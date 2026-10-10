@@ -23,13 +23,13 @@ variable {α β : Type} {P P' R : FAssn} {Q Q' : α → FAssn} {c c' : MemM α}
 
 /-- `m` holds `r₁ ⋆ r₂` with frame `rF` iff it holds `r₁` with frame `r₂ ⋆ rF`. -/
 theorem Holds.split {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.heap r₂.heap)
-    (hh : Holds m ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know⟩ rF) :
-    Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know⟩ := by
-  obtain ⟨hdisj, hheap, hk, hkF⟩ := hh
+    (hh : Holds m ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ rF) :
+    Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know, r₂.gh.add rF.gh⟩ := by
+  obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, -⟩ := FHeap.disjoint_union_left.mp hdisj
   have h2F := (FHeap.disjoint_union_left.mp hdisj).2
   exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by rw [hheap]; exact FHeap.union_assoc ..,
-    hk.left, hk.right.union hkF⟩
+    hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩
 
 /-- `c` returns from every memory that holds `P` with some frame. -/
 def FReturns (P : FAssn) (c : MemM α) : Prop :=

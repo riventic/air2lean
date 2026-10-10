@@ -128,16 +128,16 @@ theorem know_intro {b : BlockId} {A : Nat}
     (ht : CTriple (P ⋆ known b A) x Q) : CTriple P x Q :=
   fun n => FTriple.know_intro hc (ht n)
 
-/-- Knowledge (anything that owns no bytes) in the precondition can be forgotten. -/
+/-- Knowledge and ghost state (anything that owns no bytes) in the precondition can be forgotten. -/
 theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty) (ht : CTriple P x Q) :
     CTriple (P ⋆ K) x Q := by
   intro n m r rF hh hp hs
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hp
   have e := hK _ h2
   have hh₁ : Holds m r₁ rF := by
-    obtain ⟨hd', hm, hk, hkF⟩ := hh
+    obtain ⟨hd', hm, hk, hkF, hg⟩ := hh
     simp only [e, FHeap.union_empty] at hd' hm
-    exact ⟨hd', hm, hk.left, hkF⟩
+    exact ⟨hd', hm, hk.left, hkF, Ghost.Ok.mono hg⟩
   exact ht n m r₁ rF hh₁ h1 hs
 
 /-- A legacy total triple of a `Tame` step, with a full-state frame `H` (`FTotalTriple.ofTotal`). -/

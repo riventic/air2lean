@@ -189,7 +189,7 @@ theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
           rw [heap_of_blocks hblocks]
           split
           · rename_i hin
-            obtain ⟨-, b0, hb0, -, hl0⟩ := hab
+            obtain ⟨-, -, b0, hb0, -, hl0⟩ := hab
             rw [hpb] at hb0; cases hb0
             have hr := hl0 l
             rw [if_pos hin] at hr
@@ -292,7 +292,7 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   have hKb : blk.kind = K ∧ blk.kind.mappedLo ≤ p.off.toNat := by
-    obtain ⟨-, b0, hb0, -, hl0⟩ := id hab
+    obtain ⟨-, -, b0, hb0, -, hl0⟩ := id hab
     rw [hpb] at hb0; cases hb0
     have hr := hl0 (b, p.off.toNat)
     rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr

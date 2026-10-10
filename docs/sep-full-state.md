@@ -119,6 +119,7 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run`, `FTriple.ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing and never fails (an ambiguous address gives a pointer without provenance: O4 fix, `docs/address-reuse.md`) |
 | `Disjoint` | `Mem.LiveDisjoint`, `LDMono.set`/`push`/`grow`, `Mem.newAddr_addrFree` | live blocks have disjoint address ranges (`Block.clearOf`); every block update of the memory model keeps it |
 | `Triple` | `Holds.apart`, `FTriple.apart` | owned bytes of two different blocks lie in disjoint address ranges (`LiveDisjoint` is part of `FSeq`) |
+| `Ghost` | `Upd.alloc`/`issue`/`retire`/`bump`, `gfrag_count`, `FTriple.upd`/`upd_post`/`count`, `Upd.frame` | epoch ledgers (§Ghost state): frame-preserving updates; a token of the current epoch shows one is outstanding |
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
@@ -230,28 +231,28 @@ revoked. This is what ghost state is for: logical resources that live only in th
 
 ### The design
 
-`Res` gets a third component, `gh : Ghost`, with `Ghost := GName → GCell` (`GName := Nat`). A cell
-is an **epoch ledger**:
+`Res` gets a third component, `gh : Ghost`, with `Ghost := Nat → GCell` (names to cells). A cell
+is an **epoch ledger** (`ZigLean/Sep/Full/Res.lean`, rules in `Ghost.lean`):
 
 ```
 structure GCell where
-  auth : Option (Nat × Nat)   -- ●(e, n): the current epoch e, and n tokens outstanding in it
-  frag : Nat → Nat            -- ◯e, counted: how many tokens of epoch e this resource holds
+  auth : Nat × Nat → Nat   -- how many authorities ●(e, n): current epoch e, n tokens outstanding
+  frag : Nat → Nat         -- ◯e, counted: how many tokens of epoch e this resource holds
 ```
 
-* **Composition** is pointwise: `auth` by `Option.or` (two resources may not both hold an
-  authority for the same name: `GDisjoint`), `frag` by addition. It is associative and
-  commutative, with the empty ledger as unit.
-* **Validity** of a memory's whole ghost state (`GValid`, part of `Holds`): where an authority
-  `●(e, n)` exists, at most `n` tokens of epoch `e` exist, and none of a later epoch. Tokens of
-  an earlier epoch are valid: they are *stale*.
-* **Finiteness** (`GFin`, part of `Holds`): only finitely many names are in use. This gives a
-  fresh name for a new ledger.
+* **Composition** is pointwise addition of both counts, so it is total, associative and
+  commutative, with the empty ledger as unit. Two authorities for one name are ruled out by
+  validity, not by composition.
+* **Validity** (`GCell.Valid`): at most one authority; where an authority `●(e, n)` exists, at
+  most `n` tokens of epoch `e` exist, and none of a later epoch. Tokens of an earlier epoch are
+  valid: they are *stale*.
+* **Finiteness** (`Ghost.Fin`): only finitely many names are in use. This gives a fresh name for
+  a new ledger.
 * **Assertions.** `gauth γ e n` owns `●(e, n)` at `γ`; `gfrag γ e` owns one `◯e` at `γ`. Neither
   owns bytes or knowledge. `up`, `emp`, `known` and the byte assertions own no ghost state.
 
-`Holds m r rF` additionally requires `GOk r.gh rF.gh`: the two ghost states are disjoint, and
-their sum is valid and finite. No primitive changes the ghost state: every primitive rule keeps
+`Holds m r rF` additionally requires `Ghost.Ok r.gh rF.gh`: the sum of the two ghost states is
+valid and finite. No primitive changes the ghost state: every primitive rule keeps
 `r.gh`, so the existing proofs only pass the field along.
 
 **Ghost updates** change only ghost state. `Upd P P'` says that every resource of `P` can be

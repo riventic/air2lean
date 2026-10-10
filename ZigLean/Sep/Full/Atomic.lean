@@ -245,7 +245,7 @@ theorem tagOk_of_own {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S :
     {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
     (hsz : bs.size = 8) (htg : tg = none ∨ tg = some (p.off.toNat, 8)) {b : BlockId}
     (hpb : p.block = some b) : TagOk (shapes m) b p.off.toNat 8 := by
-  obtain ⟨-, b0, hb0, -, hl⟩ := hab
+  obtain ⟨-, -, b0, hb0, -, hl⟩ := hab
   rw [hpb] at hb0; cases hb0
   have key : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 8 → tagOf (shapes m) b x = tg := by
     intro x h1 h2
@@ -292,13 +292,13 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
       then some (p.off.toNat, bs.size) else tagOf (shapes m) b' x)
     (hkn : KMono m m') :
     ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
-  obtain ⟨-, b0, hb0, h0, hl⟩ := id hab
+  obtain ⟨-, -, b0, hb0, h0, hl⟩ := id hab
   rw [hpb] at hb0; cases hb0
   let h' : FHeap := fun l =>
     if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
     then some ⟨⟨bs'[l.2 - p.off.toNat]!, A, S, K⟩, some (p.off.toNat, bs.size)⟩ else none
-  refine ⟨⟨h', Know.none⟩, ⟨fun l => ?_, funext fun l => ?_, Know.sub_none _,
-    hh.knowF.trans hkn⟩, rfl, b, hpb, h0, fun l => rfl⟩
+  refine ⟨⟨h', Know.none, Ghost.unit⟩, ⟨fun l => ?_, funext fun l => ?_, Know.sub_none _,
+    hh.knowF.trans hkn, by rw [← hab.2.1]; exact hh.ghost⟩, rfl, rfl, b, hpb, h0, fun l => rfl⟩
   · by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
     · right
       have : r.heap l ≠ none := by rw [hl l, if_pos (by rw [← hsz]; exact hc)]; simp
@@ -411,7 +411,7 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
           rw [heap_of_blocks hblocks]
           split
           · rename_i hin
-            obtain ⟨-, b0, hb0, -, hl0⟩ := hab
+            obtain ⟨-, -, b0, hb0, -, hl0⟩ := hab
             rw [hpb] at hb0; cases hb0
             have hr := hl0 l
             rw [if_pos hin] at hr
@@ -440,7 +440,7 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   have hcast : (p.off.toNat : Int) = p.off := Int.toNat_of_nonneg h0
   have hKb : blk.kind = K ∧ blk.kind.mappedLo ≤ p.off.toNat := by
-    obtain ⟨-, b0, hb0, -, hl0⟩ := id hab
+    obtain ⟨-, -, b0, hb0, -, hl0⟩ := id hab
     rw [hpb] at hb0; cases hb0
     have hr := hl0 (b, p.off.toNat)
     rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr

@@ -133,7 +133,7 @@ theorem FTriple.ptrAddrOf (q : Ptr) (a : Int) :
     exact FTriple.of_run fun m r _ hh hp hs => by
       obtain ⟨A, hp'⟩ := hp
       obtain ⟨hA, hk⟩ := sep_lift.mp hp'
-      obtain ⟨x, hx, hxa⟩ := hh.know b A (by rw [hk.2]; exact ⟨rfl, rfl⟩)
+      obtain ⟨x, hx, hxa⟩ := hh.know b A (by rw [hk.2.1]; exact ⟨rfl, rfl⟩)
       exact ⟨_, m, r, ptrAddr_run hx off, hh,
         sep_lift.mpr ⟨by rw [hxa]; exact hA, ⟨A, hp'⟩⟩, hs⟩
 
@@ -299,16 +299,16 @@ theorem Holds.heap_erase {m : Mem} {r rF : Res} (hh : Holds m r rF) :
   rw [← fheap_erase, hh.heap, FHeap.erase_union]
 
 theorem Holds.sepL {m : Mem} {P Q : FAssn} {r rF : Res} (hh : Holds m r rF) (h : (P ⋆ Q) r) :
-    ∃ r₁ r₂, P r₁ ∧ Q r₂ ∧ Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know⟩ ∧
-      Holds m r₂ ⟨r₁.heap ∪ rF.heap, r₁.know.union rF.know⟩ := by
+    ∃ r₁ r₂, P r₁ ∧ Q r₂ ∧ Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know, r₂.gh.add rF.gh⟩ ∧
+      Holds m r₂ ⟨r₁.heap ∪ rF.heap, r₁.know.union rF.know, r₁.gh.add rF.gh⟩ := by
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
-  obtain ⟨hdisj, hheap, hk, hkF⟩ := hh
+  obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, h2F⟩ := FHeap.disjoint_union_left.mp hdisj
   refine ⟨r₁, r₂, h1, h2, ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by
-    rw [hheap]; exact FHeap.union_assoc .., hk.left, hk.right.union hkF⟩,
+    rw [hheap]; exact FHeap.union_assoc .., hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩,
     ⟨FHeap.disjoint_union_right.mpr ⟨hd.symm, h2F⟩, by
       rw [hheap, ← FHeap.union_assoc, FHeap.union_comm hd, FHeap.union_assoc], hk.right,
-      hk.left.union hkF⟩⟩
+      hk.left.union hkF, by rw [← Ghost.Ok.assoc, Ghost.add_comm r₂.gh]; exact hg⟩⟩
 
 /-- **O3.** A memory that holds the hint word as `apts` has no atomic location of another
 offset or size over it (`docs/alloc-page.md`'s `odd` memory, with a 4-byte location at the hint,
@@ -337,7 +337,7 @@ theorem addrOf_block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {o
     (h : addrOf ⟨some b, off⟩ a r) : ∃ blk, m.blocks[b]? = some blk ∧ (blk.addr : Int) + off = a := by
   obtain ⟨A, h⟩ := h
   obtain ⟨hA, hk⟩ := sep_lift.mp h
-  obtain ⟨blk, hblk, he⟩ := hh.know b A (by rw [hk.2]; exact ⟨rfl, rfl⟩)
+  obtain ⟨blk, hblk, he⟩ := hh.know b A (by rw [hk.2.1]; exact ⟨rfl, rfl⟩)
   exact ⟨blk, hblk, by rw [he]; exact hA⟩
 
 /-- **O1.** A memory that holds `inv` has the block of the pointer in `last`, live or freed:
@@ -413,25 +413,28 @@ theorem start_fheap : start.fheap = glob 0 4096 enc0 ∪ glob 1 4112 enc1 := by
   · simp [Mem.heap, start]
 
 theorem glob_abytes {b A : Nat} {bs : Array Byte} (hs : bs.size = 8) :
-    abytesAt ⟨some b, 0⟩ A 8 .global bs none ⟨glob b A bs, Know.none⟩ := by
-  refine ⟨rfl, b, rfl, Int.le_refl 0, fun ⟨x, y⟩ => ?_⟩
+    abytesAt ⟨some b, 0⟩ A 8 .global bs none ⟨glob b A bs, Know.none, Ghost.unit⟩ := by
+  refine ⟨rfl, rfl, b, rfl, Int.le_refl 0, fun ⟨x, y⟩ => ?_⟩
   simp [glob, hs]
 
-theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none⟩ ∧ inv hintP lastP r ∧ start.FSeq := by
+theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ inv hintP lastP r ∧ start.FSeq := by
   have hd : FHeap.Disjoint (glob 0 4096 enc0) (glob 1 4112 enc1) := by
     intro ⟨b, o⟩; by_cases hb : b = 0 <;> simp [glob, hb]
   refine ⟨⟨glob 0 4096 enc0 ∪ (glob 1 4112 enc1 ∪ FHeap.empty),
-    Know.none.union (Know.none.union Know.none)⟩, ⟨fun _ => .inr rfl, ?_, ?_, Know.sub_none _⟩,
+    Know.none.union (Know.none.union Know.none), Ghost.unit.add (Ghost.unit.add Ghost.unit)⟩,
+    ⟨fun _ => .inr rfl, ?_, ?_, Know.sub_none _, ?_⟩,
     ⟨⟨none, 0⟩, 0, ?_⟩, ?_⟩
   · simp [start_fheap]
   · simp [Know.union_none]; exact Know.sub_none _
-  · refine ⟨⟨glob 0 4096 enc0, Know.none⟩, ⟨glob 1 4112 enc1 ∪ FHeap.empty, Know.none.union Know.none⟩,
-      by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1, Know.none⟩, ⟨FHeap.empty, Know.none⟩,
-      FHeap.disjoint_empty _, rfl, ?_, ⟨rfl, rfl, rfl⟩⟩
+  · simp only [Ghost.add_unit]
+    exact ⟨fun _ => .inl fun _ => rfl, 0, fun _ _ => rfl⟩
+  · refine ⟨⟨glob 0 4096 enc0, Know.none, Ghost.unit⟩, ⟨glob 1 4112 enc1 ∪ FHeap.empty, Know.none.union Know.none, Ghost.unit.add Ghost.unit⟩,
+      by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1, Know.none, Ghost.unit⟩, ⟨FHeap.empty, Know.none, Ghost.unit⟩,
+      FHeap.disjoint_empty _, rfl, ?_, ⟨rfl, rfl, rfl, rfl⟩⟩
     · exact ⟨4096, 8, .global, enc0, none, rfl, by decide, enc0_size,
         LawfulEnc.decode_encode (α := BitVec 64) _, .inl rfl, glob_abytes enc0_size⟩
     · refine ⟨⟨4112, 8, .global, enc1, rfl, enc1_size, LawfulEnc.decode_encode (α := Ptr) _,
-        abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl⟩
+        abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl, rfl⟩
   · refine ⟨⟨singleThread_empty rfl (by decide)⟩, ⟨by simp [shapes, start], by simp [shapes, start]⟩, ?_⟩
     intro b b' blk blk' hbb h1 h2 _
     rcases b with _ | _ | b <;> rcases b' with _ | _ | b' <;>
@@ -443,7 +446,7 @@ theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none⟩ ∧ inv hi
 `cycle_spec` applies to the real run (alloc, free, alloc). -/
 theorem cycle_from_start {p : Ptr} {m' : Mem}
     (h : ((cycle hintP lastP).run start).run = some (.ok (p, m'))) :
-    ∃ r', Holds m' r' ⟨FHeap.empty, Know.none⟩ ∧ (inv hintP lastP ⋆ newMap p) r' ∧ m'.FSeq := by
+    ∃ r', Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ (inv hintP lastP ⋆ newMap p) r' ∧ m'.FSeq := by
   obtain ⟨r, hh, hi, hs⟩ := start_inv
   have := cycle_spec hintP lastP start r _ hh hi hs
   rw [h] at this

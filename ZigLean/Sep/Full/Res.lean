@@ -257,30 +257,131 @@ theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) 
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hx).1
   simp [Nat.ne_of_lt hlt, hx]
 
+/-! ## Ghost state: epoch ledgers (`docs/sep-full-state.md` §Ghost state)
+
+A ghost cell is an epoch ledger. `auth` counts authorities `●(e, n)` (epoch `e`, `n` tokens
+outstanding); a valid state has at most one per name. `frag e` counts tokens `◯e`. Composition
+adds both counts, so it is total; `Ghost.Valid` (part of `Holds`) rules out two authorities, more
+tokens of the current epoch than the authority admits, and tokens of a later epoch. -/
+
+@[ext] structure GCell where
+  auth : Nat × Nat → Nat
+  frag : Nat → Nat
+
+namespace GCell
+
+def unit : GCell := ⟨fun _ => 0, fun _ => 0⟩
+
+def add (a b : GCell) : GCell := ⟨fun x => a.auth x + b.auth x, fun e => a.frag e + b.frag e⟩
+
+/-- At most one authority, and if there is one, `●(e, n)`, at most `n` tokens of epoch `e` and
+none of a later one. -/
+def Valid (c : GCell) : Prop :=
+  (∀ x, c.auth x = 0) ∨ ∃ e n, c.auth (e, n) = 1 ∧ (∀ x, x ≠ (e, n) → c.auth x = 0) ∧
+    c.frag e ≤ n ∧ ∀ e', e < e' → c.frag e' = 0
+
+theorem add_comm (a b : GCell) : a.add b = b.add a := by
+  ext <;> simp [add, Nat.add_comm]
+
+theorem add_assoc (a b c : GCell) : (a.add b).add c = a.add (b.add c) := by
+  ext <;> simp [add, Nat.add_assoc]
+
+@[simp] theorem add_unit (a : GCell) : a.add unit = a := by ext <;> simp [add, unit]
+
+@[simp] theorem unit_add (a : GCell) : unit.add a = a := by ext <;> simp [add, unit]
+
+theorem Valid.of_add {a b : GCell} (h : (a.add b).Valid) : a.Valid := by
+  rcases h with h | ⟨e, n, h1, h2, h3, h4⟩
+  · left; intro x; have := h x; simp only [add] at this; omega
+  · by_cases ha : a.auth (e, n) = 1
+    · right
+      refine ⟨e, n, ha, fun x hx => ?_, ?_, fun e' he => ?_⟩
+      · have := h2 x hx; simp only [add] at this; omega
+      · simp only [add] at h3; omega
+      · have := h4 e' he; simp only [add] at this; omega
+    · left; intro x
+      by_cases hx : x = (e, n)
+      · subst hx; simp only [add] at h1; omega
+      · have := h2 x hx; simp only [add] at this; omega
+
+end GCell
+
+/-- Ghost names (`GName := Nat`) to ledgers. -/
+abbrev Ghost := Nat → GCell
+
+namespace Ghost
+
+def unit : Ghost := fun _ => GCell.unit
+
+def add (g₁ g₂ : Ghost) : Ghost := fun γ => (g₁ γ).add (g₂ γ)
+
+def Valid (g : Ghost) : Prop := ∀ γ, (g γ).Valid
+
+/-- Finitely many names in use (a fresh name exists). -/
+def Fin (g : Ghost) : Prop := ∃ N, ∀ γ, N ≤ γ → g γ = GCell.unit
+
+/-- `g₁` and `g₂` compose: their sum is valid and finite. -/
+def Ok (g₁ g₂ : Ghost) : Prop := Valid (add g₁ g₂) ∧ Fin (add g₁ g₂)
+
+theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
+  funext γ; exact GCell.add_comm _ _
+
+theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
+  funext γ; exact GCell.add_assoc _ _ _
+
+@[simp] theorem add_unit (g : Ghost) : g.add unit = g := by funext γ; simp [add, unit]
+
+@[simp] theorem unit_add (g : Ghost) : unit.add g = g := by funext γ; simp [add, unit]
+
+theorem Ok.assoc {a b c : Ghost} : Ok (a.add b) c ↔ Ok a (b.add c) := by
+  unfold Ok; rw [add_assoc]
+
+theorem Ok.comm {a b : Ghost} : Ok a b ↔ Ok b a := by
+  unfold Ok; rw [add_comm]
+
+/-- Ghost state can be dropped: validity and finiteness are closed under removing a part. -/
+theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
+  obtain ⟨hv, N, hN⟩ := h
+  refine ⟨fun γ => ?_, N, fun γ hγ => ?_⟩
+  · have := hv γ
+    have e : ((a.add b).add c) γ = ((a γ).add (c γ)).add (b γ) := by
+      simp only [add]; rw [GCell.add_assoc, GCell.add_comm (b γ), ← GCell.add_assoc]
+    rw [e] at this
+    exact GCell.Valid.of_add this
+  · have := hN γ hγ
+    simp only [add, GCell.add, GCell.unit, GCell.mk.injEq] at this ⊢
+    obtain ⟨h1, h2⟩ := this
+    exact ⟨funext fun x => by have := congrFun h1 x; omega,
+      funext fun x => by have := congrFun h2 x; omega⟩
+
+end Ghost
+
 /-! ## Resources and assertions -/
 
 structure Res where
   heap : FHeap
   know : Know
+  gh : Ghost
 
 abbrev FAssn := Res → Prop
 
 namespace FAssn
 
-/-- No bytes and no knowledge. -/
-def emp : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none
+/-- No bytes, no knowledge and no ghost state. -/
+def emp : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.unit
 
 /-- A fact that owns nothing. -/
 def lift (φ : Prop) : FAssn := fun r => φ ∧ emp r
 
 def sep (P Q : FAssn) : FAssn := fun r =>
-  ∃ r₁ r₂, FHeap.Disjoint r₁.heap r₂.heap ∧ r = ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know⟩ ∧
-    P r₁ ∧ Q r₂
+  ∃ r₁ r₂, FHeap.Disjoint r₁.heap r₂.heap ∧
+    r = ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ ∧ P r₁ ∧ Q r₂
 
 def ex {γ : Type} (P : γ → FAssn) : FAssn := fun r => ∃ x, P x r
 
-/-- A legacy assertion, on the bytes without their tags (any atomic layout), with no knowledge. -/
-def up (P : Assn) : FAssn := fun r => P r.heap.erase ∧ r.know = Know.none
+/-- A legacy assertion, on the bytes without their tags (any atomic layout), with no knowledge
+and no ghost state. -/
+def up (P : Assn) : FAssn := fun r => P r.heap.erase ∧ r.know = Know.none ∧ r.gh = Ghost.unit
 
 end FAssn
 
@@ -292,13 +393,13 @@ open FAssn
 /-- **Persistent knowledge** (`□ blockAddr b A`): block `b` exists, at address `A`. Owns no
 bytes; true in every later memory (`KMono`), also after `free`. -/
 def known (b : BlockId) (A : Nat) : FAssn := fun r =>
-  r.heap = FHeap.empty ∧ r.know = fun b' A' => b' = b ∧ A' = A
+  r.heap = FHeap.empty ∧ (r.know = fun b' A' => b' = b ∧ A' = A) ∧ r.gh = Ghost.unit
 
 /-- `h` owns exactly the bytes `bs` at `p` (block address `A`, size `S`, kind `K`), each with the
 atomic tag `tg`. -/
 def abytesAt (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (tg : Option (Nat × Nat)) :
     FAssn := fun r =>
-  r.know = Know.none ∧ ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ ∀ l : Loc, r.heap l =
+  r.know = Know.none ∧ r.gh = Ghost.unit ∧ ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ ∀ l : Loc, r.heap l =
     if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
     then some ⟨⟨bs[l.2 - p.off.toNat]!, A, S, K⟩, tg⟩ else none
 
@@ -313,25 +414,25 @@ section Laws
 
 variable {P Q R : FAssn} {r : Res}
 
-theorem res_eta (r : Res) : r = ⟨r.heap, r.know⟩ := rfl
+theorem res_eta (r : Res) : r = ⟨r.heap, r.know, r.gh⟩ := rfl
 
 theorem sep_comm : (P ⋆ Q) r → (Q ⋆ P) r := by
   rintro ⟨r₁, r₂, hd, rfl, hp, hq⟩
-  exact ⟨r₂, r₁, hd.symm, by rw [FHeap.union_comm hd, Know.union_comm], hq, hp⟩
+  exact ⟨r₂, r₁, hd.symm, by rw [FHeap.union_comm hd, Know.union_comm, Ghost.add_comm], hq, hp⟩
 
 theorem sep_assoc : ((P ⋆ Q) ⋆ R) r → (P ⋆ (Q ⋆ R)) r := by
   rintro ⟨r₁₂, r₃, hd, rfl, ⟨r₁, r₂, hd', rfl, hp, hq⟩, hr⟩
   obtain ⟨hd₁₃, hd₂₃⟩ := FHeap.disjoint_union_left.mp hd
-  exact ⟨r₁, ⟨r₂.heap ∪ r₃.heap, r₂.know.union r₃.know⟩,
+  exact ⟨r₁, ⟨r₂.heap ∪ r₃.heap, r₂.know.union r₃.know, r₂.gh.add r₃.gh⟩,
     FHeap.disjoint_union_right.mpr ⟨hd', hd₁₃⟩,
-    by simp only [FHeap.union_assoc, Know.union_assoc], hp, r₂, r₃, hd₂₃, rfl, hq, hr⟩
+    by simp only [FHeap.union_assoc, Know.union_assoc, Ghost.add_assoc], hp, r₂, r₃, hd₂₃, rfl, hq, hr⟩
 
 theorem sep_assoc' : (P ⋆ (Q ⋆ R)) r → ((P ⋆ Q) ⋆ R) r := by
   rintro ⟨r₁, r₂₃, hd, rfl, hp, ⟨r₂, r₃, hd', rfl, hq, hr⟩⟩
   obtain ⟨hd₁₂, hd₁₃⟩ := FHeap.disjoint_union_right.mp hd
-  exact ⟨⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know⟩, r₃,
+  exact ⟨⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩, r₃,
     FHeap.disjoint_union_left.mpr ⟨hd₁₃, hd'⟩,
-    by simp only [FHeap.union_assoc, Know.union_assoc], ⟨r₁, r₂, hd₁₂, rfl, hp, hq⟩, hr⟩
+    by simp only [FHeap.union_assoc, Know.union_assoc, Ghost.add_assoc], ⟨r₁, r₂, hd₁₂, rfl, hp, hq⟩, hr⟩
 
 theorem sep_mono {P' Q' : FAssn} (hp : ∀ r, P r → P' r) (hq : ∀ r, Q r → Q' r) :
     (P ⋆ Q) r → (P' ⋆ Q') r := by
@@ -346,19 +447,19 @@ theorem sep_mono_right (hq : ∀ r, Q r → R r) : (P ⋆ Q) r → (P ⋆ R) r :
 
 theorem sep_emp : (P ⋆ emp) r ↔ P r := by
   constructor
-  · rintro ⟨r₁, r₂, -, rfl, hp, h2, k2⟩
-    rw [h2, k2, FHeap.union_empty, Know.union_none]; exact hp
+  · rintro ⟨r₁, r₂, -, rfl, hp, h2, k2, g2⟩
+    rw [h2, k2, g2, FHeap.union_empty, Know.union_none, Ghost.add_unit]; exact hp
   · intro hp
-    exact ⟨r, ⟨FHeap.empty, Know.none⟩, FHeap.disjoint_empty _,
-      by rw [FHeap.union_empty, Know.union_none], hp, rfl, rfl⟩
+    exact ⟨r, ⟨FHeap.empty, Know.none, Ghost.unit⟩, FHeap.disjoint_empty _,
+      by rw [FHeap.union_empty, Know.union_none, Ghost.add_unit], hp, rfl, rfl, rfl⟩
 
 theorem sep_lift {φ : Prop} : (⟪φ⟫ ⋆ P) r ↔ φ ∧ P r := by
   constructor
-  · rintro ⟨r₁, r₂, -, rfl, ⟨hφ, h1, k1⟩, hp⟩
-    rw [h1, k1, FHeap.empty_union, Know.none_union]; exact ⟨hφ, hp⟩
+  · rintro ⟨r₁, r₂, -, rfl, ⟨hφ, h1, k1, g1⟩, hp⟩
+    rw [h1, k1, g1, FHeap.empty_union, Know.none_union, Ghost.unit_add]; exact ⟨hφ, hp⟩
   · rintro ⟨hφ, hp⟩
-    exact ⟨⟨FHeap.empty, Know.none⟩, r, (FHeap.disjoint_empty _).symm,
-      by rw [FHeap.empty_union, Know.none_union], ⟨hφ, rfl, rfl⟩, hp⟩
+    exact ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, r, (FHeap.disjoint_empty _).symm,
+      by rw [FHeap.empty_union, Know.none_union, Ghost.unit_add], ⟨hφ, rfl, rfl, rfl⟩, hp⟩
 
 theorem sep_ex {γ : Type} {P : γ → FAssn} : (ex P ⋆ Q) r ↔ ∃ x, (P x ⋆ Q) r := by
   constructor
@@ -367,16 +468,16 @@ theorem sep_ex {γ : Type} {P : γ → FAssn} : (ex P ⋆ Q) r ↔ ∃ x, (P x �
 
 /-- Knowledge is duplicable. -/
 theorem known_dup {b : BlockId} {A : Nat} (h : known b A r) : (known b A ⋆ known b A) r := by
-  obtain ⟨hh, hk⟩ := h
-  refine ⟨r, r, fun _ => .inl (by rw [hh]; rfl), ?_, ⟨hh, hk⟩, ⟨hh, hk⟩⟩
-  obtain ⟨rh, rk⟩ := r
-  simp only at hh ⊢
-  subst hh
-  rw [FHeap.union_empty, Know.union_self]
+  obtain ⟨hh, hk, hg⟩ := h
+  refine ⟨r, r, fun _ => .inl (by rw [hh]; rfl), ?_, ⟨hh, hk, hg⟩, ⟨hh, hk, hg⟩⟩
+  obtain ⟨rh, rk, rg⟩ := r
+  simp only at hh hg ⊢
+  subst hh hg
+  rw [FHeap.union_empty, Know.union_self, Ghost.add_unit]
 
 /-- A legacy separating conjunction is a full one (the tags split with the bytes). -/
 theorem up_sep {P Q : Assn} (h : up (P ∗ Q) r) : (up P ⋆ up Q) r := by
-  obtain ⟨⟨h₁, h₂, hd, he, hp, hq⟩, hk⟩ := h
+  obtain ⟨⟨h₁, h₂, hd, he, hp, hq⟩, hk, hg⟩ := h
   let f₁ : FHeap := fun l => if h₁ l = Option.none then Option.none else r.heap l
   let f₂ : FHeap := fun l => if h₁ l = Option.none then r.heap l else Option.none
   have hl : ∀ l, r.heap.erase l = (h₁ ∪ h₂) l := fun l => congrFun he l
@@ -399,21 +500,22 @@ theorem up_sep {P Q : Assn} (h : up (P ∗ Q) r) : (up P ⋆ up Q) r := by
       rcases hd l with e | e
       · exact absurd e n
       · rw [e]; rfl
-  refine ⟨⟨f₁, Know.none⟩, ⟨f₂, Know.none⟩, fun l => ?_, ?_, ⟨show P f₁.erase by rw [e₁]; exact hp, rfl⟩,
-    ⟨show Q f₂.erase by rw [e₂]; exact hq, rfl⟩⟩
+  refine ⟨⟨f₁, Know.none, Ghost.unit⟩, ⟨f₂, Know.none, Ghost.unit⟩, fun l => ?_, ?_,
+    ⟨show P f₁.erase by rw [e₁]; exact hp, rfl, rfl⟩, ⟨show Q f₂.erase by rw [e₂]; exact hq, rfl, rfl⟩⟩
   · by_cases n : h₁ l = Option.none
     · left; simp [f₁, n]
     · right; simp [f₂, n]
-  · rw [res_eta r, hk, Know.union_self]
+  · rw [res_eta r, hk, hg, Know.union_self, Ghost.add_unit]
     congr 1
     funext l
     by_cases n : h₁ l = Option.none <;> simp [f₁, f₂, n]
 
 /-- And back. -/
 theorem sep_up {P Q : Assn} (h : (up P ⋆ up Q) r) : up (P ∗ Q) r := by
-  obtain ⟨r₁, r₂, hd, rfl, ⟨hp, k1⟩, ⟨hq, k2⟩⟩ := h
-  refine ⟨⟨_, _, FHeap.erase_disjoint hd, FHeap.erase_union _ _, hp, hq⟩, ?_⟩
-  simp only [k1, k2, Know.union_none]
+  obtain ⟨r₁, r₂, hd, rfl, ⟨hp, k1, g1⟩, ⟨hq, k2, g2⟩⟩ := h
+  refine ⟨⟨_, _, FHeap.erase_disjoint hd, FHeap.erase_union _ _, hp, hq⟩, ?_, ?_⟩
+  · simp only [k1, k2, Know.union_none]
+  · simp only [g1, g2, Ghost.add_unit]
 
 theorem up_lift {φ : Prop} {P : Assn} : up (⌜φ⌝ ∗ P) r ↔ φ ∧ up P r := by
   constructor
@@ -437,7 +539,7 @@ theorem up_ex {γ : Type} {P : γ → Assn} : up (Assn.ex P) r ↔ ∃ x, up (P 
 /-- An atomic word's bytes, as legacy owned bytes. -/
 theorem abytesAt_bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {tg : Option (Nat × Nat)} (h : abytesAt p A S K bs tg r) : bytesAt p A S K bs r.heap.erase := by
-  obtain ⟨-, b, hb, h0, hl⟩ := h
+  obtain ⟨-, -, b, hb, h0, hl⟩ := h
   refine ⟨b, hb, h0, fun l => ?_⟩
   simp only [FHeap.erase, hl l]
   split <;> rfl

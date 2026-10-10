@@ -34,12 +34,13 @@ live blocks at disjoint addresses (`Mem.LiveDisjoint`, stage 3 of `docs/sep-full
 def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveDisjoint
 
 /-- `m` holds the resource `r` and the frame `rF`: its full heap is exactly their disjoint union,
-and their knowledge is true in `m`. -/
+their knowledge is true in `m`, and their ghost states compose (`Ghost.Ok`). -/
 structure Holds (m : Mem) (r rF : Res) : Prop where
   disj : FHeap.Disjoint r.heap rF.heap
   heap : m.fheap = r.heap ∪ rF.heap
   know : Know.Sub r.know m.kn
   knowF : Know.Sub rF.know m.kn
+  ghost : Ghost.Ok r.gh rF.gh
 
 /-- Partial correctness without a panic, over full-state resources (module doc). -/
 def FTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
@@ -79,19 +80,19 @@ theorem post (ht : FTriple P c Q) (hq : ∀ v r, Q v r → Q' v r) : FTriple P c
 theorem frame (ht : FTriple P c Q) : FTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   intro m r rF hh hpr hs
   obtain ⟨rP, rR, hd, rfl, hp, hr⟩ := hpr
-  obtain ⟨hdisj, hheap, hk, hkF⟩ := hh
+  obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨hPF, hRF⟩ := FHeap.disjoint_union_left.mp hdisj
-  have := ht m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know⟩
+  have := ht m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩
     ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [hheap]; exact FHeap.union_assoc .., hk.left,
-      hk.right.union hkF⟩ hp hs
+      hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩ hp hs
   split at this
   · trivial
   · exact this
-  · obtain ⟨r', ⟨hd', hh', hk', hkF'⟩, hq, hs'⟩ := this
+  · obtain ⟨r', ⟨hd', hh', hk', hkF', hg'⟩, hq, hs'⟩ := this
     obtain ⟨hQR, hQF⟩ := FHeap.disjoint_union_right.mp hd'
-    exact ⟨⟨r'.heap ∪ rR.heap, r'.know.union rR.know⟩,
+    exact ⟨⟨r'.heap ∪ rR.heap, r'.know.union rR.know, r'.gh.add rR.gh⟩,
       ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [hh', FHeap.union_assoc],
-        hk'.union hkF'.left, hkF'.right⟩, ⟨r', rR, hQR, rfl, hq, hr⟩, hs'⟩
+        hk'.union hkF'.left, hkF'.right, Ghost.Ok.assoc.mpr hg'⟩, ⟨r', rR, hQR, rfl, hq, hr⟩, hs'⟩
 
 /-- Frame on the left. -/
 theorem frameL (ht : FTriple P c Q) : FTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
@@ -128,7 +129,7 @@ theorem lift {φ : Prop} (h : φ → FTriple P c Q) : FTriple (⟪φ⟫ ⋆ P) c
   obtain ⟨hφ, hp⟩ := sep_lift.mp hp
   exact h hφ m r rF hh hp hs
 
-/-- Knowledge (anything that owns no bytes) can be forgotten. -/
+/-- Knowledge and ghost state (anything that owns no bytes) can be forgotten. -/
 theorem drop {K : α → FAssn} (ht : FTriple P c (fun v => Q v ⋆ K v))
     (hK : ∀ v r, K v r → r.heap = FHeap.empty) : FTriple P c Q := by
   intro m r rF hh hp hs
@@ -136,10 +137,10 @@ theorem drop {K : α → FAssn} (ht : FTriple P c (fun v => Q v ⋆ K v))
   split at this
   · trivial
   · exact this
-  · obtain ⟨r', ⟨hd, hm, hk, hkF⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hs'⟩ := this
+  · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hs'⟩ := this
     have e := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm
-    exact ⟨r₁, ⟨hd, hm, hk.left, hkF⟩, hq, hs'⟩
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, Ghost.Ok.mono hg⟩, hq, hs'⟩
 
 /-- A step that does not change the memory and returns: every assertion stays. -/
 theorem of_pure_run (h : ∀ m, m.FSeq → ∃ v, c.run m = pure (v, m)) (hq : ∀ v r, P r → Q v r) :
@@ -170,13 +171,13 @@ theorem FTriple.know_intro {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAs
   have hkn : m.kn b A := by
     obtain ⟨blk, hblk, _, _, he⟩ := Mem.heap_some (hh.cell hx)
     exact ⟨blk, hblk, by rw [← hA, he]⟩
-  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A⟩ :=
-    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A⟩, FHeap.disjoint_empty _,
-      by rw [FHeap.union_empty], hp, rfl, rfl⟩
+  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ :=
+    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A, Ghost.unit⟩, FHeap.disjoint_empty _,
+      by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
   have hk : Know.Sub (r.know.union fun b' A' => b' = b ∧ A' = A) m.kn :=
     hh.know.union fun b' A' h => by obtain ⟨rfl, rfl⟩ := h; exact hkn
-  exact ht m ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A⟩ rF
-    ⟨hh.disj, hh.heap, hk, hh.knowF⟩ hres hs
+  exact ht m ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ rF
+    ⟨hh.disj, hh.heap, hk, hh.knowF, hh.ghost⟩ hres hs
 
 theorem ptrAddr_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (off : Int) : (ptrAddr ⟨some b, off⟩).run m = pure ((blk.addr : Int) + off, m) := by
@@ -188,7 +189,7 @@ address is needed. -/
 theorem FTriple.ptrAddr {b : BlockId} {A : Nat} (off : Int) :
     FTriple (known b A) (Zig.ptrAddr ⟨some b, off⟩) (fun a => ⟪a = (A : Int) + off⟫ ⋆ known b A) :=
   FTriple.of_run fun m r _ hh hp hs => by
-    obtain ⟨blk, hblk, hA⟩ := hh.know b A (by rw [hp.2]; exact ⟨rfl, rfl⟩)
+    obtain ⟨blk, hblk, hA⟩ := hh.know b A (by rw [hp.2.1]; exact ⟨rfl, rfl⟩)
     exact ⟨_, m, r, ptrAddr_run hblk off, hh, sep_lift.mpr ⟨by rw [hA], hp⟩, hs⟩
 
 theorem ptrAddr_none_run (m : Mem) (off : Int) : (Zig.ptrAddr ⟨none, off⟩).run m = pure (off, m) := rfl
@@ -315,7 +316,7 @@ stay because the layout stays. -/
 theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
     (hc : Tame c) : FTriple (up P) c (fun v => up (Q v)) := by
   intro m r rF hh hp hs
-  obtain ⟨hd, hm, hk, hkF⟩ := hh
+  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
   have hm' : m.heap = r.heap.erase ∪ rF.heap.erase := by
     rw [← fheap_erase, hm, FHeap.erase_union]
   have := ht m _ _ (FHeap.erase_disjoint hd) hm' hp.1 hs.1
@@ -340,8 +341,9 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
           rw [hsh]
         · rw [h1] at hl; cases hl
       let hQ' : FHeap := fun l => (hQ l).map fun c => ⟨c, tagOf (shapes m') l.1 l.2⟩
-      refine ⟨⟨hQ', Know.none⟩, ⟨fun l => ?_, ?_, Know.sub_none _, hkF.trans hkm⟩,
-        ⟨?_, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
+      refine ⟨⟨hQ', Know.none, Ghost.unit⟩,
+        ⟨fun l => ?_, ?_, Know.sub_none _, hkF.trans hkm, by rw [← hp.2.2]; exact hg⟩,
+        ⟨?_, rfl, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
       · rcases hdQ l with e | e
         · left; simp [hQ', e]
         · right
