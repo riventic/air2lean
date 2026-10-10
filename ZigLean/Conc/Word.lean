@@ -1121,8 +1121,8 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
         (hop.fp e he).imp id fun h => plainHit_atomic h.2.2.2.1⟩, fun u => hown ▸ hi.off u,
     fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hop.waiters]; exact hi.fq,
-    fun hp => ?_, fun hc1 u hu =>
-      let ⟨i, l, hl, hw⟩ := hi.owner hc1 u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
+    fun hp => ?_, fun u hu =>
+      let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
     refine hi.own.keep (by rw [hop.threads]) hop.csize (fun u => hsub (hoff u) (hi.own.sub u))
       (Nat.le_of_eq hop.bsize.symm) (fun u _ => hop.clocks u) (fun e he => ?_)

@@ -254,6 +254,15 @@ def rejectedThreadFn? (name : String) : Option String :=
   | some (.rejected reason) => some reason
   | _ => none
 
+/-- Translated std functions whose generated definition starts with the owner check of a mutex
+unlock (`Zig.mutexOwnerCheck p0`, `ZigLean/Conc/Call.lean`): `.illegal` unless the current thread
+made the most recent successful acquire of the mutex word, at offset 0 of the first argument.
+They are translated, not modelled; the check is ghost (it reads no byte and writes nothing).
+`Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2): std makes an unlock from another thread undefined
+behavior. `Io.Mutex.unlock` (0.16.0, 0.17.0) is not listed: std names no owner, so an unlock by
+another thread of a held `Io.Mutex` is legal (`docs/std-models.md` §Thread model). -/
+def ownerCheckedUnlocks : Array String := #["Thread.Mutex.FutexImpl.unlock"]
+
 /-- `name` selects an allocator or thread model (not a rejection). -/
 def modelledStdFn (name : String) : Bool :=
   match stdKind? name with

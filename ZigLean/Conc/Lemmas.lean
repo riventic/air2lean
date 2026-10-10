@@ -67,6 +67,14 @@ theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
   obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
   exact ⟨rfl, h⟩
 
+/-- The owner check of a mutex unlock (`Zig.mutexOwnerCheck`, at the start of a translated
+unlock) that passes and changes nothing (`Lock.Inv.ownerCheck`). -/
+theorem WP.ownerCheck {p : Ptr} {f : Unit → ConcM Tgt β} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
+    (hrun : ((Thread.mutexOwnerCheck p).run m).run = some (.ok ((), m)))
+    (h : P.WP t (f ()) Q G m n) : P.WP t (mutexOwnerCheck p >>= f) Q G m n :=
+  WP.bind (WP.liftMem (fun e he => by rw [hrun] at he; cases he) fun a m' hr => by
+    rw [hrun] at hr; cases hr; exact ⟨rfl, h⟩)
+
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)

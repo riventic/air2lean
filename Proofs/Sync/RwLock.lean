@@ -62,7 +62,7 @@ theorem Inv.repart {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi :
     ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => ?_, hi.wfpW (fun u h => by rw [← hphu]; exact h),
     fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
     hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_,
-    fun hc1 u hu => hi.owner hc1 u (by rw [← hphu]; exact hu)⟩
+    fun u hu => hi.owner u (by rw [← hphu]; exact hu)⟩
   · unfold upd; split
     · exact hpd
     · exact hi.pdisj u

@@ -383,8 +383,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: trusted.
 - Statement: On macOS, `Thread.Mutex.DarwinImpl` stops at `os_unfair_lock_*`. The model is the
   lock's contract: an acquire `cmpxchg` 0→1 with a futex sleep, and a release `xchg` of 0
-  with a wake, after an owner check (an unlock by a thread that does not hold the lock is
-  `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
+  with a wake, after an owner check (`Thread.mutexOwnerCheck`: an unlock by a thread that did
+  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
   its DarwinImpl proofs only for a macOS translation (`if_decl`). The committed Linux
   translation selects `FutexImpl`, so no indexed theorem currently lists THR-06.
 - Derived from: tokens `osUnfairLock`, `DarwinImpl`.

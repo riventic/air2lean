@@ -231,6 +231,11 @@ def groupCancelC (g : Ptr) (_ : Io) : CM Tgt σ Unit := do
 
 /-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
 
+/-- The owner check (`Thread.mutexOwnerCheck`) that the translator puts at the start of the
+translated `Thread.Mutex.FutexImpl.unlock` (`Air2Lean.ownerCheckedUnlocks`): the mutex word is at
+offset 0 of `p`. -/
+def mutexOwnerCheck (p : Ptr) : ConcM Tgt Unit := ConcM.liftMem (Thread.mutexOwnerCheck p)
+
 /-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`). -/
 def threadFutexWaitC (p : Ptr) (expected : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p expected)))
@@ -254,12 +259,12 @@ def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
   let _ ← loop (osUnfairLockTry p) id
   pure ()
 
-/-- `os_unfair_lock_unlock`: the owner check (`Thread.unfairOwnerCheck`: an unlock by a thread
+/-- `os_unfair_lock_unlock`: the owner check (`Thread.mutexOwnerCheck`: an unlock by a thread
 that does not hold the lock is `.illegal`, as the C function terminates the process), a release
 `xchg` of 0 (the C function is a release `cmpxchg` of the owner to 0, an RMW), then a wake of one
 waiter. -/
 def osUnfairUnlockC (p : Ptr) : CM Tgt σ Unit := do
-  callMC (Thread.unfairOwnerCheck p)
+  callMC (Thread.mutexOwnerCheck p)
   let _ ← atomicRmwC .xchg false .release 4 p (0 : BitVec 32)
   threadFutexWakeC p 1
 
