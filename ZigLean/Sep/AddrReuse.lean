@@ -23,8 +23,9 @@ a pointer's provenance names, never an address. This file states that for every 
   to the freed block is still dangling.
 
 The address-sensitive operations are separate: `@ptrFromInt` (`ptrFromAddr`) of an address that
-a dead and a reused block both cover throws `.unspecified` unless the program declares the
-`ProvenanceMode.liveBlock` contract (`stale_int_strict`, `stale_int_liveBlock`).
+a dead and a reused block both cover gives a pointer with no provenance (`⟨none, n⟩`: its address,
+every access `.illegal`) unless the program declares the `ProvenanceMode.liveBlock` contract
+(`stale_int_strict`, `stale_int_liveBlock`).
 -/
 
 namespace Zig
@@ -164,11 +165,37 @@ def staleIntRun : MemM (BitVec 64) := do
   load (BitVec 64) 8 r
 
 /-- Strict provenance (the default mode): the stale integer does not silently gain the new
-block's provenance. Two blocks cover the address, so the recovery is `.unspecified`; the naive
-address reasoning "the integer is the new block's address, so the load reads 7" is not a theorem
-of the model. -/
+block's provenance. Two blocks cover the address, so the recovery has no provenance and the load
+through it is `.illegal`; the naive address reasoning "the integer is the new block's address, so
+the load reads 7" is not a theorem of the model. -/
 theorem stale_int_strict :
-    runValue staleIntRun (({} : Mem).withReuse reuseFirst) = some (.error .unspecified) := by
+    runValue staleIntRun (({} : Mem).withReuse reuseFirst) = some (.error .illegal) := by
+  decide +kernel
+
+/-- The ambiguous recovery keeps the address: `@intFromPtr` of it is the integer again. -/
+def staleIntRoundTrip : MemM Bool := do
+  let p ← alloc .heap 8 8
+  let n ← ptrAddr p
+  free p
+  let _ ← alloc .heap 8 8
+  let r ← ptrFromAddr n.toNat
+  pure (decide ((← ptrAddr r) = n))
+
+theorem stale_int_roundTrip :
+    runValue staleIntRoundTrip (({} : Mem).withReuse reuseFirst) = some (.ok true) := by
+  decide +kernel
+
+/-- `==` of the ambiguous recovery and the new block's pointer compares addresses: equal. -/
+def staleIntEq : MemM Bool := do
+  let p ← alloc .heap 8 8
+  let n ← ptrAddr p
+  free p
+  let q ← alloc .heap 8 8
+  let r ← ptrFromAddr n.toNat
+  ptrEqAddr r q
+
+theorem stale_int_eq :
+    runValue staleIntEq (({} : Mem).withReuse reuseFirst) = some (.ok true) := by
   decide +kernel
 
 /-- The address-sensitive contract `.liveBlock`: the program declares that the address recovers

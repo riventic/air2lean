@@ -242,9 +242,9 @@ inductive ByteRemapMode where
 the address (`ptrFromAddr`). That happens only under address reuse (`AllocPolicy.reuseAddr`,
 `docs/address-reuse.md`): a freed block and a later block at its address. -/
 inductive ProvenanceMode where
-  /-- The default: the integer does not say which block it came from, so the recovery throws
-  `.unspecified`. A stale integer never gains the provenance of the block that reuses its
-  address. -/
+  /-- The default: the integer does not say which block it came from, so the recovery gives no
+  provenance (`⟨none, n⟩`: the address only, every access `.illegal`). A stale integer never
+  gains the provenance of the block that reuses its address. -/
   | strict
   /-- The address-sensitive contract: the address recovers the provenance of the live block that
   covers it (live blocks never share an address). A program that declares it asserts that each
@@ -692,8 +692,15 @@ block's bytes.
 With fresh addresses (the default), at most one block covers `n`. Under address reuse
 (`AllocPolicy.reuseAddr`) a freed block and a later block can both cover it, and the integer does
 not say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
-throws `.unspecified`; the address-sensitive contract `.liveBlock` takes the live block
-(`docs/address-reuse.md`). -/
+gives no provenance; the address-sensitive contract `.liveBlock` takes the live block, and gives
+no provenance if none of the covering blocks is live (`docs/address-reuse.md`).
+
+**No provenance** is `⟨none, n⟩`, as when no block covers `n`: its address is `n` (`ptrAddr`, so
+`@intFromPtr` round-trips and `==` compares addresses), and every load, store, atomic op, `free`
+or `munmap` through it is `.illegal` (`Mem.access` needs a block). This is a conservative
+over-approximation: native code may dereference the address; the model claims nothing about such
+an access. A program that only passes the address on (`std.heap.PageAllocator`'s `mmap` hint) is
+unaffected. -/
 def ptrFromAddr (n : Nat) : MemM Ptr := do
   let m ← get
   let hits := m.blocks.zipIdx.filterMap fun (blk, b) =>
@@ -703,11 +710,11 @@ def ptrFromAddr (n : Nat) : MemM Ptr := do
   | [(b, blk)] => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
   | _ =>
     match m.allocPolicy.provenance with
-    | .strict => throw .unspecified
+    | .strict => pure ⟨none, n⟩
     | .liveBlock =>
       match hits.find? (·.2.live) with
       | some (b, blk) => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
-      | none => throw .unspecified
+      | none => pure ⟨none, n⟩
 
 /-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. Two blocks have the order of their
 addresses in the model, which can differ from the compiled code. -/
