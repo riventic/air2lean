@@ -112,8 +112,10 @@ memory model, not in the specification: an ambiguous recovery returns the proven
 pointer `⟨none, n⟩`. `ptrAddr` of it is still `n`, and every access through it is `.illegal`.
 This is a conservative over-approximation. It is approved by the coordinator but not applied on
 this branch, because it changes `ZigLean/Mem/Basic.lean`, which needs the user's permission.
-With it, `alloc` needs a pointer-valued `apts` and a `cmpxchg` rule (`ZigLean/Sep/Full/Atomic.lean`
-has only 64-bit integer words), and a sequential reading of the scheduler's one-thread run.
+The other pieces `alloc` needs exist: the pointer-valued `aptsE` with the `unordered` load and
+`cmpxchg` rules (`ZigLean/Sep/Full/AtomicPtr.lean`), and the sequential reading of the
+scheduler's one-thread run (`Sched.run_eq_seqRun`, `ZigLean/Sep/Full/Seq.lean`). What is left is
+the proof itself, and a `ThreadFree` derivation for the generated `alloc`.
 
 ### Negative check
 

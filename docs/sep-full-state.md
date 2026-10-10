@@ -309,9 +309,11 @@ needs stage 3.
 
 ## Limits
 
-* Atomic rules cover only 64-bit integer words with natural alignment, at choice 0 (sequential
-  runs, `Sched.run` with one thread). There is no `cmpxchg` rule, no RMW rule, and no
-  pointer-valued atomics (the pointer atomics of `ZigLean/Mem/AtomicPtr.lean`).
+* Atomic rules are sequential (choice 0). `Atomic.lean` has load and store of 64-bit integer
+  words; `AtomicPtr.lean` has the pointer-valued points-to `aptsE`, the `unordered` load
+  (`FTriple.atomicLoadUnorderedEnc`) and the strong pointer `cmpxchg` that succeeds
+  (`FTriple.cmpxchgPtr`). There is no RMW rule. `Seq.lean` reads a one-thread scheduler run
+  with the oracle `0` as a `MemM` program (`Sched.run_eq_seqRun`, for a `ThreadFree` function).
 * `LiveDisjoint` is stated and used (`Holds.apart`) but not part of `FSeq`, because main has no
   placement invariant that maintains it.
 * `@ptrFromInt` has no full-state rule: on `main` an ambiguous address throws `.unspecified`, and
