@@ -92,7 +92,7 @@
     "tests/diff/compat.zig": "e08b36666946ddd8dcf95d65b2fd64d00eb2a3bee698e286472d93f667ff14bc"
   },
   "compiler_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
-  "binary_sha256": "d5901e5811438859996d9a886d0a4034ee424863640ede986c68a04bbf09a662",
+  "binary_sha256": "5832b78ec1f199d5f583934722e06767f6f300d577f5e835e8aeb4bd5a1e9c27",
   "command": [
     "/Users/konstantinrr/.cache/air2lean/host-0.17.0/zig",
     "build-exe",
@@ -102,11 +102,11 @@
     "-target",
     "aarch64-macos-none",
     "-mcpu=baseline",
-    "-femit-bin=/var/folders/lv/wxxgndbn2214b00_9yjjg_dh0000gn/T/air2lean-abi-lbqw2s1v/probe",
+    "-femit-bin=/var/folders/lv/wxxgndbn2214b00_9yjjg_dh0000gn/T/air2lean-abi-kt1kc4mo/probe",
     "--dep",
     "compat",
-    "-Mroot=/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/tests/roadmap/abi-probes/probe.zig",
-    "-Mcompat=/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/tests/diff/compat.zig"
+    "-Mroot=/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/tests/roadmap/abi-probes/probe.zig",
+    "-Mcompat=/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/tests/diff/compat.zig"
   ],
   "observations": {
     "meta": {

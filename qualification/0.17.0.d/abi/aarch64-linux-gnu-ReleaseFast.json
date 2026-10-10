@@ -42,7 +42,7 @@
     "-target",
     "aarch64-linux-gnu",
     "-mcpu=baseline",
-    "-femit-bin=/tmp/air2lean-abi-xn3w1fo8/probe",
+    "-femit-bin=/tmp/air2lean-abi-knqfovql/probe",
     "--dep",
     "compat",
     "-Mroot=/w/tests/roadmap/abi-probes/probe.zig",

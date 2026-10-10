@@ -3,8 +3,8 @@
   "from": "0.16.0",
   "to": "0.17.0",
   "inputs": {
-    "before_sha256": "ab323a2d1933bfc4379f753499dacbc3d7cc0f44f072c699435293357c4af2c3",
-    "after_sha256": "ab0bdaf78681dfe696b060b919aab1cb80acf0e03ea99fa6de5ac8867d9742c0"
+    "before_sha256": "31ff9a6bf9bd5244d57567a0a5afe94583ddf201324f57163fd01d6fdd1bc2fb",
+    "after_sha256": "c841d9160cba27596a666e26734d655d4ae3467ae18a539c59bb51cb80c13bbb"
   },
   "impact_sha256": "1125d01d751372858c884e9bf3c7134f8f5ae3b16125c97aa8b93b246175d5a0",
   "impact": {
@@ -1811,9 +1811,9 @@
         "AIR2LEAN_EXAMPLES": "atomics"
       },
       "log": "0.17.0.d/logs/translation_atomics.log",
-      "log_sha256": "6da65858e70671a758f6ff597f323e260de2522d6a09722ef1280462f3ff36c5",
-      "recorded_at": "2026-10-09T20:24:18+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "430aa8575c1fda50481138763281fcc5b5673ef3953f8a0efcd266ccb52e03c8",
+      "recorded_at": "2026-10-10T19:19:29+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:basic": {
       "status": "pass",
@@ -1828,9 +1828,9 @@
         "AIR2LEAN_EXAMPLES": "basic"
       },
       "log": "0.17.0.d/logs/translation_basic.log",
-      "log_sha256": "2c48946d0352730d1036fe452343b91c570d8301da7925ac43a0da98851443e6",
-      "recorded_at": "2026-10-09T20:24:41+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "66b113604e0a43ba0a8b970260c5be866d54e77dfcb57567024ac03baabe29ad",
+      "recorded_at": "2026-10-10T19:19:53+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:errors": {
       "status": "pass",
@@ -1845,9 +1845,9 @@
         "AIR2LEAN_EXAMPLES": "errors"
       },
       "log": "0.17.0.d/logs/translation_errors.log",
-      "log_sha256": "006a911c1e227ade8431c0bf7520deb7b31c70d37fc8ea661061ba8e5041d86b",
-      "recorded_at": "2026-10-09T20:25:01+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "de2407a2289b80d43f85b7db68304806db499eb5b7e354388b4405ba77e7817f",
+      "recorded_at": "2026-10-10T19:20:16+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:floatconv": {
       "status": "pass",
@@ -1862,9 +1862,9 @@
         "AIR2LEAN_EXAMPLES": "floatconv"
       },
       "log": "0.17.0.d/logs/translation_floatconv.log",
-      "log_sha256": "03aa2b7fe53e9af50c2e0b7b63da12e5e8c6511cfce7931744da812fe5d6f01e",
-      "recorded_at": "2026-10-09T20:25:24+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "1ded53a4a1bec512336ab987049a495620aecdbdb68510264cdb7a402ca5b56c",
+      "recorded_at": "2026-10-10T19:20:48+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:floatops": {
       "status": "pass",
@@ -1879,9 +1879,9 @@
         "AIR2LEAN_EXAMPLES": "floatops"
       },
       "log": "0.17.0.d/logs/translation_floatops.log",
-      "log_sha256": "85baa9f621af565397a303187d45150b8b9a8329a4115c3e25f4c2a983151c90",
-      "recorded_at": "2026-10-09T20:26:24+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "28d608f1bf6634723617709fc9d81a01b41eeb4def468fec541fef22e97e404f",
+      "recorded_at": "2026-10-10T19:21:56+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:floats": {
       "status": "pass",
@@ -1896,9 +1896,9 @@
         "AIR2LEAN_EXAMPLES": "floats"
       },
       "log": "0.17.0.d/logs/translation_floats.log",
-      "log_sha256": "816b5b5a215e9d3885b5156062cf27a17b081fcc487e1044ca3075856a4518b8",
-      "recorded_at": "2026-10-09T20:26:49+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "00f34952f7b637064cbd171faa3e6b8564ba788e680c334ae337776a9cc0a97c",
+      "recorded_at": "2026-10-10T19:22:18+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:iogroup": {
       "status": "pass",
@@ -1913,9 +1913,9 @@
         "AIR2LEAN_EXAMPLES": "iogroup"
       },
       "log": "0.17.0.d/logs/translation_iogroup.log",
-      "log_sha256": "f5885603871e7e7846e90ed1e6b8ae8770a03ed40652af8a12cb3cb38db12a09",
-      "recorded_at": "2026-10-09T20:27:11+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "25addaaa9169bb18d0f88653a71327a7df6ca106ba7d839184d98bb5955ef0d6",
+      "recorded_at": "2026-10-10T19:22:33+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:layout": {
       "status": "pass",
@@ -1930,9 +1930,9 @@
         "AIR2LEAN_EXAMPLES": "layout"
       },
       "log": "0.17.0.d/logs/translation_layout.log",
-      "log_sha256": "f45df9e3db55a0e85f62746bf3908d6b5dae86ac0e163436722d4b40ba01e7f5",
-      "recorded_at": "2026-10-09T20:27:57+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "0a623e527c8116944b2df15104da157269280fd0d1ac56d4bd7c5dc253386f57",
+      "recorded_at": "2026-10-10T19:23:13+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:lists": {
       "status": "pass",
@@ -1947,9 +1947,9 @@
         "AIR2LEAN_EXAMPLES": "lists"
       },
       "log": "0.17.0.d/logs/translation_lists.log",
-      "log_sha256": "eea45f8a0b524e080532f8f6d8269a7f80505449564eff898cf4448c606df780",
-      "recorded_at": "2026-10-09T20:28:26+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "8e155d9c36d774a4311fb0b703ca7adae6c9d373c9fa71b83a623abd89df02cb",
+      "recorded_at": "2026-10-10T19:23:37+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:options": {
       "status": "pass",
@@ -1964,9 +1964,9 @@
         "AIR2LEAN_EXAMPLES": "options"
       },
       "log": "0.17.0.d/logs/translation_options.log",
-      "log_sha256": "2fb60457f85e09bf5eff813840cded2b4d7d7872f489d5a922e1e41d69c77afa",
-      "recorded_at": "2026-10-09T20:28:51+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "18187f18ae103aefd10b2e6520708eb1c34aed4eb871cd0d7df8ab67596b3e72",
+      "recorded_at": "2026-10-10T19:23:54+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:pointers": {
       "status": "pass",
@@ -1981,9 +1981,9 @@
         "AIR2LEAN_EXAMPLES": "pointers"
       },
       "log": "0.17.0.d/logs/translation_pointers.log",
-      "log_sha256": "2a373605da4fdeb83a868e1ac3b3b5cd464c5c9b6a36aeb6fd8f4cbcf0e1e293",
-      "recorded_at": "2026-10-09T20:29:29+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "39dc6a9946636465cc373f2bb1017cba627e575f467bb7b01ff6c02f88e76041",
+      "recorded_at": "2026-10-10T19:24:15+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:recursion": {
       "status": "pass",
@@ -1998,9 +1998,9 @@
         "AIR2LEAN_EXAMPLES": "recursion"
       },
       "log": "0.17.0.d/logs/translation_recursion.log",
-      "log_sha256": "c252655511be3015858336655ca4a8baae43ba5da8a2688106ec5003f7c89c14",
-      "recorded_at": "2026-10-09T20:29:50+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "5c2196738ff80b294a3cbc23f00eb31b91ba26a4f9566f234285d842eee6525e",
+      "recorded_at": "2026-10-10T19:24:32+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:slices": {
       "status": "pass",
@@ -2015,9 +2015,9 @@
         "AIR2LEAN_EXAMPLES": "slices"
       },
       "log": "0.17.0.d/logs/translation_slices.log",
-      "log_sha256": "fad61ff77c68b49483d3c88f28b1eca6df8ac468697291735175bb9b125d81b5",
-      "recorded_at": "2026-10-09T20:30:22+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "41e314fc75941cbfd5edafff58790c2d1e4091827539c67f0a3551334aacc1b5",
+      "recorded_at": "2026-10-10T19:24:59+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:sync": {
       "status": "pass",
@@ -2032,9 +2032,9 @@
         "AIR2LEAN_EXAMPLES": "sync"
       },
       "log": "0.17.0.d/logs/translation_sync.log",
-      "log_sha256": "fe9bad64be684d3c70958faf98189098ca1bd1f8e8877050bbe66d2a296f6aa4",
-      "recorded_at": "2026-10-09T20:30:50+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "e45d6904d246b805a3f30f1915ba27e69b523ca2a452ee9ec1a52dfe4f9e8424",
+      "recorded_at": "2026-10-10T19:25:26+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:threads": {
       "status": "pass",
@@ -2049,9 +2049,9 @@
         "AIR2LEAN_EXAMPLES": "threads"
       },
       "log": "0.17.0.d/logs/translation_threads.log",
-      "log_sha256": "0ca7b925821f2a221ccde9265f6f9278cbdfd49051eeedf43c19640e143a31e2",
-      "recorded_at": "2026-10-09T20:31:18+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "0c35e16664de0a75e9384bae67d6b92cb776cc817acdddf655fc19f98330ec4b",
+      "recorded_at": "2026-10-10T19:25:46+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:variants": {
       "status": "pass",
@@ -2066,9 +2066,9 @@
         "AIR2LEAN_EXAMPLES": "variants"
       },
       "log": "0.17.0.d/logs/translation_variants.log",
-      "log_sha256": "347627538b23949e4cebd05f23aaa256fca2f22b81ca022d82d1af86ed9d6ea9",
-      "recorded_at": "2026-10-09T20:31:43+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "700eff33cd21fd362890c17d0d672364c2db074fb3d8a1ac22a40191c49b55d6",
+      "recorded_at": "2026-10-10T19:26:07+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "translation:vectors": {
       "status": "pass",
@@ -2083,9 +2083,9 @@
         "AIR2LEAN_EXAMPLES": "vectors"
       },
       "log": "0.17.0.d/logs/translation_vectors.log",
-      "log_sha256": "d13e18f8decdb2fdbdd27eb93449cd4d5c02fa37755cc3401521243e88154e74",
-      "recorded_at": "2026-10-09T20:32:19+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "aaf2f12699b0c78c9142b9652388522616de17e86e39aeff65a0eacdb5337ad9",
+      "recorded_at": "2026-10-10T19:26:40+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "probe:layout:aarch64-macos-none-ReleaseFast": {
       "status": "pass",
@@ -2100,13 +2100,13 @@
         "--profile",
         "tests/roadmap/abi-probes/aarch64-macos-none-ReleaseFast.json",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseFast.json"
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseFast.json"
       ],
       "env": {},
       "log": "0.17.0.d/logs/probe_layout_aarch64-macos-none-ReleaseFast.log",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "recorded_at": "2026-10-09T20:32:25+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:36:33+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "probe:layout:aarch64-macos-none-ReleaseSafe": {
       "status": "pass",
@@ -2121,13 +2121,13 @@
         "--profile",
         "tests/roadmap/abi-probes/aarch64-macos-none-ReleaseSafe.json",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseSafe.json"
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseSafe.json"
       ],
       "env": {},
       "log": "0.17.0.d/logs/probe_layout_aarch64-macos-none-ReleaseSafe.log",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "recorded_at": "2026-10-09T20:32:31+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:36:39+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:asm": {
       "status": "pass",
@@ -2137,7 +2137,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/asm.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/asm.json",
         "--module",
         "Proofs.Asm.Effects",
         "--module",
@@ -2147,9 +2147,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_asm.log",
-      "log_sha256": "e6fcaf4623ad651d84455016ee86cc434710c59ca339f224aa8833c0683e5b34",
-      "recorded_at": "2026-10-09T20:32:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "290faa67df4731dc6ee897ac4acbfaec8bcc78b306b804f8802e50d87dacda6e",
+      "recorded_at": "2026-10-10T19:36:49+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:atomics": {
       "status": "pass",
@@ -2159,7 +2159,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/atomics.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/atomics.json",
         "--module",
         "Proofs.Atomics.Gen",
         "--module",
@@ -2175,9 +2175,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_atomics.log",
-      "log_sha256": "aa2aa99c70006633bae3c5c9a48d5e9d0ee62f4faa7de4a9e51d041448fc20d4",
-      "recorded_at": "2026-10-09T20:32:53+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "3425f5e329a58b7ee123345e45151c6a201a1a02720d423819135265b92a4dd1",
+      "recorded_at": "2026-10-10T19:37:05+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:basic": {
       "status": "pass",
@@ -2187,7 +2187,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/basic.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/basic.json",
         "--module",
         "Proofs.Basic.AirCert",
         "--module",
@@ -2203,9 +2203,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_basic.log",
-      "log_sha256": "4da1a1cc74aa612bad69ddd7f59ba71c6410b9a89c52b32aa668bb2d96afedb0",
-      "recorded_at": "2026-10-09T20:33:02+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "76ffc67c7ad81b8b33776dc9a3fe096abc714be01ece45b559a75cc0bd03e49c",
+      "recorded_at": "2026-10-10T19:37:17+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:cancel": {
       "status": "pass",
@@ -2215,7 +2215,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/cancel.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/cancel.json",
         "--module",
         "Proofs.Cancel.Client",
         "--module",
@@ -2225,9 +2225,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_cancel.log",
-      "log_sha256": "08aad3aba1d83abc1dcb757595d334ea1dfe5580e40472fdb42c3ced471764de",
-      "recorded_at": "2026-10-09T20:33:06+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "6da6be7ab8d1a14d61217c1ce43a37babe7ccbd285a5d8466bb4c8777066c4b5",
+      "recorded_at": "2026-10-10T19:37:30+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:detach": {
       "status": "pass",
@@ -2237,7 +2237,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/detach.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/detach.json",
         "--module",
         "Proofs.Detach.Transfer",
         "--module",
@@ -2245,9 +2245,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_detach.log",
-      "log_sha256": "7adae508e806ca2ecee13badbaf94c9b25865086e1fb3bae22789dd3c090278d",
-      "recorded_at": "2026-10-09T20:33:11+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "52e15cb42481fee89033987ee0c263370a5f2548528bb9b73876ff26c5a94362",
+      "recorded_at": "2026-10-10T19:37:41+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:errors": {
       "status": "pass",
@@ -2257,7 +2257,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/errors.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/errors.json",
         "--module",
         "Proofs.Errors.Gen",
         "--module",
@@ -2265,9 +2265,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_errors.log",
-      "log_sha256": "d8ec514bf93ecafd04c576f54432f24ee95289cdac4972cc586f113c6415fc99",
-      "recorded_at": "2026-10-09T20:33:16+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "3deed77cf56b318ec4d5323cfdace940569a07f6eb199a73e183eb22540b00fd",
+      "recorded_at": "2026-10-10T19:37:50+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:floatconv": {
       "status": "pass",
@@ -2277,7 +2277,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/floatconv.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/floatconv.json",
         "--module",
         "Proofs.Floatconv.Gen",
         "--module",
@@ -2285,9 +2285,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_floatconv.log",
-      "log_sha256": "1afc8e20f3e70550bd47dc56b4eff6746524f13c802362b184fd24453be3bcdb",
-      "recorded_at": "2026-10-09T20:33:22+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "7a04c82b586ec8b459057227ef1c2ce3f7fd9bb6584b08adf2df6341e162aefe",
+      "recorded_at": "2026-10-10T19:37:58+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:floatops": {
       "status": "pass",
@@ -2297,7 +2297,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/floatops.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/floatops.json",
         "--module",
         "Proofs.Floatops.Gen",
         "--module",
@@ -2305,9 +2305,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_floatops.log",
-      "log_sha256": "b47185cc2d022527b6aae78f6b1b89691394b88baa16c4f7167500a276fd77c1",
-      "recorded_at": "2026-10-09T20:33:29+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "bd7b0195929f57a7317db2c6bccdf233dd472a223e94e157f2e2a1314aeefe40",
+      "recorded_at": "2026-10-10T19:38:09+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:floats": {
       "status": "pass",
@@ -2317,7 +2317,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/floats.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/floats.json",
         "--module",
         "Proofs.Floats.Dot",
         "--module",
@@ -2329,9 +2329,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_floats.log",
-      "log_sha256": "2820102ac6ed72163aa8056e77583551da120a1cffd2ae60cef55e0aa2977838",
-      "recorded_at": "2026-10-09T20:33:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "baa5c2f27e74f439d9d540dce9ba92ee5480dcedfbb7f34f37dffb9887642887",
+      "recorded_at": "2026-10-10T19:38:25+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:iogroup": {
       "status": "pass",
@@ -2341,7 +2341,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/iogroup.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/iogroup.json",
         "--module",
         "Proofs.Iogroup.Counter",
         "--module",
@@ -2349,9 +2349,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_iogroup.log",
-      "log_sha256": "18ba409ce44a6fca0e0a01fb91f0dc1e3a7c873ea75eca607531cdd5857ea718",
-      "recorded_at": "2026-10-09T20:33:45+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "61fe2d602dacb420a76b88b0647c632b89c2f5de0807ff1d39293699d233818c",
+      "recorded_at": "2026-10-10T19:38:46+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:layout": {
       "status": "pass",
@@ -2361,7 +2361,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/layout.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/layout.json",
         "--module",
         "Proofs.Layout.Gen",
         "--module",
@@ -2371,9 +2371,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_layout.log",
-      "log_sha256": "01462051bb6522e3c1b59f800b36d0669bf58379caa3f5a73f47e5e5b5ff66b3",
-      "recorded_at": "2026-10-09T20:33:53+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "14bad9fe40901b7c754a1c5841df8c62779bb9f298093c2861f7f66b6b251f6c",
+      "recorded_at": "2026-10-10T19:39:02+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:lists": {
       "status": "pass",
@@ -2383,7 +2383,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/lists.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/lists.json",
         "--module",
         "Proofs.Lists.Append",
         "--module",
@@ -2401,9 +2401,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_lists.log",
-      "log_sha256": "4fd238ffdeedeb7b3a297ea11a777b81b51b8692b540fc8722f3a9df1cfa7e79",
-      "recorded_at": "2026-10-09T20:34:07+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "a35737dd9738cf1822ab0ca55b79ed28c20f1dd941a57c5cc8b0b344de865646",
+      "recorded_at": "2026-10-10T19:39:19+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:options": {
       "status": "pass",
@@ -2413,7 +2413,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/options.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/options.json",
         "--module",
         "Proofs.Options.Gen",
         "--module",
@@ -2421,9 +2421,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_options.log",
-      "log_sha256": "237b58c408f4a10ec9c48816a27c73a9376019c0bd6a694c7318f489b6f2ad15",
-      "recorded_at": "2026-10-09T20:34:13+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "67e2f458a9d002688a1498f1184cf3427654ddc0ad83db12f78d67aeb9d12f09",
+      "recorded_at": "2026-10-10T19:39:26+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:pointers": {
       "status": "pass",
@@ -2433,7 +2433,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/pointers.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/pointers.json",
         "--module",
         "Proofs.Pointers.Gen",
         "--module",
@@ -2443,9 +2443,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_pointers.log",
-      "log_sha256": "c60e5cf6723c715d72c4b015876feae4d43bb229cb8090c335a16cbe70037487",
-      "recorded_at": "2026-10-09T20:39:39+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "9d296b3087d0e18cd44366316fbe3b17f79ae3475c3a7e32a979d752d3d3a743",
+      "recorded_at": "2026-10-10T19:39:39+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:provenance": {
       "status": "pass",
@@ -2455,7 +2455,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/provenance.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/provenance.json",
         "--module",
         "Proofs.Provenance.Gen",
         "--module",
@@ -2463,9 +2463,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_provenance.log",
-      "log_sha256": "7df1e792de5d477ce514b646a8d93a31dee2ce6d81ef667b0719b54113110e29",
-      "recorded_at": "2026-10-09T20:39:44+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "825fe8c8a48dc5548c457ba1d3348527368bbb42340a1be9e8d5e980f613c0c2",
+      "recorded_at": "2026-10-10T19:39:45+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:recursion": {
       "status": "pass",
@@ -2475,7 +2475,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/recursion.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/recursion.json",
         "--module",
         "Proofs.Recursion.AirCert",
         "--module",
@@ -2485,9 +2485,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_recursion.log",
-      "log_sha256": "2b4ac105b9eebeedc2e62b6e3901c197f6907487819e7b28bbcb4f1a26218dc9",
-      "recorded_at": "2026-10-09T20:39:56+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "402bb8c88032665af4aa58799b3b3e410d3bae920d97cc663c259d898ce41886",
+      "recorded_at": "2026-10-10T19:39:55+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:slices": {
       "status": "pass",
@@ -2497,7 +2497,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/slices.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/slices.json",
         "--module",
         "Proofs.Slices.Gen",
         "--module",
@@ -2507,9 +2507,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_slices.log",
-      "log_sha256": "1b430c18466eb25d1396223e193acf56bfcd9202ba9819ade7c15178b0391245",
-      "recorded_at": "2026-10-09T20:40:03+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "b370a2c70508f6b3688114c9a1c8fc26adcc0f1ff2d7c67cef7d3423824ca63a",
+      "recorded_at": "2026-10-10T19:40:08+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:sync": {
       "status": "pass",
@@ -2519,7 +2519,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/sync.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/sync.json",
         "--module",
         "Proofs.Sync.Contracts",
         "--module",
@@ -2549,9 +2549,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_sync.log",
-      "log_sha256": "a94ae903469988397c2b30146240996529f6f4ae3dcfadb2fc529d1245b2d20f",
-      "recorded_at": "2026-10-09T20:40:42+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "19c61561e29cac54863f1fca7a8631c751e652b8b4bd1d55eb453812a92c7469",
+      "recorded_at": "2026-10-10T19:40:47+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:threads": {
       "status": "pass",
@@ -2561,7 +2561,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/threads.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/threads.json",
         "--module",
         "Proofs.Threads.Counter",
         "--module",
@@ -2573,9 +2573,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_threads.log",
-      "log_sha256": "9b9aba1a6800ba6bf8c613e8090968669349c7cf0f15733aa2d43db02a000bec",
-      "recorded_at": "2026-10-09T20:40:56+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "f43b1da0a9dde9240f0514f102480ad2b569686eb99232f825e31c786b6233d5",
+      "recorded_at": "2026-10-10T19:41:17+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:variants": {
       "status": "pass",
@@ -2585,7 +2585,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/variants.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/variants.json",
         "--module",
         "Proofs.Variants.Gen",
         "--module",
@@ -2593,9 +2593,9 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_variants.log",
-      "log_sha256": "3348873462facd862cdc49f19e43341bf9e37fd858025b59613a01a8bebad23e",
-      "recorded_at": "2026-10-09T20:41:03+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "d53464be545b117983ee59f8a5543c0b0acca9d79657f3511f38caf502551f21",
+      "recorded_at": "2026-10-10T19:41:26+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "proofs:vectors": {
       "status": "pass",
@@ -2605,7 +2605,7 @@
         "python3",
         "scripts/assumptions.py",
         "--output",
-        "/opt/dev/air2lean/.claude/worktrees/agent-a802d64cf9c61e7eb/qualification/0.17.0.d/assumptions/vectors.json",
+        "/opt/dev/air2lean/.claude/worktrees/agent-af0adc08a577524b9/qualification/0.17.0.d/assumptions/vectors.json",
         "--module",
         "Proofs.Vectors.CheckedAdd",
         "--module",
@@ -2615,71 +2615,72 @@
       ],
       "env": {},
       "log": "0.17.0.d/logs/proofs_vectors.log",
-      "log_sha256": "39804aa4b5f437cdf5f899df02fc1d3b7f4c9d698bf5fd14d9ef61b7cd6210cc",
-      "recorded_at": "2026-10-09T20:41:10+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "log_sha256": "ffd8e6bb450c4dfbda11dc176f9d7d8b7a5fbb6209f163a7232d5b565008cf06",
+      "recorded_at": "2026-10-10T19:41:37+00:00",
+      "git_head": "58af70235ba19cd0c1db1e70889fd5c740b3bc98"
     },
     "universe:air_tags": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "docs/zig-0.17-delta.md",
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "16 added / 6 removed tags have dispositions: renames and the bitcast split map onto the 0.16.0 paths (Normalize/Canon/Check, tests/roadmap/zig017), div_ceil is a new op, union_from_enum/array_to_vector/spirv_runtime_array_len/div_ceil_optimized stay rejected; bool_and/bool_or become bit_and/bit_or on bool.",
-      "recorded_at": "2026-10-09T22:16:33+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "universe:intern_keys": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "spirv_type: only made by @SpirvType, which Sema rejects unless the target is SPIR-V (fixture in TAGS.md); an export would be a k=other type entry, rejected.",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "universe:types": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "zig-patch/0.17.0/TAGS.md",
         "docs/zig-0.17-delta.md"
       ],
       "note": "std.lang.Type.spirv: unreachable on supported targets (same fixture); exported as other and rejected.",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "evidence:tags": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "tests/golden/0.17.0",
         "tests/roadmap/zig017",
         "tests/roadmap/bitcast-017",
+        "tests/roadmap/zig017/overflow",
         "qualification/0.17.0.d/logs",
         "qualification/0.17.0.d/logs/review_zig017_tags.log",
         "qualification/0.17.0.d/logs/review_zig017_cli.log",
         "qualification/0.17.0.d/logs/review_bitcast017.log",
         "qualification/0.17.0.d/logs/review_coverage_check.log"
       ],
-      "note": "Refreshed on main efd353ed (batches 7-9): the tag rows changed since the first record are xor, unwrap_errunion_payload_ptr, is_non_null_ptr, optional_payload_ptr, runtime_nav_ptr, memset_safe, mul_with_overflow, array_to_slice (re-reviewed through the same evidence; none is a 0.17.0-only tag). Seven differ from 0.16.0 only in their recorded fixture/test paths; mul_with_overflow is emitted-unqualified on 0.16.0 (its fixture is tests/roadmap/pointer-width/air/0.16.0) but emitted-unfixtured on 0.17.0 (no 0.17.0 compiler export contains it; fixture_request tests/roadmap/runtime-tags): a narrowing, no support is claimed for it on 0.17.0. Exporter rows: tests/golden/0.17.0/*/air from the patched 0.17.0 compiler; normalizer/checker rows: tests/roadmap/zig017 (synthetic tag table, renames, rejections) and bitcast-017 (exported AIR); every selected example's translation and differential test passed on aarch64-macos (translation:* logs).",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "note": "Refreshed on codex/soundness-batch 5ef0a248 (batches 7-9 and the soundness batch): the tag rows changed since the first record are xor, unwrap_errunion_payload_ptr, is_non_null_ptr, optional_payload_ptr, runtime_nav_ptr, memset_safe, mul_with_overflow, array_to_slice (re-reviewed through the same evidence; none is a 0.17.0-only tag). Seven differ from 0.16.0 only in their recorded fixture/test paths; mul_with_overflow is emitted-unqualified on 0.16.0 (fixture tests/roadmap/pointer-width/air/0.16.0) and now also on 0.17.0 through the new compiler fixture tests/roadmap/zig017/overflow (patched 0.17.0 export of @mulWithOverflow, provenance.json pins the compiler and exporter hashes; the translation of both functions elaborates), so the 0.17.0 row is no longer a narrowing; no semantic contract is claimed beyond the shared 0.16.0 path. Exporter rows: tests/golden/0.17.0/*/air from the patched 0.17.0 compiler; normalizer/checker rows: tests/roadmap/zig017 (synthetic tag table, renames, rejections) and bitcast-017 (exported AIR); every selected example's translation and differential test passed on aarch64-macos (translation:* logs).",
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "compiler-sources": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "docs/zig-0.17-delta.md",
@@ -2687,25 +2688,25 @@
         "docs/std-models.md"
       ],
       "note": "Release diff of Air/InternPool/Sema/Type/Value/llvm and the modelled std files reviewed in docs/zig-0.17-delta.md (a)-(f); @bitCast's logical-order change is modelled version-keyed (docs/bitcast-semantics.md).",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:constants:spirv_type": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "Not a support expansion in practice: InternPool.getReifiedSpirvType has one caller, Sema.zirReifySpirvType, which fails first unless the target is SPIR-V (compiler fixture with the patched 0.17.0 compiler for x86_64-linux and aarch64-macos in TAGS.md); the translator rejects the k=other entry it would produce.",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "model-boundary": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "docs/std-models.md",
@@ -2716,8 +2717,8 @@
         "qualification/0.17.0.d/logs/translation_lists.log"
       ],
       "note": "Allocator/Thread/Io/time sources compared with 0.16.0 (docs/std-models.md); model rows list 0.17.0 only where re-qualified. Io.Condition.waitUncancelable (inlined loops) and ArrayListUnmanaged's pointer_stability are proved through their 0.17.0 translations; sync and lists translations and differential tests pass.",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "probe:layout:aarch64-linux-gnu-ReleaseSafe": {
       "status": "pass",
@@ -2730,8 +2731,8 @@
         "qualification/0.17.0.d/logs/linux-container-probe.sh"
       ],
       "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
-      "recorded_at": "2026-10-09T22:16:34+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:54+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "probe:layout:aarch64-linux-gnu-ReleaseFast": {
       "status": "pass",
@@ -2744,8 +2745,8 @@
         "qualification/0.17.0.d/logs/linux-container-probe.sh"
       ],
       "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "probe:layout:x86_64-linux-gnu-ReleaseSafe": {
       "status": "pass",
@@ -2758,8 +2759,8 @@
         "qualification/0.17.0.d/logs/linux-container-probe.sh"
       ],
       "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "probe:layout:x86_64-linux-gnu-ReleaseFast": {
       "status": "pass",
@@ -2772,8 +2773,8 @@
         "qualification/0.17.0.d/logs/linux-container-probe.sh"
       ],
       "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "probe:float": {
       "status": "pass",
@@ -2786,13 +2787,13 @@
         "tests/floatprobe/expected.0.17.0.txt"
       ],
       "note": "scripts/floatprobe.sh with stock Zig 0.17.0 x86_64-linux (-mcpu=baseline) in docker linux/amd64; exit 0 with tests/floatprobe/expected.0.17.0.txt, whose two f128 sqrt lines come from this run's output and equal 0.16.0's override.",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:div_ceil": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "tests/roadmap/zig017/divceil/provenance.json",
@@ -2804,13 +2805,13 @@
         "tests/roadmap/zig017/reject"
       ],
       "note": "Compiler fixture: divceil.zig's AIR exported by the patched 0.17.0 compiler (ReleaseSafe, x86_64-linux), with Sema's minInt/-1 and divide-by-zero checks before div_ceil. Differential: the translation run on 1652 inputs (edge pairs and seeded random, i8/u8/i13/i32/u32/i64/u64) equals stock Zig 0.17.0 on aarch64-macos, aarch64-linux and x86_64-linux: 1562 values, and 90 inputs where both panic with the same check (division by zero / integer overflow). Rejections: div_ceil on a 0.16.0 file and div_ceil_optimized (tests/roadmap/zig017/reject). Contract: Zig.divCeil (ZigLean/Basic.lean). CI reruns check.sh on the 0.17.0 row.",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "translation:threadsync": {
       "status": "not-applicable",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": null,
       "evidence": [
         "examples/threadsync/zig-versions",
@@ -2818,13 +2819,13 @@
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "proofs:threadsync": {
       "status": "not-applicable",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": null,
       "evidence": [
         "examples/threadsync/zig-versions",
@@ -2832,13 +2833,13 @@
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
-      "recorded_at": "2026-10-09T22:16:35+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:bit_cast": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2851,13 +2852,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps bit_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:bit_cast_safe": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2870,13 +2871,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps bit_cast_safe onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:ptr_cast": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2889,13 +2890,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps ptr_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:ptr_from_int": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2908,13 +2909,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps ptr_from_int onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:int_from_ptr": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2927,13 +2928,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_from_ptr onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:error_cast": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2946,13 +2947,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps error_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:int_cast": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2965,13 +2966,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:36+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:int_cast_safe": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -2984,13 +2985,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_cast_safe onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:agg_field_val": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -3003,13 +3004,13 @@
         "qualification/0.17.0.d/logs/translation_layout.log"
       ],
       "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps agg_field_val onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
-      "recorded_at": "2026-10-09T22:16:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:error_from_int": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -3021,13 +3022,13 @@
         "tests/roadmap/zig017/casts/air/0.17.0"
       ],
       "note": "Canon.versionTags maps error_from_int onto 0.16.0's bitcast; the compiler fixture tests/roadmap/zig017/casts (patched 0.17.0 export of @intFromError/@errorFromInt) shows the exporter writes it, and Check.lean rejects it exactly as 0.16.0's raw error representation cast (finalized error ordinals are outside the error-storage fragment). No new semantics is claimed: the accepted expansion is the export and the shared rejection.",
-      "recorded_at": "2026-10-09T22:16:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "support:tags:int_from_error": {
       "status": "pass",
       "source": "record",
-      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 promotion prep agent)",
       "decision": "accepted",
       "evidence": [
         "Air2Lean/Air/Canon.lean",
@@ -3039,8 +3040,8 @@
         "tests/roadmap/zig017/casts/air/0.17.0"
       ],
       "note": "Canon.versionTags maps int_from_error onto 0.16.0's bitcast; the compiler fixture tests/roadmap/zig017/casts (patched 0.17.0 export of @intFromError/@errorFromInt) shows the exporter writes it, and Check.lean rejects it exactly as 0.16.0's raw error representation cast (finalized error ordinals are outside the error-storage fragment). No new semantics is claimed: the accepted expansion is the export and the shared rejection.",
-      "recorded_at": "2026-10-09T22:16:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     },
     "translation:asm": {
       "status": "pass",
@@ -3048,13 +3049,13 @@
       "reviewer": null,
       "decision": null,
       "evidence": [
-        "https://github.com/riventic/air2lean/actions/runs/37981222110/job/113991942788",
+        "https://github.com/riventic/air2lean/actions/runs/38078039771/job/114289137823",
         "qualification/0.17.0.d/logs/translation_asm_ci-x86_64-linux.log"
       ],
-      "note": "asm is x86_64-linux only. CI run 37981222110 on main efd353ed, job test (0.17.0, true, false), conclusion success: scripts/check.sh over all examples incl. asm (AIR dump, translation, golden diff vs tests/golden/0.17.0/asm/air-linux) and the differential test asm: ok=1200 fail_match=0 mismatch=0; Proofs/Asm/Gen.lean matches the 0.17.0 translation.",
-      "recorded_at": "2026-10-09T22:16:37+00:00",
-      "git_head": "efd353ed5d955c986553ebaebe49a4aafb5786e0"
+      "note": "asm is x86_64-linux only. CI run 38078039771 (PR codex/soundness-batch, head 6a11a396, whose tree this record builds on), job test (0.17.0, true, false): step Golden AIR, translate, build, differential test succeeded (scripts/check.sh over all examples incl. asm: AIR dump, translation, golden diff against tests/golden/0.17.0/asm/air-linux) with the differential test TOTAL asm: ok=1200 fail_match=4 unspecified=0 capped=0 mismatch=0 (the 4 fail_match are divmod divide-by-zero inputs, now trapped through asmTrap); Build proofs succeeded, so Proofs/Asm/Gen.lean matches the 0.17.0 translation. The job's only failing step was Review regressions (an emitter fixture test, repaired on codex/soundness-batch by 5ef0a248), which does not touch asm.",
+      "recorded_at": "2026-10-10T19:43:55+00:00",
+      "git_head": "882c53e1e2f980f28dcd910623190fbca9c30321"
     }
   },
-  "plan_sha256": "7852d2fa0adbf97e13d1247927bce2e57f5ad1f735dde4ba4b884495b0dc7076"
+  "plan_sha256": "f2d9fc7f918f1c99fb4508da0498ce965013787d66d42d17b03f207abb56458d"
 }
