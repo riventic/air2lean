@@ -1,6 +1,7 @@
 # The translated `ArenaAllocator` (allocator milestone 2)
 
-Status: translation and executable checks done; proofs are partial (obstructions below). Fixture:
+Status: translation, executable checks, kernel-checked obstructions and a mutant are done. The
+specification is not proved (obstructions O-A to O-F below). Fixture:
 [`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md). The plan and the earlier
 milestone: [alloc-spec.md](alloc-spec.md), [allocator-model.md](allocator-model.md),
 [alloc-page.md](alloc-page.md).
@@ -73,15 +74,28 @@ pointer comparison sees the block), and a region of the node's block that ends a
 cannot start inside the header, which `own` holds.
 
 **O-E: after a failed `alloc`, `free` and `resize` form an out-of-bounds pointer**
-([upstream draft](upstream/arena-oob-gep.md)). A request that does not fit leaves the first
+(kernel-checked: `ArenaObstruction.oob_free_illegal`; [upstream draft](upstream/arena-oob-gep.md)).
+A request that does not fit leaves the first
 node's `end_index` past its buffer. If the child then fails, `alloc` returns `null` with that
 node still first. `free`/`resize` compute `buf_ptr + cur_end_index`, which is
 `getelementptr inbounds` natively, and branch on its comparison: undefined behaviour in LLVM,
 illegal behaviour in Zig. With the in-bounds projection rule of the memory model (MM-3,
-`Zig.ptrProject`) the translated code is `.illegal` there. So no invariant that admits the state
+`Zig.ptrProject`) the translated code is `.illegal` there. `arena_oob_free` builds that state by hand (a node with `end_index` past its 64 bytes) because the
+kernel does not evaluate the translated `alloc`, which is a `partial_fixpoint` group: the child
+dispatch includes `ArenaAllocator.alloc` itself. So no invariant that admits the state
 that a failed `alloc` leaves satisfies `FAllocSpec`. The specification can hold only for states
 in which the first node's `end_index` is within its buffer. That is every state that a
 successful `alloc` returns to, but `alloc` cannot keep it after an out-of-memory failure.
+
+**O-F: deciding a foreign slice needs live-block disjointness.** `free` and `resize` compare
+`buf_ptr + end_index` with `memory.ptr + memory.len` by address (`Zig.ptrEqAddr`, MM-1). For
+a slice in another block, equal addresses would make `free` give back bytes of the node that the
+caller does not own. Zig rules this out: live objects have disjoint storage, and the placement
+oracle places every block clear of the live ones. But the triple's memory invariant `Mem.FSeq`
+does not carry that (`Mem.LiveDisjoint` and `Holds.apart` exist; adding them to `FSeq` is
+stage 3 of [sep-full-state.md](sep-full-state.md)). With it, a slice that ends at the node's
+end lies in the node's block, past its header (which `own` holds). So `free` and `resize` are
+specifiable for an arena with a node, with `tok = emp`.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,
@@ -100,22 +114,29 @@ at alignment `@alignOf(Node) = 8`.
 multi-threaded specification of the lock-free code (the `resizing` bit as a lock, the stolen
 free list) is not attempted.
 
-## What is proved
+## What is proved and checked
 
-* `ArenaObstruction.foreign_free_panics` (O-A), from the generated code and `mem0`, by kernel
-  evaluation.
+* `ArenaObstruction.foreign_free_panics` (O-A) and `ArenaObstruction.oob_free_illegal` (O-E),
+  from the generated code and `mem0 .fresh`, by kernel evaluation.
+* `mutant.sh`: an `alloc` whose fast path reserves nothing (the `end_index` bump adds `0`) hands
+  out the same bytes twice; `Eval.lean` rejects it (`arena_two`: 22 instead of 21). This is an
+  executable rejection, not a failed proof: there is no `alloc` proof yet.
 * The atomic rules the entries need beyond the earlier ones (`ZigLean/Sep/Full/AtomicRules.lean`):
   `FTriple.atomicLoadPtr` (an atomic load of an owned pointer word, any order) and
   `FTriple.cmpxchgHit` (a strong 64-bit `cmpxchg` that finds the expected value).
 
-The proofs of `free`, `resize` and `remap` for an arena with a node, and of `alloc` and `reset`,
-unfold the generated steps. They wait for the port of the allocator work onto the hardened memory
-model (`codex/alloc-milestone1`: in-bounds projections, alignment checks, pointer equality by
-address, placement), which changes those steps.
+The fixture is ported to the hardened memory model (`codex/alloc-milestone1`: placement,
+in-bounds projections, `checkAlign`, pointer equality by address). Not yet proved: `free`,
+`resize` and `remap` for an arena with a node (need O-F's stage 3), and `alloc` and `reset`. These
+also need rules that do not exist yet: `CTriple` rules for the generated loops (`Zig.loop`), and an
+equation-based reading of the `partial_fixpoint` group.
 
 ## Legacy models
 
 The hand-written arena model (`.owned a` blocks, `ZigLean/Sep/ArenaClient.lean`, ALC-07) stays
-until the translated arena's specification replaces it. With it, a foreign free and a use after
-a retaining reset are permission violations: the token is missing, and `reset` takes back every
-byte of every node (`Covers`, as for the `FixedBufferAllocator`'s `reset_spec`).
+until the translated arena's specification replaces it ([allocator-model.md](allocator-model.md),
+removal plan step 2). In that specification a use after a retaining reset is a permission
+violation: `reset` takes back every byte of every node (`Covers`, as for the
+`FixedBufferAllocator`'s `reset_spec`), so the caller keeps no region of the arena. A foreign
+free is one only with ghost tokens (O-A); without them a foreign slice must be harmless, which
+it is for an arena that has a node.

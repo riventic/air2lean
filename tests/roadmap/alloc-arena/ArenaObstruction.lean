@@ -18,8 +18,8 @@ So an `FAllocSpec` invariant `I` of the arena that holds for an empty arena must
 in its current generation. Full-state resources (`ZigLean/Sep/Full/Res.lean`) have owned bytes
 and duplicable block knowledge only, so a token cannot be revoked by a reset or tied to the
 arena's current node list: it needs ghost state (an authoritative node set in `own`, a fragment
-per region in `tok`). Without it, `ArenaSpec.lean` proves `free`, `resize` and `remap` for an
-arena that has a node (`used_list = some N`), where any slice is harmless.
+per region in `tok`). Without it, `free`, `resize` and `remap` can be specified only for an arena
+that has a node (`used_list = some N`), where any slice is harmless (`docs/alloc-arena.md`).
 
 ## O-E: `free` after a failed `alloc` forms an out-of-bounds pointer
 

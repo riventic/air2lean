@@ -14,7 +14,8 @@ proved: [alloc-arena.md](../../../docs/alloc-arena.md).
 | `AllocArena/Arena{Linux,Macos}.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
 | `Eval.lean` | `#guard`s: on the one-thread schedule the clients equal the native results (`expected.txt`) |
 | `native.zig`, `expected.txt` | the native run with a stock Zig 0.16.0 (independent of the page size) |
-| `ArenaObstruction.lean` | O-A, kernel-checked: a foreign `free` on an empty arena panics (`arena_foreign_free`) |
+| `ArenaObstruction.lean` | kernel-checked: O-A, a foreign `free` on an empty arena panics (`arena_foreign_free`); O-E, `free` in the state a failed `alloc` leaves is `.illegal` (`arena_oob_free`) |
+| `mutant.sh` | an `alloc` that reserves nothing is rejected by `Eval.lean` (`arena_two` sees overlapping allocations) |
 | `upstream/oob_gep.zig` | the reproducer of O-E ([draft note](../../../docs/upstream/arena-oob-gep.md)): `free` after a failed `alloc` forms an out-of-bounds `inbounds` pointer |
 | `test_cli.py` | std mode rejects the same AIR; a cyclic type graph with error storage and an `unordered` load of a `bool` stay rejected |
 
