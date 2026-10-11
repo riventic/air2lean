@@ -83,6 +83,16 @@ theorem Frame.setCell_setCell (fr : Frame) (id : InstId) (v w : Option Value) :
 theorem Frame.setCell_self (fr : Frame) (id : InstId) : fr.setCell id (fr.cells id) = fr := by
   cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> simp_all
 
+theorem Frame.setCell_eq (fr : Frame) (id : InstId) (v : Option Value) (h : fr.cells id = v) :
+    fr.setCell id v = fr := by
+  rw [← h]; exact setCell_self fr id
+
+/-- Writes to different cells commute; a certificate orders them by id. -/
+theorem Frame.setCell_comm (fr : Frame) (a b : InstId) (v w : Option Value) (h : b < a) :
+    (fr.setCell a v).setCell b w = (fr.setCell b w).setCell a v := by
+  cases fr; simp only [setCell, mk.injEq, true_and]; funext j
+  by_cases hb : j = b <;> by_cases ha : j = a <;> simp_all <;> omega
+
 def Env.set (env : Env) (id : InstId) (t : TyId) (v : Value) : Env :=
   fun j => if j = id then some (t, v) else env j
 
@@ -1274,7 +1284,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
   regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
-  Frame.setCell_blocks Frame.setCell_setCell
+  Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
   free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self
 
 end Cert

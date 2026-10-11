@@ -4172,6 +4172,36 @@ def width64Leak (src : String) : Option String :=
     | none => true
   if wholeSlice then some "Zig.Slice" else width64Names.find? fun n => (src.splitOn n).length > 1
 
+/-- The shape of one emitted function that an AIR certificate (`Air2Lean/Certificate.lean`)
+restates: its `Locals`/`Exit` types and constructors, and its loop defs. Data only; the
+certificate's kernel check is what makes it trustworthy. -/
+structure CertShape where
+  localsName : String
+  exitName : String
+  /-- Each `alloc`'s `Locals` field. -/
+  fields : Array (InstId × String)
+  escaping : Array InstId
+  byteLocals : Array InstId
+  /-- The `br<k>` and `rep<k>` constructors, and each block's and loop's result type. -/
+  brT : Array InstId
+  repT : Array InstId
+  blockTys : Array (InstId × TyId)
+  /-- Each loop's captured parameters `(id, name)`, in order. -/
+  loops : Array (InstId × Array (InstId × String))
+  /-- Extra `Exit` constructors or `Locals` fields (dispatch loops, raw returns). -/
+  other : Bool
+  deriving Inhabited
+
+/-- The certificate shape of a function's emission context. -/
+def FCtx.certShape (fc : FCtx) : CertShape :=
+  { localsName := fc.localsName, exitName := fc.exitName, fields := fc.allocFields,
+    escaping := fc.escaping, byteLocals := fc.byteLocals, brT := fc.brT, repT := fc.repT,
+    blockTys := fc.blockTys,
+    loops := fc.allInsts.filterMap fun i => match i.op with
+      | .loop _ => some (i.id, (fc.loopParams i).map fun (id, name, _) => (id, name))
+      | _ => none,
+    other := !fc.dispatchTys.isEmpty || fc.rawRet }
+
 /-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
 call groups (`callGroups`) in emission order: each group's member source names, the source
 names of the functions it references outside itself (`calleesOf`), and its declarations. -/
@@ -4193,6 +4223,8 @@ structure EmitParts where
   (`concFunctions`). -/
   memFuncs : Array String := #[]
   concFuncs : Array String := #[]
+  /-- Each function's certificate shape (`CertShape`). -/
+  shapes : Array (String × CertShape) := #[]
 
 /-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
 `prefix_` is stripped from every Zig name (function or struct) before mangling.
@@ -4287,12 +4319,15 @@ def emitParts (funcs : Array Func) (prefix_ : String)
         (name, args, kind, complete, classes))
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
-  let groups := (callGroups funcs).map fun (members, recursive) =>
+  let groupParts := (callGroups funcs).map fun (members, recursive) =>
+    (members, recursive, members.toList.map fun f =>
+      emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome)
+  let shapes := groupParts.flatMap fun (members, _, parts) =>
+    (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
+  let groups := groupParts.map fun (members, recursive, parts) =>
     let names := members.map (·.name)
     let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
-    let parts := members.toList.map fun f =>
-      emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome
     let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
@@ -4318,7 +4353,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
     dispatchTargets := if dispatchStr.isEmpty then #[] else
       targets.map (·.1) ++ futures.map (·.1)
-    declNames := ownFuncNames, memFuncs, concFuncs }
+    declNames := ownFuncNames, memFuncs, concFuncs, shapes }
 
 /-- The single-file output: every part in order under one `namespace`. -/
 def EmitParts.render (p : EmitParts) (ns : String) : String :=
