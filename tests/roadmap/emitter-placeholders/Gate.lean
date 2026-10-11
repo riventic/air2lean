@@ -11,7 +11,7 @@ private def require (condition : Bool) (message : String) : IO Unit :=
 
 /-- `@reduce(.Add, v)` on a `@Vector(2, bool)`: the emitter has no term for it. -/
 private def reduceBoolAdd : Func := {
-  zigVersion := "0.16.0"
+  dialect := .ofVersion .v0_16_0
   name := "gate.reduceBoolAdd"
   params := #[2]
   ret := 0

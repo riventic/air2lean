@@ -22,7 +22,7 @@ SOURCES = [
     'README.md', 'PLAN.md', 'ROADMAP.md', 'docs/support-matrix.md',
     'scripts/example-selection.sh', 'scripts/check.sh', 'compatibility.json',
     'scripts/mutate.sh', 'scripts/translate.sh', 'zig-patch/versions.toml',
-    'Air2Lean/Air/Normalize.lean', 'Air2Lean/Main.lean', 'Air2Lean/Diagnose.lean',
+    'Air2Lean/Air/Dialect.lean', 'Air2Lean/Main.lean', 'Air2Lean/Diagnose.lean',
     '.github/workflows/ci.yml',
 ]
 SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions']
@@ -66,10 +66,15 @@ def end(name):
 # ---- committed facts -------------------------------------------------------------------------
 
 def supported_versions(root):
-    m = re.search(r'def supportedVersions : List String := \[([^\]]*)\]',
-                  read(root, 'Air2Lean/Air/Normalize.lean'))
-    if not m: raise Stale('Air2Lean/Air/Normalize.lean: supportedVersions not found')
-    return re.findall(r'"([^"]+)"', m.group(1))
+    """`ZigVersion.all` of the translator's version registry, spelled by `ZigVersion.toString`."""
+    text = read(root, 'Air2Lean/Air/Dialect.lean')
+    m = re.search(r'def all : List ZigVersion := \[([^\]]*)\]', text)
+    if not m: raise Stale('Air2Lean/Air/Dialect.lean: ZigVersion.all not found')
+    spelled = dict(re.findall(r'\|\s*(v\d+_\d+_\d+)\s*=>\s*"([^"]+)"', text))
+    names = re.findall(r'\.(v\d+_\d+_\d+)', m.group(1))
+    if not names or any(n not in spelled for n in names):
+        raise Stale('Air2Lean/Air/Dialect.lean: ZigVersion.all names a version without a spelling')
+    return [spelled[n] for n in names]
 
 
 def pinned_versions(root):
@@ -237,7 +242,7 @@ def region_matrix(root):
     pins = pinned_versions(root)
     for row in rows:
         v = row['version']
-        out.append(f'| {v} | {"yes" if v == default else "no"} | {row["status"]} | `supportedVersions` | '
+        out.append(f'| {v} | {"yes" if v == default else "no"} | {row["status"]} | `ZigVersion.all` | '
                    f'{"`zig-patch/versions.toml`" if v in pins else "missing"} | '
                    f'{"`coverage/" + v + ".json`" if v in cov else "missing"} | {row["ci"]} |')
     out += ['', '## Examples by version', '',
@@ -319,7 +324,7 @@ def consistency(root):
     versions = supported_versions(root)
     default = default_version(root)
     if default not in versions:
-        problems.append(f'default Zig {default} is not in supportedVersions {versions}')
+        problems.append(f'default Zig {default} is not in ZigVersion.all {versions}')
     status = version_status(root)
     if sorted(status) != sorted(versions):
         problems.append(f'{DEFAULT_METADATA} lists {sorted(status)}, translator supports {versions}')

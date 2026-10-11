@@ -41,7 +41,7 @@ def main : IO Unit := do
   let funcs ← loadAir "tests/roadmap/futures/air/0.16.0"
   let _ ← get <| checkProgram funcs
   -- Version qualification: the future API is a Zig 0.16.0 model.
-  expectError (checkProgram (funcs.map fun f => { f with zigVersion := "0.15.2" }))
+  expectError (checkProgram (funcs.map fun f => { f with dialect := { f.dialect with version := .v0_15_2 } }))
     "qualified Zig 0.16.0"
   -- Cancelation points: with `Future.cancel` in the program, a task may only observe a request
   -- at `Io.checkCancel`; a cancelable futex wait would observe it in std but not in the model.
