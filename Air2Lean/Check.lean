@@ -2048,8 +2048,9 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
 
 /-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
 (`Dialect.euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
-affected payload of its global. Other backends lower these constants with the payload offset
-that the model uses. -/
+affected payload of its global. A legacy profile with no backend (`Dialect.misplacesEuPayload`) is
+treated alike. Other backends lower these constants with the payload offset that the model
+uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
   unless f.dialect.misplacesEuPayload do return
@@ -2057,10 +2058,12 @@ private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) 
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
+    let legacyNote := if f.dialect.backend == BuildProfile.unverified then
+      " (a legacy profile names no backend, so the LLVM backend cannot be excluded)" else ""
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
       alignment-1 error-union payload, which this backend lowers at the error code \
       (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
-      outside the {f.dialect.backend} profile"
+      outside the {f.dialect.backend} profile{legacyNote}"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do

@@ -1,0 +1,279 @@
+meta arch aarch64
+meta os linux
+meta abi gnu
+meta cpu generic
+meta backend stage2_llvm
+meta mode ReleaseSafe
+meta zig 0.14.1
+meta endian little
+feature fp_armv8 1
+feature neon 1
+feature fullfp16 0
+feature lse 0
+feature lse2 0
+feature outline_atomics 0
+feature rcpc 0
+int u7 1 1 7 55
+int i7 1 1 7 7e
+int u24 4 4 24 ef cd ab --
+int i24 4 4 24 aa cb ed --
+int u40 8 8 40 ee dd cc bb aa -- -- --
+int i40 8 8 40 ff ff ff ff ff -- -- --
+int u65 16 16 65 ef cd ab 89 67 45 23 01 01 -- -- -- -- -- -- --
+int u96 16 16 96 98 ba dc fe ef cd ab 89 67 45 23 01 -- -- -- --
+int u128 16 16 128 10 32 54 76 98 ba dc fe ef cd ab 89 67 45 23 01
+int i128 16 16 128 f0 cd ab 89 67 45 23 01 10 32 54 76 98 ba dc fe
+intop u24 max+%2 000001
+intop i7 min-%1 3f
+intop i7 min*%-1 40
+intop u40 mul_wrap aa9862e806
+intop u128 mul_wrap bcb448e0e2b4bd632236d88fe5618cf0
+intop u128 div 0000000000000000fffffffffffffffd
+intop i128 rem ffffffffffffffff8000000000000006
+intop i128 shr fffffffffffffffffffffffff8000000
+intop u65 add_wrap 00000000000000002
+float f16 2 2 16 00 3c
+float f32 4 4 32 00 00 80 3f
+float f64 8 8 64 00 00 00 00 00 00 f0 3f
+float f80 16 16 80 00 00 00 00 00 00 00 80 ff 3f -- -- -- -- -- --
+float f128 16 16 128 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff 3f
+float c_longdouble 16 16 128 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff 3f
+fop f80 1/3 3ffdaaaaaaaaaaaaaaab
+fop f80 sqrt(2) 3fffb504f333f9de6800
+fop f80 0/0 7fffc000000000000000
+fop f80 nan+1 7fffc000000000000000
+fop f80 -nan ffffc000000000000000
+fop f80 tiny*0.5 00000000000000000000
+fop f80 tiny*1.5 00000000000000000002
+fop f80 min_normal*0.5 00004000000000000000
+fop f80 min_normal-tiny 00007fffffffffffffff
+fop f80 max*2 7fff8000000000000000
+fop f80 mulAdd(1+e,1-e,-1) bf818000000000000000
+fop f80 f64(1/3) 3fd5555555555555
+fop f80 f64(tiny) 0000000000000000
+fop f80 of(f64.tiny) 3bcd8000000000000000
+fop f80 of(u128.max) 407f8000000000000000
+fop f80 u64(1e19) 8ac7230489e80000
+fop f80 isnan(0/0) true
+fop f80 unnormal(e=1,i=0)+0 00010000000000000001
+fop f80 isnan(unnormal(e=1,i=0)) false
+fop f80 pseudo-inf+0 7fff0000000000000000
+fop f80 isnan(pseudo-inf) true
+fop f80 pseudo-nan+0 7fff4000000000000000
+fop f80 isnan(pseudo-nan) true
+fop f80 pseudo-denormal+0 00008000000000000000
+fop f80 isnan(pseudo-denormal) false
+fop f128 1/3 3ffd5555555555555555555555555555
+fop f128 sqrt(2) 3fff6a09e667f3bcd000000000000000
+fop f128 0/0 7fff8000000000000000000000000000
+fop f128 nan+1 7fff8000000000000000000000000000
+fop f128 -nan ffff8000000000000000000000000000
+fop f128 tiny*0.5 00000000000000000000000000000000
+fop f128 tiny*1.5 00000000000000000000000000000002
+fop f128 min_normal*0.5 00008000000000000000000000000000
+fop f128 min_normal-tiny 0000ffffffffffffffffffffffffffff
+fop f128 max*2 7fff0000000000000000000000000000
+fop f128 mulAdd(1+e,1-e,-1) bf1f0000000000000000000000000000
+fop f128 f64(1/3) 3fd5555555555555
+fop f128 f64(tiny) 0000000000000000
+fop f128 of(f64.tiny) 3bcd0000000000000000000000000000
+fop f128 of(u128.max) 407f0000000000000000000000000000
+fop f128 u64(1e19) 8ac7230489e80000
+fop f128 isnan(0/0) true
+atomic u8 1 1 pad00 fe true ff ff 01 5a 5a
+atomic u8 1 1 padff fe true ff ff 01 5a 5a
+atomic u16 2 2 pad00 fffe true ffff ffff 0001 005a 005a
+atomic u16 2 2 padff fffe true ffff ffff 0001 005a 005a
+atomic u24 4 4 pad00 00fffffe true ffffff ffffff 000001 00005a 0000005a
+atomic u24 4 4 padff fffffffe false fffffe fffffe 000000 00005a 0000005a
+atomic u32 4 4 pad00 fffffffe true ffffffff ffffffff 00000001 0000005a 0000005a
+atomic u32 4 4 padff fffffffe true ffffffff ffffffff 00000001 0000005a 0000005a
+atomic u40 8 8 pad00 000000fffffffffe true ffffffffff ffffffffff 0000000001 000000005a 000000000000005a
+atomic u40 8 8 padff fffffffffffffffe false fffffffffe fffffffffe 0000000000 000000005a 000000000000005a
+atomic u64 8 8 pad00 fffffffffffffffe true ffffffffffffffff ffffffffffffffff 0000000000000001 000000000000005a 000000000000005a
+atomic u64 8 8 padff fffffffffffffffe true ffffffffffffffff ffffffffffffffff 0000000000000001 000000000000005a 000000000000005a
+atomic u128 16 16 pad00 fffffffffffffffffffffffffffffffe true ffffffffffffffffffffffffffffffff ffffffffffffffffffffffffffffffff 00000000000000000000000000000001 0000000000000000000000000000005a 0000000000000000000000000000005a
+atomic u128 16 16 padff fffffffffffffffffffffffffffffffe true ffffffffffffffffffffffffffffffff ffffffffffffffffffffffffffffffff 00000000000000000000000000000001 0000000000000000000000000000005a 0000000000000000000000000000005a
+sync cache_line 128
+rmw u8 Xchg 6f a1 6f a1
+rmw u8 Add 6f a1 6f 10
+rmw u8 Sub 6f a1 6f ce
+rmw u8 And 6f a1 6f 21
+rmw u8 Nand 6f a1 6f de
+rmw u8 Or 6f a1 6f ef
+rmw u8 Xor 6f a1 6f ce
+rmw u8 Max 6f a1 6f a1
+rmw u8 Max a1 6f a1 a1
+rmw u8 Min 6f a1 6f 6f
+rmw u8 Min a1 6f a1 6f
+rmw i8 Xchg 6f a1 6f a1
+rmw i8 Add 6f a1 6f 10
+rmw i8 Sub 6f a1 6f ce
+rmw i8 And 6f a1 6f 21
+rmw i8 Nand 6f a1 6f de
+rmw i8 Or 6f a1 6f ef
+rmw i8 Xor 6f a1 6f ce
+rmw i8 Max 6f a1 6f 6f
+rmw i8 Max a1 6f a1 6f
+rmw i8 Min 6f a1 6f a1
+rmw i8 Min a1 6f a1 a1
+rmw u24 Xchg 2bcdef e54321 2bcdef e54321
+rmw u24 Add 2bcdef e54321 2bcdef 111110
+rmw u24 Sub 2bcdef e54321 2bcdef 468ace
+rmw u24 And 2bcdef e54321 2bcdef 214121
+rmw u24 Nand 2bcdef e54321 2bcdef debede
+rmw u24 Or 2bcdef e54321 2bcdef efcfef
+rmw u24 Xor 2bcdef e54321 2bcdef ce8ece
+rmw u24 Max 2bcdef e54321 2bcdef e54321
+rmw u24 Max e54321 2bcdef e54321 e54321
+rmw u24 Min 2bcdef e54321 2bcdef 2bcdef
+rmw u24 Min e54321 2bcdef e54321 2bcdef
+rmw i24 Xchg 2bcdef e54321 2bcdef e54321
+rmw i24 Add 2bcdef e54321 2bcdef 111110
+rmw i24 Sub 2bcdef e54321 2bcdef 468ace
+rmw i24 And 2bcdef e54321 2bcdef 214121
+rmw i24 Nand 2bcdef e54321 2bcdef debede
+rmw i24 Or 2bcdef e54321 2bcdef efcfef
+rmw i24 Xor 2bcdef e54321 2bcdef ce8ece
+rmw i24 Max 2bcdef e54321 2bcdef 2bcdef
+rmw i24 Max e54321 2bcdef e54321 e54321
+rmw i24 Min 2bcdef e54321 2bcdef e54321
+rmw i24 Min e54321 2bcdef e54321 e54321
+rmw u40 Xchg 7890abcdef 8987654321 7890abcdef 8987654321
+rmw u40 Add 7890abcdef 8987654321 7890abcdef 0218111110
+rmw u40 Sub 7890abcdef 8987654321 7890abcdef ef09468ace
+rmw u40 And 7890abcdef 8987654321 7890abcdef 0880214121
+rmw u40 Nand 7890abcdef 8987654321 7890abcdef f77fdebede
+rmw u40 Or 7890abcdef 8987654321 7890abcdef f997efcfef
+rmw u40 Xor 7890abcdef 8987654321 7890abcdef f117ce8ece
+rmw u40 Max 7890abcdef 8987654321 7890abcdef 8987654321
+rmw u40 Max 8987654321 7890abcdef 8987654321 8987654321
+rmw u40 Min 7890abcdef 8987654321 7890abcdef 7890abcdef
+rmw u40 Min 8987654321 7890abcdef 8987654321 7890abcdef
+rmw i40 Xchg 7890abcdef 8987654321 7890abcdef 8987654321
+rmw i40 Add 7890abcdef 8987654321 7890abcdef 0218111110
+rmw i40 Sub 7890abcdef 8987654321 7890abcdef ef09468ace
+rmw i40 And 7890abcdef 8987654321 7890abcdef 0880214121
+rmw i40 Nand 7890abcdef 8987654321 7890abcdef f77fdebede
+rmw i40 Or 7890abcdef 8987654321 7890abcdef f997efcfef
+rmw i40 Xor 7890abcdef 8987654321 7890abcdef f117ce8ece
+rmw i40 Max 7890abcdef 8987654321 7890abcdef 7890abcdef
+rmw i40 Max 8987654321 7890abcdef 8987654321 8987654321
+rmw i40 Min 7890abcdef 8987654321 7890abcdef 8987654321
+rmw i40 Min 8987654321 7890abcdef 8987654321 8987654321
+rmw u64 Xchg 1234567890abcdef fedcba0987654321 1234567890abcdef fedcba0987654321
+rmw u64 Add 1234567890abcdef fedcba0987654321 1234567890abcdef 1111108218111110
+rmw u64 Sub 1234567890abcdef fedcba0987654321 1234567890abcdef 13579c6f09468ace
+rmw u64 And 1234567890abcdef fedcba0987654321 1234567890abcdef 1214120880214121
+rmw u64 Nand 1234567890abcdef fedcba0987654321 1234567890abcdef edebedf77fdebede
+rmw u64 Or 1234567890abcdef fedcba0987654321 1234567890abcdef fefcfe7997efcfef
+rmw u64 Xor 1234567890abcdef fedcba0987654321 1234567890abcdef ece8ec7117ce8ece
+rmw u64 Max 1234567890abcdef fedcba0987654321 1234567890abcdef fedcba0987654321
+rmw u64 Max fedcba0987654321 1234567890abcdef fedcba0987654321 fedcba0987654321
+rmw u64 Min 1234567890abcdef fedcba0987654321 1234567890abcdef 1234567890abcdef
+rmw u64 Min fedcba0987654321 1234567890abcdef fedcba0987654321 1234567890abcdef
+rmw i64 Xchg 1234567890abcdef fedcba0987654321 1234567890abcdef fedcba0987654321
+rmw i64 Add 1234567890abcdef fedcba0987654321 1234567890abcdef 1111108218111110
+rmw i64 Sub 1234567890abcdef fedcba0987654321 1234567890abcdef 13579c6f09468ace
+rmw i64 And 1234567890abcdef fedcba0987654321 1234567890abcdef 1214120880214121
+rmw i64 Nand 1234567890abcdef fedcba0987654321 1234567890abcdef edebedf77fdebede
+rmw i64 Or 1234567890abcdef fedcba0987654321 1234567890abcdef fefcfe7997efcfef
+rmw i64 Xor 1234567890abcdef fedcba0987654321 1234567890abcdef ece8ec7117ce8ece
+rmw i64 Max 1234567890abcdef fedcba0987654321 1234567890abcdef 1234567890abcdef
+rmw i64 Max fedcba0987654321 1234567890abcdef fedcba0987654321 1234567890abcdef
+rmw i64 Min 1234567890abcdef fedcba0987654321 1234567890abcdef fedcba0987654321
+rmw i64 Min fedcba0987654321 1234567890abcdef fedcba0987654321 fedcba0987654321
+rmw u128 Xchg 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321
+rmw u128 Add 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 00000000000000001111108218111110
+rmw u128 Sub 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 78b54b87e01eab5413579c6f09468ace
+rmw u128 And 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 00000000000000001214120880214121
+rmw u128 Nand 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef ffffffffffffffffedebedf77fdebede
+rmw u128 Or 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef fffffffffffffffffefcfe7997efcfef
+rmw u128 Xor 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef ffffffffffffffffece8ec7117ce8ece
+rmw u128 Max 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321
+rmw u128 Max c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 c3a55a3c0ff0aa55fedcba0987654321
+rmw u128 Min 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 3c5aa5c3f00f55aa1234567890abcdef
+rmw u128 Min c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef
+rmw i128 Xchg 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321
+rmw i128 Add 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 00000000000000001111108218111110
+rmw i128 Sub 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 78b54b87e01eab5413579c6f09468ace
+rmw i128 And 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 00000000000000001214120880214121
+rmw i128 Nand 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef ffffffffffffffffedebedf77fdebede
+rmw i128 Or 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef fffffffffffffffffefcfe7997efcfef
+rmw i128 Xor 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef ffffffffffffffffece8ec7117ce8ece
+rmw i128 Max 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef 3c5aa5c3f00f55aa1234567890abcdef
+rmw i128 Max c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef
+rmw i128 Min 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321
+rmw i128 Min c3a55a3c0ff0aa55fedcba0987654321 3c5aa5c3f00f55aa1234567890abcdef c3a55a3c0ff0aa55fedcba0987654321 c3a55a3c0ff0aa55fedcba0987654321
+order load monotonic:7 acquire:7 seq_cst:7
+order store monotonic:9 release:9 seq_cst:9
+order rmw monotonic:9 acquire:a release:b acq_rel:c seq_cst:d
+order cmpxchg monotonic/monotonic:e,true acquire/monotonic:f,true acquire/acquire:10,true release/monotonic:11,true release/acquire:12,true acq_rel/monotonic:13,true acq_rel/acquire:14,true seq_cst/monotonic:15,true seq_cst/acquire:16,true seq_cst/seq_cst:17,true
+atomic_ext bool 1 1 false true true
+atomic_ext enum_u8 1 1 red true green
+atomic_ext pointer 8 8 true true 5
+atomic_ext f32 4 4 3fc00000 40700000 bf800000 bfc00000
+atomic_ext f64 8 8 3ff8000000000000 400e000000000000 bff0000000000000 bff8000000000000
+litmus mp_release_acquire violations 0 rounds 100000
+litmus sb_seq_cst both_zero 0 unset 0 rounds 100000
+litmus counters u8 64 u24 200000 u128 200000 cas_u64 200000 per_thread 50000
+vector u9x4 8 8 ff 01 fc 0f 00 -- -- --
+lane u9x4 2 ff 01 a8 0a 00 -- -- --
+load u9x4 3 1
+pad u9x4 a5 a5 a5
+vector i9x2 4 4 ff 03 00 --
+lane i9x2 1 ff fd 03 --
+load i9x2 0 1ff
+pad i9x2 a5
+vector u12x3 8 8 bc 3a 12 ff 0f -- -- --
+lane u12x3 0 55 35 12 ff 0f -- -- --
+load u12x3 1 123
+pad u12x3 a5 a5 a5
+vector u4x4 2 2 21 43
+lane u4x4 3 21 f3
+load u4x4 0 1
+pad u4x4
+vector u1x8 1 1 85
+lane u1x8 6 c5
+load u1x8 7 1
+pad u1x8
+vector u24x2 8 8 ef cd ab 56 34 12 -- --
+lane u24x2 0 01 00 00 56 34 12 -- --
+load u24x2 1 123456
+pad u24x2 a5 a5
+vector u24x3 16 16 ef cd ab 56 34 12 77 77 77 -- -- -- -- -- -- --
+lane u24x3 1 ef cd ab ba dc fe 77 77 77 -- -- -- -- -- -- --
+load u24x3 2 777777
+pad u24x3 a5 a5 a5 a5 a5 a5 a5
+vector u40x2 16 16 ee dd cc bb aa 55 44 33 22 11 -- -- -- -- -- --
+lane u40x2 1 ee dd cc bb aa 05 04 03 02 01 -- -- -- -- -- --
+load u40x2 0 aabbccddee
+pad u40x2 a5 a5 a5 a5 a5 a5
+vector f80x2 32 32 00 00 00 00 00 00 00 80 ff 3f 00 00 00 00 00 00 00 80 00 c0 -- -- -- -- -- -- -- -- -- -- -- --
+lane f80x2 0 00 00 00 00 00 00 00 80 fe 3f 00 00 00 00 00 00 00 80 00 c0 -- -- -- -- -- -- -- -- -- -- -- --
+vector bool5 1 1 0d
+lane bool5 1 0f
+load bool5 2 1
+pad bool5
+vector bool16 2 2 2d 80
+lane bool16 15 2d 00
+load bool16 0 1
+pad bool16
+vector u8x3 4 4 01 02 03 --
+lane u8x3 2 01 02 ff --
+vector u16x3 8 8 01 00 00 80 03 00 -- --
+lane u16x3 0 ef be 00 80 03 00 -- --
+vector u32x3 16 16 01 00 00 00 02 00 00 00 03 00 00 00 -- -- -- --
+lane u32x3 1 01 00 00 00 ef be ad de 03 00 00 00 -- -- -- --
+limit atomic_array expected_bool,_integer,_float,_enum,_packed_struct,_or_pointer_type;_found_'[2]u8'
+limit atomic_u256 expected_128-bit_integer_type_or_smaller;_found_256-bit_integer_type
+limit atomic_vector expected_bool,_integer,_float,_enum,_packed_struct,_or_pointer_type;_found_'@Vector(2,_u32)'
+limit bool_add @atomicRmw_with_bool_only_allowed_with_.Xchg
+limit cmpxchg_failure_release failure_atomic_ordering_must_not_be_release_or_acq_rel
+limit cmpxchg_failure_stronger failure_atomic_ordering_must_be_no_stricter_than_success
+limit float_and @atomicRmw_with_float_only_allowed_with_.Xchg,_.Add,_.Sub,_.Max,_and_.Min
+limit load_acq_rel @atomicLoad_atomic_ordering_must_not_be_release_or_acq_rel
+limit load_release @atomicLoad_atomic_ordering_must_not_be_release_or_acq_rel
+limit rmw_unordered @atomicRmw_atomic_ordering_must_not_be_unordered
+limit store_acq_rel @atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel
+limit store_acquire @atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel

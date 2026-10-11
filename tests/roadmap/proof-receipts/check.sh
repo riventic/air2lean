@@ -48,7 +48,7 @@ for path in before.json audit.json after.json; do outputs+=(--output "$attempt/$
 status=0
 PATH="$toolchain/bin:$PATH" "$python" "$guard" \
   --cwd "$repo_root" --lock "$lock" --profile "$profile" --phase proof \
-  --timeout 900 --rss-mib 8192 --log-bytes 1048576 \
+  --timeout 900 --rss-mib 12288 --log-bytes 1048576 \
   --report "$attempt/guard.json" --log "$attempt/guard.log" \
   "${inputs[@]}" "${outputs[@]}" --tool "$toolchain/bin/lean" --tool "$toolchain/bin/lake" --tool "$toolchain/bin/leanchecker" \
   -- "$python" "$helper" worker "$attempt" || status=$?

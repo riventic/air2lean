@@ -15,3 +15,7 @@ theorem add_eq (a b : BitVec 32) : add a b = pure (a + b) := by
 
 theorem double_eq (x : BitVec 32) : double x = pure (x + x) := by
   simp [double, add, zig_unfold, Zig.addWrap, Zig.call]
+
+/-- Deliberately trivial: it names `double` but fixes no result. `tests/roadmap/coverage-report/real_run.py`
+uses its real audit entry to show that the coverage report does not count a reflexive conclusion. -/
+theorem double_refl (x : BitVec 32) : double x = double x := rfl

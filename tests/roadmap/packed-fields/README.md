@@ -6,7 +6,7 @@ undefined, and a store of `undefined` makes only the field's bits undefined. The
 each exporter pointer to a packed struct field with the layout that the model computes and rejects
 a mismatch with `PACKED_LAYOUT` (`docs/generated-code.md` §Casts, layout and function pointers).
 
-The fixture is hand-written AIR in the exporter's schema (`air/0.16.0`, written by
+The first fixture is hand-written AIR in the exporter's schema (`air/0.16.0`, written by
 `fixtures.py --write`; pointer types follow the compiler's `Type.packedStructFieldPtrInfo`) for:
 
 ```zig
@@ -54,6 +54,45 @@ lake build air2lean ZigLean
 bash tests/roadmap/packed-fields/check.sh
 ```
 
-Scope: hand-written AIR only; no fresh compiler export and no native execution. Packed unions as
-fields of packed structs, float and pointer fields, partly `undefined` packed constants and
-big-endian targets remain outside the subset.
+## Compiler export
+
+`packed_fields.zig` is the source (the Zig above, as `pub fn`s because packed types with a width
+that is not a power of two are not extern compatible, plus `bytePtr` over a plain `Inner` global
+and `innerCPtr`, `innerCKeepsAPtr`, `setInnerPtr` over a runtime `*Reg`). `air-fresh/0.16.0/llvm`
+is its unmodified export from a patched 0.16.0 compiler (`compiler-provenance.json`: build tree
+and command) and `air-fresh/0.16.0/x86_64` is `hostAbi` from the self-hosted x86_64 backend
+(`-fno-llvm -fno-lld`), whose bit-pointers have the ABI host size 4. Both are schema 12 (explicit
+Linux/baseline ReleaseSafe profile); `PackedFieldsFresh/Gen.lean` and `PackedFieldsX86/Gen.lean`
+are their translations and `PackedFieldsFresh/Proofs.lean` proves, from `mem0` with
+`decide +kernel`, the same results as above for every function (plus `bytePtr` and the three
+pointer-parameter functions).
+
+```sh
+lake build air2lean ZigLean
+bash tests/roadmap/packed-fields/compiler.sh --check                       # retained export, no compiler
+AIR2LEAN_ZIG_NATIVE=/stock/zig bash tests/roadmap/packed-fields/compiler.sh --native
+AIR2LEAN_ZIG_AIR=/patched/zig bash tests/roadmap/packed-fields/compiler.sh --export "$fresh"
+python3 tests/roadmap/packed-fields/compiler-check.py --fresh "$fresh"
+```
+
+What the real compiler does differently from the hand-written AIR (the model is unchanged):
+
+* It folds every field pointer of a global into a constant pointer (`global` 0, offset 0) with
+  the final bit-pointer type, instead of `struct_field_ptr_index_N` instructions; through a
+  runtime `*Reg` it emits the instructions, with the same types.
+* `&reg.inner.c` is the bit-pointer `*align(4:8:3) u8` (host 3, bit 8), not the byte pointer
+  `*u8` of the hand-written `innerC`. The byte-pointer path (and the nested-base fix of PR125)
+  is therefore exercised by hand-written AIR only; the bit-pointer form reads and writes the
+  same byte 1.
+* `reg.inner = .{ ... }` is two stores (`b`, then `c`), not one store of a 12-bit `Inner`.
+* `hostAbi` on the LLVM backend has host size 3 (the ABI host size 4 appears only in the
+  `-fno-llvm` export).
+
+`packed_fields.zig` has native tests for every defined-behaviour function (stock 0.16.0 on an
+aarch64-macos host, ReleaseSafe and Debug: all pass). Not run natively: `innerPartial` and
+`undefField` (they read bits that are still undefined) and `unionBadMode` (an enum tag without a
+name is a safety panic). Native execution on x86_64 Linux is not done.
+
+Scope: the hand-written AIR remains the only input for the byte-pointer form and the
+`struct_field_ptr` forms above. Packed unions as fields of packed structs, float and pointer
+fields, partly `undefined` packed constants and big-endian targets remain outside the subset.
