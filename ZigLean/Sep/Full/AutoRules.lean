@@ -329,6 +329,9 @@ theorem share_join {q₂ : Frac} {k₂ : Nat} :
 
 end Plan
 
+theorem sep_emp_eq' (P : FAssn) : (P ⋆ emp) = P := funext fun _ => propext sep_emp
+theorem emp_sep_eq' (P : FAssn) : (emp ⋆ P) = P := by rw [sep_comm_eq]; exact sep_emp_eq' P
+
 theorem atom_eq {X Y : FAssn} (e : X = Y) : EUpd X Y := e ▸ EUpd.of_imp fun _ h => h
 
 theorem ptr_ext' {p q : Ptr} (h1 : p.block = q.block) (h2 : p.off = q.off) : p = q := by
@@ -403,4 +406,45 @@ simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
 
 attribute [fsym_arith] Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
 
+/-! ## Sizes of the library's encodings -/
+
+@[fsym_arith] theorem enc_size_bv64 : Enc.size (BitVec 64) = 8 := rfl
+@[fsym_arith] theorem enc_size_bv32 : Enc.size (BitVec 32) = 4 := rfl
+@[fsym_arith] theorem enc_size_bv16 : Enc.size (BitVec 16) = 2 := rfl
+@[fsym_arith] theorem enc_size_bv8 : Enc.size (BitVec 8) = 1 := rfl
+@[fsym_arith] theorem enc_size_ptr : Enc.size Ptr = 8 := rfl
+@[fsym_arith] theorem enc_size_slice : Enc.size Slice = 16 := rfl
+
+/-! ## Facts about byte arrays (`keepsPrefix` of `resizePost`/`remapPost`) -/
+
+theorem kp_refl (bs : Array Byte) : keepsPrefix bs bs := rfl
+
+theorem kp_extract (bs : Array Byte) (n : Nat) : keepsPrefix bs (bs.extract 0 n) := by
+  unfold keepsPrefix; simp only [Array.extract_extract, Nat.zero_add, Array.size_extract]
+  congr 1; omega
+
+theorem kp_append (bs t : Array Byte) : keepsPrefix bs (bs ++ t) := by
+  unfold keepsPrefix
+  rw [Array.extract_append_left]
+  simp only [Array.size_append, Array.extract_size]
+  exact (Array.extract_eq_self_of_le (by omega)).symm
+
+theorem kp_extract_append (bs t : Array Byte) (n : Nat) : keepsPrefix bs ((bs ++ t).extract 0 n) := by
+  unfold keepsPrefix
+  apply Array.ext
+  · simp only [Array.size_extract, Array.size_append]; omega
+  · intro i h1 h2
+    simp only [Array.size_extract, Array.size_append] at h1 h2
+    simp only [Array.getElem_extract, Nat.zero_add]
+    rw [Array.getElem_append_left (by omega)]
+
 end Zig.Full.Auto
+
+/-- Library facts that are not arithmetic; extend with `macro_rules`. -/
+syntax "fsym_fact" : tactic
+macro_rules
+  | `(tactic| fsym_fact) => `(tactic| first
+      | exact Zig.Full.Auto.kp_refl _
+      | exact Zig.Full.Auto.kp_extract _ _
+      | exact Zig.Full.Auto.kp_append _ _
+      | exact Zig.Full.Auto.kp_extract_append _ _ _)

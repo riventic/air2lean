@@ -88,7 +88,12 @@ def unfold1 (e : Expr) : MetaM (Option Expr) := do
   if c == sepN || c == empN || c == liftN || c == exN then return none
   if fsymAtomAttr.hasTag (← getEnv) c then return none
   let some e' ← unfoldDefinition? e | return none
-  return some e'.headBeta
+  let e' := e'.headBeta
+  -- a definition by cases on a constructor (`resizePost … true`): reduce the match
+  if ← isMatcherApp e' then
+    let r ← whnfCore e'
+    return some r.headBeta
+  return some e'
 
 /-- Reduce the projections of structure values in `e` (`(finv ctx B).tag` to its field). -/
 def reduceProjs (e : Expr) : MetaM Expr :=
@@ -187,6 +192,21 @@ def userConsts (e : Expr) : MetaM (Array Name) := do
     out := out.push c
   return out
 
+/-- The subterms `2 ^ x` (natural numbers, `x` not a literal) of `e`. -/
+partial def twoPows (e : Expr) : Array Expr :=
+  go e #[]
+where
+  go (e : Expr) (acc : Array Expr) : Array Expr :=
+    let acc := if e.isAppOfArity ``HPow.hPow 6 && (e.getAppArgs[4]!.nat? == some 2) &&
+        (e.getAppArgs[5]!.nat?).isNone && (e.getArg! 0).isConstOf ``Nat && !acc.contains e
+      then acc.push e else acc
+    match e with
+    | .app f a => go a (go f acc)
+    | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+    | .letE _ t v b _ => go b (go v (go t acc))
+    | .mdata _ b | .proj _ _ b => go b acc
+    | _ => acc
+
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
 goals it did not prove. -/
 partial def arithGoals (g : MVarId) : TacticM (List MVarId) := g.withContext do
@@ -206,7 +226,22 @@ partial def arithGoals (g : MVarId) : TacticM (List MVarId) := g.withContext do
     return (← arithGoals g1) ++ (← arithGoals g2)
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
+  -- `0 < 2 ^ x` for the symbolic powers of two of the goal and the context
+  let mut g := g
+  let mut pows : Array Expr := #[]
+  let mut srcs := #[t]
+  for d in ← getLCtx do
+    unless d.isImplementationDetail do
+      if ← isProp d.type then srcs := srcs.push (← instantiateMVars d.type)
+  for e in srcs do
+    for x in twoPows e do
+      unless pows.contains x do pows := pows.push x
+  for x in pows do
+    let pf ← mkAppM ``Nat.two_pow_pos #[x.getAppArgs[5]!]
+    g ← g.assert `hpow (← inferType pf) pf
+    g ← (·.2) <$> g.intro1
   if ← closeWith g (← `(tactic| fsym_arith)) then return []
+  if ← closeWith g (← `(tactic| fsym_fact)) then return []
   -- unfold the user definitions of the goal and the context
   let mut cs ← userConsts t
   for d in ← getLCtx do
@@ -229,7 +264,11 @@ def acEq (x y : Expr) : TacticM Expr := do
   let ty ← mkEq x y
   let m ← mkFreshExprMVar ty
   if x == y then return ← mkEqRefl x
-  unless ← closeWith m.mvarId! (← `(tactic| ac_rfl)) do
+  let tac ← `(tactic| first
+      | ac_rfl
+      | (simp only [Zig.Full.Auto.sep_emp_eq', Zig.Full.Auto.emp_sep_eq']; ac_rfl)
+      | simp only [Zig.Full.Auto.sep_emp_eq', Zig.Full.Auto.emp_sep_eq'])
+  unless ← closeWith m.mvarId! tac do
     throwError "fsym: cannot reorder{indentExpr x}\nto{indentExpr y}"
   instantiateMVars m
 
@@ -673,7 +712,9 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
 
 def proveArith (ty : Expr) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
-  if ← arith m.mvarId! then return some (← instantiateMVars m) else return none
+  if ← arith m.mvarId! then return some (← instantiateMVars m)
+  trace[fsym] "arith failed: {ty}"
+  return none
 
 def regionArgs? (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``Zig.Full.FAssn.up 1 && e.appArg!.isAppOfArity ``Zig.regionIn 6 then
@@ -813,13 +854,18 @@ def planShares (st : St) (qshares : Array (Array Expr)) : TacticM St := do
           again := true
           break
       if again then break
-  -- split
-  for i0 in [0:st.ats.size] do
-    let some x := shareArgs? st.ats[i0]! | continue
-    let want := (← qshares.filterM fun q => withNewMCtxDepth (isDefEq q[0]! x[0]!)).size
-    let mut have_ := 1
+  -- split, per block
+  let blocks := st.ats.filterMap fun x => (shareArgs? x).map (·[0]!)
+  for blk in blocks do
+    let mut want := 0
+    for q in qshares do
+      let s0 ← saveState
+      if ← isDefEq q[0]! blk then want := want + 1
+      s0.restore
+    let some i0 := st.ats.findIdx? fun x => (shareArgs? x).any (·[0]! == blk) | continue
+    let mut xa := (shareArgs? st.ats[i0]!).get!
     let mut idx := i0
-    let mut xa := x
+    let mut have_ := 1
     while have_ < want do
       let h ← mkAppOptM ``share_halves #[xa[0]!, xa[1]!, xa[2]!, xa[3]!]
       let hf ← mkAppM ``Frac.half #[xa[1]!]
@@ -845,6 +891,18 @@ def planShares (st : St) (qshares : Array (Array Expr)) : TacticM St := do
           break
       s0.restore
   return st
+
+/-- The conjuncts of a fact, through user definitions. -/
+partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
+  if fuel == 0 then return #[φ]
+  let φ ← instantiateMVars φ
+  let w ← whnfR φ
+  if w.isAppOfArity ``And 2 then
+    return (← conjuncts w.appFn!.appArg! (fuel - 1)) ++ (← conjuncts w.appArg! (fuel - 1))
+  if let .const c _ := φ.getAppFn then
+    unless ← isLibrary c do
+      if let some u ← unfold1 φ then return ← conjuncts u (fuel - 1)
+  return #[φ]
 
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `junk`, prove `Q`'s
@@ -880,19 +938,39 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
           if ← matchArgs a x then
             if (← proveEq x (← instantiateMVars a)).isSome then break
           s'.restore
-    -- regions: join the adjacent ones, then carve
-    repeat
-      let some st' ← joinOnce st | break
-      st := st'
+    -- regions: exact matches first; then carve (joining adjacent regions for a region of
+    -- unknown size, which extends as far as the state's bytes go, or when no region holds it)
+    let mut exact : Array Nat := #[]
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
+      -- a region with a size fact is carved (its bytes may change)
+      let qbs ← instantiateMVars q[5]!
+      let mut sized := false
+      for f in facts do
+        for φ in ← conjuncts f.appArg! do
+          if let some (_, l, _) := φ.eq? then
+            if l.isAppOfArity ``Array.size 2 && (← instantiateMVars l.appArg!) == qbs then sized := true
+      if sized && qbs.hasExprMVar then continue
+      for i in [0:st.ats.size] do
+        if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
+        let s' ← saveState
+        if ← withReducibleAndInstances (isDefEq a st.ats[i]!) then exact := exact.push i; break
+        s'.restore
+    for a in qats do
+      let some q := regionArgs? (← instantiateMVars a) | continue
+      if (← st.ats.anyM fun x => return x == (← instantiateMVars a)) then continue
       -- a size fact `q.bs.size = n`
       let mut n? := none
+      let qbs ← instantiateMVars q[5]!
       for f in facts do
-        let φ ← instantiateMVars f.appArg!
-        if let some (_, l, r) := φ.eq? then
-          if l.isAppOfArity ``Array.size 2 && l.appArg! == q[5]! then n? := some r
+        for φ in ← conjuncts f.appArg! do
+          if let some (_, l, r) := φ.eq? then
+            if l.isAppOfArity ``Array.size 2 && (← instantiateMVars l.appArg!) == qbs then n? := some r
       let mut done := false
+      if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
+        repeat
+          let some st' ← joinOnce st | break
+          st := st'
       if let some st' ← carve st q n? then st := st'; done := true
       while !done do
         let some st' ← joinOnce st | break
@@ -1088,6 +1166,16 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     if (← whnfR concl).isAppOfArity ``FTotalTriple 4 then user := user.push e
     else extra := extra.push a
   let g ← getMainGoal
+  -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
+  let g ← g.withContext do
+    let mut g := g
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      unless ← isProp d.type do continue
+      let ty' ← reduceProjs (← instantiateMVars d.type)
+      if ty' != d.type then
+        g ← g.replaceLocalDeclDefEq d.fvarId ty'
+    pure g
   let gs ← walk g user extra 400
   replaceMainGoal gs
 
