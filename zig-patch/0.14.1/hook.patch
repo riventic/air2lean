@@ -8,3 +8,15 @@
  
      const ies_outdated = !func.analysisUnordered(ip).inferred_error_set or
          func.resolvedErrorSetUnordered(ip) != old_resolved_ies;
+--- zig-0.14.1-pristine/src/Compilation.zig
++++ zig-0.14.1/src/Compilation.zig
+@@ -6933,6 +6933,9 @@
+     // then when we create a sub-Compilation for zig libc, it also tries to
+     // build kernel32.lib.
+     if (comp.skip_linker_dependencies) return;
++    // air2lean: an AIR-only compilation (-fno-emit-bin) links nothing, so it needs no DLL
++    // import library (building one needs LLVM, which the AIR-only compiler lacks).
++    if (comp.bin_file == null) return;
+     const target = comp.root_mod.resolved_target.result;
+     if (target.os.tag != .windows or target.ofmt == .c) return;
+ 
