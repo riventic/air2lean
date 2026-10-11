@@ -14,13 +14,17 @@ fn rt(comptime T: type, value: T) T {
     return pointer.*;
 }
 
-fn image(comptime T: type, value: *const T, out: anytype) void {
+/// `stride` > 0: the lanes sit `stride` bytes apart, each in its first `lane_bytes` bytes, and
+/// the other bytes are padding too (printed cleared).
+fn image(comptime T: type, value: *const T, stride: usize, lane_bytes: usize, out: anytype) void {
     const bits = @bitSizeOf(T);
     const bytes: *const [@sizeOf(T)]u8 = @ptrCast(value);
     const volatile_bytes: *const volatile [@sizeOf(T)]u8 = bytes;
     for (0..@sizeOf(T)) |i| {
         if (8 * i >= bits) {
             out.print(" --", .{});
+        } else if (stride > 0 and i % stride >= lane_bytes) {
+            out.print(" 00", .{});
         } else {
             const used = @min(8, bits - 8 * i);
             const mask: u8 = @truncate((@as(u16, 1) << @intCast(used)) - 1);
@@ -42,13 +46,28 @@ fn probe(comptime name: []const u8, comptime N: comptime_int, comptime T: type, 
     const out = Out{};
     var v: V = undefined;
     inline for (0..N) |i| v[i] = rt(T, lanes[i]);
+    const stride = laneStride(N, T, &v, lanes);
+    const lane_bytes = (@bitSizeOf(T) + 7) / 8;
     out.print("vector {s} {d} {d}", .{ name, @sizeOf(V), @alignOf(V) });
-    image(V, &v, out);
+    image(V, &v, stride, lane_bytes, out);
     const pointer = &v[lane];
     pointer.* = rt(T, new);
     out.print("lane {s} {d}", .{ name, lane });
-    image(V, &v, out);
+    image(V, &v, stride, lane_bytes, out);
     if (comptime isLanePointer(T)) lanePointer(name, N, T, lanes, lane, new, out);
+}
+
+/// `@sizeOf(T)` when a float vector holds its lanes at the array stride instead of bit-packed
+/// (Zig 0.17.0 `f80x2`, a declared divergence from the model's image: `aarch64-abi/Model.lean`);
+/// the bytes after each lane's bits are then padding, which the store fills from its register.
+/// 0 otherwise.
+fn laneStride(comptime N: comptime_int, comptime T: type, v: *const @Vector(N, T), lanes: [N]T) usize {
+    const lane_bytes = (@bitSizeOf(T) + 7) / 8;
+    if (@typeInfo(T) != .float or lane_bytes == @sizeOf(T) or N < 2) return 0;
+    const array = std.mem.asBytes(&lanes);
+    const bytes: *const [@sizeOf(@Vector(N, T))]u8 = @ptrCast(v);
+    const at = @sizeOf(T);
+    return if (std.mem.eql(u8, bytes[at .. at + lane_bytes], array[at .. at + lane_bytes])) @sizeOf(T) else 0;
 }
 
 /// `&v[i]` is a lane pointer (`*align(a:0:n:i) T`) for an integer or `bool` lane whose bit size
