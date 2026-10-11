@@ -205,6 +205,21 @@ free list) is not attempted.
     `EUpd.lendT`, `EUpd.rjoin`; `grow_ghost`). The arena needs no `q' = q` for a shrink (it never
     shrinks a block itself). `remap` is the whole-region `resize` (`resize_granted_ct`,
     `FAllocInv.resize_granted_of`) and returns `memory.ptr`.
+  * **Fraction accounting per block** (for `reset`, which must give each node's whole share
+    `qn` back to the child): the arena's variables name the grant map's bound `mN` and the pool's
+    pieces (`Pool t pn pf`), and `OV.Facts` keeps, for every block `b`, `ndLent b nodes =
+    poolOn b + grantsOn b` (the used nodes' lent parts `Σ (qn - qh)` are the pool's and the
+    grants' fractions on `b`; several nodes may share a block, e.g. a `FixedBufferAllocator`'s
+    buffer), `qh ≤ qn` per used node, and `qh = qn` on the free list. `free` moves the grant's
+    fraction to the pool (`acct_free`), `resize` keeps the sums (`acct_repoint`; a growth
+    restores `qh`).
+  * **The ends of `alloc`** (resource updates, not yet used by a proof of the code):
+    `alloc_carve_upd` (a grant from the first node's tail: padding to junk, half the node's kept
+    share lent at the grant's end, `Upd.issue` at `mN`, accounting), `push_node_upd` (a node from
+    the child or the free list becomes the first node; the old one joins the used nodes, its tail
+    leaks), `grow_node_upd` (O-G: the child grew the first node in place through the refined
+    `resize` from the token and the kept part `qh`, no bytes; the new bytes join the tail, the
+    node's regions take the new labels).
   * Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit of the stock arena**: the invariant keeps `end_index` within the first
   node's buffer (`OV.Facts`: `24 + ei ≤ sz`), which a failed `alloc` breaks; the stock arena has no
