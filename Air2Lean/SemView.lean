@@ -49,9 +49,6 @@ theorem Result.run_bind' {α β : Type} (x : Result α) (f : α → Result β) :
 theorem relR_pure {α β : Type} {R : α → β → Prop} {a : α} {b : β} (h : R a b) :
     RelR R (pure a) (pure b) := h
 
-theorem relR_throw {α β : Type} {R : α → β → Prop} (e : Zig.Error) :
-    RelR R (throw e : Result α) (throw e : Result β) := rfl
-
 theorem relR_stuck {α β : Type} {R : α → β → Prop} : RelR R (stuck : Result α) (stuck : Result β) :=
   trivial
 
@@ -87,30 +84,6 @@ structure UpToReads (m₀ m : Mem) : Prop where
     ∀ e ∈ rs, e.tid = m₀.current ∧ e.kind = .read
   clocks : m.clocks = m₀.clocks.set! m₀.current (m.clocks[m₀.current]!)
   own : VClock.le (m₀.clocks[m₀.current]!) (m.clocks[m₀.current]!) = true
-
-theorem VClock.le_iff (a b : VClock) : VClock.le a b = true ↔ ∀ i, a.get i ≤ b.get i := by
-  unfold VClock.le
-  rw [Array.all_eq_true]
-  simp only [Array.size_range, Array.getElem_range, Nat.ble_eq]
-  constructor
-  · intro h i
-    by_cases hi : i < Nat.max a.size b.size
-    · exact h i hi
-    · have h1 : a.size ≤ Nat.max a.size b.size := Nat.le_max_left _ _
-      have h2 := Nat.not_lt.mp hi
-      have : a.size ≤ i := Nat.le_trans h1 h2
-      have ha : a.get i = 0 := by
-        simp only [VClock.get, Array.getD_eq_getD_getElem?]
-        rw [Array.getElem?_eq_none (by omega)]; rfl
-      rw [ha]; exact Nat.zero_le _
-  · intro h i _; exact h i
-
-theorem VClock.le_refl (a : VClock) : VClock.le a a = true :=
-  (VClock.le_iff a a).2 fun _ => Nat.le_refl _
-
-theorem VClock.le_trans {a b c : VClock} (h₁ : VClock.le a b = true) (h₂ : VClock.le b c = true) :
-    VClock.le a c = true :=
-  (VClock.le_iff a c).2 fun i => Nat.le_trans ((VClock.le_iff a b).1 h₁ i) ((VClock.le_iff b c).1 h₂ i)
 
 theorem Array.set!_getElem!_self {α : Type} [Inhabited α] (xs : Array α) (i : Nat) :
     xs.set! i xs[i]! = xs := by
@@ -181,11 +154,6 @@ theorem sim_modify {m₀ : Mem} (g : Frame → Frame) (h : ∀ fr, FrOk fr → F
     Sim m₀ (fun _ => True) (modify g) (modify g) := by
   intro fr m hfr hm
   exact relR_pure ⟨rfl, trivial, h fr hfr, hm, rfl⟩
-
-theorem sim_mono {α : Type} {m₀ : Mem} {P Q : α → Prop} {x y : SM α} (h : Sim m₀ P x y)
-    (hPQ : ∀ a, P a → Q a) : Sim m₀ Q x y := by
-  intro fr m hfr hm
-  exact relR_mono (h fr m hfr hm) fun _ _ ⟨h1, hP, h3⟩ => ⟨h1, hPQ _ hP, h3⟩
 
 section SimLoop
 open Lean.Order
@@ -398,16 +366,22 @@ def ExitOk : Exit → Prop
   | .br _ v | .ret v => v.noPtr = true
   | .rep _ => True
 
-theorem EnvOk.set {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
+theorem EnvOk.set' {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
     (h : EnvOk f V args env) (id : InstId) (t : TyId) (v : Value) (hv : v.noPtr = true)
-    (hV : V id = none) : EnvOk f V args (env.set id t v) := by
+    (hV : ∀ items, V id = some items → ∃ idx, argAt f id = some (idx, t) ∧ args[idx]? = some v) :
+    EnvOk f V args (env.set id t v) := by
   refine ⟨fun k t' w hk => ?_, fun k items t' w hk he => ?_⟩
   · simp only [Env.set] at hk; split at hk
     · cases hk; exact hv
     · exact h.1 k t' w hk
   · simp only [Env.set] at he; split at he
-    · subst_vars; rw [hV] at hk; cases hk
+    · subst_vars; cases he; exact hV items hk
     · exact h.2 k items t' w hk he
+
+theorem EnvOk.set {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
+    (h : EnvOk f V args env) (id : InstId) (t : TyId) (v : Value) (hv : v.noPtr = true)
+    (hV : V id = none) : EnvOk f V args (env.set id t v) :=
+  h.set' id t v hv fun _ he => by rw [hV] at he; cases he
 
 theorem constVal_noPtr (f : Func) (v : Val) : OkR (·.noPtr = true) (constVal f v) := by
   intro w hw
@@ -434,6 +408,9 @@ theorem operand_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : L
     · obtain ⟨a, ha, hw⟩ := Result.bind_ok hw
       cases hw; exact constVal_noPtr f v a ha
     · cases hw
+  | int t n => exact constVal_noPtr f (.int t n) w hw
+  | bool b => exact constVal_noPtr f (.bool b) w hw
+  | void => exact constVal_noPtr f .void w hw
   | _ =>
     simp only [operand] at hw
     repeat' split at hw
@@ -597,18 +574,6 @@ theorem FrOk.setCell {fr : Frame} (h : FrOk fr) (k : InstId) (v : Option Value)
   · exact hv w hj
   · exact h.2 j w hj
 
-theorem EnvOk.set' {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
-    (h : EnvOk f V args env) (id : InstId) (t : TyId) (v : Value) (hv : v.noPtr = true)
-    (hV : ∀ items, V id = some items → ∃ idx, argAt f id = some (idx, t) ∧ args[idx]? = some v) :
-    EnvOk f V args (env.set id t v) := by
-  refine ⟨fun k t' w hk => ?_, fun k items t' w hk he => ?_⟩
-  · simp only [Env.set] at hk; split at hk
-    · cases hk; exact hv
-    · exact h.1 k t' w hk
-  · simp only [Env.set] at he; split at he
-    · subst_vars; cases he; exact hV items hk
-    · exact h.2 k items t' w hk he
-
 /-- The instruction `id` is not viewed unless it is an `arg`. -/
 theorem roInst_view {f : Func} {V : InstId → Option (Array Value)} {VT : InstId → TyId} {id : InstId}
     {ty : TyId} {op : Op} (h : roInst f V VT ⟨id, ty, op⟩ = true) (hop : ∀ idx, op ≠ .arg idx) :
@@ -654,19 +619,10 @@ theorem cellVal_ok {f : Func} {V : InstId → Option (Array Value)} {args : List
     cases hm
     exact operand_noPtr h v _ ha
 
-theorem liftR_stuck_bind {α β : Type} (k : α → SM β) : (liftR stuck : SM α) >>= k = liftR stuck := by
-  apply StateT.ext; intro fr; apply StateT.ext; intro m
-  simp only [liftR, StateT.run_bind, StateT.run_lift]
-  rfl
-
 /-- The `roInst` of an instruction in a nested body (`roNested`). -/
 theorem roNested_inst {f : Func} {V : InstId → Option (Array Value)} {VT : InstId → TyId} {i : Inst}
     (h : roNested f V VT i = true) : roInst f V VT i = true := by
   unfold roNested at h; simp only [Bool.and_eq_true] at h; exact h.1
-
-local macro "sim_ih" : tactic => `(tactic| first
-  | assumption
-  | (apply_assumption <;> first | assumption | simp_all [roBody, roNested, roCases]))
 
 /-- The simulation: a body of a read-only function runs, from a memory up to reads of `m₀`, as its
 view from `m₀` (`Sim`). -/
@@ -981,29 +937,9 @@ def _root_.Zig.Mem.ClockWf (m : Mem) : Prop :=
 
 theorem VClock.get_bump (c : VClock) (t i : Nat) :
     (VClock.bump c t).get i = if i = t then c.get t + 1 else c.get i := by
-  unfold VClock.bump VClock.get
-  generalize hc' : (if t < c.size then c else c ++ Array.replicate (t + 1 - c.size) 0) = c'
-  have hsz : t < c'.size := by
-    subst hc'; split
-    · assumption
-    · simp only [Array.size_append, Array.size_replicate]; omega
-  have hext : ∀ k : Nat, c'[k]?.getD 0 = c[k]?.getD 0 := by
-    intro k
-    subst hc'
-    split
-    · rfl
-    · rw [Array.getElem?_append]
-      split
-      · rfl
-      · rename_i hk
-        rw [Array.getElem?_eq_none (xs := c) (by omega)]
-        simp only [Array.getElem?_replicate]
-        split <;> rfl
-  show (c'.set! t (c'.getD t 0 + 1)).getD i 0 = _
-  simp only [Array.set!_eq_setIfInBounds, Array.getD_eq_getD_getElem?, Array.getElem?_setIfInBounds]
-  by_cases h : i = t
-  · subst h; simp only [↓reduceIte, hsz, Option.getD_some, hext]
-  · simp only [Ne.symm h, ↓reduceIte, hext, h]
+  split
+  · subst_vars; exact VClock.get_bump_self c _
+  · exact VClock.get_bump_ne c t i ‹_›
 
 theorem VClock.le_bump_mono {a b : VClock} (t : Nat) (h : VClock.le a b = true) :
     VClock.le (VClock.bump a t) (VClock.bump b t) = true := by
@@ -1013,9 +949,6 @@ theorem VClock.le_bump_mono {a b : VClock} (t : Nat) (h : VClock.le a b = true) 
   split
   · have := h t; omega
   · exact h i
-
-theorem VClock.le_bump (a : VClock) (t : Nat) : VClock.le a (VClock.bump a t) = true := by
-  rw [VClock.le_iff]; intro i; rw [VClock.get_bump]; split <;> (try subst_vars) <;> omega
 
 theorem Result.map_ok_inv {α β : Type} {f : α → β} {x : Result α} {b : β}
     (h : (f <$> x).run = some (.ok b)) : ∃ a, x.run = some (.ok a) ∧ f a = b := by
@@ -1064,7 +997,7 @@ theorem mapM_range_ok {β : Type} (g : Nat → Result β) (n : Nat) (m m' : Mem)
   have := hall j (by simp only [List.length_range]; omega) hj
   simpa using this
 
-theorem Array.getElem!_set!_self {α : Type} [Inhabited α] (xs : Array α) (t : Nat) (v : α) :
+theorem Array.getElem!_set!_ite {α : Type} [Inhabited α] (xs : Array α) (t : Nat) (v : α) :
     (xs.set! t v)[t]! = if t < xs.size then v else xs[t]! := by
   rw [Array.set!_eq_setIfInBounds]
   split
@@ -1077,12 +1010,6 @@ theorem UpToReads.blocks {m₀ m : Mem} (h : UpToReads m₀ m) : m.blocks = m₀
 theorem UpToReads.current {m₀ m : Mem} (h : UpToReads m₀ m) : m.current = m₀.current := by
   have := congrArg Mem.current h.rest; exact this
 
-/-- `m` after a read of `n` bytes at `b`/`o`, recorded by its running thread (`recordAccess`). -/
-def _root_.Zig.Mem.withRead (m : Mem) (b : BlockId) (o n : Nat) : Mem :=
-  let t := m.current
-  let c := VClock.bump (m.clocks[t]!) t
-  { m with clocks := m.clocks.set! t c, footprint := m.footprint.push ⟨t, c, b, o, n, .read⟩ }
-
 theorem UpToReads.solo {m₀ m : Mem} (h : UpToReads m₀ m) : m.solo = m₀.solo := by
   have h1 := congrArg Mem.current h.rest
   have h2 := congrArg Mem.threads h.rest
@@ -1094,7 +1021,7 @@ theorem loadBytes_ok {p : Ptr} {n al : Nat} {m m' : Mem} {bs : Array Byte}
     (h : ((loadBytes p n al).run m).run = some (.ok (bs, m'))) :
     ∃ b blk o, m.access p n al = pure (b, blk, o) ∧
       raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none ∧
-      bs = blk.bytes.extract o (o + n) ∧ m' = m.withRead b o n := by
+      bs = blk.bytes.extract o (o + n) ∧ m' = m.recordAt b o n .read := by
   simp only [loadBytes, recordAccess, StateT.run_bind, StateT.run_get, pure_bind, liftM, monadLift,
     MonadLift.monadLift, StateT.run_lift, bind_assoc] at h
   obtain ⟨⟨b, blk, o⟩, hacc, h⟩ := Result.bind_ok h
@@ -1106,62 +1033,26 @@ theorem loadBytes_ok {p : Ptr} {n al : Nat} {m m' : Mem} {bs : Array Byte}
     cases h
     exact ⟨b, blk, o, hacc, hrc, rfl, rfl⟩
 
-theorem loadBytes_run {p : Ptr} {n al : Nat} {m : Mem} {b : BlockId} {blk : Block} {o : Nat}
-    (hacc : m.access p n al = pure (b, blk, o))
-    (hrc : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none) :
-    (loadBytes p n al).run m = pure (blk.bytes.extract o (o + n), m.withRead b o n) := by
-  simp only [loadBytes, recordAccess, StateT.run_bind, StateT.run_get, pure_bind, liftM, monadLift,
-    MonadLift.monadLift, StateT.run_lift, bind_assoc, hacc, hrc, StateT.run_set, StateT.run_pure]
-  rfl
-
-theorem throw_ne_pure {α : Type} (e : Zig.Error) (a : α) : (throw e : Result α) ≠ pure a := by
-  intro h; have := congrArg ExceptT.run h; cases this
-
-theorem access_eq {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block} {o : Nat} :
-    m.access p n al = pure (b, blk, o) ↔ p.block = some b ∧ m.blocks[b]? = some blk ∧
-      (blk.live = true ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % al = 0) ∧
-      o = p.off.toNat := by
-  unfold Mem.access
-  cases hpb : p.block with
-  | none => simp only [reduceCtorEq, false_and, iff_false]; exact throw_ne_pure _ _
-  | some b' =>
-    cases hblk : m.blocks[b']? with
-    | none =>
-      simp only [hblk]
-      constructor
-      · intro h; exact absurd h (throw_ne_pure _ _)
-      · rintro ⟨h1, h2, _⟩; cases h1; rw [hblk] at h2; cases h2
-    | some blk' =>
-      simp only [hblk]
-      split
-      · rename_i hc
-        constructor
-        · intro h; cases h; exact ⟨rfl, hblk, hc, rfl⟩
-        · rintro ⟨h1, h2, _, h4⟩; cases h1; rw [hblk] at h2; cases h2; subst h4; rfl
-      · rename_i hc
-        constructor
-        · intro h; cases h
-        · rintro ⟨h1, h2, h3, _⟩; cases h1; rw [hblk] at h2; cases h2; exact absurd h3 hc
-
 /-- An access of an item inside an accessed range. -/
 theorem access_item {m : Mem} {p : Ptr} {L sz A al j : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (hacc : m.access p (L * sz) A = pure (b, blk, o)) (hj : j < L) (hA : al ∣ A) (hal : al ∣ sz) :
     m.access (p.add (sz * j)) sz al = pure (b, blk, o + sz * j) := by
-  obtain ⟨hb, hblk, ⟨hlive, h0, hend, hmod⟩, rfl⟩ := access_eq.1 hacc
+  obtain ⟨hb, hblk, hlive, h0, hend, hmod, rfl⟩ := Zig.access_eq hacc
   have hjL : sz * j + sz ≤ L * sz := by
     have : sz * (j + 1) ≤ sz * L := Nat.mul_le_mul_left sz hj
     rw [Nat.mul_comm L sz]; rw [Nat.mul_add, Nat.mul_one] at this; exact this
   have hoff : (p.off + (sz : Int) * (j : Int)).toNat = p.off.toNat + sz * j := by
     have : ((sz * j : Nat) : Int) = (sz : Int) * (j : Int) := by push_cast; rfl
     omega
-  refine access_eq.2 ⟨hb, hblk, ⟨hlive, ?_, ?_, ?_⟩, ?_⟩
+  have h := Zig.access_of (m := m) (n := sz) (a := al) (p := p.add (sz * j)) (by simpa using hb) hblk
+    hlive ?_ ?_ ?_
+  · rw [h]; simp only [Ptr.add]; rw [hoff]
   · simp only [Ptr.add]; omega
   · simp only [Ptr.add]; push_cast at hend ⊢; omega
   · simp only [Ptr.add]
     rw [hoff, ← Nat.add_assoc]
     apply Nat.mod_eq_zero_of_dvd
     exact Nat.dvd_add (Nat.dvd_trans hA (Nat.dvd_of_mod_eq_zero hmod)) (Nat.dvd_mul_right_of_dvd hal j)
-  · simp only [Ptr.add]; rw [hoff]
 
 theorem access_congr {m m' : Mem} (h : m.blocks = m'.blocks) (p : Ptr) (n al : Nat) :
     m.access p n al = m'.access p n al := by
@@ -1170,23 +1061,13 @@ theorem access_congr {m m' : Mem} (h : m.blocks = m'.blocks) (p : Ptr) (n al : N
 theorem Result.eq_pure_of_run {α : Type} {x : Result α} {a : α} (h : x.run = some (.ok a)) : x = pure a :=
   ExceptT.ext h
 
-theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {al : Nat} {b : BlockId} {blk : Block} {o : Nat}
-    {v : α} (hacc : m.access p (Enc.size α) al = pure (b, blk, o))
-    (hrc : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o (Enc.size α) .read = none)
-    (hdec : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α).run = some (.ok v)) :
-    (Zig.load α al p).run m = pure (v, m.withRead b o (Enc.size α)) := by
-  unfold Zig.load
-  rw [StateT.run_bind, loadBytes_run hacc hrc]
-  simp only [pure_bind, StateT.run_bind, StateT.run_get, liftM, monadLift, MonadLift.monadLift,
-    StateT.run_lift, decodeLoad_of_decode (Result.eq_pure_of_run hdec)]
-
 theorem Array.set!_set! {α : Type} (xs : Array α) (t : Nat) (a b : α) :
     (xs.set! t a).set! t b = xs.set! t b := by
   simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds_setIfInBounds]
 
 theorem Array.set!_eq_set!_getElem! {α : Type} [Inhabited α] (xs : Array α) (t : Nat) (b : α) :
     xs.set! t b = xs.set! t ((xs.set! t b)[t]!) := by
-  rw [Array.getElem!_set!_self]
+  rw [Array.getElem!_set!_ite]
   split
   · rfl
   · rename_i h
@@ -1196,25 +1077,25 @@ theorem Array.set!_eq_set!_getElem! {α : Type} [Inhabited α] (xs : Array α) (
 theorem UpToReads.clocks_size {m₀ m : Mem} (h : UpToReads m₀ m) : m.clocks.size = m₀.clocks.size := by
   rw [h.clocks]; simp
 
-theorem UpToReads.withRead {m₀ m : Mem} (h : UpToReads m₀ m) (b : BlockId) (o n : Nat) :
-    UpToReads m₀ (m.withRead b o n) := by
+theorem UpToReads.recordAt {m₀ m : Mem} (h : UpToReads m₀ m) (b : BlockId) (o n : Nat) :
+    UpToReads m₀ (m.recordAt b o n .read) := by
   have hcur := h.current
   have hsize := h.clocks_size
   obtain ⟨rs, hfp, hrs⟩ := h.reads
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact h.rest
   · refine ⟨rs.push ⟨m.current, VClock.bump (m.clocks[m.current]!) m.current, b, o, n, .read⟩, ?_, ?_⟩
-    · simp only [Mem.withRead, hfp, Array.push_append]
+    · simp only [Mem.recordAt, hfp, Array.push_append]
     · intro e he
       simp only [Array.mem_push] at he
       rcases he with he | he
       · exact hrs e he
       · subst he; exact ⟨hcur, rfl⟩
-  · simp only [Mem.withRead, hcur]
+  · simp only [Mem.recordAt, hcur]
     rw [h.clocks, Array.set!_set!]
     exact Array.set!_eq_set!_getElem! _ _ _
-  · simp only [Mem.withRead, hcur]
-    rw [Array.getElem!_set!_self]
+  · simp only [Mem.recordAt, hcur]
+    rw [Array.getElem!_set!_ite]
     split
     · exact VClock.le_trans (hcur ▸ h.own) (VClock.le_bump _ _)
     · exact hcur ▸ h.own
@@ -1265,7 +1146,7 @@ theorem raceCheck_sub {m₀ m : Mem} (hm : UpToReads m₀ m) (hwf : m₀.ClockWf
             cases hle : VClock.le (VClock.bump (m₀.clocks[m₀.current]!) m₀.current) e.clock
             · rfl
             · exfalso
-              have := (VClock.le_iff _ _).1 hle m₀.current
+              have := VClock.le_iff.1 hle m₀.current
               rw [VClock.get_bump, if_pos rfl] at this
               omega
         · rfl
@@ -1315,7 +1196,7 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
   obtain ⟨⟨bs, m'⟩, hlb, hmap⟩ := Result.bind_ok hread
   obtain ⟨b, blk, o, hacc, hrc, rfl, rfl⟩ := loadBytes_ok hlb
   obtain ⟨rfl, hsize, hdec⟩ := mapM_range_ok _ _ _ _ _ hmap
-  refine ⟨?_, hsize, (UpToReads.refl m₀).withRead b o _⟩
+  refine ⟨?_, hsize, (UpToReads.refl m₀).recordAt b o _⟩
   intro size al j m hil hm
   obtain ⟨rfl, hpos, hA, hal⟩ := hlay size al hil
   by_cases hj : j.toNat < s.len.toNat
@@ -1341,24 +1222,8 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
       unfold Zig.index; rw [dif_pos (by simpa using hj')]; simp
     rw [hidx]
     simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind, hload,
-      StateT.run_map, load_run hacc' hrc' hd]
-    exact ⟨rfl, hm.withRead _ _ _⟩
+      StateT.run_map, Zig.load_run hacc' (Result.eq_pure_of_run hd) hrc']
+    exact ⟨rfl, hm.recordAt _ _ _⟩
   · exact hout _ _ j m hj hsize
-
-theorem relR_map_right {α β γ : Type} {R : α → γ → Prop} {x : Result α} {g : β → γ} {y : Result β} :
-    RelR R x (g <$> y) ↔ RelR (fun a b => R a (g b)) x y := by
-  unfold RelR
-  rw [← bind_pure_comp, Result.run_bind']
-  rcases x.run with _ | (e | a) <;> rcases y.run with _ | (e' | b) <;> exact Iff.rfl
-
-/-- The certificate statement of a function with a viewed slice: `execFunc_view` with the view
-replaced by the generated definition, whose memory is the materialization's `m₁`. -/
-theorem relR_view {m m₁ : Mem} {X : Result (Value × Mem)} {β : Type} {G : Result β} {e : β → Value}
-    (hu : UpToReads m m₁)
-    (h : RelR (fun (p q : Value × Mem) => p.1 = q.1 ∧ UpToReads m p.2 ∧ q.2 = m) X ((fun v => (e v, m)) <$> G)) :
-    RelR (fun (p q : Value × Mem) => p.1 = q.1 ∧ UpToReads m p.2 ∧ UpToReads m q.2) X
-      ((fun v => (e v, m₁)) <$> G) := by
-  rw [relR_map_right] at h ⊢
-  exact relR_mono h fun _ _ ⟨h1, h2, _⟩ => ⟨h1, h2, hu⟩
 
 end Air2Lean.Sem

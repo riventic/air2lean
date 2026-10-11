@@ -234,16 +234,16 @@ def retScalar? (f : Func) (t : TyId) : Option Scalar :=
     | some .void => some ("Unit", "(fun _ => Value.void)")
     | some (.ptr ..) => none
     | _ => (scalar? f c).map fun sc => (sc.lean, s!"(fun x => {sc.enc "x"})")
+  -- A return value is never decoded (no `inv`): `dec` is a placeholder of the type.
+  let wrap (ty enc dflt : String) (c : TyId) : Option Scalar := (payload c).map fun (lean, g) =>
+    { lean := s!"{ty} ({lean})", enc := fun v => s!"({enc} {g} {v})", dec := fun _ => dflt, inv := "",
+      decVar := fun _ => dflt }
   match f.types[t]? with
   | some .void => some {
       lean := "Unit", enc := fun _ => "Value.void", dec := fun _ => "()",
       inv := "valOk_void", decVar := fun _ => "()", ignoresValue := true }
-  | some (.optional c) => (payload c).map fun (lean, g) =>
-      { lean := s!"Option ({lean})", enc := fun v => s!"(Value.ofOpt {g} {v})", dec := fun _ => "none",
-        inv := "", decVar := fun _ => "none" }
-  | some (.errorUnion _ c) => (payload c).map fun (lean, g) =>
-      { lean := s!"Except Zig.ErrName ({lean})", enc := fun v => s!"(Value.ofExcept {g} {v})",
-        dec := fun _ => "(.error \"\")", inv := "", decVar := fun _ => "(.error \"\")" }
+  | some (.optional c) => wrap "Option" "Value.ofOpt" "none" c
+  | some (.errorUnion _ c) => wrap "Except Zig.ErrName" "Value.ofExcept" "(.error \"\")" c
   | _ => scalar? f t
 
 /-- A safety-panic handler of `Sem.panicOf?`'s literal table (not a generic instance). -/
@@ -302,14 +302,9 @@ def simpleVal (f : Func) : Val → Bool
   | .int t _ => isIntTy f t
   | .optNull t => Sem.plainOpt f t
   | .errUnionErr t _ => Sem.isErrorUnion f t
-  | .optSome t v => Sem.plainOpt f t && constPayload f v
-  | .errUnionOk t v => Sem.isErrorUnion f t && constPayload f v
+  | .optSome t v => Sem.plainOpt f t && (Sem.constVal f v).run.isSome
+  | .errUnionOk t v => Sem.isErrorUnion f t && (Sem.constVal f v).run.isSome
   | _ => false
-where
-  constPayload (f : Func) : Val → Bool
-    | .int t _ => isIntTy f t
-    | .bool _ | .void => true
-    | _ => false
 
 partial def allInsts (body : Array Inst) : Array Inst :=
   body.flatMap fun i => #[i] ++ match i.op with

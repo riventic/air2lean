@@ -25,27 +25,27 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 
 MUTATIONS = [
-    ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step'),
-    ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step'),
-    ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step'),
-    ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step'),
-    ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step'),
+    ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step', 'def'),
+    ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step', 'def'),
+    ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step', 'def'),
+    ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step', 'def'),
+    ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step', 'def'),
     # Memory: a field offset, a store's value, a pointer comparison, a load's address.
-    ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step'),
-    ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step'),
-    ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step'),
-    ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step'),
+    ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step', 'def'),
+    ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step', 'def'),
+    ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step', 'def'),
+    ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step', 'def'),
     # A loop: the checked increment of the loop counter made wrapping. The loop's AIR also appears
     # in its field and loop lemmas, so the mutation goes everywhere: the iteration lemma breaks.
     ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
-     '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body'),
+     '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body', 'all'),
     # A pure function with a slice parameter (a view): its loop's sum, and the view's wiring.
     ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
-     'sum_loop7_body'),
-    ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body'),
+     'sum_loop7_body', 'all'),
+    ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body', 'once'),
     # Error unions: the test, and the error a function returns.
-    ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step'),
-    ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step'),
+    ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step', 'def'),
+    ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step', 'def'),
 ]
 
 
@@ -115,13 +115,13 @@ def main():
     assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
-        for index, (ex, old, new, theorem) in enumerate(MUTATIONS):
+        for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
-            if old.startswith('if k'):
-                # The view's key: the item reads no longer come from the view.
+            if scope == 'once':
+                # A text that occurs once in the certificate (a view's key).
                 assert source.count(old) == 1, (ex, theorem, old)
                 mutated = source.replace(old, new)
-            elif '_loop' in theorem:
+            elif scope == 'all':
                 # A function with loops restates its AIR in its loop lemmas: mutate every copy.
                 assert source.count(old) >= 2, (ex, theorem, old)
                 mutated = source.replace(old, new)

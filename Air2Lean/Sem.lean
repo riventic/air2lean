@@ -175,11 +175,7 @@ def operand (f : Func) (env : Env) : Val → Result Value
   | .inst id => match env id with
     | some (_, v) => pure v
     | none => stuck
-  | .int t n => match tyOf f t with
-    | .int s w => pure (.int s w (litBV w n))
-    | _ => stuck
-  | .bool b => pure (.bool b)
-  | .void => pure .void
+  | v@(.int ..) | v@(.bool _) | v@.void => constVal f v
   | .optNull t => if plainOpt f t then pure .optNone else stuck
   | .optSome t v => if plainOpt f t then do pure (.optSome (← constVal f v)) else stuck
   | .err _ n => pure (.errName n)
