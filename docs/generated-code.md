@@ -665,6 +665,7 @@ each function the module then declares:
 | `B_loop<k>_again` | `abbrev` of loop `k`'s repeat test (`<fn>.again<id>`) |
 | `B_loop<k>_body_unfold` | `B_loop<k>_body caps… = (<the emitted loop body>)` |
 | `B_loop<k>_step` | `Zig.loop (B_loop<k>_body caps…) B_loop<k>_again = (B_loop<k>_body caps… >>= fun e => if B_loop<k>_again e then Zig.loop … else pure e)` |
+| `B_loop<k>_spec` | the loop specification rule of the function's monad with this loop's body and repeat test fixed (below) |
 
 `k` is the loop's position among the function's loops in pre-order (an outer loop before
 the loops nested in it), never an AIR instruction ID. Every equality states the actual
@@ -676,8 +677,18 @@ replacement semantics is introduced. The step lemma is the one-iteration rule th
 `B_loop<k>_again`. All names are reserved before ordinary declaration allocation, so a
 colliding source function is renamed by the allocator rather than the interface.
 
+`B_loop<k>_spec` is the library rule itself, instantiated at the loop and proved by applying
+it: `Zig.loop_spec` for a pure function (`Zig.M`), `Zig.loop_spec_mm` for one that uses
+memory (`Zig.MM`) and `Zig.Conc.Proto.WP.loop` for a concurrent one (`Zig.CM Tgt`). The
+client supplies the invariant, the decreasing measure and the post-condition, and proves
+one iteration of `B_loop<k>_body caps…` (`step`); the lemma then gives the whole loop
+(`∃ r, (Zig.loop …).run s = pure r ∧ post r`, or the weakest-precondition form for a
+concurrent loop). The rule is not restated or weakened: its hypotheses and conclusion are
+the library theorem's, so a library change that alters the rule changes (or breaks) the
+generated statement, and a semantic change to the function changes the body in `step`.
+
 Each function's names are listed in a generated comment record,
-`-- air2lean-proof-lemmas: {"format":"air2lean-proof-lemmas-v1","source":…,"definition":…,"model":…,"unfold":…,"loops":[{"body":…,"again":…,"body_unfold":…,"step":…}]}`
+`-- air2lean-proof-lemmas: {"format":"air2lean-proof-lemmas-v1","source":…,"definition":…,"model":…,"unfold":…,"loops":[{"body":…,"again":…,"body_unfold":…,"step":…,"spec":…}]}`
 (`loops` only when the function has loops), and in the source-map sidecar's `proof_api`
 field (`docs/stable-generation.md`). `scripts/normalize-generated.py report` indexes them
 under `proof_lemmas` and rejects names that differ from the encoding or loop order.
