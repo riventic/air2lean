@@ -1,5 +1,8 @@
 # Separation proof tools
 
+For the full-state logic (`ZigLean/Sep/Full`), the general symbolic executor `fsym` walks
+generated code from an invariant alone: [proof-automation.md](proof-automation.md).
+
 Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`. Import
 `ZigLean.Sep.Total` for total-correctness rules and `ZigLean.Sep.Step` for the
 symbolic-execution tactics ([below](#symbolic-execution-steps-p01)). These are optional modules;
