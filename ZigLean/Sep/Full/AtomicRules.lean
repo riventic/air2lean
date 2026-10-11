@@ -293,6 +293,135 @@ theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrde
     FTriple (apts p v) (cmpxchgAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ apts p new) :=
   (FTriple.cmpxchgHitW p v new succ fail).pre fun _ => apts_wpts
 
+theorem readOpts_zero_rmw {m : Mem} {li : Nat} (h : 0 < (m.atomics[li]!).msgs.size) :
+    (readOpts m li true)[0]? = some ((m.atomics[li]!).msgs.size - 1) := by
+  have hf := floorPos_lt h
+  obtain ⟨k, hk⟩ : ∃ k, (m.atomics[li]!).msgs.size - floorPos m li = k + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos (by omega)).symm⟩
+  unfold readOpts
+  rw [← Array.getElem?_toList]
+  simp [hk, List.range_succ_eq_map, List.filter_cons, ALoc.hasRmwAfter_last]
+
+/-- **Atomic RMW** of an owned word, whatever its layout (sequential: choice 0, the newest
+message): it returns the old value `v`, and the word holds `op.apply signed v x`. -/
+theorem FTriple.atomicRmwW (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
+    (ord : AtomicOrder) :
+    FTriple (wpts p v) (atomicRmwAt 0 op signed ord 8 p x)
+      (fun r => ⟪r = v⟫ ⋆ apts p (op.apply signed v x)) := by
+  intro m r rF hh hp hs
+  obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
+  have hm := hh.heap_erase
+  obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
+    (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
+  obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
+  have hKb : blk.kind = K ∧ blk.kind.mappedLo ≤ p.off.toNat := by
+    have hr := abytesAt_cell hab hpb (l := (b, p.off.toNat)) ⟨rfl, Nat.le_refl _, by omega⟩
+    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hh.cell hr)
+    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hh.cell hr)
+    rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
+    simp only [Cell.mk.injEq] at hc
+    exact ⟨hc.2.2.2.symm, hlo⟩
+  obtain ⟨hKb, hlo⟩ := hKb
+  have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
+    rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
+      simpa using hacc]
+    simp [hKb, hK, pure_bind]
+  have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicWrite) b p.off.toNat 8 = bs := by
+    simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
+    have : bs.extract 0 8 = bs := by rw [← hsz]; simp
+    simpa [this] using hx
+  have hlocok := fun e => locIdx_noErr_single (m := m.recordAt b p.off.toNat 8 .atomicWrite)
+    (singleThread_recordAt hs.1.single _ _ _ _) b p.off.toNat 8 e
+  have hdec : (intOfBytes 64 bs).run = some (.ok v) := by rw [hv]; rfl
+  have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
+      (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
+      (readOpts m₁ li true)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
+      ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
+      li < m₁.atomics.size ∧ (m₁.atomics[li]!).block = b ∧ (m₁.atomics[li]!).off = p.off.toNat ∧
+      (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicWrite with atomics := a, seen := sn, nextMsg := next }) ∧
+      ShapesWF (shapes m₁) ∧
+      (∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
+        else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x) ∧
+      0 < (m₁.atomics[li]!).msgs.size := by
+    intro li m₁ hl
+    rw [intSize_64] at hl
+    obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ :=
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2.1 (by decide) (by rw [hcur, hsz]) hl
+    exact ⟨readOpts_zero_rmw hpos, by rw [lastBytes_eq hpos, hlast, hcur], hli, hb, ho,
+      hupd, hwf, htag, hpos⟩
+  cases hrun : ((atomicRmwAt 0 op signed ord 8 p x).run m).run with
+  | none => trivial
+  | some y =>
+    cases y with
+    | error e =>
+      refine (atomicRmwAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun).elim
+      · exact loadPrep_noErr (rmw := true) (by simpa using haccW8)
+          (noRace_of_singleThread hs.1.single _ _ _ _) (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
+      · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := loadPrep_ok hp
+        simp only [↓reduceIte] at ha'
+        obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
+        obtain ⟨hz, hbytes, -⟩ := hpost li m₁ hl
+        exact ⟨_, hz, v, by rw [hbytes, hdec]⟩
+    | ok y =>
+      obtain ⟨old, m'⟩ := y
+      obtain ⟨b', blk', o', li, m₀, pos, ha', -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok hrun
+      obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
+      obtain ⟨hz, hbytes, hli, hb, ho, ⟨a', sn, next, hm₀⟩, hwf, htag, hpos0⟩ := hpost li m₀ hl
+      rw [hz] at hpos; cases hpos
+      rw [hbytes, hdec] at hold; cases hold
+      subst hm'
+      have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have key : ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks →
+          M₂.SingleThread → ∀ msg : Msg, msg.bytes = Enc.encode (op.apply signed v x) →
+          ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+              M₂.nextMsg) r' rF ∧ apts p (op.apply signed v x) r' ∧
+            (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+              M₂.nextMsg).FSeq := by
+        intro M₂ hat hbl hst msg hmb
+        have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
+          rw [hat]; omega
+        rw [hn1]
+        have hb₂ : M₂.blocks[(M₂.atomics[li]!).block]? = some blk := by
+          rw [hat, hb, hbl]; exact hblk
+        have hins := insertM_last (li := li) (msg := msg) hb₂
+        have hblocks : (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li
+            M₂.nextMsg).blocks = m.blocks.set! b
+              { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode (op.apply signed v x)) } := by
+          unfold observeM; rw [hins, hat, hb, ho, hbl, hmb]
+        have hshapes : shapes (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li
+            M₂.nextMsg) = shapes m₀ := by
+          show shapes (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) = _
+          rw [shapes_insertM_last hb₂ (by rw [hat]; exact hli)]
+          simp [shapes, hat]
+        have henc : (Enc.encode (op.apply signed v x)).size = 8 := LawfulEnc.size_encode _
+        have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive
+          (bs := Enc.encode (op.apply signed v x)) (by rw [henc]; omega) hlo
+        obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode (op.apply signed v x))
+          (by rw [henc, hsz]) hpb
+          (fun l => by
+            rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode (op.apply signed v x)))
+              hblocks, hwr, henc, hsz, hA, hS, hKb])
+          (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
+          (KMono.set (blk' := { blk with
+            bytes := writeBytes blk.bytes p.off.toNat (Enc.encode (op.apply signed v x)) })
+            hblk rfl hblocks)
+        refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode (op.apply signed v x))
+          (by rw [henc, ← hsz]; exact hab'),
+          ⟨⟨?_⟩, by rw [hshapes]; exact hwf, ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
+        unfold observeM
+        exact singleThread_insertM hst _ _ _
+      have hst₀ : m₀.SingleThread := by
+        rw [hm₀]; exact singleThread_recordAt hs.1.single _ _ _ _
+      unfold rmwM
+      dsimp only
+      cases hq : ord.isAcq
+      · simp only [Bool.false_eq_true, ↓reduceIte]
+        refine (fun ⟨r', hh', hap, hfs⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, hfs⟩)
+          (key _ rfl hblk₀ hst₀ _ rfl)
+      · simp only [↓reduceIte]
+        refine (fun ⟨r', hh', hap, hfs⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, hfs⟩)
+          (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (singleThread_acqM hst₀ _) _ rfl)
+
 /-- **Typed atomic load** of an owned word (`atomicLoadAs`, a packed type of 64 bits whose bits
 `v` are `valid`), choice `0`: the integer load, decoded by `Packed.ofBits`. -/
 theorem FTriple.atomicLoadAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
@@ -310,6 +439,28 @@ theorem FTriple.atomicLoadAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64
     (hv : Packed.valid (α := α) v = true) :
     FTriple (apts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) :=
   (FTriple.atomicLoadAsW p v ord hv).pre fun _ => apts_wpts
+
+/-- **Typed atomic RMW** of an owned word (`atomicRmwAs`, a packed type of 64 bits; `Node.beginResize`'s
+`@atomicRmw(Size, &node.size, .Or, …)`), choice `0`: the integer RMW on the bits; the old bits
+`w` are `valid`. -/
+theorem FTriple.atomicRmwAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
+    (ord : AtomicOrder) (v : α) (hw : Packed.valid (α := α) w = true) :
+    FTriple (wpts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
+      (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) := by
+  unfold Zig.atomicRmwAs
+  refine FTriple.bind (FTriple.atomicRmwW p w (Packed.toBits v) op false ord) fun b =>
+    FTriple.lift fun hb => ?_
+  subst hb
+  have e : (StateT.lift (Packed.ofBits? (α := α) b) : MemM α) = pure (Packed.ofBits b) := by
+    simp only [Packed.ofBits?, hw, ↓reduceIte]; rfl
+  rw [e]
+  exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+
+/-- **Typed atomic store** to an owned word (`atomicStoreAs`; `Node.endResize`): the integer
+store of the bits. -/
+theorem FTriple.atomicStoreAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (ord : AtomicOrder)
+    (v : α) : FTriple (wpts p w) (Zig.atomicStoreAs 0 ord 8 p v) (fun _ => apts p (Packed.toBits v)) :=
+  FTriple.atomicStoreW p w (Packed.toBits v) ord
 
 end Full
 end Zig
