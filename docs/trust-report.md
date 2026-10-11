@@ -26,7 +26,7 @@ premise, checker or test, or a check whose test CI does not run.
 | Lean emitter (Gen.lean) | `unverified-assumption` | TRU-02 | — |
 | Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain) | `independently-checked-metadata` | TRU-02 | `scripts/artifact-manifest.py` / `tests/roadmap/artifact-manifest/test_manifest.py` |
 | ZigLean runtime semantics (model fidelity) | `unverified-assumption` | SEM-01, SEM-02, SEM-03, TRU-04 | — |
-| Theorems over generated modules and the ZigLean library | `kernel-checked` | TRU-01, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/assurance/test_policy.py`<br>`scripts/premises.py` / `tests/roadmap/premises/test_premises.py` |
+| Theorems over generated modules and the ZigLean library | `kernel-checked` | TRU-01, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/assurance/test_policy.py`<br>`scripts/theorem_universe.py` / `tests/roadmap/theorem-universe/test_universe.py`<br>`scripts/premises.py` / `tests/roadmap/premises/test_premises.py` |
 | Lean kernel and toolchain | `unverified-assumption` | TRU-01 | — |
 | Native backend, linker, OS and hardware | `unverified-assumption` | TRU-03, PRF-02 | — |
 
@@ -34,11 +34,12 @@ premise, checker or test, or a check whose test CI does not run.
 
 ### Theorems over generated modules and the ZigLean library
 
-Every shipped theorem about the generated Lean module, and every runtime lemma it uses, is checked by the Lean kernel. The audited dependency closure may use only the standard axioms and reviewed opaques. This is preservation inside the model only.
+Every shipped theorem about the generated Lean module, and every runtime lemma it uses, is checked by the Lean kernel, and every non-toolchain module of each audited dependency closure is replayed by the toolchain's independent leanchecker, so an elaborator bypass (debug.skipKernelTC) cannot enter the evidence. Every module the premise index lists (tutorials, case studies, tests/roadmap) is audited the same way. The audited dependency closure may use only the standard axioms and reviewed opaques. This is preservation inside the model only.
 
 - Components: `Proofs`, `ZigLean`
 - Premises: [TRU-01](premises.md#tru-01), [TRU-04](premises.md#tru-04)
 - Check: kernel build of Proofs, then dependency/axiom/opaque/extern audit of the checked environment: `scripts/assumptions.sh`, tested by `tests/roadmap/assurance/test_policy.py` (CI: `lake build Proofs`, `scripts/assumptions.sh --output`, `tests/roadmap/assurance/check.sh`)
+- Check: kernel replay of every audited module and compiled audit of every indexed theorem module: `scripts/theorem_universe.py`, tested by `tests/roadmap/theorem-universe/test_universe.py` (CI: `scripts/theorem_universe.py audit`, `tests/roadmap/theorem-universe/test_universe.py`)
 - Check: per-theorem premise derivation and index: `scripts/premises.py`, tested by `tests/roadmap/premises/test_premises.py` (CI: `scripts/premises.py check`, `tests/roadmap/premises/test_premises.py`)
 - Further evidence (not a check of this stage): `scripts/no-sorry.sh`, `assurance/policy.json`
 
@@ -48,7 +49,7 @@ Every shipped theorem about the generated Lean module, and every runtime lemma i
 
 The exported structure is re-checked outside the Lean decoder: instruction ids, operand scoping, block/loop/dispatch targets, terminators, type-table/global references and the per-version tag set and unsupported markers of coverage/<version>.json. Operand values and the meaning of each tag remain trusted.
 
-- Components: `zig-patch/air-json/json.zig`, `zig-patch/air-json/pointer-offset.zig`
+- Components: `zig-patch/air-json/json.zig`, `zig-patch/air-json/pointer-offset.zig`, `zig-patch/air-json/identity.zig`
 - Premises: [TRU-02](premises.md#tru-02)
 - Check: independent structural validation of every committed golden AIR file: `scripts/validate-air.py`, tested by `tests/roadmap/export-validation/test_validate_air.py` (CI: `python3 -B scripts/validate-air.py`, `tests/roadmap/export-validation/test_validate_air.py`)
 - Check: compiler-derived AIR tag/type inventory against checksum-pinned compiler sources: `scripts/coverage.py`, tested by `tests/roadmap/inventory/test_inventory.py` (CI: `scripts/coverage.py check`, `tests/roadmap/inventory/test_inventory.py`)

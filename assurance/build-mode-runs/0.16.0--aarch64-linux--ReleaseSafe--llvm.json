@@ -1,0 +1,158 @@
+{
+  "backend": "llvm",
+  "cases": 43584,
+  "counts": {
+    "error_return_match": 892,
+    "illegal_exclusion": 664,
+    "panic_match": 4591,
+    "unspecified_exclusion": 185,
+    "value_match": 37252
+  },
+  "emulated": false,
+  "examples": {
+    "atomics": 100,
+    "basic": 2400,
+    "errors": 900,
+    "floats": 2100,
+    "iogroup": 40,
+    "layout": 12241,
+    "lists": 1503,
+    "options": 900,
+    "pointers": 3300,
+    "recursion": 1200,
+    "slices": 6003,
+    "sync": 100,
+    "threads": 1220,
+    "variants": 2577,
+    "vectors": 9000
+  },
+  "excluded_examples": [
+    {
+      "example": "floatconv",
+      "note": "The committed translation follows the x86_64-linux float rules and the translator has no aarch64-linux profile, so f80 pseudo-denormal and unnormal inputs (63 cases) are typed mismatches against aarch64 results. The aarch64 rules are checked on aarch64-macos.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    },
+    {
+      "example": "floatops",
+      "note": "Same cause: operations on invalid f80 encodings (500 cases) and fused operations on subnormal operands (23 cases) differ between the x86_64 rules and aarch64 results.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    }
+  ],
+  "exclusions": [
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlMode",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlSum",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "growCircle",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 135,
+      "example": "layout",
+      "function": "maskCount",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "numInt",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "shapeArea",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 300,
+      "example": "threads",
+      "function": "race",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "illegal_exclusion"
+    }
+  ],
+  "flags": "-OReleaseSafe -mcpu=baseline -fllvm",
+  "float_mode_optimized_sources": [],
+  "host": "Linux-aarch64",
+  "mode": "ReleaseSafe",
+  "pin_violations": 0,
+  "schema": "air2lean-build-mode-run/1",
+  "skipped_examples": {
+    "asm": "host_excluded",
+    "floatconv": "not_requested",
+    "floatops": "not_requested",
+    "threadsync": "version_excluded"
+  },
+  "sources_sha256": "5c84bc10681f3548708c3db5bab393d5fd7fdd307aeac95e172d97b94a376ce7",
+  "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
+  "target": "aarch64-linux",
+  "triage": [],
+  "zig_version": "0.16.0"
+}

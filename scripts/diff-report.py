@@ -35,6 +35,8 @@ class Kind(str, Enum):
     # `Zig.Error.unsupportedTimer`: a clock/timed-wait call the model has no semantics for.
     UNSPECIFIED_TIMER = 'unspecified_timer'
     DEADLOCK = 'deadlock'
+    TRAP = 'trap'
+    STACK_OVERFLOW = 'stack_overflow'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     SEARCH_CAP = 'search_cap'
     INPUT_FAILURE = 'input_failure'
@@ -44,9 +46,11 @@ class Status(str, Enum):
     VALUE_MATCH = 'value_match'
     ERROR_RETURN_MATCH = 'error_return_match'
     PANIC_MATCH = 'panic_match'
+    TRAP_MATCH = 'trap_match'
     ILLEGAL = 'illegal_exclusion'
     UNSPECIFIED = 'unspecified_exclusion'
     UNSPECIFIED_TIMER = 'unspecified_timer_exclusion'
+    STACK_OVERFLOW = 'stack_overflow_exclusion'
     SEARCH_CAP = 'search_cap'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     HOST = 'host_difference'
@@ -57,13 +61,19 @@ class Status(str, Enum):
     # ReleaseFast/ReleaseSmall only: the model throws on the input, so the build has illegal behavior.
     UB_EXCLUDED = 'ub_excluded'
 
-ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock', 'unsupportedTimer'}
-# Model errors that are not panics; every other `Zig.Error` constructor is a model panic.
+ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock',
+          'unsupportedTimer', 'trap', 'stackOverflow'}
+# Model constructors with their own observation kind; every other `Zig.Error` is a model panic.
 MODEL_ERROR_KINDS = {'illegal': Kind.ILLEGAL, 'unspecified': Kind.UNSPECIFIED,
-                     'unsupportedTimer': Kind.UNSPECIFIED_TIMER, 'deadlock': Kind.DEADLOCK}
+                     'unsupportedTimer': Kind.UNSPECIFIED_TIMER, 'deadlock': Kind.DEADLOCK, 'trap': Kind.TRAP,
+                     'stackOverflow': Kind.STACK_OVERFLOW}
 # Legacy compatibility projection: these model errors count in the legacy `unspecified` bucket.
-LEGACY_UNSPECIFIED = {'Zig.Error.illegal', 'Zig.Error.unspecified', 'Zig.Error.unsupportedTimer'}
+LEGACY_UNSPECIFIED = {'Zig.Error.illegal', 'Zig.Error.unspecified', 'Zig.Error.unsupportedTimer',
+                      'Zig.Error.stackOverflow'}
 IDENT = re.compile(r'[a-zA-Z0-9_-]+\Z')
+# The synchronous fault signals tests/diff/common.zig reports by name (`native_signal`).
+SIGNALS = frozenset({'SIGFPE', 'SIGILL', 'SIGSEGV', 'SIGBUS'})
+SHA256 = re.compile(r'[0-9a-f]{64}\Z')
 
 class Invalid(ValueError):
     pass
@@ -188,8 +198,8 @@ def observation(line, legacy, side):
         if legacy != {'fail': 'Zig.Error.capped'}:
             raise Invalid('search-cap observation lacks cap marker')
     elif kind == Kind.NATIVE_SIGNAL:
-        if legacy != {'fail': 'unknown'}:
-            raise Invalid('native signal requires unknown legacy failure')
+        if set(legacy) != {'fail'} or legacy['fail'] not in SIGNALS:
+            raise Invalid('native signal requires a fault signal name')
     elif kind == Kind.NATIVE_HARNESS_FAILURE:
         if set(legacy) != {'fail'} or not isinstance(legacy['fail'],str):
             raise Invalid('native failure lacks failure marker')
@@ -235,20 +245,122 @@ def buffer_match(native, model):
     if not re.fullmatch(r'[0-9a-f]*',native) or not re.fullmatch(r'[0-9a-f?]*',model):return False
     return all(y=='?' or x==y for x,y in zip(native,model))
 
-def same_value(native, model):
-    if 'ok' not in native or 'ok' not in model or not json_equal(normalized(native['ok']),normalized(model['ok'])):
-        return False
+def same_extras(native, model):
+    """The live allocation counts and the buffers after the call agree."""
     if native.get('live') != model.get('live') or ('bufs' in native) != ('bufs' in model):
         return False
     return len(native.get('bufs', [])) == len(model.get('bufs', [])) and all(
         buffer_match(z,l) for z,l in zip(native.get('bufs', []), model.get('bufs', [])))
 
-MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH)
+def same_value(native, model):
+    if 'ok' not in native or 'ok' not in model or not json_equal(normalized(native['ok']),normalized(model['ok'])):
+        return False
+    return same_extras(native, model)
+
+MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH, Status.TRAP_MATCH)
+
+# Typed host differences (tests/diff/<ex>/host.txt, F3). Off the reference host (x86_64-linux,
+# docs/floats.md) a native/model disagreement of two returned values is a `host_difference`
+# only if every differing float leaf satisfies one of the kinds listed for the function:
+#   nan_payload    both NaN of one format (sign and payload bits differ)
+#   zero_sign      both zero of one format, opposite signs
+#   libm_ulp       both finite of one format, at most LIBM_ULPS ulps apart; an f80/f128 pair whose
+#                  values are both f64 values (the transcendental routines compute in f64) is
+#                  measured in f64 ulps
+# Anything else, including a model panic, error or exclusion against a native value, is a mismatch.
+# An f80 rounding difference is no host kind: an aarch64-macos translation models the soft-float
+# routines bit for bit (docs/floats.md §Targets).
+HOST_KINDS = ('nan_payload', 'zero_sign', 'libm_ulp')
+LIBM_ULPS = 2
+# Hex digits of a "0x<bits>" float leaf -> (exponent bits, mantissa bits, explicit integer bit).
+FLOAT_FORMATS = {4: (5, 10, False), 8: (8, 23, False), 16: (11, 52, False), 20: (15, 64, True), 32: (15, 112, False)}
+HEX_FLOAT = re.compile(r'0x[0-9a-f]+\Z')
+
+def float_leaf(leaf):
+    """(hex digits, class, signed ordinal) of a "0x<bits>" float leaf, else None. Class is
+    'nan', 'inf', 'zero', 'finite' or 'invalid' (an f80 encoding without a valid integer bit).
+    Adjacent finite values of one format have ordinals one apart."""
+    if not isinstance(leaf, str) or not HEX_FLOAT.fullmatch(leaf) or len(leaf) - 2 not in FLOAT_FORMATS:
+        return None
+    digits = len(leaf) - 2
+    exp_bits, man_bits, explicit = FLOAT_FORMATS[digits]
+    bits = int(leaf, 16)
+    man = bits & ((1 << man_bits) - 1)
+    exp = (bits >> man_bits) & ((1 << exp_bits) - 1)
+    negative = bits >> (man_bits + exp_bits)
+    top = exp == (1 << exp_bits) - 1
+    if explicit:
+        # f80: the integer bit must be 1 for a normal, infinity or NaN and 0 for a zero or denormal.
+        integer, man_bits = man >> (man_bits - 1), man_bits - 1
+        man &= (1 << man_bits) - 1
+        if integer != (exp != 0):
+            cls = 'invalid'
+        elif top:
+            cls = 'inf' if man == 0 else 'nan'
+        else:
+            cls = 'zero' if exp == 0 and man == 0 else 'finite'
+    else:
+        cls = ('inf' if man == 0 else 'nan') if top else ('zero' if exp == 0 and man == 0 else 'finite')
+    magnitude = (exp << man_bits) | man
+    return digits, cls, -magnitude if negative else magnitude
+
+def leaf_host_kinds(native, model):
+    """The host-difference kinds that explain one differing leaf pair."""
+    n, m = float_leaf(native), float_leaf(model)
+    if n is None or m is None or n[0] != m[0]:
+        return frozenset()
+    if n[1] == m[1] == 'nan':
+        return frozenset({'nan_payload'})
+    if n[1] == m[1] == 'zero':
+        return frozenset({'zero_sign'})
+    if {n[1], m[1]} <= {'finite', 'zero'}:
+        ulps = abs(n[2] - m[2])
+        wide = {20: 63, 32: 112}.get(n[0])  # mantissa bits of f80 (integer bit dropped), f128
+        if wide is not None:
+            shift = wide - 52
+            if n[2] % (1 << shift) == 0 and m[2] % (1 << shift) == 0:
+                ulps >>= shift
+        return frozenset({'libm_ulp'} if ulps <= LIBM_ULPS else set())
+    return frozenset()
+
+def differing_leaves(native, model):
+    """The differing scalar leaf pairs of two returned values, or None if their shapes differ."""
+    if isinstance(native, list) and isinstance(model, list):
+        if len(native) != len(model):
+            return None
+        pairs = []
+        for a, b in zip(native, model):
+            sub = differing_leaves(a, b)
+            if sub is None:
+                return None
+            pairs += sub
+        return pairs
+    if json_equal(normalized(native), normalized(model)):
+        return []
+    return None if isinstance(native, (list, dict)) or isinstance(model, (list, dict)) else [(native, model)]
+
+def host_difference(native, model, allowed):
+    """The sorted typed kinds that explain a native/model disagreement off the reference host,
+    or None. Only two returned values with the same buffers and live count can differ by host."""
+    if not allowed or 'ok' not in native or 'ok' not in model or not same_extras(native, model):
+        return None
+    pairs = differing_leaves(native['ok'], model['ok'])
+    if not pairs:
+        return None
+    used = set()
+    for pair in pairs:
+        kinds = leaf_host_kinds(*pair) & allowed
+        if not kinds:
+            return None
+        used |= kinds
+    return sorted(used)
 
 def capped_search(search):
     return bool(search) and search['status'] == 'capped'
 
 def legacy_bucket(native, model, host, values_match=None, search=None, ub_kinds=False):
+    """The scripts/diff.sh bucket. `host`: the function is in host.txt off the reference host
+    and both sides returned a value (the shell does not type the difference)."""
     bucket=_legacy_bucket(native,model,host,values_match,ub_kinds)
     # A capped search never contributes a legacy agreement counter.
     return 'capped' if capped_search(search) and bucket in {'ok','fail_match'} else bucket
@@ -258,34 +370,46 @@ def _legacy_bucket(native, model, host, values_match=None, ub_model=False):
     if values_match: return 'ok'
     if model.get('fail') in LEGACY_UNSPECIFIED: return 'unspecified'
     if model.get('fail') == 'Zig.Error.capped': return 'capped'
-    if ub_model and model.get('fail','').startswith('Zig.Error.') and model['fail'] != 'Zig.Error.deadlock': return 'ub_excluded'
+    if ub_model and model.get('fail','').startswith('Zig.Error.') and model['fail'] not in ('Zig.Error.deadlock','Zig.Error.trap'): return 'ub_excluded'
     if 'fail' in native and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return 'fail_match'
-    return 'host' if host else 'mismatch'
+    return 'host' if host and 'ok' in native and 'ok' in model else 'mismatch'
 
-def classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False):
-    status=_classify(native,model,nkind,mkind,search,host,values_match,exclude_ub)
+def classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False, pinned=False):
+    """Typed status of one case. `host`: a typed host difference was found (`host_difference`);
+    `exclude_ub`: a ReleaseFast/ReleaseSmall run (a model panic is the build's illegal behavior);
+    `pinned`: the input is a pinned exclusion of the function (unspecified.txt)."""
+    status=_classify(native,model,nkind,mkind,search,host,values_match,exclude_ub,pinned)
     # Truncated exploration is never demonstrated correspondence, whatever it observed.
     return Status.SEARCH_CAP if status in MATCHES and capped_search(search) else status
 
-def _classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False):
+def _classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False, pinned=False):
     if Kind.INPUT_FAILURE in (nkind,mkind): return Status.INPUT_FAILURE
     # Without safety checks the returned value of an illegal call can be garbage that the harness
     # cannot even render (a wild pointer, a missing sentinel): that is the exclusion, not a harness bug.
-    if exclude_ub and mkind == Kind.MODEL_PANIC and nkind == Kind.NATIVE_HARNESS_FAILURE and not same_value(native,model):return Status.UB_EXCLUDED
+    # A model `.illegal` (an out-of-bounds slice pointer, MM-3) is illegal behaviour here as well.
+    if exclude_ub and mkind in (Kind.MODEL_PANIC, Kind.ILLEGAL) and nkind == Kind.NATIVE_HARNESS_FAILURE and not same_value(native,model):return Status.UB_EXCLUDED
     if Kind.NATIVE_HARNESS_FAILURE in (nkind,mkind): return Status.NATIVE_HARNESS_FAILURE
     if values_match is None:values_match=same_value(native,model)
     if values_match:
         if nkind != mkind:return Status.MISMATCH
         return Status.ERROR_RETURN_MATCH if mkind == Kind.ERROR_RETURN else Status.VALUE_MATCH
-    if mkind == Kind.ILLEGAL: return Status.ILLEGAL
-    if mkind == Kind.UNSPECIFIED: return Status.UNSPECIFIED
+    # An exclusion only on an input pinned for it (F3): elsewhere a model illegal/unspecified
+    # result is a mismatch, whatever the native side did, unless an incomplete schedule search
+    # makes the case inconclusive (its pin violation still fails the run).
+    if mkind in (Kind.ILLEGAL, Kind.UNSPECIFIED):
+        if pinned or (search and (search['status'] == 'capped' or search['saw_no_result'])):
+            return Status.ILLEGAL if mkind == Kind.ILLEGAL else Status.UNSPECIFIED
+        return Status.MISMATCH
     if mkind == Kind.UNSPECIFIED_TIMER: return Status.UNSPECIFIED_TIMER
+    # The model's stack budget is chosen by the environment (MM-5), not the native stack size.
+    if mkind == Kind.STACK_OVERFLOW: return Status.STACK_OVERFLOW
     if mkind == Kind.SEARCH_CAP: return Status.SEARCH_CAP
     if exclude_ub and mkind == Kind.MODEL_PANIC: return Status.UB_EXCLUDED
-    if nkind == Kind.NATIVE_PANIC and mkind == Kind.MODEL_PANIC and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return Status.PANIC_MATCH
+    expected = 'Zig.Error.' + PANICS.get(native.get('fail'), '')
+    if nkind == Kind.NATIVE_PANIC and mkind == Kind.MODEL_PANIC and model.get('fail') == expected: return Status.PANIC_MATCH
+    if nkind == Kind.NATIVE_SIGNAL and mkind == Kind.TRAP and model.get('fail') == expected: return Status.TRAP_MATCH
     if mkind == Kind.BOUNDED_NO_RESULT or (search and search['saw_no_result']): return Status.BOUNDED_NO_RESULT
-    if nkind == Kind.NATIVE_SIGNAL: return Status.MISMATCH
-    if host: return Status.HOST
+    if host and nkind == mkind == Kind.VALUE: return Status.HOST
     return Status.MISMATCH
 
 SEARCH_STATUSES = ('witness','exhausted','bounded','capped')
@@ -392,19 +516,47 @@ def headline(summary):
             f" | correspondence_scopes={x['correspondence_scopes']} capped_scopes={x['capped_scopes']}"
             f" reduction={x['reduction']['technique']} qualified=false")
 
-def pins(path):
-    result = {}
+def config_rows(path):
+    """The non-empty lines of an optional per-example config file, `#` comments removed."""
     if path.exists():
         for raw in path.read_text().splitlines():
             raw = raw.split('#',1)[0].strip()
-            if not raw: continue
-            parts = raw.split()
-            if len(parts) != 2 or not IDENT.fullmatch(parts[0]) or parts[0] in result or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?',parts[1]):
-                raise Invalid('invalid count pin')
-            vals = list(map(int,parts[1].split('-')))
-            lo,hi = vals[0],vals[-1]
-            if lo > hi: raise Invalid('reversed count pin')
-            result[parts[0]] = (lo,hi)
+            if raw: yield raw
+
+def pins(path):
+    """Per-input exclusion pins (F3): `<fn> <input_sha256> <count>|<min>-<max> <reason>` lines,
+    `#` comments. The number of the function's cases on inputs with that SHA-256 (of the input
+    line, newline included) in the pinned bucket must lie in the range; any other input expects
+    0. Returns {fn: {sha256: (min, max, reason)}}."""
+    result = {}
+    for raw in config_rows(path):
+        parts = raw.split(None, 3)
+        if (len(parts) != 4 or not IDENT.fullmatch(parts[0]) or not SHA256.fullmatch(parts[1])
+                or parts[1] in result.get(parts[0], {}) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?',parts[2])):
+            raise Invalid('invalid exclusion pin')
+        vals = list(map(int,parts[2].split('-')))
+        lo,hi = vals[0],vals[-1]
+        if lo > hi: raise Invalid('reversed exclusion pin')
+        result.setdefault(parts[0], {})[parts[1]] = (lo,hi,parts[3])
+    return result
+
+def pin_file(directory, bucket, host):
+    """`<bucket>.<host>.txt` (host: `uname -s`-`uname -m`, e.g. `Darwin-arm64`) if present, else
+    `<bucket>.txt`. A host file replaces the shared one whole: on that host the diff test runs
+    that host's translation, whose target profile makes other float cases unspecified
+    (docs/floats.md §Targets)."""
+    own = directory/f'{bucket}.{host}.txt'
+    return own if own.exists() else directory/f'{bucket}.txt'
+
+def host_allowances(path):
+    """tests/diff/<ex>/host.txt: `<fn> <kind>[,<kind>...]` lines (HOST_KINDS), `#` comments."""
+    result = {}
+    for raw in config_rows(path):
+        parts = raw.split()
+        kinds = frozenset(parts[1].split(',')) if len(parts) == 2 else frozenset()
+        if not kinds or not IDENT.fullmatch(parts[0]) or parts[0] in result or not kinds <= set(HOST_KINDS):
+            raise Invalid('invalid host allowance')
+        result[parts[0]] = kinds
     return result
 
 def atomic_json(path, value):
@@ -489,10 +641,9 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
         for ex in examples:
             inputs=root/'tests/diff'/ex/'inputs'
             if not inputs.is_dir(): raise Invalid('missing example inputs')
-            allowed_host=set()
-            host_file=root/'tests/diff'/ex/'host.txt'
-            if host!='Linux-x86_64' and host_file.exists():allowed_host=set(host_file.read_text().splitlines())
-            fn_pins={bucket:pins(root/'tests/diff'/ex/(bucket+'.txt')) for bucket in ('unspecified','capped')}
+            allowances=host_allowances(root/'tests/diff'/ex/'host.txt')
+            allowed_host=allowances if host!='Linux-x86_64' else {}
+            fn_pins={bucket:pins(pin_file(root/'tests/diff'/ex,bucket,host)) for bucket in ('unspecified','capped')}
             files=sorted(inputs.glob('*.jsonl'))
             if not files: raise Invalid('no function inputs')
             for infile in files:
@@ -500,7 +651,8 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                 if not IDENT.fullmatch(fn):raise Invalid('invalid function name')
                 zpath=root/'tests/diff/out/zig'/ex/infile.name;lpath=root/'tests/diff/out/lean'/ex/infile.name
                 generators=[iter(lines(path)) for path in (infile,zpath,lpath,Path(str(zpath)+'.outcomes'),Path(str(lpath)+'.outcomes'))]
-                local=Counter();statuses=Counter();count=0
+                local=Counter();statuses=Counter();count=0;per_input={bucket:Counter() for bucket in fn_pins}
+                excluded=fn_pins['unspecified'].get(fn,{})
                 while True:
                     values=[next(g,None) for g in generators]
                     if all(v is None for v in values):break
@@ -509,26 +661,36 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                     native=wire(zline);model=wire(lline)
                     nkind,_=observation(zmeta,native,'native');mkind,search=observation(lmeta,model,'model')
                     values_match=same_value(native,model)
-                    status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match,exclude_ub)
+                    input_sha=hashlib.sha256(raw.encode()).hexdigest()
+                    host_kinds=None if values_match else host_difference(native,model,allowed_host.get(fn))
+                    status=classify(native,model,nkind,mkind,search,host_kinds is not None,values_match,exclude_ub,
+                                    input_sha in excluded)
                     bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search,exclude_ub)
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
+                    if bucket in per_input:per_input[bucket][input_sha]+=1
                     eligible+=status==Status.MISMATCH
                     exploration.case(ex,fn,count,status,search)
                     row={'schema':SCHEMA,'example':ex,'function':fn,'input_index':count,
-                         'input_sha256':hashlib.sha256(raw.encode()).hexdigest(),'native_kind':nkind.value,'model_kind':mkind.value,
+                         'input_sha256':input_sha,'native_kind':nkind.value,'model_kind':mkind.value,
                          'native_sha256':hashlib.sha256(zline.encode()).hexdigest(),'model_sha256':hashlib.sha256(lline.encode()).hexdigest(),
                          'status':status.value,'legacy_bucket':bucket}
+                    if status==Status.HOST:row['host_kinds']=host_kinds
+                    if status in (Status.ILLEGAL,Status.UNSPECIFIED) and input_sha in excluded:row['exclusion_reason']=excluded[input_sha][2]
                     if search:row['schedule']=search
+                    if status==Status.MISMATCH:
+                        print(f'MISMATCH (typed) {ex}.{fn} input#{count}: {raw.strip()}\n  zig:  {zline.strip()}\n  lean: {lline.strip()}',file=sys.stderr)
                     emit(row)
                 if count==0:raise Invalid('empty function inputs')
                 observed=exploration.scope(ex,fn)['observed'];incomplete_search=bool(observed['capped'] or observed['bounded'])
                 for bucket,specs in fn_pins.items():
-                    lo,hi=specs.get(fn,(0,0))
-                    if not lo<=local[bucket]<=hi:
-                        violation={'example':ex,'function':fn,'counter':bucket,'actual':local[bucket],'min':lo,'max':hi}
-                        violations.append(violation)
+                    pinned=specs.get(fn,{})
+                    for sha in sorted(set(pinned)|set(per_input[bucket])):
+                        lo,hi,_=pinned.get(sha,(0,0,None));actual=per_input[bucket][sha]
+                        if lo<=actual<=hi:continue
+                        violations.append({'example':ex,'function':fn,'counter':bucket,'input_sha256':sha,'actual':actual,'min':lo,'max':hi})
+                        print(f'EXCLUSION PIN {ex}.{fn} {bucket} input {sha}: {actual}, expected {lo}-{hi} ({pin_file(Path("tests/diff")/ex,bucket,host)})',file=sys.stderr)
                         # Search-cap changes are budget evidence, not semantic mutation detections.
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]

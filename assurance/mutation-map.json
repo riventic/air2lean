@@ -96,6 +96,22 @@
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
           "anchor": "def test_shipping_flags_drift"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"divExactSafe tiny/1\""
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Runtime.lean",
+          "anchor": "check \"memcpy overlap\""
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/expected.json",
+          "anchor": "pointer cast between a vector and another pointee"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"forLen 2/3\""
         }
       ],
       "mutants": [
@@ -103,6 +119,51 @@
           "name": "build-mode-profile-mode-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "profile-selection"
+        },
+        {
+          "name": "divexact-safe-truncates",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "divexact-unsafe-divides",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "memcpy-as-memmove",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-index-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "shift-count-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-end-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sentinel-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "for-length-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "parent-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
         }
       ]
     },
@@ -538,7 +599,7 @@
       "negative_tests": [
         {
           "path": "tests/diff/layout/unspecified.txt",
-          "anchor": "writeTable 3"
+          "anchor": "write through @constCast to a constant: illegal behaviour"
         },
         {
           "path": "tests/diff/slices/harness.zig",
@@ -572,7 +633,8 @@
         {"name": "drop_unused_read", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
         {"name": "ordinary_load", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
         {"name": "merge_asm", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"}
+        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "claims-asm-fault-premise-dropped", "category": "other", "path": "tests/roadmap/mutation-map/mutants.py"}
       ]
     },
     "L14": {
@@ -920,7 +982,7 @@
         },
         {
           "path": "tests/diff/threads/unspecified.txt",
-          "anchor": "race 300"
+          "anchor": "data race on a plain variable: illegal behaviour"
         }
       ],
       "mutants": [
@@ -1442,6 +1504,30 @@
         {
           "path": "tests/roadmap/inventory/test_inventory.py",
           "anchor": "def test_model_recognition_is_not_verification"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "modelled row without reviewed Zig versions"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "no reviewed std source for Zig 0.16.0"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "hand-models std code"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_judge"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_io_hang_needs_a_model_deadlock"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_cap_limited_input_is_unevaluated_not_included"
         }
       ],
       "mutants": [
@@ -1449,9 +1535,29 @@
           "name": "std-model-rejected-row-recognized",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
+        },
+        {
+          "name": "inclusion-new-divergence-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-stale-known-divergence-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-hang-included-by-race",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-cap-limited-counted-included",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
         }
       ],
-      "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet."
+      "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet. W2/W4 rejections (unreviewed Zig version, registry std binding) are Lean negative tests in StdModels.lean; the W3 model-inclusion checker has Python-side mutants."
     },
     "P01": {
       "categories": [
@@ -1547,10 +1653,48 @@
       "negative_tests": [
         {
           "path": "tests/roadmap/claims/test_claims.py",
-          "anchor": "def test_diverging_program_cannot_be_declared_total"
+          "anchor": "def test_diverging_program_cannot_be_declared_correct"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_heads_are_registered_declarations"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_witnesses_cap_strength"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_hypotheses_about_generated_code_are_rejected"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "claim-head-identity-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-hypothesis-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-nonvacuity-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-liveness-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-witness-unaudited-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "P06": {
       "categories": [],
@@ -1737,9 +1881,45 @@
         {
           "path": "tests/roadmap/coverage-report/test_coverage.py",
           "anchor": "def test_sampled_tests_only_are_not_functional"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_subject_must_be_the_root"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_domain_is_derived"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_spoofed_head_does_not_bind"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_root_outside_the_subject_does_not_bind"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_fixed_arguments_scope_the_domain"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "claim-subject-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-fixed-argument-universal",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "coverage-scoped-domain-functional",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I07": {
       "categories": [],
@@ -1755,9 +1935,19 @@
         {
           "path": "tests/roadmap/artifact-manifest/test_fixture.py",
           "anchor": "def test_theorems"
+        },
+        {
+          "path": "tests/roadmap/proof-receipts/test_receipt.py",
+          "anchor": "def test_dirty_tree_receipt_needs_recorded_permission"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "receipt-dirty-tree-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I08": {
       "categories": [
@@ -1833,11 +2023,70 @@
         {
           "path": "tests/roadmap/assurance/test_policy.py",
           "anchor": "def test_transitive_hidden_sorry"
+        },
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_kernel_replay_rejection_fails_dependent_theorems"
+        },
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_module_outside_replay_is_not_trusted"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_every_indexed_theorem_file_is_audited"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_compile_rejects_sorry_warnings"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_changed_artifact_or_revision_is_stale"
+        },
+        {
+          "path": "tests/roadmap/proof-receipts/test_receipt.py",
+          "anchor": "def test_receipt_requires_kernel_replay_by_planned_toolchain"
         }
       ],
       "mutants": [
         {
           "name": "audit-dependency-violation-not-transferred",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-kernel-replay-rejection-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-unreplayed-module-trusted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-replay-cache-ignores-digest",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-freshness-digest-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "universe-sorry-warning-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "universe-kernel-bypass-unscanned",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "receipt-replay-tool-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "invariant-transfer"
         }
@@ -1871,6 +2120,30 @@
         {
           "path": "tests/roadmap/outcome-accounting/test_report.py",
           "anchor": "def test_pointer_fragment_remains_mismatch_not_setup_failure"
+        },
+        {
+          "path": "tests/roadmap/outcome-accounting/test_report.py",
+          "anchor": "def test_untyped_host_differences_are_mismatches"
+        },
+        {
+          "path": "tests/roadmap/outcome-accounting/test_report.py",
+          "anchor": "def test_model_exclusion_needs_a_pin_for_its_input"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"divExactSafe tiny/1\""
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Runtime.lean",
+          "anchor": "check \"memcpy overlap\""
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/expected.json",
+          "anchor": "pointer cast between a vector and another pointee"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"forLen 2/3\""
         }
       ],
       "mutants": [
@@ -1880,8 +2153,68 @@
           "category": "other"
         },
         {
+          "name": "diff-host-difference-untyped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "diff-host-masks-non-values",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "diff-exclusion-unpinned",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
           "name": "z",
           "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "divexact-safe-truncates",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "divexact-unsafe-divides",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "memcpy-as-memmove",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-index-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "shift-count-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-end-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sentinel-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "for-length-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "parent-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         }
       ]
@@ -2102,6 +2435,10 @@
         {
           "path": "tests/roadmap/theorem-inventory/test_inventory.py",
           "anchor": "def test_record_rejects_a_foreign_log"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_completion_witness"
         }
       ],
       "mutants": [
@@ -2112,6 +2449,11 @@
         },
         {
           "name": "theorem-inventory-narrow-claim-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "theorem-inventory-completion-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         }
@@ -2141,6 +2483,30 @@
         {
           "path": "tests/roadmap/premises/test_premises.py",
           "anchor": "def test_compiled_unresolved_dependency_fails"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_interface_marker_reaches_theorems"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_interface_marker_fails_closed"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_interface_marker"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_caller_obligations_follow_the_kernel_graph"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_caller_obligations_reach_users_transitively"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_misplaced_marker_fails"
         }
       ],
       "mutants": [
@@ -2151,6 +2517,36 @@
         },
         {
           "name": "premises-compiled-runtime-module-unmapped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-interface-marker-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-interface-marker-misplaced-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-compiled-interface-marker-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "claims-caller-obligations-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-caller-obligations-not-transitive",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premise-markers-misplaced-accepted",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "invariant-transfer"
         }

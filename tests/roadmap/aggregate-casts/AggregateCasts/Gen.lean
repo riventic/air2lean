@@ -1,4 +1,4 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"unverified","backend":"unverified","build_mode":"unverified","cpu":"unverified","endian":"little","error_layout":"reference-model","error_set_bits":16,"error_tracing":null,"export_stage":"unverified","features":[],"float_mode":"unverified","name":"legacy-abi64-le","pointer_bits":64,"schema":11,"target_triple":"unverified","zig_version":"0.16.0"}}
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -66,8 +66,8 @@ instance : Zig.Enc Padded where
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.a), (4, Zig.Enc.encode v.b)]
   decode bs := do pure { a := ← Zig.Enc.decodeAt bs 0, b := ← Zig.Enc.decodeAt bs 4 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure bytesToPaddedLocals where
   deriving Inhabited
@@ -113,26 +113,48 @@ structure optFromAddrLocals where
 
 inductive optFromAddrExit where
   | ret (v : Option (Zig.Ptr))
+  | br3
 
 def optFromAddr (p0 : BitVec 64) : Zig.MemM (Option (Zig.Ptr)) := do
   let e ← ((do
-    let i1 ← Zig.callM (Zig.optPtrFromAddr (p0).toNat)
-    pure (.ret i1)) : Zig.MM optFromAddrLocals optFromAddrExit).run' (default : optFromAddrLocals)
+    let i1 ← pure (p0 &&& (3 : BitVec 64))
+    let i2 ← pure (i1 == (0 : BitVec 64))
+    match ← ((do
+      if i2 then (do
+        pure .br3)
+      else (do
+        throw .panic)) : Zig.MM optFromAddrLocals optFromAddrExit) with
+    | .br3 => (do
+      let i8 ← Zig.callM (Zig.checkAddr 4 false (p0).toNat >>= fun _ => Zig.optPtrFromAddr (p0).toNat)
+      pure (.ret i8))
+    | e => pure e) : Zig.MM optFromAddrLocals optFromAddrExit).run' (default : optFromAddrLocals)
   match e with
   | .ret v => pure v
+  | _ => throw .panic
 
 structure optUnwrapLocals where
   deriving Inhabited
 
 inductive optUnwrapExit where
   | ret (v : Zig.Ptr)
+  | br3
 
 def optUnwrap (p0 : Option (Zig.Ptr)) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← Zig.optPtrUnwrap p0
-    pure (.ret i1)) : Zig.MM optUnwrapLocals optUnwrapExit).run' (default : optUnwrapLocals)
+    let i1 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.optPtrAddr p0)))
+    let i2 ← pure (i1 != (0 : BitVec 64))
+    match ← ((do
+      if i2 then (do
+        pure .br3)
+      else (do
+        throw .panic)) : Zig.MM optUnwrapLocals optUnwrapExit) with
+    | .br3 => (do
+      let i8 ← Zig.optPtrUnwrap p0
+      pure (.ret i8))
+    | e => pure e) : Zig.MM optUnwrapLocals optUnwrapExit).run' (default : optUnwrapLocals)
   match e with
   | .ret v => pure v
+  | _ => throw .panic
 
 structure paddedToBytesLocals where
   deriving Inhabited

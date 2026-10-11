@@ -74,7 +74,9 @@ EXPECTED = sorted([
     ("JSON_SYNTAX", "a-broken.json", None),
     ("PROFILE_FAILURE", "bad-profile.json", None),
     ("PROFILE_FAILURE", "bad-profile.json", None),
-    ("NORMALIZATION_FAILURE", "bad-profile.json", 0),
+    # Schema 12 is decoded against the schema table (deny by default): the synthetic body has
+    # no module identity, so the unit stops at decoding after its profile findings.
+    ("AIR_DECODE", "bad-profile.json", None),
     ("CANONICAL_FAILURE", "refs.json", 0),
     ("CANONICAL_FAILURE", "refs.json", 1),
     ("NORMALIZATION_FAILURE", "unknown.json", 0),
@@ -227,7 +229,8 @@ def provenance_invariance(binary, base):
         write(air, {"moved.json": doc})
         out, sidecar = base / f"{label}.lean", base / f"{label}.json"
         result = subprocess.run([str(binary), str(air), "-o", str(out), "--namespace", "Moved",
-                                 "--source-map-json", str(sidecar)], capture_output=True, text=True, timeout=60)
+                                 "--source-map-json", str(sidecar), "--profile", "legacy-abi64-le"],
+                                capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stderr
         canonical = [f["canonical"] for f in json.loads(sidecar.read_text())["functions"]]
         outputs.append((out.read_bytes(), canonical))

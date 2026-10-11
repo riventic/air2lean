@@ -43,15 +43,15 @@ class PortableTests(unittest.TestCase):
     def test_exporter_ty_op_and_normalizer(self):
         exporter = coverage.tokens((ROOT / 'zig-patch/air-json/json.zig').read_text())
         arms = coverage.switch_arms(coverage.function_body(exporter, 'writeInst'), ['tag'], 1)
-        norms = coverage.normalizer((ROOT / 'Air2Lean/Air/Normalize.lean').read_text())
+        rows = coverage.op_table()['tags']
         for tag in ('byte_swap', 'bit_reverse'):
             self.assertEqual(arms[tag], ['try', 'w', '.', 'writeArgs', '(', '&', '.', '{', 'w', '.', 'data', '(', 'inst', ')', '.', 'ty_op', '.', 'operand', '}', ')'])
-            self.assertEqual(norms[tag], ['permuteBits'])
+            self.assertEqual(rows[tag]['constructor'], 'permuteBits')
 
     def test_pipeline_operand_routing(self):
-        memory = (ROOT / 'Air2Lean/Memory.lean').read_text()
+        effects = (ROOT / 'Air2Lean/Air/Effects.lean').read_text()
         emitter = (ROOT / 'Air2Lean/Emit.lean').read_text()
-        self.assertIn('.permuteBits _ a | .not a', memory)
+        self.assertIn('.countBits _ a | .permuteBits _ a | .not a', effects)
         self.assertIn('.countBits _ a | .permuteBits _ a => #[a]', emitter)
         self.assertIn('.permuteBits o a => some (#[a], fun v => .permuteBits o v[0]!)', emitter)
         self.assertIn('"Zig.byteSwap"', emitter)

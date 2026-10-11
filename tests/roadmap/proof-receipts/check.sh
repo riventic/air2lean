@@ -20,18 +20,26 @@ shift 3
 python=$(python3 -c 'import pathlib,sys;print(pathlib.Path(sys.executable).resolve())')
 helper="$repo_root/scripts/proof-receipt.py"
 lock=${AIR2LEAN_BUILD_LOCK:-"$HOME/.cache/air2lean/build.lock"}
-modules=()
-for module in "$@"; do modules+=(--module "$module"); done
+prepare_args=()
+for module in "$@"; do prepare_args+=(--module "$module"); done
+# A receipt from a tree with uncommitted tracked changes is refused unless explicitly allowed;
+# the permission is recorded in the plan and the sealed receipt.
+case "${AIR2LEAN_RECEIPT_ALLOW_DIRTY:-0}" in
+  0) ;;
+  1) prepare_args+=(--allow-dirty) ;;
+  *) echo 'AIR2LEAN_RECEIPT_ALLOW_DIRTY must be 0 or 1' >&2; exit 2 ;;
+esac
 # Refuse to audit generated modules that are not fresh translations of their committed AIR
 # (docs/generated-code.md); the guarded worker binds this script's identity as an input.
 "$python" "$repo_root/scripts/gen-integrity.py" attest > /dev/null
-"$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" ${modules[@]+"${modules[@]}"} --guard "$guard" ${guard_pin[@]+"${guard_pin[@]}"}
+"$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" ${prepare_args[@]+"${prepare_args[@]}"} --guard "$guard" ${guard_pin[@]+"${guard_pin[@]}"}
 # Preparation has no compiler commands. Guarded worker snapshots again after locking.
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
 inputs=(--input "$attempt/plan.json")
 for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean \
             scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
-            assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py; do
+            assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py \
+            scripts/premise_markers.py; do
   inputs+=(--input "$repo_root/$path")
 done
 inputs+=(--input "$guard")
@@ -40,9 +48,9 @@ for path in before.json audit.json after.json; do outputs+=(--output "$attempt/$
 status=0
 PATH="$toolchain/bin:$PATH" "$python" "$guard" \
   --cwd "$repo_root" --lock "$lock" --profile "$profile" --phase proof \
-  --timeout 900 --rss-mib 8192 --log-bytes 1048576 \
+  --timeout 900 --rss-mib 12288 --log-bytes 1048576 \
   --report "$attempt/guard.json" --log "$attempt/guard.log" \
-  "${inputs[@]}" "${outputs[@]}" --tool "$toolchain/bin/lean" --tool "$toolchain/bin/lake" \
+  "${inputs[@]}" "${outputs[@]}" --tool "$toolchain/bin/lean" --tool "$toolchain/bin/lake" --tool "$toolchain/bin/leanchecker" \
   -- "$python" "$helper" worker "$attempt" || status=$?
 if [ "$status" -ne 0 ]; then
   echo "proof receipt incomplete: guarded audit exited $status; retaining $attempt" >&2

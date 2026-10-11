@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "floatconv.bits32",
+ "module": "root",
  "params": [
   0
  ],

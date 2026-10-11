@@ -31,6 +31,8 @@ structure BuildProfile where
 
 namespace BuildProfile
 
+/-- The value of every profile field that a schema 1–11 file leaves unnamed. -/
+def unverified : String := "unverified"
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
 /-- The big-endian model profile (T03). The exporter writes `currentName` as the raw
@@ -214,11 +216,32 @@ def toJson (p : BuildProfile) : Json :=
     ("float_mode", .str p.floatMode), ("error_set_bits", Lean.toJson p.errorSetBits),
     ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)]
 
+/-- The (build mode, backend) pairs that `assurance/build-modes.json` qualifies. -/
+def qualifiedBuilds : List (String × String) := [("ReleaseSafe", "stage2_llvm")]
+
+def qualified (p : BuildProfile) : Bool := qualifiedBuilds.contains (p.buildMode, p.backend)
+
+/-- Admission (deny by default): a legacy profile needs `--profile legacy-abi64-le`, and a
+current profile (either byte order) outside `qualifiedBuilds` needs
+`--allow-unqualified-build-mode`, which the generated header records (`Air2Lean/Main.lean`). -/
+def admit (p : BuildProfile) (expected : Option String) (allowUnqualified : Bool) :
+    Except String Unit := do
+  if p.name == legacyName && expected != some legacyName then
+    throw s!"AIR schema {p.schema} has no target profile: translating it assumes an \
+      unverified 64-bit little-endian ABI; pass --profile {legacyName} to accept that \
+      assumption explicitly (docs/profiles.md)"
+  if p.name != legacyName && !p.qualified && !allowUnqualified then
+    throw s!"build mode {p.buildMode} with backend {p.backend} is not qualified \
+      (docs/build-modes.md); only {qualifiedBuilds} AIR is translated by default. \
+      Pass --allow-unqualified-build-mode to translate it anyway; the generated header \
+      records the opt-in"
+
 /-- Exact agreement includes schema, Zig version, CPU feature order, and all build facts.
 Every differing field of every profile is a separate violation, after a selected-name
-mismatch; their order matches the fail-fast `checkProgram`. -/
-def programViolations (profiles : Array BuildProfile) (expected : Option String := none) :
-    Array String := Id.run do
+mismatch; the agreed (first) profile must then pass `admit`. Their order matches the fail-fast
+`checkProgram`. -/
+def programViolations (profiles : Array BuildProfile) (expected : Option String := none)
+    (allowUnqualified : Bool := false) : Array String := Id.run do
   let some first := profiles[0]? | return #["no AIR profiles supplied"]
   let mut errors := #[]
   if let some expected := expected then
@@ -232,12 +255,13 @@ def programViolations (profiles : Array BuildProfile) (expected : Option String 
         let other := current.getObjValD key
         unless value == other do
           errors := errors.push s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
+  if let .error e := admit first expected allowUnqualified then errors := errors.push e
   return errors
 
-def checkProgram (profiles : Array BuildProfile) (expected : Option String := none) :
-    Except String BuildProfile := do
+def checkProgram (profiles : Array BuildProfile) (expected : Option String := none)
+    (allowUnqualified : Bool := false) : Except String BuildProfile := do
   let some first := profiles[0]? | throw "no AIR profiles supplied"
-  if let some error := (programViolations profiles expected)[0]? then throw error
+  if let some error := (programViolations profiles expected allowUnqualified)[0]? then throw error
   pure first
 
 end BuildProfile

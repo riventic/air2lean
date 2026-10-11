@@ -18,7 +18,7 @@ C/allowzero pointer support.
 | Zero pointer constant | An explicit `ptr: {"null": true, "off": 0}` becomes `Val.ptrNull`; the checker requires a C/allowzero type, also inside an aggregate constant. Other integer-base constants remain rejected. |
 | Nullable pointer stored in memory (`*[*c]T`, global, escaping local) | Load/store of the pointer value itself use the storage dictionary `Zig.nullablePtrEnc`: `Ptr.null` is eight zero integer bytes (the bytes of a null `?*T`); other pointers, including one that reaches address zero by arithmetic on its provenance, keep their provenance fragments. Zero bytes from any source read back as null; undefined or other integer bytes stay `.unspecified`. The access premises are those of the storage location, never of address zero. |
 | C/allowzero pointers in extern/auto structs and arrays | The generated struct `Enc` and `Zig.Enc.vectorWith` select `Zig.nullablePtrEnc` per field/item; values of these aggregates are ordinary Lean structures/vectors of `Zig.Ptr`. |
-| Projection from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) | `ptrProjectNullable p project`. A zero byte offset (`project p = p`: the first field of a struct, item 0, a zero-size item) is the base itself for every base, including address zero: the backend emits no `getelementptr` for a constant offset 0, and a zero-offset `getelementptr inbounds` is defined. A nonzero offset from address zero is `.illegal`, for C and `allowzero` bases alike (see [Projections from address zero](#projections-from-address-zero)). Any other base is projected unchanged. The compiler inserts no null check. The result keeps the base's provenance, so any access through it still needs the existing live-block/bounds/alignment premises; a dereference of the zero-offset projection of address zero is `.illegal`. Where the compiler types the result as a nonnullable pointer (Zig 0.14.1/0.15.2 `struct_field_ptr`: `&p.*.f` of a `[*c]T` or `*allowzero T` is a `*F`; 0.16.0 keeps `allowzero`) the emitter uses `ptrProjectNonnull` instead: every offset from address zero is `.illegal`, so address zero never becomes a `*F`. |
+| Projection from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) | The checked pointer formation of every derived pointer, `ptrProject p project` (MM-3, `docs/architecture-audit/memory-model.md`): the same pointer is always allowed, so an offset-0 projection from address zero is defined (the compiler emits no `getelementptr`); any other result is `.illegal` unless base and result lie in bounds of the base's block, so a nonzero offset from address zero or another provenance-free address is `.illegal` (`getelementptr inbounds` poison). When the result type is nonnullable (0.14.1 and 0.15.2 type `&p.*.f` of a `[*c]T` as `*F`), `ptrProjectNonnull` also rejects address zero. The result keeps the base's provenance, so any access through it still needs the existing live-block/bounds/alignment premises. |
 | Item read through a C/allowzero pointer (`ptr_elem_val`, `p[i]`) | The existing item access; `Mem.access` rejects a null or raw base. |
 | `[*c]T`/`*allowzero T` ↔ `?*T`/`?[*]T` (`bitcast`, in-memory coercion) | `ptrToOptional` maps address zero to the explicit `none` and other values to `some`; `ptrOfOptional` maps `none` to address zero. No dereference or allocation. |
 
@@ -85,9 +85,10 @@ are not new compiler-execution or preservation evidence.
 
 `ZigLean/Mem/Null.lean` contains universal theorem definitions `null_access`,
 `nullable_from_zero`, `null_is_null`, `null_unwrap`, `raw_address_access`,
-`null_project_zero`, `null_project`, `null_add_zero`, `null_add_ne`, `null_project_nonnull`,
-`null_offset_access`,
-`null_to_optional` and `optional_none_to_null`.
+`null_project_zero` (an offset-0 projection from address zero is defined), `null_project`
+(any other projection from it is `.illegal`), `null_project_nonnull` (into a nonnullable
+result type every projection from it is `.illegal`), `null_offset_access`, `null_to_optional`
+and `optional_none_to_null`.
 The direct-access validity premises reuse `ZigLean/Mem/Lemmas.lean`'s existing
 `access_of`/`access_eq` rules. A nonnull check cannot discharge those premises.
 
@@ -96,10 +97,8 @@ umbrella, because it imports `ZigLean.Mem.Lemmas`; build it with
 `lake build ZigLean.Mem.NullLemmas`) proves `nullablePtrEnc_lawful` (so the generic
 `load_store_same`/`store_run` rules apply to stored C pointers), the representation match
 `nullablePtrEnc_encode_eq_optional`, `nullablePtrEnc_decode_zero`, `load_store_null`,
-`ptrProjectNullable_same`, `ptrProjectNullable_ok`, `ptrProjectNullable_zero_illegal`,
-`ptrProjectNonnull_ok`,
-`projected_access_block` (an access through any projection succeeds only in a live block of the
-base's own provenance) and `ptrOfOptional_toOptional`.
+`ptrProjectNonnull_ok`, `projected_access_block` (an access through any projection
+succeeds only in a live block of the base's own provenance) and `ptrOfOptional_toOptional`.
 
 `tests/roadmap/null-pointers/Generate.lean` adds eighteen hand-written AIR cases matching the
 exporter schema: stored C and allowzero pointers (null bytes, round trips, zero-byte and
@@ -138,7 +137,7 @@ addresses and the maximum 64-bit address. Native dereference is exercised only
 with a live byte; invalid provenance/dead-block access is tested in the model.
 
 `native_decide` occurs only in generated regression fixtures, following the
-existing emitter-test convention. The shipped universal theorem definitions (thirteen in `Null.lean`, sixteen in `NullLemmas.lean`)
+existing emitter-test convention. The shipped universal theorem definitions (eleven in `Null.lean`, thirteen in `NullLemmas.lean`)
 use kernel reductions and do not use `native_decide`, `sorry`, `admit` or axioms.
 The root serialized validation queue passed the complete driver at source
 revision `a63879e` on Zig 0.16.0 in 15.4 seconds (614 MiB peak memory), after

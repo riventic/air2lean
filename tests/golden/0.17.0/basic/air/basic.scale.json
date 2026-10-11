@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "basic.scale",
+ "module": "root",
  "params": [
   0,
   1

@@ -1,4 +1,5 @@
 import Proofs.Recursion.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -9,6 +10,12 @@ extent the translation is faithful (see the differential tests in `tests/diff/`)
 `isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`; their unfold equation is `<fn>.eq_1`. The
 `isEven`/`isOdd`/`fact` proofs do induction on `n.toNat` (one less each call); the `gcd` proof
 does strong induction on the second argument (`a % b < b`).
+
+**Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
+each theorem holds for the native function only if the native stack holds the recursion it
+states (premise STK-01, `docs/premises.md`). The recursion depth is `n.toNat + 1` for
+`isEven`/`isOdd`/`fact` and at most `b.toNat + 1` for `gcd`, so a statement about large inputs
+assumes a native stack of that many frames (MM-5, `docs/architecture-audit/memory-model.md`).
 -/
 
 open Recursion
@@ -157,3 +164,9 @@ theorem gcd_spec_aux :
 
 theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
   gcd_spec_aux b.toNat a b rfl
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness fact_ok := ⟨5, by decide, trivial⟩
+nonvacuity_witness fact_ok_aux := ⟨5, 5, rfl, by decide, trivial⟩
+nonvacuity_witness gcd_spec_aux := ⟨6, 4, 6, rfl, trivial⟩

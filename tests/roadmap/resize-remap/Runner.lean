@@ -1,7 +1,7 @@
 
 -- Append to the fresh, receipt-bound RemapProbe Gen.lean after the normal import.
 private def checkSource (mode : Zig.ByteRemapMode) (expected : Nat) : IO Unit := do
-  let m : Zig.Mem := { RemapProbe.mem0 with allocPolicy := { maxBytes := 16, byteRemap := mode } }
+  let m : Zig.Mem := { RemapProbe.mem0 .fresh with allocPolicy := { maxBytes := 16, byteRemap := mode } }
   match ((RemapProbe.exercise {}).run m).run with
   | some (.ok (.ok value, final)) =>
     unless value.toNat == expected && final.blocks.all (fun b => !b.live) do

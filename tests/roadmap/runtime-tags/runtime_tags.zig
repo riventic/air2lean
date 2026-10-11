@@ -2,15 +2,15 @@
 //! `emitted-unfixtured` (no selected golden or reviewed roadmap compiler export contains
 //! them). `scripts/coverage.py` FIXTURE_REQUESTS maps each such tag to one function here.
 //!
-//! NOT EVIDENCE. Nothing here has been exported; the expected tags come from reading
-//! Sema, not from an AIR dump. Export with a patched compiler (docs/coverage.md §L14):
+//! Exported by `export.sh` with the patched 0.16.0, 0.15.2 and 0.14.1 compilers into
+//! `air/<version>` (`provenance.json`, `test_provenance.py`). Each export is a reviewed
+//! `COMPILER_FIXTURE_ROOTS` entry, so the tags it contains are `emitted-unqualified`. Only
+//! `is_null_ptr`, `is_err`, `is_err_ptr` (no Sema producer in any version) and, on 0.15.2 and
+//! 0.14.1, `is_non_err_ptr` (see `scripts/coverage.py` NO_ERROR_TRACE_PRODUCER) stay requests.
+//! One lowering per tag is not universal tag semantics.
 //!
-//!   ZIG_AIR_JSON_DIR=<empty dir> ZIG_AIR_JSON_FILTER=runtime_tags. \
-//!     zig-air-<version>/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-//!     -target x86_64-linux -mcpu=baseline tests/roadmap/runtime-tags/runtime_tags.zig
-//!
-//! then commit the dump under tests/golden only through an example (examples/<name>) or a
-//! reviewed COMPILER_FIXTURE_ROOTS entry with provenance, and regenerate coverage.
+//!   tests/roadmap/runtime-tags/export.sh          # re-export (AIR2LEAN_ZIG_AIR=<dir of zig-air-<v>>)
+//!   tests/roadmap/runtime-tags/export.sh --check  # compare with the committed export
 
 pub const Failure = error{ Bad, Other };
 pub const Pair = struct { a: u32, b: u32 };
@@ -54,6 +54,9 @@ export fn shlPlain(a: u32, n8: u8) u32 {
     return a << n;
 }
 export fn shlExact(a: u32, n8: u8) u32 {
+    // With safety on, Sema lowers @shlExact to shl_with_overflow plus a check; shl_exact
+    // itself is emitted only when safety is off.
+    @setRuntimeSafety(false);
     const n: u5 = @truncate(n8);
     return @shlExact(a, n);
 }
@@ -62,6 +65,8 @@ export fn shrExact(a: u32, n8: u8) u32 {
     return @shrExact(a, n);
 }
 export fn divExact(a: u32, b: u32) u32 {
+    // With safety on, Sema lowers @divExact to div_trunc plus a remainder check.
+    @setRuntimeSafety(false);
     return @divExact(a, b);
 }
 export fn xorBits(a: u32, b: u32) u32 {
@@ -94,6 +99,11 @@ export fn retreat(p: [*]const u32, i: usize) [*]const u32 {
 }
 export fn manyElem(p: [*]const u32, i: usize) u32 {
     return p[i];
+}
+// 0.16.0 lowers p[i] to ptr_elem_ptr + load; its ptr_elem_val comes from the sentinel
+// safety check of a comptime-length sentinel slice.
+pub fn sentinelConst(s: []u8) *[4:0]u8 {
+    return s[0..4 :0];
 }
 
 // Control: trap, ret (safety disabled), loop_switch_br + switch_dispatch.
@@ -171,6 +181,21 @@ pub fn setPayload(p: *Failure!Pair, a: u32) void {
 }
 pub fn errorName(e: Failure) []const u8 {
     return @errorName(e);
+}
+// 0.16.0: is_non_err_ptr from a by-reference capture of an error union with a switch on
+// the error. 0.15.2 and 0.14.1 emit it only for ret_load under error return tracing.
+pub fn switchErrRef(p: *Failure!u32) u32 {
+    if (p.*) |*v| {
+        v.* += 1;
+        return v.*;
+    } else |e| switch (e) {
+        error.Bad => return 1,
+        error.Other => return 2,
+    }
+}
+// bool_and in the invalid-error-code safety check (all three versions).
+pub fn errFromInt(x: u16) anyerror {
+    return @errorFromInt(x);
 }
 
 // Booleans: bool_and (three runtime lengths), bool_or (slice alignment safety check).
@@ -280,6 +305,9 @@ comptime {
     _ = &nonErrPtr;
     _ = &setPayload;
     _ = &errorName;
+    _ = &switchErrRef;
+    _ = &errFromInt;
+    _ = &sentinelConst;
     _ = &threeWay;
     _ = &alignSlice;
     _ = &subSlice;

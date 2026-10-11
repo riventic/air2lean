@@ -1,9 +1,12 @@
 import Air2Lean.Check
+import Air2Lean.Emit
 import Air2Lean.Air.Normalize
 import Air2Lean.Air.Anon
 import Air2Lean.Device
 
-/-! Check-only diagnostic collection. No emitter, compiler or proof checker runs here. -/
+/-! Check-only diagnostic collection. No compiler or proof checker runs here. The emitter runs
+only on a fully accepted program, so that an arm the checker failed to exclude is rejected here
+as in the CLI (`EMITTER_PLACEHOLDER`); its output is discarded. -/
 namespace Air2Lean.Diagnostics
 open Lean
 
@@ -18,6 +21,7 @@ structure CheckArgs where
   spawnPolicy : SpawnSemantics := .available
   /-- `--device-contract <json>` (L13): check volatile integer accesses as device events. -/
   deviceContract : Option String := none
+  allowUnqualified : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -27,6 +31,8 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
     parseOptions rest { out with profile := some p } spawnPolicySeen
+  | "--allow-unqualified-build-mode" :: rest =>
+    parseOptions rest { out with allowUnqualified := true } spawnPolicySeen
   | "--diagnostic-limit" :: value :: rest =>
     let some limit := value.toNat? | throw "--diagnostic-limit must be an integer"
     unless 1 ≤ limit && limit ≤ 4096 do throw "--diagnostic-limit must be from 1 through 4096"
@@ -44,7 +50,7 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     if out.deviceContract.isSome then throw "duplicate --device-contract"
     parseOptions rest { out with deviceContract := some path } spawnPolicySeen
   | ["--device-contract"] => throw "missing value for --device-contract"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -52,7 +58,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
 
 structure FileResult where
   file : String
@@ -93,7 +99,8 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
     if let some (caller, insts) := source then
       for i in insts do
         if let .call (.func callee false worker) _ := i.op then
-          if !modelledStdFn callee then
+          -- An extern call is bound or reported by `resolveExternsCollect`.
+          if !modelledStdFn callee && (externSymbol? callee).isNone then
             result := result.push { caller, callee, instruction := i.id, file := u.file }
           if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
             if let some callee := worker then
@@ -225,13 +232,17 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
   let .ok json := parsed
     | log := log.record { boundary file none .jsonSyntax .decode .malformedInput with fatal := true } parsed
       return (empty, log.add (skipped file none .normalize "decoded_AIR"))
-  let name := (json.getObjValAs? String "name").toOption
+  let name := (json.getObjValAs? String "name").toOption.map fun _ => Identity.fileKey json
   if (name.map (fun n => decide (n.length > 1024))).getD false then
     log := log.add { (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters") with
       fatal := true }
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
   let decodeFailure := { boundary file name .airDecode .decode .validationFailure with fatal := true }
+  let identified := Raw.identify json
+  let .ok (json, identities) := identified
+    | log := log.record decodeFailure identified
+      return (unit, log.add (skipped file name .normalize "decoded_AIR"))
   let header := Raw.parseHeader json
   let .ok (fnName, schema, zigVersion) := header
     | log := log.record decodeFailure header
@@ -247,7 +258,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
       fatal := profile?.isNone }
   let some profile := profile?
     | return (unit, log.add (skipped file name .normalize "decoded_AIR_profile"))
-  let decoded := Raw.parseFuncWith json profile
+  let decoded := (Raw.parseFuncWith json profile).map ({ · with identities })
   let .ok raw := decoded
     | log := log.record decodeFailure decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
@@ -303,6 +314,27 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
 def collectProgram (units : Array FileResult) (initial : Log)
     (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
   let mut log := initial
+  -- Bind extern calls first (`docs/air-json.md` §Extern calls): a bound call is a direct call
+  -- of its definition below; each unbound one is its own diagnostic.
+  let mut units := units
+  let normalized := (units.filter (·.structureValid)).filterMap (·.normalized)
+  match resolveExternsCollect normalized with
+  | .error message =>
+    log := log.add { code := .programFailure, phase := .program, category := .validationFailure,
+                     message, prerequisites := #["structurally_valid_selected_functions"] }
+  | .ok (resolved, unbound) =>
+    -- `resolved` is `normalized` rewritten, in the same order.
+    let mut next := 0
+    let mut updated := #[]
+    for u in units do
+      if u.structureValid && u.normalized.isSome then
+        updated := updated.push { u with normalized := resolved[next]? }
+        next := next + 1
+      else updated := updated.push u
+    units := updated
+    for (caller, message) in unbound do
+      let file := ((units.find? (·.function == some caller)).map (·.file)).getD ""
+      log := log.add (boundary file (some caller) .calleeExternUnbound .program .unsupportedSemantics message)
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
   let snapshot := CallChecksSnapshot.build funcs
@@ -394,6 +426,18 @@ def collectProgram (units : Array FileResult) (initial : Log)
           message := "not inspected: fallible spawn policy requires a valid selected program"
           prerequisites := #["validated_selected_program"]
           firstErrorInUnit := true }
+    -- The CLI's emission gate (`emitWithNamesChecked`), so that both modes agree. Like the
+    -- CLI, it runs only once every check has passed. Diagnostics mode takes no emission flags,
+    -- so this is the default emission (IEEE floats, no std models, no proof API); the namespace
+    -- and prefix only name declarations.
+    if !log.failed && units.all (·.localPassed) then
+      log := log.record {
+        code := .emitterPlaceholder
+        phase := .program
+        category := .validationFailure
+        message := ""
+        prerequisites := #["validated_selected_program"] }
+        ((emitWithNamesChecked funcs "Diagnostics" "" .ieee #[] spawnPolicy).map fun _ => ())
   if units.any (!·.localPassed) then
     log := { log with complete := false }
   return log
@@ -499,7 +543,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
       firstProfile := some baseline
-      for message in BuildProfile.programViolations #[baseline, profile] a.profile do
+      for message in BuildProfile.programViolations #[baseline, profile] a.profile a.allowUnqualified do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))

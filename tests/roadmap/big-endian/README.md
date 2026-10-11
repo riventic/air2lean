@@ -4,10 +4,13 @@ One source, `big_endian.zig`, exported with the repository's patched Zig 0.16.0 
 `s390x-linux` (big endian) and `x86_64-linux -mcpu=baseline` (little endian)
 (`air/0.16.0/<target>/`). The two exports are the same AIR except for their profile. Every
 function observes byte order: `@bitCast` of integers, floats, packed structs and `extern`
-structs to and from byte arrays, byte views of integers, floats and vectors in memory, an
+structs to and from byte arrays, byte views of integers and floats in memory, an
 `extern union` read through another field, and bit-pointer loads and stores into a packed
 struct whose bytes are read or written one by one. `reject.zig` holds s390x operations
-outside the qualified big-endian model (`air/0.16.0/s390x-reject/`).
+outside the qualified big-endian model (`air/0.16.0/s390x-reject/`), and the two byte views
+of a vector in memory (`vecByte`, `vecLane0FromBytes`): a `@ptrCast` between a vector and an
+array is illegal behaviour (langref §Vectors, `docs/illegal-behavior.md`), rejected for every
+profile.
 
 | File | Role |
 |---|---|
@@ -15,7 +18,7 @@ outside the qualified big-endian model (`air/0.16.0/s390x-reject/`).
 | `expected-gen.diff` | Their only differences: header, namespace, `open scoped Zig.BigEndian`, the `.big` bit-pointer accesses |
 | `BigEndian/Proofs.lean` | Kernel-evaluated byte-level facts of both translations |
 | `Diff.lean` | The model of either translation on `native.zig`'s inputs, in its output format |
-| `native.zig` | The native program: the same 125 cases |
+| `native.zig` | The native program: the same 115 cases |
 | `observed/<arch>-linux-musl-ReleaseSafe.txt` | Its output with stock Zig 0.16.0: s390x under qemu (Docker `--platform linux/s390x`), x86_64 under Docker `linux/amd64` |
 | `test_cli.py` | Profile acceptance, mixed/contradictory endian metadata and the fail-closed rejections |
 

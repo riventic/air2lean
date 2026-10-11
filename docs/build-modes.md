@@ -40,7 +40,10 @@ have illegal behaviour. If the ReleaseSafe model does not throw on an input, the
 no illegal behaviour on that input. This holds only if export, translation and LLVM
 lowering are faithful (TRU-02, TRU-03). This is the premise behind the README sentence on
 ReleaseFast. No output, layout or performance correspondence is claimed beyond the tested
-inputs, and ReleaseFast AIR is never translated. The premise does not cover code under
+inputs, and ReleaseFast AIR is never translated by default: the translator admits only the
+qualified `ReleaseSafe`/`stage2_llvm` profile unless `--allow-unqualified-build-mode` is
+given, and that opt-in is recorded in the generated header (`docs/air-json.md` §Schema
+table). The premise does not cover code under
 `@setRuntimeSafety(false)` or `@setFloatMode(.optimized)`. It also does not cover other
 CPU features, other error-tracing settings, or comptime branches on
 `@import("builtin").mode`.
@@ -53,10 +56,43 @@ non-integral quotient). For a function that uses float `@divExact`, "the model d
 throw" does not imply "no illegal behaviour", so the transfer claim does not apply to it.
 The reproducer is
 [`float-divexact-inexact.zig`](../tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig).
-The records state this as an exception of the premise.
+The records state this as an exception of the premise. The model now returns `.illegal` for
+an inexact float `@divExact` quotient, so the x86_64-linux and aarch64-linux runs (the latter
+without the float examples) record no mismatch; the aarch64-macos records predate that change
+and still triage the 85 cases.
 
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
+
+**Known exceptions (open).** The premise needs the model to throw on every illegal behaviour
+that ReleaseSafe does not check. The memory-model audit
+([architecture-audit/memory-model.md](architecture-audit/memory-model.md), MM-7) found illegal
+behaviour without a model throw, so "the ReleaseSafe model does not throw" does not yet imply
+"no illegal behaviour" for programs that do the following:
+
+- **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
+  quotient; the model makes every other inexact quotient `.illegal`
+  ([illegal-behavior.md](illegal-behavior.md)), and the T06 records still list this exception
+  until the build-mode runs are re-recorded.
+
+The premise holds only for programs that do not. The item is lifted when its records are.
+
+**Fixed.** Address observation (MM-1, MM-2): every block's address is the environment's
+placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a
+no-throw proof covers the native layout, including the address-dependent safety checks
+(`@alignCast`, the alignment check of `@ptrFromInt`). Stack overflow (MM-5): a recursive function
+that uses memory charges its frame to the stack budget `Mem.stackLimit` and throws
+`.stackOverflow` when it does not fit; a statement without a budget assumes that the native stack
+holds every call chain (premise STK-01), which the claim tooling lists for such a goal.
+
+Forming a pointer outside its allocation (MM-3): LLVM lowers `ptr_add`, `ptr_sub`,
+element, field and `@fieldParentPtr` pointers to `getelementptr inbounds`, and a result outside
+`[base, base+size]` of the allocation is poison. Generated code now forms these pointers with
+`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). Residual: the
+payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
+(`Zig.tryPayloadPtr`, `Zig.errSetOk`) is formed after a checked access to the error code but
+not bounds-checked itself; it leaves the allocation only for an error union pointer that
+addresses a truncated object (a pointer cast), and every access through it is still checked.
 
 `scripts/diff.sh` also builds its libm and asm helper archives with `-OReleaseFast`,
 as Zig builds compiler_rt. These are test oracles, not a claimed program build.
@@ -77,24 +113,64 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 43584 per aarch64-linux run (floatops and floatconv left out, see below) and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
-run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
+run of batch 10 (87413 cases, no mismatch); CI uploads
 those summaries (`build-mode-summaries-*`) and verifies the records on every run.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4609 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4940 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
 | x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
 
 The aarch64-macos runs count 760 float results as `host_difference` (the float model
-follows x86_64-linux, `host.txt`); the x86_64-linux runs have none. No aarch64-linux run
-exists yet.
+follows x86_64-linux, `host.txt`) and the aarch64-linux runs 755; the x86_64-linux runs have none.
+`examples/asm` is `host_excluded` on both aarch64 hosts.
+
+**aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
+container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from
+`lean-toolchain`) on an Apple-silicon Docker VM: an aarch64 Linux kernel and aarch64 code, no
+instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
+(`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
+checks the case count, examples, mismatches and exclusions; its counts are the container's
+(43584 cases; 4609 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+
+The aarch64-linux runs leave out `floatops` and `floatconv`
+([reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)): the
+committed translation follows the x86_64-linux float rules, aarch64-macos has its own
+translation and pins, and the translator has no aarch64-linux profile, so 586 f80 and fused-multiply
+cases are typed mismatches there. The float `@divExact` exception is therefore recorded on
+aarch64-macos and x86_64-linux only. In an unchecked mode a call that the model rejects as
+`.illegal` (an out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot
+render; `scripts/diff-report.py` counts it as `ub_excluded`, like a model panic.
+
+**Crashing inputs and the hosted runner.** In ReleaseFast and ReleaseSmall about 700 of the
+excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in
+`layout` and `slices`: `ptrFromAddr`, `applyOp`, `sumMid`, `sentinelArr`, `subZ`,
+`copyWithin`); ReleaseSafe and Debug trap on them instead. The hosted `ubuntu-24.04-arm`
+image has `kernel.core_pattern = |/usr/lib/systemd/systemd-coredump ...`, and
+systemd-coredump hands each crash to apport (a Python process). The kernel starts a piped
+handler even when `RLIMIT_CORE` is 0, and the crashed child is reaped without waiting for
+it, so the harness went on to the next input while the handlers piled up: on the runner the
+unmodified `layout` harness reached about 450 processes (many blocked in `vfs_coredump`), a
+load average above 300 and all 16 GB of memory within five minutes. The runner then stopped
+answering the service (the two earlier runs were lost; `timeout` killed `diff.sh` but the
+step never ended). `ulimit -c 0` and stopping apport, as tried then, do not change that.
+The Docker VM used for the container runs has `core_pattern = core`, so the same run took
+about two minutes there. The harness (`tests/diff/common.zig`, `containChild` in
+`compat.zig`) now starts every tested call as an undumpable child (`PR_SET_DUMPABLE 0` and
+`RLIMIT_CORE 0`; no handler process appeared on the hosted runner with both set), caps its
+address space at 4 GiB (Linux), makes it die with the harness (`PR_SET_PDEATHSIG`), and
+kills it after 20 seconds. A killed case is a fatal `native_harness_failure`
+(docs/outcome-accounting.md); none occurs in the recorded runs. With this, the four
+LLVM modes run on the hosted runner in about 16 minutes, Lean build excluded.
 
 **stage2_x86_64 findings.** The self-hosted backend disagrees with the LLVM backend and the
 model on legal inputs, in every optimize mode

@@ -1,0 +1,368 @@
+{
+  "backend": "llvm",
+  "cases": 43584,
+  "counts": {
+    "error_return_match": 892,
+    "illegal_exclusion": 646,
+    "ub_excluded": 4609,
+    "unspecified_exclusion": 185,
+    "value_match": 37252
+  },
+  "emulated": false,
+  "examples": {
+    "atomics": 100,
+    "basic": 2400,
+    "errors": 900,
+    "floats": 2100,
+    "iogroup": 40,
+    "layout": 12241,
+    "lists": 1503,
+    "options": 900,
+    "pointers": 3300,
+    "recursion": 1200,
+    "slices": 6003,
+    "sync": 100,
+    "threads": 1220,
+    "variants": 2577,
+    "vectors": 9000
+  },
+  "excluded_examples": [
+    {
+      "example": "floatconv",
+      "note": "The committed translation follows the x86_64-linux float rules and the translator has no aarch64-linux profile, so f80 pseudo-denormal and unnormal inputs (63 cases) are typed mismatches against aarch64 results. The aarch64 rules are checked on aarch64-macos.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    },
+    {
+      "example": "floatops",
+      "note": "Same cause: operations on invalid f80 encodings (500 cases) and fused operations on subnormal operands (23 cases) differ between the x86_64 rules and aarch64 results.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    }
+  ],
+  "exclusions": [
+    {
+      "cases": 86,
+      "example": "basic",
+      "function": "absDiff",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 279,
+      "example": "basic",
+      "function": "scale",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 218,
+      "example": "basic",
+      "function": "totalWeightedTardiness",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 154,
+      "example": "basic",
+      "function": "weightedTardiness",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 150,
+      "example": "layout",
+      "function": "align4",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 120,
+      "example": "layout",
+      "function": "applyOp",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlMode",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlSum",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "growCircle",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 135,
+      "example": "layout",
+      "function": "maskCount",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 143,
+      "example": "layout",
+      "function": "numInt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "numInt",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 149,
+      "example": "layout",
+      "function": "numRoundTrip",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 300,
+      "example": "layout",
+      "function": "ptrFromAddr",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "shapeArea",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 164,
+      "example": "options",
+      "function": "firstIndexPlusOne",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 15,
+      "example": "pointers",
+      "function": "addDown",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 12,
+      "example": "pointers",
+      "function": "bumpOpt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 158,
+      "example": "pointers",
+      "function": "delay",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 294,
+      "example": "recursion",
+      "function": "fact",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 55,
+      "example": "slices",
+      "function": "bumpAt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 168,
+      "example": "slices",
+      "function": "copy",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 47,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 60,
+      "example": "slices",
+      "function": "factorial",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 120,
+      "example": "slices",
+      "function": "sentinelArr",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 9,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 200,
+      "example": "slices",
+      "function": "subZ",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 226,
+      "example": "slices",
+      "function": "sumMid",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 117,
+      "example": "slices",
+      "function": "total",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 300,
+      "example": "threads",
+      "function": "race",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 13,
+      "example": "variants",
+      "function": "area",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 253,
+      "example": "variants",
+      "function": "lightOf",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 237,
+      "example": "variants",
+      "function": "radius",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 167,
+      "example": "variants",
+      "function": "scale",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 70,
+      "example": "variants",
+      "function": "totalArea",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 268,
+      "example": "vectors",
+      "function": "checkedAdd",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 21,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 18,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "vectors",
+      "function": "vDiv",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 26,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 241,
+      "example": "vectors",
+      "function": "vNarrow",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 28,
+      "example": "vectors",
+      "function": "vNeg",
+      "status": "ub_excluded"
+    }
+  ],
+  "flags": "-OReleaseFast -mcpu=baseline -fllvm",
+  "float_mode_optimized_sources": [],
+  "host": "Linux-aarch64",
+  "mode": "ReleaseFast",
+  "pin_violations": 0,
+  "schema": "air2lean-build-mode-run/1",
+  "skipped_examples": {
+    "asm": "host_excluded",
+    "floatconv": "not_requested",
+    "floatops": "not_requested",
+    "threadsync": "version_excluded"
+  },
+  "sources_sha256": "5c84bc10681f3548708c3db5bab393d5fd7fdd307aeac95e172d97b94a376ce7",
+  "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
+  "target": "aarch64-linux",
+  "triage": [],
+  "zig_version": "0.16.0"
+}

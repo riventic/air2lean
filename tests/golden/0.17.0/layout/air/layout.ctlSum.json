@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.ctlSum",
+ "module": "root",
  "params": [
   0
  ],
@@ -314,6 +315,7 @@
   {
    "k": "struct",
    "name": "layout.Ctl",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -340,6 +342,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -353,6 +356,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -366,6 +370,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 1,
    "bit_offset": 1,
@@ -375,6 +380,7 @@
   {
    "k": "enum",
    "name": "layout.Mode",
+   "module": "root",
    "tag": 7,
    "exhaustive": true,
    "fields": [
@@ -409,6 +415,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 1,
    "bit_offset": 3,

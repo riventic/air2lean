@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "futures.checked",
+ "module": "root",
  "params": [
   0
  ],

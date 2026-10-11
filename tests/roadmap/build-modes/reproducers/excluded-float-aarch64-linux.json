@@ -1,0 +1,14 @@
+[
+  {
+    "example": "floatconv",
+    "reason": "no aarch64-linux float model",
+    "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md",
+    "note": "The committed translation follows the x86_64-linux float rules and the translator has no aarch64-linux profile, so f80 pseudo-denormal and unnormal inputs (63 cases) are typed mismatches against aarch64 results. The aarch64 rules are checked on aarch64-macos."
+  },
+  {
+    "example": "floatops",
+    "reason": "no aarch64-linux float model",
+    "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md",
+    "note": "Same cause: operations on invalid f80 encodings (500 cases) and fused operations on subnormal operands (23 cases) differ between the x86_64 rules and aarch64 results."
+  }
+]

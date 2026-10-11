@@ -192,35 +192,61 @@ manifest-relative `source_closure` names against the runner's repository-relativ
 
 Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`, with
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
-contract file), `policy_violation` (audit `allowed` false or violations),
-`wrapper_or_unrelated`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
-`direct` requires the conclusion of the theorem's statement (its kernel type after binders
-and hypotheses, the audit's `conclusion_dependencies`) to reference the generated root
-definition `namespace.(function without prefix)`, which must live in the hash-bound
-generated module. Proof terms are not consulted: a theorem stated about a wrapper, a
-hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or_unrelated`
-even when its proof mentions the generated code. An audit without statement dependencies
-(an older extractor) leaves goals `unbound`. A weak conclusion that mentions the root (for
-example `root x = root x`) still binds, but each direct goal also records the
-`derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
-conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
-toward levels and absence claims only up to that derived strength (an unclassified
-conclusion, or an audit without conclusion shapes, derives none). Domains and preconditions
-remain review obligations. `tests/roadmap/assurance/StatementBinding.lean` holds a
-wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last binds
+contract file), `policy_violation` (audit `allowed` false or violations), `spoofed_head`,
+`wrapper_or_unrelated`, `trivial_conclusion`, `rejected_hypothesis`, `source_hash_mismatch`, `stale_receipt`,
+`unbound` or `no_receipt`. Binding reads the statement structure that `tools/Assurance.lean`
+extracts from the kernel type ([claim strength](claim-strength.md)), never names or proof
+terms:
+
+* the conclusion head must be a registered claim head (`assurance/claim-heads.json`) or
+  `Eq`, as the registered declaration: its defining module and fingerprint must match
+  (`spoofed_head` otherwise);
+* the computation the conclusion is about (an equation's left side, a triple's program, after
+  peeling `StateT.run`, `ExceptT.run` and similar runners) must be the generated root definition
+  `namespace.(function without prefix)` from the hash-bound generated module. A root that occurs
+  only in a postcondition, a hypothesis or an ignored argument, or a theorem about a wrapper or
+  `True`, is `wrapper_or_unrelated`;
+* a conclusion that names the root but only equates it with itself (`root x = root x`: the
+  audited equation's right-hand side is the generated root) is `trivial_conclusion`: it fixes no
+  result, so it is not direct, does not reach `proved_scoped` and blocks the root (the real audited
+  `double_refl` of `assurance/provenance` is the committed example). The audit records no
+  left-hand side, so a genuine relational property such as `root a b = root b a` is refused the
+  same way (fail closed); state the result against a specification to have it counted;
+* no hypothesis may mention a generated definition or a claim head (`rejected_hypothesis`),
+  unless that definition is listed in the root's `assumptions`.
+
+Each direct goal records `derived_strength` (the strength `scripts/claims.py` derives from the
+head, capped at `safety` without a non-vacuity witness and, for partial triples, without a
+liveness witness), `claim_class`, `witnesses`, `caps`, `premises` (ASM-01/ASM-04 over an
+inline-asm opaque) and the derived domain
+(`derived_domain`, `scope`). A declared `safety`/`partial_correctness`/`total_correctness`
+counts toward levels and absence claims only up to the derived strength. The domain is
+`universal` when every explicit root argument and initial state is a distinct universally
+quantified variable that no hypothesis mentions, and the premises are witnessed non-vacuous;
+otherwise it is `scoped`, and a scoped goal must declare a domain that starts with `scoped`.
+An audit without statement structures (an older extractor) leaves goals `unbound`.
+`tests/roadmap/assurance/StatementBinding.lean` holds a wrapper-statement, a `True`, a
+hypothesis-only and a genuine theorem; only the last binds
 (`tests/roadmap/coverage-report/test_coverage.py`), and its plain `Nat` equation derives no
-strength.
+strength. `tests/roadmap/coverage-report/real_run.py` covers the I07 provenance fixture's root
+(`provenance-project.json`) with a schema-12 export manifest chained to the same real receipt:
+`analyzed`, `exported`, `translated`, `compiled` and `proved` pass and `double_eq` reaches total
+correctness, while editing the AIR fails `analyzed`/`exported`.
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
-`functionally_verified_partial`, `functionally_verified_total`.
+`correct_if_returns` (formerly `functionally_verified_partial`), `functionally_verified_total`.
 
-* `functionally_verified_*` requires passed preflight, `translated`, `compiled`, at least
-  one declared goal, every goal `direct` with its declared strength no stronger than its
-  derived strength, and at least one `partial_correctness` or `total_correctness` goal.
-  `_total` additionally requires a direct `total_correctness` goal; only that level sets
-  `fully_functionally_verified`.
+* `correct_if_returns` and `functionally_verified_total` require passed preflight,
+  `translated`, `compiled`, at least one declared goal, every goal `direct` with its declared
+  strength no stronger than its derived strength and its declared domain consistent with the
+  derived one, every functional goal over a `universal` domain, and at least one
+  `partial_correctness` or `total_correctness` goal. `functionally_verified_total`
+  additionally requires a direct `total_correctness` goal; only that level sets
+  `fully_functionally_verified`. `correct_if_returns` states correctness whenever the root
+  returns, with a liveness witness that some admissible run returns; termination is not proved.
 * `proved_scoped`: translated, compiled and at least one direct goal, but the functional
-  rule fails (missing/wrapper goals, or only `safety`, `resource_bound`, `correspondence`).
+  rule fails (missing/wrapper goals, scoped domains, unwitnessed premises, or only `safety`,
+  `resource_bound`, `correspondence`).
 * `tested_sampled`: translated, compiled and passing differential samples. Differential
   evidence is always `scope: sampled` and never contributes to a higher level.
 * A `failed` analyzed/exported stage blocks every functional level. `--require-export-evidence`
@@ -230,7 +256,7 @@ Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `prove
 * A wrapper-only theorem or sampled-only tests therefore cannot reach functional
   verification; `blockers` lists every unmet rule.
 
-Each root also reports `contract_domain` (declared domains, `review: declared_not_checked`),
+Each root also reports `contract_domain` (declared and derived domains and scope per goal),
 `theorem_strength` (declared, direct and claims.py-derived strengths of direct goals), `assumptions` (declared manifest identifiers plus audited
 axioms, opaque, extern and compiler-redirection dependencies of direct theorems) and
 `exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
@@ -240,12 +266,13 @@ exporter-marked unsupported AIR in the shared [outcome taxonomy](outcome-taxonom
 `not_proved`. Only a direct goal of matching strength proves one; a capped search, fuel-bounded
 no-result run, unspecified result, unsupported timer (`unspecified_timer`) or unsupported outcome, or an observed
 failure the claim denies, refuses it and adds a blocker, so the root cannot reach
-`functionally_verified_*`. Error returns never refuse `no-panic`. `--require-level` exits 1 when any root is below the level;
+`correct_if_returns` or `functionally_verified_total`. Error returns never refuse `no-panic`. `--require-level` exits 1 when any root is below the level;
 diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
 publication as `report`.
 
-Residual limits: the declared domain, preconditions and any strength claims.py cannot derive
-remain review obligations. The level does not attest export, source
+Residual limits: a triple's precondition is the contract's stated precondition; it is
+witnessed non-vacuous but, unlike a hypothesis, does not scope the domain. Any strength
+claims.py cannot derive remains a review obligation. The level does not attest export, source
 correspondence, backend lowering or native adequacy (see the receipt's trust fields).
 
 ```sh
@@ -436,9 +463,9 @@ The audit covers whole contract modules, but only goal theorems are judged: a po
 violation in another theorem of a contract module (audit status `fail`) does not fail the
 check. A goal is `allowed` only when its theorem lives in a declared contract module, has
 no audit policy violation, its root definition `namespace.(function without prefix)` is
-defined in the committed `generated` module, the conclusion of its audited statement
-references that definition (`references_root`, the same statement binding coverage uses),
-and every project assumption it depends on
+defined in the committed `generated` module, its audited statement binds `direct` to that
+definition under the coverage rules above (`subject`, `claim_binding`, `derived_domain`), a
+scoped derived domain is declared `scoped: ...`, and every project assumption it depends on
 is named in the root's `assumptions` (which the manifest loader already restricts to
 `allowed_assumptions`). Project assumptions are non-standard axioms, dependency nodes
 missing from the audit graph, and dependencies with an audited `allowed-project-*` or
@@ -446,8 +473,9 @@ missing from the audit graph, and dependencies with an audited `allowed-project-
 `module::name` policy key. Lean's three logical axioms and standard-library opaques,
 externs and redirections are listed as `standard_assumptions` without a manifest entry.
 Other goal rows are `missing`, `outside_contracts`, `policy_violation`,
-`unallowed_assumption`, `unbound` (the audit lacks statement dependencies),
-`wrapper_or_unrelated` (the conclusion does not name the root) or `unbound_generated`;
+`unallowed_assumption`, `unbound` (the audit lacks statement structures), `spoofed_head`,
+`wrapper_or_unrelated` (the conclusion is not about the root), `rejected_hypothesis`,
+`domain_mismatch` or `unbound_generated`;
 the coverage binding rules above still decide verification levels.
 
 The optional `check` object bounds proof checking: `build_timeout_seconds` and

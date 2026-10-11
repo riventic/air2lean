@@ -1,0 +1,248 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "runtime_tags.shrExact",
+ "module": "root",
+ "src": {
+  "file": "runtime_tags.zig",
+  "module": "runtime_tags",
+  "decl_line": 63
+ },
+ "params": [
+  0,
+  1
+ ],
+ "ret": 0,
+ "export": {
+  "name": "shrExact",
+  "cc": "x86_64_sysv"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 19
+  },
+  {
+   "id": 3,
+   "tag": "trunc",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "n"
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 6,
+   "tag": "shr_exact",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "shl",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "cmp_eq",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 12,
+     "tag": "cond_br",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 8
+      }
+     ],
+     "then": [
+      {
+       "id": 13,
+       "tag": "br",
+       "ty": 5,
+       "target": 11,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 9,
+       "tag": "call",
+       "ty": 5,
+       "callee": {
+        "ty": 6,
+        "func": "debug.FullPanic((function 'defaultPanic')).shrOverflow",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 10,
+       "tag": "unreach",
+       "ty": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 5,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  }
+ ]
+}

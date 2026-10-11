@@ -54,7 +54,8 @@ def union_layout(bits, psize, palign):
 
 def ptr(child, align):
     return {"k": "ptr", "size": "one", "const": False, "child": child, "ptr_align": align,
-            "volatile": False, "allowzero": False, "sentinel": False, "host_size": 0,
+            "volatile": False, "allowzero": False, "address_space": "generic",
+            "sentinel": False, "host_size": 0,
             "abi_size": 8, "abi_align": 8}
 
 
@@ -127,7 +128,7 @@ FUNCTIONS = {
 def document(bits, name, params, ret, body):
     return {"schema": 12, "zig_version": "0.16.0", "target_endian": "little",
             "profile": dict(PROFILE, error_set_bits=bits),
-            "name": f"error_width.{name}", "params": params, "ret": ret, "body": body,
+            "name": f"error_width.{name}", "module": "root", "params": params, "ret": ret, "body": body,
             "types": types_for(bits)}
 
 

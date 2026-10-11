@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "futures.square",
+ "module": "root",
  "params": [
   0
  ],

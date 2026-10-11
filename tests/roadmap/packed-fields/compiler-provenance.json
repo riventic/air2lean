@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "source": "packed_fields.zig",
+  "source_sha256": "55d85249ff459dc24d851e29089d3287cc745991fd9805a647cb05762f40b0aa",
+  "exporter": {
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 59b90ea989358bec4e81e4545514a3d54f2b2b91b2421ac07534a66a8cf91be7",
+    "zig_patch_json_zig": "zig-patch/air-json/json.zig of the batch-10 integration tree",
+    "json_zig_sha256": "022d9b94ac8feaeb36d93b3d9aacea78a0f9726d5a753b33ecebd1646570ba49",
+    "install": "built by zig-patch/build.sh from that tree"
+  },
+  "commands": {
+    "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "x86_64": "ZIG_AIR_JSON_FILTER=packed_fields.hostAbi zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host)"
+  },
+  "functions": {
+    "llvm": [
+      "boolOn",
+      "bytePtr",
+      "hostAbi",
+      "innerC",
+      "innerCKeepsA",
+      "innerCKeepsAPtr",
+      "innerCPtr",
+      "innerPartial",
+      "localUndef",
+      "modeHigh",
+      "setA",
+      "setInner",
+      "setInnerPtr",
+      "signedS",
+      "undefField",
+      "undefKeepsA",
+      "unionBadMode",
+      "unionRaw"
+    ],
+    "x86_64": [
+      "hostAbi"
+    ]
+  },
+  "artifacts": {
+    "air-fresh/0.16.0/llvm/packed_fields.boolOn.json": "cb0772608e258580b15c5ea68cb643f5e30c7e55c0bd42177d1a74fbd2c16641",
+    "air-fresh/0.16.0/llvm/packed_fields.bytePtr.json": "fdc0ee9e730c2dfcbd8e5a9446f8022e26cc41227403941119344fe450f93b5f",
+    "air-fresh/0.16.0/llvm/packed_fields.hostAbi.json": "ad898f48a4398f61cb4f6664aefec19f6f4308b0fb1e3fe6bdfc06be2f10b931",
+    "air-fresh/0.16.0/llvm/packed_fields.innerC.json": "54ff9e390ffbd1769ca05b6f12fe0dd0d965087ffaa72b585c6b154c1c989fd6",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsA.json": "692aa57324b356a2ae54907cadc74aeebeb91a04c9585e347e406e4ca8c6cb05",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsAPtr.json": "26fe47682524e6928287224b8e5873d66cb9d9368da89f27d8aca2b05a0c0dee",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCPtr.json": "1cb2f21494f6988f587d1d6eb5b9bd29f2216447dd2b215dc67a642908863866",
+    "air-fresh/0.16.0/llvm/packed_fields.innerPartial.json": "90ccefe2dfd55348177bd395a6429608d073051de53af0a8f3d774ff5200a089",
+    "air-fresh/0.16.0/llvm/packed_fields.localUndef.json": "0388ad586d54537a03de7e0d9e76585560469f7c3851ca46d4fd26f2b63f39d3",
+    "air-fresh/0.16.0/llvm/packed_fields.modeHigh.json": "34574f04cfbe66eb7ef6ec96a334d3b1c5cf7497a6bbe719fb6b64ad0a1429fb",
+    "air-fresh/0.16.0/llvm/packed_fields.setA.json": "5bf8db79ead6c8cf861d3a86d7abb855add212639abc7406de042383eb36a931",
+    "air-fresh/0.16.0/llvm/packed_fields.setInner.json": "97b111710701e59416c8189f822c6fa4f49f27f29e23266a583bcd7cec05debc",
+    "air-fresh/0.16.0/llvm/packed_fields.setInnerPtr.json": "ae9369d0895ebac50587e92d116feffa67a320b8a61a948889fb32627b73858e",
+    "air-fresh/0.16.0/llvm/packed_fields.signedS.json": "936e8a7d5c958378efc6d66a180aa59ce7ab89be915f722d593cf4fe84a6d617",
+    "air-fresh/0.16.0/llvm/packed_fields.undefField.json": "d663f2db36655d775e9fbd28a6316450e89fae195901173975607b84bb369607",
+    "air-fresh/0.16.0/llvm/packed_fields.undefKeepsA.json": "6888fdeaa4d3321db37f8ae90f9fa163f7773ba4d981d27e5f38b6c2911d18dc",
+    "air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "8b172cfdb633b805a9a8b12b6137bc9d1b1642f7d7976d1afebe889ac5531555",
+    "air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "a7c0a6276789cd7160a4496bf27ca3b5863c55de920431c00804615a02c96da0",
+    "air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "b864495750cfa87c0c6627b46c34c9b1580a38f20878a97c63807e1d8560717f",
+    "PackedFieldsFresh/Gen.lean": "5a0e25079e765fcab84127c02b950d84ee439159f7e3d1091a55bb571abd0320",
+    "PackedFieldsX86/Gen.lean": "2c0abcc29d920ac5c6217d3171047985af944f1c4c1da92c4095f01524ee568c"
+  },
+  "qualification": {
+    "compiler_export": "passed",
+    "native": "passed (aarch64-macos host; not executed on x86_64-linux)",
+    "lean": "passed"
+  }
+}

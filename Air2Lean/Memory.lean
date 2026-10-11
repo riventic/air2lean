@@ -1,6 +1,5 @@
 import Std.Data.HashMap
-import Air2Lean.Air.Op
-import Air2Lean.StdModels
+import Air2Lean.Air.Effects
 import Air2Lean.AsmAllowlist
 
 /-!
@@ -36,15 +35,7 @@ partial def flattenInst (acc : Array Inst) (i : Inst) : Array Inst :=
   flattenOp (acc.push i) i.op
 
 partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
-  match op with
-  | .block body => body.foldl flattenInst acc
-  | .loop body => body.foldl flattenInst acc
-  | .condBr _ t e => e.foldl flattenInst (t.foldl flattenInst acc)
-  | .switchBr _ cases e | .loopSwitchBr _ cases e =>
-    let acc := cases.foldl (fun acc c => c.body.foldl flattenInst acc) acc
-    e.foldl flattenInst acc
-  | .«try» _ errBody | .tryPtr _ errBody => errBody.foldl flattenInst acc
-  | _ => acc
+  op.effects.control.bodies.foldl (fun acc body => body.foldl flattenInst acc) acc
 end
 
 def Func.allInsts (f : Func) : Array Inst := f.body.foldl flattenInst #[]
@@ -122,54 +113,9 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
       | _, _ => acc
     | _ => acc
 
-/-- The operands of `op` that are read as values: every operand except the pointer operand of
-`load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, and `dbg`. -/
-def valueOperands (op : Op) : Array Val :=
-  match op with
-  | .arg _ | .alloc | .runtimeNavPtr _ | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
-  | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
-  | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
-  | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
-  | .floatConv a | .floatFromInt a | .intFromFloat _ a | .isNull a | .isNonNull a
-  | .optPayload a | .wrapOptional a | .isErr a | .isNonErr a | .errPayload a | .errCode a
-  | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a => #[a]
-  -- A place has no optional-payload or error-union path: the local becomes a stack block.
-  | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
-  | .mulAdd a b c => #[a, b, c]
-  | .splat a | .reduce _ a => #[a]
-  | .select pred a b => #[pred, a, b]
-  | .shuffle a b mask =>
-    #[a] ++ (match b with | some v => #[v] | none => #[]) ++
-      mask.filterMap fun l => match l with | .value v => some v | _ => none
-  | .bitcast _ | .fieldPtr .. | .fieldParentPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
-  | .atomicLoad .. => #[]
-  | .atomicStore _ v _ => #[v]
-  | .atomicRmw _ _ _ v => #[v]
-  | .cmpxchg _ _ expected new _ _ => #[expected, new]
-  | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
-  | .memset a b | .memcpy a b => #[a, b]
-  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
-  | .setUnionTag _ tag => #[tag]
-  | .store _ v => #[v]
-  | .sliceLen s => #[s]
-  | .sliceElemVal s i => #[s, i]
-  | .structFieldVal s _ => #[s]
-  | .aggregateInit elems => elems
-  | .call callee args => #[callee] ++ args
-  | .block _ | .loop _ => #[]
-  | .br _ v | .switchDispatch _ v | .ret v | .«try» v _ | .tryPtr v _ => #[v]
-  | .condBr c _ _ => #[c]
-  | .switchBr v cases _ | .loopSwitchBr v cases _ =>
-    #[v] ++ cases.foldl (fun acc c =>
-      let acc := c.items.foldl Array.push acc
-      c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
-  -- Only the inputs are read as values (like `call`'s args); an output's `ref` (if present) is a
-  -- place the result stores to, like `store`'s pointer operand, so it is excluded here.
-  | .asm _ _ _ _ inputs =>
-    inputs.foldl (init := #[]) fun acc i =>
-      match i.ref with
-      | some v => acc.push v
-      | none => acc
+/-- The operands of `op` that are read as values: every operand except the place operands
+(`Effects.places`) and `dbg`'s. -/
+def valueOperands (op : Op) : Array Val := op.effects.values
 
 /-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
 default (`0`, `false`), so a partly undefined global initializer fails closed. -/
@@ -283,21 +229,13 @@ def pureParam (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
 
 /-- The instruction list of `body` and of each nested body. -/
 partial def bodyLists (body : Array Inst) : Array (Array Inst) :=
-  #[body] ++ body.flatMap fun i => match i.op with
-    | .block b | .loop b | .«try» _ b | .tryPtr _ b => bodyLists b
-    | .condBr _ t e => bodyLists t ++ bodyLists e
-    | .switchBr _ cs e | .loopSwitchBr _ cs e => cs.flatMap (bodyLists ·.body) ++ bodyLists e
-    | _ => #[]
+  #[body] ++ body.flatMap fun i => i.op.effects.control.bodies.flatMap bodyLists
 
 /-- Every operand of `op` that can be a place: the value operands, the pointer operands and the
 places that an asm output writes. -/
 def placeOperands (op : Op) : Array Val :=
-  valueOperands op ++ match op with
-    | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
-    | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
-    | .cmpxchg _ p .. => #[p]
-    | .asm _ _ _ outputs _ => outputs.filterMap (·.ref)
-    | _ => #[]
+  let e := op.effects
+  e.values ++ e.places
 
 /-- The places of the `alloc` `a`. -/
 def placesOf (roots : Array (InstId × InstId)) (a : InstId) : Array InstId :=
@@ -313,9 +251,9 @@ def deadUndefStores (f : Func) : Array InstId :=
   -- `j` (or a body inside it) can jump to a block or loop that encloses `j`.
   let leaves (j : Inst) : Bool :=
     let inner := flattenInst #[] j
-    inner.any fun x => match x.op with
-      | .br t _ | .«repeat» t | .switchDispatch t _ => !inner.any (·.id == t)
-      | _ => false
+    inner.any fun x => match x.op.effects.control.jumpTarget? with
+      | some t => !inner.any (·.id == t)
+      | none => false
   let roots := placeRoots insts
   (bodyLists f.body).foldl (init := #[]) fun acc body =>
     body.zipIdx.foldl (init := acc) fun acc (i, k) => match i.op with
@@ -403,15 +341,6 @@ def escapingAllocs (f : Func) : Array InstId :=
   let base := usesEscapingAllocs f
   base ++ (undefAllocs f).filter fun a => !base.contains a && !byteLocalOk f insts roots a
 
-/-- Audited operand-free spin instructions emitted by `std.atomic.spinLoopHint` on
-x86/x86_64 (and RISC-V with Zihintpause) and aarch64. Exact volatile instructions only:
-other assembly keeps its opaque semantics. This is an extra scheduling opportunity, not a
-memory fence or progress premise (`docs/progress-hints.md`). -/
-def Op.isSpinHint : Op → Bool
-  | .asm source true clobbers outputs inputs =>
-    (source == "pause" || source == "isb") && clobbers.isEmpty && outputs.isEmpty && inputs.isEmpty
-  | _ => false
-
 /-- The ordered constraints of an asm op: outputs, then inputs (`Air2Lean/AsmAllowlist.lean`). -/
 def asmConstraints (outputs inputs : Array AsmOperand) : List String :=
   (outputs.map (·.constraint) ++ inputs.map (·.constraint)).toList
@@ -420,24 +349,17 @@ def asmConstraints (outputs inputs : Array AsmOperand) : List String :=
 def Op.asmAllowEntry? (arch : String) : Op → Option AsmAllowEntry
   | .asm source _ clobbers outputs inputs =>
     asmAllowed? arch source (asmConstraints outputs inputs) clobbers.toList
-  | _ => none
+  | _ => none  -- keep: only `asm` has an allowlist entry
 
 /-- An inline asm op that is not on the reviewed allowlist for the target `arch`. The checker
 accepts one only as a declared device event (`Zig.vasm`, L13), which runs in `Zig.MemM`. -/
 def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
   match op with
   | .asm .. => (op.asmAllowEntry? arch).isNone
-  | _ => false
+  | _ => false  -- keep: only `asm` can be a device event
 
-/-- An op that only a function that uses memory has. -/
-def memoryOp (op : Op) : Bool :=
-  op.isSpinHint || match op with
-  | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
-  | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
-  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
-  | .runtimeNavPtr _ => true
-  | .call (.func name ..) _ => modelledStdFn name
-  | _ => false
+/-- An op that only a function that uses memory has (`Effects.memoryOnly`). -/
+def memoryOp (op : Op) : Bool := op.effects.memoryOnly
 
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
@@ -468,9 +390,8 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||
-      match i.op with
-      | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
-      | _ => false
+      -- A place operand that is a pointer constant is memory, not a local.
+      i.op.effects.places.any Val.pointsToMem
 
 /-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only
 forwards it as the block's own value: a call to a generic/inline std function (e.g. `fetchAdd`)
@@ -550,10 +471,7 @@ partial def memoryFunctions (funcs : Array Func) (externalMemory : Array String 
 
 /-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
 def Func.syncLocally (f : Func) : Bool :=
-  f.allInsts.any fun i => i.op.isSpinHint || match i.op with
-    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
-    | .call (.func name ..) _ => (threadFn? name).isSome
-    | _ => false
+  f.allInsts.any (·.op.effects.sync)
 
 /-- The names of the concurrent functions in `funcs` (`Zig.ConcM`): the ones with a sync op,
 then every caller of such a function, up to a fixpoint. A concurrent function also uses memory

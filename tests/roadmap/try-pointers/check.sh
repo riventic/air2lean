@@ -19,8 +19,16 @@ case "${1:---check-artifacts}" in
       "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
       -target x86_64-linux -mcpu=baseline tests/roadmap/try-pointers/try_pointers.zig
     exit ;;
+  --check-qualification)
+    # The retained fresh exports (air-fresh, aliases/air-fresh): hashes, profile, tags, and that
+    # they translate to the retained Gen modules up to the profile header. Runs no compiler.
+    [ "$#" -eq 1 ] || { echo 'usage: check.sh --check-qualification' >&2; exit 2; }
+    translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
+    [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }
+    PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/try-pointers/compiler-qualification.py --translator "$translator"
+    exit ;;
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check-artifacts|--check-qualification|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/try-pointers/check-artifacts.py
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
@@ -31,7 +39,7 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/TryPointers"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-"$translator" tests/roadmap/try-pointers/air/0.16.0 -o "$work/TryPointers/Gen.lean" \
+"$translator" tests/roadmap/try-pointers/air/0.16.0 --profile legacy-abi64-le -o "$work/TryPointers/Gen.lean" \
   --namespace TryPointers --prefix try_pointers.
 if [ -f tests/roadmap/try-pointers/integration-qualification.json ]; then
   python3 scripts/normalize-generated.py report "$work/TryPointers/Gen.lean" \

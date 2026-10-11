@@ -163,6 +163,19 @@ class PlanTests(Repo):
             with self.subTest(bad=bad), self.assertRaises(rr.ReleaseError):
                 rr.parse_workflow_yaml(bad)
 
+    def test_dirty_tree_receipt_gate_is_refused(self):
+        unit = 'run: echo unit'
+        for change in ('run: AIR2LEAN_RECEIPT_ALLOW_DIRTY=1 bash tests/roadmap/proof-receipts/check.sh x y z',
+                       'run: python3 scripts/proof-receipt.py prepare "$a" --profile "p" --allow-dirty',
+                       'run: |\n          python3 scripts/proof-receipt.py prepare "$a" \\\n            --allow-dirty',
+                       'env:\n          AIR2LEAN_RECEIPT_ALLOW_DIRTY: "1"\n        ' + unit):
+            with self.subTest(change=change):
+                self.write('.github/workflows/ci.yml', WORKFLOW.replace(unit, change))
+                with self.assertRaisesRegex(rr.ReleaseError, 'lets a proof receipt bind a dirty tree'):
+                    rr.build_plan(self.repo, self.commit('dirty receipt gate'))
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace(unit, 'env:\n          AIR2LEAN_RECEIPT_ALLOW_DIRTY: "0"\n        ' + unit))
+        rr.build_plan(self.repo, self.commit('permission disabled'))
+
     def test_unevaluable_condition_fails_closed(self):
         self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', "if: matrix.zig != '1'"))
         with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
@@ -340,7 +353,7 @@ class MacosJobTests(Repo):
 
     def test_other_jobs_and_macos_conditions_fail_closed(self):
         self.write('.github/workflows/ci.yml', self.workflow + '  lint:\n    runs-on: ubuntu-24.04\n')
-        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, macos, aarch64-linux and bitops-native-arm jobs'):
+        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, macos, aarch64-linux, bitops-native-arm and build-modes-aarch64-linux jobs'):
             rr.build_plan(self.repo, self.commit('extra job'))
         self.write('.github/workflows/ci.yml', self.workflow.replace(
             'run: echo macos unit', 'if: failure()\n        run: echo macos unit'))

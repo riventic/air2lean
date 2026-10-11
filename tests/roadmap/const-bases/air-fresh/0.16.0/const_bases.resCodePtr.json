@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_bases.resCodePtr",
+ "module": "root",
+ "src": {
+  "file": "const_bases.zig",
+  "module": "const_bases",
+  "decl_line": 35
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -42,7 +48,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -62,6 +69,7 @@
  "globals": [
   {
    "name": "const_bases.table",
+   "module": "root",
    "ty": 3,
    "const": true,
    "threadlocal": false,
@@ -143,6 +151,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -159,6 +168,7 @@
   {
    "k": "struct",
    "name": "const_bases.Holder",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -201,6 +211,7 @@
   {
    "k": "struct",
    "name": "const_bases.Cell",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

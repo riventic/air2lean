@@ -19,11 +19,12 @@ and requires the committed file to equal the fresh output:
 A tracked generated module that no rule covers fails. EXCEPTIONS lists each reviewed file
 that is not current translator output, with its reason; no Lean module may import one.
 
-`attest [PATH ...]` (default: every tracked generated module) is the check for consumers
-that run after scripts/check.sh has replaced Proofs/<Ex>/Gen.lean with one Zig version's
-translation: each file must equal (as above) a fresh translation of some case for that file
-or, for Proofs/<Ex>/Gen.lean, of any version/OS of example <ex>. It prints one JSON record
-per file (sha256 and the matching cases) and fails on any file without a match.
+`attest [PATH ...]` (default: every tracked generated module) is the check for evidence
+consumers (proof receipts, theorem inventory records): each file must equal (as above) a fresh
+translation of one of its own cases. Verification never replaces a committed module
+(scripts/check.sh builds another version's translation in a check tree), so no other
+translation is accepted. It prints one JSON record per file (sha256 and the matching cases) and
+fails on any file without a match.
 
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
@@ -64,6 +65,10 @@ FIXTURES = [
      ["--namespace", "IdleLoop", "--prefix", "progress."], "exact"),
     ("tests/roadmap/packed-fields/PackedFields/Gen.lean", "tests/roadmap/packed-fields/air/0.16.0",
      ["--namespace", "PackedFields", "--prefix", "packed_fields."], "exact"),
+    ("tests/roadmap/packed-fields/PackedFieldsFresh/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm",
+     ["--namespace", "PackedFieldsFresh", "--prefix", "packed_fields."], "exact"),
+    ("tests/roadmap/packed-fields/PackedFieldsX86/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/x86_64",
+     ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/spawn-failure/SpawnFailure/Gen.lean", "tests/roadmap/spawn-failure/air/0.16.0",
      ["--namespace", "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"], "exact"),
     # Its check.sh compares with normalize-generated.py compare (body only); schema-11 AIR.
@@ -89,14 +94,24 @@ FIXTURES = [
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
      ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
+    ("Proofs/ProvenanceGap/Gen.lean", "assurance/provenance-gap/air",
+     ["--namespace", "ProvenanceGap", "--prefix", "gap."], "exact"),
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
-     ["--namespace", "ConstBases", "--prefix", "const_bases."], "exact"),
+     ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
+    ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
+     ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
     ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
      ["--namespace", "FuzzS19", "--prefix", "fuzz_s19."], "exact"),
+    # G1 extern calls: the 0.16.0 translation (check.sh) and the trusted-base binding.
+    ("tests/roadmap/extern-calls/ExternCalls/Gen.lean", "tests/roadmap/extern-calls/air/0.16.0",
+     ["--namespace", "ExternCalls", "--prefix", "extern_calls."], "exact"),
+    ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
+     ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
+      "tests/roadmap/extern-calls/registry.json"], "exact"),
     ("tests/roadmap/futures/Futures/Gen.lean", "tests/roadmap/futures/air/0.16.0",
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
     ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
@@ -139,7 +154,13 @@ EXCEPTIONS = {
         "historical translator output retained byte-for-byte as a provenance input "
         "(tests/roadmap/try-pointers/README.md); check-artifacts.py pins its hash and no "
         "Lean module imports it",
+    "tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean":
+        "hand-written stand-in for a translation in the architecture-audit claim counterexamples "
+        "(docs/architecture-audit/claims.md); only those untrusted fixtures import it",
 }
+# Exceptions that counterexample fixtures import on purpose; assurance/premises.json keeps those
+# fixtures out of the theorem universe.
+STAND_INS = {"tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean"}
 
 
 @dataclasses.dataclass
@@ -150,7 +171,6 @@ class Case:
     mode: str
     label: str
     version: str | None = None
-    example: str | None = None
 
 
 def git_files(*patterns):
@@ -159,9 +179,16 @@ def git_files(*patterns):
     return [p for p in out.decode().split("\0") if p]
 
 
+# Architecture-audit counterexamples (docs/architecture-audit): untrusted by design, excluded
+# from the premise index (assurance/premises.json) and from this gate alike.
+AUDIT = "tests/roadmap/architecture-audit/"
+
+
 def tracked_generated():
     found = set()
     for path in git_files("*.lean"):
+        if path.startswith(AUDIT):
+            continue
         if GEN_NAME.fullmatch(Path(path).name):
             found.add(path)
             continue
@@ -200,12 +227,24 @@ def golden_cases():
                             if (golden / "Gen.lean").is_file() else ROOT / "Proofs" / Ex / "Gen.lean")
                 dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", os_dir) if d.is_dir()]
                 yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
-                           f"{ex} {version} {os_name}", version, ex)
+                           f"{ex} {version} {os_name}", version)
 
 
 def all_cases():
     cases = [Case(path, [ROOT / air], args, mode, path) for path, air, args, mode in FIXTURES]
     return cases + list(golden_cases())
+
+
+def strip_identities(value, root=True):
+    """`value` without the module identity keys of the current exporter (`module` of the file,
+    of a function reference, of a named type or global; `comptime_fn_module`)."""
+    if isinstance(value, list):
+        return [strip_identities(v, False) for v in value]
+    if not isinstance(value, dict):
+        return value
+    named = root or "func" in value or "name" in value
+    return {k: strip_identities(v, False) for k, v in value.items()
+            if k != "comptime_fn_module" and not (k == "module" and named)}
 
 
 def compose(dirs, destination, version):
@@ -220,10 +259,27 @@ def compose(dirs, destination, version):
             doc = json.loads(path.read_text(encoding="utf-8"))
             layer.setdefault(IDENTITY.sub(r"__\1_N", doc["name"]), []).append((path.name, doc))
         chosen.update(layer)
+    # A non-Linux host's own export (`air-<os>`) that replaces every function keeps its
+    # schema-12 profile: its translation depends on the target (aarch64 floats, fix-target-floats),
+    # as check.sh's does on that host.
+    docs = [doc for entries in chosen.values() for _, doc in entries]
+    last = dirs[-1].name if dirs else ""
+    if (last.startswith("air-") and last != "air-linux" and docs
+            and all(doc.get("schema") == 12 for doc in docs)
+            and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1
+            and set(chosen) =={IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
+                                for p in dirs[-1].glob("*.json")}):
+        for entries in chosen.values():
+            for name, doc in entries:
+                (destination / name).write_text(json.dumps(doc), encoding="utf-8")
+        return
     for entries in chosen.values():
         for name, doc in entries:
             doc = {k: v for k, v in doc.items() if k != "profile"}
             doc.update(zig_version=version, schema=min(doc["schema"], 11))
+            # A legacy (schema-11) program names no modules (docs/air-json.md §Identity): the
+            # identities of a schema-12 overlay go with its profile.
+            doc = strip_identities(doc)
             (destination / name).write_text(json.dumps(doc), encoding="utf-8")
 
 
@@ -278,7 +334,11 @@ class Translator:
                 for src in (sorted(source.glob("*.json")) if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
-            result = subprocess.run([self.binary, str(air), "-o", str(out), *case.args],
+            # Schema-11 (legacy) AIR translates only with the explicit legacy profile opt-in
+            # (docs/profiles.md), as each fixture's own check passes it.
+            legacy = ["--profile", "legacy-abi64-le"] if "--profile" not in case.args and all(
+                json.loads(f.read_bytes()).get("schema", 0) < 12 for f in air.glob("*.json")) else []
+            result = subprocess.run([self.binary, str(air), "-o", str(out), *legacy, *case.args],
                                     capture_output=True, text=True)
             if result.returncode != 0 or not out.is_file():
                 message = (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
@@ -312,6 +372,8 @@ def coverage_errors(cases):
     for path in EXCEPTIONS:
         if not (ROOT / path).is_file():
             errors.append(f"{path}: listed exception no longer exists; remove it from EXCEPTIONS")
+            continue
+        if path in STAND_INS:
             continue
         # An importer resolves `<Dir>.Gen` against its own `-R` root: only a module below the
         # exception's package root can import it.
@@ -351,11 +413,9 @@ def run_attest(translator, cases, paths):
             records.append(dict(path=path, sha256=hashlib.sha256((ROOT / path).read_bytes()).hexdigest(),
                                 exception=EXCEPTIONS[path]))
             continue
-        parts = Path(path).parts
-        example = parts[1].lower() if len(parts) == 3 and parts[0] == "Proofs" and parts[2] == "Gen.lean" else None
         matched = []
         for index, case in enumerate(cases):
-            if case.path == path or example and case.example == example:
+            if case.path == path:
                 try:
                     if translator.matches(index, case, path) is None:
                         matched.append(case.label)

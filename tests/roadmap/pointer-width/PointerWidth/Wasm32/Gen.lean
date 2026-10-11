@@ -17,8 +17,8 @@ instance : Zig.Enc View where
   encode v := Zig.Enc.fields 12 [(0, Zig.Enc.encode v.first), (4, Zig.Enc.encode v.rest)]
   decode bs := do pure { first := ← Zig.Enc.decodeAt bs 0, rest := ← Zig.Enc.decodeAt bs 4 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure atLocals where
   deriving Inhabited
@@ -93,8 +93,8 @@ def copy4 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
       let i11 ← pure (i10)
       let i12 ← pure (i11)
       let i13 ← pure (p1)
-      let i14 ← pure (i13.elemOf 1 (4 : BitVec 32))
-      let i15 ← pure (i12.elemOf 1 (4 : BitVec 32))
+      let i14 ← Zig.callM (Zig.ptrProject i13 (·.elemOf 1 (4 : BitVec 32)))
+      let i15 ← Zig.callM (Zig.ptrProject i12 (·.elemOf 1 (4 : BitVec 32)))
       let i16 ← Zig.callM (Zig.ptrLe i14 i12)
       let i17 ← Zig.callM (Zig.ptrLe i15 p1)
       let i18 ← pure (i16 || i17)
@@ -104,7 +104,7 @@ def copy4 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
         else (do
           throw .panic)) : Zig.MM copy4Locals copy4Exit) with
       | .br19 => (do
-        Zig.callM (Zig.memmoveOf 1 1 1 i11 p1 (4 : BitVec 32))
+        Zig.callM (Zig.memcpyOf 1 1 1 i11 p1 (4 : BitVec 32) (4 : BitVec 32))
         pure .ret)
       | e => pure e)
     | e => pure e) : Zig.MM copy4Locals copy4Exit).run' (default : copy4Locals)
@@ -132,7 +132,7 @@ def offsetOf (p0 : Zig.Slice32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM offsetOfLocals offsetOfExit) with
     | .br8 => (do
-      let i13 ← pure (i5.ptr.elemOf 4 p1)
+      let i13 ← Zig.callM (Zig.ptrProject i5.ptr (·.elemOf 4 p1))
       let i14 ← Zig.callM (Zig.ptrAddrOf .w32 i13)
       let i16 ← pure (((← get).local2).ptr)
       let i17 ← Zig.callM (Zig.ptrAddrOf .w32 i16)
@@ -149,6 +149,7 @@ structure releaseLocals where
 inductive releaseExit where
   | ret
 
+-- air2lean-premises: {"ALC-09":[0]}
 def release (p0 : Zig.Allocator) (p1 : Zig.Slice32) : Zig.MemM (Unit) := do
   let e ← ((do
     let _i2 ← Zig.callM (Zig.Allocator.freeOf p0 4 p1)
@@ -164,8 +165,8 @@ inductive restLenExit where
 
 def restLen (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (p0.add 4)
-    let i2 ← pure (i1.add 4)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
+    let i2 ← Zig.callM (Zig.ptrProject i1 (·.add 4))
     let i3 ← Zig.load (BitVec 32) 4 i2
     pure (.ret i3)) : Zig.MM restLenLocals restLenExit).run' (default : restLenLocals)
   match e with
@@ -179,7 +180,7 @@ inductive setFirstExit where
 
 def setFirst (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.load (Zig.Ptr) 4 i2
     Zig.store (α := BitVec 32) 4 i3 p1
     pure .ret) : Zig.MM setFirstLocals setFirstExit).run' (default : setFirstLocals)
@@ -205,6 +206,7 @@ structure zerosLocals where
 inductive zerosExit where
   | ret (v : Except Zig.ErrName (Zig.Slice32))
 
+-- air2lean-premises: {"ALC-09":[0]}
 def zeros (p0 : Zig.Allocator) (p1 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Zig.Slice32)) := do
   let e ← ((do
     let i2 ← Zig.callM (Zig.Allocator.allocOf .w32 p0 4 4 p1)

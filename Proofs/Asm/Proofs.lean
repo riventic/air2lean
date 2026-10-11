@@ -42,10 +42,18 @@ theorem lzcnt64_allOnes
 
 /-- `divl` with `edx = 0` gives the quotient and the remainder: two outputs, the second one a
 store to the local `rem` (an lvalue output). Stated as a hypothesis about the opaque
-`airAsm_3653072158`. Then `divmod` puts the remainder in the high 32 bits and the quotient in the
-low 32 bits. -/
-theorem divmod_spec (a b : BitVec 32)
+`airAsm_3653072158`. Then, for a nonzero divisor, `divmod` puts the remainder in the high 32
+bits and the quotient in the low 32 bits. `hb` is not optional: the allowlist entry's fault
+condition (`AsmFault.zeroInput 1`, premise ASM-04) makes the zero divisor a trap. -/
+theorem divmod_spec (a b : BitVec 32) (hb : b ≠ 0)
     (hdiv : airAsm_3653072158 a b = (a / b, a % b)) :
     divmod a b = pure ((a % b).setWidth 64 <<< 32 ||| (a / b).setWidth 64) := by
   unfold divmod
+  simp only [Zig.asmTrap, hb, ↓reduceIte]
   simp [zig_unfold, hdiv, Zig.shl]
+
+/-- `divl` with a zero divisor is #DE (SIGFPE natively): the model traps, with no hypothesis
+about the opaque. -/
+theorem divmod_zero_traps (a : BitVec 32) : divmod a 0 = throw .trap := by
+  unfold divmod
+  simp [zig_unfold]

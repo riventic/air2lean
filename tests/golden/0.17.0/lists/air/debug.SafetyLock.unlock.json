@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "debug.SafetyLock.unlock",
+ "module": "std",
  "params": [
   0
  ],
@@ -216,6 +217,7 @@
    "callee": {
     "ty": 7,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -285,6 +287,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -303,6 +306,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -316,6 +320,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -329,6 +334,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -337,6 +343,7 @@
   {
    "k": "enum",
    "name": "debug.SafetyLock.State__enum_1",
+   "module": "std",
    "tag": 10,
    "exhaustive": false,
    "fields": [
@@ -367,6 +374,7 @@
   {
    "k": "struct",
    "name": "debug.SafetyLock",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

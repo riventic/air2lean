@@ -28,7 +28,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
 private def bv (n : Nat) : BitVec 32 := BitVec.ofNat 32 n
 
 private def outcomes {α : Type} (x : ConcM Futures.Tgt α) : Array (Option (Except Error α)) :=
-  allOutcomes Futures.dispatch 200 5000 x Futures.mem0
+  allOutcomes Futures.dispatch 200 5000 x (Futures.mem0 .fresh)
 
 private def onlyOk {α : Type} [BEq α] (rs : Array (Option (Except Error α))) (v : α) : Bool :=
   !rs.isEmpty && rs.all fun r => match r with

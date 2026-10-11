@@ -82,6 +82,6 @@ private def unprotectedSnapshot : MemM (BitVec 32) := do
 
 /-- The real footprint/race checker rejects a counter read lacking the lock clock edge. -/
 theorem snapshot_without_clock_edge_rejected :
-    (match (unprotectedSnapshot.run mem0).run with
+    ∃ σ, (match (unprotectedSnapshot.run (mem0 σ)).run with
      | some (.error .illegal) => true
-     | _ => false) = true := by decide +kernel
+     | _ => false) = true := ⟨.fresh, by decide +kernel⟩

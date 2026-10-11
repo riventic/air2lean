@@ -129,7 +129,8 @@ class ExportEvidenceTests(unittest.TestCase):
             names = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
             stages = {n: {'status': 'passed', 'reason': ''} for n in names}
             stages['analyzed'], stages['exported'] = {'status': analyzed, 'reason': 'r'}, {'status': exported, 'reason': 'r'}
-            goal = {'theorem': 't', 'binding': 'direct', 'strength': 'total_correctness', 'derived_strength': 'total_correctness'}
+            goal = {'theorem': 't', 'binding': 'direct', 'strength': 'total_correctness',
+                    'derived_strength': 'total_correctness', 'domain': 'all inputs', 'scope': 'universal'}
             return {'stages': stages, 'goals': [goal], 'input_validation': {'status': 'passed'}, 'absence_claims': {}}
         level = lambda *a, **k: project.coverage_level(record(*a), **k)[0]
         self.assertEqual(level('passed', 'passed', require_export=True), 'functionally_verified_total')

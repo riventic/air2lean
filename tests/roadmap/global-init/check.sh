@@ -13,7 +13,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/GlobalInit"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The retained translation is the fresh one, byte for byte.
-"$translator" tests/roadmap/global-init/air/0.16.0 -o "$work/GlobalInit/Gen.lean" \
+"$translator" tests/roadmap/global-init/air/0.16.0 --profile legacy-abi64-le -o "$work/GlobalInit/Gen.lean" \
   --namespace GlobalInit --prefix global_init.
 cmp "$work/GlobalInit/Gen.lean" tests/roadmap/global-init/GlobalInit/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/GlobalInit/Gen.olean" "$work/GlobalInit/Gen.lean"

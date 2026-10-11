@@ -33,7 +33,7 @@ export or `.lake/check-reports` file). The output path must not exist; it is nev
 | `toolchain` | `lean-toolchain`, `lakefile.toml`, `lake-manifest.json` | changed toolchain/build configuration |
 | `proofs` | `--proof` (default `Proofs/Ex/*.lean` except `Gen.lean`) | changed proof sources |
 | `theorems` | namespace-qualified theorem names scanned from the proof files; with `--audit` or `--receipt`, also the compiled audit's theorem names, statuses and non-allowed names for those modules | changed theorem inventory |
-| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json` and `after.json` when present (`receipt.json` hash-binds the rest, so the multi-MB `after.json` may be omitted from a committed copy). Receipt schema 1 and 2 are both just hashed bytes. A receipt inside the repository is recorded repository-relative | changed proof receipt |
+| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json` and `after.json` when present (`receipt.json` hash-binds the rest, so the multi-MB `after.json` may be omitted from a committed copy). Receipt schemas 1 to 3 are all just hashed bytes. A receipt inside the repository is recorded repository-relative | changed proof receipt |
 | `native` | only with `--native-binary`: stock-Zig build of the same source; target, mode, cpu, compiler version, compiler sha256, binary sha256, plus the current `source` and `profile` link digests and whether target/mode/Zig version agree with the proved profile | wrong native binary |
 
 Each link digest is SHA-256 over canonical JSON of its `{files, value}`; each chain entry
@@ -53,7 +53,9 @@ the AIR profile, a missing pin, or any unreadable link. Schema < 12 AIR records 
 under a link's named inputs that differs from `HEAD`, staged or not, including deletions),
 `untracked_link_paths` (hashed link files not in the index) and `external_link_paths` (outside the
 repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
-reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given.
+reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given. For
+the same reason it rejects a chained proof receipt sealed over a dirty tree
+(`tree.dirty_allowed`, [proof-receipts.md](proof-receipts.md)) unless `--allow-dirty` is given.
 
 ### Native-binary identity
 
@@ -113,41 +115,74 @@ Offline fixture regressions (no Zig/Lake/Lean):
 python3 tests/roadmap/artifact-manifest/test_manifest.py
 ```
 
-## Committed receipt-chained fixture
+## Committed receipt-chained fixtures
 
-`assurance/provenance/` holds a genuine fresh run for `assurance/provenance/src/provenance.zig`: schema-12 AIR from the
-patched 0.16.0 AIR-only compiler, `Proofs/Provenance/Gen.lean` (with profile header) from
-`scripts/translate.sh`, proofs, a schema-2 proof receipt (`receipt/`, without `after.json`), and
-`manifest.json` chaining every link including the `native` build; `pins.json` holds reviewer pins.
+Two fixtures are committed, each a genuine fresh run chaining every link including the `native` build:
+
+| `--fixture` | Directory | Source | Target | Proofs |
+| --- | --- | --- | --- | --- |
+| `provenance` (default) | `assurance/provenance/` | `src/provenance.zig` (`add`, `double`) | x86_64-linux musl, ReleaseSafe | `Proofs/Provenance/` |
+| `gap` | `assurance/provenance-gap/` | `src/gap.zig` (`gap`, `within`) | aarch64-macos, ReleaseSafe | `Proofs/ProvenanceGap/` |
+
+Each holds schema-12 AIR from the patched 0.16.0 AIR-only compiler (`air/`), the generated
+`Gen.lean` (with profile header, byte-identical to translator output: `scripts/gen-integrity.py`),
+proofs, a schema-3 proof receipt (`receipt/`, without `after.json`), `manifest.json` and
+`pins.json` (reviewer pins). The two differ in target, ABI, CPU features and theorem shapes, so
+neither a profile nor a theorem set is special-cased.
 
 ```sh
-python3 scripts/provenance-evidence.py check [--strict] [--native-binary BIN]   # offline, CI
-python3 tests/roadmap/artifact-manifest/test_fixture.py                          # edit-one-link on copies
-AIR2LEAN_BUILD_LOCK=... python3 scripts/provenance-evidence.py regenerate WORKDIR \
-  --zig-air PATCHED_ZIG --stock-zig STOCK_ZIG                                    # heavy, guarded
+python3 scripts/provenance-evidence.py [--fixture NAME|all] check [--strict] [--native-binary BIN]   # offline, CI
+python3 scripts/provenance-evidence.py [--fixture NAME|all] replay [--strict]                        # offline, CI
+python3 tests/roadmap/artifact-manifest/test_fixture.py                                              # edit-one-link and replay on copies
+AIR2LEAN_BUILD_LOCK=... python3 scripts/provenance-evidence.py --fixture NAME regenerate WORKDIR \
+  --zig-air PATCHED_ZIG --stock-zig STOCK_ZIG                                                        # heavy, guarded
 ```
 
 `check` requires every example-local link to be current; drift of the repository-wide links
 (compiler patch, translator, runtime, toolchain) is reported as `aged` and fails only with `--strict`.
-`regenerate` re-exports, retranslates, rebuilds the native binary and a guarded receipt, requires
-byte-identical AIR, Gen.lean and (for the same stock compiler) binary, then strictly checks a fresh
-manifest. To refresh the fixture after an intentional change: commit the example/Gen/proofs (and new
-AIR), run `regenerate WORKDIR` on the clean, committed tree, then
+`regenerate` builds the translator, re-exports with the fixture's target, translates, rebuilds the
+native binary and a guarded receipt, requires byte-identical AIR, Gen.lean and (for the same stock
+compiler) binary, then strictly checks a fresh manifest. To refresh a fixture after an intentional
+change: commit the example/Gen/proofs (and new AIR), run `regenerate WORKDIR --refresh` on the
+clean, committed tree (`--refresh` skips the comparison with the committed audit and manifest; a
+new fixture needs it), then
 
 ```sh
-python3 scripts/provenance-evidence.py install WORKDIR        # path-redacted receipt copy
-git commit ...                                                  # the receipt
-python3 scripts/provenance-evidence.py record WORKDIR --stock-zig STOCK_ZIG   # manifest + pins.json
-git commit ...
+python3 scripts/provenance-evidence.py --fixture NAME install WORKDIR                        # path-redacted receipt copy
+# commit the receipt
+python3 scripts/provenance-evidence.py --fixture NAME record WORKDIR --stock-zig STOCK_ZIG   # manifest + pins.json
+# commit the manifest
 ```
 
-`install` copies `receipt.json`, `plan.json` and `audit.json` with every host-local absolute path
-replaced: the attempt directory by `<attempt>`, the checkout by `<repo>`, the home directory by `~`
-and any other absolute path by `<host>/<basename>`. The committed copy therefore holds no local
-paths; its `receipt.json` artifact hashes are those of the unredacted files of the run (the copy's
-own bytes are what the manifest chains).
+`install` verifies the sealed receipt against the whole tracked tree, so commit everything before
+it and change nothing tracked until it has run. It copies `receipt.json`, `plan.json` and
+`audit.json` with every host-local absolute path replaced: the attempt directory by `<attempt>`,
+the checkout by `<repo>`, the home directory by `~` and any other absolute path by
+`<host>/<basename>`, and refuses a copy that still contains one. Its `receipt.json` artifact hashes
+are those of the unredacted files of the run (the copy's own bytes are what the manifest chains).
 
-The committed receipt's `plan.json` records the revision it was produced at (a pushed commit of the
-integration branch); that commit may no longer exist after history rewrites or squash merges, so the receipt is evidence of that run
-(its bytes are chained), not something `verify` can replay later. `regenerate` produces and
-verifies a fresh one.
+### Receipt replay and staleness
+
+`manifest.json` hashes the translator, the runtime and the toolchain pins, so it goes stale whenever
+ZigLean, Air2Lean, the translation scripts or the pins change: record both manifests last on a branch
+and again after merges that touch those paths (`check` reports this as `aged`, not as a failure).
+
+A committed receipt is replayed by `replay` without its revision (a pushed integration commit that
+history rewrites or squash merges can remove) and without its attempt directory:
+
+1. `plan.json` records the sha256 of every tracked source at the run. `replay` finds the Lean import
+   closure of the proved module in the current tree and compares each closure file (plus
+   `lean-toolchain`, `lakefile.toml`, `lake-manifest.json`, `assurance/policy.json` and
+   `tools/Assurance.lean`) with those hashes. A changed file under the fixture's own `Proofs/<Name>/`
+   is `stale`; a changed shared file (ZigLean, toolchain pins, policy) is `aged` and fails only with
+   `--strict`. Files outside the closure (translator, scripts) do not matter to the audited theorems.
+2. The audit must have `status: pass`, no violations, a checked build, the tree's Lean toolchain and,
+   for the proved module, exactly the theorem declarations the manifest chained (all allowed).
+3. Manifest, receipt, plan and audit are scanned for host-local absolute paths.
+4. `replay --rerun WORKDIR` (heavy, guarded) additionally reruns the proof receipt on the current
+   tree and requires the same compiled theorem audit; it refuses to run on a `stale` receipt.
+
+`replay` does not verify the sealed receipt itself (the unredacted files and `after.json` are not
+committed, and `receipt.json` hash-binds the unredacted bytes) and authenticates no one: it
+establishes that the receipt's claim concerns the bytes in the tree now, or names the files that
+differ. Binary-to-model correspondence stays out of scope (the `native` link is identity only).

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Hash/inventory gate for the L04 alias/cleanup fixture; hashes do not attest compilation.
 
-The retained `try_aliases.*` AIR is hand-written in the 0.16.0 schema-11 exporter shape. Its
-compiler export is pending, so `provenance.json` records `air_origin: hand-written` and every
-qualification entry as `pending`. `--fresh-air DIR` validates the inventory/profile/tags of an
-actual patched-compiler export without rewriting the retained hashes.
+The retained `try_aliases.*` AIR is hand-written in the 0.16.0 schema-11 exporter shape, so
+`provenance.json` records `air_origin: hand-written`. The unmodified compiler export is retained
+in `air-fresh/0.16.0` and gated by `../compiler-qualification.py`: it translates to this `Gen.lean`
+up to the profile header. `--fresh-air DIR` validates the inventory/profile/tags of an actual
+patched-compiler export without rewriting the retained hashes.
 """
 import argparse
 import hashlib
@@ -15,7 +16,8 @@ import runpy
 REPO = Path(__file__).resolve().parents[4]
 CASE = Path(__file__).resolve().parent
 HELPERS = runpy.run_path(str(REPO / 'scripts/normalize-generated.py'))
-PENDING = {'compiler_export': 'pending', 'native': 'pending', 'lean': 'pending'}
+QUALIFICATION = {'compiler_export': 'passed: ../compiler-qualification.json',
+                 'native': 'passed: ../compiler-qualification.json', 'lean': 'pending'}
 
 
 def digest(path):
@@ -40,8 +42,10 @@ def inspect(repo=REPO, case=CASE, record=False, fresh_air=None):
         raise ValueError('fresh AIR validation cannot record checked artifact hashes')
     manifest_path = case / 'provenance.json'
     manifest = HELPERS['parse_json'](manifest_path.read_text())
-    if manifest.get('air_origin') != 'hand-written' or manifest.get('qualification') != PENDING:
-        raise ValueError('alias fixture must stay hand-written with pending qualification')
+    qualification = manifest.get('qualification', {})
+    if (manifest.get('air_origin') != 'hand-written' or set(qualification) != set(QUALIFICATION) or
+            any(not qualification[k].startswith(v) for k, v in QUALIFICATION.items())):
+        raise ValueError('alias fixture must stay hand-written; qualification must reference the export record')
     if not record and digest(repo / manifest['source']) != manifest['source_sha256']:
         raise ValueError('stale source')
     air_dir = Path(fresh_air) if fresh_air is not None else case / 'air/0.16.0'

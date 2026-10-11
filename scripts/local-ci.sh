@@ -19,7 +19,8 @@ prepare() {
   fi
   export PATH="$host:$ELAN_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   key=$(cat zig-patch/versions.toml zig-patch/toml-get.sh zig-patch/build.sh zig-patch/lock.sh \
-    zig-patch/air-json/json.zig zig-patch/air-json/pointer-offset.zig "zig-patch/$version/hook.patch" | sha256sum | cut -d' ' -f1)
+    zig-patch/air-json/json.zig zig-patch/air-json/pointer-offset.zig zig-patch/air-json/identity.zig \
+    "zig-patch/$version/hook.patch" | sha256sum | cut -d' ' -f1)
   compiler=/cache/zig-air-$version-$key
   if [ ! -x "$compiler/bin/zig" ]; then
     # FD 9's exclusive flock is inherited by every child, so only an exited
@@ -94,6 +95,8 @@ if [ "${1:-}" = --inside ]; then
   fi
   lake build
   scripts/check.sh
+  tree=$(cat ".lake/check-reports/$version/build-tree")
+  cd "$tree"
   lake build Proofs
   exit 0
 fi

@@ -34,10 +34,8 @@ policies. Whole-block ownership replaces each cell's size metadata, retains
 `min(old,new)` byte representations, adds undefined grown bytes, and preserves
 the exact caller heap frame. The moved branch allocates a fresh block and frees
 the complete old block; the failure branch preserves memory. In-place growth
-checks both the latest block index and that every other block, including dead
-history, ends before its address. This check supplies an allocation-order
-condition that is not implied by arbitrary sequential model memory. It advances
-`nextAddr` monotonically. Race and whole-allocation premises remain explicit.
+needs only that the grown range is clear of every other live block
+(`Mem.growFree`): no allocation order is assumed (`docs/address-placement.md`). Race and whole-allocation premises remain explicit.
 
 `Kernel.lean` checks representation facts and imports the ownership rules.
 `Check.lean` executes separate assertions for prefix, suffix undefinedness,

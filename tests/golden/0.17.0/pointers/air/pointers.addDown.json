@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "pointers.addDown",
+ "module": "root",
  "params": [
   0,
   1
@@ -293,6 +294,7 @@
    "callee": {
     "ty": 6,
     "func": "pointers.addDown",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -325,6 +327,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

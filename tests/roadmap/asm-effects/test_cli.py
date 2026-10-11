@@ -16,7 +16,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 AIR = HERE / "air" / "0.16.0"
 GEN = HERE / "AsmEffects" / "Gen.lean"
-ARGS = ["--namespace", "AsmEffects", "--prefix", "asm_effects."]
+# The fixture AIR is schema 11 (no target profile): the reference ABI is accepted explicitly.
+ARGS = ["--namespace", "AsmEffects", "--prefix", "asm_effects.", "--profile", "legacy-abi64-le"]
 
 
 def fixtures():
@@ -49,7 +50,7 @@ def reject(binary, documents, marker):
         assert result.returncode == 1, (marker, result.returncode, result.stderr)
         assert marker in result.stderr, (marker, result.stderr)
         assert out.read_text() == "sentinel\n", "a rejected input replaced the output"
-        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air")],
+        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air"), "--profile", "legacy-abi64-le"],
                                      text=True, capture_output=True, check=False, timeout=60)
         assert diagnostics.returncode == 1, diagnostics.stderr
         report = json.loads(diagnostics.stdout)
@@ -98,7 +99,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-effects-") as d:
         out = Path(d) / "Gen.lean"
         result = subprocess.run([str(binary), str(ROOT / "tests/golden/asm/air"), "-o", str(out),
-                                 "--namespace", "Asm", "--prefix", "asm."], text=True,
+                                 "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le"], text=True,
                                 capture_output=True, check=False, timeout=60)
         assert result.returncode == 0, result.stderr
         # check.sh may have rewritten Proofs/Asm/Gen.lean with this host's profile header first

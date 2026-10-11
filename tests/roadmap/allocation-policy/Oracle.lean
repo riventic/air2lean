@@ -68,7 +68,7 @@ def main : IO Unit := do
     match ((do
         let src ← alloc .global n 1
         let r ← Lists.dupe {} ⟨src, BitVec.ofNat 64 n⟩
-        pure (r, (← get).liveHeapBytes)).run { Lists.mem0 with allocPolicy := P }).run with
+        pure (r, (← get).liveHeapBytes)).run { Lists.mem0 .fresh with allocPolicy := P }).run with
     | some (.ok r) => some r.1
     | _ => none
   match large {} with
@@ -81,7 +81,7 @@ def main : IO Unit := do
   -- Several failures in one run of the translated `append` loop: each failure is reported
   -- and leaves the list unchanged, so exactly the successful values remain.
   let vs : List (BitVec 32) := [1, 2, 3, 4, 5, 6, 7, 8]
-  match ((appendRun vs).run { Lists.mem0 with allocPolicy := { fails := fun i _ => i < 3 } }).run with
+  match ((appendRun vs).run { Lists.mem0 .fresh with allocPolicy := { fails := fun i _ => i < 3 } }).run with
   | some (.ok ((oks, items), _)) =>
     require (oks == [false, false, false, true, true, true, true, true] && items == [4, 5, 6, 7, 8])
       s!"append loop mismatch: {oks} {items}"

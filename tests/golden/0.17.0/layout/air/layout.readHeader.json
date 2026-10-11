@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.readHeader",
+ "module": "root",
  "params": [
   0
  ],
@@ -248,6 +249,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -256,6 +258,7 @@
   {
    "k": "struct",
    "name": "layout.Header",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {
@@ -290,6 +293,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -308,6 +312,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -321,6 +326,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -334,6 +340,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -347,6 +354,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -379,6 +387,7 @@
   {
    "k": "struct",
    "name": "layout.Flags",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
