@@ -40,8 +40,9 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      # Also on schedule: a commit whose CI run finished later (a workflow_dispatch run after an
+      # admin bypass) is published by the next scheduled run.
       - name: Publish the CI-produced files of every new main commit
-        if: github.event_name != 'schedule'
         run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push
 
       - name: Every main commit has its entry

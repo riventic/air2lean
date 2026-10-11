@@ -147,8 +147,15 @@ class Coverage(unittest.TestCase):
         problems = cr.coverage([step], cr.Inputs([], ['docs']), TREE, False, generated)
         self.assertIn('whole-tree generated file', problems[0][2])
         self.assertEqual(cr.coverage([step], cr.Inputs(['**']), TREE, False, generated), [])
-        installed = self.step({'docs/premise-index.md': ['probe', 'write']})
+        installed = self.step({'docs/premise-index.md': ['write']})
         self.assertEqual(cr.coverage([installed], cr.Inputs([]), TREE, False, generated), [])
+        probed = self.step({'docs/premise-index.md': ['probe', 'write']})
+        self.assertTrue(cr.coverage([probed], cr.Inputs([]), TREE, False, generated))
+
+    def test_read_write_open_also_reads(self):
+        out = reduce(['10 openat(AT_FDCWD</w>, "out/r.json", O_RDWR) = 4</w/out/r.json>',
+                      '10 openat(AT_FDCWD</w>, "out/s.json", O_RDWR|O_TRUNC) = 5</w/out/s.json>'])
+        self.assertEqual(out['observed'], {'out/r.json': ['read', 'write'], 'out/s.json': ['write']})
 
     def test_commit_identity_needs_commit_bound(self):
         step = self.step({}, git={'["git","rev-parse","HEAD"]': 'commit'})

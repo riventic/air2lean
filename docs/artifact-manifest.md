@@ -52,8 +52,9 @@ the AIR profile, a missing pin, or any unreadable link. Schema < 12 AIR records 
 `provenance` records `HEAD`, whether any tracked file is dirty, `modified_link_paths` (any path
 under a link's named inputs that differs from `HEAD`, staged or not, including deletions),
 `untracked_link_paths` (hashed link files not in the index), `generated_link_paths` (whole-tree
-generated files of `assurance/generated.json`: never in the index, produced from `HEAD` by CI and
-published for it on the `generated` branch, so they do not make a manifest dirty) and
+generated files of `assurance/generated.json` that `scripts/generated.py` has just produced from
+`HEAD` and records with `AIR2LEAN_GENERATING=1`; they do not make a manifest dirty, while any
+other untracked copy of such a file does) and
 `external_link_paths` (outside the repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
 reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given. For
 the same reason it rejects a chained proof receipt sealed over a dirty tree

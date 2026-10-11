@@ -502,6 +502,11 @@ class Reducer:
             flags = args[index] if len(args) > index else ''
             kind = 'write' if re.search(r'O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND', flags) else \
                 'probe' if 'O_DIRECTORY' in flags or failed else 'read'
+            # A read-write open of an existing file can read its old content too.
+            if 'O_RDWR' in flags and 'O_TRUNC' not in flags and not failed:
+                fd = FD.match(result)
+                if fd:
+                    self.note(pid, fd.group(2), 'read')
         elif name in READS:
             kind = 'probe' if failed else 'read'
         else:
@@ -592,8 +597,8 @@ def coverage(observations, inputs, tree, commit_bound=False, generated=()):
                     if path and not inputs.listing(parent):
                         problems.append((path, kinds, 'listing of %r not declared' % (parent or '.')))
             elif path in generated:
-                # Installing one (write, existence probes) reveals nothing the registry does not fix.
-                if set(kinds) - {'write', 'probe'} and not inputs.subtree(''):
+                # Installing one (`scripts/generated.py install` only writes it) reveals nothing.
+                if set(kinds) - {'write'} and not inputs.subtree(''):
                     problems.append((path, kinds, 'whole-tree generated file (%s): declare "**"' % GENERATED))
             else:
                 anchor = deepest_tracked_dir(path, dirs)

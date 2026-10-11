@@ -38,6 +38,7 @@ message names the main commit, its tree and the CI run (trailers Main-Commit, Ma
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import os
@@ -152,7 +153,8 @@ def gen_provenance(group: dict, root: Path):
         tool = [sys.executable, '-B', 'scripts/provenance-evidence.py', '--fixture', fixture]
         run(*tool, 'regenerate', work, '--refresh', cwd=root)
         run(*tool, 'install', work, cwd=root)
-        run(*tool, 'record', work, cwd=root)
+        # The receipt `install` just wrote is untracked by design; it was produced from HEAD here.
+        run(*tool, 'record', work, cwd=root, env=dict(os.environ, AIR2LEAN_GENERATING='1'))
 
 
 GENERATORS = {'coverage': gen_coverage, 'premise-index': gen_premise_index, 'provenance': gen_provenance}
@@ -275,8 +277,11 @@ def install(data: dict, directories, root: Path = ROOT):
     for directory in directories:
         manifest = verified(Path(directory), data, identity['commit'], identity['tree'])
         for rel in manifest['files']:
-            (root / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(Path(directory) / rel, root / rel)
+            # Only writes to the files themselves: the reuse tracer (scripts/ci-reuse.py) lets a
+            # part write a whole-tree file without declaring the whole tree, never stat or read it.
+            if not (root / rel).parent.is_dir():
+                (root / rel).parent.mkdir(parents=True)
+            (root / rel).write_bytes((Path(directory) / rel).read_bytes())
         print('installed %s (%s) for %s' % (directory, ', '.join(manifest['groups']), identity['commit']))
 
 
@@ -439,7 +444,7 @@ def landing_times(repo: str | None) -> dict:
         print('note: no repository activity (%s); using committer dates' % error, file=sys.stderr)
         return {}
     for item in activity:
-        stamp = time.mktime(time.strptime(item['timestamp'], '%Y-%m-%dT%H:%M:%SZ')) - time.timezone
+        stamp = calendar.timegm(time.strptime(item['timestamp'], '%Y-%m-%dT%H:%M:%SZ'))
         span = git('rev-list', '--first-parent', '%s..%s' % (item['before'], item['after']), check=False) \
             if set(item['before']) != {'0'} else item['after']
         for commit in (span or '').split():

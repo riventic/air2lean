@@ -350,11 +350,13 @@ def provenance(root, links, inputs):
     # Diff the named scopes, not just hashed files, so deleted link files (staged or not) count.
     dirty = git_paths(root, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', '--', *scopes) if scopes else []
     # Whole-tree generated files (assurance/generated.json, docs/ci.md) are never committed: CI
-    # produces them from HEAD and publishes them per main commit on the `generated` branch, so a
-    # link to one (a provenance fixture's receipt) is reproducible from HEAD as well.
+    # produces them from HEAD and publishes them per main commit on the `generated` branch. Only
+    # while scripts/generated.py records them from HEAD (AIR2LEAN_GENERATING=1: it has just
+    # produced the linked files in this tree) is a link to one reproducible from HEAD; otherwise
+    # such a file (fetched for another commit, or edited) is an untracked link file as before.
     registry = Path(root) / 'assurance/generated.json'
     generated = ({p for g in json.loads(registry.read_text())['groups'] for p in g['paths']}
-                 if registry.is_file() else set())
+                 if registry.is_file() and os.environ.get('AIR2LEAN_GENERATING') == '1' else set())
     untracked = sorted(p for p in inside if p not in tracked_paths and p not in generated)
     return {'head': git_at(root, 'rev-parse', 'HEAD').decode().strip(),
             'tracked_dirty': bool(git_at(root, 'status', '--porcelain', '--untracked-files=no')),
