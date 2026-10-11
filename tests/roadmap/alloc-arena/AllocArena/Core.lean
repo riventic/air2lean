@@ -135,8 +135,9 @@ def Chain (CI : FAllocInv) (free : Bool) : List NodeV → Option Ptr → FAssn
 /-- The used nodes after the first. -/
 def UsedRest (CI : FAllocInv) (ns : List NodeV) (nxt : Option Ptr) : FAssn := Chain CI false ns nxt
 
-/-- The free list. -/
-def FreeList (CI : FAllocInv) (fl : Option Ptr) : FAssn := FAssn.ex fun ns => Chain CI true ns fl
+/-- The free list: nodes with no grants, so the arena keeps their whole share (`qh = qn`). -/
+def FreeList (CI : FAllocInv) (fl : Option Ptr) : FAssn :=
+  FAssn.ex fun ns => ⟪∀ nd ∈ ns, nd.qh = nd.qn⟫ ⋆ Chain CI true ns fl
 
 theorem encode_nxt_size (nxt : Option Ptr) : (Enc.encode nxt).size = 8 := LawfulEnc.size_encode nxt
 
@@ -166,11 +167,14 @@ def rcptOf (γ e : Nat) : Option GRegion → FAssn
 def Rcpts (γ e : Nat) (M : GMap) : FAssn :=
   FAssn.ex fun N => ⟪∀ i, N ≤ i → M i = none⟫ ⋆ sepN N (fun i => rcptOf γ e (M i))
 
-/-- Shares (tagged `t`) that frees gave back: they belong to the blocks of the arena's nodes and
-go back to the child with the nodes. -/
-def Pool (t : STag) : FAssn :=
-  FAssn.ex fun n => FAssn.ex fun f : Nat → BlockId × Frac × Nat =>
-    sepN n (fun j => bshare (f j).1 (f j).2.1 (f j).2.2 t)
+/-- Shares (tagged `t`) that frees gave back, `n` pieces `f j = (block, fraction, bound)`: they
+belong to the blocks of the arena's nodes and go back to the child with the nodes. -/
+def Pool (t : STag) (n : Nat) (f : Nat → BlockId × Frac × Nat) : FAssn :=
+  sepN n (fun j => bshare (f j).1 (f j).2.1 (f j).2.2 t)
+
+/-- The pool pieces with one more piece `x` at index `n`. -/
+def poolPush (n : Nat) (f : Nat → BlockId × Frac × Nat) (x : BlockId × Frac × Nat) :
+    Nat → BlockId × Frac × Nat := fun j => if j = n then x else f j
 
 theorem rcpts_pick {γ e i : Nat} {M : GMap} {g : GRegion} {r : Res} (hM : M i = some g)
     (h : Rcpts γ e M r) : (rcptOf γ e (some g) ⋆ Rcpts γ e (M.set i none)) r := by
@@ -205,18 +209,16 @@ theorem rcpts_put {γ e i : Nat} {M : GMap} {v : Option GRegion} {r : Res} (hM :
       sepN_extend (by omega) fun j hj _ => by rw [hN j hj]; rfl
     rw [e1, e2]; exact h
 
-theorem pool_add {t : STag} {b : BlockId} {q : Frac} {k : Nat} {r : Res}
-    (h : (bshare b q k t ⋆ Pool t) r) : Pool t r := by
-  obtain ⟨n, h⟩ := sep_exR h
-  obtain ⟨f, h⟩ := sep_exR h
-  refine ⟨n + 1, fun j => if j = n then (b, q, k) else f j, ?_⟩
-  simp only [sepN, if_pos rfl]
+theorem pool_add {t : STag} {b : BlockId} {q : Frac} {k : Nat} {n : Nat}
+    {f : Nat → BlockId × Frac × Nat} {r : Res}
+    (h : (bshare b q k t ⋆ Pool t n f) r) : Pool t (n + 1) (poolPush n f (b, q, k)) r := by
+  simp only [Pool, sepN, poolPush, if_pos rfl]
   exact of_eq (congrArg _ (sepN_congr fun j hj => by simp [Nat.ne_of_lt hj])) h
 
 /-- The arena's variables: the struct (`Ac`, `Sc`, `Kc`, `cbs`: the child allocator's bytes), the
-lists' heads, the grant map `M`, the first node (`nxt`, `A`, `S`, `K`, `sz`, `ei`, `tail`, the
-token's fraction `qn` and the kept share `qh`; unused without one) and the used nodes after it
-(`rest`). -/
+lists' heads, the grant map `M` (no grant at an id `≥ mN`), the first node (`nxt`, `A`, `S`, `K`,
+`sz`, `ei`, `tail`, the token's fraction `qn` and the kept share `qh`; unused without one), the
+used nodes after it (`rest`) and the pool (`pn` pieces `pf`). -/
 structure OV where
   Ac : Nat
   Sc : Nat
@@ -235,6 +237,9 @@ structure OV where
   qn : Frac
   qh : Frac
   rest : List NodeV
+  mN : Nat
+  pn : Nat
+  pf : Nat → BlockId × Frac × Nat
 
 /-- The first node at `N`, as a node. -/
 def OV.node (w : OV) (N : Ptr) : NodeV := ⟨N, w.A, w.S, w.K, w.sz, w.qn, w.qh⟩
@@ -250,15 +255,46 @@ at a nonnegative offset. -/
 def GrantOk (ns : List NodeV) : GRegion → Prop
   | (p, _, _, A, K) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K = nd.K
 
+/-- A grant's length does not matter to `GrantOk`. -/
+theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat} {K : BlockKind}
+    (h : GrantOk ns (p, n, q, A, K)) : GrantOk ns (p, n', q, A, K) := h
+
 /-- The facts of the first node: none means no grant. -/
 def OV.FirstFacts (w : OV) : Prop :=
   match w.first with
     | none => w.M = GMap.empty
     | some N => NodeFacts N w.A w.sz ∧ 24 + w.ei ≤ w.sz ∧ w.tail.size = w.sz - 24 - w.ei
 
+/-! ### Fraction accounting per block
+
+The child lent each used node's share `qn` with the node; the arena keeps the part `qh` and lent
+the rest to its grants, or got it back into the pool. Per block (several nodes may lie in one
+block of the child, e.g. a `FixedBufferAllocator`'s buffer): the nodes' lent parts
+`Σ (qn - qh)` are the pool's pieces and the grants' fractions on that block. A reset revokes the
+grants' receipts and joins everything back into each node's `qn`. -/
+
+/-- `Σ (qn - qh)` over the nodes of `ns` in block `b`. -/
+def ndLent (b : BlockId) : List NodeV → Rat
+  | [] => 0
+  | nd :: ns => (if nd.N.block = some b then nd.qn.val - nd.qh.val else 0) + ndLent b ns
+
+/-- The pool's fractions on block `b`. -/
+def poolOn (b : BlockId) (n : Nat) (f : Nat → BlockId × Frac × Nat) : Rat :=
+  esum (fun j => if (f j).1 = b then (f j).2.1.val else 0) n
+
+/-- A grant's fraction on block `b`. -/
+def grantOn (b : BlockId) : Option GRegion → Rat
+  | some (p, _, q, _, _) => if p.block = some b then q.val else 0
+  | none => 0
+
+/-- The grants' fractions on block `b` (ids below `N`). -/
+def grantsOn (b : BlockId) (M : GMap) (N : Nat) : Rat := esum (fun i => grantOn b (M i)) N
+
 /-- The facts of the arena's variables. -/
 def OV.Facts (w : OV) : Prop :=
-  w.cbs.size = 16 ∧ w.M.Fin ∧ w.FirstFacts ∧ ∀ i g, w.M i = some g → GrantOk w.nodes g
+  w.cbs.size = 16 ∧ (∀ i, w.mN ≤ i → w.M i = none) ∧ w.FirstFacts ∧
+    (∀ i g, w.M i = some g → GrantOk w.nodes g) ∧
+    ∀ b, ndLent b w.nodes = poolOn b w.pn w.pf + grantsOn b w.M w.mN
 
 /-- The grant facts after one grant changes. -/
 theorem grants_set {ns : List NodeV} {M : GMap} (h : ∀ i g, M i = some g → GrantOk ns g) (i : Nat)
@@ -267,6 +303,54 @@ theorem grants_set {ns : List NodeV} {M : GMap} (h : ∀ i g, M i = some g → G
   by_cases hji : j = i
   · subst hji; rw [GMap.set_same] at hj; exact hx g hj
   · rw [GMap.set_ne _ _ hji] at hj; exact h j g hj
+
+/-- A grant of the map has an id below the map's bound. -/
+theorem lt_bound {M : GMap} {N i : Nat} {g : GRegion} (hN : ∀ j, N ≤ j → M j = none)
+    (hM : M i = some g) : i < N :=
+  Nat.lt_of_not_le fun h => by rw [hN i h] at hM; cases hM
+
+/-- The bound after one grant below it changes. -/
+theorem bound_set {M : GMap} {N i : Nat} (hN : ∀ j, N ≤ j → M j = none) (hi : i < N)
+    (x : Option GRegion) : ∀ j, N ≤ j → M.set i x j = none := fun j hj => by
+  rw [GMap.set_ne _ _ (by omega)]; exact hN j hj
+
+/-- The pool's fractions after a piece is pushed. -/
+theorem poolOn_push (b : BlockId) (n : Nat) (f : Nat → BlockId × Frac × Nat) (x : BlockId × Frac × Nat) :
+    poolOn b (n + 1) (poolPush n f x) = poolOn b n f + (if x.1 = b then x.2.1.val else 0) := by
+  simp only [poolOn, esum]
+  rw [esum_congr (g := fun j => if (f j).1 = b then (f j).2.1.val else 0)
+    fun j hj => by simp only [poolPush, if_neg (Nat.ne_of_lt hj)]]
+  simp [poolPush]
+
+/-- **Accounting of a `free`**: the grant's fraction moves from the grants to the pool. -/
+theorem acct_free {ns : List NodeV} {pn N i : Nat} {pf : Nat → BlockId × Frac × Nat} {M : GMap}
+    {p : Ptr} {n : Nat} {q : Frac} {A : Nat} {K : BlockKind} {bp : BlockId} {k : Nat}
+    (h : ∀ b, ndLent b ns = poolOn b pn pf + grantsOn b M N) (hM : M i = some (p, n, q, A, K))
+    (hi : i < N) (hb : p.block = some bp) :
+    ∀ b, ndLent b ns = poolOn b (pn + 1) (poolPush pn pf (bp, q, k)) + grantsOn b (M.set i none) N := by
+  intro b
+  have e := esum_update (f := fun j => grantOn b (M j)) (g := fun j => grantOn b (M.set i none j))
+    (fun j hj => by simp only [GMap.set_ne _ _ hj]) hi
+  have hf : grantOn b (M i) = if bp = b then q.val else 0 := by simp [hM, grantOn, hb]
+  have hg : grantOn b (M.set i none i) = 0 := by simp [GMap.set_same, grantOn]
+  simp only [hf, hg] at e
+  rw [poolOn_push, h b]
+  simp only [grantsOn]
+  generalize esum (fun j => grantOn b (M j)) N = x at e ⊢
+  generalize esum (fun j => grantOn b (M.set i none j)) N = y at e ⊢
+  generalize poolOn b pn pf = z
+  by_cases hbb : bp = b
+  · simp only [hbb, if_true] at e ⊢; grind
+  · simp only [hbb, if_false] at e ⊢; grind
+
+/-- **Accounting of a re-pointed grant** (same pointer and fraction): unchanged. -/
+theorem acct_repoint {M : GMap} {i : Nat} {p : Ptr} {n n' : Nat} {q : Frac} {A A' : Nat}
+    {K K' : BlockKind} (hM : M i = some (p, n, q, A, K)) (b : BlockId) (N : Nat) :
+    grantsOn b (M.set i (some (p, n', q, A', K'))) N = grantsOn b M N :=
+  esum_congr fun j _ => by
+    by_cases hj : j = i
+    · subst hj; simp only [GMap.set_same, hM, grantOn]
+    · simp only [GMap.set_ne _ _ hj]
 
 /-- The first node of `used_list`: header, token and share, and the unused tail of its buffer. -/
 def FirstPart (CI : FAllocInv) (w : OV) : FAssn :=
@@ -278,7 +362,7 @@ def FirstPart (CI : FAllocInv) (w : OV) : FAssn :=
 /-- The arena's resources. -/
 def OV.body (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (w : OV) : FAssn :=
   up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
-    gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag ⋆ FirstPart CI w ⋆
+    gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆
     UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
 
 /-- The arena's state (module doc). -/
@@ -348,7 +432,7 @@ def FV.F (v : FV) : FAssn :=
     UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl
 /-- The client's part of the grant's share, the receipts and the pool. -/
 def FV.xs (v : FV) : FAssn :=
-  pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M ⋆ Pool CI.tag
+  pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M ⋆ Pool CI.tag v.w.pn v.w.pf
 
 variable (G : Nat → Nat → BlockKind → FAssn)
 
@@ -398,11 +482,11 @@ theorem pre_of {k A S : Nat} {K : BlockKind} {q q' : Frac} {m : Mem} {r rF : Res
     have hp' := of_eq (Q := (gauthP γ e w.M CI.tag ⋆ gfrag γ e i (s.ptr, s.len.toNat, q, A, K)) ⋆
       (pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ G A S K ⋆
       up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
-      CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag ⋆ FirstPart CI w ⋆ UsedRest CI w.rest w.nxt ⋆
+      CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆ UsedRest CI w.rest w.nxt ⋆
       FreeList CI w.fl)) (by simp only [OV.body]; ac_rfl) hp
     obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hp'
     exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
-  have hp0 : 0 ≤ s.ptr.off := (hwf.2.2.2 i _ hM).1
+  have hp0 : 0 ≤ s.ptr.off := (hwf.2.2.2.1 i _ hM).1
   obtain ⟨bp, hbp⟩ : ∃ bp, s.ptr.block = some bp := by
     obtain ⟨_, _, -, -, -, h1⟩ := id hp
     obtain ⟨_, _, -, -, ⟨bp, hsh⟩, -⟩ := h1
@@ -504,7 +588,7 @@ node's labels (`GrantOk`); two nodes of one block own cells of the one block, so
 agree (`chain_owns`, `Owns.block`). -/
 theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : v.L CI γ e ctx s G r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
-  obtain ⟨⟨-, -, -, hgr⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
+  obtain ⟨⟨-, -, -, hgr, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
   obtain ⟨-, nd, hnd, hblk, hA, hK⟩ := hgr _ _ hMi
   simp only [OV.nodes, hfirst] at hnd
   rcases List.mem_cons.mp hnd with rfl | hm
@@ -684,28 +768,28 @@ theorem grant_fact {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} {X : FAssn
     obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := sep_assoc' hp
     exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
 
-/-- **`free`'s ghost part**: the share goes back against its receipt into the pool, the grant
-is retired. -/
+/-- **`free`'s ghost part**: the share goes back against its receipt (at the receipt's bound `k`,
+on the grant's block `b`), the grant is retired. -/
 theorem free_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n : Nat} {q : Frac} {A : Nat}
     {K : BlockKind} :
     EUpd (gauthP γ e M t ⋆ (gfrag γ e i (p, n, q, A, K) ⋆ (pshare p q (p.off.toNat + n) (some (γ, e)) ⋆
-      (Rcpts γ e M ⋆ Pool t))))
-      (gauthP γ e (M.set i none) t ⋆ (Rcpts γ e (M.set i none) ⋆ Pool t)) := by
+      Rcpts γ e M)))
+      (FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+        (gauthP γ e (M.set i none) t ⋆ (Rcpts γ e (M.set i none) ⋆ bshare b q k t))) := by
   refine EUpd.withFact grant_fact fun hM => ?_
-  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k =>
-      (gauthP γ e M t ⋆ (bshare b q (p.off.toNat + n) (some (γ, e)) ⋆ brcpt b q k γ e)) ⋆
-        (gfrag γ e i (p, n, q, A, K) ⋆ (Rcpts γ e (M.set i none) ⋆ Pool t)))
-      fun r h => ?_) (EUpd.exAll fun b => EUpd.exAll fun k => ?_)
-  · obtain ⟨b, k, -, h⟩ := open_rcpt (X := gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K) ⋆ Pool t) hM
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+      ((gauthP γ e M t ⋆ (bshare b q (p.off.toNat + n) (some (γ, e)) ⋆ brcpt b q k γ e)) ⋆
+        (gfrag γ e i (p, n, q, A, K) ⋆ Rcpts γ e (M.set i none))))
+      fun r h => ?_) (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_)
+  · obtain ⟨b, k, hb, h⟩ := open_rcpt (X := gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K)) hM
       (of_eq (Q := pshare p q (p.off.toNat + n) (some (γ, e)) ⋆ (Rcpts γ e M ⋆
-        (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K) ⋆ Pool t))) (by ac_rfl) h)
-    exact ⟨b, k, of_eq (by ac_rfl) h⟩
+        (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K)))) (by ac_rfl) h)
+    exact ⟨b, k, sep_lift.mpr ⟨hb, of_eq (by ac_rfl) h⟩⟩
   refine EUpd.trans (EUpd.frame EUpd.returnTw) ?_
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K)) ⋆
-    (bshare b q k t ⋆ (Rcpts γ e (M.set i none) ⋆ Pool t))) fun _ h => of_eq (by ac_rfl) h) ?_
+    (bshare b q k t ⋆ Rcpts γ e (M.set i none))) fun _ h => of_eq (by ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (EUpd.of_upd Upd.retire)) ?_
-  exact EUpd.of_imp fun _ h => sep_mono_right (fun _ x =>
-    sep_mono_right (fun _ y => pool_add y) (of_eq (sep_left_comm_eq _ _ _) x)) h
+  exact EUpd.of_imp fun _ h => ⟨b, k, sep_lift.mpr ⟨hb, of_eq (by ac_rfl) h⟩⟩
 
 /-- **A shrink's ghost part**: the bound of the client's part `q'` of the share comes down to the
 new end, the grant is re-pointed; its receipt does not change. -/
@@ -850,6 +934,47 @@ end Glue
 Each branch of the entries ends in one of these updates from the precondition the code leaves
 (the first node's `end_index` word as the `cmpxchg` left it) to the entry's postcondition. -/
 
+/-- The facts after a `free`: the grant retired, its share pushed to the pool, the first node's
+`end_index` and tail as given (`hff`). -/
+theorem facts_free {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n : Nat} {q : Frac} {A : Nat}
+    {K : BlockKind} (hMi : w.M i = some (p, n, q, A, K)) {b : BlockId} {k ei : Nat}
+    {tail : Array Byte} (hb : p.block = some b)
+    (hff : OV.FirstFacts { w with M := w.M.set i none, ei := ei, tail := tail }) :
+    OV.Facts
+      { w with M := w.M.set i none, ei := ei, tail := tail, pn := w.pn + 1,
+               pf := poolPush w.pn w.pf (b, q, k) } := by
+  obtain ⟨hc16, hfin, -, hgr, hacct⟩ := hw
+  have hi := lt_bound hfin hMi
+  exact ⟨hc16, bound_set hfin hi _, hff, grants_set hgr _ (fun g hg => by cases hg),
+    acct_free hacct hMi hi hb⟩
+
+/-- The facts after a grant is re-pointed (same pointer and fraction, labels `A'`, `K'` of a node
+of its block), the first node's `end_index` and tail as given (`hff`). -/
+theorem facts_repoint {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n n' : Nat} {q : Frac}
+    {A A' : Nat} {K K' : BlockKind} (hMi : w.M i = some (p, n, q, A, K)) {ei : Nat} {tail : Array Byte}
+    (hg : GrantOk w.nodes (p, n', q, A', K'))
+    (hff : OV.FirstFacts { w with M := w.M.set i (some (p, n', q, A', K')), ei := ei, tail := tail }) :
+    OV.Facts { w with M := w.M.set i (some (p, n', q, A', K')), ei := ei, tail := tail } := by
+  obtain ⟨hc16, hfin, -, hgr, hacct⟩ := hw
+  exact ⟨hc16, bound_set hfin (lt_bound hfin hMi) _, hff, grants_set hgr _ fun g hg' => by cases hg'; exact hg,
+    fun b => by show ndLent b w.nodes = _; rw [acct_repoint hMi, hacct b]⟩
+
+/-- Push the share that `free_ghost` gave back into the pool. -/
+theorem pool_of_free {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {q : Frac} {pn : Nat}
+    {pf : Nat → BlockId × Frac × Nat} {X : FAssn} {r : Res}
+    (h : ((FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+        (gauthP γ e (M.set i none) t ⋆ (Rcpts γ e (M.set i none) ⋆ bshare b q k t))) ⋆
+      (Pool t pn pf ⋆ X)) r) :
+    ∃ b k, p.block = some b ∧ ((gauthP γ e (M.set i none) t ⋆ Rcpts γ e (M.set i none) ⋆
+      Pool t (pn + 1) (poolPush pn pf (b, q, k))) ⋆ X) r := by
+  obtain ⟨b, h⟩ := sep_ex.mp h
+  obtain ⟨k, h⟩ := sep_ex.mp h
+  obtain ⟨hb, h⟩ := sep_lift.mp (sep_assoc h)
+  have h := of_eq (Q := (bshare b q k t ⋆ Pool t pn pf) ⋆ ((gauthP γ e (M.set i none) t ⋆
+    Rcpts γ e (M.set i none)) ⋆ X)) (by ac_rfl) h
+  exact ⟨b, k, hb, of_eq (by ac_rfl) (sep_mono_left (Q := Pool t (pn + 1) (poolPush pn pf (b, q, k)))
+    (fun _ x => pool_add x) h)⟩
+
 section Ends
 
 variable {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {s : Slice}
@@ -902,19 +1027,19 @@ theorem free_other_upd {v : FV} (hv : v.Facts ctx s) (hq : v.q' = v.q)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k : Nat} {bs : Array Byte} :
     EUpd (v.L CI γ e ctx s (rgn s k bs)) (inv CI γ e ctx).own := by
-  obtain ⟨⟨hc16, hfin, -, hgr⟩, -⟩ := hv
+  obtain ⟨hw, -, -, -, -, -, -, -, -, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
-      (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ (Rcpts γ e v.w.M ⋆ Pool CI.tag)))) ⋆
-      ((rgn s k bs v.A' v.S' v.K' ⋆ Junk) ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
-        v.tR v.w.ei v.w.tail ⋆ v.F CI ctx)))
+      (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ ((rgn s k bs v.A' v.S' v.K' ⋆ Junk) ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆
+        v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ v.F CI ctx))))
     fun _ h => of_eq (by simp only [FV.L, FV.R0, FV.xs, FV.gA, FV.gT, hq]; ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame free_ghost) ?_
   refine EUpd.of_imp fun r h => ?_
+  obtain ⟨b, k', hb, h⟩ := pool_of_free h
   have h := sep_mono_right (R := Junk ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
     v.tR v.w.ei v.w.tail ⋆ v.F CI ctx)) (fun _ x => sep_mono_left (Q := Junk) (fun _ y => junk_absorb y) x) h
-  refine ⟨{ v.w with M := v.w.M.set v.i none }, sep_lift.mpr ⟨⟨hc16, hfin.set _ _, ?_,
-    grants_set hgr _ fun g hg => by cases hg⟩, of_eq ?_ h⟩⟩
+  refine ⟨_, sep_lift.mpr ⟨facts_free (k := k') (ei := v.w.ei) (tail := v.w.tail) hw hMi hb ?_, of_eq ?_ h⟩⟩
   · simp only [OV.FirstFacts, hfirst]; exact ⟨hnf, hei, htail⟩
   · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.eW, FV.nR, FV.cR, FV.tR, FV.F, FV.nS]
     ac_rfl
@@ -931,19 +1056,20 @@ theorem free_last_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn s k bs)))
       (inv CI γ e ctx).own := by
   subst hw
-  obtain ⟨⟨hc16, hfin, -, hgr⟩, -, -, hbN, hbp, -, -, -, -, -⟩ := hv
+  obtain ⟨hw, -, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
-      (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ (Rcpts γ e v.w.M ⋆ Pool CI.tag)))) ⋆
-      (up (regionIn s.ptr v.A' v.S' v.K' (2 ^ k) bs) ⋆
+      (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ (up (regionIn s.ptr v.A' v.S' v.K' (2 ^ k) bs) ⋆
         (apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆
-        v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ v.F CI ctx)))
+        v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ v.F CI ctx))))
     fun _ h => of_eq (by simp only [FV.R0, FV.xs, FV.gA, FV.gT, rgn, hq]; ac_rfl)
       (sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)))
         (fun _ x => (sep_lift.mp x).2) h)) ?_
   refine EUpd.trans (EUpd.frame free_ghost) ?_
-  refine EUpd.trans (EUpd.frameL (EUpd.frame (EUpd.relabel (S' := v.w.S) hK.symm))) ?_
+  refine EUpd.trans (EUpd.frameL (EUpd.frameL (EUpd.frame (EUpd.relabel (S' := v.w.S) hK.symm)))) ?_
   refine EUpd.of_imp fun r h => ?_
+  obtain ⟨b, k', hb', h⟩ := pool_of_free h
   have hpq : s.ptr = v.N.add (24 + ((v.w.ei - s.len.toNat : Nat) : Int)) := by
     have hb' : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
     have ho : s.ptr.off = v.N.off + (24 + ((v.w.ei - s.len.toNat : Nat) : Int)) := by
@@ -962,13 +1088,14 @@ theorem free_last_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
         rw [hpq]; simp only [Ptr.add, Ptr.mk.injEq, true_and]; have := hnf.off0; omega
       rw [this]; exact x2
   have h' := of_eq (Q := (up (regionIn s.ptr v.A' v.w.S v.w.K (2 ^ k) bs) ⋆ v.tR v.w.ei v.w.tail) ⋆
-    (gauthP γ e (v.w.M.set v.i none) CI.tag ⋆ Rcpts γ e (v.w.M.set v.i none) ⋆ Pool CI.tag ⋆
+    (gauthP γ e (v.w.M.set v.i none) CI.tag ⋆ Rcpts γ e (v.w.M.set v.i none) ⋆
+      Pool CI.tag (v.w.pn + 1) (poolPush v.w.pn v.w.pf (b, v.q, k')) ⋆
       apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ Junk ⋆
       v.F CI ctx)) (by ac_rfl) h
   have h'' := sep_mono_left (Q := up (regionIn (v.N.add (24 + ((v.w.ei - s.len.toNat : Nat) : Int)))
     v.w.A v.w.S v.w.K 1 (bs ++ v.w.tail))) hjoin h'
-  refine ⟨{ v.w with M := v.w.M.set v.i none, ei := v.w.ei - s.len.toNat, tail := bs ++ v.w.tail },
-    sep_lift.mpr ⟨⟨hc16, hfin.set _ _, ?_, grants_set hgr _ fun g hg => by cases hg⟩, of_eq ?_ h''⟩⟩
+  refine ⟨_, sep_lift.mpr ⟨facts_free (k := k') (ei := v.w.ei - s.len.toNat) (tail := bs ++ v.w.tail)
+    hw hMi hb' ?_, of_eq ?_ h''⟩⟩
   · simp only [OV.FirstFacts, hfirst]
     exact ⟨hnf, by omega, by simp only [Array.size_append, htail]; have := hnf.hdr; omega⟩
   · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.nR, FV.cR, FV.F, FV.nS]
@@ -983,21 +1110,20 @@ theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = som
     (hle : n ≤ s.len.toNat) :
     EUpd (v.L CI γ e ctx s (relB s n tl))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' tl true) := by
-  obtain ⟨⟨hc16, hfin, -, hgr⟩, -, -, -, -, -, -, -, -, hMi⟩ := hv
+  obtain ⟨hw, -, -, -, -, -, -, -, -, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M))) ⋆
-      ((relB s n tl v.A' v.S' v.K' ⋆ Junk) ⋆ (Pool CI.tag ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
+      ((relB s n tl v.A' v.S' v.K' ⋆ Junk) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
         v.tR v.w.ei v.w.tail ⋆ v.F CI ctx)))
     fun _ h => of_eq (by simp only [FV.L, FV.R0, FV.xs, FV.gA, FV.gT]; ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (shrink_ghost hle)) ?_
   refine EUpd.of_imp fun r h => ?_
-  have h := sep_mono_right (R := Junk ⋆ (Pool CI.tag ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
+  have h := sep_mono_right (R := Junk ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR ctx ⋆
     v.tR v.w.ei v.w.tail ⋆ v.F CI ctx)) (fun _ x => sep_mono_left (Q := Junk) (fun _ y => relB_junk y) x) h
-  refine rpost_true0 (w := { v.w with M := v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K')) })
-    ⟨hc16, hfin.set _ _, ?_, grants_set hgr _ fun g hg => ?_⟩ hle (i := v.i) (of_eq ?_ h)
+  refine rpost_true0 (facts_repoint (n' := n) (ei := v.w.ei) (tail := v.w.tail) hw hMi (GrantOk.len (hw.2.2.2.1 _ _ hMi)) ?_)
+    hle (i := v.i) (of_eq ?_ h)
   · simp only [OV.FirstFacts, hfirst]; exact ⟨hnf, hei, htail⟩
-  · cases hg; have := hgr _ _ hMi; exact this
   · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.eW, FV.nR, FV.cR, FV.tR, FV.F, FV.nS]
     ac_rfl
 
@@ -1023,12 +1149,12 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
       (resize_other_upd hv hfirst hnf hei htail hle)
   have hcut : n < s.len.toNat := by omega
   obtain ⟨htl, hlo⟩ := hcf hcut
-  obtain ⟨⟨hc16, hfin, -, hgr⟩, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
+  obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
   have h0 := hnf.off0
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M))) ⋆
-      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag ⋆
+      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
         apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ v.F CI ctx)))
     fun _ h => ?_) ?_
@@ -1038,7 +1164,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     exact (sep_lift.mp (of_eq (Q := ⟪tl.size = s.len.toNat - n⟫ ⋆ ((gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ Rcpts γ e v.w.M))) ⋆
-      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag ⋆
+      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
         apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ v.F CI ctx)))) (by ac_rfl) h)).2
   refine EUpd.trans (EUpd.frame (shrink_ghost (Nat.le_of_lt hcut))) ?_
@@ -1065,16 +1191,15 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     (gauthP γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K'))) CI.tag ⋆
       (gfrag γ e v.i (s.ptr, n, v.q, v.A', v.K') ⋆ (pshare s.ptr v.q' (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         Rcpts γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K'))))) ⋆
-      (Pool CI.tag ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ Junk ⋆ v.F CI ctx)))
     (by ac_rfl) h
   have h := sep_mono_left (Q := up (regionIn (v.N.add (24 + ((v.w.ei - (s.len.toNat - n) : Nat) : Int)))
     v.w.A v.w.S v.w.K 1 (tl ++ v.w.tail))) hjoin h
-  refine rpost_true0 (w := { v.w with M := v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K')), ei := v.w.ei - (s.len.toNat - n), tail := tl ++ v.w.tail })
-    ⟨hc16, hfin.set _ _, ?_, grants_set hgr _ fun g hg => ?_⟩ hle (i := v.i) (of_eq ?_ h)
+  refine rpost_true0 (facts_repoint (n' := n) (ei := v.w.ei - (s.len.toNat - n)) (tail := tl ++ v.w.tail) hw hMi
+    (GrantOk.len (hw.2.2.2.1 _ _ hMi)) ?_) hle (i := v.i) (of_eq ?_ h)
   · simp only [OV.FirstFacts, hfirst]
     exact ⟨hnf, by omega, by simp only [Array.size_append, htail]; omega⟩
-  · cases hg; have := hgr _ _ hMi; exact this
   · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.nR, FV.cR, FV.F, FV.nS]
     ac_rfl
 
@@ -1092,14 +1217,14 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     EUpd (apts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB s n tl)))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' tl true) := by
   subst hw
-  obtain ⟨⟨hc16, hfin, -, hgr⟩, -, -, hbN, hbp, -, -, -, hp0, -⟩ := hv
+  obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
   have h0 := hnf.off0
   have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K') ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ (Rcpts γ e v.w.M ⋆
         pshare v.N v.w.qh (v.N.off.toNat + v.w.sz) CI.tag)))) ⋆
-      (Pool CI.tag ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ apts v.N (BitVec.ofNat 64 v.w.sz) ⋆
         CI.tok v.N v.w.sz 3 v.w.A v.w.S v.w.K v.w.qn ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.own ⋆
         UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl))
@@ -1121,7 +1246,7 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
       (gfrag γ e v.i (s.ptr, n, v.q, v.A', v.w.K) ⋆ (pshare s.ptr v.q' (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         (Rcpts γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.w.K))) ⋆
           pshare v.N v.w.qh (v.N.off.toNat + v.w.sz) CI.tag))) ⋆
-      (Pool CI.tag ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ Junk ⋆ apts v.N (BitVec.ofNat 64 v.w.sz) ⋆
         CI.tok v.N v.w.sz 3 v.w.A v.w.S v.w.K v.w.qn ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.own ⋆
         UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl))) (by ac_rfl) h
@@ -1132,14 +1257,13 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (fun _ x => up_region_split (n := n - s.len.toNat) (by omega) x) h
   rw [hnt, hend] at h
   have hsz : (v.w.tail.extract 0 (n - s.len.toNat)).size = n - s.len.toNat := by simp; omega
-  refine rpost_true (w := { v.w with M := v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.w.K)), ei := v.w.ei + (n - s.len.toNat), tail := v.w.tail.extract (n - s.len.toNat) v.w.tail.size })
-    ⟨hc16, hfin.set _ _, ?_, grants_set hgr _ fun g hg => ?_⟩ hK.symm (S' := v.w.S) (i := v.i)
+  refine rpost_true (facts_repoint (n' := n) (K' := v.w.K) (ei := v.w.ei + (n - s.len.toNat))
+    (tail := v.w.tail.extract (n - s.len.toNat) v.w.tail.size) hw hMi
+    ⟨hp0, v.w.node v.N, by simp [OV.nodes, hfirst], hpN, hA, rfl⟩ ?_) hK.symm (S' := v.w.S) (i := v.i)
     (X := up (regionIn (s.ptr.add s.len.toNat) v.w.A v.w.S v.w.K 1 (v.w.tail.extract 0 (n - s.len.toNat))))
     (fun r hr => ?_) (of_eq ?_ h)
   · simp only [OV.FirstFacts, hfirst]
     exact ⟨hnf, by omega, by simp only [Array.size_extract, htail]; omega⟩
-  · cases hg
-    exact ⟨hp0, v.w.node v.N, by simp [OV.nodes, hfirst], hpN, hA, rfl⟩
   · simp only [FAllocInv.newBytes, if_pos hlt]
     exact ⟨_, sep_lift.mpr ⟨hsz, by rw [hA]; exact hr⟩⟩
   · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.nR, FV.cR]
@@ -1199,7 +1323,7 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   refine CTriple.ex fun v => CTriple.lift fun hv0 => ?_
   obtain ⟨hv, hx⟩ := hv0
   have hv' := hv
-  obtain ⟨⟨hc16, hfin, hwf, hgr⟩, hfirst, hbc, hbN, hbp, hac, hpos', hc0, hp0, hMi⟩ := hv'
+  obtain ⟨⟨hc16, hfin, hwf, hgr, hacct⟩, hfirst, hbc, hbN, hbp, hac, hpos', hc0, hp0, hMi⟩ := hv'
   unfold OV.FirstFacts at hwf
   rw [hfirst] at hwf
   obtain ⟨hnf, hei, htail⟩ := hwf
