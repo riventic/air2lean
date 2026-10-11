@@ -47,6 +47,7 @@ PANIC_HANDLERS = frozenset(
     'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
 MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
+ZIG_VERSION = re.compile(r'\.v(\d+)_(\d+)_(\d+)\b')
 REVIEW_HELPER = re.compile(r'^private def (\w+)(?: \([^)]*\))? : Array StdReview :=\s*review "[^"]+"\s*(?:<\|\s*)?\[(.*?)\]',
                            re.M | re.S)
 # Zig 0.17.0 names a generic instance `<fn>__func_<n>` (`Air2Lean/Air/Anon.lean` `funcInstances017`).
@@ -82,6 +83,11 @@ def normalized(name):
     return IDENTITY_MARKER.sub(r'__\1_N', name)
 
 
+def zig_versions(text):
+    """The `ZigVersion` constructors (`.v0_16_0`) in `text`, spelled as versions (`0.16.0`)."""
+    return tuple('.'.join(v) for v in ZIG_VERSION.findall(text))
+
+
 def std_models(text=None):
     """Rows of `stdModels`: symbol -> (status, zig versions, rejection reason)."""
     if text is None:
@@ -89,8 +95,7 @@ def std_models(text=None):
     start = text.index('def stdModels')
     end = text.find('\n\n', start)
     table = text[start:] if end < 0 else text[start:end]
-    helpers = {name: tuple(re.findall(r'\("(\d+\.\d+\.\d+)",', body))
-               for name, body in REVIEW_HELPER.findall(text)}
+    helpers = {name: zig_versions(body) for name, body in REVIEW_HELPER.findall(text)}
 
     def reviewed(kind, expr):
         expr = (expr or '').strip()
@@ -106,7 +111,7 @@ def std_models(text=None):
         versions = helpers[m.group(2)]
         for restrict in (m.group(1), m.group(3)):
             if restrict:
-                keep = re.findall(r'"([^"]+)"', restrict)
+                keep = zig_versions(restrict)
                 versions = tuple(v for v in versions if v in keep)
         return versions
     models = {}

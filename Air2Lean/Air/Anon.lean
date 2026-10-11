@@ -3,6 +3,7 @@ import Std.Data.HashSet
 import Lean.Data.Json
 import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Identity
+import Air2Lean.Air.Dialect
 
 /-!
 # Stable names of generic instances
@@ -118,7 +119,8 @@ write `<name>__anon_<n>` (`InternPool.zig`'s instance naming). A 0.17.0 file's i
 are read in the older spelling, so the renumbering below, the std models and the panic table
 see one spelling in every version. -/
 def funcInstances017 (j : Lean.Json) : Lean.Json :=
-  if (j.getObjValAs? String "zig_version").toOption != some "0.17.0" then j else
+  let version := (j.getObjValAs? String "zig_version").toOption.bind ZigVersion.ofString?
+  if !version.any (·.funcInstanceNames) then j else
   mapIdentities (fun s => Id.run do
     let parts := s.splitOn "__func_"
     let mut out := parts.head!

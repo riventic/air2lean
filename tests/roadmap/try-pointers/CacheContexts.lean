@@ -44,7 +44,7 @@ private def bareContext (fc : FCtx) : FCtx := {
   allocFields := fc.allocFields, places := fc.places, blockTys := fc.blockTys
   allInsts := fc.allInsts, brT := fc.brT, repT := fc.repT
   retTy := fc.retTy, fnName := fc.fnName, localsName := fc.localsName, exitName := fc.exitName
-  floatSemantics := fc.floatSemantics, zigVersion := fc.zigVersion
+  floatSemantics := fc.floatSemantics, dialect := fc.dialect
   mem := fc.mem, memFuncs := fc.memFuncs, layouts := fc.layouts, escaping := fc.escaping }
 
 def main (args : List String) : IO Unit := do

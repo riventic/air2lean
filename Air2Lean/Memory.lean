@@ -381,7 +381,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     | .inst id => (insts.find? (·.id == id)).map (·.ty)
     | v => v.constTy?
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.targetArch ||
+    insts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.dialect.arch ||
       (valueOperands i.op).any Val.pointsToMem ||
       -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
       (match i.op with
