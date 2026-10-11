@@ -26,10 +26,8 @@
       "note": "reads commit identity (git rev-parse HEAD: a freshness binding to the revision, run 38175631570); untraced"
     },
     "test/0.16.0/inputs": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "reads commit identity (release-record, manifest and generated-branch regressions run git on HEAD and fetch, run 38175631570); untraced, 14 min instead of 25 traced"
     },
     "test/0.16.0/native": {
       "commit_bound": true,
