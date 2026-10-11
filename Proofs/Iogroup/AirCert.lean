@@ -23,12 +23,11 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `debug.assert`. -/
 def air_debug_assert : Func :=
-{ zigVersion := "0.16.0", name := "debug.assert",
+{ dialect := { version := Air2Lean.ZigVersion.v0_16_0, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "debug.assert",
   params := #[0], ret := 1,
   types := #[.bool, .void, .noreturn, (.other "fn () noreturn")],
   layouts := #[{ size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨8, 1, (.line 3)⟩,
     ⟨1, 1, (.block #[⟨2, 0, (.not (.inst 0))⟩,
@@ -36,6 +35,8 @@ def air_debug_assert : Func :=
     ⟨4, 2, (.call (.func "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" true none) #[])⟩,
     ⟨5, 2, .unreach⟩] #[⟨6, 2, (.br 1 .void)⟩])⟩])⟩,
     ⟨7, 2, (.ret .void)⟩] }
+
+theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" = some .unreachable := rfl
 
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
@@ -46,8 +47,6 @@ def gen : Oracle
   | "debug.assert", args =>
     StateT.lift ((fun _ => Value.void) <$> Iogroup.debug_assert ((args.getD 0 .void).toBool))
   | _, _ => StateT.lift stuck
-
-theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" = some .unreachable := rfl
 
 /-- `debug.assert`: the AIR semantics of the decoded function (under any call oracle) equals the generated definition. -/
 theorem debug_assert_step (call : Oracle) (p0 : Bool) (m : Zig.Mem) :

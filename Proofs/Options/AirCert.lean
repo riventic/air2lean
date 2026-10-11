@@ -12,9 +12,9 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `options.find`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
-* `options.findOr`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
-* `options.firstIndexPlusOne`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `options.find`: a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)
+* `options.findOr`: a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)
+* `options.firstIndexPlusOne`: a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)
 -/
 
 end Options.AirCert

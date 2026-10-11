@@ -22,12 +22,11 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `pointers.addTo`. -/
 def air_addTo : Func :=
-{ zigVersion := "0.15.2", name := "pointers.addTo",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.addTo",
   params := #[0, 1], ret := 2,
   types := #[(.ptr "one" false 3), (.int false 32), .void, (.int false 64), .noreturn],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 1, (.arg 1)⟩,
     ⟨7, 2, (.line 2)⟩,
@@ -40,12 +39,11 @@ def air_addTo : Func :=
 
 /-- The decoded canonical AIR of `pointers.delay`. -/
 def air_delay : Func :=
-{ zigVersion := "0.15.2", name := "pointers.delay",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.delay",
   params := #[0, 1], ret := 2,
   types := #[(.ptr "one" false 7), (.int false 32), .void, (.ptr "one" false 0), (.ptr "one" true 0), (.ptr "one" false 1), .noreturn, (.struct "pointers.Job" "auto" #[("duration", 1), ("due", 1), ("weight", 8)]), (.int false 8)],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 12), align := (some 4), offsets := #[0, 4, 8], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 1, (.arg 1)⟩,
     ⟨7, 2, (.line 2)⟩,
@@ -58,12 +56,11 @@ def air_delay : Func :=
 
 /-- The decoded canonical AIR of `pointers.dueOf`. -/
 def air_dueOf : Func :=
-{ zigVersion := "0.15.2", name := "pointers.dueOf",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.dueOf",
   params := #[0], ret := 1,
   types := #[(.ptr "one" false 6), (.ptr "one" false 7), (.ptr "one" false 0), .void, (.ptr "one" true 0), .noreturn, (.struct "pointers.Job" "auto" #[("duration", 7), ("due", 7), ("weight", 8)]), (.int false 32), (.int false 8)],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 12), align := (some 4), offsets := #[0, 4, 8], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨3, 3, (.line 2)⟩,
     ⟨1, 1, (.fieldPtr (.inst 0) 1)⟩,
@@ -72,12 +69,11 @@ def air_dueOf : Func :=
 
 /-- The decoded canonical AIR of `pointers.same`. -/
 def air_same : Func :=
-{ zigVersion := "0.15.2", name := "pointers.same",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.same",
   params := #[0, 0], ret := 1,
   types := #[(.ptr "one" true 4), .bool, .void, .noreturn, (.int false 32)],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 0, (.arg 1)⟩,
     ⟨4, 2, (.line 2)⟩,
@@ -87,12 +83,11 @@ def air_same : Func :=
 
 /-- The decoded canonical AIR of `pointers.sumTo`. -/
 def air_sumTo : Func :=
-{ zigVersion := "0.15.2", name := "pointers.sumTo",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.sumTo",
   params := #[0], ret := 1,
   types := #[(.int false 32), (.int false 64), .void, (.ptr "one" false 1), (.ptr "one" false 0), .noreturn, .bool, (.other "fn (*u64, u32) void")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨21, 2, (.line 2)⟩,
     ⟨1, 3, .alloc⟩,
@@ -125,12 +120,11 @@ def air_sumTo : Func :=
 
 /-- The decoded canonical AIR of `pointers.swap`. -/
 def air_swap : Func :=
-{ zigVersion := "0.15.2", name := "pointers.swap",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "pointers.swap",
   params := #[0, 0], ret := 1,
   types := #[(.ptr "one" false 2), .void, (.int false 32), .noreturn],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 0, (.arg 1)⟩,
     ⟨7, 1, (.line 2)⟩,
@@ -142,6 +136,8 @@ def air_swap : Func :=
     ⟨10, 1, (.line 4)⟩,
     ⟨5, 1, (.store (.inst 1) (.inst 2))⟩,
     ⟨6, 3, (.ret .void)⟩] }
+
+theorem callee_0 : panicOf? "pointers.addTo" = none := rfl
 
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
@@ -167,8 +163,6 @@ def gen : Oracle
   | "pointers.swap", args =>
     (fun _ => Value.void) <$> Pointers.swap ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toPtr)
   | _, _ => StateT.lift stuck
-
-theorem callee_0 : panicOf? "pointers.addTo" = none := rfl
 
 /-- `pointers.addTo`: the AIR semantics of the decoded function (under any call oracle) equals the generated definition. -/
 theorem addTo_step (call : Oracle) (p0 : Zig.Ptr) (p1 : BitVec 32) (m : Zig.Mem) :
@@ -302,7 +296,7 @@ def enc_sumTo : Pointers.sumToExit → Exit
 
 theorem sumTo_loop6_body (args : List Value) (env : Env) (st : Frame) (x0 : BitVec 32) (x1 : Zig.Ptr)
     (h0 : env 0 = some (0, (Value.int false 32 x0))) (h1 : env 1 = some (3, (Value.ptr x1))) (h3 : env 3 = some (4, .cell 3)) (s : Pointers.sumToLocals) (m : Zig.Mem) :
-    ((execBody ⟨air_sumTo, args, gen⟩ (Array.toList #[⟨7, 2, (.block #[⟨25, 2, (.line 4)⟩,
+    ((execBody ⟨air_sumTo, args, gen, (fun _ => none)⟩ (Array.toList #[⟨7, 2, (.block #[⟨25, 2, (.line 4)⟩,
     ⟨8, 0, (.load (.inst 3))⟩,
     ⟨9, 6, (.cmp .lt (.inst 8) (.inst 0))⟩,
     ⟨10, 5, (.condBr (.inst 9) #[⟨26, 2, (.line 4)⟩,
@@ -327,7 +321,7 @@ theorem sumTo_loop6_body (args : List Value) (env : Env) (st : Frame) (x0 : BitV
 
 theorem sumTo_loop6_comm (args : List Value) (env : Env) (st : Frame) (x0 : BitVec 32) (x1 : Zig.Ptr)
     (h0 : env 0 = some (0, (Value.int false 32 x0))) (h1 : env 1 = some (3, (Value.ptr x1))) (h3 : env 3 = some (4, .cell 3)) (s : Pointers.sumToLocals) :
-    (execLoop ⟨air_sumTo, args, gen⟩ 6 #[⟨7, 2, (.block #[⟨25, 2, (.line 4)⟩,
+    (execLoop ⟨air_sumTo, args, gen, (fun _ => none)⟩ 6 #[⟨7, 2, (.block #[⟨25, 2, (.line 4)⟩,
     ⟨8, 0, (.load (.inst 3))⟩,
     ⟨9, 6, (.cmp .lt (.inst 8) (.inst 0))⟩,
     ⟨10, 5, (.condBr (.inst 9) #[⟨26, 2, (.line 4)⟩,
@@ -376,7 +370,7 @@ theorem sumTo_loop6 (args : List Value) (env : Env) (st : Frame) (B : Array Inst
     ⟨18, 5, (.repeat 6)⟩])
     (h0 : env 0 = some (0, (Value.int false 32 (Value.toBV 32 (env.val 0))))) (h1 : env 1 = some (3, (Value.ptr (Value.toPtr (env.val 1))))) (h3 : env 3 = some (4, .cell 3))
     (hc3 : st.cells 3 = some (Value.int false 32 (Value.toBV 32 (st.cell 3)))) :
-    (execLoop ⟨air_sumTo, args, gen⟩ 6 B env).run st =
+    (execLoop ⟨air_sumTo, args, gen, (fun _ => none)⟩ 6 B env).run st =
       mapRes enc_sumTo (fun s : Pointers.sumToLocals => (Frame.setCell st 3 (some (Value.int false 32 s.i)))) <$>
         (Zig.loop (Pointers.sumTo.loop6 (Value.toBV 32 (env.val 0)) (Value.toPtr (env.val 1))) Pointers.sumTo.again6).run { (default : Pointers.sumToLocals) with i := (Value.toBV 32 (st.cell 3)), acc := Value.toPtr (env.val 1) } := by
   subst hB

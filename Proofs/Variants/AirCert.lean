@@ -23,7 +23,7 @@ Outside the certificate fragment:
 * `variants.radius`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.scale`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.severity`: a parameter that is not an integer, bool, plain pointer or slice
-* `variants.totalArea`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `variants.totalArea`: a slice parameter whose items are not integers or `bool`
 -/
 
 end Variants.AirCert

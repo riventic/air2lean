@@ -28,7 +28,7 @@ EXAMPLES = ['asm', 'atomics', 'basic', 'errors', 'floatconv', 'floats', 'iogroup
 # The certified functions (none for an example not listed); every other function must be listed
 # as excluded.
 CERTIFIED = {
-    'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
+    'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.sum', 'basic.tardiness'],
     'iogroup': ['debug.assert'],
     'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.sumTo',
                  'pointers.swap'],
@@ -78,11 +78,14 @@ def check_example(binary, ex, work):
         decl = re.sub(r'\W', '_', name.removeprefix(ex + '.'))
         assert re.search(rf'^theorem {decl}_step ', text, re.M), (ex, name)
         # Equality with `run`; a function in `Zig.MemM` that calls gets soundness only
-        # (completeness for memory callers is future work, docs/air-semantics.md).
-        assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M) or \
+        # (completeness for memory callers is future work, docs/air-semantics.md); a function
+        # without memory with a slice parameter is certified at the call boundary through its
+        # view (`_view`, and `_step` up to read entries).
+        assert re.search(rf'^theorem {decl}_(run|eq|view) ', text, re.M) or \
             (re.search(rf'^theorem {decl}_sound ', text, re.M) and
              f'-- `{name}`: no completeness theorem' in text), (ex, name)
-    if certified:
+    if any(not re.search(rf'^theorem {re.sub(r"\W", "_", n.removeprefix(ex + "."))}_view ', text, re.M)
+           for n in certified):
         assert re.search(r'^theorem run_le_gen ', text, re.M)
 
 

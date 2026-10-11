@@ -39,6 +39,10 @@ MUTATIONS = [
     # in its field and loop lemmas, so the mutation goes everywhere: the iteration lemma breaks.
     ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
      '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body'),
+    # A pure function with a slice parameter (a view): its loop's sum, and the view's wiring.
+    ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
+     'sum_loop7_body'),
+    ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body'),
 ]
 
 
@@ -57,7 +61,8 @@ def check_module(gen, cert, tmp):
     assert check.returncode == 0, check.stdout + check.stderr
 
 
-SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumZ']
+SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
+                    'slices.sumZ']
 
 
 def check_slices(binary, tmp):
@@ -109,7 +114,11 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         for index, (ex, old, new, theorem) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
-            if '_loop' in theorem:
+            if old.startswith('if k'):
+                # The view's key: the item reads no longer come from the view.
+                assert source.count(old) == 1, (ex, theorem, old)
+                mutated = source.replace(old, new)
+            elif '_loop' in theorem:
                 # A function with loops restates its AIR in its loop lemmas: mutate every copy.
                 assert source.count(old) >= 2, (ex, theorem, old)
                 mutated = source.replace(old, new)

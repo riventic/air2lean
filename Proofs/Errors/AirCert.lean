@@ -14,7 +14,7 @@ Outside the certificate fragment:
 
 * `errors.digitOrZero`: inst 3: an instruction outside the fragment
 * `errors.parseDigit`: a return type that is not an integer, bool, plain pointer or void
-* `errors.sumDigits`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `errors.sumDigits`: a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)
 -/
 
 end Errors.AirCert

@@ -26,12 +26,11 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `threads.writeFlag`. -/
 def air_writeFlag : Func :=
-{ zigVersion := "0.16.0", name := "threads.writeFlag",
+{ dialect := { version := Air2Lean.ZigVersion.v0_16_0, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "threads.writeFlag",
   params := #[0], ret := 1,
   types := #[(.ptr "one" false 8), .void, (.ptr "one" false 0), (.ptr "one" true 0), (.ptr "one" false 5), (.ptr "one" false 6), (.int false 32), .noreturn, (.struct "threads.RaceCtx" "auto" #[("flag", 5), ("val", 6)])],
   layouts := #[{ size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 8), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 8), align := (some 8), offsets := #[], ptrAlign := (some 4), sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 16), align := (some 8), offsets := #[0, 8], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨7, 1, (.line 2)⟩,
     ⟨1, 4, (.fieldPtr (.inst 0) 0)⟩,
@@ -42,6 +41,7 @@ def air_writeFlag : Func :=
     ⟨5, 1, (.store (.inst 2) (.inst 4))⟩,
     ⟨6, 7, (.ret .void)⟩] }
 
+
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
   ("threads.writeFlag", air_writeFlag)]
@@ -51,7 +51,6 @@ def gen : Oracle
   | "threads.writeFlag", args =>
     (fun _ => Value.void) <$> Threads.writeFlag ((args.getD 0 .void).toPtr)
   | _, _ => StateT.lift stuck
-
 
 /-- `threads.writeFlag`: the AIR semantics of the decoded function (under any call oracle) equals the generated definition. -/
 theorem writeFlag_step (call : Oracle) (p0 : Zig.Ptr) (m : Zig.Mem) :

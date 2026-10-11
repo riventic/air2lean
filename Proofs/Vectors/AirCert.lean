@@ -45,12 +45,11 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `vectors.sMod`. -/
 def air_sMod : Func :=
-{ zigVersion := "0.16.0", name := "vectors.sMod",
+{ dialect := { version := Air2Lean.ZigVersion.v0_16_0, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "vectors.sMod",
   params := #[0, 0], ret := 0,
   types := #[(.int true 32), .void, .bool, .noreturn, (.other "fn () noreturn")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 0, (.arg 1)⟩,
     ⟨10, 1, (.line 2)⟩,
@@ -63,12 +62,11 @@ def air_sMod : Func :=
 
 /-- The decoded canonical AIR of `vectors.sRem`. -/
 def air_sRem : Func :=
-{ zigVersion := "0.16.0", name := "vectors.sRem",
+{ dialect := { version := Air2Lean.ZigVersion.v0_16_0, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "vectors.sRem",
   params := #[0, 0], ret := 0,
   types := #[(.int true 32), .void, .bool, .noreturn, (.other "fn () noreturn")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 0, (.arg 1)⟩,
     ⟨10, 1, (.line 2)⟩,
@@ -78,6 +76,8 @@ def air_sRem : Func :=
     ⟨8, 0, (.div .rem (.inst 0) (.inst 1))⟩,
     ⟨11, 1, (.line 2)⟩,
     ⟨9, 3, (.ret (.inst 8))⟩] }
+
+theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
 
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
@@ -91,8 +91,6 @@ def gen : Oracle
   | "vectors.sRem", args =>
     StateT.lift ((fun v => (Value.int true 32 v)) <$> Vectors.sRem ((args.getD 0 .void).toBV 32) ((args.getD 1 .void).toBV 32))
   | _, _ => StateT.lift stuck
-
-theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
 
 /-- `vectors.sMod`: the AIR semantics of the decoded function (under any call oracle) equals the generated definition. -/
 theorem sMod_step (call : Oracle) (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :

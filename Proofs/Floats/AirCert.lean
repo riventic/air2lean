@@ -14,8 +14,8 @@ Outside the certificate fragment:
 
 * `floats.celsius`: a parameter that is not an integer, bool, plain pointer or slice
 * `floats.clamp`: a parameter that is not an integer, bool, plain pointer or slice
-* `floats.dot`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
-* `floats.fitness`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `floats.dot`: a slice parameter whose items are not integers or `bool`
+* `floats.fitness`: a parameter that is not an integer, bool, plain pointer or slice
 * `floats.hypot2`: a parameter that is not an integer, bool, plain pointer or slice
 * `floats.isNan`: a parameter that is not an integer, bool, plain pointer or slice
 * `floats.lerp`: a parameter that is not an integer, bool, plain pointer or slice
