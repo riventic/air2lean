@@ -39,9 +39,19 @@ HOME = Path(os.environ.get('AIR2LEAN_LOCAL_CI_HOME', Path.home() / '.cache/air2l
 WORKFLOW = '.github/workflows/ci.yml'
 DEFAULT_VERSION = '0.16.0'
 # job -> where it runs. The `all-checks` aggregator has no steps of its own to run.
-PLACEMENT = {'lake': 'amd64', 'test': 'amd64', 'macos': 'host', 'aarch64-linux': 'arm64',
+PLACEMENT = {'lake': 'amd64', 'test': 'amd64', 'macos': 'host', 'preflight': 'host', 'aarch64-linux': 'arm64',
              'build-modes-aarch64-linux': 'arm64', 'bitops-native-arm': 'arm64'}
-IGNORED_JOBS = {'all-checks'}
+# No row of their own. `zig-air` and `generated` produce what the rows download in CI: here the
+# rows build the patched compiler into a persistent cache and `scripts/generated.py materialize`
+# (run on the host before the rows) provides the generated files. `provenance` regenerates the
+# provenance fixtures twice from a Lake build and a patched compiler (minutes of CPU on every run,
+# and materialize fetches the published ones); use `scripts/generated.py regen --group provenance`
+# for it. `all-checks` aggregates job results.
+IGNORED_JOBS = {'all-checks', 'zig-air', 'generated', 'provenance'}
+# Steps with no local meaning, recognised by what they run (not by name): the reuse machinery and
+# trace coverage (local runs never reuse, trace or record), the system packages (in the image), and
+# the in-run artifact hand-over between jobs (the substitutes are in Job.run_step).
+CI_ONLY_CODE = ('scripts/ci-reuse.py', 'sudo apt-get', 'lake-root.tar.zst', 'zig-air.tar', 'scripts/generated.py install')
 # Steps that cannot give CI's answer in the emulated container, by step name. They are skipped
 # visibly (summary and steps.json), never silently.
 EMULATION_SKIPS = {
@@ -140,7 +150,9 @@ def select_rows(rows, parts, versions):
 def row_context(row, root):
     values = {'github.workspace': str(root), 'runner.os': {'host': 'macOS'}.get(row['where'], 'Linux'),
               'runner.arch': 'X64' if row['where'] == 'amd64' else 'ARM64', 'strategy.job-index': '0',
-              'matrix.zig': row['zig'] or ''}  # expression() reads matrix.zig for any condition
+              'matrix.zig': row['zig'] or '',  # expression() reads matrix.zig for any condition
+              'env.AIR2LEAN_REUSED': '', 'env.AIR2LEAN_RECORD': '', 'env.AIR2LEAN_TRACE_DIR': '',
+              'env.AIR2LEAN_REUSE_KEY': ''}
     values.update({'matrix.%s' % k: v for k, v in row['matrix'].items()})
     return values
 
@@ -163,7 +175,7 @@ def active_steps(workflow, row, expression):
     for step in workflow['jobs'][row['job']]['steps']:
         condition = step.get('if')
         if condition is not None:
-            text = str(condition).replace('!cancelled()', "'1'").replace('failure()', "''")
+            text = str(condition).replace('!cancelled()', "'1'").replace('failure()', "''").replace('success()', "'1'")
             text = re.sub(r'steps\.[\w.-]+', "''", text)
             try:
                 if not evaluate(expression, text, values):
@@ -329,6 +341,9 @@ class Job:
         self.values = row_context(row, workspace)
         self.values['runner.temp'] = str(self.runner_temp)
         self.path_extra = []
+        self.env_extra = {}
+        self.src = None
+        self.generated = []
         self.outputs = {}
         self.log = None
         self.failed = False
@@ -348,6 +363,8 @@ class Job:
         env.update({'CI': 'true', 'GITHUB_ACTIONS': 'true', 'GITHUB_WORKSPACE': str(self.workspace),
                     'RUNNER_TEMP': str(self.runner_temp), 'RUNNER_OS': self.values['runner.os'],
                     'RUNNER_ARCH': self.values['runner.arch'], 'GITHUB_PATH': str(self.artifacts / 'github_path'),
+                    'GITHUB_OUTPUT': str(self.artifacts / 'github_output'),
+                    'GITHUB_ENV': str(self.artifacts / 'github_env'),
                     'AIR2LEAN_CACHE': str(self.tools / 'downloads'), 'ZIG_GLOBAL_CACHE_DIR': str(self.tools / 'zig-global'),
                     'LEAN_NUM_THREADS': LEAN_THREADS, 'ELAN_NO_OVERRIDE_NOTICE': '1', 'HOME': env.get('HOME', '/root'),
                     'PATH': ':'.join([*self.path_extra, *([str(elan / 'bin')] if elan else []), path])})
@@ -356,6 +373,7 @@ class Job:
         if os.environ.get('AIR2LEAN_LOCAL_ROSETTA') == '1':
             # Rosetta rejects the empty RELRO segment of release builds ("bss_size overflow").
             env.setdefault('AIR2LEAN_DIFF_LINK_FLAGS', '-z norelro')
+        env.update(self.env_extra)
         job_env = {k: self.render_text(v, self.step_values()) for k, v in self.job.get('env', {}).items()}
         env.update(job_env)
         return env
@@ -393,6 +411,23 @@ class Job:
         self.child = None
         return status
 
+    def read_env_file(self, f):
+        if f.exists():
+            for line in f.read_text().splitlines():
+                key, _, value = line.partition('=')
+                if key:
+                    self.env_extra[key] = value
+            f.unlink()
+
+    def read_github_output(self, step):
+        f = self.artifacts / 'github_output'
+        if f.exists():
+            for line in f.read_text().splitlines():
+                key, _, value = line.partition('=')
+                if key:
+                    self.outputs.setdefault(step.get('id', ''), {})[key] = value
+            f.unlink()
+
     def read_github_path(self):
         f = self.artifacts / 'github_path'
         if f.exists():
@@ -406,7 +441,8 @@ class Job:
         condition = step.get('if')
         if condition is None:
             return True
-        text = str(condition).replace('!cancelled()', "'1'").replace('failure()', "'1'" if self.failed else "''")
+        text = str(condition).replace('!cancelled()', "'1'").replace('always()', "'1'")
+        text = text.replace('failure()', "'1'" if self.failed else "''").replace('success()', "''" if self.failed else "'1'")
         return bool(evaluate(self.expression, text, self.step_values()))
 
     def render(self, text):
@@ -475,13 +511,40 @@ class Job:
 
     def lake_key(self):
         """The key under which CI's `lake` job caches this tree's build of the root package."""
-        lookup = next(s for s in self.workflow['jobs']['lake']['steps'] if s.get('id') == 'lookup')
+        lookup = next(s for s in self.workflow['jobs']['lake']['steps'] if str(s.get('uses', '')).startswith('actions/cache/restore'))
         return self.render_key(lookup['with']['key'])
 
-    def save_lake(self, step):
-        if str(step['with']['path']).startswith('.lake'):
-            self.lake_marker().parent.mkdir(exist_ok=True)
-            self.lake_marker().write_text(self.render_key(step['with']['key']))
+    def save_lake_marker(self):
+        self.lake_marker().parent.mkdir(exist_ok=True)
+        self.lake_marker().write_text(self.lake_key())
+
+    def install_generated(self):
+        """`generated.py install` of CI: the whole-tree generated files (materialized on the host
+        by `generated.py materialize`) land in the workspace as untracked files."""
+        for path in self.generated:
+            target = self.workspace / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.src / path, target)
+        self.log.write(('installed %d generated file(s)\n' % len(self.generated)).encode())
+
+    def install_zig_air(self):
+        """The patched compiler of the zig-air job: from the persistent cache under the key of
+        scripts/ci-cache.py, or built with that job's own recipe and saved."""
+        version = self.row['zig']
+        dest = self.workspace / ('zig-air-' + version)
+        env = self.base_env()
+        key = subprocess.run(['python3', 'scripts/ci-cache.py', 'zig-air-key', version], cwd=self.workspace, env=env,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        entry = self.tools / 'cache' / digest(key)[:24]
+        if (entry / '.complete').exists():
+            shutil.rmtree(dest, ignore_errors=True)
+            shutil.copytree(entry / dest.name, dest, symlinks=True)
+            return
+        build = next(s for s in self.workflow['jobs']['zig-air']['steps'] if 'zig-patch/build.sh' in str(s.get('run', '')))
+        if self.run_code(self.render(build['run']), env, self.workspace) != 0:
+            raise RuntimeError('building the patched zig failed')
+        self.zig_air = (dest.name, entry)
+        self.save_zig_air()
 
     def save_zig_air(self):
         name, entry = self.zig_air
@@ -525,8 +588,10 @@ class Job:
             for entry in self.workspace.iterdir():
                 if entry.name not in ('.git', '.lake') and not entry.name.startswith(('host-zig', 'zig-air-', 'elan')):
                     (work / entry.name).symlink_to(entry)
-            run_env = dict(env, RUNNER_TEMP=str(home / 'tmp'), GITHUB_PATH=str(home / 'github_path'))
+            run_env = dict(env, RUNNER_TEMP=str(home / 'tmp'), GITHUB_PATH=str(home / 'github_path'),
+                           GITHUB_ENV=str(home / 'github_env'))
             (home / 'github_path').touch()
+            (home / 'github_env').touch()
             if self.run_code(code, run_env, work) != 0:
                 return 1
             out.mkdir()
@@ -555,6 +620,10 @@ class Job:
             if not link.exists():
                 link.symlink_to(entry)
             mapping[str(entry)] = str(link)
+        for line in (home / 'github_env').read_text().splitlines():  # e.g. AIR2LEAN_HOST_PIN
+            key, _, value = line.partition('=')
+            if key:
+                self.env_extra[key] = value
         for line in (home / 'github_path').read_text().split('\n'):
             if line and not line.endswith('/.elan/bin'):  # the recipe's HOME; ELAN_HOME/bin is ours
                 for old, new in sorted(mapping.items(), key=lambda kv: -len(kv[0])):
@@ -569,6 +638,10 @@ class Job:
         uses = str(step.get('uses', '')).split('@')[0]
         started = time.monotonic()
         status, outcome = 0, 'success'
+        code = str(step.get('run', ''))
+        substitute = next((c for c in CI_ONLY_CODE if c in code), None)
+        if substitute in ('scripts/ci-reuse.py', 'sudo apt-get'):
+            return  # nothing to do locally, not even to report
         try:
             if not self.active(step):
                 return
@@ -585,12 +658,18 @@ class Job:
                 pass
             elif uses in ('actions/cache', 'actions/cache/restore'):
                 self.do_cache(step)
-            elif uses == 'actions/cache/save':
-                self.save_lake(step)  # the directories themselves are persistent
+            elif uses == 'actions/download-artifact':
+                pass  # the step that unpacks it is replaced below
             elif uses == 'actions/upload-artifact':
                 self.do_upload(step)
             elif uses:
                 raise RuntimeError('unsupported action in ci.yml: %s' % uses)
+            elif substitute == 'scripts/generated.py install':
+                self.install_generated()
+            elif substitute == 'zig-air.tar':
+                self.install_zig_air()
+            elif substitute == 'lake-root.tar.zst':
+                pass  # .lake persists; the `lake` job runs first when this tree's build is missing
             else:
                 code = step['run']
                 env = self.base_env()
@@ -608,6 +687,8 @@ class Job:
                         self.say('   step exited 139; running it once more')
                         status = self.run_code(self.render(code), env, self.workspace)
                     self.read_github_path()
+                    self.read_env_file(self.artifacts / 'github_env')
+                    self.read_github_output(step)
                     if status == 0 and self.zig_air and 'build.sh' in code \
                             and (self.workspace / self.zig_air[0]).is_dir():
                         self.save_zig_air()
@@ -651,7 +732,9 @@ def exec_row(args):
     for stale in workspace.glob('.zig-air-*.air2lean-build.lock'):
         shutil.rmtree(stale, ignore_errors=True)  # a killed build; the lane lock excludes another one
     sync_workspace(root, workspace, files)
+    generated = Path(args.generated).read_bytes().decode().split('\0') if args.generated else []
     job = Job(row, workflow, workspace, tools, artifacts, expression, render)
+    job.src, job.generated = root, [p for p in generated if p]
     shutil.rmtree(job.runner_temp, ignore_errors=True)
     job.runner_temp.mkdir(parents=True)
     job.log = open(artifacts / 'row.log', 'wb')
@@ -685,6 +768,7 @@ def exec_row(args):
         job.say('== CI %s: needs the lake job; running it first ==' % row['id'])
         for step in lake.job['steps']:
             lake.run_step(step)
+        lake.save_lake_marker()
         job.failed = job.failed or lake.failed
         job.steps_report += lake.steps_report
     try:
@@ -692,6 +776,8 @@ def exec_row(args):
             build_lake_first()
         for step in job.job['steps']:
             job.run_step(step)
+        if row['job'] == 'lake' and not job.failed:
+            job.save_lake_marker()
     except StepFailed as failure:
         status, failed_step = failure.args[1], failure.args[0]
     finally:
@@ -709,11 +795,12 @@ def exec_row(args):
 
 def ensure_image(arch, root):
     dockerfile = root / 'docker/local-ci.Dockerfile'
-    tag = 'air2lean-local-ci:%s-%s' % (arch, digest(dockerfile.read_bytes())[:8])
+    python_arch = 'arm64' if arch == 'amd64' and platform_is_arm_host() else arch
+    tag = 'air2lean-local-ci:%s-py%s-%s' % (arch, python_arch, digest(dockerfile.read_bytes())[:8])
     if subprocess.run(['docker', 'image', 'inspect', tag], capture_output=True).returncode:
         print('local-ci: building %s (once per Dockerfile change)' % tag, file=sys.stderr)
-        subprocess.run(['docker', 'build', '-q', '--platform', 'linux/' + arch, '-f', str(dockerfile),
-                        '-t', tag, str(dockerfile.parent)], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(['docker', 'build', '-q', '--platform', 'linux/' + arch, '--build-arg', 'PYTHON_ARCH=' + python_arch,
+                        '-f', str(dockerfile), '-t', tag, str(dockerfile.parent)], check=True, stdout=subprocess.DEVNULL)
     return tag
 
 
@@ -732,6 +819,22 @@ def volumes(arch, root):
                 arch, ns, key('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json'))}
 
 
+def generated_paths(root):
+    out = subprocess.run([sys.executable, str(root / 'scripts/generated.py'), 'paths'], cwd=root, check=True,
+                         capture_output=True, text=True).stdout
+    return out.split()
+
+
+def materialize_generated(root):
+    """The `generated` job of CI, here: the whole-tree files (coverage inventories, premise index,
+    provenance fixtures) in this worktree, which the rows then install like CI's artifact."""
+    print('local-ci: scripts/generated.py materialize', file=sys.stderr)
+    status = subprocess.call([sys.executable, '-B', str(root / 'scripts/generated.py'), 'materialize'], cwd=root,
+                             stdout=subprocess.DEVNULL)
+    if status:
+        raise SystemExit('error: scripts/generated.py materialize failed (exit %d)' % status)
+
+
 def launch_row(args):
     """Run one row where it belongs and leave its results in args.results. Exit status = the row's."""
     root = REPO
@@ -746,10 +849,12 @@ def launch_row(args):
     snapshot = Path(tempfile.mkdtemp(prefix='air2lean-local-ci.'))
     try:
         (snapshot / 'files').write_bytes(b''.join(p.encode() + b'\0' for p in names))
+        present = [p for p in generated_paths(root) if (root / p).is_file()]
+        (snapshot / 'generated').write_bytes(b''.join(p.encode() + b'\0' for p in present))
         if row['where'] == 'host':
             tools = HOME / 'tools-macos'
             command = [sys.executable, str(root / 'scripts/local-ci-run.py'), 'exec-row', '--row', row['id'],
-                       '--src', str(root), '--files', str(snapshot / 'files'), '--workspace', str(HOME / 'macos-work'),
+                       '--src', str(root), '--files', str(snapshot / 'files'), '--generated', str(snapshot / 'generated'), '--workspace', str(HOME / 'macos-work'),
                        '--tools', str(tools), '--artifacts', str(results)]
             return subprocess.call(command, stdout=progress, stderr=subprocess.STDOUT)
         arch = row['where']
@@ -780,7 +885,7 @@ def launch_row(args):
              '--mount', 'type=bind,src=%s,dst=/src,readonly' % root,
              '--mount', 'type=bind,src=%s,dst=/snapshot,readonly' % snapshot, *mounts, image,
              'python3', '/src/scripts/local-ci-run.py', 'exec-row', '--row', row['id'], '--src', '/src',
-             '--files', '/snapshot/files', '--workspace', '/work', '--tools', '/cache', '--artifacts', '/artifacts'],
+             '--files', '/snapshot/files', '--generated', '/snapshot/generated', '--workspace', '/work', '--tools', '/cache', '--artifacts', '/artifacts'],
             check=True, capture_output=True, text=True).stdout.strip()
         try:
             subprocess.run(['docker', 'start', '-a', container], check=False, stdout=progress, stderr=subprocess.STDOUT)
@@ -896,6 +1001,8 @@ def main(argv):
         if not chosen:
             print('local-ci: no row selected')
         return 0
+    if any('scripts/generated.py install' in json.dumps(workflow['jobs'][r['job']]['steps']) for r in chosen):
+        materialize_generated(REPO)
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     parent = Path(os.environ.get('AIR2LEAN_LOCAL_RESULTS', REPO / '.lake/local-ci-results'))
     run_dir = parent / ('run-' + stamp)
@@ -945,6 +1052,7 @@ if __name__ == '__main__':
         parser.add_argument('--row', required=True)
         parser.add_argument('--src')
         parser.add_argument('--files')
+        parser.add_argument('--generated')
         parser.add_argument('--workspace')
         parser.add_argument('--tools')
         parser.add_argument('--artifacts')
