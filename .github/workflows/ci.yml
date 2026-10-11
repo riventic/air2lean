@@ -16,8 +16,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    # The 0.16.0 full job also runs the three T06 build-mode differential runs (~15 min).
-    timeout-minutes: 90
+    # The 0.16.0 full job also runs the three T06 build-mode differential runs (~15-22 min), the
+    # thread spec and OS thread primitive builds; it took ~90 min after the concurrency batch.
+    timeout-minutes: 120
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
