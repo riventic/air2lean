@@ -227,7 +227,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                   else (do
                     throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                 | .br51 => (do
-                  let i56 ← Zig.callM (Zig.checkIndex i48 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (i48.ptr.elem 1 (0 : BitVec 64)))
+                  let i56 ← Zig.callM (Zig.checkIndex i48.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (i48.ptr.elem 1 (0 : BitVec 64)))
                   let i57 ← pure ((← get).local5)
                   let i58 ← pure i57.len
                   let i59 ← pure (Zig.lt false (0 : BitVec 64) i58)
@@ -237,7 +237,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                     else (do
                       throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                   | .br60 => (do
-                    let i65 ← Zig.callM (Zig.checkIndex i57 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (i57.ptr.elem 1 (0 : BitVec 64)))
+                    let i65 ← Zig.callM (Zig.checkIndex i57.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (i57.ptr.elem 1 (0 : BitVec 64)))
                     let i66 ← pure (i56 ^^^ i65)
                     let i68 ← pure (((← get).local2).len)
                     let i69 ← Zig.sub false i68 (1 : BitVec 64)
@@ -250,7 +250,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                       else (do
                         throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                     | .br73 => (do
-                      let i78 ← Zig.callM (Zig.checkIndex i70 i69 >>= fun _ => Zig.load (BitVec 8) 1 (i70.ptr.elem 1 i69))
+                      let i78 ← Zig.callM (Zig.checkIndex i70.len i69 >>= fun _ => Zig.load (BitVec 8) 1 (i70.ptr.elem 1 i69))
                       let i80 ← pure (((← get).local2).len)
                       let i81 ← Zig.sub false i80 (1 : BitVec 64)
                       let i82 ← pure ((← get).local5)
@@ -262,7 +262,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                         else (do
                           throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                       | .br85 => (do
-                        let i90 ← Zig.callM (Zig.checkIndex i82 i81 >>= fun _ => Zig.load (BitVec 8) 1 (i82.ptr.elem 1 i81))
+                        let i90 ← Zig.callM (Zig.checkIndex i82.len i81 >>= fun _ => Zig.load (BitVec 8) 1 (i82.ptr.elem 1 i81))
                         let i91 ← pure (i78 ^^^ i90)
                         let i92 ← pure (i66 ||| i91)
                         let i94 ← pure (((← get).local2).len)
@@ -276,7 +276,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                           else (do
                             throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                         | .br99 => (do
-                          let i104 ← Zig.callM (Zig.checkIndex i96 i95 >>= fun _ => Zig.load (BitVec 8) 1 (i96.ptr.elem 1 i95))
+                          let i104 ← Zig.callM (Zig.checkIndex i96.len i95 >>= fun _ => Zig.load (BitVec 8) 1 (i96.ptr.elem 1 i95))
                           let i106 ← pure (((← get).local2).len)
                           let i107 ← Zig.divTrunc false i106 (2 : BitVec 64)
                           let i108 ← pure ((← get).local5)
@@ -288,7 +288,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                             else (do
                               throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
                           | .br111 => (do
-                            let i116 ← Zig.callM (Zig.checkIndex i108 i107 >>= fun _ => Zig.load (BitVec 8) 1 (i108.ptr.elem 1 i107))
+                            let i116 ← Zig.callM (Zig.checkIndex i108.len i107 >>= fun _ => Zig.load (BitVec 8) 1 (i108.ptr.elem 1 i107))
                             let i117 ← pure (i104 ^^^ i116)
                             let i118 ← pure (i92 ||| i117)
                             let i119 ← pure (i118 == (0 : BitVec 8))
