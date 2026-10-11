@@ -281,6 +281,8 @@ puts them there:
   regenerates them locally too (patched 0.16.0, stock 0.16.0, Lean).
 - `fetch --rev SHA [--group G]`: the published files of main commit SHA, e.g. to inspect or
   diff a released revision's coverage or provenance; `regen [--group G]`: regenerate in place.
+- `scripts/regen.sh`: its `tree` steps are exactly these groups (it asserts that against the
+  registry) and regenerate them in place through this helper; `--pr` skips them.
 - CI rows: `install` of the run's own artifact, as above.
 
 A gate that reads a whole-tree file reads data derived from the whole tree, so the reuse checker

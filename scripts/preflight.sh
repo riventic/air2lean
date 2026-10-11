@@ -3,15 +3,17 @@
 # record that CI gates on, in a few minutes, so that a round does not fail on a file that only
 # needed regenerating. It runs no proof, differential test or mutation; CI still runs everything.
 #
-#   scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize]
+#   scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr]
 #
+# scripts/regen.sh regenerates what these checks find stale (`scripts/regen.sh --check` runs this).
 # First it materializes the whole-tree generated files (assurance/generated.json; not committed,
 # docs/ci.md#whole-tree-generated-files): `scripts/generated.py materialize` regenerates the
-# coverage inventories (pinned pristine compiler sources, cached in $AIR2LEAN_CACHE as
-# zig-patch/build.sh does) and the premise index, and fetches the provenance fixtures from the
-# `generated` branch when it is reachable (CI regenerates and strictly checks them on the PR's
-# tree). --no-materialize uses the files already in the checkout (CI installs its own);
-# --no-sources skips regenerating the coverage inventories.
+# coverage inventories (pinned pristine compiler sources, scripts/cas.py) and the premise index,
+# and fetches the provenance fixtures from the `generated` branch when it is reachable (CI
+# regenerates and strictly checks them on the PR's tree; --pr skips that fetch).
+# --no-materialize uses the files already in the checkout (CI installs its own); --no-sources
+# regenerates only the premise index. With AIR2LEAN_CAS_DIR set, the translator build and the
+# pristine compiler sources come from the shared cache (docs/build-cache.md).
 #
 # Checks (each one's own error names the regeneration command):
 #   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
@@ -32,13 +34,14 @@ set -uo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root" || exit 2
 export PYTHONDONTWRITEBYTECODE=1
-translator=1 sources=1 materialize=1
+translator=1 sources=1 materialize=1 heavy=fetch
 for arg in "$@"; do
   case "$arg" in
     --no-translator) translator=0 ;;
     --no-sources) sources=0 ;;
     --no-materialize) materialize=0 ;;
-    *) echo "usage: scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize]" >&2; exit 2 ;;
+    --pr) heavy=skip ;;
+    *) echo "usage: scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr]" >&2; exit 2 ;;
   esac
 done
 
@@ -52,7 +55,7 @@ check() {
 
 if [ "$materialize" = 1 ]; then
   if [ "$sources" = 1 ]; then
-    check 'whole-tree generated files (materialize)' python3 -B scripts/generated.py materialize
+    check 'whole-tree generated files (materialize)' python3 -B scripts/generated.py materialize --heavy "$heavy"
   else
     check 'premise index (regenerate)' python3 -B scripts/generated.py regen --group premise-index
   fi
@@ -80,8 +83,10 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
 trap 'rm -rf "$scratch"' EXIT
 
 if [ "$translator" = 1 ]; then
-  check 'translator build (lake build air2lean)' python3 scripts/build-guard.py \
-    --report "$scratch/guard.json" --log "$scratch/lake.log" --timeout 1800 -- lake build air2lean
+  # `cas.py run`: Lake's shared artifact cache when AIR2LEAN_CAS_DIR is set, else a plain exec.
+  check 'translator build (lake build air2lean)' python3 -B scripts/cas.py run -- python3 scripts/build-guard.py \
+    --report "$scratch/guard.json" --log "$scratch/lake.log" --timeout 1800 \
+    --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- lake build air2lean
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
 fi
 

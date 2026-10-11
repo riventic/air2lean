@@ -42,17 +42,15 @@ import atexit
 import calendar
 import concurrent.futures
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
-import tomllib
-import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = 'assurance/generated.json'
@@ -114,49 +112,27 @@ def cheap(data: dict) -> list[str]:
 
 # ----------------------------------------------------------------------------- generators
 
+_spec = importlib.util.spec_from_file_location('air2lean_cas', ROOT / 'scripts/cas.py')
+CAS = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(CAS)
 SOURCES = {}  # version -> extracted pristine source, shared by both passes of `produce`
 
 
-def pinned_source(version: str, cache: Path) -> Path:
-    """The pinned pristine compiler source of `version` (zig-patch/versions.toml), cached as
-    zig-patch/build.sh caches it, extracted once per process."""
-    if version in SOURCES:
-        return SOURCES[version]
-    pin = tomllib.loads((ROOT / 'zig-patch/versions.toml').read_text())[version]
-    url, digest = pin['url'], pin['sha256']
-    tarball = cache / ('zig-%s.tar.xz' % version)
-    if not tarball.is_file() or sha256(tarball) != digest:
-        cache.mkdir(parents=True, exist_ok=True)
-        part = Path(tempfile.mkstemp(dir=cache, prefix=tarball.name + '.part.')[1])
-        try:
-            with urllib.request.urlopen(url, timeout=300) as response, part.open('wb') as out:
-                shutil.copyfileobj(response, out)
-            if sha256(part) != digest:
-                raise Error('%s: sha256 differs from zig-patch/versions.toml' % url)
-            os.replace(part, tarball)
-        finally:
-            part.unlink(missing_ok=True)
-    source = Path(tempfile.mkdtemp(prefix='air2lean-zig-%s.' % version))
-    atexit.register(shutil.rmtree, source, True)
-    with tarfile.open(tarball) as archive:
-        members = []
-        for member in archive.getmembers():
-            name = member.name.split('/', 1)
-            if len(name) == 2 and (member.isfile() or member.isdir()):
-                member.name = name[1]
-                members.append(member)
-        archive.extractall(source, members=members, filter='data')
-    SOURCES[version] = source
-    return source
+def pinned_source(version: str) -> Path:
+    """The pinned pristine compiler source of `version` (scripts/cas.py: downloaded into
+    $AIR2LEAN_CACHE and sha256-checked as zig-patch/build.sh does), extracted once per process."""
+    if version not in SOURCES:
+        scratch = Path(tempfile.mkdtemp(prefix='air2lean-zig-%s.' % version))
+        atexit.register(shutil.rmtree, scratch, True)
+        SOURCES[version] = CAS.pristine_source(ROOT, version, scratch / 'src')
+    return SOURCES[version]
 
 
 def gen_coverage(group: dict, root: Path):
-    cache = Path(os.environ.get('AIR2LEAN_CACHE', Path.home() / '.cache/air2lean'))
-
     def one(rel):
         version = Path(rel).stem
         run(sys.executable, '-B', 'scripts/coverage.py', 'generate', '--version', version,
-            '--source', pinned_source(version, cache), '--os', 'linux', '--inventory', rel, cwd=root)
+            '--source', pinned_source(version), '--os', 'linux', '--inventory', rel, cwd=root)
     with concurrent.futures.ThreadPoolExecutor() as pool:  # one coverage.py process per version
         list(pool.map(one, group['paths']))
 

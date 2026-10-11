@@ -1,15 +1,43 @@
 #!/usr/bin/env bash
 # Extract real statement structures from Fixture.lean, require them to match the checked-in
 # fixture report, then check accepted and overstated manifest goals against that report.
+# --write (scripts/regen.sh): regenerate fixture-report.json from the extraction instead: the
+# committed report's keys, theorem fields and node modules are kept, their values refreshed.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 tests/roadmap/claims/test_claims.py
+write=0
+case "${1:-}" in
+  '') ;;
+  --write) write=1 ;;
+  *) echo "usage: tests/roadmap/claims/check.sh [--write]" >&2; exit 2 ;;
+esac
+[ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/claims
 lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total
 lake env lean -o .lake/build/lib/lean/tests/roadmap/claims/Fixture.olean tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
+if [ "$write" = 1 ]; then
+  python3 - "$out/assurance.json" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path('tests/roadmap/claims/fixture-report.json')
+old, new = json.loads(path.read_text()), json.loads(Path(sys.argv[1]).read_text())
+fields = set().union(*(t.keys() for t in old['theorems']))
+modules = {n['module'] for n in old['nodes']}
+nodes = new['nodes'] if isinstance(new['nodes'], list) else [dict(name=n, **v) for n, v in new['nodes'].items()]
+report = {key: new[key] for key in old}
+report['theorems'] = [{k: v for k, v in t.items() if k in fields} for t in new['theorems']]
+report['nodes'] = [{k: n[k] for k in old['nodes'][0]} for n in nodes if n['module'] in modules]
+text = json.dumps(report, indent=1) + '\n'
+if text != path.read_text():
+    path.write_text(text)
+    print('wrote', path)
+PY
+  # Then every check below, as without --write: a failing extraction is not a fixture.
+  python3 tests/roadmap/claims/test_claims.py
+fi
 python3 - "$out" <<'PY'
 import json, subprocess, sys
 from pathlib import Path

@@ -17,6 +17,7 @@ and none of its entries is evicted by size.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -29,35 +30,20 @@ ROOT = Path(__file__).resolve().parent.parent
 PATCH = 'zig-patch'
 
 
-def toml_table(text, header):
-    """The lines of one `[header]` table of versions.toml (as zig-patch/toml-get.sh reads it)."""
-    lines, inside = [], False
-    for line in text.splitlines():
-        if line == header:
-            inside = True
-            continue
-        if inside and line.startswith('['):
-            break
-        if inside and line.strip() and not line.lstrip().startswith('#'):
-            lines.append(line.strip())
-    if not lines:
-        raise ValueError('versions.toml has no table %s' % header)
-    return lines
+_spec = importlib.util.spec_from_file_location('air2lean_cas', ROOT / 'scripts/cas.py')
+CAS = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(CAS)
 
 
 def zig_air_key(root, version, host_pin=None, environ=os.environ):
+    """scripts/cas.py zig_patch_inputs (what zig-patch/build.sh reads for VERSION) plus the
+    host-Zig pin that bootstraps it on this runner."""
     root = Path(root)
-    versions = (root / PATCH / 'versions.toml').read_text(encoding='utf-8')
-    table = toml_table(versions, '["%s"]' % version)
-    hook = next(re.fullmatch(r'hook\s*=\s*"(.*)"', l).group(1) for l in table if l.startswith('hook'))
-    files = sorted(p.relative_to(root).as_posix() for p in (root / PATCH / 'air-json').glob('*.zig'))
-    files += ['%s/%s' % (PATCH, hook)] + ['%s/%s' % (PATCH, n) for n in ('build.sh', 'lock.sh', 'toml-get.sh')]
     if host_pin is None:
-        host_pin = '\n'.join(toml_table(versions, '[ci.host-zig."%s"]' % version))
-    digest = hashlib.sha256()
-    for item in [json.dumps(table), host_pin] + [f + '\0' + hashlib.sha256((root / f).read_bytes()).hexdigest()
-                                                  for f in files]:
-        digest.update(item.encode() + b'\n')
+        versions = (root / PATCH / 'versions.toml').read_text(encoding='utf-8')
+        host_pin = '\n'.join(CAS.toml_table(versions, '[ci.host-zig."%s"]' % version))
+    inputs = CAS.zig_patch_inputs(root, version)
+    digest = hashlib.sha256(json.dumps({'inputs': inputs, 'host_pin': host_pin}, sort_keys=True).encode())
     host = '%s-%s' % (environ.get('RUNNER_OS', 'local'), environ.get('RUNNER_ARCH', 'local'))
     return 'zig-air-%s-%s-%s' % (host, version, digest.hexdigest())
 

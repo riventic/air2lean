@@ -53,6 +53,12 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   `scripts/generated.py materialize` (or `fetch`/`regen`) puts them in a checkout.
 - Run heavy builds through `scripts/build-guard.py`. Regenerate the other generated files (theorem
   inventory, goldens, `Gen.lean`) rather than hand-merging them.
+- After merging `main`, run `scripts/regen.sh`: it regenerates every generated file in order
+  (`--pr` skips the whole-tree files). Do not write private regeneration scripts; fix or extend
+  `scripts/regen.py` instead.
+- On the dev Mac, set `AIR2LEAN_CAS_DIR=$HOME/.cache/air2lean/cas`: worktrees then share patched
+  compilers (`scripts/zig-air.sh <version>`), Lean build outputs and AIR exports. Unset (CI), nothing
+  is cached. See [docs/build-cache.md](docs/build-cache.md).
 - Run `scripts/preflight.sh` before every push: it materializes the whole-tree files and checks
   every committed generated file CI checks for staleness, in minutes.
 - **Local first, CI confirms.** Every CI part can be run on the development Mac, and a PR is pushed
