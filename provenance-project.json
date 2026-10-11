@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "profile": "assurance/provenance/profile.json",
+  "float_semantics": "ieee",
+  "source_closure": ["assurance/provenance/src/provenance.zig"],
+  "components": {
+    "compiler_patch": ["zig-patch/air-json/json.zig", "zig-patch/0.16.0/hook.patch"],
+    "runtime": ["ZigLean.lean", "ZigLean/Basic.lean"],
+    "toolchain": ["lean-toolchain", "lakefile.toml", "lake-manifest.json"]
+  },
+  "allowed_assumptions": [],
+  "roots": [{
+    "id": "double",
+    "function": "provenance.double",
+    "air": ["assurance/provenance/air/provenance.add.json", "assurance/provenance/air/provenance.double.json"],
+    "namespace": "Provenance",
+    "prefix": "provenance.",
+    "generated": "Proofs/Provenance/Gen.lean",
+    "contracts": ["Proofs/Provenance/Proofs.lean"],
+    "goals": [{"theorem": "double_eq", "strength": "total_correctness", "domain": "all pairs of unsigned 32-bit inputs (wrapping)"}],
+    "assumptions": [],
+    "exclusions": ["source closure completeness and tool/runtime inventories are illustrative",
+                   "compiler analysis, the exporter and the stock-Zig native build are trusted and not rerun"]
+  }]
+}
