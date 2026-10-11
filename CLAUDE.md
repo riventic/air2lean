@@ -25,10 +25,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   sync specs) to make a proof go through. Report the exact obstruction, with a kernel-checked
   counterexample where possible.
 
-- **Zig 0.17 first.** New features, std translations, targets and proofs target Zig 0.17 first.
-  Older versions may stay partially supported, but anything they do not support is rejected with
-  a clear diagnostic, never mis-modelled. Do not block a change on a gap that only an older
-  version has.
+- **Zig 0.17 first, older versions still supported.** New features, std translations, targets and
+  proofs target Zig 0.17 first. Solve gaps in older versions too. An older version may be left
+  partially supported only when supporting it would weaken support for another version. Then it
+  rejects the construct with a clear diagnostic and is never mis-modelled.
 
 ## Trusted base
 
