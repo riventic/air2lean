@@ -87,6 +87,31 @@ example : Enc.size (Vec Bool 16) = 2 := rfl
 example : Enc.size (Float .f80) = 16 ∧ Enc.align (Float .f80) = 16 := ⟨rfl, rfl⟩
 example : linuxGnu.floats ≠ macosNone.floats := by decide
 
+/-! ### Zig 0.17.0 layouts
+
+Zig 0.17.0 (LLVM 22) aligns `f80` to 8 bytes on both profiles, and `f128` on aarch64-macos (where
+it is not `c_longdouble`); the bit-packed `f80x2` vector is 8-aligned, and its second lane is not
+where `Vec.packedEnc` puts it. The model keeps 16 and the packed image. These rows are declared
+divergences of the 0.17.0 files: the translator compares the layout of every type in memory with
+the exporter's (`checkMemTy`), so it rejects these types in memory on 0.17.0 aarch64. -/
+
+/-- The rows of a 0.17.0 file whose alignment is 8, not the model's 16. -/
+def layoutDivergences017 (triple : String) : List String :=
+  ["float f80", "vector f80x2"] ++ (if triple == "aarch64-macos-none" then ["float f128"] else [])
+
+/-- The table that a file of `version` must record: the kernel-checked one, with the 0.17.0
+divergent rows at alignment 8. -/
+def Recorded.forVersion (r : Recorded) (version triple : String) : Recorded :=
+  if version != "0.17.0" then r else
+  let ds := layoutDivergences017 triple
+  { r with
+    floats := r.floats.map fun (n, f, s, a) => (n, f, s, if ds.contains s!"float {n}" then 8 else a)
+    vectors := r.vectors.map fun (n, k, w, b, s, a) =>
+      (n, k, w, b, s, if ds.contains s!"vector {n}" then 8 else a) }
+
+/-- The model's `f80` and `f128` are 16-aligned, so each 0.17.0 row is a divergence. -/
+example : Enc.align (Float .f80) = 16 ∧ Enc.align (Float .f128) = 16 := ⟨rfl, rfl⟩
+
 /-! ## Float and atomic results (run time) -/
 
 def hexNat? (s : String) : Option Nat :=
@@ -175,10 +200,13 @@ def atomicCase (bits : Nat) (won lost added swapped loaded : String) : Bool :=
 
 /-- Results that differ from the model on that profile, with the reason. Each must diverge:
 a listed case that matches fails the check (the list is stale). -/
-def divergences : List (String × String) := [
+def softF80Divergences : List (String × String) := [
   -- `unnormal+0` itself is allowed: the model classifies the unnormal it returns as a NaN.
   ("fop f80 isnan(unnormal(e=1,i=0))", "soft-float f80 (compiler_rt) treats an unnormal as a number, not NaN (the model and x87: NaN)"),
-  ("fop f80 pseudo-denormal+0", "soft-float f80 keeps the pseudo-denormal encoding; the model (x87) normalizes it"),
+  ("fop f80 pseudo-denormal+0", "soft-float f80 keeps the pseudo-denormal encoding; the model (x87) normalizes it")]
+
+/-- The padded-width atomics of Zig before 0.17.0 (0.17.0 agrees with the model on them). -/
+def paddedDivergences : List (String × String) := [
   ("atomic u24 padff", "cmpxchg compares the 4-byte cell, padding byte included: it fails although the u24 values are equal"),
   ("atomic u40 padff", "cmpxchg compares the 8-byte cell, padding bytes included: it fails although the u40 values are equal"),
   ("rmw i24 Max e54321 2bcdef", "signed Max of a negative i24 cell and a positive operand keeps the negative cell: the native i24 Max is not the signed maximum (padded width)"),
@@ -186,8 +214,13 @@ def divergences : List (String × String) := [
 
 /-- Zig before 0.16.0: the soft-float `@sqrt` of f80 and f128 on aarch64 is computed at f64
 precision (`sqrt(2)` has 53 correct bits, the rest zero). 0.16.0 rounds correctly. -/
+def divergences : List (String × String) := softF80Divergences ++ paddedDivergences
+
+/-- Zig 0.17.0 compares only the value bits of a padded `cmpxchg` and computes the signed `Max`
+of a padded width, as the model does, so only the soft-float `f80` rows diverge. -/
 def divergencesIn (version : String) : List (String × String) :=
-  if version == "0.14.1" || version == "0.15.2" then divergences ++ [
+  if version == "0.17.0" then softF80Divergences
+  else if version == "0.14.1" || version == "0.15.2" then divergences ++ [
     ("fop f80 sqrt(2)", "@sqrt of f80 is correct to f64 precision only (compiler_rt before 0.16.0)"),
     ("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")]
   else divergences
@@ -323,9 +356,12 @@ def main (args : List String) : IO UInt32 := do
   let r ← match parseLayouts ref lines with
     | .ok r => pure r
     | .error e => throw (IO.userError s!"aarch64-abi: {path}: {e}")
-  unless r == ref do
+  unless r == ref.forVersion version triple do
     IO.eprintln s!"aarch64-abi: {path}: layout lines differ from the kernel-checked {triple} table:\n{repr r}"
     return 1
+  if version == "0.17.0" then
+    for row in layoutDivergences017 triple do
+      IO.println s!"divergence (not a match) {row}: 8-aligned in Zig 0.17.0, 16 in the model"
   let mut matched := 0
   let mut diverged : List String := []
   let mut bad : List String := []

@@ -44,7 +44,7 @@ history (M0–T5) as historical scope; current open work is the register below.
 | 0.17.0 | no | in-qualification | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
 | 0.16.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
 | 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
-| 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (translation and proofs; no diff harness) |
+| 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (pipeline, diff test, proofs on the listed examples) |
 
 ## Examples by version
 

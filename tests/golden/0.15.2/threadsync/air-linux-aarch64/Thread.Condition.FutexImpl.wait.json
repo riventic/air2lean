@@ -1,0 +1,3361 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "generic",
+  "features": [
+   "enable_select_opt",
+   "ete",
+   "fp_armv8",
+   "fuse_adrp_add",
+   "fuse_aes",
+   "neon",
+   "trbe",
+   "use_postra_scheduler"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "Thread.Condition.FutexImpl.wait",
+ "module": "std",
+ "src": {
+  "file": "Thread/Condition.zig",
+  "module": "std",
+  "decl_line": 204
+ },
+ "params": [
+  0,
+  1,
+  2
+ ],
+ "ret": 3,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 2,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "bitcast",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "alloc",
+   "ty": 7
+  },
+  {
+   "id": 7,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "bitcast",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 12,
+   "column": 9
+  },
+  {
+   "id": 10,
+   "tag": "alloc",
+   "ty": 9
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 12,
+   "column": 25
+  },
+  {
+   "id": 12,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 12,
+   "column": 36
+  },
+  {
+   "id": 15,
+   "tag": "bitcast",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 12,
+   "column": 36
+  },
+  {
+   "id": 17,
+   "tag": "dbg_inline_block",
+   "ty": 12,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 13
+   },
+   "body": [
+    {
+     "id": 18,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 15
+      }
+     ],
+     "name": "self"
+    },
+    {
+     "id": 19,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "ty": 13,
+       "enum": "2"
+      }
+     ],
+     "name": "order"
+    },
+    {
+     "id": 20,
+     "tag": "alloc",
+     "ty": 14
+    },
+    {
+     "id": 21,
+     "tag": "store_safe",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 20
+      },
+      {
+       "inst": 15
+      }
+     ]
+    },
+    {
+     "id": 22,
+     "tag": "bitcast",
+     "ty": 15,
+     "args": [
+      {
+       "inst": 20
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 2,
+     "column": 40
+    },
+    {
+     "id": 24,
+     "tag": "load",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 22
+      }
+     ]
+    },
+    {
+     "id": 25,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 16,
+     "args": [
+      {
+       "inst": 24
+      }
+     ]
+    },
+    {
+     "id": 26,
+     "tag": "atomic_load",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 25
+      }
+     ],
+     "order": "acquire"
+    },
+    {
+     "id": 27,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 2,
+     "column": 13
+    },
+    {
+     "id": 28,
+     "tag": "br",
+     "ty": 17,
+     "target": 17,
+     "args": [
+      {
+       "inst": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "tag": "store",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 10
+    },
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "tag": "dbg_var_ptr",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 10
+    }
+   ],
+   "name": "epoch"
+  },
+  {
+   "id": 32,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 13,
+   "column": 9
+  },
+  {
+   "id": 33,
+   "tag": "alloc",
+   "ty": 9
+  },
+  {
+   "id": 34,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 13,
+   "column": 25
+  },
+  {
+   "id": 35,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 35
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 13,
+   "column": 40
+  },
+  {
+   "id": 38,
+   "tag": "dbg_inline_block",
+   "ty": 12,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 45
+   },
+   "body": [
+    {
+     "id": 39,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 36
+      }
+     ],
+     "name": "self"
+    },
+    {
+     "id": 40,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "ty": 12,
+       "val": "1"
+      }
+     ],
+     "name": "operand"
+    },
+    {
+     "id": 41,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "ty": 13,
+       "enum": "1"
+      }
+     ],
+     "name": "order"
+    },
+    {
+     "id": 42,
+     "tag": "alloc",
+     "ty": 18
+    },
+    {
+     "id": 43,
+     "tag": "store_safe",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 42
+      },
+      {
+       "inst": 36
+      }
+     ]
+    },
+    {
+     "id": 44,
+     "tag": "bitcast",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 42
+      }
+     ]
+    },
+    {
+     "id": 45,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 2,
+     "column": 39
+    },
+    {
+     "id": 46,
+     "tag": "load",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 44
+      }
+     ]
+    },
+    {
+     "id": 47,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 46
+      }
+     ]
+    },
+    {
+     "id": 48,
+     "tag": "atomic_rmw",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 47
+      },
+      {
+       "ty": 12,
+       "val": "1"
+      }
+     ],
+     "op": "Add",
+     "order": "monotonic"
+    },
+    {
+     "id": 49,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 2,
+     "column": 13
+    },
+    {
+     "id": 50,
+     "tag": "br",
+     "ty": 17,
+     "target": 38,
+     "args": [
+      {
+       "inst": 48
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "store",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 33
+    },
+    {
+     "inst": 38
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "tag": "dbg_var_ptr",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 33
+    }
+   ],
+   "name": "state"
+  },
+  {
+   "id": 54,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 14,
+   "column": 15
+  },
+  {
+   "id": 55,
+   "tag": "load",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 33
+    }
+   ]
+  },
+  {
+   "id": 56,
+   "tag": "bit_and",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 55
+    },
+    {
+     "ty": 12,
+     "val": "65535"
+    }
+   ]
+  },
+  {
+   "id": 57,
+   "tag": "cmp_neq",
+   "ty": 20,
+   "args": [
+    {
+     "inst": 56
+    },
+    {
+     "ty": 12,
+     "val": "65535"
+    }
+   ]
+  },
+  {
+   "id": 58,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 14,
+   "column": 15
+  },
+  {
+   "id": 59,
+   "tag": "call",
+   "ty": 5,
+   "callee": {
+    "ty": 21,
+    "func": "debug.assert",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 57
+    }
+   ]
+  },
+  {
+   "id": 60,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 15,
+   "column": 9
+  },
+  {
+   "id": 61,
+   "tag": "load",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 33
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 15,
+   "column": 15
+  },
+  {
+   "id": 63,
+   "tag": "add_safe",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 61
+    },
+    {
+     "ty": 12,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 64,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 33
+    },
+    {
+     "inst": 63
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 17,
+   "column": 21
+  },
+  {
+   "id": 66,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 67,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 17,
+   "column": 21
+  },
+  {
+   "id": 68,
+   "tag": "call",
+   "ty": 5,
+   "callee": {
+    "ty": 22,
+    "func": "Thread.Mutex.unlock",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 66
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 20,
+   "column": 9
+  },
+  {
+   "id": 70,
+   "tag": "alloc",
+   "ty": 23
+  },
+  {
+   "id": 71,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 20,
+   "column": 49
+  },
+  {
+   "id": 72,
+   "tag": "call",
+   "ty": 24,
+   "callee": {
+    "ty": 25,
+    "func": "Thread.Futex.Deadline.init",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 73,
+   "tag": "store",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 70
+    },
+    {
+     "inst": 72
+    }
+   ]
+  },
+  {
+   "id": 75,
+   "tag": "dbg_var_ptr",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 70
+    }
+   ],
+   "name": "futex_deadline"
+  },
+  {
+   "id": 77,
+   "tag": "loop",
+   "ty": 17,
+   "body": [
+    {
+     "id": 79,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 22,
+     "column": 16
+    },
+    {
+     "id": 81,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 23,
+     "column": 38
+    },
+    {
+     "id": 82,
+     "tag": "load",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 5
+      }
+     ]
+    },
+    {
+     "id": 83,
+     "tag": "struct_field_ptr_index_1",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 82
+      }
+     ]
+    },
+    {
+     "id": 84,
+     "tag": "bitcast",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 83
+      }
+     ]
+    },
+    {
+     "id": 85,
+     "tag": "load",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 10
+      }
+     ]
+    },
+    {
+     "id": 86,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 23,
+     "column": 32
+    },
+    {
+     "id": 87,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 26,
+      "func": "Thread.Futex.Deadline.wait",
+      "module": "std",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 70
+      },
+      {
+       "inst": 84
+      },
+      {
+       "inst": 85
+      }
+     ]
+    },
+    {
+     "id": 88,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 23,
+     "column": 13
+    },
+    {
+     "id": 90,
+     "tag": "is_non_err",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 87
+      }
+     ]
+    },
+    {
+     "id": 89,
+     "tag": "block",
+     "ty": 5,
+     "body": [
+      {
+       "id": 203,
+       "tag": "cond_br",
+       "ty": 17,
+       "args": [
+        {
+         "inst": 90
+        }
+       ],
+       "then": [
+        {
+         "id": 91,
+         "tag": "br",
+         "ty": 17,
+         "target": 89,
+         "args": [
+          {
+           "ty": 5,
+           "val": "{}"
+          }
+         ]
+        }
+       ],
+       "else": [
+        {
+         "id": 92,
+         "tag": "unwrap_errunion_err",
+         "ty": 27,
+         "args": [
+          {
+           "inst": 87
+          }
+         ]
+        },
+        {
+         "id": 202,
+         "tag": "switch_br",
+         "ty": 17,
+         "args": [
+          {
+           "inst": 92
+          }
+         ],
+         "cases": [
+          {
+           "items": [
+            {
+             "ty": 27,
+             "err": "Timeout"
+            }
+           ],
+           "ranges": [],
+           "body": [
+            {
+             "id": 94,
+             "tag": "loop",
+             "ty": 17,
+             "body": [
+              {
+               "id": 96,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 26,
+               "column": 28
+              },
+              {
+               "id": 97,
+               "tag": "block",
+               "ty": 5,
+               "body": [
+                {
+                 "id": 98,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 26,
+                 "column": 34
+                },
+                {
+                 "id": 99,
+                 "tag": "block",
+                 "ty": 5,
+                 "body": [
+                  {
+                   "id": 100,
+                   "tag": "loop",
+                   "ty": 17,
+                   "body": [
+                    {
+                     "id": 101,
+                     "tag": "block",
+                     "ty": 5,
+                     "body": [
+                      {
+                       "id": 102,
+                       "tag": "dbg_stmt",
+                       "ty": 5,
+                       "line": 29,
+                       "column": 32
+                      },
+                      {
+                       "id": 103,
+                       "tag": "load",
+                       "ty": 12,
+                       "args": [
+                        {
+                         "inst": 33
+                        }
+                       ]
+                      },
+                      {
+                       "id": 104,
+                       "tag": "bit_and",
+                       "ty": 12,
+                       "args": [
+                        {
+                         "inst": 103
+                        },
+                        {
+                         "ty": 12,
+                         "val": "4294901760"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 105,
+                       "tag": "cmp_neq",
+                       "ty": 20,
+                       "args": [
+                        {
+                         "inst": 104
+                        },
+                        {
+                         "ty": 12,
+                         "val": "0"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 152,
+                       "tag": "cond_br",
+                       "ty": 17,
+                       "args": [
+                        {
+                         "inst": 105
+                        }
+                       ],
+                       "then": [
+                        {
+                         "id": 106,
+                         "tag": "block",
+                         "ty": 5,
+                         "body": [
+                          {
+                           "id": 107,
+                           "tag": "dbg_stmt",
+                           "ty": 5,
+                           "line": 30,
+                           "column": 29
+                          },
+                          {
+                           "id": 108,
+                           "tag": "load",
+                           "ty": 12,
+                           "args": [
+                            {
+                             "inst": 33
+                            }
+                           ]
+                          },
+                          {
+                           "id": 109,
+                           "tag": "dbg_stmt",
+                           "ty": 5,
+                           "line": 30,
+                           "column": 53
+                          },
+                          {
+                           "id": 110,
+                           "tag": "sub_safe",
+                           "ty": 12,
+                           "args": [
+                            {
+                             "inst": 108
+                            },
+                            {
+                             "ty": 12,
+                             "val": "1"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 111,
+                           "tag": "dbg_stmt",
+                           "ty": 5,
+                           "line": 30,
+                           "column": 66
+                          },
+                          {
+                           "id": 112,
+                           "tag": "sub_safe",
+                           "ty": 12,
+                           "args": [
+                            {
+                             "inst": 110
+                            },
+                            {
+                             "ty": 12,
+                             "val": "65536"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 113,
+                           "tag": "dbg_var_val",
+                           "ty": 5,
+                           "args": [
+                            {
+                             "inst": 112
+                            }
+                           ],
+                           "name": "new_state"
+                          },
+                          {
+                           "id": 114,
+                           "tag": "dbg_stmt",
+                           "ty": 5,
+                           "line": 31,
+                           "column": 29
+                          },
+                          {
+                           "id": 115,
+                           "tag": "block",
+                           "ty": 12,
+                           "body": [
+                            {
+                             "id": 116,
+                             "tag": "dbg_stmt",
+                             "ty": 5,
+                             "line": 31,
+                             "column": 41
+                            },
+                            {
+                             "id": 117,
+                             "tag": "load",
+                             "ty": 0,
+                             "args": [
+                              {
+                               "inst": 5
+                              }
+                             ]
+                            },
+                            {
+                             "id": 118,
+                             "tag": "struct_field_ptr_index_0",
+                             "ty": 10,
+                             "args": [
+                              {
+                               "inst": 117
+                              }
+                             ]
+                            },
+                            {
+                             "id": 119,
+                             "tag": "dbg_stmt",
+                             "ty": 5,
+                             "line": 31,
+                             "column": 59
+                            },
+                            {
+                             "id": 120,
+                             "tag": "load",
+                             "ty": 12,
+                             "args": [
+                              {
+                               "inst": 33
+                              }
+                             ]
+                            },
+                            {
+                             "id": 121,
+                             "tag": "dbg_stmt",
+                             "ty": 5,
+                             "line": 31,
+                             "column": 59
+                            },
+                            {
+                             "id": 122,
+                             "tag": "dbg_inline_block",
+                             "ty": 28,
+                             "src": {
+                              "file": "atomic.zig",
+                              "module": "std",
+                              "decl_line": 25
+                             },
+                             "body": [
+                              {
+                               "id": 123,
+                               "tag": "dbg_arg_inline",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "inst": 118
+                                }
+                               ],
+                               "name": "self"
+                              },
+                              {
+                               "id": 124,
+                               "tag": "dbg_arg_inline",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "inst": 120
+                                }
+                               ],
+                               "name": "expected_value"
+                              },
+                              {
+                               "id": 125,
+                               "tag": "dbg_arg_inline",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "inst": 112
+                                }
+                               ],
+                               "name": "new_value"
+                              },
+                              {
+                               "id": 126,
+                               "tag": "dbg_arg_inline",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "ty": 13,
+                                 "enum": "2"
+                                }
+                               ],
+                               "name": "success_order"
+                              },
+                              {
+                               "id": 127,
+                               "tag": "dbg_arg_inline",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "ty": 13,
+                                 "enum": "1"
+                                }
+                               ],
+                               "name": "fail_order"
+                              },
+                              {
+                               "id": 128,
+                               "tag": "alloc",
+                               "ty": 18
+                              },
+                              {
+                               "id": 129,
+                               "tag": "store_safe",
+                               "ty": 5,
+                               "args": [
+                                {
+                                 "inst": 128
+                                },
+                                {
+                                 "inst": 118
+                                }
+                               ]
+                              },
+                              {
+                               "id": 130,
+                               "tag": "bitcast",
+                               "ty": 19,
+                               "args": [
+                                {
+                                 "inst": 128
+                                }
+                               ]
+                              },
+                              {
+                               "id": 131,
+                               "tag": "dbg_stmt",
+                               "ty": 5,
+                               "line": 8,
+                               "column": 41
+                              },
+                              {
+                               "id": 132,
+                               "tag": "load",
+                               "ty": 10,
+                               "args": [
+                                {
+                                 "inst": 130
+                                }
+                               ]
+                              },
+                              {
+                               "id": 133,
+                               "tag": "struct_field_ptr_index_0",
+                               "ty": 9,
+                               "args": [
+                                {
+                                 "inst": 132
+                                }
+                               ]
+                              },
+                              {
+                               "id": 134,
+                               "tag": "cmpxchg_weak",
+                               "ty": 28,
+                               "args": [
+                                {
+                                 "inst": 133
+                                },
+                                {
+                                 "inst": 120
+                                },
+                                {
+                                 "inst": 112
+                                }
+                               ],
+                               "success_order": "acquire",
+                               "failure_order": "monotonic"
+                              },
+                              {
+                               "id": 135,
+                               "tag": "dbg_stmt",
+                               "ty": 5,
+                               "line": 8,
+                               "column": 13
+                              },
+                              {
+                               "id": 136,
+                               "tag": "br",
+                               "ty": 17,
+                               "target": 122,
+                               "args": [
+                                {
+                                 "inst": 134
+                                }
+                               ]
+                              }
+                             ]
+                            },
+                            {
+                             "id": 137,
+                             "tag": "is_non_null",
+                             "ty": 20,
+                             "args": [
+                              {
+                               "inst": 122
+                              }
+                             ]
+                            },
+                            {
+                             "id": 145,
+                             "tag": "cond_br",
+                             "ty": 17,
+                             "args": [
+                              {
+                               "inst": 137
+                              }
+                             ],
+                             "then": [
+                              {
+                               "id": 138,
+                               "tag": "optional_payload",
+                               "ty": 12,
+                               "args": [
+                                {
+                                 "inst": 122
+                                }
+                               ]
+                              },
+                              {
+                               "id": 139,
+                               "tag": "br",
+                               "ty": 17,
+                               "target": 115,
+                               "args": [
+                                {
+                                 "inst": 138
+                                }
+                               ]
+                              }
+                             ],
+                             "else": [
+                              {
+                               "id": 140,
+                               "tag": "dbg_stmt",
+                               "ty": 5,
+                               "line": 18,
+                               "column": 25
+                              },
+                              {
+                               "id": 141,
+                               "tag": "load",
+                               "ty": 1,
+                               "args": [
+                                {
+                                 "inst": 8
+                                }
+                               ]
+                              },
+                              {
+                               "id": 142,
+                               "tag": "dbg_stmt",
+                               "ty": 5,
+                               "line": 18,
+                               "column": 25
+                              },
+                              {
+                               "id": 143,
+                               "tag": "call",
+                               "ty": 5,
+                               "callee": {
+                                "ty": 22,
+                                "func": "Thread.Mutex.lock",
+                                "module": "std",
+                                "noreturn": false
+                               },
+                               "args": [
+                                {
+                                 "inst": 141
+                                }
+                               ]
+                              },
+                              {
+                               "id": 144,
+                               "tag": "ret_safe",
+                               "ty": 17,
+                               "args": [
+                                {
+                                 "ty": 3,
+                                 "payload": {
+                                  "ty": 5,
+                                  "val": "{}"
+                                 }
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "id": 146,
+                           "tag": "store_safe",
+                           "ty": 5,
+                           "args": [
+                            {
+                             "inst": 33
+                            },
+                            {
+                             "inst": 115
+                            }
+                           ]
+                          },
+                          {
+                           "id": 147,
+                           "tag": "dbg_stmt",
+                           "ty": 5,
+                           "line": 32,
+                           "column": 25
+                          },
+                          {
+                           "id": 148,
+                           "tag": "dbg_empty_stmt",
+                           "ty": 5
+                          },
+                          {
+                           "id": 149,
+                           "tag": "br",
+                           "ty": 17,
+                           "target": 106,
+                           "args": [
+                            {
+                             "ty": 5,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 150,
+                         "tag": "br",
+                         "ty": 17,
+                         "target": 101,
+                         "args": [
+                          {
+                           "ty": 5,
+                           "val": "{}"
+                          }
+                         ]
+                        }
+                       ],
+                       "else": [
+                        {
+                         "id": 151,
+                         "tag": "br",
+                         "ty": 17,
+                         "target": 99,
+                         "args": [
+                          {
+                           "ty": 5,
+                           "val": "{}"
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "id": 153,
+                     "tag": "repeat",
+                     "ty": 17,
+                     "target": 100
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 154,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 35,
+                 "column": 25
+                },
+                {
+                 "id": 155,
+                 "tag": "load",
+                 "ty": 12,
+                 "args": [
+                  {
+                   "inst": 33
+                  }
+                 ]
+                },
+                {
+                 "id": 156,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 35,
+                 "column": 49
+                },
+                {
+                 "id": 157,
+                 "tag": "sub_safe",
+                 "ty": 12,
+                 "args": [
+                  {
+                   "inst": 155
+                  },
+                  {
+                   "ty": 12,
+                   "val": "1"
+                  }
+                 ]
+                },
+                {
+                 "id": 158,
+                 "tag": "dbg_var_val",
+                 "ty": 5,
+                 "args": [
+                  {
+                   "inst": 157
+                  }
+                 ],
+                 "name": "new_state"
+                },
+                {
+                 "id": 159,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 36,
+                 "column": 25
+                },
+                {
+                 "id": 160,
+                 "tag": "block",
+                 "ty": 12,
+                 "body": [
+                  {
+                   "id": 161,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 36,
+                   "column": 37
+                  },
+                  {
+                   "id": 162,
+                   "tag": "load",
+                   "ty": 0,
+                   "args": [
+                    {
+                     "inst": 5
+                    }
+                   ]
+                  },
+                  {
+                   "id": 163,
+                   "tag": "struct_field_ptr_index_0",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 162
+                    }
+                   ]
+                  },
+                  {
+                   "id": 164,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 36,
+                   "column": 55
+                  },
+                  {
+                   "id": 165,
+                   "tag": "load",
+                   "ty": 12,
+                   "args": [
+                    {
+                     "inst": 33
+                    }
+                   ]
+                  },
+                  {
+                   "id": 166,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 36,
+                   "column": 55
+                  },
+                  {
+                   "id": 167,
+                   "tag": "dbg_inline_block",
+                   "ty": 28,
+                   "src": {
+                    "file": "atomic.zig",
+                    "module": "std",
+                    "decl_line": 25
+                   },
+                   "body": [
+                    {
+                     "id": 168,
+                     "tag": "dbg_arg_inline",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 163
+                      }
+                     ],
+                     "name": "self"
+                    },
+                    {
+                     "id": 169,
+                     "tag": "dbg_arg_inline",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 165
+                      }
+                     ],
+                     "name": "expected_value"
+                    },
+                    {
+                     "id": 170,
+                     "tag": "dbg_arg_inline",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 157
+                      }
+                     ],
+                     "name": "new_value"
+                    },
+                    {
+                     "id": 171,
+                     "tag": "dbg_arg_inline",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "ty": 13,
+                       "enum": "1"
+                      }
+                     ],
+                     "name": "success_order"
+                    },
+                    {
+                     "id": 172,
+                     "tag": "dbg_arg_inline",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "ty": 13,
+                       "enum": "1"
+                      }
+                     ],
+                     "name": "fail_order"
+                    },
+                    {
+                     "id": 173,
+                     "tag": "alloc",
+                     "ty": 18
+                    },
+                    {
+                     "id": 174,
+                     "tag": "store_safe",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 173
+                      },
+                      {
+                       "inst": 163
+                      }
+                     ]
+                    },
+                    {
+                     "id": 175,
+                     "tag": "bitcast",
+                     "ty": 19,
+                     "args": [
+                      {
+                       "inst": 173
+                      }
+                     ]
+                    },
+                    {
+                     "id": 176,
+                     "tag": "dbg_stmt",
+                     "ty": 5,
+                     "line": 8,
+                     "column": 41
+                    },
+                    {
+                     "id": 177,
+                     "tag": "load",
+                     "ty": 10,
+                     "args": [
+                      {
+                       "inst": 175
+                      }
+                     ]
+                    },
+                    {
+                     "id": 178,
+                     "tag": "struct_field_ptr_index_0",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 177
+                      }
+                     ]
+                    },
+                    {
+                     "id": 179,
+                     "tag": "cmpxchg_weak",
+                     "ty": 28,
+                     "args": [
+                      {
+                       "inst": 178
+                      },
+                      {
+                       "inst": 165
+                      },
+                      {
+                       "inst": 157
+                      }
+                     ],
+                     "success_order": "monotonic",
+                     "failure_order": "monotonic"
+                    },
+                    {
+                     "id": 180,
+                     "tag": "dbg_stmt",
+                     "ty": 5,
+                     "line": 8,
+                     "column": 13
+                    },
+                    {
+                     "id": 181,
+                     "tag": "br",
+                     "ty": 17,
+                     "target": 167,
+                     "args": [
+                      {
+                       "inst": 179
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 182,
+                   "tag": "is_non_null",
+                   "ty": 20,
+                   "args": [
+                    {
+                     "inst": 167
+                    }
+                   ]
+                  },
+                  {
+                   "id": 192,
+                   "tag": "cond_br",
+                   "ty": 17,
+                   "args": [
+                    {
+                     "inst": 182
+                    }
+                   ],
+                   "then": [
+                    {
+                     "id": 183,
+                     "tag": "optional_payload",
+                     "ty": 12,
+                     "args": [
+                      {
+                       "inst": 167
+                      }
+                     ]
+                    },
+                    {
+                     "id": 184,
+                     "tag": "br",
+                     "ty": 17,
+                     "target": 160,
+                     "args": [
+                      {
+                       "inst": 183
+                      }
+                     ]
+                    }
+                   ],
+                   "else": [
+                    {
+                     "id": 185,
+                     "tag": "dbg_stmt",
+                     "ty": 5,
+                     "line": 18,
+                     "column": 25
+                    },
+                    {
+                     "id": 186,
+                     "tag": "load",
+                     "ty": 1,
+                     "args": [
+                      {
+                       "inst": 8
+                      }
+                     ]
+                    },
+                    {
+                     "id": 187,
+                     "tag": "dbg_stmt",
+                     "ty": 5,
+                     "line": 18,
+                     "column": 25
+                    },
+                    {
+                     "id": 188,
+                     "tag": "call",
+                     "ty": 5,
+                     "callee": {
+                      "ty": 22,
+                      "func": "Thread.Mutex.lock",
+                      "module": "std",
+                      "noreturn": false
+                     },
+                     "args": [
+                      {
+                       "inst": 186
+                      }
+                     ]
+                    },
+                    {
+                     "id": 189,
+                     "tag": "dbg_stmt",
+                     "ty": 5,
+                     "line": 36,
+                     "column": 105
+                    },
+                    {
+                     "id": 190,
+                     "tag": "wrap_errunion_err",
+                     "ty": 3,
+                     "args": [
+                      {
+                       "inst": 92
+                      }
+                     ]
+                    },
+                    {
+                     "id": 191,
+                     "tag": "ret_safe",
+                     "ty": 17,
+                     "args": [
+                      {
+                       "inst": 190
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 193,
+                 "tag": "store_safe",
+                 "ty": 5,
+                 "args": [
+                  {
+                   "inst": 33
+                  },
+                  {
+                   "inst": 160
+                  }
+                 ]
+                },
+                {
+                 "id": 194,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 37,
+                 "column": 21
+                },
+                {
+                 "id": 195,
+                 "tag": "dbg_empty_stmt",
+                 "ty": 5
+                },
+                {
+                 "id": 196,
+                 "tag": "br",
+                 "ty": 17,
+                 "target": 97,
+                 "args": [
+                  {
+                   "ty": 5,
+                   "val": "{}"
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "id": 198,
+               "tag": "repeat",
+               "ty": 17,
+               "target": 94
+              }
+             ]
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 199,
+           "tag": "dbg_stmt",
+           "ty": 5,
+           "line": 23,
+           "column": 13
+          },
+          {
+           "id": 200,
+           "tag": "call",
+           "ty": 17,
+           "callee": {
+            "ty": 29,
+            "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+            "module": "std",
+            "noreturn": true
+           },
+           "args": []
+          },
+          {
+           "id": 201,
+           "tag": "unreach",
+           "ty": 17
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 204,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 41,
+     "column": 25
+    },
+    {
+     "id": 205,
+     "tag": "load",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 5
+      }
+     ]
+    },
+    {
+     "id": 206,
+     "tag": "struct_field_ptr_index_1",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 205
+      }
+     ]
+    },
+    {
+     "id": 207,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 41,
+     "column": 36
+    },
+    {
+     "id": 208,
+     "tag": "bitcast",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 206
+      }
+     ]
+    },
+    {
+     "id": 209,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 41,
+     "column": 36
+    },
+    {
+     "id": 210,
+     "tag": "dbg_inline_block",
+     "ty": 12,
+     "src": {
+      "file": "atomic.zig",
+      "module": "std",
+      "decl_line": 13
+     },
+     "body": [
+      {
+       "id": 211,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 208
+        }
+       ],
+       "name": "self"
+      },
+      {
+       "id": 212,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "ty": 13,
+         "enum": "2"
+        }
+       ],
+       "name": "order"
+      },
+      {
+       "id": 213,
+       "tag": "alloc",
+       "ty": 14
+      },
+      {
+       "id": 214,
+       "tag": "store_safe",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 213
+        },
+        {
+         "inst": 208
+        }
+       ]
+      },
+      {
+       "id": 215,
+       "tag": "bitcast",
+       "ty": 15,
+       "args": [
+        {
+         "inst": 213
+        }
+       ]
+      },
+      {
+       "id": 216,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 2,
+       "column": 40
+      },
+      {
+       "id": 217,
+       "tag": "load",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 215
+        }
+       ]
+      },
+      {
+       "id": 218,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 16,
+       "args": [
+        {
+         "inst": 217
+        }
+       ]
+      },
+      {
+       "id": 219,
+       "tag": "atomic_load",
+       "ty": 12,
+       "args": [
+        {
+         "inst": 218
+        }
+       ],
+       "order": "acquire"
+      },
+      {
+       "id": 220,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 2,
+       "column": 13
+      },
+      {
+       "id": 221,
+       "tag": "br",
+       "ty": 17,
+       "target": 210,
+       "args": [
+        {
+         "inst": 219
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 222,
+     "tag": "store_safe",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 10
+      },
+      {
+       "inst": 210
+      }
+     ]
+    },
+    {
+     "id": 223,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 42,
+     "column": 25
+    },
+    {
+     "id": 224,
+     "tag": "load",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 5
+      }
+     ]
+    },
+    {
+     "id": 225,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 224
+      }
+     ]
+    },
+    {
+     "id": 226,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 42,
+     "column": 36
+    },
+    {
+     "id": 227,
+     "tag": "bitcast",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 225
+      }
+     ]
+    },
+    {
+     "id": 228,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 42,
+     "column": 36
+    },
+    {
+     "id": 229,
+     "tag": "dbg_inline_block",
+     "ty": 12,
+     "src": {
+      "file": "atomic.zig",
+      "module": "std",
+      "decl_line": 13
+     },
+     "body": [
+      {
+       "id": 230,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 227
+        }
+       ],
+       "name": "self"
+      },
+      {
+       "id": 231,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "ty": 13,
+         "enum": "1"
+        }
+       ],
+       "name": "order"
+      },
+      {
+       "id": 232,
+       "tag": "alloc",
+       "ty": 14
+      },
+      {
+       "id": 233,
+       "tag": "store_safe",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 232
+        },
+        {
+         "inst": 227
+        }
+       ]
+      },
+      {
+       "id": 234,
+       "tag": "bitcast",
+       "ty": 15,
+       "args": [
+        {
+         "inst": 232
+        }
+       ]
+      },
+      {
+       "id": 235,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 2,
+       "column": 40
+      },
+      {
+       "id": 236,
+       "tag": "load",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 234
+        }
+       ]
+      },
+      {
+       "id": 237,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 16,
+       "args": [
+        {
+         "inst": 236
+        }
+       ]
+      },
+      {
+       "id": 238,
+       "tag": "atomic_load",
+       "ty": 12,
+       "args": [
+        {
+         "inst": 237
+        }
+       ],
+       "order": "monotonic"
+      },
+      {
+       "id": 239,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 2,
+       "column": 13
+      },
+      {
+       "id": 240,
+       "tag": "br",
+       "ty": 17,
+       "target": 229,
+       "args": [
+        {
+         "inst": 238
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 241,
+     "tag": "store_safe",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 33
+      },
+      {
+       "inst": 229
+      }
+     ]
+    },
+    {
+     "id": 242,
+     "tag": "block",
+     "ty": 5,
+     "body": [
+      {
+       "id": 243,
+       "tag": "loop",
+       "ty": 17,
+       "body": [
+        {
+         "id": 244,
+         "tag": "block",
+         "ty": 5,
+         "body": [
+          {
+           "id": 245,
+           "tag": "dbg_stmt",
+           "ty": 5,
+           "line": 46,
+           "column": 20
+          },
+          {
+           "id": 246,
+           "tag": "load",
+           "ty": 12,
+           "args": [
+            {
+             "inst": 33
+            }
+           ]
+          },
+          {
+           "id": 247,
+           "tag": "bit_and",
+           "ty": 12,
+           "args": [
+            {
+             "inst": 246
+            },
+            {
+             "ty": 12,
+             "val": "4294901760"
+            }
+           ]
+          },
+          {
+           "id": 248,
+           "tag": "cmp_neq",
+           "ty": 20,
+           "args": [
+            {
+             "inst": 247
+            },
+            {
+             "ty": 12,
+             "val": "0"
+            }
+           ]
+          },
+          {
+           "id": 295,
+           "tag": "cond_br",
+           "ty": 17,
+           "args": [
+            {
+             "inst": 248
+            }
+           ],
+           "then": [
+            {
+             "id": 249,
+             "tag": "block",
+             "ty": 5,
+             "body": [
+              {
+               "id": 250,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 47,
+               "column": 17
+              },
+              {
+               "id": 251,
+               "tag": "load",
+               "ty": 12,
+               "args": [
+                {
+                 "inst": 33
+                }
+               ]
+              },
+              {
+               "id": 252,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 47,
+               "column": 41
+              },
+              {
+               "id": 253,
+               "tag": "sub_safe",
+               "ty": 12,
+               "args": [
+                {
+                 "inst": 251
+                },
+                {
+                 "ty": 12,
+                 "val": "1"
+                }
+               ]
+              },
+              {
+               "id": 254,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 47,
+               "column": 54
+              },
+              {
+               "id": 255,
+               "tag": "sub_safe",
+               "ty": 12,
+               "args": [
+                {
+                 "inst": 253
+                },
+                {
+                 "ty": 12,
+                 "val": "65536"
+                }
+               ]
+              },
+              {
+               "id": 256,
+               "tag": "dbg_var_val",
+               "ty": 5,
+               "args": [
+                {
+                 "inst": 255
+                }
+               ],
+               "name": "new_state"
+              },
+              {
+               "id": 257,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 48,
+               "column": 17
+              },
+              {
+               "id": 258,
+               "tag": "block",
+               "ty": 12,
+               "body": [
+                {
+                 "id": 259,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 48,
+                 "column": 29
+                },
+                {
+                 "id": 260,
+                 "tag": "load",
+                 "ty": 0,
+                 "args": [
+                  {
+                   "inst": 5
+                  }
+                 ]
+                },
+                {
+                 "id": 261,
+                 "tag": "struct_field_ptr_index_0",
+                 "ty": 10,
+                 "args": [
+                  {
+                   "inst": 260
+                  }
+                 ]
+                },
+                {
+                 "id": 262,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 48,
+                 "column": 47
+                },
+                {
+                 "id": 263,
+                 "tag": "load",
+                 "ty": 12,
+                 "args": [
+                  {
+                   "inst": 33
+                  }
+                 ]
+                },
+                {
+                 "id": 264,
+                 "tag": "dbg_stmt",
+                 "ty": 5,
+                 "line": 48,
+                 "column": 47
+                },
+                {
+                 "id": 265,
+                 "tag": "dbg_inline_block",
+                 "ty": 28,
+                 "src": {
+                  "file": "atomic.zig",
+                  "module": "std",
+                  "decl_line": 25
+                 },
+                 "body": [
+                  {
+                   "id": 266,
+                   "tag": "dbg_arg_inline",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 261
+                    }
+                   ],
+                   "name": "self"
+                  },
+                  {
+                   "id": 267,
+                   "tag": "dbg_arg_inline",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 263
+                    }
+                   ],
+                   "name": "expected_value"
+                  },
+                  {
+                   "id": 268,
+                   "tag": "dbg_arg_inline",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 255
+                    }
+                   ],
+                   "name": "new_value"
+                  },
+                  {
+                   "id": 269,
+                   "tag": "dbg_arg_inline",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "ty": 13,
+                     "enum": "2"
+                    }
+                   ],
+                   "name": "success_order"
+                  },
+                  {
+                   "id": 270,
+                   "tag": "dbg_arg_inline",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "ty": 13,
+                     "enum": "1"
+                    }
+                   ],
+                   "name": "fail_order"
+                  },
+                  {
+                   "id": 271,
+                   "tag": "alloc",
+                   "ty": 18
+                  },
+                  {
+                   "id": 272,
+                   "tag": "store_safe",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 271
+                    },
+                    {
+                     "inst": 261
+                    }
+                   ]
+                  },
+                  {
+                   "id": 273,
+                   "tag": "bitcast",
+                   "ty": 19,
+                   "args": [
+                    {
+                     "inst": 271
+                    }
+                   ]
+                  },
+                  {
+                   "id": 274,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 8,
+                   "column": 41
+                  },
+                  {
+                   "id": 275,
+                   "tag": "load",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 273
+                    }
+                   ]
+                  },
+                  {
+                   "id": 276,
+                   "tag": "struct_field_ptr_index_0",
+                   "ty": 9,
+                   "args": [
+                    {
+                     "inst": 275
+                    }
+                   ]
+                  },
+                  {
+                   "id": 277,
+                   "tag": "cmpxchg_weak",
+                   "ty": 28,
+                   "args": [
+                    {
+                     "inst": 276
+                    },
+                    {
+                     "inst": 263
+                    },
+                    {
+                     "inst": 255
+                    }
+                   ],
+                   "success_order": "acquire",
+                   "failure_order": "monotonic"
+                  },
+                  {
+                   "id": 278,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 8,
+                   "column": 13
+                  },
+                  {
+                   "id": 279,
+                   "tag": "br",
+                   "ty": 17,
+                   "target": 265,
+                   "args": [
+                    {
+                     "inst": 277
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 280,
+                 "tag": "is_non_null",
+                 "ty": 20,
+                 "args": [
+                  {
+                   "inst": 265
+                  }
+                 ]
+                },
+                {
+                 "id": 288,
+                 "tag": "cond_br",
+                 "ty": 17,
+                 "args": [
+                  {
+                   "inst": 280
+                  }
+                 ],
+                 "then": [
+                  {
+                   "id": 281,
+                   "tag": "optional_payload",
+                   "ty": 12,
+                   "args": [
+                    {
+                     "inst": 265
+                    }
+                   ]
+                  },
+                  {
+                   "id": 282,
+                   "tag": "br",
+                   "ty": 17,
+                   "target": 258,
+                   "args": [
+                    {
+                     "inst": 281
+                    }
+                   ]
+                  }
+                 ],
+                 "else": [
+                  {
+                   "id": 283,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 18,
+                   "column": 25
+                  },
+                  {
+                   "id": 284,
+                   "tag": "load",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 8
+                    }
+                   ]
+                  },
+                  {
+                   "id": 285,
+                   "tag": "dbg_stmt",
+                   "ty": 5,
+                   "line": 18,
+                   "column": 25
+                  },
+                  {
+                   "id": 286,
+                   "tag": "call",
+                   "ty": 5,
+                   "callee": {
+                    "ty": 22,
+                    "func": "Thread.Mutex.lock",
+                    "module": "std",
+                    "noreturn": false
+                   },
+                   "args": [
+                    {
+                     "inst": 284
+                    }
+                   ]
+                  },
+                  {
+                   "id": 287,
+                   "tag": "ret_safe",
+                   "ty": 17,
+                   "args": [
+                    {
+                     "ty": 3,
+                     "payload": {
+                      "ty": 5,
+                      "val": "{}"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "id": 289,
+               "tag": "store_safe",
+               "ty": 5,
+               "args": [
+                {
+                 "inst": 33
+                },
+                {
+                 "inst": 258
+                }
+               ]
+              },
+              {
+               "id": 290,
+               "tag": "dbg_stmt",
+               "ty": 5,
+               "line": 49,
+               "column": 13
+              },
+              {
+               "id": 291,
+               "tag": "dbg_empty_stmt",
+               "ty": 5
+              },
+              {
+               "id": 292,
+               "tag": "br",
+               "ty": 17,
+               "target": 249,
+               "args": [
+                {
+                 "ty": 5,
+                 "val": "{}"
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 293,
+             "tag": "br",
+             "ty": 17,
+             "target": 244,
+             "args": [
+              {
+               "ty": 5,
+               "val": "{}"
+              }
+             ]
+            }
+           ],
+           "else": [
+            {
+             "id": 294,
+             "tag": "br",
+             "ty": 17,
+             "target": 242,
+             "args": [
+              {
+               "ty": 5,
+               "val": "{}"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": 296,
+         "tag": "repeat",
+         "ty": 17,
+         "target": 243
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 297,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 50,
+     "column": 9
+    },
+    {
+     "id": 298,
+     "tag": "dbg_empty_stmt",
+     "ty": 5
+    },
+    {
+     "id": 301,
+     "tag": "repeat",
+     "ty": 17,
+     "target": 77
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 30,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 31,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 32,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 27,
+   "payload": 5,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 33,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 33,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "builtin.AtomicOrder",
+   "module": "std",
+   "tag": 34,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "unordered",
+     "value": "0"
+    },
+    {
+     "name": "monotonic",
+     "value": "1"
+    },
+    {
+     "name": "acquire",
+     "value": "2"
+    },
+    {
+     "name": "release",
+     "value": "3"
+    },
+    {
+     "name": "acq_rel",
+     "value": "4"
+    },
+    {
+     "name": "seq_cst",
+     "value": "5"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 11,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 11,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 12,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (bool) void"
+  },
+  {
+   "k": "other",
+   "name": "fn (*Thread.Mutex) void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 24,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.Futex.Deadline",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "timeout",
+     "ty": 2,
+     "offset": 0
+    },
+    {
+     "name": "started",
+     "ty": 35,
+     "offset": 16
+    }
+   ],
+   "abi_size": 48,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (?u64) Thread.Futex.Deadline"
+  },
+  {
+   "k": "other",
+   "name": "fn (*Thread.Futex.Deadline, *const atomic.Value(u32), u32) error{Timeout}!void"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Timeout"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "optional",
+   "child": 12,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "Thread.Condition.FutexImpl",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "state",
+     "ty": 33,
+     "offset": 0
+    },
+    {
+     "name": "epoch",
+     "ty": 33,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "Thread.Mutex",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "impl",
+     "ty": 36,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 12,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 3,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "time.Timer",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "started",
+     "ty": 37,
+     "offset": 0
+    },
+    {
+     "name": "previous",
+     "ty": 37,
+     "offset": 16
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.Mutex.FutexImpl",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "state",
+     "ty": 33,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "time.Instant",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "timestamp",
+     "ty": 38,
+     "offset": 0
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "os.linux.timespec__struct_2571",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "sec",
+     "ty": 39,
+     "offset": 0
+    },
+    {
+     "name": "nsec",
+     "ty": 39,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  }
+ ]
+}

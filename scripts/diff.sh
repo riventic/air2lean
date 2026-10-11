@@ -160,7 +160,8 @@ echo "== building libm ==" >&2
 # $build_dir, one level above compiler_rt/, with the stub compiler_rt.zig alongside it — putting
 # both "../compiler_rt.zig" and "compiler_rt/*.zig" in path. The stub is inert for 0.15.2: its
 # op files never import the top-level compiler_rt.zig at all.
-lib_dir=$("$zig_bin" env | sed -n 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p')
+# `zig env` is ZON from 0.15.0 (`.lib_dir = "..."`), JSON before (`"lib_dir": "..."`).
+lib_dir=$("$zig_bin" env | sed -n -e 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p' -e 's/^ *"lib_dir": "\([^"]*\)".*/\1/p')
 crt_dir="$build_dir/compiler_rt"
 cp -R "$lib_dir/compiler_rt" "$crt_dir"
 cat >"$build_dir/compiler_rt.zig" <<'EOF'

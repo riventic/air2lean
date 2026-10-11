@@ -131,7 +131,7 @@ pointer on is rejected.
 | Float division, `@divTrunc`, `@divFloor`, `@rem`, `@mod` by zero | langref §Operators: division by zero is IB for floats only in `FloatMode.optimized`; Sema's `addDivByZeroSafety` skips strict floats | IEEE result (±inf, NaN) |
 | `@truncate`, wrapping and saturating ops, `<<|` with any count | defined | value |
 | `extern`/`packed` union field reads | reinterpretation is defined | `Zig.Raw.get`/`Zig.PackedU.get` |
-| `@bitCast` of a NaN to an integer, `@min`/`@max` of `+0` and `-0` (f32/f64) | result left open | `.unspecified` |
+| `@bitCast` of a NaN to an integer, `@min`/`@max` of `+0` and `-0` (every format) | result left open | `.unspecified` |
 | `@setFloatMode(.optimized)` | fast-math changes values | *rejected* |
 
 ## Gaps
