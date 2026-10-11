@@ -285,9 +285,11 @@ theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
   · split at h₁
     · rename_i b _ blk hblk
       split at h₁
-      · have := Conc.Proto.MemM.set_ok h₁
-        subst this
-        exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl⟩
+      · split at h₁
+        · exact (Conc.Proto.MemM.throw_ok h₁).elim
+        · have := Conc.Proto.MemM.set_ok h₁
+          subst this
+          exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl⟩
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 

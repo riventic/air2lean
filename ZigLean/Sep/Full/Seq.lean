@@ -29,7 +29,10 @@ def soloResp : (op : SyncOp Tgt) → op.Resp
   | .yield => ()
   | .choose _ => (0 : Nat)
   | .pick _ => (0 : Nat)
-  | .spawn _ => (0 : Nat)
+  | .spawn _ => .ok 0
+  | .asyncChoice => (0 : Nat)
+  | .spawnGated _ => (0 : Nat)
+  | .gate => ()
   | .join _ => ()
   | .wait .. => ()
   | .wake .. => ()
@@ -54,11 +57,11 @@ theorem canGo_solo {s : State Tgt α} {op : SyncOp Tgt} (h : SyncOp.Solo op = tr
     canGo s 0 op = true := by
   cases op <;> simp_all [SyncOp.Solo, canGo]
 
-theorem leaf_solo (d : Tgt → ConcM Tgt Unit) (f n : Nat) (v : α) (m : Mem) (s : State Tgt α) :
+theorem leaf_solo (env : Env) (d : Tgt → ConcM Tgt Unit) (f n : Nat) (v : α) (m : Mem) (s : State Tgt α) :
     (match settle 0 s (CoN.leaf (some (.ok (v, m))) : CoN Tgt (α × Mem) n) with
       | .error e => outOf e
       | .ok (_, some v, s') => some (.ok (v, s'.mem))
-      | .ok (ts, none, s') => (go d (fun _ => 0) f { s' with main := ts }).1) =
+      | .ok (ts, none, s') => (go env d (fun _ => 0) f { s' with main := ts }).1) =
       seqTree (CoN.leaf (some (.ok (v, m))) : CoN Tgt (α × Mem) n) := by
   simp only [settle, seqTree]
   cases hc : ((Thread.checkJoinedByChild 0).run m).run with
@@ -70,13 +73,13 @@ theorem leaf_solo (d : Tgt → ConcM Tgt Unit) (f n : Nat) (v : α) (m : Mem) (s
 
 /-- After a settle of thread `0`, the scheduler (with the oracle `0`, no other thread) reads the
 rest of the tree sequentially. -/
-theorem step_solo (d : Tgt → ConcM Tgt Unit) :
+theorem step_solo (env : Env) (d : Tgt → ConcM Tgt Unit) :
     ∀ (f dep : Nat), dep ≤ f → ∀ (t : CoN Tgt (α × Mem) dep), ThreadFree t →
       ∀ (s : State Tgt α), s.kids = #[] →
       (match settle 0 s t with
         | .error e => outOf e
         | .ok (_, some v, s') => some (.ok (v, s'.mem))
-        | .ok (ts, none, s') => (go d (fun _ => 0) f { s' with main := ts }).1) = seqTree t := by
+        | .ok (ts, none, s') => (go env d (fun _ => 0) f { s' with main := ts }).1) = seqTree t := by
   intro f
   induction f with
   | zero =>
@@ -86,7 +89,7 @@ theorem step_solo (d : Tgt → ConcM Tgt Unit) :
       rcases r with _ | (e | ⟨v, m⟩)
       · rfl
       · rfl
-      · exact leaf_solo d _ _ _ _ _
+      · exact leaf_solo env d _ _ _ _ _
     | sync op m k => omega
   | succ f ih =>
     intro dep hdep t ht s hk
@@ -95,7 +98,7 @@ theorem step_solo (d : Tgt → ConcM Tgt Unit) :
       rcases r with _ | (e | ⟨v, m⟩)
       · rfl
       · rfl
-      · exact leaf_solo d _ _ _ _ _
+      · exact leaf_solo env d _ _ _ _ _
     | sync op m k =>
       rename_i n
       obtain ⟨hsolo, hrest⟩ := ht
@@ -137,15 +140,18 @@ theorem step_solo (d : Tgt → ConcM Tgt Unit) :
         generalize settle 0 _ _ = x
         rcases x with e | ⟨ts, _ | v, s'⟩ <;> rfl
       | spawn _ => simp [SyncOp.Solo] at hsolo
+      | asyncChoice => simp [SyncOp.Solo] at hsolo
+      | spawnGated _ => simp [SyncOp.Solo] at hsolo
+      | gate => simp [SyncOp.Solo] at hsolo
       | join _ => simp [SyncOp.Solo] at hsolo
       | wait _ _ => simp [SyncOp.Solo] at hsolo
       | wake _ _ => simp [SyncOp.Solo] at hsolo
 
 /-- **A one-thread run with the oracle `0` is the sequential reading of its tree.** -/
-theorem run_solo (d : Tgt → ConcM Tgt Unit) (fuel : Nat) (main : ConcM Tgt α) (m0 : Mem)
+theorem run_solo (env : Env) (d : Tgt → ConcM Tgt Unit) (fuel : Nat) (main : ConcM Tgt α) (m0 : Mem)
     (ht : ThreadFree (main fuel { m0 with current := 0 })) :
-    (run d fuel (fun _ => 0) main m0).run = seqTree (main fuel { m0 with current := 0 }) := by
-  have := step_solo d fuel fuel (Nat.le_refl _) _ ht
+    (run env d fuel (fun _ => 0) main m0).run = seqTree (main fuel { m0 with current := 0 }) := by
+  have := step_solo env d fuel fuel (Nat.le_refl _) _ ht
     { main := .done, kids := #[], mem := { m0 with current := 0 }, step := 0, trace := #[] } rfl
   simp only [run, runTrace, ExceptT.mk, ExceptT.run]
   rw [← this]
@@ -197,10 +203,10 @@ def seqRun (fuel : Nat) (main : ConcM Tgt α) : MemM α :=
   fun m => ExceptT.mk (seqTree (main fuel { m with current := 0 }))
 
 /-- **A one-thread scheduler run of a thread-free function is its sequential reading.** -/
-theorem run_eq_seqRun (d : Tgt → ConcM Tgt Unit) (fuel : Nat) {main : ConcM Tgt α}
+theorem run_eq_seqRun (env : Env) (d : Tgt → ConcM Tgt Unit) (fuel : Nat) {main : ConcM Tgt α}
     (ht : ConcM.ThreadFree main) (m : Mem) :
-    run d fuel (fun _ => 0) main m = (seqRun fuel main).run m := by
-  have := run_solo d fuel main m (ht _ _)
+    run env d fuel (fun _ => 0) main m = (seqRun fuel main).run m := by
+  have := run_solo env d fuel main m (ht _ _)
   simp only [seqRun, StateT.run]
   exact congrArg ExceptT.mk this
 
