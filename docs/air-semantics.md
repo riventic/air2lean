@@ -268,7 +268,7 @@ Measured by `lake build` (elaboration of the certificate only; Apple M-series):
 | Certificate | Functions | Lines | Bytes | Theorems | Check time |
 |---|---|---|---|---|---|
 | `Proofs/Basic/AirCert.lean` | 5 | 310 | 19,851 | 22 | 1.7 s |
-| `Proofs/Pointers/AirCert.lean` | 5 | 311 | 23,144 | 22 | 1.7 s |
+| `Proofs/Pointers/AirCert.lean` | 6 (one with a loop) | 517 | 39,440 | 34 | 7.1 s |
 | `Proofs/Recursion/AirCert.lean` | 4 | 486 | 30,541 | 27 | 6.0 s |
 | `Proofs/Vectors/AirCert.lean` | 2 | 174 | 11,613 | 11 | 1.8 s |
 | `Proofs/Threads/AirCert.lean` | 1 | 95 | 6,639 | 6 | 1.4 s |
