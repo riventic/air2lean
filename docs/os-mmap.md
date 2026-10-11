@@ -118,6 +118,16 @@ middle-range `munmap`.
 Runtime regressions of every rule and its negative cases: `tests/roadmap/os-mmap/Check.lean`
 (`lake env lean tests/roadmap/os-mmap/Check.lean`).
 
+## Full-state rules (`ZigLean/Sep/Full/Mmap.lean`)
+
+Over full-state resources with block extents (`docs/sep-full-state.md` §Block extents), a step
+that changes a mapping's size or live start needs the mapping's full extent `bext` and only the
+bytes it releases; the bytes that stay live may be anyone's. `FTotalTriple.munmapTail'` and
+`munmapPrefix'` (the unmapped pages' bytes), `mremapShrink'` (the cut bytes) and `mremapGrow'`
+(growth in place without `MAYMOVE`, from `bext` alone; the new bytes go to the caller) are proved
+from the general step `Holds.reblock`. A whole mapping (`mmap`, a whole `munmap`, a growth that
+may move) lifts from the rules above with the pinned bridge.
+
 ## Effect on the existing memory model
 
 `BlockKind` has the new kind `.mapped lo`; `Mem.access` and `Mem.heap` exclude offsets below

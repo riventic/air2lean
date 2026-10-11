@@ -356,6 +356,14 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
     region's cells with another size label and a kind of the same normal form: labels carry no
     information), `Mem.LiveDisjoint.addr_ne` (two live blocks share no byte address), `Junk` (one
     definition for every allocator), `sepN` (an indexed separating conjunction).
+* **Native OS mapping rules** (step 5, `ZigLean/Sep/Full/Mmap.lean`): one general step
+  `Holds.reblock` (a block's extent changes under its `bext`; the resource gives up exactly the
+  bytes that stop being live and gets those that become live; frame bytes keep their normalized
+  cells), `Holds.trim`, and the rules `FTotalTriple.munmapTail'`, `munmapPrefix'` (the live start
+  moves: a kind of the same normal form), `mremapShrink'` (each from `bext` and the released bytes
+  only) and `mremapGrow'` (growth in place without `MAYMOVE` from `bext` alone, `LDMono.grow` from
+  `Mem.mappingRoom`; the new bytes go to the caller). A whole mapping (`mmap`, a whole `munmap`, a
+  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
@@ -530,7 +538,7 @@ of tags:
 |---|---|---|---|
 | 1 | design | this section | done |
 | 2 | model | `Res.ext`, `bsize` in `know`, normalized `FMatch`, `Holds`; re-prove `Res`, `Triple`, `Atomic`, `AtomicPtr`, `AtomicRules`, `Disjoint`, `Ghost`, `Seq`, `Tame`, `Toy`, `Conc`, `Dispatch`; the two bridges | 1–2 phases |
-| 3 | OS rules | native full-state `mmap` (fresh `bext`), `munmap` whole/prefix/tail, `mremap` grow (`bext` only) and shrink (`bext` + tail), and move | 1 phase |
+| 3 | OS rules | native full-state `munmap` prefix/tail, `mremap` grow in place (`bext` only) and shrink (`bext` + tail); `mmap`, whole `munmap` and move through the pinned bridge | done |
 | 4 | spec | refined `FAllocSpec.resize`, old form as a corollary, `toLegacy` and wrappers adjusted | ½ phase |
 | 5 | re-proofs | FBA (`resize` from the token; `bsize` of the buffer; no pin byte), `PageSpec` linux+macOS (token = `bext` + tail), arena `free`/`resize`/`remap` (O-F from the slice's bytes and the node's extent share) | done |
 | 6 | arena `alloc` | patched arena for every `CAllocSpec` child (dispatch through `CVTable.dispatch` + `vtR`; `fits` per O-C); page child instance; O-G regression (`8`-byte grant, then `alloc(5000)`) | 2–3 phases |
