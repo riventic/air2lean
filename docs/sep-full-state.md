@@ -256,8 +256,8 @@ sequential run that compares the value it just read needs no address.
 ## Block extents (alloc M2 O-G)
 
 Status: design approved by the coordinator (2026-10-11), phases below. Phase 2 (the model and the
-Full layer) is in the code; the allocator re-proofs (FBA, page allocator, arena) follow, see the
-table. It replaces "frame cells carry their block's size".
+Full layer) is in the code, and the FixedBufferAllocator and the page allocator (Linux and macOS)
+are re-proved against the stronger `FAllocSpec`; the arena follows, see the table. It replaces "frame cells carry their block's size".
 
 **As implemented (phase 2).**
 
@@ -301,6 +301,16 @@ table. It replaces "frame cells carry their block's size".
   lifted `load`/`store` of `pts`. The FixedBufferAllocator is proved with them
   (`FBA.fallocSpec`): its invariant holds a share of the buffer block's extent at the buffer's
   end instead of a pin byte; a grant gets half of it, `free`/`resize` join it back.
+* **Pinned allocators** (`ZigLean/Sep/Full/Pinned.lean`): an allocator whose legacy token pins
+  its grant's block (`Pinned`: the token's cells lie in the block, record its extent, and the
+  block reaches the grant's end) gets the full-state token `pinnedInv`: the legacy token and the
+  block's authority with the fraction `q'` that the grant's share `q` leaves (`q' + q = 1`).
+  `pinned_free`/`pinned_resize`/`pinned_remap` turn its legacy total triples into `FAllocSpec`
+  fields: unlend the share into the full extent, run the pinned bridge, read the new extent back
+  from the post's cells (`upPost_bext`), lend half of it to the new grant (`pinned_lend`). The
+  page allocator (`PageSpec.pinned`, Linux and macOS) is proved this way; its `alloc` gets the new
+  mapping's extent from the bridge's post and keeps it through legacy read steps
+  (`CTriple.step_bext`). `PageSpec.inv_legacy` is gone with the wrapper contracts.
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and

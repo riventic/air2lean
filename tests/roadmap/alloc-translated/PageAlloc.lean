@@ -180,31 +180,54 @@ theorem lift_out {φ : Prop} (h : (P ⋆ (⟪φ⟫ ⋆ Q)) r) : (⟪φ⟫ ⋆ (P
   obtain ⟨hφ, hq⟩ := Full.sep_lift.mp hq
   exact Full.sep_lift.mpr ⟨hφ, ⟨r₁, r₂, hd, rfl, hp, hq⟩⟩
 
-theorem up_lift_out {φ : Prop} {X : Assn} (h : (P ⋆ up (⌜φ⌝ ∗ X)) r) : (⟪φ⟫ ⋆ (P ⋆ up X)) r :=
-  lift_out (sep_mono_right (fun _ y => Full.sep_lift.mpr (up_lift.mp y)) h)
+/-- The cells of a mapping lie in its block and record its extent. -/
+theorem mapping_cells {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} {h : Heap}
+    (hb : p.block = some b) (hm : mapping PageSpec.P p A lo bs h) {l : Loc} {c : Cell} (hl : h l = some c) :
+    l.1 = b ∧ c.size = lo + bs.size ∧ c.kind = .mapped lo := by
+  obtain ⟨e, hs, hk⟩ := bytesAt_of_cell hm.2.2.2.2 hl
+  rw [hb] at e
+  exact ⟨(Option.some.inj e).symm, hs, hk⟩
 
-/-- A legacy step that returns a known value `a`. -/
-theorem step_eq {H : FAssn} {X X' : Assn} {α β : Type} {c : MemM α} {a : α}
-    {f : α → ConcM Tgt β} {S : β → FAssn} (ht : TotalTriple X c (fun v => ⌜v = a⌝ ∗ X'))
-    (hc : Full.Tame c) (hf : CTriple (H ⋆ up X') (f a) S) :
-    CTriple (H ⋆ up X) (ConcM.liftMem c >>= f) S :=
-  CTriple.step ht hc fun _ => CTriple.pre (CTriple.lift fun hv => hv ▸ hf) fun _ h => up_lift_out h
+/-- A mapping owns a cell of its block. -/
+theorem mapping_cell {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} {h : Heap}
+    (hb : p.block = some b) (hm : mapping PageSpec.P p A lo bs h) :
+    ∃ x c, h (b, x) = some c ∧ c.size = lo + bs.size ∧ c.kind = .mapped lo := by
+  obtain ⟨b', hb', -, hl⟩ := hm.2.2.2.2
+  rw [hb] at hb'; cases hb'
+  refine ⟨p.off.toNat, ⟨bs[0]!, A, lo + bs.size, .mapped lo⟩, ?_, rfl, rfl⟩
+  rw [hl, if_pos ⟨rfl, Nat.le_refl _, by have := hm.2.1; omega⟩]
+  simp
+
+/-- A legacy step on a pinned mapping that returns a known value `a` and keeps the mapping. -/
+theorem step_eq {H : FAssn} {α β : Type} {c : MemM α} {a : α} {f : α → ConcM Tgt β}
+    {S : β → FAssn} {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} (hb : p.block = some b)
+    (ht : TotalTriple (mapping PageSpec.P p A lo bs) c (fun v => ⌜v = a⌝ ∗ mapping PageSpec.P p A lo bs))
+    (hc : Full.Tame c)
+    (hf : CTriple (H ⋆ (up (mapping PageSpec.P p A lo bs) ⋆ bext b (lo + bs.size) (.mapped lo))) (f a) S) :
+    CTriple (H ⋆ (up (mapping PageSpec.P p A lo bs) ⋆ bext b (lo + bs.size) (.mapped lo)))
+      (ConcM.liftMem c >>= f) S :=
+  CTriple.step_bext ht hc (fun _ hm _ _ hl => mapping_cells hb hm hl)
+    (fun _ _ hy => mapping_cell hb (Zig.sep_lift.mp hy).2) fun _ =>
+    CTriple.pre (CTriple.lift fun hv => hv ▸ hf) fun _ h => lift_out (sep_mono_right
+      (fun _ y => Full.sep_assoc (sep_mono_left (fun _ z => Full.sep_lift.mpr (up_lift.mp z)) y)) h)
 
 theorem swap_last (h : ((P ⋆ Q) ⋆ R) r) : ((P ⋆ R) ⋆ Q) r :=
   Full.sep_assoc' (Full.sep_mono_right (fun _ y => Full.sep_comm y) (Full.sep_assoc h))
 
 /-- An owned byte of block `b` with address `A` in the legacy part gives `know_intro`'s cell. -/
 theorem own_cell {X : Assn} {b : BlockId} {A : Nat} (hx : ∀ h, X h → OwnsIn b A h)
-    (h : (P ⋆ up X) r) : ∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A := by
-  obtain ⟨r₁, r₂, hd, rfl, -, hX, -⟩ := h
+    (h : (P ⋆ (up X ⋆ R)) r) : ∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A := by
+  obtain ⟨r₁, r₂₃, hd, rfl, -, r₂, r₃, hd', rfl, ⟨hX, -⟩, -⟩ := h
   obtain ⟨o, c, hc, hA⟩ := hx _ hX
   simp only [FHeap.erase, Option.map_eq_some_iff] at hc
   obtain ⟨fc, hfc, rfl⟩ := hc
   refine ⟨o, fc, ?_, hA⟩
-  show (r₁.heap (b, o)).or (r₂.heap (b, o)) = some fc
+  have h2 : (r₂.heap ∪ r₃.heap) (b, o) = some fc := by simp [hfc]
+  show (r₁.heap (b, o)).or ((r₂.heap ∪ r₃.heap) (b, o)) = some fc
   rcases hd (b, o) with e | e
-  · rw [e, hfc]; rfl
-  · rw [hfc] at e; cases e
+  · rw [e, h2]; rfl
+  · have e' : (r₂.heap ∪ r₃.heap) (b, o) = none := e
+    rw [h2] at e'; cases e'
 
 theorem rearr_final {φ : Prop} {X Hk K M : FAssn} (h : ((⟪φ⟫ ⋆ X) ⋆ ((Hk ⋆ K) ⋆ M)) r) :
     ((X ⋆ (K ⋆ M)) ⋆ Hk) r := by
@@ -246,25 +269,49 @@ theorem hintKn_heap (e : Option Ptr) (r : Res) (h : HintKn e r) : r.heap = FHeap
     show r₁.heap ∪ r₂.heap = FHeap.empty
     rw [h1, h2]; rfl
 
-/-- The state after a granted mapping: the hint points to it, and the caller owns it. -/
-theorem final_post {p : Ptr} {b : BlockId} {A L k : Nat} {all : Array Byte} {r : Res}
+/-- The state after a granted mapping: the hint points to it, and the caller owns it, with half
+of the mapping's extent lent to the grant (`pinned_lend`). -/
+theorem final_upd {p : Ptr} {b : BlockId} {A L k : Nat} {all : Array Byte}
     (hp : p.block = some b) (hoff : p.off = 0) (hA : A % P = 0) (hk : k ≤ 12)
-    (hsz : all.size = alignUp L P) (hfit : L + P ≤ 2 ^ 64)
-    (h : (aptsE hint (some p) ⋆ (known b A ⋆ up (mapping P p A 0 all))) r) :
-    ainv.allocPost L k (some p) r := by
+    (hsz : all.size = alignUp L P) (hfit : L + P ≤ 2 ^ 64) :
+    EUpd (aptsE hint (some p) ⋆ (known b A ⋆ (up (mapping P p A 0 all) ⋆
+      bext b (0 + all.size) (.mapped 0)))) (ainv.allocPost L k (some p)) := by
   have hA' : A % 4096 = 0 := hA
   have hal : (A + p.off.toNat) % 2 ^ k = 0 := by
     rw [hoff]
     exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk)
       (Nat.dvd_of_mod_eq_zero (by simpa using hA')))
   have hge := alignUp_ge L
-  refine Full.sep_mono (fun _ x => ⟨some p, Full.sep_mono_right (fun _ y =>
+  have h0 : p.off.toNat = 0 := by rw [hoff]; rfl
+  refine EUpd.trans (EUpd.of_imp fun r h => ?_) (EUpd.frameL (R := own) (pinned_lend (own := own)
+    (A := A) (S := 0 + all.size) (K := .mapped 0) (k := k) (bs := all.extract 0 L) PageSpec.pinned hp)) |>.trans (EUpd.of_imp fun r h => ?_)
+  · refine Full.sep_mono (fun _ x => ⟨some p, Full.sep_mono_right (fun _ y =>
       hintKn_some (Full.sep_lift.mpr ⟨⟨hp, by omega, by rw [hoff]; omega⟩, y⟩)) x⟩)
-    (fun r' y => (lift_granted_up (J := ainv) (I := legacy) (fun _ _ _ _ _ _ => rfl)).mpr (by
-      have hm : mapping P p A p.off.toNat all r'.heap.erase := by simpa [hoff] using y.1
-      exact up_ex.mpr ⟨all.extract 0 L, up_lift.mpr ⟨by simp; omega,
-        regrant hm hsz (by omega) hal, y.2⟩⟩))
-    (Full.sep_assoc' h)
+      (fun r' y => ?_) (Full.sep_assoc' h)
+    refine sep_mono_left (fun r'' z => ⟨?_, z.2⟩) y
+    have hm : mapping P p A p.off.toNat all r''.heap.erase := by simpa [hoff] using z.1
+    have := regrantIn (k := k) hm hsz (by omega) hal
+    rw [h0] at this
+    exact this
+  · exact Full.sep_mono_right (fun _ y => ⟨all.extract 0 L, Full.sep_lift.mpr ⟨by simp; omega, y⟩⟩) h
+
+/-- A new mapping, with its full extent from its cells (`upPost_bext`: it is a new block). -/
+theorem mmap_bext {H : FAssn} {s : Slice} {len : BitVec 64} :
+    EUpd (H ⋆ upPost (mmapPost P len (.ok s)) (fun _ => False) (fun _ => none))
+      (FAssn.ex fun A : Nat => FAssn.ex fun b => ⟪s.ptr.off = 0 ∧ s.ptr.block = some b⟫ ⋆
+        (H ⋆ (up (mapping P s.ptr A 0 (Array.replicate len.toNat (Byte.int 0))) ⋆
+          bext b (0 + (Array.replicate len.toNat (Byte.int 0)).size) (.mapped 0)))) := by
+  intro m r rF hh hr hs
+  obtain ⟨r₁, r₂, hd, rfl, h1, hp⟩ := hr
+  obtain ⟨-, ho, A, hm⟩ : mmapPost P len (.ok s) r₂.heap.erase := by
+    obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
+  obtain ⟨b, hb, -⟩ := PageSpec.mapping_block hm
+  obtain ⟨x, cl, hcl, hS, hK⟩ := mapping_cell hb hm
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hcl
+  obtain ⟨fc, hfc, rfl⟩ := hcl
+  obtain ⟨r', hh', hr'⟩ := (EUpd.frameL (EUpd.drop (fun _ h => h))) m _ rF hh
+    ⟨r₁, r₂, hd, rfl, h1, upPost_bext (hp.mono hm) ⟨x, fc, hfc, hS, hK, fun h => h.elim⟩⟩ hs
+  exact ⟨r', hh', A, b, Full.sep_lift.mpr ⟨⟨ho, hb⟩, hr'⟩⟩
 
 theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
     (hk : k ≤ 12) (hfit : len.toNat + 2 ^ k + P ≤ 2 ^ 64) :
@@ -322,39 +369,36 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
     refine CTriple.pre (P := aptsE hint (some (⟨some b, off⟩ : Ptr)) ⋆ HintKn (some (⟨some b, off⟩ : Ptr))) ?_
       fun r hr => Full.sep_mono_right (fun _ hk => hintKn_some (Full.sep_lift.mpr ⟨⟨rfl, ho, hal⟩, hk⟩)) hr
   all_goals
-    refine CTriple.pre (CTriple.step (X := Assn.emp) (TotalTriple.mmap Os.Target.linux _
+    refine CTriple.pre (CTriple.step (X := Assn.emp) (E := fun _ => none) (B := fun _ => False)
+      (TotalTriple.mmap Os.Target.linux _
       (BitVec.ofNat 64 (alignUp len.toNat P)) (by rw [hL]; exact alignUp_pos hlen))
-      (Full.Tame.mmap _ _ _ _ _ _ _) fun v => ?_)
-      fun r hr => Full.sep_mono_right (fun _ y => up_emp.mpr y) (Full.sep_emp.mpr hr)
+      (Full.Tame.mmap _ _ _ _ _ _ _) (fun _ he l _ hl => by rw [he] at hl; cases hl)
+      (fun _ _ _ _ _ _ _ h => by cases h) (SizeFree.of_pinned fun _ he l _ hl => by rw [he] at hl; cases hl)
+      (.inl fun _ h => h.elim) fun v => ?_)
+      fun r hr => Full.sep_mono_right (fun _ y => upE_none.mpr (up_emp.mpr y)) (Full.sep_emp.mpr hr)
     rcases v with err | s
     · simp only [isNonErr, isErr, Bool.not_true, Bool.false_eq_true, ↓reduceIte, unwrapErr,
         CNorm.liftMem_lift_pure, pure_bind]
-      exact CTriple.ret' none fun r hr =>
-        ⟨_, Full.sep_emp.mp (Full.sep_mono_right (fun _ y => up_pure y) hr)⟩
+      exact CTriple.eupd (EUpd.frameL EUpd.upPost_up) (CTriple.ret' none fun r hr =>
+        ⟨_, Full.sep_emp.mp (Full.sep_mono_right (fun _ y => up_pure y) hr)⟩)
     · simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, unwrapPayload,
         CNorm.liftMem_lift_pure, pure_bind]
-      refine CTriple.pre (P := FAssn.ex fun A : Nat => ⟪s.ptr.off = 0⟫ ⋆
-          ((aptsE hint _ ⋆ HintKn _) ⋆ up (mapping P s.ptr A 0
-            (Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0))))) ?_
-        fun r hr => by
-          obtain ⟨r₁, r₂, hd, rfl, h1, ⟨-, ho, A, hm⟩, hk⟩ := hr
-          exact ⟨A, Full.sep_lift.mpr ⟨ho, r₁, r₂, hd, rfl, h1, hm, hk⟩⟩
-      refine CTriple.ex fun A => CTriple.lift fun hso => ?_
-      refine CTriple.of_pure (φ := ∃ b, s.ptr.block = some b ∧ A % P = 0) (fun r hr => by
-        obtain ⟨-, r₂, -, -, -, hm, -⟩ := hr
-        obtain ⟨b, hb, -⟩ := PageSpec.mapping_block hm
-        exact ⟨b, hb, hm.2.2.1⟩) fun ⟨b, hb, hA⟩ => ?_
+      refine CTriple.eupd mmap_bext ?_
+      refine CTriple.ex fun A => CTriple.ex fun b => CTriple.lift fun ⟨hso, hb⟩ => ?_
+      refine CTriple.of_pure (φ := A % P = 0) (fun r hr => by
+        obtain ⟨-, r₂, -, -, -, r₃, -, -, -, hm, -⟩ := hr
+        exact hm.1.2.2.1) fun hA => ?_
       have hown : ∀ h, mapping P s.ptr A 0
           (Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0)) h →
           OwnsIn b A h := fun h hm => by
         obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hm
         rw [hb] at hb'; cases hb'; exact ho
       refine CTriple.know_intro (b := b) (A := A) (fun r hr => own_cell hown hr) ?_
-      refine CTriple.pre (step_eq (alignPointer_total hk hso) (tame_alignPointer hk _) ?_)
+      refine CTriple.pre (step_eq hb (alignPointer_total hk hso) (tame_alignPointer hk _) ?_)
         fun r hr => swap_last hr
       simp only [Option.isSome_some, ↓reduceIte, optPayload, CNorm.liftMem_lift_pure, pure_bind]
-      refine step_eq (addr64_total hb hown) (tame_addr64 _) ?_
-      refine step_eq (addr64_total hb hown) (tame_addr64 _) ?_
+      refine step_eq hb (addr64_total hb hown) (tame_addr64 _) ?_
+      refine step_eq hb (addr64_total hb hown) (tame_addr64 _) ?_
       simp only [divExact_self, CNorm.liftMem_lift_pure, pure_bind, bne_self_eq_false,
         Bool.false_eq_true, ↓reduceIte, Norm.sub_zero, gt_self]
       refine CTriple.pick_bind ?_
@@ -363,9 +407,9 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
       refine CTriple.bind (CTriple.liftMem
         (FTriple.cmpxchgPtr rfl hint _ (some s.ptr) .relaxed .relaxed).frame) fun _ => ?_
       refine CTriple.pre ?_ fun r hr => rearr_final hr
-      exact CTriple.forget (hintKn_heap _) (CTriple.ret' _ fun r hr =>
-        final_post (all := Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0))
-          hb hso hA hk (by rw [Array.size_replicate, hL]) (by omega) hr)
+      exact CTriple.forget (hintKn_heap _) (CTriple.eupd
+        (final_upd (all := Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0))
+          hb hso hA hk (by rw [Array.size_replicate, hL]) (by omega)) (CTriple.ret _))
 
 /-! ## The vtable -/
 

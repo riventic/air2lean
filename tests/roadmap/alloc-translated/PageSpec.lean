@@ -2,7 +2,7 @@ import AllocTranslated.PageLinux
 import ZigLean.Sep.Mmap
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
-import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Pinned
 import ZigLean.Sep.Full.Tame
 
 /-!
@@ -30,7 +30,10 @@ exactly the grant and the token. Addresses are page-aligned, and `n + P ≤ 2^64
 growth returns `false` (x86_64-linux never grows in place: the stack grows down). `remap` uses
 `mremap` with `MAYMOVE`: in place, moved to a fresh mapping, or `null` on `OutOfMemory`. The
 legacy total triples (`free_total`, `resize_total`, `remap_total`) lift to full-state ones because
-the entries are `Tame` (`ZigLean/Sep/Full/Tame.lean`), and the allocator state is framed.
+the token pins the grant's mapping (`pinned`): the full-state token also holds the mapping's
+extent authority, so each entry runs with the mapping's whole extent and gives half of the new one
+to the new grant (`ZigLean/Sep/Full/Pinned.lean`); the entries are `Tame`
+(`ZigLean/Sep/Full/Tame.lean`), and the allocator state is framed.
 -/
 
 namespace AllocTranslated.PageSpec
@@ -207,23 +210,32 @@ theorem free_total (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array 
 
 /-! ## Granting the start of a mapping -/
 
-/-- The first `n` bytes of a whole mapping whose live range ends at their page end, granted. -/
-theorem regrant {p : Ptr} {A k n : Nat} {all : Array Byte} {h : Heap}
+/-- The first `n` bytes of a whole mapping whose live range ends at their page end, granted, at
+the mapping's extent. -/
+theorem regrantIn {p : Ptr} {A k n : Nat} {all : Array Byte} {h : Heap}
     (hm : mapping P p A p.off.toNat all h) (hsz : all.size = alignUp n P)
     (hfit : n + P ≤ 2 ^ 64) (hal : (A + p.off.toNat) % 2 ^ k = 0) :
-    granted legacy p k (all.extract 0 n) h := by
+    (regionIn p A (p.off.toNat + all.size) (.mapped p.off.toNat) (2 ^ k) (all.extract 0 n) ∗
+      tok p (all.extract 0 n).size k A (p.off.toNat + all.size) (.mapped p.off.toNat)) h := by
   obtain ⟨hoff, -, hA, hlo, hb⟩ := hm
   have hge := alignUp_ge n
   have hr : regionIn p A (p.off.toNat + all.size) (.mapped p.off.toNat) (2 ^ k) all h :=
     ⟨hal, by simp, hb⟩
   obtain ⟨h₁, h₂, hd, rfl, h1, h2⟩ := regionIn_split hr (k := n) (a' := 1) (by omega) (Nat.mod_one _)
   have hn' : (all.extract 0 n).size = n := by simp; omega
-  refine ⟨A, _, _, h₁, h₂, hd, rfl, h1, all.extract n all.size, sep_lift.mpr ⟨⟨?_, rfl, ?_, hA, hlo,
+  refine ⟨h₁, h₂, hd, rfl, h1, all.extract n all.size, sep_lift.mpr ⟨⟨?_, rfl, ?_, hA, hlo,
     ?_, by rw [hn']; exact hfit⟩, ?_⟩⟩
   · omega
   · rw [hn', hsz]
   · rw [hn']; simp; omega
   · rw [hn']; exact h2
+
+/-- The first `n` bytes of a whole mapping whose live range ends at their page end, granted. -/
+theorem regrant {p : Ptr} {A k n : Nat} {all : Array Byte} {h : Heap}
+    (hm : mapping P p A p.off.toNat all h) (hsz : all.size = alignUp n P)
+    (hfit : n + P ≤ 2 ^ 64) (hal : (A + p.off.toNat) % 2 ^ k = 0) :
+    granted legacy p k (all.extract 0 n) h :=
+  ⟨A, _, _, regrantIn hm hsz hfit hal⟩
 
 theorem keepsPrefix_of {bs all : Array Byte} {n : Nat} (hp : all.extract 0 bs.size = bs) :
     keepsPrefix bs (all.extract 0 n) := by
@@ -502,12 +514,11 @@ theorem remap_total (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Arr
 
 open Zig.Full Zig.Full.FAssn in
 /-- The page allocator's invariant over full-state resources, for an allocator state `own`
-(the hint word with its atomic layout and the knowledge of the hinted mapping). `resize`,
-`remap` and `free` never touch it. -/
-def inv (own : FAssn) : FAllocInv where
-  own := own
-  tok p n k A S K := FAssn.up (tok p n k A S K)
-  fits := legacy.fits
+(the hint word with its atomic layout and the knowledge of the hinted mapping), which `resize`,
+`remap` and `free` never touch. A grant pins its mapping (`pinned`), so the token also holds the
+mapping's extent authority with the fraction that the grant's share leaves (`pinnedInv`,
+`ZigLean/Sep/Full/Pinned.lean`). -/
+def inv (own : FAssn) : FAllocInv := pinnedInv legacy own
 
 section Full
 
@@ -530,30 +541,26 @@ theorem tame_remap (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) :
   have := tame_realloc
   simp only [vt, heap_PageAllocator_remap]; gen_norm; tame
 
-variable {own : FAssn} {r : Res}
+/-- **A grant pins its mapping**: the token's cells (the rest of the last page) lie in the
+grant's block and record the mapping's extent, which reaches the grant's page end. -/
+theorem pinned : Pinned legacy where
+  own := rfl
+  cells p n k A S K h ht l c hl := by
+    obtain ⟨tail, hs⟩ := ht
+    obtain ⟨-, -, hb⟩ := (Zig.sep_lift.mp hs).2
+    exact bytesAt_of_cell hb hl
+  bound p n k A S K h ht := by
+    obtain ⟨tail, hs⟩ := ht
+    obtain ⟨⟨-, -, hS, -⟩, -⟩ := Zig.sep_lift.mp hs
+    have := alignUp_ge n; omega
 
-/-- The page allocator's invariant is the legacy one with the allocator state `own` added, so
-every `std.mem.Allocator` wrapper contract holds for it (`ZigLean/Sep/Full/Wrappers.lean`). -/
-theorem inv_legacy (own : FAssn) : LegacyTokens (inv own) legacy own :=
-  ⟨fun _ _ _ _ _ _ => rfl,
-    fun _ => ⟨fun h => sep_mono_right (fun _ y => up_emp.mpr y) (sep_emp.mpr h),
-      fun h => sep_emp.mp (sep_mono_right (fun _ y => up_emp.mp y) h)⟩,
-    fun _ _ => Iff.rfl⟩
-
-theorem pre_up {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : (own ⋆ (inv own).granted p k bs) r) : (own ⋆ up (granted legacy p k bs)) r :=
-  sep_mono_right (fun _ x => up_granted (I := legacy).mp x) h
-
-theorem post_own {X : FAssn} (h : (own ⋆ (up emp ⋆ X)) r) : (own ⋆ X) r :=
-  sep_mono_right (fun _ x => sep_emp.mp (sep_comm (sep_mono_left (fun _ y => up_emp.mp y) x))) h
+variable {own : FAssn}
 
 /-- **`free`** of a granted region: the region and its token go, the allocator state stays. -/
 theorem free_spec (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
     (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     FTotalTriple (own ⋆ (inv own).granted s.ptr k bs) (vt.free c s k ra) (fun _ => own) :=
-  (FLogic.total.frameL (R := own) (FTotalTriple.ofTotal (free_total c s k ra bs hs hpos)
-    (tame_free c s k ra))).conseq (fun _ h => pre_up h)
-    fun _ _ h => sep_emp.mp (sep_mono_right (fun _ y => up_emp.mp y) h)
+  pinned_free pinned (free_total c s k ra bs hs hpos) (tame_free c s k ra)
 
 /-- **`resize`**: in place, or `false` and nothing changed. -/
 theorem resize_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
@@ -561,11 +568,7 @@ theorem resize_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Arr
     (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     FTotalTriple (own ⋆ (inv own).granted s.ptr k bs) (vt.resize c s k n ra)
       ((inv own).resizePost s.ptr k bs n.toNat) :=
-  (FLogic.total.frameL (R := own) (FTotalTriple.ofTotal (resize_total c s k n ra bs hk hn hfit hs hpos)
-    (tame_resize c s k n ra))).conseq (fun _ h => pre_up h)
-    fun v _ h => by
-      have h' := sep_mono_right (fun _ y => up_resizePost (I := legacy) y) h
-      cases v <;> exact post_own h'
+  pinned_resize pinned hpos hn (resize_total c s k n ra bs hk hn hfit hs hpos) (tame_resize c s k n ra)
 
 /-- **`remap`**: in place, moved (`mremap` may move), or `null` and nothing changed. -/
 theorem remap_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
@@ -573,11 +576,7 @@ theorem remap_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Arra
     (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     FTotalTriple (own ⋆ (inv own).granted s.ptr k bs) (vt.remap c s k n ra)
       ((inv own).remapPost s.ptr k bs n.toNat) :=
-  (FLogic.total.frameL (R := own) (FTotalTriple.ofTotal (remap_total c s k n ra bs hk hn hfit hs hpos)
-    (tame_remap c s k n ra))).conseq (fun _ h => pre_up h)
-    fun v _ h => by
-      have h' := sep_mono_right (fun _ y => up_remapPost (I := legacy) y) h
-      cases v <;> exact post_own h'
+  pinned_remap pinned hpos hn (remap_total c s k n ra bs hk hn hfit hs hpos) (tame_remap c s k n ra)
 
 end Full
 
