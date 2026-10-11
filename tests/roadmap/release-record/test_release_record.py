@@ -82,11 +82,10 @@ class Repo(unittest.TestCase):
         git(self.repo, 'init', '-q')
         # No detached auto-gc/maintenance after `commit`: it can still be writing into .git when
         # the cleanup removes the repository (an ENOTEMPTY error that fails the test).
-        for key, value in (('gc.auto', '0'), ('maintenance.auto', 'false'), ('core.fsmonitor', 'false')):
+        for key, value in (('gc.auto', '0'), ('maintenance.auto', 'false'), ('core.fsmonitor', 'false'),
+                           ('user.email', 'test@example.invalid'), ('user.name', 'test'),
+                           ('commit.gpgsign', 'false')):
             git(self.repo, 'config', key, value)
-        git(self.repo, 'config', 'user.email', 'test@example.invalid')
-        git(self.repo, 'config', 'user.name', 'test')
-        git(self.repo, 'config', 'commit.gpgsign', 'false')
         self.write('reviewed.txt', 'reviewed\n')
         self.write('kept.txt', 'kept\n')
         self.reviewed = self.commit('baseline')
