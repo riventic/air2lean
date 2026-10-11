@@ -52,6 +52,8 @@ inductive Value where
   /-- The address of a register local (`regAlloc`): only `load` and `store` take it, which read
   and write the local's cell in the frame. Every other operation on it is stuck. -/
   | cell (id : InstId)
+  /-- A slice `[]T`: its item pointer and length (`Zig.Slice`). -/
+  | slice (s : Zig.Slice)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
@@ -342,6 +344,39 @@ def ptrOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Ptr × Nat) := do
     | _, _, _ => stuck
   | none => stuck
 
+/-- A plain slice type: not `volatile`, `allowzero` or with a sentinel. -/
+def plainSlice (f : Func) (t : TyId) : Bool :=
+  match f.types[t]?, f.layouts[t]? with
+  | some (.ptr size _ _), some l =>
+    size == "slice" && !l.isVolatile && !l.allowzero && l.hostSize == 0 && !l.sentinel
+  | _, _ => false
+
+/-- The slice operand `v`, with the alignment of its (plain) slice type. -/
+def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) := do
+  match operandTy env v with
+  | some t =>
+    match plainSlice f t, ptrAlignOf f t, ← operand f env v with
+    | true, some a, .slice s => pure (s, a)
+    | _, _, _ => stuck
+  | none => stuck
+
+/-- The item pointer of a slice or plain pointer operand. -/
+def itemBase (f : Func) (env : Env) (v : Val) : Result Zig.Ptr :=
+  match operandTy env v with
+  | some t => if plainSlice f t then do pure (← sliceOperand f env v).1.ptr
+    else do pure (← ptrOperand f env v).1
+  | none => stuck
+
+/-- The size of a type, and the alignment of an item of it behind a pointer of alignment `a`
+(an item of an `align(8)` pointer to `u32` is only 4-aligned). -/
+def itemLayout (f : Func) (t : TyId) (a : Nat) : Option (Nat × Nat) := do
+  let (size, align) ← layoutOf f t
+  pure (size, Nat.min a align)
+
+/-- A `u64` index operand. -/
+def indexOperand (f : Func) (env : Env) (v : Val) : Result (BitVec 64) := do
+  (← operand f env v).asInt 64
+
 /-- Load a value of the AIR type `t`. -/
 def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
   match tyOf f t with
@@ -388,6 +423,41 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
       let (q, _) ← StateT.lift (ptrOperand f env a)
       pure (.ptr q)
     else StateT.lift stuck
+  -- Pointer arithmetic is `getelementptr inbounds` (`Zig.ptrProject`, MM-3) by items of the
+  -- result's pointee.
+  | .ptrAdd sub p n => do
+    let (q, _) ← StateT.lift (ptrOperand f env p)
+    let k ← StateT.lift (indexOperand f env n)
+    match (pointee? f i.ty).bind (layoutOf f), f.plainPtr i.ty with
+    | some (size, _), true =>
+      do pure (.ptr (← Zig.ptrProject q (if sub then (·.elemSub size k) else (·.elem size k))))
+    | _, _ => StateT.lift stuck
+  | .elemPtr p idx => do
+    let base ← StateT.lift (itemBase f env p)
+    let k ← StateT.lift (indexOperand f env idx)
+    match (pointee? f i.ty).bind (layoutOf f), f.plainPtr i.ty with
+    | some (size, _), true => do pure (.ptr (← Zig.ptrProject base (·.elem size k)))
+    | _, _ => StateT.lift stuck
+  -- An item load reads the item pointer, without a projection of its own.
+  | .ptrElemVal p idx => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    let k ← StateT.lift (indexOperand f env idx)
+    match itemLayout f i.ty a with
+    | some (size, align) => loadAs f i.ty (q.elem size k) align
+    | none => StateT.lift stuck
+  -- An index at or past the length is illegal behaviour (`Zig.checkIndex`).
+  | .sliceElemVal sv idx => do
+    let (s, a) ← StateT.lift (sliceOperand f env sv)
+    let k ← StateT.lift (indexOperand f env idx)
+    match itemLayout f i.ty a with
+    | some (size, align) => do
+      Zig.checkIndex s k
+      loadAs f i.ty (s.ptr.elem size k) align
+    | none => StateT.lift stuck
+  | .sliceLen sv => do pure (.int false 64 (← StateT.lift (sliceOperand f env sv)).1.len)
+  | .slicePtr sv =>
+    if f.plainPtr i.ty then do pure (.ptr (← StateT.lift (sliceOperand f env sv)).1.ptr)
+    else StateT.lift stuck
   | .cmp op a b => do
     match ← StateT.lift (operand f env a) with
     | .ptr _ => do
@@ -411,6 +481,7 @@ def valOk (t : Ty) (v : Value) : Bool :=
   | .bool, .bool _ => true
   | .void, .void => true
   | .ptr size _ _, .ptr _ => size == "one" || size == "many"
+  | .ptr size _ _, .slice _ => size == "slice"
   | _, _ => false
 
 /-! ## Register locals
@@ -437,7 +508,8 @@ def regUse (a : InstId) : Op → Bool
   | .arith _ _ x y | .div _ x y | .minMax _ x y | .bit _ x y | .cmp _ x y | .boolAnd x y
   | .boolOr x y => clearOf a x && clearOf a y
   | .not x | .intCast x | .trunc x | .br _ x | .ret x | .bitcast x | .fieldPtr x _
-  | .condBr x _ _ => clearOf a x
+  | .condBr x _ _ | .sliceLen x | .slicePtr x => clearOf a x
+  | .ptrAdd _ x y | .elemPtr x y | .ptrElemVal x y | .sliceElemVal x y => clearOf a x && clearOf a y
   | .call c args => clearOf a c && args.toList.all (clearOf a ·)
   | .switchBr v cs _ => clearOf a v && cs.toList.all fun sc =>
       sc.items.toList.all (clearOf a ·) && sc.ranges.toList.all fun (l, h) => clearOf a l && clearOf a h
@@ -624,6 +696,11 @@ def Value.toBool : Value → Bool
   | .bool b => b
   | _ => false
 
+/-- The slice a `slice` value holds (the empty slice at `Zig.Ptr.null` for any other value). -/
+def Value.toSlice : Value → Zig.Slice
+  | .slice s => s
+  | _ => ⟨Zig.Ptr.null, 0⟩
+
 /-- The pointer a `ptr` value holds (`Zig.Ptr.null` for any other value). -/
 def Value.toPtr : Value → Zig.Ptr
   | .ptr p => p
@@ -651,8 +728,12 @@ theorem valOk_void {v : Value} (h : valOk .void v = true) : v = .void := by
   cases v <;> simp_all [valOk]
 
 theorem valOk_ptr {size : String} {c : Bool} {t : TyId} {v : Value}
-    (h : valOk (.ptr size c t) v = true) : v = .ptr v.toPtr := by
+    (h : valOk (.ptr size c t) v = true) (hs : size ≠ "slice") : v = .ptr v.toPtr := by
   cases v <;> simp_all [valOk, Value.toPtr]
+
+theorem valOk_slice {c : Bool} {t : TyId} {v : Value}
+    (h : valOk (.ptr "slice" c t) v = true) : v = .slice v.toSlice := by
+  cases v <;> simp_all [valOk, Value.toSlice]
 
 /-! ## Programs -/
 
@@ -1261,6 +1342,18 @@ theorem ptrProject_add_zero (p : Zig.Ptr) : Zig.ptrProject p (·.add 0) = pure p
   simp only [Zig.ptrProject, h, true_or, ite_true]
   rfl
 
+/-- An item projection by no bytes is the pointer itself (no instruction natively). -/
+theorem ptrProject_elem_zero (p : Zig.Ptr) (size : Nat) : Zig.ptrProject p (·.elem size 0) = pure p := by
+  have : (fun q : Zig.Ptr => q.elem size 0) = (·.add 0) := by
+    funext q; simp [Zig.Ptr.elem]
+  rw [this, ptrProject_add_zero]
+
+theorem ptrProject_elem_size_zero (p : Zig.Ptr) (k : BitVec 64) :
+    Zig.ptrProject p (·.elem 0 k) = pure p := by
+  have : (fun q : Zig.Ptr => q.elem 0 k) = (·.add 0) := by
+    funext q; simp [Zig.Ptr.elem]
+  rw [this, ptrProject_add_zero]
+
 /-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
 theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
 
@@ -1284,6 +1377,8 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
   regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
+  plainSlice sliceOperand itemBase itemLayout indexOperand Value.toSlice ptrProject_elem_zero
+  ptrProject_elem_size_zero Nat.min_def ite_self Nat.reduceLeDiff
   Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
   free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self
 

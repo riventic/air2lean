@@ -4190,6 +4190,8 @@ structure CertShape where
   loops : Array (InstId × Array (InstId × String))
   /-- Extra `Exit` constructors or `Locals` fields (dispatch loops, raw returns). -/
   other : Bool
+  /-- The `slice_len`s that also check a `for` loop's lengths (`Zig.forLen`). -/
+  forLen : Array InstId := #[]
   deriving Inhabited
 
 /-- The certificate shape of a function's emission context. -/
@@ -4200,7 +4202,10 @@ def FCtx.certShape (fc : FCtx) : CertShape :=
     loops := fc.allInsts.filterMap fun i => match i.op with
       | .loop _ => some (i.id, (fc.loopParams i).map fun (id, name, _) => (id, name))
       | _ => none,
-    other := !fc.dispatchTys.isEmpty || fc.rawRet }
+    other := !fc.dispatchTys.isEmpty || fc.rawRet,
+    forLen := fc.allInsts.filterMap fun i => match i.op with
+      | .sliceLen _ => (fc.forLenBound? i.id).map fun _ => i.id
+      | _ => none }
 
 /-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
 call groups (`callGroups`) in emission order: each group's member source names, the source

@@ -7,9 +7,15 @@ Needs `lake build Proofs.<Ex>.AirCert Air2Lean.Main` (every committed certificat
     certificates are not vacuous.
 (c) fixtures/caller: a non-recursive caller of a certified function (a path the committed
     examples do not exercise) gets `_complete` and `_eq`, and its fresh certificate checks.
+(d) Slices and pointer arithmetic: the Zig 0.15.2 files of tests/golden/slices (the example has
+    no committed certificate: its golden mixes versions) certify the expected functions, and the
+    fresh certificate checks.
 """
 import argparse
+import json
 import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -39,6 +45,37 @@ def lean(path):
                           text=True, timeout=1800)
 
 
+def check_module(gen, cert, tmp):
+    """Compile the generated module `gen` into `tmp`, then kernel-check the certificate `cert`."""
+    olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(gen.with_suffix('.olean')), str(gen)],
+                           cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert olean.returncode == 0, olean.stdout + olean.stderr
+    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumZ']
+
+
+def check_slices(binary, tmp):
+    air = tmp / 'slices-0.15.2'
+    air.mkdir()
+    for path in sorted((ROOT / 'tests/golden/slices/air').glob('*.json')):
+        if json.loads(path.read_text())['zig_version'] == '0.15.2':
+            shutil.copy(path, air / path.name)
+    gen, cert = tmp / 'SlicesGen.lean', tmp / 'SlicesCert.lean'
+    result = subprocess.run([str(binary), str(air), '-o', str(gen), '--namespace', 'Slices', '--prefix', 'slices.',
+                             '--profile', 'legacy-abi64-le',
+                             '--air-certificate', str(cert), '--air-certificate-import', 'SlicesGen'],
+                            capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    certified = re.findall(r'`([^`]+)`', re.search(r'^/-! Certified: (.*)$', cert.read_text(), re.M).group(1))
+    assert certified == SLICES_CERTIFIED, certified
+    check_module(gen, cert, tmp)
+    print(f'slices: {len(certified)} certified functions check')
+
+
 def check_caller(binary, tmp):
     gen, cert = tmp / 'CallerGen.lean', tmp / 'CallerCert.lean'
     result = subprocess.run([str(binary), str(ROOT / 'tests/roadmap/air-semantics/fixtures/caller'),
@@ -51,12 +88,7 @@ def check_caller(binary, tmp):
     text = cert.read_text()
     for name in ('scale_run', 'scaleTwice_sound', 'scaleTwice_complete', 'scaleTwice_eq'):
         assert f'theorem {name} ' in text, name
-    olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(tmp / 'CallerGen.olean'), str(gen)],
-                           cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert olean.returncode == 0, olean.stdout + olean.stderr
-    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
-                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert check.returncode == 0, check.stdout + check.stderr
+    check_module(gen, cert, tmp)
     print('caller fixture: scaleTwice_eq checks')
 
 
@@ -97,6 +129,7 @@ def main():
             assert errors and all(start < n <= end + 1 for n in errors[:1]), (theorem, errors, output[:2000])
             print(f'mutant {index}: {theorem} rejected')
         check_caller(args.binary, Path(tmp))
+        check_slices(args.binary, Path(tmp))
     print('AIR semantics Lean checks passed')
 
 

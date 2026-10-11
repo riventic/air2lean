@@ -104,6 +104,12 @@ partial def printOp : Op → Option String
   | .fieldPtr b idx => some s!"(.fieldPtr {printVal b} {idx})"
   | .bitcast a => some s!"(.bitcast {printVal a})"
   | .store p v => some s!"(.store {printVal p} {printVal v})"
+  | .ptrAdd sub p n => some s!"(.ptrAdd {bool sub} {printVal p} {printVal n})"
+  | .elemPtr p i => some s!"(.elemPtr {printVal p} {printVal i})"
+  | .ptrElemVal p i => some s!"(.ptrElemVal {printVal p} {printVal i})"
+  | .sliceElemVal sl i => some s!"(.sliceElemVal {printVal sl} {printVal i})"
+  | .sliceLen sl => some s!"(.sliceLen {printVal sl})"
+  | .slicePtr sl => some s!"(.slicePtr {printVal sl})"
   | .call c args => some s!"(.call {printVal c} {arr printVal args})"
   | .block b => return s!"(.block {← printBody b})"
   | .loop b => return s!"(.loop {← printBody b})"
@@ -189,8 +195,15 @@ def scalar? (f : Func) (t : TyId) : Option Scalar :=
     if f.plainPtr t then some {
       lean := "Zig.Ptr", enc := fun v => s!"(Value.ptr {v})",
       dec := fun i => s!"((args.getD {i} .void).toPtr)",
-      inv := "valOk_ptr", decVar := fun i => s!"v{i}.toPtr",
+      inv := "valOk_ptr (hs := by decide)", decVar := fun i => s!"v{i}.toPtr",
       decT := fun t => s!"(Value.toPtr {t})" }
+    -- A slice of a function in `Zig.MemM` (a pure function's `[]const T` is an `Array`;
+    -- `localReason` excludes it).
+    else if Sem.plainSlice f t then some {
+      lean := "Zig.Slice", enc := fun v => s!"(Value.slice {v})",
+      dec := fun i => s!"((args.getD {i} .void).toSlice)",
+      inv := "valOk_slice", decVar := fun i => s!"v{i}.toSlice",
+      decT := fun t => s!"(Value.toSlice {t})" }
     else none
   | _ => none
 
@@ -233,7 +246,8 @@ partial def allInsts (body : Array Inst) : Array Inst :=
 
 /-- Why one instruction is outside the certificate fragment (nested bodies are checked by
 `localReason`, which visits every instruction). -/
-def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Except String Unit := do
+def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array InstId) (i : Inst) :
+    Except String Unit := do
   let vals (vs : List Val) : Except String Unit :=
     unless vs.all (simpleVal f) do throw s!"inst {i.id}: an operand outside the fragment"
   let intRes : Except String Unit :=
@@ -251,6 +265,15 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
   let ptrVal (v : Val) : Except String TyId := do
     let some t := ptrOf v | throw s!"inst {i.id}: an access through a pointer outside the fragment"
     pure t
+  -- A slice operand: an instruction of a plain slice type.
+  let sliceOf (v : Val) : Option TyId := match v with
+    | .inst x => (tyOfInst x).filter (Sem.plainSlice f)
+    | _ => none
+  let sliceVal (v : Val) : Except String TyId := do
+    let some t := sliceOf v | throw s!"inst {i.id}: a slice outside the fragment"
+    pure t
+  -- 64-bit pointers: the translator's `Ptr.elem` (other widths use `Ptr.elemOf`).
+  let ptr64 (t : TyId) : Bool := (f.layouts[t]?.bind (·.size)) == some 8
   match i.op with
   | .arg _ | .line _ | .dbg .. | .unreach | .trap | .block _ => pure ()
   | .arith _ _ a b | .div _ a b | .minMax _ a b | .bit _ a b => do intRes; vals [a, b]
@@ -272,6 +295,26 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
   | .bitcast a => do
     let _ ← ptrVal a
     unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
+  | .ptrAdd _ p n | .elemPtr p n => do
+    unless (sliceOf p).isSome do let _ ← ptrVal p
+    vals [n]
+    unless typed (isIntTy f) n && f.plainPtr i.ty && ptr64 i.ty do
+      throw s!"inst {i.id}: pointer arithmetic outside the fragment"
+  | .ptrElemVal p n => do
+    let _ ← ptrVal p
+    vals [n]
+    unless typed (isIntTy f) n && memValTy f i.ty do throw s!"inst {i.id}: an item load outside the fragment"
+  | .sliceElemVal sl n => do
+    let _ ← sliceVal sl
+    vals [n]
+    unless typed (isIntTy f) n && memValTy f i.ty do throw s!"inst {i.id}: an item load outside the fragment"
+  | .sliceLen sl => do
+    let _ ← sliceVal sl
+    if forLen.contains i.id then throw s!"inst {i.id}: a `for` length check (`Zig.forLen`, not an AIR operation)"
+  | .slicePtr sl => do
+    let _ ← sliceVal sl
+    unless f.plainPtr i.ty do throw s!"inst {i.id}: a slice pointer outside the fragment"
+  | .slice .. => throw s!"inst {i.id}: a slicing (the translator checks its bounds, which no AIR operation does)"
   | .boolAnd a b | .boolOr a b => vals [a, b]
   | .not a => vals [a]
   | .intCast a | .trunc a => do intRes; vals [a]
@@ -296,15 +339,17 @@ def callsIn (f : Func) : Array String :=
     | _ => none
 
 /-- The local reason a function is outside the fragment, or its non-panic callees. -/
-def localReason (f : Func) : Except String (Array String) := do
+def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String (Array String) := do
   for p in f.params do
-    unless (scalar? f p).isSome do throw "a parameter that is not an integer, bool or plain pointer"
+    unless (scalar? f p).isSome do throw "a parameter that is not an integer, bool, plain pointer or slice"
+    if !mem && Sem.plainSlice f p then
+      throw "a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)"
   unless (retScalar? f f.ret).isSome do
     throw "a return type that is not an integer, bool, plain pointer or void"
   let insts := allInsts f.body
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let tyOfInst (x : InstId) := tys[x]?
-  for i in insts do instReason f tyOfInst i
+  for i in insts do instReason f tyOfInst forLen i
   unless (printFunc f).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
 
@@ -413,9 +458,11 @@ def fragment (funcs : Array Func) (memFuncs concFuncs : Array String)
     let reason := if concFuncs.contains f.name then .error "a concurrent function (`Zig.ConcM`)"
       else if budgeted.contains f.name then
         .error "a recursive function that uses memory (stack budget `Zig.enterFrame`, STK-01)"
-      else localReason f >>= fun cs => do
-        localsReason f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) (memFuncs.contains f.name)
-        pure cs
+      else
+        let sh := (shapes.find? (·.1 == f.name)).map (·.2) |>.getD default
+        localReason f (memFuncs.contains f.name) sh.forLen >>= fun cs => do
+          localsReason f sh (memFuncs.contains f.name)
+          pure cs
     match reason with
     | .ok cs => cands := cands.push (f, cs)
     | .error e => out := out.push (f.name, e)
@@ -628,6 +675,8 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   let mut lines : Array String := #[
     "-- air2lean AIR semantics certificate (docs/air-semantics.md). Generated; do not edit.",
     "import Air2Lean.Sem", s!"import {genModule}", "",
+    -- One simp set serves every function: an argument a function does not need is expected.
+    "set_option linter.unusedSimpArgs false", "",
     s!"namespace {ns}.AirCert", "", "open Air2Lean Air2Lean.Sem", "",
     "/-! Certified: " ++ (if frag.isEmpty then "(none)" else ", ".intercalate (frag.toList.map (s!"`{·.name}`"))),
     "", "Outside the certificate fragment:", ""]
