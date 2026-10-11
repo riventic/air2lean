@@ -403,7 +403,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     insts.any fun i =>
       let values := valueOperands i.op
-      memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.targetArch ||
+      memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.dialect.arch ||
       values.any Val.pointsToMem ||
       -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
       -- `checkUndefOperands` admits it as a pointer operand too.

@@ -64,11 +64,9 @@ def profile_for_air(doc):
         raise ValueError("profile string fields must not be empty or malformed")
     # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos,
     # 32-bit wasm32-freestanding/wasm32-wasi pointers or the 64-bit big-endian s390x-linux model
-    # (named `abi64-be-v1` by the translator), and a 1..32-bit error integer.
+    # (named `abi64-be-v1` by the exporter), and a 1..32-bit error integer.
     big = p["endian"] == "big"
-    if big and p["name"] == "abi64-be-v1":  # a translated header; raw AIR names every profile le
-        p = dict(p, name="abi64-le-v1")
-    if (p["name"] != "abi64-le-v1" or p["zig_version"] != version or
+    if (p["name"] != ("abi64-be-v1" if big else "abi64-le-v1") or p["zig_version"] != version or
             type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
             p["endian"] not in ("little", "big") or type(p["error_set_bits"]) is not int or
             not 0 < p["error_set_bits"] <= 32):
@@ -93,7 +91,7 @@ def profile_for_air(doc):
             p["float_mode"] != "per-instruction" or p["error_layout"] != "type-table" or
             p["export_stage"] != "analyzed-air"):
         raise ValueError("unsupported build/profile claim")
-    return dict(p, schema=schema, name="abi64-be-v1" if big else p["name"])
+    return dict(p, schema=schema)
 
 
 # Audited Zig 0.15.2/0.16.0 x86_64 baseline models, including sse2's sse dependency.

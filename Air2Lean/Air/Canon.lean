@@ -22,7 +22,7 @@ supported version, so one translation (and the proofs over it) serves all versio
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
    the meaning is the same). A `ptr_cast` to a whole-byte vector lane becomes 0.16.0's
    `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's `zig_version` does not
-   have (`versionTagReason?`), before the rename can make a misplaced tag look canonical.
+   have (`airTagReason?`), before the rename can make a misplaced tag look canonical.
 
 1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
    payload) to a read-only stack copy: `alloc`, one `store` of `v`, and `bitcast`s to a const
@@ -84,9 +84,14 @@ def tagsOnly017 : List String :=
 def tagsRemoved017 : List String :=
   ["bitcast", "intcast", "intcast_safe", "struct_field_val", "bool_and", "bool_or"]
 
-/-- Why `tag` cannot occur in an AIR file of `zigVersion`, if it cannot. -/
-def versionTagReason? (zigVersion tag : String) : Option String :=
-  if zigVersion == "0.17.0" then
+/-- The tag spelling of a `zig_version`. A version outside the registry, which `normalize`
+rejects later, reads as the 0.16.0 spelling. -/
+def airTagsOf (version? : Option ZigVersion) : ZigVersion.AirTags :=
+  (version?.map (·.airTags)).getD .base
+
+/-- Why `tag` cannot occur in an AIR file of the tag spelling `tags`, if it cannot. -/
+def airTagReason? (tags : ZigVersion.AirTags) (zigVersion tag : String) : Option String :=
+  if tags == .v017 then
     if tagsRemoved017.contains tag then
       some s!"is not a Zig 0.17.0 AIR tag (removed or renamed in 0.17.0)"
     else none
@@ -159,10 +164,11 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
 
 /-- `versionTags` (module doc). -/
 def versionTags (f : RawFunc) : Except String RawFunc := do
+  let tags := airTagsOf f.version?
   for i in flatten f.body do
-    if let some reason := versionTagReason? f.zigVersion i.tag then
+    if let some reason := airTagReason? tags f.profile.zigVersion i.tag then
       throw s!"{f.name}: inst {i.id}: tag '{i.tag}' {reason}"
-  if f.zigVersion != "0.17.0" then return f
+  if tags != .v017 then return f
   let f := laneElemPtrs f
   let boolTyped (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with

@@ -107,7 +107,10 @@ end
 
 structure RawFunc where
   schema : Nat
-  zigVersion : String
+  /-- `zig_version`, parsed once; `none` for a version outside `ZigVersion.all`, which
+  `normalize` rejects. Its spelling is `profile.zigVersion` (`BuildProfile.collect` checks the
+  profile's against the top-level one). -/
+  version? : Option ZigVersion
   profile : BuildProfile
   name : String
   params : Array TyId
@@ -788,9 +791,11 @@ def parseFuncWith (j : Json) (profile : BuildProfile) (allocatorModel : Allocato
   if schema ≥ 12 then Schema.validate j |>.mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM (parseTy · allocatorModel)
+  let version? := ZigVersion.ofString? zigVersion
   -- Zig 0.17.0 removed the `i0` type; one in a 0.17.0 file is a malformed export.
-  if zigVersion == "0.17.0" && types.any (· matches .int true 0) then
-    throw s!"{name}: type i0 does not exist in Zig 0.17.0"
+  if let some v := version? then
+    if !v.hasI0 && types.any (· matches .int true 0) then
+      throw s!"{name}: type i0 does not exist in Zig {v}"
   validateTypeGraph name types
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
@@ -828,7 +833,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) (allocatorModel : Allocato
     | none => pure none
   return {
     schema
-    zigVersion
+    version?
     profile
     name
     params

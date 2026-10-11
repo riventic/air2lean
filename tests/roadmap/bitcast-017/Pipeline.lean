@@ -89,7 +89,7 @@ private def require (test : Bool) (message : String) : IO Unit := do
 
 private def load (name : String) (src dst : Nat) (version : String) : IO Func := do
   match (do pure (← normalize (← Raw.parseFunc (file name src dst))) : Except String Func) with
-  | .ok f => pure { f with zigVersion := version }
+  | .ok f => pure { f with dialect := { f.dialect with version := (ZigVersion.ofString? version).get! } }
   | .error e => throw (IO.userError s!"{name}: {e}")
 
 private def verdict (f : Func) : Except String Unit := do
