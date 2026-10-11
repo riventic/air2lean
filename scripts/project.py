@@ -229,11 +229,17 @@ def load_manifest(path):
         if not isinstance(root['goals'], list):
             raise Invalid('goals must be a list')
         for goal in root['goals']:
-            obj(goal, ('theorem', 'strength', 'domain'))
+            obj(goal, ('theorem', 'strength', 'domain'), ('outcomes',))
             string(goal['theorem'])
             string(goal['domain'])
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
                 raise Invalid('invalid theorem strength')
+            if 'outcomes' in goal:
+                obj(goal['outcomes'], ('admits',))
+                try:
+                    outcomes.contract_admits(goal['strength'], goal['outcomes']['admits'])
+                except ValueError as error:
+                    raise Invalid(f'goal {goal["theorem"]}: {error}')
     return manifest, raw, limits
 
 
@@ -1150,6 +1156,11 @@ def coverage_level(record, require_export=False):
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
+    for goal in goals:
+        contract = goal['outcome_contract']
+        if contract['status'] == 'refuted':
+            blockers.append(f'goal {goal["theorem"]}: outcome contract refuted ({contract["reason"]}; '
+                            f'admits {", ".join(contract["admits"])})')
     for goal in direct:
         if not strength_supported(goal):
             caps = '; '.join(goal.get('caps') or [])
@@ -1257,6 +1268,8 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
         exclusions = list(root['exclusions']) + diff_exclusions
         if bundle is not None:
             exclusions += [f'proof receipt {k}: {v}' for k, v in bundle['trust'].items() if v and v != 'selected compiled Lean theorem dependency policy only']
+        for goal in goals:  # The outcome contract of each goal, judged against the sampled outcomes.
+            goal['outcome_contract'] = outcomes.contract(goal['strength'], (goal.get('outcomes') or {}).get('admits'), counts)
         record = {'id': root['id'], 'function': root['function'], 'input_validation': evidence['input_validation'],
                   'stages': stages, 'goals': goals,
                   'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'scope': g.get('scope'),
@@ -1297,6 +1310,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal over a universal domain; correct_if_returns needs a partial goal '
                       'with a liveness witness, full verification requires total_correctness.',
+                      'Each goal carries an outcome contract (scripts/outcomes.py): the outcomes it admits, by default values and error '
+                      'returns, or the `outcomes.admits` the manifest declares (never an outcome its strength rules out or an '
+                      'incomplete-evidence class). Sampled outcomes outside it refute the contract and block functional levels; '
+                      'incomplete evidence leaves it unassessed; evidence never proves it.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
                       'analyzed and exported pass only from an I07 artifact manifest whose source, compiler_patch, air and '
                       'profile links recompute to the recorded digests and whose air/source files include this root\'s '
@@ -1321,6 +1338,7 @@ def coverage_text(result):
             lines.append(f'  {name:<11} {entry["status"]:<8} {entry.get("reason", entry.get("code", ""))}')
         for goal in root['goals']:
             lines.append(f'  goal {goal["theorem"]} [{goal["strength"]}] domain: {goal["domain"]} -> {goal["binding"]}')
+            lines.append(f'    outcome contract: {goal["outcome_contract"]["status"]} (admits {", ".join(goal["outcome_contract"]["admits"])})')
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])

@@ -594,6 +594,64 @@ class CoverageTests(unittest.TestCase):
         self.diff.write_text(json.dumps({'schema': 1, 'complete': False}))
         self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')
 
+    def diff_row(self, status, model_kind):
+        return {'schema': 1, 'example': 'example', 'function': 'root', 'status': status, 'model_kind': model_kind}
+
+    def test_goal_outcome_contracts(self):
+        goal = self.manifest['roots'][0]['goals'][0]
+        # Default contract: values and error returns; clean evidence refutes nothing and proves nothing.
+        contract = self.run_coverage()['goals'][0]['outcome_contract']
+        self.assertEqual((contract['status'], contract['source']), ('not_refuted', 'default for total_correctness'))
+        self.assertEqual(contract['admits'], ['error_return', 'nondeterministic_valid', 'valid'])
+        self.assertEqual(self.run_coverage(diff=False)['goals'][0]['outcome_contract']['status'], 'no_evidence')
+        # An error return is an admitted outcome of its own, never a model failure.
+        self.write_diff([self.diff_row('error_return_match', 'error_return')])
+        root = self.run_coverage()
+        self.assertEqual(root['goals'][0]['outcome_contract']['status'], 'not_refuted')
+        self.assertEqual(root['level'], 'functionally_verified_total')
+        # An observed panic is outside the default contract: refuted, and it blocks the functional level.
+        self.write_diff([self.diff_row('panic_match', 'model_panic')])
+        root = self.run_coverage()
+        contract = root['goals'][0]['outcome_contract']
+        self.assertEqual((contract['status'], contract['violations']), ('refuted', {'panic': 1}))
+        self.assertTrue(any('outcome contract refuted' in b for b in root['blockers']), root['blockers'])
+        self.assertNotFunctional(root)
+        # A contract documenting the panic admits it, but not under a strength that rules it out.
+        for strength, level_ok in (('resource_bound', True), ('safety', False)):
+            goal.update(strength=strength, outcomes={'admits': ['valid', 'error_return', 'panic']})
+            self.save()
+            if level_ok:
+                self.rebuild_artifact()
+                contract = self.run_coverage()['goals'][0]['outcome_contract']
+                self.assertEqual((contract['status'], contract['source']), ('not_refuted', 'declared'))
+            else:
+                with self.assertRaises(project.Invalid):
+                    project.load_manifest(self.path)
+        # A narrowed contract is refuted by an error return it does not admit.
+        goal.update(strength='total_correctness', outcomes={'admits': ['valid']})
+        self.save()
+        self.rebuild_artifact()
+        self.write_diff([self.diff_row('error_return_match', 'error_return')])
+        root = self.run_coverage()
+        self.assertEqual(root['goals'][0]['outcome_contract']['violations'], {'error_return': 1})
+        self.assertNotFunctional(root)
+        # Capped, fuel-bounded, unsupported and unspecified evidence leave the contract unassessed.
+        for kind, status in (('search_cap', 'search_cap'), ('unspecified_timer', 'unspecified_timer_exclusion'),
+                             ('bounded_no_result', 'bounded_no_result')):
+            self.write_diff([self.diff_row('value_match', 'value'), self.diff_row(status, kind)])
+            self.assertEqual(self.run_coverage()['goals'][0]['outcome_contract']['status'], 'unassessed', kind)
+
+    def test_invalid_outcome_contract_declarations_are_refused(self):
+        goal = self.manifest['roots'][0]['goals'][0]
+        for declared in ({'admits': []}, {'admits': ['nope']}, {'admits': ['valid', 'valid']}, {'admits': ['search_cap']},
+                         {'admits': ['unsupported_semantics']}, {'admits': ['unspecified_timer']}, {'admits': ['deadlock']},
+                         {'admits': 'valid'}, {}, {'admits': ['valid'], 'extra': 1}):
+            with self.subTest(declared=declared):
+                goal['outcomes'] = declared
+                self.save()
+                with self.assertRaises(project.Invalid):
+                    project.load_manifest(self.path)
+
     def test_absence_claims_from_outcome_taxonomy(self):
         root = self.run_coverage()
         self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},

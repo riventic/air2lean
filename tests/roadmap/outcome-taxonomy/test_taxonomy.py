@@ -263,5 +263,38 @@ class ClaimsEvidenceTests(unittest.TestCase):
         self.assertEqual(code, 2, err)
 
 
+class ContractTests(unittest.TestCase):
+    """The taxonomy as a contract vocabulary (V06): what a goal admits, judged against outcome counts."""
+
+    def test_default_contract_admits_values_and_error_returns_only(self):
+        for strength in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
+            self.assertEqual(outcomes.contract_admits(strength, None), {O.VALID, O.NONDETERMINISTIC_VALID, O.ERROR_RETURN})
+
+    def test_declarations_are_validated(self):
+        self.assertEqual(outcomes.contract_admits('resource_bound', ['valid', 'panic', 'deadlock']),
+                         {O.VALID, O.PANIC, O.DEADLOCK})
+        # Divergence is incomplete evidence (fuel ran out), never an admitted program outcome.
+        for strength, declared in (('total_correctness', ['divergence']), ('safety', ['panic']),
+                                   ('safety', ['search_cap']), ('safety', ['unspecified_timer']),
+                                   ('safety', ['unsupported_semantics']), ('safety', ['bogus']),
+                                   ('safety', []), ('safety', ['valid', 'valid']), ('safety', 'valid')):
+            with self.assertRaises(ValueError, msg=(strength, declared)):
+                outcomes.contract_admits(strength, declared)
+
+    def test_evidence_only_refutes(self):
+        verdict = lambda counts, declared=None: outcomes.contract('total_correctness', declared, counts)['status']
+        self.assertEqual(verdict({}), 'no_evidence')
+        self.assertEqual(verdict({'valid': 4, 'error_return': 2}), 'not_refuted')
+        self.assertEqual(verdict({'valid': 4, 'panic': 1}), 'refuted')
+        self.assertEqual(verdict({'error_return': 1}, ['valid']), 'refuted')
+        self.assertEqual(verdict({'valid': 1, 'search_cap': 1}), 'unassessed')
+        self.assertEqual(verdict({'valid': 1, 'unspecified_timer': 1}), 'unassessed')
+        self.assertEqual(verdict({'panic': 1, 'search_cap': 1}), 'refuted')
+
+    def test_every_outcome_is_a_contract_outcome_or_incomplete_evidence(self):
+        self.assertEqual(outcomes.CONTRACT_OUTCOMES | outcomes.INCOMPLETE, set(O))
+        self.assertFalse(outcomes.CONTRACT_OUTCOMES & outcomes.INCOMPLETE)
+
+
 if __name__ == '__main__':
     unittest.main()

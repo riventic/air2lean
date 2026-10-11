@@ -84,7 +84,9 @@ module its contracts import (hashed like every other input; required by `check`)
 IDs are letters followed by letters, digits, underscores or hyphens. Namespaces are
 ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a theorem
 name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
-`total_correctness`, `resource_bound` or `correspondence`. Every root assumption must occur
+`total_correctness`, `resource_bound` or `correspondence`, and may declare its outcome contract
+`"outcomes": {"admits": [...]}` with names from the [outcome taxonomy](outcome-taxonomy.md#goal-outcome-contracts).
+Every root assumption must occur
 in `allowed_assumptions`. These are declarations for review, not discovered theorem
 premises or checked contracts. `scripts/claims.py check` separately rejects a goal whose
 declared strength exceeds the strength derived from its audited theorem type
@@ -269,7 +271,7 @@ axioms, opaque, extern and compiler-redirection dependencies of direct theorems)
 `exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
 `not_attested` trust fields). `outcomes` counts the root's differential cases and
 exporter-marked unsupported AIR in the shared [outcome taxonomy](outcome-taxonomy.md);
-`absence_claims` reports `no-panic` and `guaranteed-return` as `proved`, `refused` or
+each goal's `outcome_contract` (admitted outcomes, observed counts, `refuted`, `unassessed`, `not_refuted` or `no_evidence`; a refuted contract is a blocker); `absence_claims` reports `no-panic` and `guaranteed-return` as `proved`, `refused` or
 `not_proved`. Only a direct goal of matching strength proves one; a capped search, fuel-bounded
 no-result run, unspecified result, unsupported timer (`unspecified_timer`) or unsupported outcome, or an observed
 failure the claim denies, refuses it and adds a blocker, so the root cannot reach

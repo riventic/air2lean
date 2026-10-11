@@ -56,6 +56,27 @@ constructor: generated `time.Timer.start`/`.read`/`Thread.Futex.timedWait` calls
 timed scheduler's no-clock, wrong-clock and unselected-timeout paths throw it instead of
 `.unspecified`.
 
+## Goal outcome contracts
+
+The taxonomy is also the vocabulary of contracts, not only of reports. Every manifest goal has an
+outcome contract: the set of outcomes it admits. Undeclared, it is the default of every strength:
+`valid`, `nondeterministic_valid` and `error_return` (a returned error is an admitted outcome of its
+own, never a model failure); failures are admitted only by declaration. A goal may declare
+`"outcomes": {"admits": ["valid", "error_return", "panic"]}` to document a function that panics on
+bad input, or `["valid"]` to say it never returns an error. The manifest is refused (fail closed) when
+a declaration names an unknown or duplicate outcome, is empty, admits an outcome its own strength
+rules out (`safety` and `partial_correctness` rule out the failures of `no-panic`;
+`total_correctness` adds `divergence`), or admits an incomplete-evidence class (`search_cap`,
+`divergence`, `unspecified_behavior`, `unspecified_timer`, `unsupported_semantics`), which are
+properties of the evidence or the model, not of a program.
+
+`project.py coverage` judges each goal's contract against the root's outcome counts
+(`goals[].outcome_contract`): `refuted` when an outcome it does not admit was observed (a blocker for
+`correct_if_returns` and `functionally_verified_total`), `unassessed` when an incomplete class was
+observed, `no_evidence` without differential cases, else `not_refuted`. Sampled evidence never proves
+a contract, and the contract is separate from correspondence: it neither relies on nor establishes
+native agreement.
+
 ## Validation
 
 ```sh
