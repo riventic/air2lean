@@ -209,15 +209,18 @@ def call(command, **kwargs):
 import yaml
 
 workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
-# The Q05 `macos` and T04 `aarch64-linux` jobs need native runners; local CI (an x86_64 Linux
-# container) reproduces only the test job, and scripts/release-record.py requires GitHub evidence
-# for their gates.
-if set(workflow['jobs']) - {'macos', 'aarch64-linux'} != {'test'}:
-    raise ValueError('local CI supports only the test job (and skips macos, aarch64-linux); '
-                     'qualify new jobs explicitly')
+# The Q05 `macos`, T04 `aarch64-linux`, T06 `build-modes-aarch64-linux` and L02 `bitops-native-arm` jobs need native runners;
+# local CI (an x86_64 Linux container) reproduces only the test job, and
+# scripts/release-record.py requires GitHub evidence for their gates. `lake` only pre-builds the
+# cache that the test rows restore (local-ci.sh --prepare builds it here), and `all-checks` only
+# aggregates job results.
+SKIPPED_JOBS = {'macos', 'aarch64-linux', 'build-modes-aarch64-linux', 'bitops-native-arm', 'lake', 'all-checks'}
+if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
+    raise ValueError('local CI supports only the test job (and skips %s); '
+                     'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
 job = workflow['jobs']['test']
 if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow
-        or set(job) - {'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
+        or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
         or set(job['strategy']) - {'fail-fast', 'matrix'}
         or set(job['strategy']['matrix']) != {'include'}):
     raise ValueError('unsupported CI runner, defaults or workflow environment')
@@ -258,7 +261,7 @@ setup = {
     ''').strip(),
     'Build patched zig': 'zig-patch/build.sh ${{ matrix.zig }} || zig-patch/build.sh ${{ matrix.zig }}',
 }
-allowed_actions = {'actions/checkout', 'actions/cache', 'actions/upload-artifact'}
+allowed_actions = {'actions/checkout', 'actions/cache', 'actions/cache/restore', 'actions/upload-artifact'}
 for step in job['steps']:
     if set(step) - {'name', 'id', 'if', 'env', 'run', 'uses', 'with'}:
         raise ValueError(f"unsupported CI step fields: {step['name']}")
@@ -274,7 +277,7 @@ for step in job['steps']:
             raise ValueError(f"changed tool setup environment/guard: {step['name']}")
 
 for number, row in enumerate(rows):
-    if set(row) - {'zig', 'examples', 'full', 'mutate', 'shard'}:
+    if set(row) - {'zig', 'part', 'examples', 'full', 'mutate', 'shard'}:
         raise ValueError('unsupported matrix row fields')
     call(['git', 'restore', '.'])
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
