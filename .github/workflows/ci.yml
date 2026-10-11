@@ -465,6 +465,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
+      # tree by scripts/generated.py install. Before the reuse decision, so untraced: a traced
+      # step that reads one needs a whole-tree declaration (docs/ci.md).
+      - name: Download the generated files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-files
+          path: ${{ runner.temp }}/generated-files
+
+      - name: Install the generated files
+        run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
+
+      # System packages that some parts run, installed before the traced steps (strace's seccomp
+      # filter sets no_new_privs, so sudo cannot run under the tracer). Their versions come from
+      # the runner image's apt sources, like the image itself (part of every key).
+      - name: Install system packages
+        if: ${{ matrix.part == 'inputs' || matrix.part == 'native' && !matrix.mutate || matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          if [ '${{ matrix.part }}' = inputs ]; then
+            sudo apt-get install --no-install-recommends -y -qq ripgrep
+          else
+            sudo apt-get install --no-install-recommends -y -qq qemu-user-static
+          fi
+
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that
       # run); otherwise the part runs, traced on Linux, and records its result when it passes.
@@ -474,19 +500,6 @@ jobs:
           AIR2LEAN_EVENT: ${{ github.event_name }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job test --row "$AIR2LEAN_ROW"
-
-      # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
-      # tree by scripts/generated.py install.
-      - name: Download the generated files
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: generated-files
-          path: ${{ runner.temp }}/generated-files
-
-      - name: Install the generated files
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
 
       - name: Offline compiler inventory regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -1304,10 +1317,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/roadmap/flow-time/test_provenance.py
-          if ! command -v rg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install --no-install-recommends -y ripgrep
-          fi
           bash scripts/flow-time.sh --check-artifacts
 
       # The portable gate checks all supported synthetic signatures without invoking Zig.
@@ -1745,8 +1754,6 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-user-static
           lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
           bash tests/roadmap/big-endian/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-big-endian-source.XXXXXX")
@@ -2040,8 +2047,6 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.14.1' || !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
           python3 -B tests/roadmap/bitops-native/gen.py --check
           python3 -B tests/roadmap/bitops-native/qualify.py check
           lake build ZigLean Air2Lean air2lean

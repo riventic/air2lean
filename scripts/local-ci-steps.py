@@ -224,7 +224,9 @@ job = workflow['jobs']['test']
 # CI-only reuse machinery (docs/ci.md): the reuse decision, the in-run artifact unpacking that
 # local-ci.sh --prepare replaces (and `scripts/generated.py materialize` for the generated files), and the trace coverage and record steps. Local CI never reuses,
 # traces or records; scripts/release-record.py does not count these steps as gates.
+# The image (Dockerfile.local-ci) provides the system packages CI installs before tracing.
 ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build', 'Install the generated files',
+           'Install system packages',
            'Declared inputs cover every observation', 'Record the result for reuse'}
 # The traced shell is GitHub's bash when AIR2LEAN_TRACE_DIR is unset, as it is here.
 traced_shell = {'run': {'shell': 'bash scripts/ci-trace.sh {0}'}}
