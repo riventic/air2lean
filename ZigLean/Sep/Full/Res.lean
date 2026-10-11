@@ -188,18 +188,41 @@ def TagSat (sh : List Shape) (b x : Nat) : Option (Nat × Nat) → Prop
   | none => True
   | some s => tagOf sh b x = none ∨ tagOf sh b x = some s
 
-/-- The full heap `h` matches `m`: its cells are exactly `m`'s live bytes, and each of its bytes
-meets its atomic tag constraint. -/
+/-- A block kind without its mapping start. -/
+def _root_.Zig.BlockKind.norm : BlockKind → BlockKind
+  | .mapped _ => .mapped 0
+  | k => k
+
+/-- A cell without its block's size and mapping start: the byte, the block's address (which
+never changes) and the kind's constructor. A frame's cell pins only this, so the owner of a
+block's extent (`bext`) can resize it under the frame (`docs/sep-full-state.md` §Block extents). -/
+def _root_.Zig.Cell.norm (c : Cell) : Cell := { c with size := 0, kind := c.kind.norm }
+
+/-- The full heap `h` matches `m`: its cells are `m`'s live bytes up to their block's size and
+mapping start (`Cell.norm`), and each of its bytes meets its atomic tag constraint. -/
 def FMatch (m : Mem) (h : FHeap) : Prop :=
-  m.heap = h.erase ∧ ∀ l fc, h l = some fc → TagSat (shapes m) l.1 l.2 fc.atom
+  (∀ l, (m.heap l).map Cell.norm = (h l).map fun fc => fc.cell.norm) ∧
+    ∀ l fc, h l = some fc → TagSat (shapes m) l.1 l.2 fc.atom
 
 theorem FMatch.cell {m : Mem} {h : FHeap} (hm : FMatch m h) {l : Loc} {fc : FCell}
-    (hl : h l = some fc) : m.heap l = some fc.cell := by
-  rw [hm.1]; simp [FHeap.erase, hl]
+    (hl : h l = some fc) : ∃ c, m.heap l = some c ∧ c.norm = fc.cell.norm := by
+  have := hm.1 l
+  rw [hl] at this
+  cases e : m.heap l with
+  | none => rw [e] at this; cases this
+  | some c => rw [e] at this; exact ⟨c, rfl, Option.some.inj this⟩
+
+theorem FMatch.none {m : Mem} {h : FHeap} (hm : FMatch m h) {l : Loc} (hl : h l = none) :
+    m.heap l = none := by
+  have := hm.1 l
+  rw [hl] at this
+  cases e : m.heap l with
+  | none => rfl
+  | some c => rw [e] at this; cases this
 
 /-- A memory's own full heap (exact tags) matches it. -/
 theorem FMatch.fheap (m : Mem) : FMatch m m.fheap := by
-  refine ⟨(fheap_erase m).symm, fun l fc hl => ?_⟩
+  refine ⟨fun l => by simp only [Mem.fheap, Option.map_map]; rfl, fun l fc hl => ?_⟩
   simp only [Mem.fheap, Option.map_eq_some_iff] at hl
   obtain ⟨c, -, rfl⟩ := hl
   cases e : tagOf (shapes m) l.1 l.2 with
@@ -351,32 +374,131 @@ theorem Valid.of_add {a b : GCell} (h : (a.add b).Valid) : a.Valid := by
 
 end GCell
 
-/-- Ghost names (`GName := Nat`) to ledgers. -/
-abbrev Ghost := Nat → GCell
+/-! ## Block extents (`docs/sep-full-state.md` §Block extents)
+
+A block's extent (liveness, size, kind with its mapping start) is a resource, not a property of
+the bytes: cells are compared without it (`Cell.norm`, `FMatch`). Per block, an `ECell` holds
+authority claims `auth (S, K)` (the exact extent; exclusive, `ECell.Valid`) and fractional
+lower-bound shares `sh k` (the block is live with at least `k` bytes). The full extent `bext b S
+K` is the authority with all of the fraction (`1`, at bound `0`): only it may shrink or end the
+block, and then no other resource holds a share. Shares split off the authority (`bshare`) let a
+client keep "the block has at least `off + n` bytes" while it holds a grant. -/
+
+/-- A nonnegative fraction. -/
+structure Frac where
+  val : Rat
+  nonneg : 0 ≤ val
+
+namespace Frac
+
+theorem eq {a b : Frac} (h : a.val = b.val) : a = b := by
+  cases a; cases b; simp only at h; subst h; rfl
+
+def zero : Frac := ⟨0, Rat.le_refl⟩
+
+def one : Frac := ⟨1, by decide⟩
+
+def add (a b : Frac) : Frac := ⟨a.val + b.val, by have := a.nonneg; have := b.nonneg; grind⟩
+
+theorem add_comm (a b : Frac) : a.add b = b.add a := eq (by simp only [add]; grind)
+
+theorem add_assoc (a b c : Frac) : (a.add b).add c = a.add (b.add c) := eq (by simp only [add]; grind)
+
+@[simp] theorem add_zero (a : Frac) : a.add zero = a := eq (by simp only [add, zero]; grind)
+
+@[simp] theorem zero_add (a : Frac) : zero.add a = a := eq (by simp only [add, zero]; grind)
+
+end Frac
+
+/-- The extent claims on one block: authority claims `(S, K) ↦ count` and the fraction held at
+each lower bound. -/
+@[ext] structure ECell where
+  auth : Nat × BlockKind → Nat
+  sh : Nat → Frac
+
+namespace ECell
+
+def unit : ECell := ⟨fun _ => 0, fun _ => Frac.zero⟩
+
+def add (a b : ECell) : ECell := ⟨fun x => a.auth x + b.auth x, fun k => (a.sh k).add (b.sh k)⟩
+
+theorem add_comm (a b : ECell) : a.add b = b.add a := by
+  ext x <;> simp [add, Nat.add_comm, Frac.add_comm]
+
+theorem add_assoc (a b c : ECell) : (a.add b).add c = a.add (b.add c) := by
+  ext x <;> simp [add, Nat.add_assoc, Frac.add_assoc]
+
+@[simp] theorem add_unit (a : ECell) : a.add unit = a := by ext x <;> simp [add, unit]
+
+@[simp] theorem unit_add (a : ECell) : unit.add a = a := by ext x <;> simp [add, unit]
+
+/-- The fraction held at the bounds below `n`. -/
+def total (c : ECell) : Nat → Rat
+  | 0 => 0
+  | n + 1 => c.total n + (c.sh n).val
+
+theorem total_nonneg (c : ECell) : ∀ n, 0 ≤ c.total n
+  | 0 => Rat.le_refl
+  | n + 1 => by have := total_nonneg c n; have := (c.sh n).nonneg; simp only [total]; grind
+
+theorem total_add (a b : ECell) : ∀ n, (a.add b).total n = a.total n + b.total n
+  | 0 => by simp only [total]; grind
+  | n + 1 => by have := total_add a b n; simp only [total, add, Frac.add] at *; grind
+
+/-- At most one authority claim, held once, and at most the whole fraction. -/
+def Valid (c : ECell) : Prop :=
+  (∀ x, c.auth x ≤ 1) ∧ (∀ x y, 0 < c.auth x → 0 < c.auth y → x = y) ∧ ∀ n, c.total n ≤ 1
+
+theorem Valid.of_add {a b : ECell} (h : (a.add b).Valid) : a.Valid := by
+  obtain ⟨h1, h2, h3⟩ := h
+  refine ⟨fun x => ?_, fun x y hx hy => h2 x y ?_ ?_, fun n => ?_⟩
+  · have := h1 x; simp only [add] at this; omega
+  · simp only [add]; omega
+  · simp only [add]; omega
+  · have := h3 n; rw [total_add] at this; have := total_nonneg b n; grind
+
+theorem valid_unit : unit.Valid :=
+  ⟨fun _ => Nat.zero_le _, fun _ _ h => absurd h (Nat.lt_irrefl 0), fun n => by
+    have : ∀ n, unit.total n = 0 := fun n => by
+      induction n with
+      | zero => rfl
+      | succ n ih => simp only [total, ih]; show (0 : Rat) + 0 = 0; grind
+    rw [this]; decide⟩
+
+end ECell
+
+/-- Ghost state: ledgers by ghost name (`GName := Nat`) and extent claims by block. -/
+@[ext] structure Ghost where
+  led : Nat → GCell
+  extent : BlockId → ECell
 
 namespace Ghost
 
-def unit : Ghost := fun _ => GCell.unit
+def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit⟩
 
-def add (g₁ g₂ : Ghost) : Ghost := fun γ => (g₁ γ).add (g₂ γ)
+def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b)⟩
 
-def Valid (g : Ghost) : Prop := ∀ γ, (g γ).Valid
+def Valid (g : Ghost) : Prop := (∀ γ, (g.led γ).Valid) ∧ ∀ b, (g.extent b).Valid
 
 /-- Finitely many names in use (a fresh name exists). -/
-def Fin (g : Ghost) : Prop := ∃ N, ∀ γ, N ≤ γ → g γ = GCell.unit
+def Fin (g : Ghost) : Prop := ∃ N, ∀ γ, N ≤ γ → g.led γ = GCell.unit
 
 /-- `g₁` and `g₂` compose: their sum is valid and finite. -/
 def Ok (g₁ g₂ : Ghost) : Prop := Valid (add g₁ g₂) ∧ Fin (add g₁ g₂)
 
 theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
-  funext γ; exact GCell.add_comm _ _
+  ext1
+  · funext γ; exact GCell.add_comm _ _
+  · funext b; exact ECell.add_comm _ _
 
 theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
-  funext γ; exact GCell.add_assoc _ _ _
+  ext1
+  · funext γ; exact GCell.add_assoc _ _ _
+  · funext b; exact ECell.add_assoc _ _ _
 
-@[simp] theorem add_unit (g : Ghost) : g.add unit = g := by funext γ; simp [add, unit]
+@[simp] theorem add_unit (g : Ghost) : g.add unit = g := by ext1 <;> funext x <;> simp [add, unit]
 
-@[simp] theorem unit_add (g : Ghost) : unit.add g = g := by funext γ; simp [add, unit]
+@[simp] theorem unit_add (g : Ghost) : unit.add g = g := by ext1 <;> funext x <;> simp [add, unit]
 
 theorem Ok.assoc {a b c : Ghost} : Ok (a.add b) c ↔ Ok a (b.add c) := by
   unfold Ok; rw [add_assoc]
@@ -386,13 +508,18 @@ theorem Ok.comm {a b : Ghost} : Ok a b ↔ Ok b a := by
 
 /-- Ghost state can be dropped: validity and finiteness are closed under removing a part. -/
 theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
-  obtain ⟨hv, N, hN⟩ := h
-  refine ⟨fun γ => ?_, N, fun γ hγ => ?_⟩
+  obtain ⟨⟨hv, hx⟩, N, hN⟩ := h
+  refine ⟨⟨fun γ => ?_, fun x => ?_⟩, N, fun γ hγ => ?_⟩
   · have := hv γ
-    have e : ((a.add b).add c) γ = ((a γ).add (c γ)).add (b γ) := by
-      simp only [add]; rw [GCell.add_assoc, GCell.add_comm (b γ), ← GCell.add_assoc]
+    have e : ((a.add b).add c).led γ = ((a.led γ).add (c.led γ)).add (b.led γ) := by
+      simp only [add]; rw [GCell.add_assoc, GCell.add_comm (b.led γ), ← GCell.add_assoc]
     rw [e] at this
     exact GCell.Valid.of_add this
+  · have := hx x
+    have e : ((a.add b).add c).extent x = ((a.extent x).add (c.extent x)).add (b.extent x) := by
+      simp only [add]; rw [ECell.add_assoc, ECell.add_comm (b.extent x), ← ECell.add_assoc]
+    rw [e] at this
+    exact ECell.Valid.of_add this
   · have := hN γ hγ
     simp only [add, GCell.add, GCell.unit, GCell.mk.injEq] at this ⊢
     obtain ⟨h1, h2⟩ := this
@@ -401,7 +528,89 @@ theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
 
 end Ghost
 
+/-- The extent claims of `e` are true in `m`: an authority claim `(S, K)` names a live block of
+size `S` and kind `K`, and a share at bound `k` a live block of at least `k` bytes; in both cases
+the block has a live byte (`mappedLo < size`). -/
+def ExtTrue (m : Mem) (e : BlockId → ECell) : Prop :=
+  ∀ b : BlockId, (∀ (S : Nat) (K : BlockKind), 0 < (e b).auth (S, K) → ∃ blk : Block, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      blk.bytes.size = S ∧ blk.kind = K ∧ K.mappedLo < S) ∧
+    (∀ k : Nat, 0 < ((e b).sh k).val → ∃ blk : Block, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      k ≤ blk.bytes.size ∧ blk.kind.mappedLo < blk.bytes.size)
+
+/-- `m'` keeps every block that is live in `m`: live, with the same size and kind. -/
+def KeepsExt (m m' : Mem) : Prop :=
+  ∀ (b : BlockId) (blk : Block), m.blocks[b]? = some blk → blk.live = true → ∃ blk', m'.blocks[b]? = some blk' ∧
+    blk'.live = true ∧ blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind
+
+theorem KeepsExt.refl (m : Mem) : KeepsExt m m := fun _ blk h hl => ⟨blk, h, hl, rfl, rfl⟩
+
+theorem KeepsExt.trans {m₁ m₂ m₃ : Mem} (h₁ : KeepsExt m₁ m₂) (h₂ : KeepsExt m₂ m₃) : KeepsExt m₁ m₃ :=
+  fun b blk hb hl => by
+    obtain ⟨blk', hb', hl', hs, hk⟩ := h₁ b blk hb hl
+    obtain ⟨blk'', hb'', hl'', hs', hk'⟩ := h₂ b blk' hb' hl'
+    exact ⟨blk'', hb'', hl'', hs'.trans hs, hk'.trans hk⟩
+
+theorem KeepsExt.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KeepsExt m m' :=
+  fun _ blk hb hl => ⟨blk, by rw [h]; exact hb, hl, rfl, rfl⟩
+
+/-- Replacing a block by one with the same liveness, size and kind keeps every extent. -/
+theorem KeepsExt.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+    (hl : nb.live = blk.live) (hs : nb.bytes.size = blk.bytes.size) (hk : nb.kind = blk.kind)
+    (h : m'.blocks = m.blocks.set! b nb) : KeepsExt m m' := by
+  intro b' x hx hlx
+  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  by_cases e : b = b'
+  · subst e
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    rw [hb] at hx; cases hx
+    exact ⟨nb, by simp [hlt], by rw [hl]; exact hlx, hs, hk⟩
+  · exact ⟨x, by simp [e, hx], hlx, rfl, rfl⟩
+
+/-- Pushing a block keeps every extent. -/
+theorem KeepsExt.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) : KeepsExt m m' := by
+  intro b x hx hl
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hx).1
+  exact ⟨x, by rw [h, Array.getElem?_push]; simp [Nat.ne_of_lt hlt, hx], hl, rfl, rfl⟩
+
+theorem ExtTrue.keep {m m' : Mem} {e : BlockId → ECell} (h : ExtTrue m e) (hk : KeepsExt m m') :
+    ExtTrue m' e := fun b => by
+  obtain ⟨ha, hs⟩ := h b
+  refine ⟨fun S K hp => ?_, fun k hp => ?_⟩
+  · obtain ⟨blk, hb, hl, hS, hK, hlo⟩ := ha S K hp
+    obtain ⟨blk', hb', hl', hs', hk'⟩ := hk b blk hb hl
+    exact ⟨blk', hb', hl', hs'.trans hS, hk'.trans hK, hlo⟩
+  · obtain ⟨blk, hb, hl, hkS, hlo⟩ := hs k hp
+    obtain ⟨blk', hb', hl', hs', hk'⟩ := hk b blk hb hl
+    exact ⟨blk', hb', hl', by omega, by rw [hk', hs']; exact hlo⟩
+
+theorem ExtTrue.of_add {m : Mem} {a b : Ghost} (h : ExtTrue m (a.add b).extent) : ExtTrue m a.extent :=
+  fun x => by
+    obtain ⟨ha, hs⟩ := h x
+    refine ⟨fun S K hp => ha S K (by simp only [Ghost.add, ECell.add]; omega), fun k hp => hs k ?_⟩
+    simp only [Ghost.add, ECell.add, Frac.add]
+    have := ((b.extent x).sh k).nonneg; grind
+
+/-- The ghost states of a resource and its frame compose, and their extent claims are true. -/
+def GOk (m : Mem) (g gF : Ghost) : Prop := Ghost.Ok g gF ∧ ExtTrue m (g.add gF).extent
+
+theorem GOk.assoc {m : Mem} {a b c : Ghost} : GOk m (a.add b) c ↔ GOk m a (b.add c) := by
+  unfold GOk; rw [Ghost.add_assoc, Ghost.Ok.assoc]
+
+theorem GOk.mono {m : Mem} {a b c : Ghost} (h : GOk m (a.add b) c) : GOk m a c := by
+  refine ⟨Ghost.Ok.mono h.1, ?_⟩
+  have e : (a.add b).add c = (a.add c).add b := by
+    rw [Ghost.add_assoc, Ghost.add_comm b, ← Ghost.add_assoc]
+  have := h.2; rw [e] at this; exact ExtTrue.of_add this
+
+theorem GOk.keep {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hk : KeepsExt m m') : GOk m' g gF :=
+  ⟨h.1, h.2.keep hk⟩
+
+/-- A ghost state without extent claims composes in every memory where it composes in one. -/
+theorem GOk.of_unit {m : Mem} {gF : Ghost} (h : GOk m Ghost.unit gF) (m' : Mem)
+    (hF : ExtTrue m' gF.extent) : GOk m' Ghost.unit gF := ⟨h.1, by simpa using hF⟩
+
 /-! ## Resources and assertions -/
+
 
 structure Res where
   heap : FHeap
@@ -610,6 +819,84 @@ theorem sep_ex_eq {γ : Type} (P : γ → FAssn) (Q : FAssn) :
 theorem of_eq {P Q : FAssn} {r : Res} (e : P = Q) (h : P r) : Q r := e ▸ h
 
 end Laws
+
+/-! ## Cells with their block's actual extent -/
+
+/-- `h` with each cell's size and kind read from `m` (the cells of `FMatch` up to `Cell.norm`
+become exactly `m`'s live bytes, `Holds.fix_exact`). -/
+def FHeap.fix (m : Mem) (h : FHeap) : FHeap := fun l => (h l).map fun fc =>
+  match m.blocks[l.1]? with
+  | some blk => ⟨{ fc.cell with size := blk.bytes.size, kind := blk.kind }, fc.atom⟩
+  | none => fc
+
+/-- `r` with its cells' sizes and kinds read from `m`. -/
+def Res.fix (m : Mem) (r : Res) : Res := ⟨r.heap.fix m, r.know, r.gh⟩
+
+theorem FHeap.fix_none {m : Mem} {h : FHeap} {l : Loc} : h.fix m l = none ↔ h l = none := by
+  simp [FHeap.fix]
+
+theorem FHeap.fix_disjoint {m : Mem} {h₁ h₂ : FHeap} (hd : FHeap.Disjoint h₁ h₂) :
+    FHeap.Disjoint (h₁.fix m) (h₂.fix m) := fun l => by
+  rcases hd l with e | e
+  · exact .inl (FHeap.fix_none.mpr e)
+  · exact .inr (FHeap.fix_none.mpr e)
+
+theorem FHeap.fix_union (m : Mem) (h₁ h₂ : FHeap) : (h₁ ∪ h₂).fix m = h₁.fix m ∪ h₂.fix m := by
+  funext l; simp only [FHeap.fix, FHeap.union_apply]; cases h₁ l <;> rfl
+
+/-! ## Extent assertions -/
+
+namespace ECell
+
+/-- The authority over extent `(S, K)` holding the fraction `q` (at bound `0`). -/
+def auth1 (S : Nat) (K : BlockKind) (q : Frac) : ECell :=
+  ⟨fun x => if x = (S, K) then 1 else 0, fun k => if k = 0 then q else Frac.zero⟩
+
+/-- A share: the fraction `q` at the lower bound `k`. -/
+def share (q : Frac) (k : Nat) : ECell := ⟨fun _ => 0, fun k' => if k' = k then q else Frac.zero⟩
+
+end ECell
+
+/-- The ghost state with the extent cell `c` at block `b` and nothing else. -/
+def Ghost.atExt (b : BlockId) (c : ECell) : Ghost :=
+  ⟨fun _ => GCell.unit, fun b' => if b' = b then c else ECell.unit⟩
+
+theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
+    (Ghost.atExt b c).add (Ghost.atExt b c') = Ghost.atExt b (c.add c') := by
+  ext1
+  · funext γ; simp [Ghost.add, Ghost.atExt]
+  · funext b'; simp only [Ghost.add, Ghost.atExt]; split <;> simp
+
+/-- **The authority over block `b`'s extent with the fraction `q`**: `b` is live, `S` bytes,
+kind `K` (mapping start included); shares of `1 - q` are out. Owns no bytes. -/
+def bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.atExt b (ECell.auth1 S K q)
+
+/-- **The full extent of block `b`**: the authority with every share back. Only it changes the
+block's size or start, or ends it (`docs/sep-full-state.md` §Block extents). -/
+def bext (b : BlockId) (S : Nat) (K : BlockKind) : FAssn := bauth b S K Frac.one
+
+/-- **A share of block `b`'s extent**: a positive fraction `q`; `b` is live with at least `k`
+bytes while the share is held. -/
+def bshare (b : BlockId) (q : Frac) (k : Nat) : FAssn := fun r =>
+  0 < q.val ∧ r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.atExt b (ECell.share q k)
+
+/-- Extents of the blocks `E` (full), as one ghost state. -/
+def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
+  ⟨fun _ => GCell.unit, fun b => match E b with
+    | some (S, K) => ECell.auth1 S K Frac.one
+    | none => ECell.unit⟩
+
+/-- A legacy assertion with the full extents `E` of its blocks (`FTriple.ofTriple`). -/
+def upE (P : Assn) (E : BlockId → Option (Nat × BlockKind)) : FAssn := fun r =>
+  P r.heap.erase ∧ r.know = Know.none ∧ r.gh = Ghost.exts E
+
+@[simp] theorem Ghost.exts_none : Ghost.exts (fun _ => none) = Ghost.unit := by
+  ext1 <;> funext x <;> rfl
+
+theorem upE_none {P : Assn} {r : Res} : upE P (fun _ => none) r ↔ up P r := by
+  simp [upE, up]
+
 
 end Full
 end Zig
