@@ -1296,8 +1296,17 @@ theorem memcpy_eq_memmove {size da sa : Nat} {dst src : Ptr} {n m : BitVec 64} (
 
 /-- An index below the length passes the bounds check of `slice_elem_val`, `slice_elem_ptr`,
 `ptr_elem_val` and `ptr_elem_ptr`. -/
+theorem checkIndex_of_lt {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    checkIndex len i = pure () := by
+  simp [checkIndex, h]
+
 theorem checkIndex_bind_of_lt {α : Type} {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat)
     (x : MemM α) : (checkIndex len i >>= fun _ => x) = x := by
-  simp [checkIndex, h]
+  simp [checkIndex_of_lt h]
+
+/-- An index at most the length passes the bounds check of an operand with a sentinel. -/
+theorem checkSentinelIndex_of_le {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
+    checkSentinelIndex len i = pure () := by
+  simp [checkSentinelIndex, h]
 
 end Zig
