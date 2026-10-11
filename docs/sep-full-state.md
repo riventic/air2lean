@@ -451,7 +451,13 @@ precondition comes back.
   the node with the part it kept (O-G).
 * **A shrink takes the whole share** (`q' = q`), for the same reason as `munmap` needs `bext`: an
   allocator may shrink the block itself (the page allocator's tail `munmap`), and a share held
-  elsewhere would then claim the old end. Kernel-checked regression: to do (step 7a, before the PR).
+  elsewhere would then claim the old end. Kernel-checked regression
+  (`tests/roadmap/sep-full/ShrinkCX.lean`): a mapping of two pages, the tail page's bytes and half
+  the authority in the resource, the first page and a share of the other half at bound `8192` in
+  the frame (`EUpd.lend`); the tail `munmap` succeeds and leaves `4096` bytes, so no resource holds
+  next to that frame (`frame_breaks`), and no `FTriple` from half the authority exists, whatever the
+  postcondition (`no_partial_shrink`). With the whole extent the rule holds
+  (`FTotalTriple.munmapTail'`).
 * `FAllocSpec.resize_granted`: the old whole-region contract is a corollary (the client splits off
   the released bytes, relabels the kept ones to the new token's labels, `EUpd.relabel`, and joins
   the new bytes); `FLogic.eupdPost` (an `EUpd` of the postcondition) is a field of the logic for it.
