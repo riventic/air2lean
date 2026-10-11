@@ -731,6 +731,14 @@ def Func.plainPtr (f : Func) (t : TyId) : Bool :=
     (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
   | _, _ => false
 
+/-- A plain slice type: not `volatile`, `allowzero`, bit-packed or with a sentinel (shared by
+`Air2Lean.Sem` and its certificate fragment). -/
+def Func.plainSlice (f : Func) (t : TyId) : Bool :=
+  match f.types[t]?, f.layouts[t]? with
+  | some (.ptr size _ _), some l =>
+    size == "slice" && !l.isVolatile && !l.allowzero && l.hostSize == 0 && !l.sentinel
+  | _, _ => false
+
 /-- The byte offset of field `idx` of the non-`packed` struct that a pointer of type `t` points
 to (shared by `Air2Lean.Sem` and its certificate fragment). -/
 def Func.fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat :=

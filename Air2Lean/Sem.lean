@@ -82,12 +82,9 @@ theorem Frame.setCell_setCell (fr : Frame) (id : InstId) (v w : Option Value) :
     (fr.setCell id v).setCell id w = fr.setCell id w := by
   cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> rfl
 
-theorem Frame.setCell_self (fr : Frame) (id : InstId) : fr.setCell id (fr.cells id) = fr := by
-  cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> simp_all
-
 theorem Frame.setCell_eq (fr : Frame) (id : InstId) (v : Option Value) (h : fr.cells id = v) :
     fr.setCell id v = fr := by
-  rw [← h]; exact setCell_self fr id
+  subst h; cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> simp_all
 
 /-- Writes to different cells commute; a certificate orders them by id. -/
 theorem Frame.setCell_comm (fr : Frame) (a b : InstId) (v w : Option Value) (h : b < a) :
@@ -344,18 +341,11 @@ def ptrOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Ptr × Nat) := do
     | _, _, _ => stuck
   | none => stuck
 
-/-- A plain slice type: not `volatile`, `allowzero` or with a sentinel. -/
-def plainSlice (f : Func) (t : TyId) : Bool :=
-  match f.types[t]?, f.layouts[t]? with
-  | some (.ptr size _ _), some l =>
-    size == "slice" && !l.isVolatile && !l.allowzero && l.hostSize == 0 && !l.sentinel
-  | _, _ => false
-
 /-- The slice operand `v`, with the alignment of its (plain) slice type. -/
 def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) := do
   match operandTy env v with
   | some t =>
-    match plainSlice f t, ptrAlignOf f t, ← operand f env v with
+    match f.plainSlice t, ptrAlignOf f t, ← operand f env v with
     | true, some a, .slice s => pure (s, a)
     | _, _, _ => stuck
   | none => stuck
@@ -365,7 +355,7 @@ def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) :=
 def itemBase (f : Func) (env : Env) (v : Val) (k : BitVec 64) : MemM Zig.Ptr :=
   match operandTy env v with
   | some t =>
-    if plainSlice f t then do
+    if f.plainSlice t then do
       let (s, _) ← StateT.lift (sliceOperand f env v)
       Zig.checkIndex s k
       pure s.ptr
@@ -1095,13 +1085,6 @@ theorem ok_pure {σ α : Type} {P : α → Prop} {a : α} (h : P a) : Ok (σ := 
   cases hr
   exact h
 
-theorem ok_bind {σ α β : Type} {P : β → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
-    (h : ∀ a, Ok P (f a)) : Ok P (x >>= f) := by
-  intro s m r hr
-  rw [StateT.run_bind, StateT.run_bind] at hr
-  obtain ⟨_, _, hf⟩ := Result.bind_ok hr
-  exact h _ _ _ _ hf
-
 theorem ok_lift {α : Type} {P : α → Prop} {x : Zig.Result α} (h : ∀ a, x.run = some (.ok a) → P a) :
     Ok P (liftR x) := by
   intro s m r hr
@@ -1156,6 +1139,10 @@ theorem ok_bind' {σ α β : Type} {P : β → Prop} {Q : α → Prop} {x : Zig.
   rw [StateT.run_bind, StateT.run_bind] at hr
   obtain ⟨p, hp, hf⟩ := Result.bind_ok hr
   exact h _ (hx s m p hp) _ _ _ hf
+
+theorem ok_bind {σ α β : Type} {P : β → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
+    (h : ∀ a, Ok P (f a)) : Ok P (x >>= f) :=
+  ok_bind' (Q := fun _ => True) (fun _ _ _ _ => trivial) fun a _ => h a
 
 theorem ok_ite {σ α : Type} {P : α → Prop} {c : Prop} [Decidable c] {x y : Zig.MM σ α}
     (hx : Ok P x) (hy : Ok P y) : Ok P (if c then x else y) := by
@@ -1388,7 +1375,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
   regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
-  plainSlice sliceOperand itemBase itemLayout indexOperand Value.toSlice ptrProject_elem_zero
+  Func.plainSlice sliceOperand itemBase itemLayout indexOperand Value.toSlice ptrProject_elem_zero
   ptrProject_elem_size_zero Nat.min_def ite_self Nat.reduceLeDiff
   Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
   free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self

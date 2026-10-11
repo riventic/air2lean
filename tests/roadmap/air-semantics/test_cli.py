@@ -37,9 +37,6 @@ CERTIFIED = {
     'vectors': ['vectors.sMod', 'vectors.sRem'],
 }
 
-# Certified memory functions with certified calls: `_step` and `_sound`, no `_eq` yet.
-SOUND_ONLY = ['pointers.sumTo']
-
 
 def run(binary, ex, out, *flags):
     # The shared goldens are schema-11 AIR: translating them needs the explicit legacy profile.
@@ -83,7 +80,8 @@ def check_example(binary, ex, work):
         # Equality with `run`; a function in `Zig.MemM` that calls gets soundness only
         # (completeness for memory callers is future work, docs/air-semantics.md).
         assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M) or \
-            (name in SOUND_ONLY and re.search(rf'^theorem {decl}_sound ', text, re.M)), (ex, name)
+            (re.search(rf'^theorem {decl}_sound ', text, re.M) and
+             f'-- `{name}`: no completeness theorem' in text), (ex, name)
     if certified:
         assert re.search(r'^theorem run_le_gen ', text, re.M)
 
