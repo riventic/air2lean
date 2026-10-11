@@ -161,6 +161,9 @@ class Evidence(Scratch):
         self.check_fails('0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1 is not a path')
 
     def test_restricted_job_without_diff_is_not_native_execution(self):
+        # The 0.14.1 row is not `full`: without its own AIR2LEAN_DIFF clause check.sh skips the diff.
+        self.edit_text('.github/workflows/ci.yml', "(matrix.full || matrix.zig == '0.14.1') && '1' || '0'",
+                       "matrix.full && '1' || '0'")
         def change(data):
             entry = self.entry(data, '0.14.1', 'x86_64-linux')
             entry['evidence']['native_execution'] = ['Golden AIR, translate, build, differential test']
