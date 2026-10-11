@@ -184,9 +184,9 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(root['level'], 'compiled')
         self.assertNotFunctional(root)
 
-    def use_statement_fixture(self, *goals):
+    def use_statement_fixture(self, *goals, root='root', **options):
         """Bind goals against real extracted theorems; the fixture's root stands in for generated code."""
-        self.nodes = [{'name': 'StatementFixture.root', 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []}]
+        self.nodes = [{'name': 'StatementFixture.' + root, 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []}]
         for theorem in STATEMENT_FIXTURE['theorems']:
             self.nodes.append({'name': theorem['name'], 'module': 'contract', 'kind': 'theorem',
                                'dependencies': theorem['dependencies']})
@@ -195,17 +195,19 @@ class CoverageTests(unittest.TestCase):
             self.structures[theorem['name']] = theorem['statement']
         self.write_receipt()
         self.manifest['roots'][0]['namespace'] = 'StatementFixture'
+        self.manifest['roots'][0]['function'] = 'example.' + root
+        (self.base / 'air.json').write_text(json.dumps({'schema': 11, 'name': 'example.' + root, 'zig_version': '0.16.0', 'body': []}))
         self.manifest['roots'][0]['goals'] = [{'theorem': g, 'strength': 'total_correctness', 'domain': 'all'} for g in goals]
         self.save()
         self.rebuild_artifact()
-        return self.run_coverage()
+        return self.run_coverage(**options)
 
     def test_only_statements_about_the_root_bind(self):
         names = ['wrapper_spec', 'trivial_spec', 'premise_only', 'root_spec']
         # Every fixture proof term mentions the root, so declaration edges alone would bind all four.
-        self.assertTrue(all('StatementFixture.root' in t['dependencies'] for t in STATEMENT_FIXTURE['theorems']))
+        self.assertTrue(all('StatementFixture.root' in t['dependencies'] for t in STATEMENT_FIXTURE['theorems'] if 'root2' not in t['name']))
         self.assertEqual(sorted(t['name'] for t in STATEMENT_FIXTURE['theorems']),
-                         sorted('StatementFixture.' + n for n in names))
+                         sorted('StatementFixture.' + n for n in names + ['root2_comm', 'root2_refl']))
         root = self.use_statement_fixture(*names)
         self.assertEqual([g['binding'] for g in root['goals']], ['wrapper_or_unrelated'] * 3 + ['direct'])
         self.assertEqual(root['stages']['proved']['status'], 'partial')
@@ -230,6 +232,56 @@ class CoverageTests(unittest.TestCase):
         self.write_receipt()
         root = self.run_coverage()
         self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+
+    def test_real_extracted_relational_property_is_interpreted_not_credited(self):
+        # The committed real extraction of `root2 x y = root2 y x` (tests/roadmap/assurance/StatementBinding.lean).
+        root = self.use_statement_fixture('root2_comm', root='root2', diff=False)
+        goal = root['goals'][0]
+        self.assertEqual((goal['binding'], goal['relation']['kind']), ('relational_property', 'commutative'))
+        self.assertEqual(root['theorem_strength']['direct'], [])
+        self.assertNotFunctional(root)
+        goal = self.use_statement_fixture('root2_refl', root='root2', diff=False)['goals'][0]
+        self.assertEqual((goal['binding'], 'relation' in goal), ('trivial_conclusion', False))
+
+    def test_relational_properties_are_interpreted_and_never_credited(self):
+        # `root a b = root b a`, `root (root x) = root x`: both sides apply the root. The statement
+        # records both sides, so the relation is read off the arguments and reported; the goal is
+        # never direct and the root never reaches a functional level.
+        a, b = {'bvar': 0}, {'bvar': 1}
+        nested = {'open': 'Example.root', 'bvars': [0]}
+        cases = {'commutative': ([a, b], [b, a]), 'argument_permutation': ([a, b, {'bvar': 2}], [b, {'bvar': 2}, a]),
+                 'self_composition': ([nested], [a]), 'other_arguments': ([a], [b])}
+        for kind, (left, right) in cases.items():
+            with self.subTest(kind=kind):
+                rhs = computation('Example.root', right)
+                shape = structure(computation('Example.root', left), head='Eq', nonvacuity='trivial')
+                shape['args'][2] = rhs
+                self.conclusions['Example.root_spec'] = {'head': 'Eq', 'args': [{'head': 'Example.root'}]}
+                self.structures['Example.root_spec'] = shape
+                self.write_receipt()
+                for strength in ('total_correctness', 'safety'):
+                    self.manifest['roots'][0]['goals'][0]['strength'] = strength
+                    self.save()
+                    self.rebuild_artifact()
+                    root = self.run_coverage()
+                    goal = root['goals'][0]
+                    self.assertEqual((goal['binding'], goal['relation']['kind']), ('relational_property', kind))
+                    self.assertIn('relational property', goal['reason'])
+                    self.assertEqual(root['theorem_strength']['direct'], [])
+                    self.assertNotFunctional(root)
+                    self.assertEqual(root['stages']['proved']['status'], 'failed')
+                    self.assertTrue(any('relational_property' in blocker for blocker in root['blockers']), root['blockers'])
+                    self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
+                                     {'no-panic': 'not_proved', 'guaranteed-return': 'not_proved'})
+        # Identical arguments stay a trivial_conclusion, not a relation.
+        shape = structure(computation('Example.root', [a, b]), head='Eq', nonvacuity='trivial')
+        shape['args'][2] = computation('Example.root', [a, b])
+        self.structures['Example.root_spec'] = shape
+        self.write_receipt()
+        self.rebuild_artifact()
+        goal = self.run_coverage()['goals'][0]
+        self.assertEqual(goal['binding'], 'trivial_conclusion')
+        self.assertNotIn('relation', goal)
 
     def test_trivial_conclusion_cannot_reach_functional_levels(self):
         # `Example.root x = Example.root x`: the conclusion names the root, so statement binding passes,

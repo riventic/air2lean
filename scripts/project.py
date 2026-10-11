@@ -862,22 +862,68 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
-def trivial_conclusion(theorem, definition):
-    """The reason an audited conclusion that names the root still states no result about it, else None.
+def self_relation(theorem, definition):
+    """How an audited equation relates the generated root to itself, from the kernel statement, else None.
 
-    The audit records an equation's right-hand side and no other argument. An `Eq` whose right-hand
-    side is the generated root itself (`root x = root x`, or `root x = root y`) relates the root to
-    itself and fixes no value; the audit omits the left-hand side, so a genuine relational property
-    (commutativity, idempotence) cannot be told apart and is not credited either (fail closed). A `True` conclusion never gets here (it does not reference the root).
-    Other conclusions are left to the derived strength: they are not called trivial without evidence."""
+    Both sides of an `Eq` conclusion are recorded (`statement.args`: type, left, right). When both
+    apply the root, the equation fixes no result: `reflexive` when the applications are identical
+    (`root x = root x`), otherwise a relational property between runs of the root. The relation is
+    named when it can be read off the arguments: `commutative` (two arguments swapped),
+    `argument_permutation`, `self_composition` (an argument is itself an application of the root,
+    e.g. idempotence), `state_relation` (same arguments, other runners or initial states) or
+    `other_arguments`. Returns (kind, left arguments, right arguments)."""
+    statement = theorem.get('statement')
+    args = statement.get('args') if isinstance(statement, dict) else None
+    head = statement.get('head') if isinstance(statement, dict) else None
+    if not (isinstance(args, list) and len(args) == 3 and isinstance(head, dict) and head.get('name') == 'Eq'):
+        return None
+    left, right = args[1], args[2]
+    if not all(isinstance(side, dict) and side.get('fn') == definition for side in (left, right)):
+        return None
+    same = lambda key: left.get(key) == right.get(key)
+    if same('args') and same('peeled') and same('extra'):
+        return 'reflexive', left.get('args'), right.get('args')
+    la, ra = left.get('args') or [], right.get('args') or []
+    canonical = lambda atoms: sorted(json.dumps(a, sort_keys=True) for a in atoms)
+    if len(la) == len(ra) and canonical(la) == canonical(ra) and la != ra:
+        swapped = sum(x != y for x, y in zip(la, ra))
+        kind = 'commutative' if swapped == 2 else 'argument_permutation'
+    elif any(isinstance(a, dict) and definition in (a.get('open'), a.get('closed')) for a in la + ra):
+        kind = 'self_composition'
+    elif la == ra:
+        kind = 'state_relation'
+    else:
+        kind = 'other_arguments'
+    return kind, la, ra
+
+
+def trivial_conclusion(theorem, definition):
+    """(binding, reason, relation) of an audited conclusion that names the root yet states no result, else None.
+
+    `trivial_conclusion`: an `Eq` relating the generated root to itself with identical arguments
+    (`root x = root x`) fixes no value. `relational_property`: both sides apply the root to different
+    arguments or states (`root a b = root b a`): the property is interpreted and reported with its
+    relation, but it constrains the root against itself, not against a specification, so it is never
+    a direct goal and is refused for functional levels (fail closed). A conclusion without the
+    statement structure falls back to the recorded right-hand side. Other conclusions are left to the
+    derived strength: they are not called trivial without evidence."""
+    relation = self_relation(theorem, definition)
+    if relation is not None and relation[0] != 'reflexive':
+        kind = relation[0]
+        return ('relational_property',
+                f'relational property ({kind}): the equation relates the generated root {definition} to itself under '
+                'different arguments or states and fixes no result; it is reported but never counted as direct or '
+                'functional (state the result against a specification)',
+                {'kind': kind, 'left_arguments': relation[1], 'right_arguments': relation[2]})
     shape = theorem.get('conclusion')
     if not isinstance(shape, dict):
         return None
     args = shape.get('args')
-    if shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1 and isinstance(args[0], dict) \
-            and args[0].get('head') == definition:
-        return (f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
-                '(a relational property such as commutativity is not credited either; state the result against a specification)')
+    if relation is not None or (shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1
+                                and isinstance(args[0], dict) and args[0].get('head') == definition):
+        return ('trivial_conclusion',
+                f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
+                '(state the result against a specification)', None)
     return None
 
 
@@ -951,11 +997,14 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
         else:
             found = assess_goal(theorem, root, definition, bundle['nodes'], gen_modules, bundle['theorems'])
             binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
+            relation = None
             if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
-                binding, reason = 'trivial_conclusion', trivial
+                binding, reason, relation = trivial
             row.update(binding=binding, reason=reason)
-            if binding == 'trivial_conclusion':
+            if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
+                if relation:
+                    row['relation'] = relation
             elif binding == 'direct':
                 row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
@@ -1239,8 +1288,9 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'from the audited conclusion head (Zig triples, Returns, exact-success equations), capped at safety '
                       'without a non-vacuity witness and, for partial correctness, without a liveness witness '
                       '(ZigLean/Witness.lean); an unclassified conclusion derives none. An equation whose right-hand side is the generated root itself '
-                      '(`root x = root x`) is a trivial_conclusion: it names the root but fixes no result, so it is not '
-                      'a direct goal and cannot reach proved_scoped.',
+                      '(`root x = root x`) is a trivial_conclusion and a relational property between runs of the root (`root a b = '
+                      'root b a`) a relational_property, reported with its relation: they name the root but fix no result, '
+                      'so they are not direct goals and cannot reach proved_scoped.',
                       'The domain is derived from the kernel type: a fixed or derived root argument or initial state, a '
                       'repeated variable or a hypothesis over a quantified argument makes it scoped, which caps the root at '
                       'proved_scoped; a scoped goal must declare its domain as `scoped: ...`.',
@@ -1448,6 +1498,8 @@ def audit_goal(root, goal, theorems, nodes, modules):
     if binding == 'wrapper_or_unrelated' and found['binding'] == 'direct':
         return dict(row, status='unbound_generated',
                     reason=f'audited {definition} is not defined in the committed generated module {modules["generated"]}')
+    if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
+        binding, reason, _ = trivial
     if binding != 'direct':
         return dict(row, status=binding, reason=reason)
     if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):

@@ -193,7 +193,7 @@ manifest-relative `source_closure` names against the runner's repository-relativ
 Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`, with
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
 contract file), `policy_violation` (audit `allowed` false or violations), `spoofed_head`,
-`wrapper_or_unrelated`, `trivial_conclusion`, `rejected_hypothesis`, `source_hash_mismatch`, `stale_receipt`,
+`wrapper_or_unrelated`, `trivial_conclusion`, `relational_property`, `rejected_hypothesis`, `source_hash_mismatch`, `stale_receipt`,
 `unbound` or `no_receipt`. Binding reads the statement structure that `tools/Assurance.lean`
 extracts from the kernel type ([claim strength](claim-strength.md)), never names or proof
 terms:
@@ -209,9 +209,16 @@ terms:
 * a conclusion that names the root but only equates it with itself (`root x = root x`: the
   audited equation's right-hand side is the generated root) is `trivial_conclusion`: it fixes no
   result, so it is not direct, does not reach `proved_scoped` and blocks the root (the real audited
-  `double_refl` of `assurance/provenance` is the committed example). The audit records no
-  left-hand side, so a genuine relational property such as `root a b = root b a` is refused the
-  same way (fail closed); state the result against a specification to have it counted;
+  `double_refl` of `assurance/provenance` is the committed example);
+* an equation whose two sides both apply the root to different arguments or states is a
+  relational property (`root a b = root b a`, `root (root x) = root x`). The audit records
+  both sides (`statement.args`: type, left, right), so the goal is `relational_property`
+  with a `relation` (`commutative`, `argument_permutation`, `self_composition`,
+  `state_relation` or `other_arguments`, plus both argument lists). It is interpreted and
+  reported, never silently passed: it constrains the root against itself, not against a
+  specification, so it is not direct, counts for no strength or absence claim, and blocks
+  the root's functional levels (`claims.py check` reports the same status). State the
+  result against a specification to have it counted;
 * no hypothesis may mention a generated definition or a claim head (`rejected_hypothesis`),
   unless that definition is listed in the root's `assumptions`.
 
