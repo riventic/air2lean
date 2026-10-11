@@ -174,7 +174,8 @@ free list) is not attempted.
   std types, so no generated term of one module is a term of another. The specification is
   therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
   ownership and run lemmas, and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
-  `arena_loadBuf`), and each module states the theorems and proves them with these tactics,
+  `arena_loadBuf`), and each module's file states the theorems with one command
+  (`arena_spec_statements`, `checked` for the patched arena) and proves them with these tactics,
   elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
   (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,
   so the check passes).
@@ -206,7 +207,11 @@ free list) is not attempted.
 Not proved yet, in order:
 
 * The patched arena's `alloc`: fixpoint induction over the `alloc` group with the library rules
-  above, the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
+  above. A new node's header comes from the child as a plain region (`up`, any atomic layout); the
+  atomic rules apply to it once its tag constraints are dropped (`FTriple.untag`, `wpts_of_up`;
+  atomic tags are constraints, [sep-full-state.md](sep-full-state.md) §Atomic tags are
+  constraints), so the invariant's header words can be any owned words (`wpts`), and the RMW rules
+  exist (`FTriple.atomicRmwW`, `atomicRmwAsW`, `atomicStoreAsW`); the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
   call site tests the loaded function pointer against every allocator function of the program;
   with the child's vtable read-only, as `Dispatch.vtR`, it selects the child's entry),
   `Upd.issue` under a fresh id for each grant, `defer pushFreeList`. The child's specification
