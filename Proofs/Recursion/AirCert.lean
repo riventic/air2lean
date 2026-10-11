@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Recursion.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Recursion.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -95,6 +97,12 @@ def air_isOdd : Func :=
     ⟨13, 2, (.line 3)⟩,
     ⟨8, 3, (.ret (.inst 7))⟩] }
 
+theorem callee_0 : panicOf? "recursion.fact" = none := rfl
+theorem callee_1 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
+theorem callee_2 : panicOf? "recursion.gcd" = none := rfl
+theorem callee_3 : panicOf? "recursion.isOdd" = none := rfl
+theorem callee_4 : panicOf? "recursion.isEven" = none := rfl
+
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
   ("recursion.fact", air_fact),
@@ -113,12 +121,6 @@ def gen : Oracle
   | "recursion.isOdd", args =>
     StateT.lift ((fun v => (Value.bool v)) <$> Recursion.isOdd ((args.getD 0 .void).toBV 32))
   | _, _ => StateT.lift stuck
-
-theorem callee_0 : panicOf? "recursion.fact" = none := rfl
-theorem callee_1 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
-theorem callee_2 : panicOf? "recursion.gcd" = none := rfl
-theorem callee_3 : panicOf? "recursion.isOdd" = none := rfl
-theorem callee_4 : panicOf? "recursion.isEven" = none := rfl
 
 /-- `recursion.fact`: the AIR semantics of the decoded function, with the generated program answering its calls, equals the generated definition. -/
 theorem fact_step (p0 : BitVec 32) (m : Zig.Mem) :
