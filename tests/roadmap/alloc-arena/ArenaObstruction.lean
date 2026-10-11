@@ -47,8 +47,33 @@ theorem foreign_free_panics : solo arena_foreign_free = some (.error .panic) := 
 theorem oob_free_illegal : solo arena_oob_free = some (.error .illegal) := by
   decide +kernel
 
+/-- The program's memory at start. -/
+def mem00 : Mem := mem0 .fresh
+
+/-- A live 32-byte block at `2^64 - 32`. -/
+def topBlock : Block :=
+  { bytes := Array.replicate 32 .undef, align := 8, kind := .heap, live := true, addr := 2 ^ 64 - 32 }
+
+/-- A memory whose last block (32 bytes, a node's header and 8 buffer bytes) ends at `2^64`: the
+model's placement admits it (`Mem.placeOk`: `A + size ≤ 2^64`), no native process has it. -/
+def memTop : Mem := { mem00 with blocks := mem00.blocks.push topBlock }
+
+/-- The run ends in `.overflow`. -/
+def overflows {α : Type} : Option (Except Error α) → Bool
+  | some (.error .overflow) => true
+  | _ => false
+
+/-- **O-H** (old behaviour, to become unreachable): `alignedIndex(buf.ptr, end_index, .@"8")`,
+which `alloc`'s fast path calls after the reservation check, with the buffer ending at `2^64` and
+`end_index = 5`: `Alignment.forward` adds `7` to `2^64 - 3` with an overflow check. -/
+theorem aligned_index_overflows :
+    overflows ((heap_ArenaAllocator_alignedIndex ⟨some mem00.blocks.size, 24⟩ 5 mem_Alignment.«8»).run
+      memTop).run = true := by
+  decide +kernel
+
 -- `check.sh` requires only the standard axioms.
 #print axioms foreign_free_panics
 #print axioms oob_free_illegal
+#print axioms aligned_index_overflows
 
 end AllocArena.ArenaObstruction

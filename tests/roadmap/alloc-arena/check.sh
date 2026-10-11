@@ -46,14 +46,14 @@ for pair in "arena-linux ArenaLinux" "arena-macos ArenaMacos" "arena-fixed-linux
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean"
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
-# ArenaObstruction.lean prints the axioms of its two theorems.
+# ArenaObstruction.lean prints the axioms of its three theorems.
 "${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt"
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
 python3 - "$work/axioms.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+assert text.count('depends on axioms') == 3 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 # The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
 cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"

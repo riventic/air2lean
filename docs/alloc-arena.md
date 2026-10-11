@@ -165,7 +165,15 @@ arena invariant in such memories, stock or patched. Natively the state does not 
 addresses end below `2^47`/`2^48` on x86_64-linux and aarch64-macos). The resolution belongs in
 the model or the premises (an address-space bound for every live block, e.g. a placement and
 `Mem.newAddr` that keep blocks below an architecture bound, as an OS/architecture premise), not in
-`FAllocSpec` (no per-triple premise). Not kernel-checked yet.
+`FAllocSpec` (no per-triple premise). Kernel-checked at the step that panics
+(`ArenaObstruction.aligned_index_overflows`: `alignedIndex` on a memory whose last block ends at
+`2^64`, `end_index = 5`, alignment 8: `.overflow`). **Decision (coordinator, 2026-10-12):** fix
+it in the model, one mechanism for every block kind (the O5 follow-up "`Mem.top`/`placeOk` bound
+for all block kinds"): placement keeps every live block below the target's `addrLimit`
+(`Mem.placeOk` and the fallback `Mem.top`; an allocation that does not fit fails as for OOM, it
+is never placed above), with an OSM-01-family premise "user-space addresses lie below
+`addrLimit`" per target. Not an `FSeq` invariant and not an `FAllocSpec` premise. The regression
+then shows the state unreachable (or the call succeeding). Not done yet.
 
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
