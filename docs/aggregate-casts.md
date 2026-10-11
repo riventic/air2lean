@@ -58,7 +58,7 @@ Its 8 bytes are zero (`optPtr_encode_null`). A wrapped pointer has the pointer's
 | Zig | Model | Null rule |
 |---|---|---|
 | `*T` → `?*T` (`@ptrCast`, coercion) | `optPtrWrap p = some p` (Lean coercion), any version | never null (`optPtrWrap_ne_null`) |
-| `@ptrCast(?*T)` → `*U` | `Zig.optPtrUnwrap` | null throws `.panic` (`optPtrUnwrap_null`); safe builds check before the cast |
+| `@ptrCast(?*T)` → `*U` | `Zig.optPtrUnwrap` | null throws `.illegal` (`optPtrUnwrap_null`); safe builds check before the cast (ordinary AIR, `.panic` first) |
 | `@intFromPtr(?*T)` | `Zig.optPtrAddr` | null is 0 (`optPtrAddr_null`) |
 | `@ptrFromInt(n)` to `?*T` | `Zig.optPtrFromAddr` | 0 is null (`optPtrFromAddr_zero`); `n ≠ 0` is `optPtrWrap <$> ptrFromAddr n` |
 
