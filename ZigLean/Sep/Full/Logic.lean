@@ -116,6 +116,71 @@ theorem FTotalTriple.ofTotal_up {P : Assn} {Q : α → Assn} (ht : TotalTriple P
       (fun _ _ _ _ _ _ _ h => by cases h) hsf (.inr (fun m v m' h b blk _ => hk m v m' h b blk id))).2
       m r rF hh (upE_none.mpr hp) hs⟩
 
+/-! ## Updates in a memory -/
+
+/-- **A frame-preserving update in a memory**: every resource of `P` that `m` holds with a frame
+can be replaced by one of `P'` that `m` holds with the same frame. -/
+def EUpd (P P' : FAssn) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → m.FSeq → ∃ r', Holds m r' rF ∧ P' r'
+
+/-- `m` holds `r₁ ⋆ r₂` with frame `rF` if it holds `r₁` with frame `r₂ ⋆ rF` (`Holds.split`
+backwards). -/
+theorem Holds.join {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.heap r₂.heap)
+    (h2F : FHeap.Disjoint r₂.heap rF.heap)
+    (hh : Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know, r₂.gh.add rF.gh⟩) :
+    Holds m ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ rF := by
+  obtain ⟨hd', hh', hk', hkF', hg'⟩ := hh
+  exact ⟨FHeap.disjoint_union_left.mpr ⟨(FHeap.disjoint_union_right.mp hd').2, h2F⟩,
+    by rw [FHeap.union_assoc]; exact hh', hk'.union hkF'.left, hkF'.right, GOk.assoc.mpr hg'⟩
+
+namespace EUpd
+
+variable {P P' P'' : FAssn}
+
+theorem of_imp (h : ∀ r, P r → P' r) : EUpd P P' := fun _ r _ hh hp _ => ⟨r, hh, h r hp⟩
+
+theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF hh hp hs => by
+  obtain ⟨r₁, hh₁, hp₁⟩ := h₁ m r rF hh hp hs
+  exact h₂ m r₁ rF hh₁ hp₁ hs
+
+end EUpd
+
+namespace FTriple
+
+variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
+
+/-- An update of the precondition. -/
+theorem eupd (hu : EUpd P P') (ht : FTriple P' c Q) : FTriple P c Q := fun m r rF hh hp hs => by
+  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
+  exact ht m r' rF hh' hp' hs
+
+/-- An update of the postcondition. -/
+theorem eupd_post (ht : FTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTriple P c Q' := by
+  intro m r rF hh hp hs
+  have := ht m r rF hh hp hs
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', hq, hs'⟩ := this
+    obtain ⟨r'', hh'', hq'⟩ := hu _ _ r' rF hh' hq hs'
+    exact ⟨r'', hh'', hq', hs'⟩
+
+end FTriple
+
+namespace FTotalTriple
+
+variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
+
+theorem eupd (hu : EUpd P P') (ht : FTotalTriple P' c Q) : FTotalTriple P c Q :=
+  ⟨FTriple.eupd hu ht.1, fun m r rF hh hp hs => by
+    obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
+    exact ht.2 m r' rF hh' hp' hs⟩
+
+theorem eupd_post (ht : FTotalTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTotalTriple P c Q' :=
+  ⟨FTriple.eupd_post ht.1 hu, ht.2⟩
+
+end FTotalTriple
+
 /-! ## The logic record -/
 
 /-- `Logic` (`ZigLean/Sep/AllocSpec.lean`) over full-state assertions. A total triple is a triple
@@ -137,6 +202,9 @@ structure FLogic where
   /-- Two programs with the same runs from every full-state sequential memory. -/
   congr : ∀ {α : Type} {P : FAssn} {c c' : MemM α} {Q : α → FAssn},
     (∀ m, m.FSeq → c'.run m = c.run m) → T P c Q → T P c' Q
+  /-- An update of the postcondition in the final memory (`EUpd`: it may change extent claims). -/
+  eupdPost : ∀ {α : Type} {P : FAssn} {c : MemM α} {Q Q' : α → FAssn}, T P c Q →
+    (∀ v, EUpd (Q v) (Q' v)) → T P c Q'
 
 /-- Partial correctness: `FTriple`. -/
 def FLogic.partial : FLogic where
@@ -149,6 +217,7 @@ def FLogic.partial : FLogic where
   ex := FTriple.ex
   lift := FTriple.lift
   congr := FTriple.congr
+  eupdPost := FTriple.eupd_post
 
 /-- Total correctness: `FTotalTriple`. -/
 def FLogic.total : FLogic where
@@ -161,6 +230,7 @@ def FLogic.total : FLogic where
   ex := FTotalTriple.ex
   lift := FTotalTriple.lift
   congr := FTotalTriple.congr
+  eupdPost := FTotalTriple.eupd_post
 
 namespace FLogic
 
