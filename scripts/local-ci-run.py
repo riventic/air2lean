@@ -319,7 +319,7 @@ class Job:
         self.row, self.workflow, self.job = row, workflow, workflow['jobs'][row['job']]
         self.workspace, self.tools, self.artifacts = workspace, tools, artifacts
         self.expression, self.render_text = expression, render
-        self.runner_temp = artifacts / 'runner-temp'
+        self.runner_temp = artifacts / ('runner-temp-' + row['job'])
         self.values = row_context(row, workspace)
         self.values['runner.temp'] = str(self.runner_temp)
         self.path_extra = []
@@ -337,9 +337,7 @@ class Job:
         path = env.get('PATH', '/usr/bin:/bin')
         if host:
             # No Zig/Lean of the user's own on the path: the steps install what CI installs.
-            keep = [d for d in path.split(':') if not any(
-                os.access(os.path.join(d, t), os.X_OK) for t in ('zig', 'lake', 'lean', 'elan', 'air2lean'))]
-            path = ':'.join(keep)
+            path = ':'.join(self.without_user_toolchains(d) for d in path.split(':'))
         elan = self.elan_home()
         env.update({'CI': 'true', 'GITHUB_ACTIONS': 'true', 'GITHUB_WORKSPACE': str(self.workspace),
                     'RUNNER_TEMP': str(self.runner_temp), 'RUNNER_OS': self.values['runner.os'],
@@ -355,6 +353,20 @@ class Job:
         job_env = {k: self.render_text(v, self.step_values()) for k, v in self.job.get('env', {}).items()}
         env.update(job_env)
         return env
+
+    BANNED = ('zig', 'lake', 'lean', 'leanc', 'elan', 'air2lean')
+
+    def without_user_toolchains(self, directory):
+        """A PATH directory minus the user's own Zig/Lean tools: a symlink farm when it has any."""
+        if not any(os.access(os.path.join(directory, t), os.X_OK) for t in self.BANNED):
+            return directory
+        farm = self.tools / 'path' / re.sub(r'\W', '_', directory)
+        shutil.rmtree(farm, ignore_errors=True)
+        farm.mkdir(parents=True)
+        for name in os.listdir(directory):
+            if name not in self.BANNED:
+                (farm / name).symlink_to(os.path.join(directory, name))
+        return str(farm)
 
     def elan_home(self):
         for step in self.job['steps']:
@@ -379,7 +391,7 @@ class Job:
         f = self.artifacts / 'github_path'
         if f.exists():
             for line in reversed(f.read_text().split('\n')):
-                if line and line not in self.path_extra:
+                if line and line not in self.path_extra and not line.endswith('/.elan/bin'):
                     self.path_extra.insert(0, line)
             f.unlink()
 
@@ -427,7 +439,11 @@ class Job:
         out['cache-hit'] = 'false'
         runner_prefix = str(self.runner_temp) + '/'
         if re.fullmatch(r'(tests/diff/)?\.lake(/\*)?', path):
-            return  # .lake directories persist in the volume/workspace: restored builds are incremental
+            # .lake directories persist in the volume/workspace, so every build is incremental. A
+            # marker plays the exact-key cache entry: the `lake` job writes it after its build.
+            if path.startswith('.lake') and self.lake_marker().exists() and self.lake_marker().read_text() == key:
+                out['cache-hit'] = 'true'
+            return
         if path.startswith(runner_prefix) and path.endswith('zig-diff-cache'):
             # The harness builds of scripts/diff.sh; content addressed, so staleness only costs time.
             target = self.tools / 'zig-diff-cache' / ('%s-%s-%s' % (self.row['job'], self.row['zig'], self.row['part']))
@@ -447,6 +463,19 @@ class Job:
                 out['cache-hit'] = 'true'
             return
         raise RuntimeError('unsupported cache path in ci.yml: %s (teach scripts/local-ci-run.py)' % path)
+
+    def lake_marker(self):
+        return self.workspace / '.lake/local-ci-lake-key'
+
+    def lake_key(self):
+        """The key under which CI's `lake` job caches this tree's build of the root package."""
+        lookup = next(s for s in self.workflow['jobs']['lake']['steps'] if s.get('id') == 'lookup')
+        return self.render_key(lookup['with']['key'])
+
+    def save_lake(self, step):
+        if str(step['with']['path']).startswith('.lake'):
+            self.lake_marker().parent.mkdir(exist_ok=True)
+            self.lake_marker().write_text(self.render_key(step['with']['key']))
 
     def save_zig_air(self):
         name, entry = self.zig_air
@@ -521,7 +550,7 @@ class Job:
                 link.symlink_to(entry)
             mapping[str(entry)] = str(link)
         for line in (home / 'github_path').read_text().split('\n'):
-            if line:
+            if line and not line.endswith('/.elan/bin'):  # the recipe's HOME; ELAN_HOME/bin is ours
                 for old, new in sorted(mapping.items(), key=lambda kv: -len(kv[0])):
                     if line == old or line.startswith(old + '/'):
                         line = new + line[len(old):]
@@ -547,7 +576,7 @@ class Job:
             elif uses in ('actions/cache', 'actions/cache/restore'):
                 self.do_cache(step)
             elif uses == 'actions/cache/save':
-                pass  # persistent directories instead
+                self.save_lake(step)  # the directories themselves are persistent
             elif uses == 'actions/upload-artifact':
                 self.do_upload(step)
             elif uses:
@@ -619,17 +648,38 @@ def exec_row(args):
     status, failed_step = 0, None
 
     def stop(signum, _frame):
-        if job.child is not None and job.child.poll() is None:
-            os.killpg(job.child.pid, signum)
-            try:
-                job.child.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(job.child.pid, signal.SIGKILL)
+        for each in jobs:
+            if each.child is not None and each.child.poll() is None:
+                os.killpg(each.child.pid, signum)
+                try:
+                    each.child.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    os.killpg(each.child.pid, signal.SIGKILL)
         raise SystemExit(128 + signum)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     os.chdir(workspace)
+    jobs = [job]
+
+    def build_lake_first():
+        # `needs: lake`: CI's test rows restore the root package's build from the `lake` job,
+        # and some steps rely on modules only that job builds. Run it first when this tree's
+        # build is not in the persistent .lake yet.
+        lake = Job(rows['lake'], workflow, workspace, tools, artifacts, expression, render)
+        lake.log = job.log
+        jobs.append(lake)
+        if lake.lake_marker().exists() and lake.lake_marker().read_text() == lake.lake_key():
+            return
+        shutil.rmtree(lake.runner_temp, ignore_errors=True)
+        lake.runner_temp.mkdir(parents=True)
+        job.say('== CI %s: needs the lake job; running it first ==' % row['id'])
+        for step in lake.job['steps']:
+            lake.run_step(step)
+        job.failed = job.failed or lake.failed
+        job.steps_report += lake.steps_report
     try:
+        if 'lake' in ([job.job.get('needs')] if isinstance(job.job.get('needs'), str) else job.job.get('needs', [])):
+            build_lake_first()
         for step in job.job['steps']:
             job.run_step(step)
     except StepFailed as failure:
