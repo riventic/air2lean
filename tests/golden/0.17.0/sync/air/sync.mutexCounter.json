@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,9 +118,15 @@
  },
  "name": "sync.mutexCounter",
  "module": "root",
+ "src": {
+  "file": "sync.zig",
+  "module": "sync",
+  "decl_line": 22
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -130,7 +139,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -233,7 +243,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 12,
@@ -249,7 +260,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 15,
@@ -259,6 +271,7 @@
     "ty": 13,
     "func": "Thread.spawn__func_1",
     "module": "std",
+    "instance_key": "abcd1cf9934a80233f030d93736d9354adcb4c0e78a89978be44215b42128f80",
     "noreturn": false,
     "comptime_fn": "sync.work",
     "comptime_fn_module": "root"
@@ -306,7 +319,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 15
     },
     {
      "id": 18,
@@ -383,7 +397,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 9
   },
   {
    "id": 27,
@@ -405,7 +420,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 29,
@@ -421,7 +437,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 31,
@@ -443,7 +460,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 13
   },
   {
    "id": 33,
@@ -469,7 +487,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 36,

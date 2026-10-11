@@ -56,7 +56,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 24 | Sentinel mismatch (sentinel slicing) | `sentinelMismatch` | `.panic` | `u8` sentinel on 0.16.0 (the export records its value): `Zig.checkSentinelByte`, and the sentinel item must lie in the operand, `.illegal` (**fixed**, was a value). Any other sentinel without Sema's check: *rejected* (**fixed**) |
 | 25 | `@memcpy` arguments of unequal length | `copyLenMismatch` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove` with the destination's count) |
 | 26 | `@memcpy` arguments alias | `memcpyAlias` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove`) |
-| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | slice operands: Sema still emits each slice operand's `slice_len`; one that nothing reads, before a loop bounded by `cmp_lt(bitcast(i), bound)`, becomes `Zig.forLen len bound`, `.illegal` when unequal (**fixed**, was a value). The match is by shape, so it errs toward `.illegal`: an unread `slice_len` before an unrelated loop is checked too. A later range or array operand: **gap**, see below |
+| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | Sema compares the lengths only with safety on; without it the AIR need not hold any operand length but the loop's own (a range `0..n` has no instruction). The patched Sema (`zig-patch/<version>/hook.patch`, every supported version) emits the same comparison as `if (!ok) unreachable`, and the export lists `for_len` in `unchecked_ib`; the bare `unreach` is `.illegal` (**fixed**, slices, ranges and arrays). A function with a loop in an export without that fact is rejected (`Check.checkForLenFact`) |
 | 28 | `@tagName` of an unnamed non-exhaustive enum value | `invalidEnumValue` (via `is_named_enum_value`) | `.panic` | `E.tagName`: `.illegal` (**fixed**, was `.panic`) |
 | 29 | Switch on a corrupt value | `corruptSwitch` | `.panic` | every model enum value is named; no corrupt value exists |
 | 30 | A `noreturn` function returns | `noreturnReturned` | *rejected* (handler outside the table) | — |
@@ -77,6 +77,52 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 40 | `@fieldParentPtr` of a pointer that is not to that field (parent without a defined layout) | local places: the checker requires the proven field. Memory: `Zig.checkParent`, the parent must be a live, aligned object of its size in the field pointer's block, `.illegal` (**fixed**, was a value). `extern`/`packed` parents: defined arithmetic, a value |
 | 41 | Inline assembly with undeclared clobbers | premises [ASM-01](premises.md#asm-01), [ASM-02](premises.md#asm-02) |
 | 42 | Branch on, or arithmetic with, `undefined` | `undefined` constant operands are *rejected*. A load of undefined bytes throws `.unspecified`, earlier than the IB |
+| 43 | A `noalias` parameter's memory also accessed through another pointer during the call, one access a write ([below](#noalias-parameters)) | `Zig.naMark`: `.illegal` (**fixed**, was the value of the call). A function whose roots the translator cannot tell: *rejected* |
+
+## noalias parameters
+
+**Rule.** The language reference has no text for `noalias` ("TODO add documentation for
+noalias" in 0.15.2, 0.16.0 and 0.17.0, 0.14.1 likewise). Sema records it as a bit of the
+function type (`noalias_bits`: the first 32 parameters; "non-pointer parameter declared
+noalias" for any other type), and the LLVM backend lowers each set bit to LLVM's `noalias`
+argument attribute: on a pointer parameter, and on the pointer of a slice parameter
+(`src/codegen/llvm.zig` `addByValParamAttrs` and the `.slice` lowering; the call-site attributes
+in `src/codegen/llvm/FuncGen.zig`), in 0.14.1 to 0.17.0 alike. So the rule is LLVM's: during the
+execution of the call, memory accessed through a pointer *based on* the parameter is not also
+accessed through a pointer not based on it, if either access writes. Violating it is undefined
+behaviour; no Zig safety check exists. A parameter of an `inline fn` has no attribute (Sema
+inlines the body), so only a called function's own parameters count. `@memcpy`'s `noalias` is a
+separate rule (row 26).
+
+**Model.** The exporter writes each function's `noalias` parameter indices (`docs/air-json.md`).
+For a function that has some and uses memory, `Air2Lean/Noalias.lean` computes the *root* of
+every access: the parameter the pointer is based on (LLVM's rules: a derived pointer is based
+on its base, `@ptrFromInt` on the pointers of its integer), or none. The generated function
+opens a scope (`Zig.naEnter`) and follows each instruction that can touch memory with the mark
+of its roots (`Zig.naMark`, `ZigLean/Mem/Noalias.lean`). The mark checks that instruction's
+accesses at once against the scope's log and logs them: an access that overlaps a logged one
+with another root, one of the two a write, throws `.illegal`. Every function that such a
+function may call marks its own accesses the same way (root none), so a conflict inside a
+callee is found there too. No later failure (an overflow, a safety panic, a callee's error) can
+take the place of the violation. One instruction is the unit: a load whose read conflicts and
+whose bytes are undefined throws `.unspecified` from its own decode before its mark (the
+conflicting write must then have stored `undefined`), and a model function that records an
+access and then fails in the same call keeps its failure.
+
+**Rejected.** The translator rejects (fail closed) a function with `noalias` parameters in which
+a value based on one reaches memory or another function (a store, an atomic or `memset`
+operand, a call or asm argument, a copy out of a local that holds one): a pointer read back or
+the callee's accesses could then be based on the parameter unseen. It also rejects an access
+whose pointer may be based on more than one of a parameter and another pointer
+(`if (c) p else q`), and a concurrent (`Zig.ConcM`) function with `noalias` parameters. A
+function with `noalias` parameters that uses no memory needs no scope: it writes nothing.
+
+`tests/roadmap/noalias/check.sh`: a `memcpy`-like copy (compiler_rt's `memcpySmall`) within one
+buffer is `.illegal` for overlapping ranges and returns the value for disjoint ones;
+`swap(&x, &x)` is `.illegal`, two `noalias` reads of one pointer are legal, a `noalias` write and
+a read through a plain parameter of the same `u32` are `.illegal`, also when an unchecked
+overflow or a callee's safety panic follows the conflict; a function that passes its `noalias`
+pointer on is rejected.
 
 ## Not illegal behaviour
 
@@ -91,21 +137,19 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 ## Gaps
 
 `@setRuntimeSafety(false)` blocks inside a ReleaseSafe build produce the unchecked shapes,
-so the rows above model each op's own check instead of relying on a Sema check. One case stays
-open: a `for` loop with runtime safety off whose second or later operand is a range
-(`for (a, 0..n)`) or an array. Sema emits no instruction for that operand's length, so the
-analyzed AIR does not contain it (`ib.forRange`). The loop runs over the first operand, and the
-model returns that result for any other length. Neither the model nor the checker can see the
-mismatch. Closing it needs an exporter change that keeps the operand lengths. Until then, a
-claim about a function with such a loop under `@setRuntimeSafety(false)` does not cover
-unequal lengths.
+so the rows above model each op's own check instead of relying on a Sema check. No case is open.
+The last one, a `for` loop with runtime safety off whose later operand is a range or an array,
+needs a fact the AIR did not carry; the patched Sema now exports it (row 27). AIR from a
+compiler without that patch (no `unchecked_ib`) is accepted only for functions without loops.
 
 ## Evidence
 
 - `tests/roadmap/illegal-behavior/check.sh`: the fixture sources `ib.zig` and `probe.zig`
   (each former gap as a `@setRuntimeSafety(false)` function),
   their retained 0.16.0 AIR (`air/`, `probe-air/`), the translation, `Cases.lean` on the
-  generated functions, and `Runtime.lean` on the runtime ops.
+  generated functions, and `Runtime.lean` on the runtime ops. `forlen.zig` and its AIR from every
+  supported version (`for-air/<version>/`) show the `for` length check (row 27) in each, and a
+  copy without `unchecked_ib` is rejected.
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input
   class (`native/*.txt`; [build-modes.md](build-modes.md)). The differential harness (`scripts/diff.sh`) counts every
   `.illegal` row as an `illegal` exclusion in every mode, so it compares none of them:
@@ -115,3 +159,4 @@ unequal lengths.
   `.illegal`, so float `@divExact` needs no exception to the
   [build-modes](build-modes.md) transfer premise.
 - `tests/roadmap/architecture-audit/trust-chain/check.py unchecked-memcpy --require-fixed`.
+- `tests/roadmap/noalias/check.sh` (row 43).

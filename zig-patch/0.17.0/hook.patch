@@ -8,3 +8,45 @@
      var air_owned = true;
      defer if (air_owned) air.deinit(gpa);
  
+--- zig-0.17.0-pristine/src/Sema.zig
++++ zig-0.17.0/src/Sema.zig
+@@ -4170,8 +4170,9 @@
+         return sema.failWithOwnedErrorMsg(block, msg);
+     }
+ 
+-    // Now for the runtime checks.
+-    if (any_runtime and block.wantSafety()) {
++    // Now for the runtime checks. air2lean: with runtime safety off the lengths must still
++    // agree (illegal behaviour otherwise): the check is `unreach` instead of a panic.
++    if (any_runtime and !block.isComptime()) {
+         var ok: Air.Inst.Ref = .none;
+         for (runtime_arg_lens, 0..) |arg_len, i| {
+             if (arg_len == .none) continue;
+@@ -4183,11 +4184,26 @@
+                 eq;
+         }
+         if (ok != .none)
+-            try sema.addSafetyCheck(block, src, ok, .for_len_mismatch);
++            if (block.wantSafety())
++                try sema.addSafetyCheck(block, src, ok, .for_len_mismatch)
++            else
++                try sema.air2leanUncheckedIb(block, ok);
+     }
+ 
+     return len;
+ }
++
++/// air2lean (zig-patch): illegal behaviour that Sema does not check with runtime safety off,
++/// made visible to the AIR exporter as `if (!ok) unreachable` (`air_json_unchecked_ib`).
++fn air2leanUncheckedIb(sema: *Sema, block: *Block, ok: Air.Inst.Ref) CompileError!void {
++    var fail_block = block.makeSubBlock();
++    defer fail_block.instructions.deinit(sema.gpa);
++    _ = try fail_block.addNoOp(.unreach);
++    try sema.addSafetyCheckExtra(block, ok, &fail_block);
++}
++
++/// The unchecked illegal behaviours this compiler lowers to `unreach` (`air2leanUncheckedIb`).
++pub const air_json_unchecked_ib = [_][]const u8{"for_len"};
+ 
+ /// Given any single pointer, retrieve a pointer to the payload of any optional
+ /// or error union pointed to, initializing these pointers along the way.

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,9 +118,15 @@
  },
  "name": "sync.rwLockSnapshotPair",
  "module": "root",
+ "src": {
+  "file": "sync.zig",
+  "module": "sync",
+  "decl_line": 117
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -130,7 +139,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -288,7 +298,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 12,
@@ -304,7 +315,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 15,
@@ -314,6 +326,7 @@
     "ty": 20,
     "func": "Thread.spawn__func_2",
     "module": "std",
+    "instance_key": "4a60f40c32acc35a6e8ce66dce66c37fc5eb64f2febd8055c3c8ba8c73205594",
     "noreturn": false,
     "comptime_fn": "sync.writer",
     "comptime_fn_module": "root"
@@ -361,7 +374,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 15
     },
     {
      "id": 18,
@@ -438,7 +452,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 7
   },
   {
    "id": 27,
@@ -454,7 +469,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 32
   },
   {
    "id": 29,
@@ -479,7 +495,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 21
   },
   {
    "id": 31,
@@ -516,7 +533,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 22
   },
   {
    "id": 35,
@@ -553,7 +571,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 7
   },
   {
    "id": 39,
@@ -569,7 +588,8 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 22
   },
   {
    "id": 41,
@@ -594,7 +614,8 @@
    "id": 42,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 11
   },
   {
    "id": 43,
@@ -610,7 +631,8 @@
    "id": 44,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 11
   },
   {
    "id": 45,
@@ -632,7 +654,8 @@
    "id": 46,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 15
   },
   {
    "id": 47,
@@ -652,7 +675,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 23
   },
   {
    "id": 49,
@@ -671,7 +695,8 @@
    "id": 50,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 51,

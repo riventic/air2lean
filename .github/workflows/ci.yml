@@ -965,6 +965,13 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/roadmap/illegal-behavior/check.sh
+      # noalias parameters (docs/illegal-behavior.md row 43): overlapping calls are `.illegal`,
+      # disjoint ones return values, an escaping noalias pointer is rejected.
+      - name: noalias parameters
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/noalias/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
@@ -1272,10 +1279,13 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
 
-      # L10: error-code widths. Width-quantified proofs (proof-only module) and the
-      # hand-written 16/8/10/17-bit fixtures; only the default width has native evidence.
+      # L10: error-code widths. Width-quantified proofs (proof-only module), the hand-written
+      # 16/8/10/17-bit fixtures, the recorded native observations against the model, and this
+      # host's stock compiler on the same 22 configurations.
       - name: Error-code widths (--error-limit) proofs, fixtures and rejections
         if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean

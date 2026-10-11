@@ -34,6 +34,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -47,7 +48,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -105,17 +105,6 @@
        "default",
        "inst_implicit"
       ],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "bvar": 0
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
       "peeled": []
      },
      {
@@ -215,7 +204,7 @@
         "closed": "OfNat.ofNat"
        },
        {
-        "closed": "Zig.OsState.mk"
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -263,17 +252,9 @@
       "peeled": []
      }
     ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     }
-    ],
+    "binders": [],
     "head": {
-     "fingerprint": "3c682a6f6f68eb8e6416f65b9d4d1f2b",
+     "fingerprint": "a2a2bee6dab1482cecec85635a6c8193",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.ReturnsWithin"
@@ -305,8 +286,7 @@
     "instLENat",
     "instOfNatNat",
     "LE.le",
-    "OfNat.ofNat",
-    "Zig.Env"
+    "OfNat.ofNat"
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.countdown_bounded.nonvacuous",
@@ -315,11 +295,11 @@
      {
       "args": [],
       "atom": {
-       "closed": "Zig.Env"
+       "closed": null
       },
       "extra": [],
-      "fn": "Zig.Env",
-      "fn_module": "ZigLean.Conc.Basic",
+      "fn": null,
+      "fn_module": null,
       "params": [],
       "peeled": []
      },
@@ -387,6 +367,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -400,7 +381,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -432,17 +412,6 @@
       "extra": [],
       "fn": "Unit",
       "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "bvar": 0
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
       "params": [],
       "peeled": []
      },
@@ -543,7 +512,7 @@
         "closed": "OfNat.ofNat"
        },
        {
-        "closed": "Zig.OsState.mk"
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -591,17 +560,9 @@
       "peeled": []
      }
     ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     }
-    ],
+    "binders": [],
     "head": {
-     "fingerprint": "55c181f83e30841d8195822e2c82d707",
+     "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturns"
@@ -653,6 +614,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -666,7 +628,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -704,17 +665,6 @@
      {
       "args": [],
       "atom": {
-       "bvar": 0
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
        "closed": null
       },
       "extra": [],
@@ -726,12 +676,12 @@
      {
       "args": [
        {
-        "bvar": 1
+        "bvar": 0
        }
       ],
       "atom": {
        "bvars": [
-        1
+        0
        ],
        "open": "Zig.Conc.Total.countdown"
       },
@@ -812,7 +762,7 @@
         "closed": "OfNat.ofNat"
        },
        {
-        "closed": "Zig.OsState.mk"
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -864,20 +814,13 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
       "name": "n",
       "prop": false,
       "uses": []
      }
     ],
     "head": {
-     "fingerprint": "55c181f83e30841d8195822e2c82d707",
+     "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturns"
@@ -929,6 +872,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -942,7 +886,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -974,17 +917,6 @@
       "extra": [],
       "fn": "Unit",
       "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "bvar": 1
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
       "params": [],
       "peeled": []
      },
@@ -1096,7 +1028,7 @@
         "closed": "OfNat.ofNat"
        },
        {
-        "closed": "Zig.OsState.mk"
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -1148,20 +1080,13 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
       "name": "Fair",
       "prop": false,
       "uses": []
      }
     ],
     "head": {
-     "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
+     "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
@@ -4354,6 +4279,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4367,7 +4293,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -4389,9 +4314,6 @@
         "closed": "Unit"
        },
        {
-        "bvar": 0
-       },
-       {
         "closed": null
        },
        {
@@ -4405,10 +4327,7 @@
        }
       ],
       "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "Zig.Conc.Total.EventuallyReturns"
+       "closed": "Zig.Conc.Total.EventuallyReturns"
       },
       "extra": [],
       "fn": "Zig.Conc.Total.EventuallyReturns",
@@ -4419,21 +4338,12 @@
        "default",
        "default",
        "default",
-       "default",
        "default"
       ],
       "peeled": []
      }
     ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     }
-    ],
+    "binders": [],
     "head": {
      "fingerprint": "1d9820f975500d1f9e6b550c0f4a3425",
      "kind": "definition",
@@ -4485,6 +4395,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4498,7 +4409,6 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
-    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -4537,17 +4447,6 @@
       "args": [],
       "atom": {
        "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "bvar": 0
       },
       "extra": [],
       "fn": null,
@@ -4656,7 +4555,7 @@
         "closed": "OfNat.ofNat"
        },
        {
-        "closed": "Zig.OsState.mk"
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -4704,17 +4603,9 @@
       "peeled": []
      }
     ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "env",
-      "prop": false,
-      "uses": []
-     }
-    ],
+    "binders": [],
     "head": {
-     "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
+     "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"

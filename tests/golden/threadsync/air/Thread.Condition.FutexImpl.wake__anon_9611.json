@@ -1,6 +1,9 @@
 {
  "schema": 11,
  "zig_version": "0.15.2",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "name": "Thread.Condition.FutexImpl.wake__anon_9611",
  "instance_key": "b3c587c577891975ae679f21f5c53613aa07af65615fd2696afe4cb483152164",
  "params": [
