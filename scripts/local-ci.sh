@@ -101,8 +101,14 @@ if [ "${1:-}" = --inside ]; then
   exit 0
 fi
 
+# Row-based runner: scripts/local-ci.sh --part P ... --version V ... --changed (docs/local-ci.md).
+case "${1:-}" in
+  --*) exec python3 "$(dirname -- "${BASH_SOURCE[0]}")/local-ci-run.py" "$@" ;;
+esac
+
 usage() {
-  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix | mutations' >&2
+  echo 'usage: scripts/local-ci.sh [--part P ...] [--version V ...] [--changed] [--list] [-v]   (rows, docs/local-ci.md)' >&2
+  echo '   or: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix | mutations' >&2
   exit 2
 }
 mode=${1:-full} version=${2:-0.16.0} examples=${3:-}
