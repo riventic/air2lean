@@ -1,0 +1,44 @@
+{
+  "schema": "air2lean-generated/1",
+  "note": "Whole-tree generated files (docs/ci.md#whole-tree-generated-files). They describe the whole tree, so they go stale whenever main moves; they are not committed (.gitignore). CI regenerates them twice on the tested tree (scripts/generated.py produce), and the merge_group run's files are published on the `generated` branch, one commit per main commit. Local tools get them through scripts/generated.py materialize/fetch.",
+  "branch": "generated",
+  "freshness_minutes": 30,
+  "groups": [
+    {
+      "name": "coverage",
+      "generator": "coverage",
+      "note": "scripts/coverage.py generate --os linux over each version's pinned pristine compiler source",
+      "paths": ["coverage/0.14.1.json", "coverage/0.15.2.json", "coverage/0.16.0.json", "coverage/0.17.0.json"]
+    },
+    {
+      "name": "premise-index",
+      "generator": "premise-index",
+      "note": "scripts/premises.py write",
+      "paths": ["docs/premise-index.md"]
+    },
+    {
+      "name": "provenance",
+      "generator": "provenance",
+      "heavy": true,
+      "note": "scripts/provenance-evidence.py --fixture provenance regenerate --refresh, install, record (patched 0.16.0, stock 0.16.0, Lean)",
+      "paths": ["assurance/provenance/manifest.json", "assurance/provenance/pins.json",
+                "assurance/provenance/receipt/audit.json", "assurance/provenance/receipt/plan.json",
+                "assurance/provenance/receipt/receipt.json"],
+      "run_bound": {"assurance/provenance/receipt/receipt.json": ["artifacts"],
+                    "assurance/provenance/manifest.json": ["manifest_sha256", "links.receipt"],
+                    "assurance/provenance/pins.json": ["manifest_sha256"]}
+    },
+    {
+      "name": "provenance-gap",
+      "generator": "provenance",
+      "heavy": true,
+      "note": "the same for --fixture gap (aarch64-macos target, cross-built with stock Zig)",
+      "paths": ["assurance/provenance-gap/manifest.json", "assurance/provenance-gap/pins.json",
+                "assurance/provenance-gap/receipt/audit.json", "assurance/provenance-gap/receipt/plan.json",
+                "assurance/provenance-gap/receipt/receipt.json"],
+      "run_bound": {"assurance/provenance-gap/receipt/receipt.json": ["artifacts"],
+                    "assurance/provenance-gap/manifest.json": ["manifest_sha256", "links.receipt"],
+                    "assurance/provenance-gap/pins.json": ["manifest_sha256"]}
+    }
+  ]
+}

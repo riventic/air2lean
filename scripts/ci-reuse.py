@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = 'air2lean-ci-reuse/1'
 DECLARATIONS = '.github/ci-inputs.json'
 WORKFLOW = '.github/workflows/ci.yml'
+GENERATED = 'assurance/generated.json'
 WORKFLOW_NAME = 'CI'
 MACHINERY = ('scripts/ci-reuse.py', 'scripts/ci-trace.sh', DECLARATIONS)
 # Jobs that are not parts: they build what the parts consume, or aggregate results.
@@ -552,8 +553,11 @@ def deepest_tracked_dir(path, dirs):
     return parent
 
 
-def coverage(observations, inputs, tree, commit_bound=False):
-    """Violations: (path, kinds, what the declaration lacks) for every uncovered observation."""
+def coverage(observations, inputs, tree, commit_bound=False, generated=()):
+    """Violations: (path, kinds, what the declaration lacks) for every uncovered observation.
+
+    `generated` are the whole-tree generated files (assurance/generated.json): untracked, but
+    derived from the whole tree by the `generated` job, so only a whole-tree declaration covers them."""
     dirs = tree_dirs(tree)
     problems = []
     for step in observations:
@@ -587,6 +591,10 @@ def coverage(observations, inputs, tree, commit_bound=False):
                     parent = str(PurePosixPath(path).parent) if '/' in path else ''
                     if path and not inputs.listing(parent):
                         problems.append((path, kinds, 'listing of %r not declared' % (parent or '.')))
+            elif path in generated:
+                # Installing one (write, existence probes) reveals nothing the registry does not fix.
+                if set(kinds) - {'write', 'probe'} and not inputs.subtree(''):
+                    problems.append((path, kinds, 'whole-tree generated file (%s): declare "**"' % GENERATED))
             else:
                 anchor = deepest_tracked_dir(path, dirs)
                 if not inputs.listing(anchor):
@@ -800,7 +808,8 @@ def check_trace(root, part, directory, environ=os.environ):
         return 0
     inputs = part_inputs(data, entry, hashfiles_patterns(canonical(preimage['definitions'])))
     steps = read_traces(directory)
-    problems = coverage(steps, inputs, tracked_tree(root), bool(entry.get('commit_bound')))
+    generated = {p for g in json.loads((Path(root) / GENERATED).read_text())['groups'] for p in g['paths']}
+    problems = coverage(steps, inputs, tracked_tree(root), bool(entry.get('commit_bound')), generated)
     observed = sum(len(s.get('observed', {})) for s in steps)
     Path(directory, 'coverage.json').write_text(canonical(
         {'part': part, 'steps': len(steps), 'observed': observed, 'problems': problems}))

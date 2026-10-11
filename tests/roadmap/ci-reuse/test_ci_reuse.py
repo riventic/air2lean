@@ -141,6 +141,15 @@ class Coverage(unittest.TestCase):
         self.assertIn("'.'", problems['.lake/build/x.olean'])
         self.assertEqual(violations(step, [], listings=['tests/t', '.']), [])
 
+    def test_whole_tree_generated_file_needs_the_whole_tree(self):
+        step = self.step({'docs/premise-index.md': ['read']})
+        generated = {'docs/premise-index.md'}
+        problems = cr.coverage([step], cr.Inputs([], ['docs']), TREE, False, generated)
+        self.assertIn('whole-tree generated file', problems[0][2])
+        self.assertEqual(cr.coverage([step], cr.Inputs(['**']), TREE, False, generated), [])
+        installed = self.step({'docs/premise-index.md': ['probe', 'write']})
+        self.assertEqual(cr.coverage([installed], cr.Inputs([]), TREE, False, generated), [])
+
     def test_commit_identity_needs_commit_bound(self):
         step = self.step({}, git={'["git","rev-parse","HEAD"]': 'commit'})
         self.assertIn('commit_bound', violations(step)[0][2])

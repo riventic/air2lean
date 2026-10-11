@@ -218,6 +218,10 @@ MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs
 # T04 `aarch64-linux`, L02 `bitops-native-arm` and T06 `build-modes-aarch64-linux` (ubuntu-24.04-arm).
 ARM_REPRODUCE = 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job'
 NATIVE_JOBS = {
+    # The whole-tree generated files (docs/ci.md#whole-tree-generated-files): their determinism
+    # and strict checks are gates of the run that produced them.
+    'generated': 'scripts/generated.py produce --group coverage --group premise-index --out DIR',
+    'provenance': 'scripts/generated.py produce --group provenance --group provenance-gap --out DIR',
     'macos': MACOS_REPRODUCE,
     'aarch64-linux': ARM_REPRODUCE,
     'bitops-native-arm': ARM_REPRODUCE,

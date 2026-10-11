@@ -435,7 +435,10 @@ class RealWorkflowTests(Repo):
 
     def test_current_workflow_plan_and_ledger_structure(self):
         plan = rr.build_plan(ROOT, rr.git_text(ROOT, 'rev-parse', 'HEAD'))
-        self.assertTrue(all(job['gates'] for job in plan['jobs'] if job['name'] not in rr.SUPPORT_JOBS))
+        support = [job for job in plan['jobs'] if job['reproduce'] == 'not a gate']
+        self.assertEqual({job['name'].split(' (')[0] for job in support}, rr.SUPPORT_JOBS)
+        self.assertTrue(all(job['gates'] for job in plan['jobs'] if job not in support))
+        self.assertTrue({'generated', 'provenance'} <= {job['name'] for job in plan['jobs'] if job['gates']})
         errors, _, counts = rr.check_ledger(ROOT, allow_unfetched=True)
         self.assertEqual(errors, [])
         self.assertTrue(counts)

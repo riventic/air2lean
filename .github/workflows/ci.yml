@@ -22,9 +22,177 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # docs/ci.md#whole-tree-generated-files: the whole-tree files of this tree that need no build
+  # (coverage inventories, premise index; assurance/generated.json), regenerated twice with
+  # identical bytes required, and handed to every row and to preflight as the artifact
+  # `generated-files`. A merge_group run's artifact is what .github/workflows/generated.yml
+  # publishes on the `generated` branch once main is this commit; nothing is regenerated there.
+  generated:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash scripts/ci-trace.sh {0}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#1-input-hash-result-reuse ("reuse": false: this part always runs).
+      - name: Reuse a recorded result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_ROW: ${{ toJSON(matrix) }}
+        run: python3 scripts/ci-reuse.py decide --job generated --row "$AIR2LEAN_ROW"
+
+      - name: Regenerate the whole-tree files twice
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_CACHE: ${{ runner.temp }}/air2lean-cache
+        run: python3 scripts/generated.py produce --group coverage --group premise-index --out "$RUNNER_TEMP/generated-files"
+
+      - name: Upload the generated files
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-files
+          path: ${{ runner.temp }}/generated-files
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Checkout unchanged by verification
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+
+      - name: Declared inputs cover every observation
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_UNTRACED: "1"
+        run: python3 scripts/ci-reuse.py check-trace
+
+  # The two provenance fixtures (assurance/provenance, assurance/provenance-gap): the pipeline
+  # (patched 0.16.0 export, translation, stock-Zig native build, guarded proof receipt) twice on
+  # this tree, identical up to the receipt's own run record, then checked strictly. Uploaded as
+  # `generated-provenance` for the `generated` branch; no other job reads them.
+  provenance:
+    needs: [lake, zig-air]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash scripts/ci-trace.sh {0}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#1-input-hash-result-reuse ("reuse": false: this part always runs).
+      - name: Reuse a recorded result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_ROW: ${{ toJSON(matrix) }}
+        run: python3 scripts/ci-reuse.py decide --job provenance --row "$AIR2LEAN_ROW"
+
+      - name: Install stock zig 0.16.0
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.host-zig."0.16.0"]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.host-zig."0.16.0"]' sha256)
+          curl -fL --output host-zig.tar.xz "$url"
+          echo "$sha256  host-zig.tar.xz" | sha256sum -c -
+          mkdir -p host-zig
+          tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
+
+      - name: Download the patched zig
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: zig-air-0.16.0
+          path: ${{ runner.temp }}/zig-air
+
+      - name: Unpack the patched zig
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: tar -xf "$RUNNER_TEMP/zig-air/zig-air.tar"
+
+      - name: Install elan
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Download the Lake build
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lake-root
+          path: ${{ runner.temp }}/lake-root
+
+      - name: Unpack the Lake build
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: tar --zstd -xf "$RUNNER_TEMP/lake-root/lake-root.tar.zst"
+
+      - name: Regenerate the provenance fixtures twice
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          export AIR2LEAN_BUILD_LOCK="$RUNNER_TEMP/air2lean-build.lock"
+          export AIR2LEAN_ZIG_AIR="$PWD/zig-air-0.16.0/bin/zig" AIR2LEAN_ZIG="$PWD/host-zig/zig"
+          python3 scripts/generated.py produce --group provenance --group provenance-gap --out "$RUNNER_TEMP/generated-provenance"
+
+      # Edit-one-link and receipt-replay tests on copies, then the strict recheck of each fresh
+      # manifest and the strict offline replay of each fresh receipt against the tree.
+      - name: Provenance fixtures edit-one-link tests, strict recheck and receipt replay
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          python3 tests/roadmap/artifact-manifest/test_fixture.py
+          python3 scripts/provenance-evidence.py --fixture all check --strict
+          python3 scripts/provenance-evidence.py --fixture all replay --strict
+
+      - name: Upload the provenance fixtures
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-provenance
+          path: ${{ runner.temp }}/generated-provenance
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Checkout unchanged by verification
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+
+      - name: Declared inputs cover every observation
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_UNTRACED: "1"
+        run: python3 scripts/ci-reuse.py check-trace
+
   # The staleness checks of every generated file and record (scripts/preflight.sh, no Lean or Zig
   # build): a fast first signal. The test rows run each check again.
   preflight:
+    needs: [generated]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -33,8 +201,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
+      # tree by scripts/generated.py install.
+      - name: Download the generated files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-files
+          path: ${{ runner.temp }}/generated-files
+
+      - name: Install the generated files
+        run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
+
       - name: Preflight
-        run: scripts/preflight.sh --no-translator --no-sources
+        run: scripts/preflight.sh --no-translator --no-sources --no-materialize
 
   # Builds the root Lake package once per run, on top of main's newest cache entry, and hands it to
   # the rows as an artifact (retention 1 day). Only ci-cache.yml saves the Lake cache, on main, so
@@ -163,7 +342,7 @@ jobs:
   # also the parts that run once (offline checks and translator gates in `inputs`; `native`;
   # `audit`; `receipt`; one row per T06 build mode) and the mutation shards.
   test:
-    needs: [lake, zig-air]
+    needs: [lake, zig-air, generated]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     defaults:
@@ -296,6 +475,19 @@ jobs:
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job test --row "$AIR2LEAN_ROW"
 
+      # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
+      # tree by scripts/generated.py install.
+      - name: Download the generated files
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-files
+          path: ${{ runner.temp }}/generated-files
+
+      - name: Install the generated files
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
+
       - name: Offline compiler inventory regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: python3 tests/roadmap/inventory/test_inventory.py
@@ -341,6 +533,7 @@ jobs:
         run: |
           python3 tests/roadmap/ci-reuse/test_ci_reuse.py
           python3 tests/roadmap/ci-cache/test_ci_cache.py
+          python3 tests/roadmap/generated/test_generated.py
           python3 scripts/ci-reuse.py check-workflow
 
       # Fixture receipts/audits/diff summaries only; no Lean, Lake or Zig.
@@ -414,17 +607,6 @@ jobs:
       - name: Artifact manifest provenance regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
-
-      # Two committed receipt-chained fixtures (fresh schema-12 exports, schema-3 receipts, native identity):
-      # edit-one-link and receipt-replay tests on copies, the offline recheck and the offline replay of
-      # each committed receipt against the tree (no revision needed). No Zig, Lake or Lean.
-      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py --fixture NAME regenerate WORKDIR.
-      - name: Provenance fixtures edit-one-link tests, recheck and receipt replay
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: |
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_fixture.py
-          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all check
-          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all replay
 
       # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
       - name: Asm wrapper harness offline regressions
@@ -522,22 +704,6 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/build-modes -v
           python3 -B scripts/build-modes.py check
-
-      # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
-      - name: Check compiler-derived coverage inventory
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          source_temp=$(mktemp -d "$RUNNER_TEMP/air-inventory.XXXXXX")
-          trap 'rm -rf "$source_temp"' EXIT
-          url=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' url)
-          sha256=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' sha256)
-          curl -fL --output "$source_temp/source.tar.xz" "$url"
-          echo "$sha256  $source_temp/source.tar.xz" | sha256sum -c -
-          mkdir "$source_temp/source"
-          tar -xJf "$source_temp/source.tar.xz" -C "$source_temp/source" --strip-components=1
-          python3 scripts/coverage.py check --version '${{ matrix.zig }}' \
-            --source "$source_temp/source" --os linux --inventory 'coverage/${{ matrix.zig }}.json'
 
       - name: Shell check regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -2809,7 +2975,7 @@ jobs:
   # cancelled job fails it too). The split into rows must not let a missing job pass a merge.
   all-checks:
     if: always()
-    needs: [preflight, lake, zig-air, test, macos, aarch64-linux, build-modes-aarch64-linux, bitops-native-arm]
+    needs: [generated, provenance, preflight, lake, zig-air, test, macos, aarch64-linux, build-modes-aarch64-linux, bitops-native-arm]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

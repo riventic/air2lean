@@ -349,10 +349,17 @@ def provenance(root, links, inputs):
     tracked_paths = set(git_paths(root, 'ls-files', '-z', '--', *scopes)) if scopes else set()
     # Diff the named scopes, not just hashed files, so deleted link files (staged or not) count.
     dirty = git_paths(root, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', '--', *scopes) if scopes else []
-    untracked = sorted(p for p in inside if p not in tracked_paths)
+    # Whole-tree generated files (assurance/generated.json, docs/ci.md) are never committed: CI
+    # produces them from HEAD and publishes them per main commit on the `generated` branch, so a
+    # link to one (a provenance fixture's receipt) is reproducible from HEAD as well.
+    registry = Path(root) / 'assurance/generated.json'
+    generated = ({p for g in json.loads(registry.read_text())['groups'] for p in g['paths']}
+                 if registry.is_file() else set())
+    untracked = sorted(p for p in inside if p not in tracked_paths and p not in generated)
     return {'head': git_at(root, 'rev-parse', 'HEAD').decode().strip(),
             'tracked_dirty': bool(git_at(root, 'status', '--porcelain', '--untracked-files=no')),
             'modified_link_paths': dirty, 'untracked_link_paths': untracked,
+            'generated_link_paths': sorted(p for p in inside if p not in tracked_paths and p in generated),
             'external_link_paths': sorted(p for p in paths if Path(p).is_absolute()),
             'status': 'dirty' if dirty or untracked else 'clean'}
 

@@ -123,10 +123,9 @@ def expression(source, values):
     source = source.strip()
     if source.startswith("${{") and source.endswith("}}"):
         source = source[3:-2].strip()
-    source = source.replace(
-        "format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig)",
-        repr(f"/work/zig-air-{values['matrix.zig']}/bin/zig"),
-    )
+    zig_air = "format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig)"
+    if zig_air in source:
+        source = source.replace(zig_air, repr(f"/work/zig-air-{values['matrix.zig']}/bin/zig"))
     tokens = []
     while source:
         match = re.match(r"\s*(&&|\|\||==|!|'[^']*'|[a-zA-Z][\w.-]*)", source)
@@ -212,17 +211,20 @@ workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
 # The Q05 `macos`, T04 `aarch64-linux`, T06 `build-modes-aarch64-linux` and L02 `bitops-native-arm` jobs need native runners;
 # local CI (an x86_64 Linux container) reproduces only the test job, and
 # scripts/release-record.py requires GitHub evidence for their gates. `lake` only pre-builds the
-# cache that the test rows restore (local-ci.sh --prepare builds it here), and `all-checks` only
+# cache that the test rows restore (local-ci.sh --prepare builds it here), `zig-air` the patched
+# compilers, `preflight` repeats checks of the test rows, `generated` and `provenance` produce the
+# whole-tree generated files (scripts/generated.py materialize/regen locally), and `all-checks` only
 # aggregates job results.
-SKIPPED_JOBS = {'macos', 'aarch64-linux', 'build-modes-aarch64-linux', 'bitops-native-arm', 'lake', 'all-checks'}
+SKIPPED_JOBS = {'macos', 'aarch64-linux', 'build-modes-aarch64-linux', 'bitops-native-arm', 'lake', 'zig-air',
+                'preflight', 'generated', 'provenance', 'all-checks'}
 if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
     raise ValueError('local CI supports only the test job (and skips %s); '
                      'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
 job = workflow['jobs']['test']
 # CI-only reuse machinery (docs/ci.md): the reuse decision, the in-run artifact unpacking that
-# local-ci.sh --prepare replaces, and the trace coverage and record steps. Local CI never reuses,
+# local-ci.sh --prepare replaces (and `scripts/generated.py materialize` for the generated files), and the trace coverage and record steps. Local CI never reuses,
 # traces or records; scripts/release-record.py does not count these steps as gates.
-ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build',
+ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build', 'Install the generated files',
            'Declared inputs cover every observation', 'Record the result for reuse'}
 # The traced shell is GitHub's bash when AIR2LEAN_TRACE_DIR is unset, as it is here.
 traced_shell = {'run': {'shell': 'bash scripts/ci-trace.sh {0}'}}

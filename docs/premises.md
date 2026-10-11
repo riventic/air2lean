@@ -2,10 +2,10 @@
 
 This is the single indexed reference for the premises behind every shipped theorem in
 `Proofs/` and every theorem-bearing roadmap, tutorial and case-study client. Each premise
-has a stable ID. [premise-index.md](premise-index.md) lists, per theorem, the IDs it
+has a stable ID. [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) lists, per theorem, the IDs it
 uses. `scripts/premises.py` derives that index mechanically and checks it.
 
-To read a proof: find the theorem in [premise-index.md](premise-index.md), then read each
+To read a proof: find the theorem in [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md), then read each
 listed premise below. The theorem holds in the model under those premises and its own
 stated hypotheses. Nothing else in the runtime is assumed. A premise ID marked
 *environment* is a model choice that the theorem quantifies over or fixes. A premise marked
@@ -14,7 +14,8 @@ proof makes (for example partial correctness).
 
 ```sh
 python3 scripts/premises.py check            # fails on a stale index, undefined/orphan ID or unmapped module
-python3 scripts/premises.py write            # regenerate docs/premise-index.md
+python3 scripts/premises.py write            # regenerate docs/premise-index.md (not committed: a whole-tree
+                                             # generated file, docs/ci.md; CI publishes it on the `generated` branch)
 python3 scripts/premises.py explain parallelCounter_spec   # which tokens/modules caused each premise
 python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.json --output premises.json --strict
 ```

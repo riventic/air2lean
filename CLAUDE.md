@@ -47,9 +47,14 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   --auto` once `all-checks` is green on the PR head. The queue runs the full CI on the merge
   result and advances `main` only when it is green; that `merge_group` run is the commit's
   evidence. PR runs reuse unchanged parts' results; the queue never does.
-- Run heavy builds through `scripts/build-guard.py`. Regenerate generated files (coverage, premise
-  index, theorem inventory, pins, provenance) rather than hand-merging them.
-- Run `scripts/preflight.sh` before every push: it checks every generated file CI checks for staleness, in minutes.
+- **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
+  inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
+  merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
+  `scripts/generated.py materialize` (or `fetch`/`regen`) puts them in a checkout.
+- Run heavy builds through `scripts/build-guard.py`. Regenerate the other generated files (theorem
+  inventory, goldens, `Gen.lean`) rather than hand-merging them.
+- Run `scripts/preflight.sh` before every push: it materializes the whole-tree files and checks
+  every committed generated file CI checks for staleness, in minutes.
 - **Local first, CI confirms.** Every CI part can be run on the development Mac, and a PR is pushed
   only after the parts it touches are green locally. CI is the final, independent check before
   merge, never the test loop. Do not push to find out whether something is still red.
