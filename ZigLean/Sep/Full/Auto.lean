@@ -87,7 +87,7 @@ def unfold1 (e : Expr) : MetaM (Option Expr) := do
     unless ctor == info.ctorName do return none
     let some fld := s.getAppArgs[info.numParams + info.i]? | return none
     return some (mkAppN fld args[info.numParams + 1:]).headBeta
-  if c == sepN || c == empN || c == liftN || c == exN then return none
+  if c == sepN || c == empN || c == liftN || c == exN || c == ``ite || c == ``dite then return none
   if isFsymAtom (← getEnv) c then return none
   let some e' ← unfoldDefinition? e | return none
   let e' := e'.headBeta
@@ -730,6 +730,24 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       return ← unifyBlocks g
   return g
 
+/-- `if c then X else Y` of assertions where the facts decide `c`: `(X or Y, proof of the
+equation)`. An undecided condition is retried only once there are more facts. -/
+def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
+  let args := a.getAppArgs
+  let (c, inst, x, y) := (args[1]!, args[2]!, args[3]!, args[4]!)
+  let n := (← propHyps).size
+  let key := mkApp (mkConst `fsym.ite) c
+  if let some (.inr m) := (← probeCache.get).get? key then
+    if n ≤ m then return none
+  let hp ← mkFreshExprMVar c
+  if ← arith hp.mvarId! quick then
+    return some (← mkAppOptM ``ite_pos_eq #[c, inst, ← instantiateMVars hp, x, y], x)
+  let hn ← mkFreshExprMVar (mkNot c)
+  if ← arith hn.mvarId! quick then
+    return some (← mkAppOptM ``ite_neg_eq #[c, inst, ← instantiateMVars hn, x, y], y)
+  probeCache.modify (·.insert key (.inr n))
+  return none
+
 /-- Normalize the precondition: unfold, flatten, move facts and existentials into the context. -/
 partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withContext do
   if fuel == 0 then return g
@@ -740,6 +758,17 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     unfoldAtom e
   let Pu ← reduceProjs (← leaves P)
   let ats := atoms Pu
+  -- an assertion-level `if` whose condition the facts decide: take its branch
+  for a in ats do
+    unless a.isAppOfArity ``ite 5 do continue
+    let some (pf, br) ← decideIte a | continue
+    let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
+      mkLambdaFVars #[x] (Pu.replace fun y => if y == a then some x else none)
+    let P' := (mkApp f br).headBeta
+    let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
+    let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
+    g.assign (← mkAppOptM ``pre_eq #[L, α, P, P', Q, c, e, g2])
+    return ← normPre g2.mvarId! (fuel - 1)
   let isFact (a : Expr) := a.isAppOfArity liftN 1 || a.isAppOfArity exN 2
   let facts := ats.filter isFact
   let others := ats.filter (! isFact ·)
@@ -899,7 +928,7 @@ def rules (user : Array Expr) : MetaM (Array Expr) := do
 /-! ## Returns -/
 
 /-- `Q` with its existentials opened by fresh witnesses: `(Qi, pf : ∀ r, Qi r → Q r)`. -/
-partial def instQ (e : Expr) (fuel : Nat := 64) : MetaM (Expr × Expr) := do
+partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
   let e := e.consumeMData.headBeta
   let refl := fun e => mkAppOptM ``imp_refl #[e]
   if fuel == 0 then return (e, ← refl e)
@@ -913,6 +942,10 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : MetaM (Expr × Expr) := do
     let (b, pb) ← instQ (mkApp F w).headBeta (fuel - 1)
     return (b, ← mkAppOptM ``imp_ex #[b, none, F, w, pb])
   if e.isAppOfArity liftN 1 then return (e, ← refl e)
+  if e.isAppOfArity ``ite 5 then
+    let some (pf, br) ← decideIte e false | return (e, ← refl e)
+    let (b, pb) ← instQ br (fuel - 1)
+    return (b, ← mkAppM ``imp_trans #[pb, ← mkAppM ``imp_eq #[← mkEqSymm pf]])
   let e' ← unfoldAtom e
   if e' == e then return (e, ← refl e)
   let (b, pb) ← instQ e' (fuel - 1)
@@ -1120,13 +1153,44 @@ def joinOnce (st : St) : TacticM (Option St) := do
 
 /-- Shares: join those of one block, split for the postcondition's shares of that block,
 weaken to their bounds. -/
-def planShares (st : St) (qshares : Array (Array Expr)) : TacticM St := do
+def planShares (st : St) (qshares0 : Array (Array Expr)) : TacticM St := do
   let mut st := st
+  -- a postcondition share with a determined fraction: the state's share of that fraction,
+  -- raised to the bound (`share_raise` with another share of the block) if it is too low
+  let mut reserved : Array Expr := #[]
+  let mut fixed : Array (Array Expr) := #[]
+  let mut rest : Array (Array Expr) := #[]
+  for q in qshares0 do
+    let q ← q.mapM instantiateMVars
+    if q[1]!.hasExprMVar then rest := rest.push q; continue
+    let some i := st.ats.findIdx? fun x => !reserved.contains x && (shareArgs? x).any fun a =>
+        a[0]! == q[0]! && a[1]! == q[1]! && a[3]! == q[3]! | rest := rest.push q; continue
+    let x := (shareArgs? st.ats[i]!).get!
+    let qk := q[2]!
+    if qk.hasExprMVar || (← proveArith (← mkAppM ``LE.le #[qk, x[2]!]) (quick := true)).isSome then
+      reserved := reserved.push st.ats[i]!; fixed := fixed.push q; continue
+    -- raise with another share of the block whose bound suffices
+    let mut done := false
+    for j in [0:st.ats.size] do
+      if j == i || reserved.contains st.ats[j]! then continue
+      let some y := shareArgs? st.ats[j]! | continue
+      unless y[0]! == x[0]! && y[3]! == x[3]! do continue
+      unless (← proveArith (← mkAppM ``LE.le #[qk, y[2]!]) (quick := true)).isSome do continue
+      let h ← mkAppOptM ``share_raise #[x[0]!, x[1]!, x[2]!, x[3]!, y[1]!, y[2]!]
+      let K ← mkAppM ``Max.max #[x[2]!, y[2]!]
+      let o1 := mkAppN (mkConst ``Zig.Full.bshare) #[x[0]!, x[1]!, K, x[3]!]
+      let o2 := mkAppN (mkConst ``Zig.Full.bshare) #[x[0]!, y[1]!, K, x[3]!]
+      st ← st.step #[i, j] #[o1, o2] h
+      reserved := reserved.push o1; fixed := fixed.push q; done := true
+      break
+    unless done do rest := rest.push q
+  let qshares := fixed ++ rest
   -- join
   let mut again := true
   while again do
     again := false
-    let ss := (List.range st.ats.size).filterMap fun i => (shareArgs? st.ats[i]!).map (i, ·)
+    let ss := (List.range st.ats.size).filterMap fun i =>
+      if reserved.contains st.ats[i]! then none else (shareArgs? st.ats[i]!).map (i, ·)
     for (i, x) in ss do
       for (j, y) in ss do
         if i < j && x[0]! == y[0]! && x[3]! == y[3]! then
@@ -1138,14 +1202,15 @@ def planShares (st : St) (qshares : Array (Array Expr)) : TacticM St := do
           break
       if again then break
   -- split, per block
-  let blocks := st.ats.filterMap fun x => (shareArgs? x).map (·[0]!)
+  let blocks := st.ats.filterMap fun x => if reserved.contains x then none else (shareArgs? x).map (·[0]!)
   for blk in blocks do
     let mut want := 0
-    for q in qshares do
+    for q in rest do
       let s0 ← saveState
       if ← isDefEq q[0]! blk then want := want + 1
       s0.restore
-    let some i0 := st.ats.findIdx? fun x => (shareArgs? x).any (·[0]! == blk) | continue
+    let some i0 := st.ats.findIdx? fun x => !reserved.contains x && (shareArgs? x).any (·[0]! == blk)
+      | continue
     let mut xa := (shareArgs? st.ats[i0]!).get!
     let mut idx := i0
     let mut have_ := 1
@@ -1190,7 +1255,48 @@ partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
-def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
+partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
+  -- an assertion-level `if` of the state: take the branch the facts decide, else split
+  let t ← instantiateMVars (← g.getType)
+  let P := t.appFn!.appArg!
+  let Q := t.appArg!
+  if let some a := (atoms P).find? (·.isAppOfArity ``ite 5) then
+    let swap (pf br : Expr) : TacticM (List MVarId) := do
+      let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
+        mkLambdaFVars #[x] (P.replace fun y => if y == a then some x else none)
+      let P' := (mkApp f br).headBeta
+      let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
+      let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P', Q])
+      g.assign (← mkAppM ``EUpd.trans #[← mkAppM ``atom_eq #[e], g2])
+      closeEntail g2.mvarId!
+    if let some (pf, br) ← decideIte a false then return ← swap pf br
+    let (sp, sn) ← g.byCases (a.getArg! 1) `hc
+    let gp ← sp.mvarId.withContext (closeEntail sp.mvarId)
+    let gn ← sn.mvarId.withContext (closeEntail sn.mvarId)
+    return gp ++ gn
+  -- facts and existentials of the state go into the context
+  let ats := atoms P
+  if let some i := ats.findIdx? fun a => a.isAppOfArity liftN 1 || a.isAppOfArity exN 2 then
+    let a := ats[i]!
+    let R := sepOf (ats.eraseIdx! i)
+    let e ← acEq P (mkSep a R)
+    if a.isAppOfArity liftN 1 then
+      let φ := a.appArg!
+      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (← mkAppM ``EUpd #[R, Q]))
+      g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppM ``eupd_lift_pre #[k]])
+      let (h, g2) ← k.mvarId!.intro `h
+      let g2 ← destruct g2 h
+      return ← g2.withContext (closeEntail g2)
+    else
+      let F := a.appArg!
+      let β := (← whnfD (← inferType F)).bindingDomain!
+      let n := match F.consumeMData with | .lam n .. => n | _ => `x
+      let kTy ← withLocalDeclD n β fun x => do
+        mkForallFVars #[x] (← mkAppM ``EUpd #[mkSep (mkApp F x).headBeta R, Q])
+      let k ← mkFreshExprSyntheticOpaqueMVar kTy
+      g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppOptM ``eupd_ex_pre #[β, F, R, Q, k]])
+      let (_, g2) ← k.mvarId!.intro n
+      return ← g2.withContext (closeEntail g2)
   let h0 ← IO.getNumHeartbeats
   let r ← closeEntail' g
   trace[fsym.prof] "entail {((← IO.getNumHeartbeats) - h0) / 1000}"
@@ -1200,8 +1306,9 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
   try
     let t ← instantiateMVars (← g.getType)
     let P := t.appFn!.appArg!
-    let Q := t.appArg!
+    let Q ← reduceProjs t.appArg!
     let (Qi, pQ) ← instQ Q
+    let Qi ← reduceProjs Qi
     let qats := atoms Qi
     let facts := qats.filter (·.isAppOfArity liftN 1)
     -- block facts first

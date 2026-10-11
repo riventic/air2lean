@@ -492,12 +492,37 @@ theorem share_weaken (h : k' ≤ k) : EUpd (bshare b q k t) (bshare b q k' t) :=
 theorem share_join {q₂ : Frac} {k₂ : Nat} :
     EUpd (bshare b q k t ⋆ bshare b q₂ k₂ t) (bshare b (q.add q₂) (Max.max k k₂) t) := EUpd.join
 
+/-- **Raise a share's bound** with another share of the block: both at the higher bound, the
+fractions unchanged (join, then split back). A grant that grows in place takes its new bound
+from the allocator's share of the block. -/
+theorem share_raise {q₂ : Frac} {k₂ : Nat} :
+    EUpd (bshare b q k t ⋆ bshare b q₂ k₂ t)
+      (bshare b q (Max.max k k₂) t ⋆ bshare b q₂ (Max.max k k₂) t) := fun m r rF hh hp hs => by
+  obtain ⟨r₁, r₂, -, -, h1, h2⟩ := id hp
+  obtain ⟨r', hh', hp'⟩ := EUpd.join m r rF hh hp hs
+  exact ⟨r', hh', (bshare_split h1.1 h2.1).mp hp'⟩
+
+theorem ite_pos_eq {c : Prop} [Decidable c] (h : c) (X Y : FAssn) : (if c then X else Y) = X := if_pos h
+theorem ite_neg_eq {c : Prop} [Decidable c] (h : ¬c) (X Y : FAssn) : (if c then X else Y) = Y := if_neg h
+
 end Plan
 
 theorem sep_emp_eq' (P : FAssn) : (P ⋆ emp) = P := funext fun _ => propext sep_emp
 theorem emp_sep_eq' (P : FAssn) : (emp ⋆ P) = P := by rw [sep_comm_eq]; exact sep_emp_eq' P
 
 theorem atom_eq {X Y : FAssn} (e : X = Y) : EUpd X Y := e ▸ EUpd.of_imp fun _ h => h
+
+/-- A fact of the state of an update goes into the context. -/
+theorem eupd_lift_pre {φ : Prop} {R Q : FAssn} (h : φ → EUpd R Q) : EUpd (⟪φ⟫ ⋆ R) Q :=
+  fun m r rF hh hp hs => (h (sep_lift.mp hp).1) m r rF hh (sep_lift.mp hp).2 hs
+
+/-- An existential of the state of an update is opened. -/
+theorem eupd_ex_pre {β : Type} {F : β → FAssn} {R Q : FAssn} (h : ∀ x, EUpd (F x ⋆ R) Q) :
+    EUpd (FAssn.ex F ⋆ R) Q := fun m r rF hh hp hs => by
+  obtain ⟨x, hx⟩ := sep_ex.mp hp
+  exact h x m r rF hh hx hs
+
+theorem eupd_pre_eq {P P' Q : FAssn} (e : P = P') (h : EUpd P' Q) : EUpd P Q := e ▸ h
 
 theorem ptr_ext' {p q : Ptr} (h1 : p.block = q.block) (h2 : p.off = q.off) : p = q := by
   cases p; cases q; simp_all
