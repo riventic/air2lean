@@ -182,11 +182,11 @@ def changed_paths(root):
 
 
 def mentions_graph(root, tracked):
-    """For scripts/ and tests/ files: which tracked files mention them (by path or, for scripts,
-    by file name). Used to follow a changed helper up to the CI steps that run it."""
+    """For each scripts/ file: which scripts/tests/tools files mention its name. Used to follow a
+    changed helper up to the CI steps that run it (tests are covered by their directory)."""
     candidates = {}
     for path in tracked:
-        if path.startswith(('scripts/', 'tests/roadmap/')) and path.endswith(FILE_SUFFIXES):
+        if path.startswith('scripts/') and path.endswith(FILE_SUFFIXES):
             candidates.setdefault(os.path.basename(path), set()).add(path)
     pattern = re.compile('|'.join(re.escape(n) for n in sorted(candidates, key=len, reverse=True)))
     users = {}
