@@ -1043,6 +1043,7 @@ theorem loadBytes_ok {p : Ptr} {n al : Nat} {m m' : Mem} {bs : Array Byte}
 theorem access_item {m : Mem} {p : Ptr} {L sz A al j : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (hacc : m.access p (L * sz) A = pure (b, blk, o)) (hj : j < L) (hA : al ∣ A) (hal : al ∣ sz) :
     m.access (p.add (sz * j)) sz al = pure (b, blk, o + sz * j) := by
+  have hlo := Zig.access_lo hacc
   obtain ⟨hb, hblk, hlive, h0, hend, hmod, rfl⟩ := Zig.access_eq hacc
   have hjL : sz * j + sz ≤ L * sz := by
     have : sz * (j + 1) ≤ sz * L := Nat.mul_le_mul_left sz hj
@@ -1051,7 +1052,7 @@ theorem access_item {m : Mem} {p : Ptr} {L sz A al j : Nat} {b : BlockId} {blk :
     have : ((sz * j : Nat) : Int) = (sz : Int) * (j : Int) := by push_cast; rfl
     omega
   have h := Zig.access_of (m := m) (n := sz) (a := al) (p := p.add (sz * j)) (by simpa using hb) hblk
-    hlive ?_ ?_ ?_
+    hlive ?_ ?_ ?_ (by simp only [Ptr.add]; rw [hoff]; omega)
   · rw [h]; simp only [Ptr.add]; rw [hoff]
   · simp only [Ptr.add]; omega
   · simp only [Ptr.add]; push_cast at hend ⊢; omega

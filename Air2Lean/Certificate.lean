@@ -318,7 +318,7 @@ partial def allInsts (body : Array Inst) : Array Inst :=
 
 /-- Why one instruction is outside the certificate fragment (nested bodies are checked by
 `localReason`, which visits every instruction). -/
-def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Array InstId) (i : Inst) :
+def instReason (f : Func) (tyOfInst : InstId → Option TyId) (regs : Array InstId) (i : Inst) :
     Except String Unit := do
   let vals (vs : List Val) : Except String Unit :=
     unless vs.all (simpleVal f) do throw s!"inst {i.id}: an operand outside the fragment"
@@ -394,7 +394,6 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Arr
     unless typed (isIntTy f) n && memValTy f i.ty do throw s!"inst {i.id}: an item load outside the fragment"
   | .sliceLen sl => do
     let _ ← sliceVal sl
-    if forLen.contains i.id then throw s!"inst {i.id}: a `for` length check (`Zig.forLen`, not an AIR operation)"
   | .slicePtr sl => do
     let _ ← sliceVal sl
     unless f.plainPtr i.ty do throw s!"inst {i.id}: a slice pointer outside the fragment"
@@ -441,7 +440,7 @@ def callsIn (f : Func) : Array String :=
     | _ => none
 
 /-- The local reason a function is outside the fragment, or its non-panic callees. -/
-def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String (Array String) := do
+def localReason (f : Func) (mem : Bool) : Except String (Array String) := do
   for p in f.params do
     unless (scalar? f p).isSome do throw "a parameter that is not an integer, bool, plain pointer or slice"
   if !mem then
@@ -464,7 +463,7 @@ def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String 
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let tyOfInst (x : InstId) := tys[x]?
   let regs := registers f
-  for i in insts do instReason f tyOfInst forLen regs i
+  for i in insts do instReason f tyOfInst regs i
   unless (printFunc f).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
 
@@ -567,10 +566,10 @@ def fragment (funcs : Array Func) (memFuncs concFuncs : Array String)
       else if budgeted.contains f.name then
         .error "a recursive function that uses memory (stack budget `Zig.enterFrame`, STK-01)"
       else match shapes.find? (·.1 == f.name) with
-        -- Fail closed: without the emitter's shape, its locals, loops and `for` checks are unknown.
+        -- Fail closed: without the emitter's shape, its locals and loops are unknown.
         | none => .error "no emitted certificate shape (`Emit.CertShape`)"
         | some (_, sh) =>
-          localReason f (memFuncs.contains f.name) sh.forLen >>= fun cs => do
+          localReason f (memFuncs.contains f.name) >>= fun cs => do
             localsReason f sh
             pure cs
     match reason with
