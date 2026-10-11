@@ -26,6 +26,90 @@ namespace Zig
 
 open Lean.Order
 
+/-! ## The environment of a run (`Sched.run`)
+
+A concurrent theorem states the environment it holds in: nothing about thread creation is a
+default of the scheduler. -/
+
+/-- Whether thread assignment can fail (`Thread.spawn`, `Io.Group.concurrent`, and the thread of
+`Io.Group.async`). -/
+inductive SpawnPolicy where
+  /-- Assignment succeeds (a thread, and `Io.Threaded`'s allocation of an async task): an explicit
+  environment permission. -/
+  | available
+  /-- Every declared failure is possible (`spawnErrors`), and the per-caller budget
+  `Mem.spawnLimit` excludes success at an exhausted budget. -/
+  | fallible
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The `std.Io` implementation that runs `Io.Group.async`. -/
+inductive AsyncEnv where
+  /-- `Io.Threaded` on `cpus` CPUs: `async_limit = cpus - 1`. A task runs in the caller once that
+  many tasks may be busy (and on an assignment failure, `SpawnPolicy.fallible`); it is never
+  deferred. `single_threaded` builds are `threaded 1`. -/
+  | threaded (cpus : Nat)
+  /-- Any `Io` implementation: a task may get a thread, run in the caller, or be deferred until
+  the group's `await`. -/
+  | any
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The environment of a run: how `Io.Group.async` executes and whether assignment can fail. The
+`Io.Group.async` outcomes come from the environment alone (the translation's `--spawn-policy`
+does not add any). The program's `std.mem.Allocator` is assumed thread-safe in a concurrent run
+(premise ALC-10, `ZigLean/Mem/Alloc.lean`): its state has no race footprint. -/
+structure Env where
+  io : AsyncEnv
+  spawn : SpawnPolicy
+  deriving DecidableEq, Repr
+
+/-- An environment exists (the claim layer's non-vacuity check: a theorem over every `Env` has an
+inhabited domain). Deliberately not `Inhabited`: no environment is a default. -/
+instance : Nonempty Env := ⟨⟨.any, .available⟩⟩
+
+/-- The exact declared SpawnError set in std.Thread 0.14.1, 0.15.2, and 0.16.0.
+The model does not predict which platform resource fails or its frequency. -/
+def spawnErrors : Array ErrName :=
+  #["ThreadQuotaExceeded", "SystemResources", "OutOfMemory",
+    "LockedMemoryLimitExceeded", "Unexpected"]
+
+/-- A total lookup; the fallback only covers malformed direct callers. -/
+def spawnErrorAt (choice : Nat) : ErrName := spawnErrors[choice]?.getD "Unexpected"
+
+/-- The assigned children of thread `t` that no join has reclaimed. A deferred `Io.Group` task
+(`ThreadRec.gated`) has no thread of its own: it does not count. -/
+def Mem.liveChildren (m : Mem) (t : ThreadId) : Nat :=
+  (m.threads.filter fun r => r.spawner == t && !r.joined && !r.gated).size
+
+/-- The current thread may receive another child under `Mem.spawnLimit`. -/
+def Mem.spawnAdmits (m : Mem) : Bool :=
+  match m.spawnLimit with
+  | none => true
+  | some limit => decide (m.liveChildren m.current < limit)
+
+/-- The oracle range of a resource choice with `total` outcomes, where outcome 0 assigns a
+child: without budget for the caller, outcome 0 is not in the range. -/
+def assignmentCount (total : Nat) (m : Mem) : Nat :=
+  if m.spawnAdmits then total else total - 1
+
+/-- The outcome of oracle choice `c`: without budget, choice `c` means outcome `c + 1`. -/
+def assignmentOutcome (admits : Bool) (c : Nat) : Nat :=
+  if admits then c else c + 1
+
+/-- The threads that may count as busy `Io.Threaded` tasks: every thread but `main`, joined or
+not (an upper bound of std's `busy_count`: a worker decrements it only after it signalled the
+group, so `await` can return while a finished task still counts). -/
+def Mem.busyBound (m : Mem) : Nat := m.threads.size - 1
+
+/-- The executions of an `Io.Group.async` task that the environment allows, among 0 (a thread),
+1 (the caller, at once) and 2 (deferred until `await`). A thread is always possible (the model's
+busy count is an upper bound); `Io.Threaded` runs the task in the caller only once
+`async_limit = cpus - 1` tasks may be busy (assignment failure is the thread's own outcome,
+`SyncOp.spawn`), and never defers it. -/
+def asyncOptions (io : AsyncEnv) (m : Mem) : Array Nat :=
+  match io with
+  | .any => #[0, 1, 2]
+  | .threaded cpus => if cpus - 1 ≤ m.busyBound then #[0, 1] else #[0]
+
 /-- An op where the scheduler takes over. An atomic op is `yield` and then the op in `MemM`
 (`ZigLean/Mem/Thread.lean`): the scheduler picks the thread that runs it. -/
 inductive SyncOp (Tgt : Type) where
@@ -37,8 +121,17 @@ inductive SyncOp (Tgt : Type) where
   on: the message that an atomic read reads, or the place of an atomic write
   (`ZigLean/Mem/Thread.lean`). -/
   | pick (count : Mem → Nat)
-  /-- `Thread.spawn` of `t`. -/
+  /-- `Thread.spawn` of `t`: a new thread, or (`SpawnPolicy.fallible`) a declared error. -/
   | spawn (t : Tgt)
+  /-- The execution of an `Io.Group.async` task that the environment picks (`asyncOptions`). -/
+  | asyncChoice
+  /-- A spawn of `t` whose thread does not start yet: an `Io.Group.async` task deferred until its
+  group's `await` or `cancel` (`ThreadRec.gated`, `Thread.forkGated`). The new thread waits at `gate`
+  until `Thread.groupTake` releases it. -/
+  | spawnGated (t : Tgt)
+  /-- The first stop of a deferred task (`spawnGated`): it goes on once it is no longer gated
+  (`Mem.isGated`). Only the scheduler makes this stop. -/
+  | gate
   /-- `Thread.join`: waits until thread `tid` ends. -/
   | join (tid : ThreadId)
   /-- A futex wait (`Io.futexWait`): if the `u32` at `p` is `expected`, the thread waits until a
@@ -49,9 +142,10 @@ inductive SyncOp (Tgt : Type) where
 
 /-- The response of the scheduler to a sync op. -/
 def SyncOp.Resp {Tgt : Type} : SyncOp Tgt → Type
-  | .choose _ | .pick _ => Nat
-  | .spawn _ => ThreadId
-  | .yield | .join _ | .wait .. | .wake .. => Unit
+  | .choose _ | .pick _ | .asyncChoice => Nat
+  | .spawn _ => Except ErrName ThreadId
+  | .spawnGated _ => ThreadId
+  | .yield | .gate | .join _ | .wait .. | .wake .. => Unit
 
 /-- A run of a thread with at most `n` sync ops on each path. `leaf none`: no result. `sync op m
 k`: the thread stops at `op` with the memory `m`; `k` is the rest, from the response and the

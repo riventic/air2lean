@@ -52,7 +52,7 @@ The exported structure is re-checked outside the Lean decoder: instruction ids, 
 - Components: `zig-patch/air-json/json.zig`, `zig-patch/air-json/pointer-offset.zig`, `zig-patch/air-json/identity.zig`
 - Premises: [TRU-02](premises.md#tru-02)
 - Check: independent structural validation of every committed golden AIR file: `scripts/validate-air.py`, tested by `tests/roadmap/export-validation/test_validate_air.py` (CI: `python3 -B scripts/validate-air.py`, `tests/roadmap/export-validation/test_validate_air.py`)
-- Check: compiler-derived AIR tag/type inventory against checksum-pinned compiler sources: `scripts/coverage.py`, tested by `tests/roadmap/inventory/test_inventory.py` (CI: `scripts/coverage.py check`, `tests/roadmap/inventory/test_inventory.py`)
+- Check: compiler-derived AIR tag/type inventory generated twice, identically, from checksum-pinned compiler sources on the tested tree (scripts/generated.py; docs/ci.md#whole-tree-generated-files): `scripts/coverage.py`, tested by `tests/roadmap/inventory/test_inventory.py` (CI: `scripts/generated.py produce --group coverage`, `tests/roadmap/inventory/test_inventory.py`)
 - Check: exported filename identity, re-export and collision contract: `scripts/check-export-names.sh`, tested by `tests/roadmap/export-names/test_order_cli.py` (CI: `bash scripts/check-export-names.sh`)
 
 ### Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain)

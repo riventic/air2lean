@@ -26,7 +26,13 @@ translation of one of its own cases. Verification never replaces a committed mod
 translation is accepted. It prints one JSON record per file (sha256 and the matching cases) and
 fails on any file without a match.
 
+`write` replaces each failing module by the fresh translation (scripts/regen.sh): the whole file
+for `exact` cases; for `body` and `golden` cases the fresh body after the committed first-line
+profile record, which these checks compare only for its float semantics (a record that names
+other ones than the translation is replaced by the fresh one). A module whose cases disagree is not written.
+
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
+       gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
        gen-integrity.py list   (each case and its inputs; no translation)
 """
@@ -405,6 +411,44 @@ def run_check(translator, cases, only):
     return errors
 
 
+def run_write(translator, cases, only):
+    """Rewrite each module whose cases all translate to one body that differs from it."""
+    errors = []
+    by_path = {}
+    for index, case in enumerate(cases):
+        if (not only or only in case.path or only in case.label) and (ROOT / case.path).is_file() \
+                and all(d.exists() for d in case.dirs):
+            by_path.setdefault(case.path, []).append((index, case))
+    for path, members in sorted(by_path.items()):
+        try:
+            if all(translator.matches(index, case, path) is None for index, case in members):
+                continue
+            committed = (ROOT / path).read_bytes()
+            fresh = {}
+            for index, case in members:
+                out = translator.output(index, case)
+                if case.mode == "exact":
+                    fresh[case.label] = out
+                else:
+                    # The committed profile record, unless its float semantics are stale.
+                    first, sep, _ = committed.partition(b"\n")
+                    if header_error(committed, out):
+                        first, sep, _ = out.partition(b"\n")
+                    header = first + sep if first.startswith(PROFILE_PREFIX) else b""
+                    fresh[case.label] = header + comparable(out, case.mode)
+        except ValueError as error:
+            errors.append(f"{path}: {error}")
+            continue
+        if len(set(fresh.values())) != 1:
+            errors.append(f"{path}: its cases translate differently ({', '.join(sorted(fresh))}); not written")
+            continue
+        staged = ROOT / (path + ".partial")
+        staged.write_bytes(next(iter(fresh.values())))
+        os.replace(staged, ROOT / path)
+        print(f"wrote {path}", file=sys.stderr)
+    return errors + run_check(translator, cases, only)
+
+
 def run_attest(translator, cases, paths):
     errors = coverage_errors(cases)
     records = []
@@ -431,7 +475,7 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "attest", "list"))
+    parser.add_argument("command", choices=("check", "write", "attest", "list"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
                                                              str(ROOT / ".lake/build/bin/air2lean")))
@@ -467,6 +511,8 @@ def run(args, cases):
         translator = Translator(args.translator, work)
         if args.command == "check":
             return run_check(translator, cases, args.only)
+        if args.command == "write":
+            return run_write(translator, cases, args.only)
         return run_attest(translator, cases, [str(Path(p)) for p in args.paths])
 
 

@@ -38,11 +38,17 @@ A gate is `passed` only with evidence for the recorded commit:
 
 - GitHub Actions run JSON: `headSha` must equal the revision, the run must be completed and
   come from the same workflow name, and every job must be a matrix row at that revision.
-  The run's event must be `push` or `workflow_dispatch`. A `pull_request` run tests a merge
-  with the base branch, not the head commit, so it is rejected.
+  The run's event must be `merge_group`, `workflow_dispatch` or `push`. A `merge_group` run
+  tests exactly the commit that the merge queue then fast-forwards `main` to, so it is the
+  normal evidence for a `main` commit (docs/ci.md). A `pull_request` run is rejected: it tests
+  the PR head or a merge with the base branch, not the recorded commit.
   A step that ran even though its condition is false at the revision rejects the run, because
   it came from another workflow. Only step conclusion `success` passes; `skipped`, `failure`
-  and `cancelled` fail a required gate.
+  and `cancelled` fail a required gate. One exception keeps reuse honest: a job whose
+  `Reuse a recorded result` step passed, with no failed or cancelled step and every gate
+  skipped, is a reused part (docs/ci.md). Its run executed none of the gates, so it is evidence
+  for none of them: they stay `missing` until the run that executed them is passed as well.
+  The CI-only reuse steps (`ci_only` in scripts/local-ci-steps.py) are not gates.
 - `scripts/local-ci.sh` results directory: the script writes `source-revision` (HEAD, whether
   tracked files were clean, mode, version) and `exit-status` next to `container.log`. The
   revision must match and the tracked tree must be clean. Step headers must follow the

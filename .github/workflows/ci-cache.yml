@@ -1,0 +1,457 @@
+name: CI cache
+
+# docs/ci.md#4-cache-hygiene. The only workflow that saves Actions cache entries: on main, after
+# each merge, it builds what the PR and merge-queue runs of ci.yml restore (they only restore), then
+# keeps the newest main entry per key prefix and deletes every other entry. Each job looks its
+# entries up first and does nothing when main already has them. Not a gate: ci.yml's merge_group
+# run already verified the commit.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cache
+  cancel-in-progress: false
+
+jobs:
+  # The root package with its proofs, as ci.yml's `lake` job builds it.
+  linux-lake:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Look up the Lake build (root package)
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          lookup-only: true
+
+      - name: Restore an older Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          restore-keys: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: Install elan
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build the root package and its proofs
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/local-ci-steps.py --prune-cache
+          mapfile -t modules < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
+          lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
+
+      - name: Save the Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
+  # Each x86_64-linux patched compiler under scripts/ci-cache.py's per-version key.
+  linux-zig-air:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        zig: ["0.16.0", "0.17.0", "0.15.2", "0.14.1"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Patched zig cache key
+        id: key
+        run: echo "key=$(python3 scripts/ci-cache.py zig-air-key '${{ matrix.zig }}')" >> "$GITHUB_OUTPUT"
+
+      - name: Look up patched zig
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+
+      - name: Build patched zig
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' sha256)
+          curl -fL --output host-zig.tar.xz "$url"
+          echo "$sha256  host-zig.tar.xz" | sha256sum -c -
+          mkdir -p host-zig
+          tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
+          export PATH="$PWD/host-zig:$PATH"
+          zig-patch/build.sh ${{ matrix.zig }} || zig-patch/build.sh ${{ matrix.zig }}
+
+      - name: Save patched zig
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: ${{ steps.key.outputs.key }}
+
+  # The stock-Zig harness builds of scripts/diff.sh for each ci.yml row that restores them (the
+  # golden rows of the full versions and the T06 build-mode rows), with the same flags, and the
+  # tests/diff package. Keep these rows in step with ci.yml's `test` rows.
+  linux-harness:
+    if: github.event_name != 'schedule'
+    needs: linux-lake
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {zig: "0.16.0", part: golden, optimize: ReleaseSafe, backend: ""}
+          - {zig: "0.17.0", part: golden, optimize: ReleaseSafe, backend: ""}
+          - {zig: "0.15.2", part: golden, optimize: ReleaseSafe, backend: ""}
+          - {zig: "0.16.0", part: Debug, optimize: Debug, backend: llvm}
+          - {zig: "0.16.0", part: ReleaseFast, optimize: ReleaseFast, backend: llvm}
+          - {zig: "0.16.0", part: ReleaseSmall, optimize: ReleaseSmall, backend: llvm}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Look up the harness builds
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: zig-diff-${{ runner.os }}-${{ matrix.zig }}-${{ matrix.part }}-${{ hashFiles('examples/**/*.zig', 'tests/diff/**/*.zig', 'scripts/diff.sh') }}
+          lookup-only: true
+
+      - name: Install host zig and elan
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' sha256)
+          curl -fL --output host-zig.tar.xz "$url"
+          echo "$sha256  host-zig.tar.xz" | sha256sum -c -
+          mkdir -p host-zig
+          tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
+          echo "$PWD/host-zig" >> "$GITHUB_PATH"
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the Lake builds
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+
+      - name: Restore the tests/diff package
+        id: lake-diff
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      # A failing differential run still leaves valid (content-addressed) harness builds.
+      - name: Differential run
+        if: steps.lookup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
+          AIR2LEAN_DIFF_OPTIMIZE: ${{ matrix.optimize }}
+          AIR2LEAN_DIFF_BACKEND: ${{ matrix.backend }}
+        run: |
+          lake build
+          scripts/diff.sh
+
+      - name: Save the harness builds
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
+      - name: Save the tests/diff package
+        if: steps.lookup.outputs.cache-hit != 'true' && steps.lake-diff.outputs.cache-hit != 'true' && matrix.part == 'golden' && matrix.zig == '0.16.0'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: ${{ steps.lake-diff.outputs.cache-primary-key }}
+
+  # The macOS root package with `Proofs` built: the macOS rows' proof build is then incremental.
+  macos-lake:
+    if: github.event_name != 'schedule'
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Look up the Lake build (macOS root package)
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          lookup-only: true
+
+      - name: Restore an older Lake build (macOS root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          restore-keys: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      # zig-patch/versions.toml [ci.elan] pins elan v4.2.4's Linux asset; this is the same
+      # release's aarch64-apple-darwin asset (as in ci.yml).
+      - name: Build the root package and its proofs (macOS)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-apple-darwin.tar.gz
+          echo "7ad829861392c718dfebde3a83b5c8508df47be02af68894b094b0b3952616e5  $RUNNER_TEMP/elan.tar.gz" \
+            | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          export PATH="$HOME/.elan/bin:$PATH"
+          python3 scripts/local-ci-steps.py --prune-cache
+          lake build
+          lake build Proofs
+
+      - name: Save the Lake build (macOS root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
+  # The macOS patched compiler of each version (key as in ci.yml's macos rows) and its harness
+  # builds and tests/diff package (the rows' scripts/check.sh runs scripts/diff.sh with stock Zig).
+  macos-zig:
+    if: github.event_name != 'schedule'
+    needs: macos-lake
+    runs-on: macos-14
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        zig: ["0.17.0", "0.16.0", "0.15.2"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The pinned stock aarch64-macos releases, as ci.yml's macos job installs them.
+      - name: Install stock zig (aarch64-macos)
+        run: |
+          set -euo pipefail
+          version='${{ matrix.zig }}'
+          case "$version" in
+            0.17.0) sha256=b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a ;;
+            0.16.0) sha256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489 ;;
+            0.15.2) sha256=3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b ;;
+            *) echo "no pinned aarch64-macos stock zig for $version" >&2; exit 1 ;;
+          esac
+          curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+            "https://ziglang.org/download/$version/zig-aarch64-macos-$version.tar.xz"
+          echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/host-zig-$version"
+          tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+          echo "AIR2LEAN_HOST_PIN=$sha256" >> "$GITHUB_ENV"
+
+      - name: Patched zig cache key (macOS)
+        id: key
+        run: echo "key=$(python3 scripts/ci-cache.py zig-air-key '${{ matrix.zig }}' --host-pin "aarch64-macos $AIR2LEAN_HOST_PIN")" >> "$GITHUB_OUTPUT"
+
+      - name: Look up patched zig (macOS)
+        id: zig
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+
+      # One retry and --maxrss, as in ci.yml.
+      - name: Build patched zig (macOS)
+        if: steps.zig.outputs.cache-hit != 'true'
+        env:
+          AIR2LEAN_ZIG_MAXRSS: "8000000000"
+        run: |
+          set -euo pipefail
+          v='${{ matrix.zig }}'
+          PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+            || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+
+      - name: Save patched zig (macOS)
+        if: steps.zig.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Look up the harness builds (macOS)
+        id: harness
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: zig-diff-${{ runner.os }}-${{ matrix.zig }}-golden-${{ hashFiles('examples/**/*.zig', 'tests/diff/**/*.zig', 'scripts/diff.sh') }}
+          lookup-only: true
+
+      - name: Restore the Lake builds (macOS)
+        if: steps.harness.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+
+      - name: Restore the tests/diff package (macOS)
+        id: lake-diff
+        if: steps.harness.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-macos-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Differential run (macOS)
+        if: steps.harness.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-${{ matrix.zig }}/zig
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-apple-darwin.tar.gz
+          echo "7ad829861392c718dfebde3a83b5c8508df47be02af68894b094b0b3952616e5  $RUNNER_TEMP/elan.tar.gz" \
+            | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake build
+          scripts/diff.sh
+
+      - name: Save the harness builds (macOS)
+        if: steps.harness.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: ${{ steps.harness.outputs.cache-primary-key }}
+
+      - name: Save the tests/diff package (macOS)
+        if: steps.harness.outputs.cache-hit != 'true' && steps.lake-diff.outputs.cache-hit != 'true' && matrix.zig == '0.16.0'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: ${{ steps.lake-diff.outputs.cache-primary-key }}
+
+  # The aarch64-linux root package that ci.yml's build-modes-aarch64-linux job restores.
+  arm-lake:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Look up the Lake build (aarch64-linux)
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          lookup-only: true
+
+      - name: Restore an older Lake build (aarch64-linux)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          restore-keys: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: Build the root package (aarch64-linux)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          export PATH="$HOME/.elan/bin:$PATH"
+          python3 scripts/local-ci-steps.py --prune-cache
+          lake build
+
+      - name: Save the Lake build (aarch64-linux)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
+  # Keep the newest main entry per key prefix; delete everything else (scripts/ci-cache.py).
+  prune:
+    if: ${{ always() }}
+    needs: [linux-lake, linux-zig-air, linux-harness, macos-lake, macos-zig, arm-lake]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Prune cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci-cache.py prune

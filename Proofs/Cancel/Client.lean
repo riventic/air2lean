@@ -73,7 +73,7 @@ def cancelClient : ConcM Tgt (BitVec 32 × BitVec 32) :=
     let done ← callMC (alloc .heap 4 4)
     callMC (store 4 done (0 : BitVec 32))
     let g ← callMC (alloc .stack 16 8)
-    groupAsyncC g ⟨⟩ (Tgt.worker status done)
+    groupAsyncC g ⟨⟩ (Tgt.worker status done) (worker status done)
     spinLoopHintC
     groupCancelC g ⟨⟩
     let s ← callMC (load (BitVec 32) 4 status)
@@ -101,24 +101,24 @@ def follow (xs : List Nat) : Nat → Nat := fun i => xs.getD i 0
 
 /-- The task runs all three steps before `main` cancels: completed. -/
 theorem cancelClient_completed :
-    resultOf (Sched.run dispatch 60 (follow [1, 1, 1, 1, 1, 1]) cancelClient {}) =
+    resultOf (Sched.run ⟨.any, .available⟩ dispatch 60 (follow [1, 1, 1, 1, 1, 1]) cancelClient {}) =
       some ((1, 3), true) := by
   decide +kernel
 
 /-- `main` cancels before the task's first cancelation point: canceled with no step done. -/
 theorem cancelClient_canceled :
-    resultOf (Sched.run dispatch 60 (follow []) cancelClient {}) = some ((2, 0), true) := by
+    resultOf (Sched.run ⟨.any, .available⟩ dispatch 60 (follow []) cancelClient {}) = some ((2, 0), true) := by
   decide +kernel
 
 /-- The request arrives while the task is at its second cancelation point: canceled with one
 step done. -/
 theorem cancelClient_canceled_one :
-    resultOf (Sched.run dispatch 60 (follow [1, 1, 1]) cancelClient {}) = some ((2, 1), true) := by
+    resultOf (Sched.run ⟨.any, .available⟩ dispatch 60 (follow [1, 1, 1]) cancelClient {}) = some ((2, 1), true) := by
   decide +kernel
 
 /-- Canceled with two steps done. -/
 theorem cancelClient_canceled_two :
-    resultOf (Sched.run dispatch 60 (follow [1, 1, 1, 1]) cancelClient {}) =
+    resultOf (Sched.run ⟨.any, .available⟩ dispatch 60 (follow [1, 1, 1, 1]) cancelClient {}) =
       some ((2, 2), true) := by
   decide +kernel
 

@@ -9,7 +9,8 @@ job; the default version also gets the parts that run once (`inputs`, `native`, 
 `receipt`, one row per T06 build mode) and one mutation row per line of
 scripts/mutation-shards.txt. A version in RESTRICTED runs the examples that
 scripts/example-selection.sh selects for it, without the diff harness. The `macos` job has one
-row per version whose hosts include aarch64-macos. Every step of the test job names its part
+row per version whose hosts include aarch64-macos, the `zig-air` job (the patched compiler of
+each x86_64-linux version, built once per run) one per x86_64-linux version. Every step of the test job names its part
 in its `if`; the rows only say which parts exist. Offline: no Zig, Lake or Lean process.
 """
 import argparse
@@ -50,7 +51,7 @@ def rows(root):
             for part in ('golden', 'lean') + (ONCE if v == default else ())]
     test += [row(default, 'mutation', shard=n) for n in range(1, shards + 1)]
     macos = [{'zig': v['version']} for v in compat['zig']['versions'] if 'aarch64-macos' in v['hosts']]
-    return {'test': test, 'macos': macos}
+    return {'test': test, 'macos': macos, 'zig-air': [{'zig': v} for v in ordered]}
 
 
 def render(items):

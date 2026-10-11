@@ -75,9 +75,12 @@ Prove the same for `Thread.Mutex.unlock` by the holder:
 ```lean
 theorem unlock_keeps_current (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d
 ```
+
+The unlock starts with an owner check (`Thread.mutexOwnerCheck`): it holds for the thread that
+runs it, so the statement says that `t` is the current thread (`hcur`).
 
 A solution is in [`Solution.lean`](Solution.lean).
 
@@ -96,7 +99,7 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
 
 ## Assumptions and remaining obligations
 
-[`docs/premise-index.md`](../../docs/premise-index.md) derives these premises for `Main.lean`
+[`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives these premises for `Main.lean`
 (definitions in [`docs/premises.md`](../../docs/premises.md)):
 
 - [PRF-01](../../docs/premises.md#prf-01): the committed `Threadsync/Gen.lean` has no profile

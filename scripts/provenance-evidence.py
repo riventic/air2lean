@@ -232,7 +232,7 @@ def fresh_receipt(fx, attempt):
     return am.audit_theorems(ROOT, {'proofs': [fx['proofs']]}, attempt / 'audit.json')
 
 
-def record_manifest(fx, out, air_dir, receipt, binary, stock):
+def record_manifest(fx, out, air_dir, receipt, binary, stock, generated_from_head=False):
     """`artifact-manifest.py manifest` of the fixture's example: the fixture source, the given AIR,
     receipt and stock-Zig native build (fixture target, ReleaseSafe, baseline)."""
     code = am.manifest_main(['manifest', str(out), '--example', fx['example'], '--zig-version', VERSION,
@@ -241,7 +241,8 @@ def record_manifest(fx, out, air_dir, receipt, binary, stock):
                              '--receipt', str(receipt), '--native-binary', str(binary),
                              '--native-compiler', str(Path(stock).absolute()),
                              '--native-compiler-version', VERSION, '--native-target', fx['target'],
-                             '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline'])
+                             '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline']
+                            + ['--generated-from-head'] * generated_from_head)
     am.demand(code == 0, 'could not record the manifest ' + str(out))
 
 
@@ -360,7 +361,8 @@ def record(fx, a):
     # Recorded beside the run, then moved over the fixture: a failure keeps the committed manifest.
     staged = work / 'fixture-manifest.json'
     staged.unlink(missing_ok=True)
-    record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['example'], stock)
+    record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['example'], stock,
+                    a.generated_from_head)
     path = fx['path'] / 'manifest.json'
     os.replace(staged, path)
     manifest = am.load(path)
@@ -403,6 +405,8 @@ def main(argv):
     r = sub.add_parser('record', help='record the fixture manifest from the clean tree and refresh pins.json')
     r.add_argument('workdir')
     r.add_argument('--stock-zig', default=os.environ.get('AIR2LEAN_ZIG', 'zig'))
+    r.add_argument('--generated-from-head', action='store_true',
+                   help='the receipt was just installed from a run on HEAD (scripts/generated.py)')
     a = parser.parse_args(argv)
     names = list(FIXTURES) if a.fixture == 'all' else [a.fixture]
     if a.action in ('regenerate', 'install', 'record') and len(names) != 1:

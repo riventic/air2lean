@@ -42,7 +42,7 @@ inductive ThreadFn where
   `.unsupportedTimer` at run time (distinct from `.unspecified`), not a rejection. Each has its
   own runtime signature (`checkModelSignature`). -/
   | timerStart | timerRead | futexTimedWait
-  /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
+  /-- `Io.Group.async` (a thread, the caller or deferred), `.concurrent`, `.await`, `.cancel` (0.16.0). -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
   /-- `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel`, `Io.checkCancel` (0.16.0 only;
   `ZigLean/Conc/Future.lean`, `docs/futures.md`): a future's task is a thread with a result. -/
@@ -169,11 +169,11 @@ def stdModels : Array StdModel := #[
   threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
   threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
   threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] ioZig,
+  threadModel "Io.Group.async" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] ioZig,
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] ioZig,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] ioZig,
-  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] (only [.v0_16_0] ioZig),
+  threadModel "Io.async" .futureAsync #["asyncWithPolicyC", "asyncC", "Future.complete"] (only [.v0_16_0] ioZig),
   threadModel "Io.Future.await" .futureAwait #["awaitC"] (only [.v0_16_0] ioZig),
   threadModel "Io.Future.cancel" .futureCancel #["cancelC"] (only [.v0_16_0] ioZig),
   threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] (only [.v0_16_0] ioZig),
@@ -254,6 +254,15 @@ def rejectedThreadFn? (name : String) : Option String :=
   match stdKind? name with
   | some (.rejected reason) => some reason
   | _ => none
+
+/-- Translated std functions whose generated definition starts with the owner check of a mutex
+unlock (`Zig.mutexOwnerCheck p0`, `ZigLean/Conc/Call.lean`): `.illegal` unless the current thread
+made the most recent successful acquire of the mutex word, at offset 0 of the first argument.
+They are translated, not modelled; the check is ghost (it reads no byte and writes nothing).
+`Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2): std makes an unlock from another thread undefined
+behavior. `Io.Mutex.unlock` (0.16.0, 0.17.0) is not listed: std names no owner, so an unlock by
+another thread of a held `Io.Mutex` is legal (`docs/std-models.md` §Thread model). -/
+def ownerCheckedUnlocks : Array String := #["Thread.Mutex.FutexImpl.unlock"]
 
 /-- `name` selects an allocator or thread model (not a rejection). -/
 def modelledStdFn (name : String) : Bool :=
