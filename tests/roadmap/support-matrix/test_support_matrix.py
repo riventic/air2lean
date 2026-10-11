@@ -153,8 +153,10 @@ class Agreement(Scratch):
         self.assertProblem('usage differs from the --diagnostics-json usage')
 
     def test_translator_version_must_be_pinned_and_inventoried(self):
-        self.edit('Air2Lean/Air/Normalize.lean', 'def supportedVersions : List String := [',
-                  'def supportedVersions : List String := ["0.99.0", ')
+        self.edit('Air2Lean/Air/Dialect.lean', 'def all : List ZigVersion := [',
+                  'def all : List ZigVersion := [.v0_99_0, ')
+        self.edit('Air2Lean/Air/Dialect.lean', '  | v0_17_0 => "0.17.0"\n',
+                  '  | v0_17_0 => "0.17.0"\n  | v0_99_0 => "0.99.0"\n')
         status, output = run('generate', '--root', self.root)
         self.assertEqual(status, 1, output)
         self.assertIn('zig-patch/versions.toml pins', output)

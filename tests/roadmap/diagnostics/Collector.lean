@@ -8,7 +8,7 @@ private def require (condition : Bool) (message : String) : IO Unit :=
   unless condition do throw (IO.userError message)
 
 private def mkFunc (name : String) (body : Array Inst := #[]) : Func := {
-  zigVersion := "0.16.0"
+  dialect := .ofVersion .v0_16_0
   name
   params := #[3]
   ret := 1
@@ -380,7 +380,7 @@ private def collectorChecks : IO Unit := do
     (some 2, "indirect callee is not a function pointer")])
     "bucket lookup must not change unknown indirect-callee diagnostics or their call anchors"
   let worker : Func := {
-    zigVersion := "0.16.0"
+    dialect := .ofVersion .v0_16_0
     name := "worker"
     types := #[.int false 32, .void, .noreturn]
     layouts := Array.replicate 3 {}
@@ -389,7 +389,7 @@ private def collectorChecks : IO Unit := do
     globals := #[]
     body := #[{ id := 0, ty := 0, op := .arg 0 }, { id := 1, ty := 2, op := .ret .void }] }
   let spawn : Func := {
-    zigVersion := "0.16.0"
+    dialect := .ofVersion .v0_16_0
     name := "spawn"
     types := #[.int false 32, .tuple #[0],
       .struct "Thread.SpawnConfig" "auto" #[], .errorSet none, .thread, .errorUnion 3 4, .noreturn]
@@ -521,7 +521,7 @@ private def collectorChecks : IO Unit := do
     { id := 1, ty := 6, op := .ret (.inst 0) }] } "custom allocators"
   -- Before 0.16.0 `Io.Group` has no reviewed std source: the ordinary program check rejects it
   -- before the spawn policy runs.
-  match checkProgram #[{ group with zigVersion := "0.15.2" }, worker] with
+  match checkProgram #[{ group with dialect := .ofVersion .v0_15_2 }, worker] with
   | .ok _ => throw (IO.userError "pre-0.16 Io.Group accepted")
   | .error message =>
     require ((message.splitOn "no reviewed std source for Zig 0.15.2").length > 1)
