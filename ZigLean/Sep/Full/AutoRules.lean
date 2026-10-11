@@ -386,6 +386,23 @@ theorem land_high {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w
     (a &&& b) + a % 2 ^ j = a := by
   rw [land_high' ha hj h]; have := Nat.mod_le a (2 ^ j); omega
 
+/-! **Atoms for `omega`**: a truncated subtraction, `Int.toNat`, `min` or `max` whose case is
+known, as an opaque atom with a linear defining fact (no case split). -/
+
+/-- `a - b` as an atom for `omega` where `b ≤ a` is known (no case split). -/
+@[irreducible] def subAtom (a b : Nat) : Nat := a - b
+theorem subAtom_add {a b : Nat} (h : b ≤ a) : subAtom a b + b = a := by unfold subAtom; omega
+/-- `x.toNat` as an atom for `omega` where `0 ≤ x` is known. -/
+@[irreducible] def toNatAtom (x : Int) : Nat := x.toNat
+theorem toNatAtom_eq {x : Int} (h : 0 ≤ x) : (toNatAtom x : Int) = x := by unfold toNatAtom; omega
+/-- `min a b`/`max a b` as an atom where the order is known. -/
+@[irreducible] def minAtom (a b : Nat) : Nat := Min.min a b
+theorem minAtom_left {a b : Nat} (h : a ≤ b) : minAtom a b = a := by unfold minAtom; omega
+theorem minAtom_right {a b : Nat} (h : b ≤ a) : minAtom a b = b := by unfold minAtom; omega
+@[irreducible] def maxAtom (a b : Nat) : Nat := Max.max a b
+theorem maxAtom_left {a b : Nat} (h : b ≤ a) : maxAtom a b = a := by unfold maxAtom; omega
+theorem maxAtom_right {a b : Nat} (h : a ≤ b) : maxAtom a b = b := by unfold maxAtom; omega
+
 /-! **No wrap-around**: the value of a word operation whose result fits (conditional rewrites of
 the arithmetic solver, side conditions by `omega`). -/
 

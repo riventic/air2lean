@@ -216,21 +216,6 @@ def propHyps : MetaM (Array LocalDecl) := do
 normal form. `omega` and the discharger work from these, not from the raw context. -/
 initialize dischFacts : IO.Ref (Array Expr) ← IO.mkRef #[]
 
-/-- `omega` proves `ty` from `facts` (proof terms); the state is kept clean on failure. -/
-def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
-  let s ← saveState
-  try
-    let m ← mkFreshExprMVar ty
-    let before := (← getLCtx).lastDecl.map (·.fvarId)
-    let some g ← m.mvarId!.falseOrByContra | return some (← instantiateMVars m)
-    g.withContext do
-      let neg := match (← getLCtx).lastDecl with
-        | some d => if some d.fvarId != before then #[d.toExpr] else #[]
-        | none => #[]
-      Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
-    return some (← instantiateMVars m)
-  catch _ => s.restore; return none
-
 /-- Probes of `extraFacts` (a mask or remainder fact for a term), per run of `fsym`: a proof
 (reused where its free variables are in scope), or the number of facts it failed with (retried
 only with more facts). -/
@@ -246,6 +231,104 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   let r ← run
   probeCache.modify (·.insert key (match r with | some pf => .inl pf | none => .inr n))
   return r
+
+/-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
+def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+  let s ← saveState
+  try
+    let m ← mkFreshExprMVar ty
+    let before := (← getLCtx).lastDecl.map (·.fvarId)
+    let some g ← m.mvarId!.falseOrByContra | return some (← instantiateMVars m)
+    g.withContext do
+      let neg := match (← getLCtx).lastDecl with
+        | some d => if some d.fvarId != before then #[d.toExpr] else #[]
+        | none => #[]
+      Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
+    return some (← instantiateMVars m)
+  catch _ => s.restore; return none
+
+/-- A proposition `omega` reads: relations of natural numbers and integers under `¬ ∧ ∨ → ↔`. -/
+partial def isArithProp (t : Expr) : MetaM Bool := do
+  let t ← instantiateMVars t
+  if t.isConstOf ``True || t.isConstOf ``False then return true
+  if t.isAppOfArity ``Not 1 then return ← isArithProp t.appArg!
+  if t.isAppOfArity ``And 2 || t.isAppOfArity ``Or 2 || t.isAppOfArity ``Iff 2 then
+    return (← isArithProp t.appFn!.appArg!) && (← isArithProp t.appArg!)
+  if t.isArrow then return (← isArithProp t.bindingDomain!) && (← isArithProp t.bindingBody!)
+  let num (ty : Expr) := ty.isConstOf ``Nat || ty.isConstOf ``Int
+  if t.isAppOfArity ``Eq 3 || t.isAppOfArity ``LT.lt 4 || t.isAppOfArity ``LE.le 4 ||
+      t.isAppOfArity ``GT.gt 4 || t.isAppOfArity ``GE.ge 4 || t.isAppOfArity ``Dvd.dvd 4 then
+    return num (← whnfR (t.getArg! 0))
+  return false
+
+/-- A term `omega` case-splits on: a truncated subtraction, `Int.toNat`, `min`, `max`. -/
+def isSplitTerm (e : Expr) : Bool :=
+  (e.isAppOfArity ``HSub.hSub 6 && (e.getArg! 0).isConstOf ``Nat) || e.isAppOfArity ``Int.toNat 1 ||
+    (e.isAppOfArity ``Min.min 4 && (e.getArg! 0).isConstOf ``Nat) ||
+    (e.isAppOfArity ``Max.max 4 && (e.getArg! 0).isConstOf ``Nat)
+
+/-- A fact without case splits for `omega`. -/
+def isLinearProp (t : Expr) : Bool :=
+  !t.isArrow && !(t.find? fun e => isSplitTerm e || e.isAppOfArity ``Or 2 || e.isAppOfArity ``Iff 2 ||
+    e.isAppOfArity ``Not 1).isSome
+
+/-- `omega` proves `ty` from `facts`: only arithmetic facts; the split terms whose case the
+linear facts decide become opaque atoms with linear defining facts (`subAtom`, `toNatAtom`,
+`minAtom`, `maxAtom`): `omega` explores no case split for them. -/
+def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+  let mut arith : Array (Expr × Expr) := #[]
+  for f in facts do
+    let t ← instantiateMVars (← inferType f)
+    if ← isArithProp t then arith := arith.push (f, t)
+  let ty ← instantiateMVars ty
+  let hasSplit := (arith.any fun (_, t) => (t.find? isSplitTerm).isSome) || (ty.find? isSplitTerm).isSome
+  unless hasSplit do return ← omegaRaw (arith.map (·.1)) ty
+  let lin := (arith.filter fun (_, t) => isLinearProp t).map (·.1)
+  let atomsRef ← IO.mkRef (({} : Std.HashMap Expr Expr), (#[] : Array Expr))
+  let rw (e : Expr) : MetaM Expr := Meta.transform e (post := fun x => do
+    unless isSplitTerm x do return .continue
+    let (m, defs) ← atomsRef.get
+    if let some a := m.get? x then return .done a
+    let base := lin ++ defs
+    let decide (prop : Expr) : MetaM (Option Expr) :=
+      probe (mkApp2 (mkConst `fsym.det) x prop) base.size (omegaRaw base prop)
+    let args := x.getAppArgs
+    let r : Option (Expr × Expr) ← do
+      if x.isAppOfArity ``Int.toNat 1 then
+        let v := x.appArg!
+        match ← decide (← mkAppM ``LE.le #[mkIntLit 0, v]) with
+        | some h => pure (some (mkApp (mkConst ``toNatAtom) v, ← mkAppM ``toNatAtom_eq #[h]))
+        | none => pure none
+      else
+        let (a, b) := (args[args.size - 2]!, args[args.size - 1]!)
+        if x.isAppOfArity ``HSub.hSub 6 then
+          match ← decide (← mkAppM ``LE.le #[b, a]) with
+          | some h => pure (some (mkApp2 (mkConst ``subAtom) a b, ← mkAppM ``subAtom_add #[h]))
+          | none => pure none
+        else
+          let isMin := x.isAppOfArity ``Min.min 4
+          let c := if isMin then ``minAtom else ``maxAtom
+          match ← decide (← mkAppM ``LE.le #[a, b]) with
+          | some h => pure (some (mkApp2 (mkConst c) a b,
+              ← mkAppM (if isMin then ``minAtom_left else ``maxAtom_right) #[h]))
+          | none =>
+            match ← decide (← mkAppM ``LE.le #[b, a]) with
+            | some h => pure (some (mkApp2 (mkConst c) a b,
+                ← mkAppM (if isMin then ``minAtom_right else ``maxAtom_left) #[h]))
+            | none => pure none
+    match r with
+    | some (atom, d) =>
+      atomsRef.modify fun (m, defs) => (m.insert x atom, defs.push d)
+      return .done atom
+    | none => return .continue)
+  let mut facts' : Array Expr := #[]
+  for (f, t) in arith do
+    let t' ← rw t
+    facts' := facts'.push (← if t' == t then pure f else mkExpectedTypeHint f t')
+  let ty' ← rw ty
+  let (_, defs) ← atomsRef.get
+  let some pf ← omegaRaw (facts' ++ defs) ty' | return none
+  return some (← mkExpectedTypeHint pf ty)
 
 /-- The subterms `a &&& b` of natural numbers in `e`. -/
 partial def natAnds (e : Expr) : Array Expr :=
