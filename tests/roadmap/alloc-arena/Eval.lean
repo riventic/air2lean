@@ -52,6 +52,9 @@ open AllocArena.ArenaLinux
 #guard first (arena_oom_free 8) dispatch (mem0 .fresh) = "fail Zig.Error.illegal"
 #guard [first (arena_fit 55) dispatch (mem0 .fresh), first (arena_fit 60) dispatch (mem0 .fresh)] =
   ["ok 60055", "ok 60060"]
+-- A node over bytes that held a 4-byte atomic of an earlier object: the arena's 8-byte atomic on
+-- its `size` word, ordered after it, retires that location (the mixed-size policy).
+#guard first arena_mixed dispatch (mem0 .fresh) = "ok 16"
 end Linux
 
 section Fixed
@@ -75,14 +78,15 @@ open AllocArena.ArenaFixedLinux
 -- retry there would never end).
 #guard [first (arena_fit 55) dispatch (mem0 .fresh), first (arena_fit 60) dispatch (mem0 .fresh)] =
   ["ok 60055", "ok 60060"]
+#guard first arena_mixed dispatch (mem0 .fresh) = "ok 16"
 end Fixed
 
 section Macos
 open AllocArena.ArenaMacos
 #guard [first (arena_sum 10) dispatch (mem0 .fresh), first (arena_resize 10 20) dispatch (mem0 .fresh),
   first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh),
-  first (arena_fit 55) dispatch (mem0 .fresh)] =
-  ["ok 10", "ok 1", "ok 7001", "ok 20002", "ok 60055"]
+  first (arena_fit 55) dispatch (mem0 .fresh), first arena_mixed dispatch (mem0 .fresh)] =
+  ["ok 10", "ok 1", "ok 7001", "ok 20002", "ok 60055", "ok 16"]
 end Macos
 
 end AllocArena.Eval

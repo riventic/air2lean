@@ -351,19 +351,19 @@
      ]
     },
     {
-     "id": 30,
+     "id": 29,
      "tag": "dbg_stmt",
      "ty": 1,
      "line": 5,
      "column": 29
     },
     {
-     "id": 31,
+     "id": 30,
      "tag": "call",
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alignedAlloc__anon_606",
+      "func": "mem.Allocator.alignedAlloc__anon_9036",
       "module": "std",
       "instance_key": "004dab4d837d22e6e9f4e74bf48ea9f90579d0684d467e7dd3b2963f5335b611",
       "noreturn": false
@@ -379,67 +379,67 @@
      ]
     },
     {
-     "id": 32,
+     "id": 31,
      "tag": "is_non_err",
      "ty": 18,
      "args": [
       {
-       "inst": 31
+       "inst": 30
       }
      ]
     },
     {
-     "id": 38,
+     "id": 37,
      "tag": "cond_br",
      "ty": 19,
      "args": [
       {
-       "inst": 32
+       "inst": 31
       }
      ],
      "then": [
       {
-       "id": 33,
+       "id": 32,
        "tag": "unwrap_errunion_payload",
        "ty": 15,
        "args": [
         {
-         "inst": 31
+         "inst": 30
         }
        ]
       },
       {
-       "id": 34,
+       "id": 33,
        "tag": "br",
        "ty": 19,
        "target": 24,
        "args": [
         {
-         "inst": 33
+         "inst": 32
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 35,
+       "id": 34,
        "tag": "unwrap_errunion_err",
        "ty": 20,
        "args": [
         {
-         "inst": 31
+         "inst": 30
         }
        ]
       },
       {
-       "id": 36,
+       "id": 35,
        "tag": "dbg_stmt",
        "ty": 1,
        "line": 5,
        "column": 50
       },
       {
-       "id": 37,
+       "id": 36,
        "tag": "ret_safe",
        "ty": 19,
        "args": [
@@ -454,7 +454,7 @@
    ]
   },
   {
-   "id": 39,
+   "id": 38,
    "tag": "dbg_var_val",
    "ty": 1,
    "args": [
@@ -465,14 +465,14 @@
    "name": "s"
   },
   {
-   "id": 40,
+   "id": 39,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 6,
    "column": 11
   },
   {
-   "id": 41,
+   "id": 40,
    "tag": "load",
    "ty": 8,
    "args": [
@@ -482,26 +482,26 @@
    ]
   },
   {
-   "id": 44,
+   "id": 43,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 6,
    "column": 11
   },
   {
-   "id": 45,
+   "id": 44,
    "tag": "call",
    "ty": 1,
    "callee": {
     "ty": 21,
-    "func": "mem.Allocator.free__anon_612",
+    "func": "mem.Allocator.free__anon_9045",
     "module": "std",
     "instance_key": "809fd7dfd3c9f402ca4b360071479a018a1c130950fa3de4ad4fe289c47435bb",
     "noreturn": false
    },
    "args": [
     {
-     "inst": 41
+     "inst": 40
     },
     {
      "inst": 24
@@ -509,26 +509,26 @@
    ]
   },
   {
-   "id": 46,
+   "id": 45,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 7,
    "column": 5
   },
   {
-   "id": 47,
+   "id": 46,
    "tag": "block",
    "ty": 15,
    "body": [
     {
-     "id": 48,
+     "id": 47,
      "tag": "dbg_stmt",
      "ty": 1,
      "line": 7,
      "column": 29
     },
     {
-     "id": 49,
+     "id": 48,
      "tag": "load",
      "ty": 8,
      "args": [
@@ -538,26 +538,26 @@
      ]
     },
     {
-     "id": 52,
+     "id": 51,
      "tag": "dbg_stmt",
      "ty": 1,
      "line": 7,
      "column": 29
     },
     {
-     "id": 53,
+     "id": 52,
      "tag": "call",
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alignedAlloc__anon_606",
+      "func": "mem.Allocator.alignedAlloc__anon_9036",
       "module": "std",
       "instance_key": "004dab4d837d22e6e9f4e74bf48ea9f90579d0684d467e7dd3b2963f5335b611",
       "noreturn": false
      },
      "args": [
       {
-       "inst": 49
+       "inst": 48
       },
       {
        "inst": 0
@@ -565,67 +565,67 @@
      ]
     },
     {
-     "id": 54,
+     "id": 53,
      "tag": "is_non_err",
      "ty": 18,
      "args": [
       {
-       "inst": 53
+       "inst": 52
       }
      ]
     },
     {
-     "id": 60,
+     "id": 59,
      "tag": "cond_br",
      "ty": 19,
      "args": [
       {
-       "inst": 54
+       "inst": 53
       }
      ],
      "then": [
       {
-       "id": 55,
+       "id": 54,
        "tag": "unwrap_errunion_payload",
        "ty": 15,
        "args": [
         {
-         "inst": 53
+         "inst": 52
         }
        ]
       },
       {
-       "id": 56,
+       "id": 55,
        "tag": "br",
        "ty": 19,
-       "target": 47,
+       "target": 46,
        "args": [
         {
-         "inst": 55
+         "inst": 54
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 57,
+       "id": 56,
        "tag": "unwrap_errunion_err",
        "ty": 20,
        "args": [
         {
-         "inst": 53
+         "inst": 52
         }
        ]
       },
       {
-       "id": 58,
+       "id": 57,
        "tag": "dbg_stmt",
        "ty": 1,
        "line": 7,
        "column": 50
       },
       {
-       "id": 59,
+       "id": 58,
        "tag": "ret_safe",
        "ty": 19,
        "args": [
@@ -640,80 +640,80 @@
    ]
   },
   {
-   "id": 61,
+   "id": 60,
    "tag": "alloc",
    "ty": 22
   },
   {
-   "id": 62,
+   "id": 61,
    "tag": "store_safe",
    "ty": 1,
    "args": [
     {
-     "inst": 61
+     "inst": 60
     },
     {
-     "inst": 47
+     "inst": 46
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "tag": "bitcast",
+   "ty": 23,
+   "args": [
+    {
+     "inst": 60
     }
    ]
   },
   {
    "id": 63,
-   "tag": "bitcast",
-   "ty": 23,
-   "args": [
-    {
-     "inst": 61
-    }
-   ]
-  },
-  {
-   "id": 64,
    "tag": "dbg_var_val",
    "ty": 1,
    "args": [
     {
-     "inst": 47
+     "inst": 46
     }
    ],
    "name": "t"
   },
   {
-   "id": 65,
+   "id": 64,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 13
   },
   {
-   "id": 66,
+   "id": 65,
    "tag": "ptr_slice_len_ptr",
    "ty": 24,
    "args": [
     {
-     "inst": 63
+     "inst": 62
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 65
     }
    ]
   },
   {
    "id": 67,
-   "tag": "load",
-   "ty": 0,
-   "args": [
-    {
-     "inst": 66
-    }
-   ]
-  },
-  {
-   "id": 68,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 46
   },
   {
-   "id": 69,
+   "id": 68,
    "tag": "load",
    "ty": 10,
    "args": [
@@ -723,14 +723,14 @@
    ]
   },
   {
-   "id": 70,
+   "id": 69,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 46
   },
   {
-   "id": 71,
+   "id": 70,
    "tag": "call",
    "ty": 0,
    "callee": {
@@ -741,19 +741,19 @@
    },
    "args": [
     {
-     "inst": 69
+     "inst": 68
     }
    ]
   },
   {
-   "id": 72,
+   "id": 71,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 25
   },
   {
-   "id": 73,
+   "id": 72,
    "tag": "mul_safe",
    "ty": 0,
    "args": [
@@ -762,44 +762,44 @@
      "val": "1000"
     },
     {
-     "inst": 71
+     "inst": 70
     }
    ]
   },
   {
-   "id": 74,
+   "id": 73,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 18
   },
   {
-   "id": 75,
+   "id": 74,
    "tag": "add_safe",
    "ty": 0,
    "args": [
     {
-     "inst": 67
+     "inst": 66
     },
     {
-     "inst": 73
+     "inst": 72
     }
    ]
   },
   {
-   "id": 76,
+   "id": 75,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 8,
    "column": 5
   },
   {
-   "id": 77,
+   "id": 76,
    "tag": "ret_safe",
    "ty": 19,
    "args": [
     {
-     "inst": 75
+     "inst": 74
     }
    ]
   }

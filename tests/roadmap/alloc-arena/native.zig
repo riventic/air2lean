@@ -14,4 +14,5 @@ pub fn main() void {
     std.debug.print("three ok {d} ok {d}\n", .{ arena.arena_three(1), arena.arena_three(100) });
     std.debug.print("oom ok {d}\n", .{b(arena.arena_oom_free(8))});
     std.debug.print("fit ok {d} ok {d}\n", .{ arena.arena_fit(55), arena.arena_fit(60) });
+    std.debug.print("mixed ok {d}\n", .{arena.arena_mixed()});
 }

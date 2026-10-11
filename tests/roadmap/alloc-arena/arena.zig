@@ -119,3 +119,23 @@ pub export fn arena_fit(n: usize) usize {
     const t = a.alignedAlloc(u8, .@"8", n) catch return 1;
     return t.len + 1000 * arena.queryCapacity();
 }
+
+/// Memory reused for another object across atomic sizes. A client of the child allocator uses
+/// the upper half of 8 bytes as a 4-byte atomic and gives them back; an arena over the same child
+/// puts its first node there (plain header writes), and its next `alloc` loads the node's `size`
+/// word atomically (8 bytes). Natively that is fine (16). The model's mixed-size policy retires
+/// the 4-byte location, since every access to it happened before (a racing mixed-size access
+/// would be `.unspecified`).
+pub export fn arena_mixed() usize {
+    var fba = std.heap.FixedBufferAllocator.init(&small);
+    const c = fba.allocator();
+    const w = c.create(u64) catch return 0;
+    const halves: *[2]u32 = @ptrCast(w);
+    @atomicStore(u32, &halves[1], 7, .seq_cst);
+    c.destroy(w);
+    var arena = std.heap.ArenaAllocator.init(c);
+    const a = arena.allocator();
+    const s = a.alloc(u8, 8) catch return 1;
+    const t = a.alloc(u8, 8) catch return 2;
+    return s.len + t.len;
+}

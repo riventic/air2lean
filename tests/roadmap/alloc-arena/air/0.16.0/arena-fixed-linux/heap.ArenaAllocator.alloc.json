@@ -11152,7 +11152,7 @@
              "ty": 56,
              "callee": {
               "ty": 57,
-              "func": "math.add__anon_18122",
+              "func": "math.add__anon_18169",
               "module": "std",
               "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
               "noreturn": false
@@ -11523,7 +11523,7 @@
              "ty": 56,
              "callee": {
               "ty": 57,
-              "func": "math.add__anon_18122",
+              "func": "math.add__anon_18169",
               "module": "std",
               "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
               "noreturn": false

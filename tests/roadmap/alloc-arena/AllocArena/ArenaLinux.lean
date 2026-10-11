@@ -3300,31 +3300,56 @@ def arena_foreign_free  : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
 
-structure arena_oob_freeLocals where
-  arena : Zig.Ptr
+structure mem_Allocator_create__anon_496c6df2f4baLocals where
   deriving Inhabited
 
-inductive arena_oob_freeExit where
-  | ret
+inductive mem_Allocator_create__anon_496c6df2f4baExit where
+  | ret (v : Except Zig.ErrName (Zig.Ptr))
 
-def arena_oob_free  : Zig.ConcM Tgt (Unit) := do
-  let s0 ← Zig.allocStack 32 8
+def mem_Allocator_create__anon_496c6df2f4ba (p0 : mem_Allocator) : Zig.ConcM Tgt (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
-    let i0 ← pure (← get).arena
-    let i1 ← Zig.callMC (heap_ArenaAllocator_init ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator))
-    Zig.store (α := heap_ArenaAllocator) 8 i0 i1
-    Zig.store (α := heap_ArenaAllocator_Node_Size) 8 (⟨some 7, 0⟩ : Zig.Ptr) (Zig.Packed.ofBits (64 : BitVec 64) : heap_ArenaAllocator_Node_Size)
-    Zig.store (α := BitVec 64) 8 (⟨some 7, 8⟩ : Zig.Ptr) (1000 : BitVec 64)
-    Zig.store (α := Option (Zig.Ptr)) 8 (⟨some 7, 16⟩ : Zig.Ptr) none
-    let i6 ← Zig.callMC (Zig.ptrProject i0 (·.add 16))
-    let i7 ← pure i6
-    Zig.store (α := Option (Zig.Ptr)) 8 i7 (some (⟨some 7, 0⟩ : Zig.Ptr))
-    let i9 ← Zig.callMC (heap_ArenaAllocator_allocator i0)
-    let _i10 ← Zig.callC (mem_Allocator_free__anon_1e60e7ef40f5 i9 (⟨(⟨some 2, 0⟩ : Zig.Ptr), (8 : BitVec 64)⟩ : Zig.Slice))
-    pure .ret) : Zig.CM Tgt arena_oob_freeLocals arena_oob_freeExit).run' { (default : arena_oob_freeLocals) with arena := s0 }
-  Zig.free s0
+    let i1 ← Zig.callMC Zig.returnAddress
+    let i2 ← Zig.callC (mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7 p0 (8 : BitVec 64) i1)
+    match i2 with
+    | .error _ => (do
+      let i4 ← Zig.callRC (Zig.unwrapErr i2)
+      let i5 ← pure ((.error i4) : Except Zig.ErrName (Zig.Ptr))
+      pure (.ret i5))
+    | .ok v3 => (do
+      let i7 ← pure (v3)
+      let i8 ← pure ((.ok i7) : Except Zig.ErrName (Zig.Ptr))
+      pure (.ret i8))) : Zig.CM Tgt mem_Allocator_create__anon_496c6df2f4baLocals mem_Allocator_create__anon_496c6df2f4baExit).run' (default : mem_Allocator_create__anon_496c6df2f4baLocals)
+  match e with
+  | .ret v => pure v
+
+structure mem_Allocator_destroy__anon_d74a2d8a982dLocals where
+  deriving Inhabited
+
+inductive mem_Allocator_destroy__anon_d74a2d8a982dExit where
+  | ret
+  | br8
+
+def mem_Allocator_destroy__anon_d74a2d8a982d (p0 : mem_Allocator) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p1)
+    let i3 ← pure i2
+    let i4 ← pure (i3)
+    let i5 ← pure (⟨i4, (8 : BitVec 64)⟩ : Zig.Slice)
+    let i6 ← Zig.callRC (mem_Alignment_fromByteUnits (8 : BitVec 64))
+    let i7 ← Zig.callMC Zig.returnAddress
+    match ← ((do
+      let i9 ← pure ((p0).vtable)
+      let i10 ← Zig.callMC (Zig.ptrProject i9 (·.add 24))
+      let i11 ← Zig.load (Zig.Ptr) 8 i10
+      let i12 ← pure ((p0).ptr)
+      let _i13 ← (if i11 == (⟨some 6, 0⟩ : Zig.Ptr) then Zig.callMC (heap_PageAllocator_free i12 i5 i6 i7) else if i11 == (⟨some 11, 0⟩ : Zig.Ptr) then Zig.callC (heap_ArenaAllocator_free i12 i5 i6 i7) else if i11 == (⟨some 15, 0⟩ : Zig.Ptr) then Zig.callMC (heap_FixedBufferAllocator_free i12 i5 i6 i7) else throw .illegal)
+      pure .br8) : Zig.CM Tgt mem_Allocator_destroy__anon_d74a2d8a982dLocals mem_Allocator_destroy__anon_d74a2d8a982dExit) with
+    | .br8 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt mem_Allocator_destroy__anon_d74a2d8a982dLocals mem_Allocator_destroy__anon_d74a2d8a982dExit).run' (default : mem_Allocator_destroy__anon_d74a2d8a982dLocals)
   match e with
   | .ret => pure ()
+  | _ => throw .panic
 
 structure mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals where
   deriving Inhabited
@@ -3433,6 +3458,102 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
   | .ret v => pure v
   | _ => throw .panic
 
+structure arena_mixedLocals where
+  fba : Zig.Ptr
+  arena : Zig.Ptr
+  deriving Inhabited
+
+inductive arena_mixedExit where
+  | ret (v : BitVec 64)
+  | br4 (v : Zig.Ptr)
+  | br20 (v : Zig.Slice)
+  | br28 (v : Zig.Slice)
+
+def arena_mixed  : Zig.ConcM Tgt (BitVec 64) := do
+  let s0 ← Zig.allocStack 24 8
+  let s16 ← Zig.allocStack 32 8
+  let e ← ((do
+    let i0 ← pure (← get).fba
+    let i1 ← Zig.callMC (heap_FixedBufferAllocator_init (⟨(⟨some 0, 0⟩ : Zig.Ptr), (256 : BitVec 64)⟩ : Zig.Slice))
+    Zig.store (α := heap_FixedBufferAllocator) 8 i0 i1
+    let i3 ← Zig.callMC (heap_FixedBufferAllocator_allocator i0)
+    match ← ((do
+      let i5 ← Zig.callC (mem_Allocator_create__anon_496c6df2f4ba i3)
+      let i6 ← pure (Zig.isNonErr i5)
+      if i6 then (do
+        let i8 ← Zig.callRC (Zig.unwrapPayload i5)
+        pure (.br4 i8))
+      else (do
+        let _i10 ← Zig.callRC (Zig.unwrapErr i5)
+        pure (.ret (0 : BitVec 64)))) : Zig.CM Tgt arena_mixedLocals arena_mixedExit) with
+    | .br4 v4 => (do
+      let i12 ← pure (v4)
+      let i13 ← Zig.callMC (Zig.ptrProject i12 (·.elem 4 (1 : BitVec 64)))
+      Zig.atomicStoreC Zig.AtomicOrder.seqCst 4 i13 (7 : BitVec 32)
+      let _i15 ← Zig.callC (mem_Allocator_destroy__anon_d74a2d8a982d i3 v4)
+      let i16 ← pure (← get).arena
+      let i17 ← Zig.callMC (heap_ArenaAllocator_init i3)
+      Zig.store (α := heap_ArenaAllocator) 8 i16 i17
+      let i19 ← Zig.callMC (heap_ArenaAllocator_allocator i16)
+      match ← ((do
+        let i21 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 i19 (8 : BitVec 64))
+        let i22 ← pure (Zig.isNonErr i21)
+        if i22 then (do
+          let i24 ← Zig.callRC (Zig.unwrapPayload i21)
+          pure (.br20 i24))
+        else (do
+          let _i26 ← Zig.callRC (Zig.unwrapErr i21)
+          pure (.ret (1 : BitVec 64)))) : Zig.CM Tgt arena_mixedLocals arena_mixedExit) with
+      | .br20 v20 => (do
+        match ← ((do
+          let i29 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 i19 (8 : BitVec 64))
+          let i30 ← pure (Zig.isNonErr i29)
+          if i30 then (do
+            let i32 ← Zig.callRC (Zig.unwrapPayload i29)
+            pure (.br28 i32))
+          else (do
+            let _i34 ← Zig.callRC (Zig.unwrapErr i29)
+            pure (.ret (2 : BitVec 64)))) : Zig.CM Tgt arena_mixedLocals arena_mixedExit) with
+        | .br28 v28 => (do
+          let i36 ← pure v20.len
+          let i37 ← pure v28.len
+          let i38 ← Zig.add false i36 i37
+          pure (.ret i38))
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt arena_mixedLocals arena_mixedExit).run' { (default : arena_mixedLocals) with fba := s0, arena := s16 }
+  Zig.free s0
+  Zig.free s16
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure arena_oob_freeLocals where
+  arena : Zig.Ptr
+  deriving Inhabited
+
+inductive arena_oob_freeExit where
+  | ret
+
+def arena_oob_free  : Zig.ConcM Tgt (Unit) := do
+  let s0 ← Zig.allocStack 32 8
+  let e ← ((do
+    let i0 ← pure (← get).arena
+    let i1 ← Zig.callMC (heap_ArenaAllocator_init ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator))
+    Zig.store (α := heap_ArenaAllocator) 8 i0 i1
+    Zig.store (α := heap_ArenaAllocator_Node_Size) 8 (⟨some 7, 0⟩ : Zig.Ptr) (Zig.Packed.ofBits (64 : BitVec 64) : heap_ArenaAllocator_Node_Size)
+    Zig.store (α := BitVec 64) 8 (⟨some 7, 8⟩ : Zig.Ptr) (1000 : BitVec 64)
+    Zig.store (α := Option (Zig.Ptr)) 8 (⟨some 7, 16⟩ : Zig.Ptr) none
+    let i6 ← Zig.callMC (Zig.ptrProject i0 (·.add 16))
+    let i7 ← pure i6
+    Zig.store (α := Option (Zig.Ptr)) 8 i7 (some (⟨some 7, 0⟩ : Zig.Ptr))
+    let i9 ← Zig.callMC (heap_ArenaAllocator_allocator i0)
+    let _i10 ← Zig.callC (mem_Allocator_free__anon_1e60e7ef40f5 i9 (⟨(⟨some 2, 0⟩ : Zig.Ptr), (8 : BitVec 64)⟩ : Zig.Slice))
+    pure .ret) : Zig.CM Tgt arena_oob_freeLocals arena_oob_freeExit).run' { (default : arena_oob_freeLocals) with arena := s0 }
+  Zig.free s0
+  match e with
+  | .ret => pure ()
+
 structure arena_oom_freeLocals where
   fba : Zig.Ptr
   arena : Zig.Ptr
@@ -3484,28 +3605,6 @@ def arena_oom_free (p0 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
-
-structure mem_Allocator_create__anon_496c6df2f4baLocals where
-  deriving Inhabited
-
-inductive mem_Allocator_create__anon_496c6df2f4baExit where
-  | ret (v : Except Zig.ErrName (Zig.Ptr))
-
-def mem_Allocator_create__anon_496c6df2f4ba (p0 : mem_Allocator) : Zig.ConcM Tgt (Except Zig.ErrName (Zig.Ptr)) := do
-  let e ← ((do
-    let i1 ← Zig.callMC Zig.returnAddress
-    let i2 ← Zig.callC (mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7 p0 (8 : BitVec 64) i1)
-    match i2 with
-    | .error _ => (do
-      let i4 ← Zig.callRC (Zig.unwrapErr i2)
-      let i5 ← pure ((.error i4) : Except Zig.ErrName (Zig.Ptr))
-      pure (.ret i5))
-    | .ok v3 => (do
-      let i7 ← pure (v3)
-      let i8 ← pure ((.ok i7) : Except Zig.ErrName (Zig.Ptr))
-      pure (.ret i8))) : Zig.CM Tgt mem_Allocator_create__anon_496c6df2f4baLocals mem_Allocator_create__anon_496c6df2f4baExit).run' (default : mem_Allocator_create__anon_496c6df2f4baLocals)
-  match e with
-  | .ret v => pure v
 
 structure heap_ArenaAllocator_deinitLocals where
   local1 : BitVec 64
