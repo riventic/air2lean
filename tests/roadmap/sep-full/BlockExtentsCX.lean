@@ -67,10 +67,10 @@ def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
 
 theorem gF_ok : GOk m1 Ghost.unit gF := by
   refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
-    fun b => ?_⟩, 0, fun _ _ => ⟨rfl, fun b e k => ?_⟩⟩, fun b => ?_⟩
+    fun b => ?_⟩, 0, fun _ _ => ⟨rfl, fun b e k => ?_, fun _ _ _ _ => rfl⟩⟩, fun b => ?_⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
-    · have := (ECell.dormant_unit (Ghost.ep ⟨fun γ => GCell.unit.add GCell.unit,
+    · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
@@ -207,7 +207,6 @@ end Zig.Full.ExtCX
 #print axioms Zig.Full.EUpd.lendT
 #print axioms Zig.Full.EUpd.returnT
 #print axioms Zig.Full.EUpd.revoke
-#print axioms Zig.Full.Holds.bshareT
 #print axioms Zig.Full.Upd.alloc
 #print axioms Zig.Full.Upd.bump
 #print axioms Zig.Full.full_excl

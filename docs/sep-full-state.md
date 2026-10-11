@@ -313,7 +313,7 @@ are re-proved against the stronger `FAllocSpec`; the arena follows, see the tabl
   (`CTriple.step_bext`). `PageSpec.inv_legacy` is gone with the wrapper contracts.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
-  (`Ghost.ep g γ e`: ledger `γ` is at epoch `e`): `ECell.TagOk` bounds the counted fraction
+  (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
   `ECell.wsum` (the untagged fraction plus, per tag, `tagWt`: the larger of tagged shares and
   receipts while the epoch is current, the receipts once it is past, nothing otherwise) by `1`,
   and forbids tags of a future epoch; `ECell.Req` is a live claim (an untagged share, a tagged
@@ -325,13 +325,18 @@ are re-proved against the stronger `FAllocSpec`; the arena follows, see the tabl
   dormant claims on the block (`ECell.Dormant`), which is what the bridge and every shrink need.
   Updates of one block's claims are `ECell.StepE` (under every ledger status that contains the
   resource's ledgers, `EUpd.ext1L`); the untagged rules are `ECell.Step`. New rules:
-  `EUpd.lendT` (`gauth γ e M ⋆ bshare b q k` to `gauth ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q
-  k γ e)`, `k' ≤ k`), `EUpd.returnT` (back), `EUpd.revoke` (`gauth γ e' M ⋆ brcpt b q k γ e`,
-  `e < e'`, to the untagged share), `Holds.bshareT` (with the ledger's authority, a tagged share
-  gives the bound). `FAllocInv.tag` (default `none`) tags `granted`'s share (`pshare … I.tag`);
-  the FixedBufferAllocator and the page allocator keep `none` and are unchanged. Not done yet:
-  tagged split/join/weaken (not needed by the arena plan: each grant gets its own tagged share)
-  and the nested parent tag (below).
+  `EUpd.lendT`, `EUpd.returnT`, `EUpd.revoke` (with the parent tag of §Nested tags below).
+  `FAllocInv.tag` (default `none`) tags `granted`'s share (`pshare … I.tag`); the
+  FixedBufferAllocator and the page allocator keep `none` and are unchanged.
+* **Nested tags** (step 3c, §Nested tags below): a ledger records a parent tag (`gauthP γ e M p`;
+  `gauth γ e M` is the ledger without parent). Validity and truth read the ledger statuses
+  (`Ghost.ls g γ e p`): a tag is active (`Act`) while its ledger is at its epoch under an active
+  parent, future (`Fut`) when its ledger is at an earlier epoch or its parent is future. The
+  3b counting (`ECell.wsum`, `tagWt`) became the balanced tree of worlds (`ECell.BalAt`, `Bal`,
+  `mass`, `cwt`); `Ghost.valid_led_change` is the one lemma behind `Upd.alloc p` and `Upd.bump`.
+  `bshare_split`, `EUpd.join`, `EUpd.weaken` hold for every tag (`ECell.StepT`, `EUpd.ext1T`);
+  `Holds.bshare` takes the tag's activity in the resource (automatic for an untagged share;
+  `Holds.bshareT` is gone). Regression: `tests/roadmap/sep-full/NestedTags.lean`.
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
@@ -432,20 +437,22 @@ semantics. `FTriple.ofTriple` and `FTotalTriple.ofTotal` change their side condi
 An arena's `reset` bumps its ledger's epoch (§Ghost state) and takes its nodes back; with
 `.free_all` it frees them to its child, which needs the node's whole share back. But the clients
 of the old epoch still hold shares lent off the node's share, and a stale share cannot come back.
-So a share can carry an epoch tag, `bshare b q k (tag : Option (LedgerId × Epoch))`:
+So a share can carry an epoch tag, `bshare b q k (tag : Option (LedgerId × Epoch))` (step 3b; step 3c,
+§Nested tags, makes the tags a tree):
 
 * **Untagged shares** behave exactly as before. `FAllocInv.tag` (default `none`) is the tag of
   the shares in `granted`; the FixedBufferAllocator and the page allocator keep `none`, so their
   statements and their clients are unchanged. An arena's invariant family `I e` uses
   `some (γ, e)`.
 * **A tagged share `(γ, e)` counts and is true only while ledger `γ` is at epoch `e`** (its
-  authority `gauth γ e _` exists): validity and truth read the ledger. Its fraction is booked
+  authority `gauth γ e _` exists) and its parent tag is active (§Nested tags): validity and truth
+  read the ledgers. Its fraction is booked
   twice: the client's tagged share and the lender's **receipt** (`EUpd.lendT`: an untagged share
   becomes a tagged share and a receipt of the same fraction). Per tag, validity counts
   `max(tagged, receipts)` while the epoch is current, the receipts once it is stale, and nothing
   while the ledger has no authority. A tagged share given back during its epoch cancels its
   receipt (`EUpd.returnT`). After `Upd.bump`, the receipts of the old epoch turn back into
-  untagged shares (`EUpd.revoke`): the ledger authority revokes every share of a past epoch at
+  shares tagged with the ledger's parent, untagged for a root ledger (`EUpd.revoke`): the ledger authority revokes every share of a past epoch at
   once, whatever the clients kept (the cancellable-invariant pattern). Every rule is general (the
   ghost library), none is arena-specific.
 * `bext` (the whole fraction) still leaves the frame no counted claim, so shrinking and freeing
@@ -453,13 +460,50 @@ So a share can carry an epoch tag, `bshare b q k (tag : Option (LedgerId × Epoc
   dormant.
 * `Ghost.Fin` also bounds the tags' ledger names, so `Upd.alloc` picks a name no tag uses.
 
-**Required later step: nested tags for arena-over-arena** (coordinator, 2026-10-11; not
-optional). An arena whose child is an arena gets node shares that are already tagged by the outer
-ledger; its own sub-shares must die with either epoch. The extension keeps the share statements:
-a ledger records a parent tag when it is created, and a tag is active iff its ledger is at that
-epoch **and** the ledger's parent tag is active (acyclic: a parent is older than its child). It
-must exist at the latest when the arena's `alloc` theorem for every child lands, and the inner
-arena over an arena child must instantiate that theorem.
+### Nested tags (step 3c, coordinator decisions 2026-10-11)
+
+An arena whose child is an arena gets node shares that are already tagged by the outer arena's
+ledger; the shares it lends must die with either epoch. One mechanism covers both levels, a tree
+of tags:
+
+* **The parent link lives in the ledger authority** (`GCell.auth` is keyed by `(e, M, p)`;
+  `gauthP γ e M p`; `gauth γ e M := gauthP γ e M none` keeps every existing user). `Upd.alloc p`
+  creates a ledger with parent `p` at a name no frame uses, no tag uses and no ledger names as its
+  parent (`Ghost.Fin` bounds parent names too); `Upd.bump` keeps the parent.
+* **Active is recursive** over the parent chain (`Act`, an inductive predicate: a cycle is never
+  active). **Future** (`Fut`) is recursive too: a tag whose ledger is at an earlier epoch, or whose
+  ledger's parent is future. No future tag has a claim (`ECell.FutZ`), so a bump that makes a tag
+  current activates an empty subtree.
+* **Lending always records its source**: the source of a lend under ledger `γ` is `γ`'s parent
+  tag (`none`: an untagged share). `EUpd.lendT`: `gauthP γ e M p ⋆ bshare b q k p` to `gauthP γ e
+  M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e)`; `EUpd.returnT` cancels back to the
+  `p`-tagged share; `EUpd.revoke` (`e < e'`) turns a stale receipt into a `p`-tagged share. The
+  3b rules are the case `p = none`. The source is not a separate field of the receipt: a lend from
+  a tag that is not on the chain of `(γ, e)` would let the lent share outlive its source, so the
+  source must be the parent, which the ledger already fixes.
+* **Accounting** (`ECell.BalAt`): the shares tagged `w` form the world `w` (`tg c w`; the root is
+  `none`), a receipt of `(γ, e)` lies in the world of `γ`'s parent. A child's weight in its parent's
+  world (`cwt`) is the larger of its receipts and its own world's budget `β γ e` while it is
+  current, its receipts once it is past. `Bal`: some budgets make the root's fraction at most `1`
+  and every active world's fraction at most its budget, below every bound. So a child's weight
+  counts inside its source's budget and the root sums the whole tree. The form is downward closed
+  (dropping claims or ledgers keeps the same budgets valid), and `bext` still leaves the frame only
+  dormant claims (`ECell.dormant_of_auth1`, by induction on `Act`: every active world of the frame
+  weighs nothing).
+* **One lemma for every status change** (`Ghost.valid_led_change`): a change of the ledgers keeps
+  validity and truth when the tags it makes active or future lie in a claim-free set `Z` closed
+  under children, and every other child keeps a status as live as before. `Upd.bump` uses the
+  future tags as `Z` (a bump turns the old epoch and its whole subtree dormant at once);
+  `Upd.alloc` adds the new name.
+* **A tagged share's bound needs its tag's activity** (`Holds.bshare`, argument `Act r.gh.ls t`):
+  the ledgers of the whole chain must be in the resource. An arena owns its child allocator
+  (`CI.own`), so an arena over an arena holds the outer ledger's authority; the arena proof
+  (step 4) needs `CI.own` to witness `Act CI.tag` (trivial for `none`).
+* FBA and the page allocator (tag `none`) keep their statements; their checks pass unchanged.
+* Regression `tests/roadmap/sep-full/NestedTags.lean`: `nested_reset` goes from `bext` through
+  an outer grant, an inner ledger under it and an inner grant, to `bext` again after the outer
+  reset, with the inner ledger, share and receipt still held; `inner_dead`: the inner tag is
+  inactive in every memory that holds the result.
 
 ### Phases (one commit and one agent phase each, estimated)
 
