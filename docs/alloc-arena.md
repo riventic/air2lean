@@ -151,6 +151,22 @@ done): size-free cells and extent resources, and a stronger `FAllocSpec` whose g
 share of their block's extent ([sep-full-state.md](sep-full-state.md) §Block extents, with
 phases). The patched `alloc` proof waits for the remaining phases.
 
+**O-H: the address space ends at `2^64` in the model (open, found in step 7; needs a decision).**
+`alloc`'s fast path computes `alignedIndex(buf.ptr, end_index, alignment)`: `addr +% end_index`
+(wrapping), then `Alignment.forward`, whose `x + (alignment - 1)` is overflow-checked
+(`Zig.add false`: `.overflow`, a panic). The memory model lets a block end exactly at `2^64`
+(`Mem.placeOk`: `A + size ≤ 2^64`; the fallback `alignUp m.top align` is not bounded at all), and
+nothing in `Mem.FSeq` or the arena's invariant bounds a node's address. Scenario: a
+`FixedBufferAllocator` child whose buffer global is placed so that a node's buffer ends at `2^64`
+(placement `σ` of `mem0 σ`); allocations of alignment `1` leave `end_index = buf.len - 3`; then
+`alloc(1, alignment 8)` passes the patched reservation check (`1 + 7 ≤ buf.len`) and
+`alignedIndex` adds `7` to `2^64 - 3`: overflow, a panic. So `FAllocSpec.alloc` fails for every
+arena invariant in such memories, stock or patched. Natively the state does not exist (user
+addresses end below `2^47`/`2^48` on x86_64-linux and aarch64-macos). The resolution belongs in
+the model or the premises (an address-space bound for every live block, e.g. a placement and
+`Mem.newAddr` that keep blocks below an architecture bound, as an OS/architecture premise), not in
+`FAllocSpec` (no per-triple premise). Not kernel-checked yet.
+
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
 multi-threaded specification of the lock-free code (the `resizing` bit as a lock, the stolen
