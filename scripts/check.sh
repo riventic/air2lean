@@ -71,6 +71,9 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   echo "hint: build one with zig-patch/build.sh $zig_version (see zig-patch/README.md)" >&2
   exit 1
 }
+# With AIR2LEAN_CAS_DIR set, exports go through the shared cache (docs/build-cache.md).
+air_export=()
+[ -z "${AIR2LEAN_CAS_DIR:-}" ] || air_export=(python3 -B "$repo_root/scripts/cas.py" air --)
 
 # The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
 # (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
@@ -117,7 +120,8 @@ for ex in $examples; do
     fi
   done
   echo "== $ex: dumping AIR ==" >&2
-  workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
+  workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" \
+    ${air_export[@]+"${air_export[@]}"} "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
