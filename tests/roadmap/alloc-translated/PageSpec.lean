@@ -458,10 +458,11 @@ theorem sep_emp_left {Q : Assn} {h : Heap} : (emp ∗ Q) h ↔ Q h :=
 /-! ## The vtable entries -/
 
 /-- The translated vtable entries, as `RawVTable` fields. `alloc` reaches sync ops (the atomics on
-`addr_hint`); a sequential call is the scheduler's run of one thread (`PageObstruction.lean`). -/
+`addr_hint`); a sequential call is the scheduler's run of one thread (`PageObstruction.lean`), in
+an environment that no `alloc` step reads (`PageAlloc.alloc_run`). -/
 def vt : RawVTable where
   alloc c len k ra := fun m =>
-    Sched.run dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) m
+    Sched.run ⟨.any, .available⟩ dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) m
   resize c s k n ra := heap_PageAllocator_resize c s ⟨BitVec.ofNat 6 k⟩ n ra
   remap c s k n ra := heap_PageAllocator_remap c s ⟨BitVec.ofNat 6 k⟩ n ra
   free c s k ra := heap_PageAllocator_free c s ⟨BitVec.ofNat 6 k⟩ ra

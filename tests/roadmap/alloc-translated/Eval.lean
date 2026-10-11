@@ -51,7 +51,7 @@ end Macos
 /-- The first schedule's result of a concurrent page-allocator client. -/
 def first {α : Type} [ToString α] (main : Zig.ConcM Tgt α) (dispatch : Tgt → Zig.ConcM Tgt Unit)
     (m : Zig.Mem) : String :=
-  match (Zig.Sched.run dispatch 10000 (fun _ => 0) main m).run with
+  match (Zig.Sched.run ⟨.any, .available⟩ dispatch 10000 (fun _ => 0) main m).run with
   | some (.ok (v, _)) => s!"ok {v}"
   | some (.error e) => s!"fail {repr e}"
   | none => "diverge"
