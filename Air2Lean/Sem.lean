@@ -161,6 +161,19 @@ def plainOpt (f : Func) (t : TyId) : Bool :=
 
 def isErrorUnion (f : Func) (t : TyId) : Bool := f.types[t]? matches some (.errorUnion ..)
 
+/-- Is `name` an error of the error set `s` (any name for `anyerror` or an inferred set)? -/
+def errIn (f : Func) (s : TyId) (name : String) : Bool :=
+  match f.types[s]? with
+  | some (.errorSet (some names)) => names.contains name
+  | some (.errorSet none) => true
+  | _ => false
+
+/-- Is `name` an error of the error union `t`'s set? -/
+def errUnionIn (f : Func) (t : TyId) (name : String) : Bool :=
+  match f.types[t]? with
+  | some (.errorUnion s _) => errIn f s name
+  | _ => false
+
 /-- The payload of an optional or error-union constant: an integer, `bool` or `void`. -/
 def constVal (f : Func) : Val → Result Value
   | .int t n => match tyOf f t with
@@ -178,8 +191,8 @@ def operand (f : Func) (env : Env) : Val → Result Value
   | v@(.int ..) | v@(.bool _) | v@.void => constVal f v
   | .optNull t => if plainOpt f t then pure .optNone else stuck
   | .optSome t v => if plainOpt f t then do pure (.optSome (← constVal f v)) else stuck
-  | .err _ n => pure (.errName n)
-  | .errUnionErr t n => if isErrorUnion f t then pure (.errErr n) else stuck
+  | .err t n => if errIn f t n then pure (.errName n) else stuck
+  | .errUnionErr t n => if errUnionIn f t n then pure (.errErr n) else stuck
   | .errUnionOk t v => if isErrorUnion f t then do pure (.errOk (← constVal f v)) else stuck
   | _ => stuck
 
@@ -197,16 +210,20 @@ def Value.asBool : Value → Result Bool
   | .bool b => pure b
   | _ => stuck
 
+/-- An operand of an error-union type. -/
+def errUnionOperand (f : Func) (env : Env) (v : Val) : Result Value :=
+  if isErrorUnion f ((operandTy env v).getD 0) then operand f env v else stuck
+
 /-- `is_non_null` of an optional. -/
 def Value.optIsSome : Value → Result Bool
   | .optSome _ => pure true
   | .optNone => pure false
   | _ => stuck
 
-/-- `optional_payload`: the payload; `null` panics (`Zig.optPayload`). -/
+/-- `optional_payload`: the payload; `null` is illegal behaviour (`Zig.optPayload`). -/
 def Value.optGet : Value → Result Value
   | .optSome v => pure v
-  | .optNone => throw .panic
+  | .optNone => throw .illegal
   | _ => stuck
 
 /-- `is_err` of an error union (`Zig.isErr`). -/
@@ -215,16 +232,16 @@ def Value.errIsErr : Value → Result Bool
   | .errOk _ => pure false
   | _ => stuck
 
-/-- `unwrap_errunion_payload`: the payload; an error panics (`Zig.unwrapPayload`). -/
+/-- `unwrap_errunion_payload`: the payload; an error is illegal behaviour (`Zig.unwrapPayload`). -/
 def Value.errGet : Value → Result Value
   | .errOk v => pure v
-  | .errErr _ => throw .panic
+  | .errErr _ => throw .illegal
   | _ => stuck
 
-/-- `unwrap_errunion_err`: the error; a payload panics (`Zig.unwrapErr`). -/
+/-- `unwrap_errunion_err`: the error; a payload is illegal behaviour (`Zig.unwrapErr`). -/
 def Value.errGetErr : Value → Result Value
   | .errErr n => pure (.errName n)
-  | .errOk _ => throw .panic
+  | .errOk _ => throw .illegal
   | _ => stuck
 
 /-- `wrap_errunion_err`: an error union holding the error `v`. -/
@@ -370,10 +387,14 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
   | .optPayload a => if plainOpt f ((operandTy env a).getD 0) then do
       (← operand f env a).optGet else stuck
   | .wrapOptional a => if plainOpt f i.ty then do pure (.optSome (← operand f env a)) else stuck
-  | .isErr a => do pure (.bool (← (← operand f env a).errIsErr))
-  | .isNonErr a => do pure (.bool (!(← (← operand f env a).errIsErr)))
-  | .errPayload a => do (← operand f env a).errGet
-  | .errCode a => do (← operand f env a).errGetErr
+  | .isErr a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      pure (.bool (← (← operand f env a).errIsErr)) else stuck
+  | .isNonErr a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      pure (.bool (!(← (← operand f env a).errIsErr))) else stuck
+  | .errPayload a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      (← operand f env a).errGet else stuck
+  | .errCode a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      (← operand f env a).errGetErr else stuck
   | .wrapErrPayload a => if isErrorUnion f i.ty then do pure (.errOk (← operand f env a)) else stuck
   | .wrapErr a => if isErrorUnion f i.ty then do (← operand f env a).errWrap else stuck
   -- `@bitCast` between integers of one width: the same bits (any other `bitcast` of a value is
@@ -579,7 +600,10 @@ def valOk (t : Ty) (v : Value) : Bool :=
   | _, _ => false
 
 /-- `valOk` with the payload types of optionals and error unions: `?T` holds `null` or a `T`;
-`E!T` a `T` or an error of `E` (any name if `E` is `anyerror` or inferred). -/
+`E!T` a `T` or an error of `E` (any name if `E` is `anyerror` or inferred). The fuel bounds the
+nesting (`argsOk`: two levels, `E!?T`); a deeper argument type is outside the fragment (stuck,
+like any out-of-fragment step). Fuel keeps the certificates' `argsOk` a simp normal form; a
+structural version leaves overlap side conditions. -/
 def valOkIn (f : Func) : Nat → TyId → Value → Bool
   | 0, _, _ => false
   | n + 1, t, v =>
@@ -591,12 +615,6 @@ def valOkIn (f : Func) : Nat → TyId → Value → Bool
     | some (.errorSet _), .errName name => errIn f t name
     | some ty, w => valOk ty w
     | none, _ => false
-where
-  errIn (f : Func) (s : TyId) (name : String) : Bool :=
-    match f.types[s]? with
-    | some (.errorSet (some names)) => names.contains name
-    | some (.errorSet none) => true
-    | _ => false
 
 /-! ## Register locals
 
@@ -751,7 +769,7 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
   | .dbg _ _ => execBody c rest env
   -- `try`: the payload continues; an error runs the error body (it ends in an exit).
   | .«try» v errBody => do
-    match ← liftR (operand c.func env v) with
+    match ← liftR (errUnionOperand c.func env v) with
     | .errOk x => execBody c rest (env.set i.id i.ty x)
     | .errErr _ => execBody c errBody.toList env
     | _ => liftR stuck
@@ -1518,12 +1536,12 @@ def Value.ofExcept {α : Type} (g : α → Value) : Except Zig.ErrName α → Va
 theorem Value.optIsSome_some (v : Value) : (Value.optSome v).optIsSome = pure true := rfl
 theorem Value.optIsSome_none : Value.optNone.optIsSome = pure false := rfl
 theorem Value.optGet_some (v : Value) : (Value.optSome v).optGet = pure v := rfl
-theorem Value.optGet_none : Value.optNone.optGet = throw .panic := rfl
+theorem Value.optGet_none : Value.optNone.optGet = throw .illegal := rfl
 theorem Value.errIsErr_ok (v : Value) : (Value.errOk v).errIsErr = pure false := rfl
 theorem Value.errIsErr_err (n : String) : (Value.errErr n).errIsErr = pure true := rfl
 theorem Value.errGet_ok (v : Value) : (Value.errOk v).errGet = pure v := rfl
-theorem Value.errGet_err (n : String) : (Value.errErr n).errGet = throw .panic := rfl
-theorem Value.errGetErr_ok (v : Value) : (Value.errOk v).errGetErr = throw .panic := rfl
+theorem Value.errGet_err (n : String) : (Value.errErr n).errGet = throw .illegal := rfl
+theorem Value.errGetErr_ok (v : Value) : (Value.errOk v).errGetErr = throw .illegal := rfl
 theorem Value.errGetErr_err (n : String) : (Value.errErr n).errGetErr = pure (.errName n) := rfl
 theorem Value.errWrap_name (n : String) : (Value.errName n).errWrap = pure (.errErr n) := rfl
 
@@ -1606,14 +1624,14 @@ theorem ptrProject_elem_size_zero (p : Zig.Ptr) (k : BitVec 64) :
 /-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
 theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
 
-attribute [air_sem] execFunc argsOk valOk valOkIn valOkIn.errIn execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+attribute [air_sem] execFunc argsOk valOk valOkIn errIn errUnionIn List.contains_toArray List.contains_cons List.contains_nil execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   evalMem ptrOperand operandTy Func.plainPtr loadAs storeAs Func.fieldOffset? pointee? ptrAlignOf layoutOf
   Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
   Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
   Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def
   Option.bind_eq_bind String.reduceBEq String.reduceBNe Nat.reduceBEq Nat.reduceBNe Option.getD_none
   Bool.false_eq_true Bool.true_eq_false natCast_ofNat Int.natCast_zero
-  operand constVal plainOpt isErrorUnion Value.optIsSome_some Value.optIsSome_none Value.optGet_some
+  operand constVal plainOpt isErrorUnion errUnionOperand Value.optIsSome_some Value.optIsSome_none Value.optGet_some
   Value.optGet_none Value.errIsErr_ok Value.errIsErr_err Value.errGet_ok Value.errGet_err
   Value.errGetErr_ok Value.errGetErr_err Value.errWrap_name Env.set Value.asInt Value.asBool ofOpt_some ofOpt_none ofExcept_ok
   ofExcept_error optIsSome_ofOpt optGet_ofOpt errIsErr_ofExcept errGet_ofExcept errGetErr_ofExcept Zig.isNonErr arithFn divFn cmpFn bitFn liftR litBV Exit.again

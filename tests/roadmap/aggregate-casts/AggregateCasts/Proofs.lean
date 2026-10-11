@@ -87,7 +87,7 @@ theorem optAddr_null (m : Mem) : (optAddr none).run m = pure (0, m) := rfl
 
 theorem optFromAddr_zero (m : Mem) : (optFromAddr 0).run m = pure (none, m) := rfl
 
-theorem optUnwrap_null (m : Mem) : (optUnwrap none).run m = throw .panic := rfl
+theorem optUnwrap_null (m : Mem) : (optUnwrap none).run m = throw .illegal := rfl
 
 theorem optUnwrap_some (p : Ptr) (m : Mem) : (optUnwrap (some p)).run m = pure (p, m) := rfl
 

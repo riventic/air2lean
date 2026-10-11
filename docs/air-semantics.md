@@ -206,7 +206,10 @@ Out of range, `Zig.index` (and `Zig.vindex`) throw `.illegal`, as `Zig.checkInde
 (`docs/illegal-behavior.md` row 2): the model of the item read checks its own illegal behaviour.
 
 A function with a viewed slice has no fixpoint equation (`_fix`), so its callers are excluded
-until a caller's step relates its materialization to the callee's view.
+until a caller's step relates its materialization to the callee's view. With several slice
+parameters, the step states each `Zig.readSlice` from the same `m`; the generated caller reads
+them one after another, and memories after a read differ from `m` only in read entries, so that
+caller step also has to carry `UpToReads` across the reads (the composition is not proved yet).
 
 ### Canonicalization (V02)
 
@@ -283,7 +286,7 @@ with the first reason found:
 | a return type outside the fragment (enums, unions, floats, …) | 7 |
 | an instruction outside the fragment | 5 |
 | a slice parameter whose items are not integers or `bool` (structs, floats) | 3 |
-| a function with a slice parameter that reads memory other than through its items (a call: `errors.sumDigits`, `options.findOr`, `options.firstIndexPlusOne`) | 3 |
+| a function with a slice parameter that calls a function (`errors.sumDigits`, `options.findOr`, `options.firstIndexPlusOne`) | 3 |
 | an operand outside the fragment (`asm.divmod`: a local whose address is taken by an `asm` output) | 1 |
 | a load of a type outside the fragment (a struct) | 1 |
 | a recursive function that uses memory (`Zig.enterFrame`) | 1 |

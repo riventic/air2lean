@@ -298,10 +298,11 @@ def viewParams (f : Func) : Except String (Array ViewParam) := do
 /-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`, or an
 optional or error-union constant of one (`Sem.constVal`). -/
 def simpleVal (f : Func) : Val → Bool
-  | .inst _ | .bool _ | .void | .err .. => true
+  | .inst _ | .bool _ | .void => true
+  | .err t n => Sem.errIn f t n
+  | .errUnionErr t n => Sem.errUnionIn f t n
   | .int t _ => isIntTy f t
   | .optNull t => Sem.plainOpt f t
-  | .errUnionErr t _ => Sem.isErrorUnion f t
   | .optSome t v => Sem.plainOpt f t && (Sem.constVal f v).run.isSome
   | .errUnionOk t v => Sem.isErrorUnion f t && (Sem.constVal f v).run.isSome
   | _ => false
@@ -452,7 +453,12 @@ def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String 
       let V : InstId → Option (Array Sem.Value) := fun k => if keys.contains k then some #[] else none
       let VT : InstId → TyId := fun k => ((views.find? (·.arg == k)).map (·.item)).getD 0
       unless Sem.roBody f V VT f.body.toList do
-        throw "a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)"
+        -- The first instruction that `roInst` rejects names the cause.
+        let bad := (allInsts f.body).find? (!Sem.roInst f V VT ·)
+        throw <| match bad.map (·.op) with
+          | some (.call ..) => "a function with a slice parameter that calls a function (a view function calls only panic handlers, `Sem.roBody`)"
+          | some .alloc => "a function with a slice parameter and a local whose address is taken (`Sem.roBody`)"
+          | _ => "a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)"
   unless (retScalar? f f.ret).isSome do
     throw "a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one"
   let insts := allInsts f.body

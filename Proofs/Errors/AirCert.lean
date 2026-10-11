@@ -12,7 +12,7 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `errors.sumDigits`: a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)
+* `errors.sumDigits`: a function with a slice parameter that calls a function (a view function calls only panic handlers, `Sem.roBody`)
 -/
 
 /-- The decoded canonical AIR of `errors.digitOrZero`. -/

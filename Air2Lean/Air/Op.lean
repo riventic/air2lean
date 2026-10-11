@@ -507,9 +507,8 @@ inductive Op where
   | isNull (a : Val)
   /-- `is_non_null`: true iff the optional `a` holds a value. -/
   | isNonNull (a : Val)
-  /-- Unwrap an optional's payload. Sema emits this only after an `is_non_null` check, so the
-  `null` case is statically unreachable — `Zig.optPayload` (`ZigLean/Basic.lean`) panics on it
-  anyway. -/
+  /-- Unwrap an optional's payload. Null is illegal behaviour: Sema's `is_non_null` check before
+  it is ordinary AIR, and `Zig.optPayload` (`ZigLean/Basic.lean`) checks it itself (`.illegal`). -/
   | optPayload (a : Val)
   /-- Wrap a value into `some`. -/
   | wrapOptional (a : Val)

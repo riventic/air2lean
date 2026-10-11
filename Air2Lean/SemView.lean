@@ -12,7 +12,7 @@ function, that the two agree at the call boundary (`docs/air-semantics.md` §Pur
 * `execFuncV` runs a function with a *view* (`Ctx.view`): `slice_elem_val` of a viewed parameter
   takes the item from an array instead of memory, and the run does not touch memory. A certificate
   proves by normalization that this run is the generated definition.
-* `execFunc_view`: for a function that reads memory only through viewed slices (`roFunc`), from a
+* `execFunc_view`: for a function that reads memory only through viewed slices (`roBody`), from a
   memory in which every viewed slice holds the view's items (`ArgsView`), `execFunc` gives the
   view's values and errors, and its memory is the starting memory up to read entries of the running
   thread in the footprint (`UpToReads`): the same blocks, threads and every other field.
@@ -416,6 +416,12 @@ theorem operand_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : L
     repeat' split at hw
     all_goals first | (cases hw; rfl) | cases hw
 
+theorem errUnionOperand_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : List Value}
+    {env : Env} (h : EnvOk f V args env) (v : Val) : OkR (·.noPtr = true) (errUnionOperand f env v) := by
+  unfold errUnionOperand; split
+  · exact operand_noPtr h v
+  · exact okR_stuck
+
 theorem optGet_ok {w : Value} (h : w.noPtr = true) : OkR (·.noPtr = true) w.optGet := by
   intro v hv; cases w <;> simp only [Value.optGet] at hv <;> (try cases hv) <;> exact h
 
@@ -816,7 +822,7 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
     have hri := roNested_inst hro
     simp only [roNested, Bool.and_eq_true] at hro
     simp only [execInst]
-    refine sim_bind (sim_liftR _ (operand_noPtr henv v)) fun w hw => ?_
+    refine sim_bind (sim_liftR _ (errUnionOperand_noPtr henv v)) fun w hw => ?_
     cases w with
     | errOk x => exact ihok x hrest (henv.set _ _ _ hw (roInst_view hri (by simp)))
     | errErr n => exact iherr hro.2 henv

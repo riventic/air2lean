@@ -268,13 +268,13 @@ row 2). -/
 
 /-! ## Optionals -/
 
-/-- Unwrap an optional's payload (`optional_payload`). Sema emits this only after an
-`is_non_null` check, so the `none` case is statically unreachable; still total, so it panics
-instead of diverging. -/
+/-- Unwrap an optional's payload (`optional_payload`). Unwrapping null is illegal behaviour
+(docs/illegal-behavior.md row 15): Sema's `is_non_null` check before it is ordinary AIR that
+panics first; without it (`@setRuntimeSafety(false)`) the op's own check gives `.illegal`. -/
 @[inline] def optPayload {α : Type} (a : Option α) : Result α :=
   match a with
   | some v => pure v
-  | none => throw .panic
+  | none => throw .illegal
 
 /-! ## Error unions -/
 
@@ -286,12 +286,13 @@ instead of diverging. -/
 /-- `is_non_err`. -/
 @[inline] def isNonErr {α : Type} (e : Except ErrName α) : Bool := !isErr e
 
-/-- `unwrap_errunion_payload`: Sema always checks the union first (`is_err`/`is_non_err` or a
-`try`), so the `.error` case here is statically impossible. -/
+/-- `unwrap_errunion_payload`. Unwrapping an error is illegal behaviour (row 16): Sema's check
+(`is_err`/`is_non_err` or a `try`) is ordinary AIR before it; the op's own check gives
+`.illegal`. -/
 @[inline] def unwrapPayload {α : Type} (e : Except ErrName α) : Result α :=
   match e with
   | .ok v => pure v
-  | .error _ => throw .panic
+  | .error _ => throw .illegal
 
 /-- `@errorCast` to the error set `names` (a `bitcast` between error sets): an error outside it
 is illegal behaviour that only Sema's check (`error_set_has_value`, which the exporter does not
@@ -299,12 +300,12 @@ support) catches, so the model checks it itself: `.illegal`. -/
 @[inline] def errorIn (names : List ErrName) (e : ErrName) : Result ErrName :=
   if names.contains e then pure e else throw .illegal
 
-/-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
-statically impossible. -/
+/-- `unwrap_errunion_err`: the error of a union that holds one; of a payload, illegal behaviour
+that the op checks itself (`.illegal`), as `unwrapPayload`. -/
 @[inline] def unwrapErr {α : Type} (e : Except ErrName α) : Result ErrName :=
   match e with
   | .error name => pure name
-  | .ok _ => throw .panic
+  | .ok _ => throw .illegal
 
 /-! ## Enums -/
 

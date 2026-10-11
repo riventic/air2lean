@@ -110,6 +110,16 @@ def cases : IO Unit := do
     (memErr (do let x ← alloc .heap 6 4; parentOf (x.add 4))) (some .illegal)
   check "parentOf field b of an S"
     (memErr (do let p ← alloc .heap 8 4; parentOf (p.add 4))) none
+  -- The model's primitives check their own illegal behaviour (rows 2, 15, 16): out-of-range
+  -- index, unwrap of null or of an error (without the Sema check before them).
+  check "Zig.index #[1] 1" (errOf (Zig.index #[(1 : Nat)] (1 : BitVec 64))) (some .illegal)
+  check "Zig.index #[1] 0" (errOf (Zig.index #[(1 : Nat)] (0 : BitVec 64))) none
+  check "Zig.optPayload none" (errOf (Zig.optPayload (none : Option Nat))) (some .illegal)
+  check "Zig.optPtrUnwrap none" (errOf (Zig.optPtrUnwrap none)) (some .illegal)
+  check "Zig.ptrRequireNonNull null" (memErr (Zig.ptrRequireNonNull Ptr.null)) (some .illegal)
+  check "Zig.unwrapPayload error"
+    (errOf (Zig.unwrapPayload (.error "E" : Except ErrName Nat))) (some .illegal)
+  check "Zig.unwrapErr ok" (errOf (Zig.unwrapErr (.ok 1 : Except ErrName Nat))) (some .illegal)
 
 end IllegalCases
 
