@@ -600,16 +600,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T21:58:45.111197+00:00",
-      "elapsed_seconds": 34.397,
+      "started_utc": "2026-10-11T08:14:12.644077+00:00",
+      "elapsed_seconds": 52.31,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "2c5c2a636a5c2db914f28ea1af1b1032dfada4d3368837f86cfc5a5aab78e0bf",
+      "log_sha256": "7bc4ab6dc4f4335f68ee5f659b06df0947c615c440b8ad93f780442a5545b875",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -681,16 +681,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T21:59:20.009132+00:00",
-      "elapsed_seconds": 38.529,
+      "started_utc": "2026-10-11T08:15:05.811033+00:00",
+      "elapsed_seconds": 40.262,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f90495c151db1b4e51009ebd7c3d1747e080aced63626372a24c5802ba377d9e",
+      "log_sha256": "3702f48188b2f34c383c9f06182fadb0286bd5ba63271c20b1f070360033f006",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -728,16 +728,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T22:00:05.108391+00:00",
-      "elapsed_seconds": 5.759,
+      "started_utc": "2026-10-11T08:15:51.171790+00:00",
+      "elapsed_seconds": 4.207,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "30f97201b244d1dbee6acb0580fdad68e5375c9166208fe316b4e514a2ed8809",
+      "log_sha256": "436734f204496ca8dca9ad3f2a42019c38484986b2a778b023d498031a8e3b12",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-10T21:55:06.604471+00:00",
-      "elapsed_seconds": 214.015,
+      "started_utc": "2026-10-11T08:14:09.152704+00:00",
+      "elapsed_seconds": 0.503,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1589d6fc201e636fb42f3ba1c6c653cb4a1cd295cbd526cd6806b525f3c94845",
+      "log_sha256": "27fbaa6c6d9475c6f7fb8b07778120e984cd2c9c79fa90cd72a217c0b07d68d4",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Effects",
@@ -998,11 +998,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T21:58:43.568803+00:00",
-      "elapsed_seconds": 0.273,
+      "started_utc": "2026-10-11T08:14:11.503531+00:00",
+      "elapsed_seconds": 0.235,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -1037,16 +1037,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T21:59:58.848890+00:00",
-      "elapsed_seconds": 5.975,
+      "started_utc": "2026-10-11T08:15:46.505300+00:00",
+      "elapsed_seconds": 4.476,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "731240fb30b3851539e13ee03b4c2f20aa27e81f43027e2f36d56b66625dc07d",
+      "log_sha256": "c8493af3672ead518ef01be64f1def267b4adb83bb5e2bfff722e672d7b18f61",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1072,16 +1072,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T21:58:44.125274+00:00",
-      "elapsed_seconds": 0.269,
+      "started_utc": "2026-10-11T08:14:11.929846+00:00",
+      "elapsed_seconds": 0.231,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "b4ea24741307ae0f2008f92e5510b90c18fc71f9b5aa1e9922d099503bb89287",
+      "log_sha256": "009d3fed3e39016536643062716f5f36b06b0683c19fca326f290e476f00f19d",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1148,16 +1148,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T22:00:11.152730+00:00",
-      "elapsed_seconds": 98.588,
+      "started_utc": "2026-10-11T08:15:55.572524+00:00",
+      "elapsed_seconds": 68.705,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "5fb50214b372ffeb6e05555572eedae3de05970cb30d303812810254d5f17d92",
+      "log_sha256": "f86c6f0a9d87ed8cf10a10068b72fe895efbe2d32d5b080883002b5124aacd6a",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1229,16 +1229,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T22:01:50.578858+00:00",
-      "elapsed_seconds": 7.75,
+      "started_utc": "2026-10-11T08:17:04.874604+00:00",
+      "elapsed_seconds": 6.67,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "4c3aa3a026b6a913cacb19971dd00d5c5c6dcecbc13198f720766d842960e928",
+      "log_sha256": "d494ed56cad89a2ead0e43098d9a3e9c2efc8f80712b8ce34c21ae351e4566b5",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1268,16 +1268,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T22:01:58.608824+00:00",
-      "elapsed_seconds": 6.371,
+      "started_utc": "2026-10-11T08:17:11.736420+00:00",
+      "elapsed_seconds": 4.163,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "504ae0617d84e722ff03de7dded16d6181480a5bd3b1023d93fdc1ec3bd96a76",
+      "log_sha256": "8fa1f734eb5ca37f89d58391bb1e944639ca67819943d6c0c282d55deca1b855",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1307,16 +1307,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "18de88618a9749ead06d9e1cf2d0eb3b00b2c469",
+        "head": "ea1d41bbef2c622a3fe54e23952096a5880d738c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-10T22:02:05.270048+00:00",
-      "elapsed_seconds": 6.138,
+      "started_utc": "2026-10-11T08:17:16.089991+00:00",
+      "elapsed_seconds": 4.463,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6a2a6e3154213ca0ee39e115dda1742e06f7819efef82aee4e17346b63054f04",
+      "log_sha256": "15fca285e43871206725c16a4b3255cf3950f54aa4395a8a20721fb694046dbb",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
