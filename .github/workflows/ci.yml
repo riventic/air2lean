@@ -1,7 +1,8 @@
 name: CI
 
-# docs/ci.md. Pull requests run the cheap set: their head, every part whose inputs changed
-# (scripts/ci-reuse.py reuses the rest by reference to the run that executed it). The merge queue
+# docs/ci.md. Pull requests run the cheap set on GitHub's merge of the PR into main (the tree
+# this workflow file comes from): every part whose inputs changed (scripts/ci-reuse.py reuses
+# the rest by reference to the run that executed it). The merge queue
 # runs every part, without reuse, on the exact commit that main advances to: that `merge_group`
 # run is the commit's evidence. workflow_dispatch is a full run too (a commit that reached main
 # outside the queue). Pushes to main only warm the caches (.github/workflows/ci-cache.yml).
@@ -31,8 +32,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Preflight
         run: scripts/preflight.sh --no-translator --no-sources
@@ -47,8 +46,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Restore the Lake build (root package)
         id: restore
@@ -118,8 +115,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Patched zig cache key
         id: key
@@ -290,8 +285,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that
@@ -888,7 +881,7 @@ jobs:
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
       - name: Generic sync specifications (futex, mutex, event, wait group, condition)
-        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/thread-specs"
@@ -1390,7 +1383,7 @@ jobs:
       # clocks, interrupts, macOS malloc): proof-only rules with kernel-checked schedules, and
       # runtime regressions over every schedule.
       - name: OS thread primitive models, rules and runtime regressions
-        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
@@ -2202,8 +2195,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that
@@ -2490,8 +2481,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that
@@ -2607,8 +2596,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that
@@ -2743,8 +2730,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
       # run already recorded is reused (every later step is skipped and the summary names that

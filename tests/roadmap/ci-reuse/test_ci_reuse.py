@@ -301,7 +301,17 @@ class Lookup(unittest.TestCase):
         self.assertEqual(cr.self_check_part(env, parts), cr.self_check_part(env, list(reversed(parts))))
 
 
-@unittest.skipUnless(shutil.which('strace') and sys.platform == 'linux', 'needs strace (Linux)')
+def ptraced():
+    """True inside a traced CI step: strace cannot attach to a process that is already traced."""
+    try:
+        status = Path('/proc/self/status').read_text()
+    except OSError:
+        return False
+    return any(line.split()[1:] != ['0'] for line in status.splitlines() if line.startswith('TracerPid:'))
+
+
+@unittest.skipUnless(shutil.which('strace') and sys.platform == 'linux' and not ptraced(),
+                     'needs strace (Linux) outside a traced step (the CI step itself is traced)')
 class EndToEnd(unittest.TestCase):
     def test_traced_step_reading_an_undeclared_file_fails(self):
         with tempfile.TemporaryDirectory() as temp:

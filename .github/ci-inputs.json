@@ -10,10 +10,8 @@
   },
   "parts": {
     "test/0.16.0/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "reads commit identity: the theorem-universe gate of the dispatch regressions binds its assumptions report to HEAD (scripts/assumptions.py verify_fresh); untraced"
     },
     "test/0.16.0/lean": {
       "inputs": [
@@ -40,10 +38,8 @@
       "tree_names": true
     },
     "test/0.16.0/receipt": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "reads commit identity (the proof receipt binds HEAD; `git checkout -- Proofs`); untraced, which also keeps the guarded audit inside its deadline"
     },
     "test/0.16.0/Debug": {
       "inputs": [
