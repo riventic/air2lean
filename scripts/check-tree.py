@@ -6,7 +6,7 @@
 Verification never writes a tracked file (docs/generated-code.md#check-trees). To build or
 differentially test a module other than the committed one (one Zig version's or host OS's
 `Proofs/<Ex>/Gen.lean`), this makes DEST a copy of the checkout's working tree (tracked and
-unignored untracked files), replaces each PATH with SOURCE (paths relative to the current
+unignored untracked files, and the materialized whole-tree generated files), replaces each PATH with SOURCE (paths relative to the current
 directory), and clones the checkout's Lake build caches (`.lake/build`, `tests/diff/.lake`) into
 it: Lake traces are content-based, so only the replaced modules and their dependents rebuild
 there. DEST is not a git checkout: run Lake, scripts/diff.sh and the Lean checks inside it,
@@ -45,7 +45,13 @@ def create(dest, replacements, root=ROOT):
     listed = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
                             check=True, capture_output=True).stdout
     # Lake's own directories (build caches, check reports, check trees) are never sources.
-    files = sorted({p for p in os.fsdecode(listed).split('\0') if p and '.lake' not in Path(p).parts})
+    files = {p for p in os.fsdecode(listed).split('\0') if p and '.lake' not in Path(p).parts}
+    # The whole-tree generated files materialized in the checkout (ignored, never committed:
+    # assurance/generated.json, docs/ci.md#whole-tree-generated-files) belong to this tree too.
+    registry = root / 'assurance/generated.json'
+    if registry.is_file():
+        files |= {p for g in json.loads(registry.read_text())['groups'] for p in g['paths'] if (root / p).is_file()}
+    files = sorted(files)
     if dest == root or root.is_relative_to(dest):
         raise ValueError(f'{dest}: a check tree cannot contain the checkout')
     if dest.is_relative_to(root):
