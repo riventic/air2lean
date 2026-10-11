@@ -187,7 +187,7 @@ class Evidence(Scratch):
         self.check_fails("0.15.2/x86_64-linux/x86_64-linux/abi64-le-v1: target_probe step "
                          "'ABI target probe (0.14.1)': its `if` is false for this row",
                          "0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1: target_probe step "
-                         "'macOS ABI target probe (0.15.2)': bound to Zig 0.15.2, not 0.16.0")
+                         "'macOS ABI target probe (0.15.2)': its `if` is false for this row")
 
     def test_probe_step_must_run_the_probe(self):
         self.edit_text(TM['WORKFLOW'], 'python3 scripts/abi-probe.py observe --zig "$PWD/host-zig/zig"',
@@ -196,22 +196,40 @@ class Evidence(Scratch):
 
     def test_evidence_of_another_version_does_not_count(self):
         def change(data):
-            self.entry(data, *DARWIN_15)['evidence']['proof_check'] = ['macOS proofs (0.16.0)']
+            self.entry(data, *DARWIN_15)['matrix'] = {'zig': '0.16.0'}
         self.edit_json(TM['MAP'], change)
         self.check_fails('bound to Zig 0.16.0, not 0.15.2')
 
+    def test_step_bound_to_another_version_fails(self):
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n        env:\n'
+                       '          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}\n',
+                       '      - name: macOS proofs\n        env:\n'
+                       '          AIR2LEAN_ZIG_VERSION: "0.17.0"\n')
+        self.check_fails('bound to Zig 0.17.0, not 0.16.0', 'bound to Zig 0.17.0, not 0.15.2')
+
     def test_unbound_step_in_a_job_without_matrix_fails(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs (0.16.0)\n        env:\n'
-                       '          AIR2LEAN_ZIG_VERSION: "0.16.0"\n',
-                       '      - name: macOS proofs (0.16.0)\n        env:\n'
-                       '          OTHER: "0.16.0"\n')
+        # The macos job without its matrix: one version, bound by each step's environment.
+        workflow = (self.root/TM['WORKFLOW']).read_text()
+        start = workflow.index('  macos:\n')
+        end = workflow.index('\n  # T04: native aarch64-linux', start)
+        job = workflow[start:end]
+        rows = job[job.index('    strategy:\n'):job.index('    steps:\n')]
+        job = job.replace(rows, '').replace('${{ matrix.zig }}', '0.16.0').replace(
+            '      - name: macOS proofs\n        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
+            '      - name: macOS proofs\n        env:\n          OTHER: 0.16.0\n')
+        (self.root/TM['WORKFLOW']).write_text(workflow[:start] + job + workflow[end:])
+
+        def change(data):
+            data['paths'] = [p for p in data['paths'] if p['host'] != 'aarch64-macos' or p['zig'] == '0.16.0']
+            self.entry(data, '0.16.0', 'aarch64-macos').pop('matrix')
+            data['abi_profiles'][1]['probe'].pop('matrix')
+        self.edit_json(TM['MAP'], change)
         self.check_fails('must bind AIR2LEAN_ZIG_VERSION')
 
     def test_step_commands_must_perform_the_kind(self):
-        self.edit_text(TM['WORKFLOW'],
-                       '          lake build Proofs\n\n      - name: macOS golden AIR, translate, differential test (0.17.0)',
-                       '          lake build ZigLean\n\n      - name: macOS golden AIR, translate, differential test (0.17.0)')
-        self.check_fails("'macOS proofs (0.16.0)': its commands do not perform proof_check")
+        self.edit_text(TM['WORKFLOW'], '          lake build Proofs\n\n      # As in the test job',
+                       '          lake build ZigLean\n\n      # As in the test job')
+        self.check_fails("'macOS proofs': its commands do not perform proof_check")
 
     def test_missing_or_renamed_step_fails(self):
         self.edit_text(TM['WORKFLOW'], 'name: macOS ABI target probe (0.16.0)',
@@ -219,15 +237,15 @@ class Evidence(Scratch):
         self.check_fails("'macOS ABI target probe (0.16.0)': not found in the job")
 
     def test_unknown_condition_context_fails_closed(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs (0.15.2)\n',
-                       "      - name: macOS proofs (0.15.2)\n        if: steps.x.outputs.y == 'true'\n")
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n',
+                       "      - name: macOS proofs\n        if: steps.x.outputs.y == 'true'\n")
         self.check_fails("unsupported term 'steps.x.outputs.y'")
 
     def test_ambiguous_matrix_selector_fails(self):
         def change(data):
             self.entry(data, '0.16.0', 'x86_64-linux')['matrix'] = {'zig': '0.16.0'}
         self.edit_json(TM['MAP'], change)
-        self.check_fails('matches 6 rows')
+        self.check_fails('matches 14 rows')
 
 
 class Gaps(Scratch):
