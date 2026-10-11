@@ -437,6 +437,29 @@ why the size leaves the cells.
 
 ### `FAllocSpec` refined (a stronger contract)
 
+**As implemented (step 7a; coordinator decision 2026-10-11).** One `resize` field, both
+directions (`ZigLean/Sep/Full/AllocSpec.lean`): the precondition is `I.own ⋆ (I.held p len k A S
+K q q' ⋆ relBytes p A S K n len tl)`, where `I.held` is the token and a part `q'` of the grant's
+extent share at the grant's end, and `relBytes` the bytes `tl` that a shrink releases (`[n, len)`;
+nothing for a growth). The client keeps the bytes it keeps. On success (`rresizePost`) the token
+is at `n` (same address; size and kind labels within the kind's normal form), the share at the
+new end, and a growth hands over the new bytes `[len, n)` (`newBytes`); on failure the
+precondition comes back.
+
+* **A growth takes any part of the share** (`q' ≤ q`): every other part stays true when the block
+  only grows (`Holds.grow`), so an arena that lent most of its node's share to its clients grows
+  the node with the part it kept (O-G).
+* **A shrink takes the whole share** (`q' = q`), for the same reason as `munmap` needs `bext`: an
+  allocator may shrink the block itself (the page allocator's tail `munmap`), and a share held
+  elsewhere would then claim the old end. Kernel-checked regression: to do (step 7a, before the PR).
+* `FAllocSpec.resize_granted`: the old whole-region contract is a corollary (the client splits off
+  the released bytes, relabels the kept ones to the new token's labels, `EUpd.relabel`, and joins
+  the new bytes); `FLogic.eupdPost` (an `EUpd` of the postcondition) is a field of the logic for it.
+* `remap` keeps the whole region (it may move).
+
+The design below is the original plan.
+
+
 `resize` and `remap` keep their postconditions. `resize`'s precondition becomes `I.own ⋆
 I.tok p bs.size k A S K` plus `up (regionIn (p.add n) …)` of the released bytes `[n, len)` when
 `n ≤ len`, and nothing of the region when it grows. Zig's `resize` is in place and keeps the

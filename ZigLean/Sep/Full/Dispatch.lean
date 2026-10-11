@@ -252,9 +252,11 @@ def CAllocSpec (vt : CVTable Tgt) (ctx : Ptr) (I : FAllocInv) : Prop :=
 theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
     (ha : ∀ len k ra, 0 < len.toNat → k < 64 → I.fits len.toNat k →
       CTriple I.own (vt.alloc ctx len k ra) (I.allocPost len.toNat k))
-    (hr : ∀ s k n ra bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
-      0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra)
-        (I.resizePost s.ptr k bs n.toNat))
+    (hr : ∀ s k n ra A S K q q' tl, k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
+      q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
+      CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+          FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+        (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
     (hm : ∀ s k n ra bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
       0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.remap ctx s k n ra)
         (I.remapPost s.ptr k bs n.toNat))
@@ -262,7 +264,7 @@ theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
       CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.free ctx s k ra) (fun _ => I.own)) :
     CAllocSpec vt ctx I := fun fuel =>
   { alloc := fun len k ra h1 h2 h3 => ha len k ra h1 h2 h3 fuel
-    resize := fun s k n ra bs h1 h2 h3 h4 h5 => hr s k n ra bs h1 h2 h3 h4 h5 fuel
+    resize := fun s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 => hr s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 fuel
     remap := fun s k n ra bs h1 h2 h3 h4 h5 => hm s k n ra bs h1 h2 h3 h4 h5 fuel
     free := fun s k ra bs h1 h2 h3 => hf s k ra bs h1 h2 h3 fuel }
 
@@ -276,11 +278,22 @@ theorem CAllocSpec.alloc (len : BitVec 64) (k : Nat) (ra : BitVec 64) (h1 : 0 < 
     CTriple I.own (vt.alloc ctx len k ra) (I.allocPost len.toNat k) :=
   fun fuel => (h fuel).alloc len k ra h1 h2 h3
 
-theorem CAllocSpec.resize (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte) (h1 : k < 64)
-    (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k) (h4 : s.len.toNat = bs.size) (h5 : 0 < bs.size) :
+/-- The refined `resize` (`FAllocSpec.resize`). -/
+theorem CAllocSpec.resize (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
+    (q q' : Frac) (tl : Array Byte) (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k)
+    (h4 : 0 < s.len.toNat) (h5 : q'.val ≤ q.val) (h6 : n.toNat < s.len.toNat → q' = q) :
+    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+        FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl) :=
+  fun fuel => (h fuel).resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6
+
+/-- The whole-region `resize` (`FAllocSpec.resize_granted`). -/
+theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
+    (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k) (h4 : s.len.toNat = bs.size)
+    (h5 : 0 < bs.size) :
     CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra)
       (I.resizePost s.ptr k bs n.toNat) :=
-  fun fuel => (h fuel).resize s k n ra bs h1 h2 h3 h4 h5
+  fun fuel => (h fuel).resize_granted s k n ra bs h1 h2 h3 h4 h5
 
 theorem CAllocSpec.remap (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte) (h1 : k < 64)
     (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k) (h4 : s.len.toNat = bs.size) (h5 : 0 < bs.size) :
@@ -322,12 +335,13 @@ structure Selects (t : AllocTables Tgt) (fns : VTableFns) (impl : CVTable Tgt) :
 theorem CAllocSpec.dispatch {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tgt}
     {ctx : Ptr} {I : FAllocInv} (hs : Selects t fns impl) (h : CAllocSpec impl ctx I) :
     CAllocSpec (CVTable.dispatch t fns) ctx I := by
-  refine CAllocSpec.of_ctriples (fun len k ra h1 h2 h3 => ?_) (fun s k n ra bs h1 h2 h3 h4 h5 => ?_)
+  refine CAllocSpec.of_ctriples (fun len k ra h1 h2 h3 => ?_)
+    (fun s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 => ?_)
     (fun s k n ra bs h1 h2 h3 h4 h5 => ?_) fun s k ra bs h1 h2 h3 => ?_
   · show CTriple _ (t.alloc.call _ _) _
     rw [Table.call_of_sel hs.alloc]; exact h.alloc len k ra h1 h2 h3
   · show CTriple _ (t.resize.call _ _) _
-    rw [Table.call_of_sel hs.resize]; exact h.resize s k n ra bs h1 h2 h3 h4 h5
+    rw [Table.call_of_sel hs.resize]; exact h.resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6
   · show CTriple _ (t.remap.call _ _) _
     rw [Table.call_of_sel hs.remap]; exact h.remap s k n ra bs h1 h2 h3 h4 h5
   · show CTriple _ (t.free.call _ _) _
