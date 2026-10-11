@@ -8,7 +8,7 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
+  "patched_compiler_sha256": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
   "stock_compiler_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "qualification": "Retained fresh AIR of a passed --full spawn-failure qualification (Zig 0.16.0); every file hash below equals that report's artifact record. Re-export and refresh this record when spawn_failure.zig changes. The strict-schema exporter (pointer address_space) re-exported these files byte-identical to the committed ones; the hashes are of that export.",
   "air_sha256": {

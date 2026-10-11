@@ -11,7 +11,7 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
+  "patched_compiler_sha256": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
   "stock_compiler_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
   "qualification": "Fresh AIR exported by the patched 0.16.0 compiler (zig-patch tree 5715fa4a); `check.sh --export` re-exports and compares, `check.sh --native` runs both sources' tests with the stock compiler. Re-export and refresh this record when a source changes.",
   "air_sha256": {

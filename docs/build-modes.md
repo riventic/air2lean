@@ -56,7 +56,10 @@ non-integral quotient). For a function that uses float `@divExact`, "the model d
 throw" does not imply "no illegal behaviour", so the transfer claim does not apply to it.
 The reproducer is
 [`float-divexact-inexact.zig`](../tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig).
-The records state this as an exception of the premise.
+The records state this as an exception of the premise. The model now returns `.illegal` for
+an inexact float `@divExact` quotient, so the x86_64-linux and aarch64-linux runs (the latter
+without the float examples) record no mismatch; the aarch64-macos records predate that change
+and still triage the 85 cases.
 
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
@@ -109,7 +112,7 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 43584 per aarch64-linux run (floatops and floatconv left out, see below) and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
 cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
@@ -121,6 +124,8 @@ records on every run.
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4591 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
@@ -128,8 +133,46 @@ records on every run.
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
 
 The aarch64-macos runs count 760 float results as `host_difference` (the float model
-follows x86_64-linux, `host.txt`); the x86_64-linux runs have none. No aarch64-linux run
-exists yet.
+follows x86_64-linux, `host.txt`) and the aarch64-linux runs 755; the x86_64-linux runs have none.
+`examples/asm` is `host_excluded` on both aarch64 hosts.
+
+**aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
+container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from
+`lean-toolchain`) on an Apple-silicon Docker VM: an aarch64 Linux kernel and aarch64 code, no
+instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
+(`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
+checks the case count, examples, mismatches and exclusions; its counts are the container's
+(43584 cases; 4591 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+
+The aarch64-linux runs leave out `floatops` and `floatconv`
+([reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)): the
+committed translation follows the x86_64-linux float rules, aarch64-macos has its own
+translation and pins, and the translator has no aarch64-linux profile, so 586 f80 and fused-multiply
+cases are typed mismatches there. The float `@divExact` exception (which the model now answers with `.illegal`, so no mismatch) is therefore recorded on
+aarch64-macos only. In an unchecked mode a pinned model `.illegal` (an
+out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot render;
+`scripts/diff-report.py` counts it as `illegal_exclusion`.
+
+**Crashing inputs and the hosted runner.** In ReleaseFast and ReleaseSmall about 700 of the
+excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in
+`layout` and `slices`: `ptrFromAddr`, `applyOp`, `sumMid`, `sentinelArr`, `subZ`,
+`copyWithin`); ReleaseSafe and Debug trap on them instead. The hosted `ubuntu-24.04-arm`
+image has `kernel.core_pattern = |/usr/lib/systemd/systemd-coredump ...`, and
+systemd-coredump hands each crash to apport (a Python process). The kernel starts a piped
+handler even when `RLIMIT_CORE` is 0, and the crashed child is reaped without waiting for
+it, so the harness went on to the next input while the handlers piled up: on the runner the
+unmodified `layout` harness reached about 450 processes (many blocked in `vfs_coredump`), a
+load average above 300 and all 16 GB of memory within five minutes. The runner then stopped
+answering the service (the two earlier runs were lost; `timeout` killed `diff.sh` but the
+step never ended). `ulimit -c 0` and stopping apport, as tried then, do not change that.
+The Docker VM used for the container runs has `core_pattern = core`, so the same run took
+about two minutes there. The harness (`tests/diff/common.zig`, `containChild` in
+`compat.zig`) now starts every tested call as an undumpable child (`PR_SET_DUMPABLE 0` and
+`RLIMIT_CORE 0`; no handler process appeared on the hosted runner with both set), caps its
+address space at 4 GiB (Linux), makes it die with the harness (`PR_SET_PDEATHSIG`), and
+kills it after 20 seconds. A killed case is a fatal `native_harness_failure`
+(docs/outcome-accounting.md); none occurs in the recorded runs. With this, the four
+LLVM modes run on the hosted runner in about 16 minutes, Lean build excluded.
 
 **stage2_x86_64 findings.** The self-hosted backend disagrees with the LLVM backend and the
 model on legal inputs, in every optimize mode

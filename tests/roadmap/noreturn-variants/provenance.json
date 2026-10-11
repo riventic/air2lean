@@ -13,8 +13,8 @@
     "command": "ZIG_AIR_JSON_DIR=air/<version> ZIG_AIR_JSON_FILTER=noreturn_variants. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline noreturn_variants.zig; air-reject/<version>: the same with ZIG_AIR_JSON_FILTER=reject. and reject.zig"
   },
   "patched_compiler_sha256": {
-    "0.16.0": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
-    "0.15.2": "206856640c7b6b95b79254da322bdaa124ffe3f92696e84148a8e60a56dcdbd1"
+    "0.16.0": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
+    "0.15.2": "476db22912d57dd975d5b0f58ad45107834dc11f997431f874f15b667f5b895e"
   },
   "stock_compiler_sha256": {
     "0.16.0": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",

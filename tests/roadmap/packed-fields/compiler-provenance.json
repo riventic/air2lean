@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "source": "packed_fields.zig",
+  "source_sha256": "55d85249ff459dc24d851e29089d3287cc745991fd9805a647cb05762f40b0aa",
+  "exporter": {
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
+    "zig_patch_json_zig": "zig-patch/air-json/json.zig of the soundness-wave-3 tree (rebuilt after merging main)",
+    "json_zig_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
+    "install": "built by zig-patch/build.sh from that tree"
+  },
+  "commands": {
+    "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "x86_64": "ZIG_AIR_JSON_FILTER=packed_fields.hostAbi zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host)"
+  },
+  "functions": {
+    "llvm": [
+      "boolOn",
+      "bytePtr",
+      "hostAbi",
+      "innerC",
+      "innerCKeepsA",
+      "innerCKeepsAPtr",
+      "innerCPtr",
+      "innerPartial",
+      "localUndef",
+      "modeHigh",
+      "setA",
+      "setInner",
+      "setInnerPtr",
+      "signedS",
+      "undefField",
+      "undefKeepsA",
+      "unionBadMode",
+      "unionRaw"
+    ],
+    "x86_64": [
+      "hostAbi"
+    ]
+  },
+  "artifacts": {
+    "air-fresh/0.16.0/llvm/packed_fields.boolOn.json": "cf095ff6d07b7ebf07302394a62a01212ca907fdcbbb13dfc99bc66198c4c863",
+    "air-fresh/0.16.0/llvm/packed_fields.bytePtr.json": "c573f14f715a60454d5699c20ee9bd2e66766b8d69efc4a9892bf3e4d20db57e",
+    "air-fresh/0.16.0/llvm/packed_fields.hostAbi.json": "770a2b214a37f0ccaf2c3f583e324af2cec09ffbb797550b90078f42057c715f",
+    "air-fresh/0.16.0/llvm/packed_fields.innerC.json": "d23bc604d4d8364008270b9ab59e75ff027636725cc8ba02b8ad01fadfaab7d0",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsA.json": "59220b1e585d63a4c2c02be077121d522d89ca27856d176729228b0112b97719",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsAPtr.json": "bc282751596c8229cb04feea542af3e40adfcf0c230104917baebee3b84fb61a",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCPtr.json": "a1b77bbd2c72f094a7f3ea6e37a793e9be642c77e9cd59939680f3ecb1a1fa1e",
+    "air-fresh/0.16.0/llvm/packed_fields.innerPartial.json": "54e7643b923a825332bedc9ce8dd465fb50d6341b11a169d014d6baed5ab2a1e",
+    "air-fresh/0.16.0/llvm/packed_fields.localUndef.json": "bd95f5e1f4af33c74f44c84bdb68c2bf0a8b285fc1ae570c285211e8feeec75a",
+    "air-fresh/0.16.0/llvm/packed_fields.modeHigh.json": "286b5b6329dbfc990ac4783369a1cebcdd3358cbbb48bf34fd57d251dc1544ae",
+    "air-fresh/0.16.0/llvm/packed_fields.setA.json": "0df6a3518ae9b77adae834e753e6431526f997c75415236322115e80be74712b",
+    "air-fresh/0.16.0/llvm/packed_fields.setInner.json": "16571cabed0dd7be86f7a7c48b11991b0d15ac8fb87ac0680e01bc6cddea2939",
+    "air-fresh/0.16.0/llvm/packed_fields.setInnerPtr.json": "e71510a58546a8aafe6b17efd102e80e8351d48d85b07917dbe148f655c12563",
+    "air-fresh/0.16.0/llvm/packed_fields.signedS.json": "fc215eeee53f860957090f6acf7b482ad9c640233fc3744dd79dc8538519eaba",
+    "air-fresh/0.16.0/llvm/packed_fields.undefField.json": "b58770bff9f17fd47e6b8d16ba11b305f33d054e3dff8b4bcced282917caf3bd",
+    "air-fresh/0.16.0/llvm/packed_fields.undefKeepsA.json": "09f18c64844c12cd4c39384bb8ba9f67935e4fbb42ab5a35059869c5d63e52ac",
+    "air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "1e5d0c51fe31871749c28b9d58fdb32415df8a25b7b7d4c25abb1a253117dc46",
+    "air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "78cf9bc567e00a040611c7ecde8c02b083dda9a772de85edd81c4c26f703b4eb",
+    "air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "de31d052c7dbc9ab9f27ee66c84245edee90a6cdc7f17be97cdb707f464a9b00",
+    "PackedFieldsFresh/Gen.lean": "5a0e25079e765fcab84127c02b950d84ee439159f7e3d1091a55bb571abd0320",
+    "PackedFieldsX86/Gen.lean": "2c0abcc29d920ac5c6217d3171047985af944f1c4c1da92c4095f01524ee568c"
+  },
+  "qualification": {
+    "compiler_export": "passed",
+    "native": "passed (aarch64-macos host; not executed on x86_64-linux)",
+    "lean": "passed"
+  }
+}

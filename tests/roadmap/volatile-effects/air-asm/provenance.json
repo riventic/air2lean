@@ -8,7 +8,7 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
+  "patched_compiler_sha256": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
   "qualification": "Fresh export of device_asm.zig (filter device_asm.) with the patched 0.16.0 compiler (aarch64-macos host build of zig-patch 5715fa4a); check-device.sh --export re-exports and requires the same DeviceAsm translation. The 0.15.2 export translates to the same Gen.lean except for the profile header; 0.14.1 cannot parse the 0.15 clobber syntax. Re-export and refresh this record when device_asm.zig changes.",
   "air_sha256": {
     "device_asm.barrier.json": "6ebc08e599874d10f5413775f8c87c4334cd860577d9a4c253fcf3d344a197dc",

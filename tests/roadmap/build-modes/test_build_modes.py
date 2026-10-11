@@ -81,6 +81,17 @@ class CommittedRecord(unittest.TestCase):
             cited = sorted(Path(e['path']).name.split('--')[1] for e in r['evidence'] if e['kind'] == 'run')
             self.assertEqual(cited, sorted(r.get('targets', [])), r['mode'])
 
+    def test_llvm_builds_are_run_on_all_three_targets(self):
+        for mode in bm.MODES:
+            self.assertEqual(record(REGISTRY, mode, 'llvm')['targets'],
+                             ['aarch64-linux', 'aarch64-macos', 'x86_64-linux'])
+            run = json.loads((ROOT / bm.RUN_DIR / f'0.16.0--aarch64-linux--{mode}--llvm.json').read_text())
+            self.assertEqual((run['target'], run['emulated'], run['host']), ('aarch64-linux', False, 'Linux-aarch64'))
+            # No aarch64-linux float model: the run leaves floatops and floatconv out, so it
+            # shows none of the float @divExact mismatches the other two targets triage.
+            self.assertEqual(run['counts'].get('mismatch', 0), 0)
+            self.assertEqual(sorted(e['example'] for e in run['excluded_examples']), ['floatconv', 'floatops'])
+
     def test_unqualified_backend_records_state_findings(self):
         for mode in ('Debug', 'ReleaseSafe', 'ReleaseFast'):
             stage2 = record(REGISTRY, mode, 'stage2_x86_64')
@@ -305,6 +316,12 @@ class RunControls(Fixture):
             e for e in record(self.data, 'ReleaseSafe', 'llvm')['evidence']
             if 'aarch64-macos--ReleaseSafe' not in e['path']]
         self.assertRejects('must cite a run for target aarch64-macos')
+
+    def test_qualified_record_needs_the_aarch64_linux_run(self):
+        record(self.data, 'ReleaseSafe', 'llvm')['evidence'] = [
+            e for e in record(self.data, 'ReleaseSafe', 'llvm')['evidence']
+            if 'aarch64-linux--ReleaseSafe' not in e['path']]
+        self.assertRejects('must cite a run for target aarch64-linux')
 
     def test_run_for_another_pair(self):
         record(self.data, 'ReleaseSafe', 'llvm')['evidence'][-1]['path'] = \

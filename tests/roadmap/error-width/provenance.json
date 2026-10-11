@@ -144,7 +144,7 @@
     "0.16.0/bits8/error_width.unionTry8.json": "eb06d0783a40b714ce64af94414b11662f738adc5eb6952af33cafb497dd983c"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "d8d3f9917c8c808d9f0608d3241bd2859241af0ec4151a48fb445f0fe5e7909c",
+  "exporter_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
   "native": {
     "command": "<stock zig> build-exe -lc -OReleaseSafe -fno-error-tracing [--error-limit <limit>] probe.zig, one build per configuration (native.py)",
     "driver_sha256": "4fa27981b9e409ce451785ae0d97cf8e2dd820100d5e3f1d5e0ce1a7bba79bf4",
@@ -162,9 +162,9 @@
     "target": "aarch64-macos"
   },
   "patched_compiler_sha256": {
-    "0.14.1": "8cb29d8f328e7c01b39d9cac1ded162e538df397b1ca9da0750b2ed3e67df0f6",
-    "0.15.2": "56c78bad94ac13634142e0ce089d68f8cf94e4f4b544069bc990152916a9e433",
-    "0.16.0": "fe2ff13fca8b6825ae90e97993e229e00798a70ab86cdfc2c344f953f79f0790"
+    "0.14.1": "60508a3d000934d3e2ca18730229fcae9052843d27d0dac234b0d803a808f9e6",
+    "0.15.2": "476db22912d57dd975d5b0f58ad45107834dc11f997431f874f15b667f5b895e",
+    "0.16.0": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99"
   },
   "source": "tests/roadmap/error-width/error_width.zig",
   "source_sha256": "4bcc30f6e465d4a4ed809a264fd999599bcc5cd9f5cbf95183ce6fffcea7fc49"

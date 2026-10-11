@@ -7,9 +7,9 @@
 
 TRIPLE is aarch64-linux-gnu or aarch64-macos-none; MODE is ReleaseSafe (default). `observe`
 builds and runs, with the stock compiler ZIG, tests/roadmap/aarch64-abi/probe.zig, L09's
-tests/roadmap/vector-layouts/probe.zig, and the atomic-width limit probe that must fail to
-compile; it runs only on the profile's own host (no emulator, no cross execution). `compare`
-compares an observation file line by line with
+tests/roadmap/vector-layouts/probe.zig, and the limit probes (tests/roadmap/aarch64-abi/limits/)
+that must fail to compile, one result line each; it runs only on the profile's own host (no
+emulator, no cross execution). `compare` compares an observation file line by line with
 tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt. `check` is observe + compare.
 
 Every command prints one JSON status line. Exit 0: `match`; 1: `mismatch` (or an error);
@@ -30,14 +30,15 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 DIR = 'tests/roadmap/aarch64-abi'
 PROBE = f'{DIR}/probe.zig'
-LIMIT = f'{DIR}/atomic-limit.zig'
+LIMITS = f'{DIR}/limits'
 VECTORS = 'tests/roadmap/vector-layouts/probe.zig'
 COMPAT = 'tests/diff/compat.zig'
 # triple -> (platform.system(), platform.machine() values, Zig -mcpu)
 PROFILES = {'aarch64-linux-gnu': ('Linux', ('aarch64', 'arm64'), 'baseline'),
             'aarch64-macos-none': ('Darwin', ('arm64',), 'baseline')}
 MODES = ('ReleaseSafe',)
-LIMIT_ERROR = re.compile(r'error: (expected \d+-bit integer type or smaller; found \d+-bit integer type)')
+# The first compile error of a probe that must be rejected: `<file>.zig:<line>:<col>: error: <message>`.
+LIMIT_ERROR = re.compile(r'\.zig:\d+:\d+: error: (.+)$', re.M)
 EXCLUDED, MISMATCH = 3, 1
 
 
@@ -80,13 +81,15 @@ def observe(zig, target, mode):
             if built.returncode:
                 raise ValueError(f'{root} failed to compile:\n' + built.stderr.decode()[:4096])
             lines += run(binary, stream).splitlines()
-        # Synchronization boundary: the widest atomic integer the compiler accepts.
-        limit = build(zig, target, mode, LIMIT, tmp / 'limit', compat=False)
-        found = LIMIT_ERROR.search(limit.stderr.decode())
-        if limit.returncode == 0 or not found:
-            raise ValueError(f'{LIMIT} must fail with the atomic width error; got exit '
-                             f'{limit.returncode}:\n' + limit.stderr.decode()[:4096])
-        lines.append('limit atomic_u256 ' + found.group(1).replace(' ', '_'))
+        # Synchronization boundaries the compiler must reject (widest atomic integer, orderings,
+        # operand types): one line each with the first compile error.
+        for source in sorted((ROOT / LIMITS).glob('*.zig')):
+            limit = build(zig, target, mode, f'{LIMITS}/{source.name}', tmp / 'limit', compat=False)
+            found = LIMIT_ERROR.search(limit.stderr.decode())
+            if limit.returncode == 0 or not found:
+                raise ValueError(f'{source.name} must fail to compile with an error; got exit '
+                                 f'{limit.returncode}:\n' + limit.stderr.decode()[:4096])
+            lines.append(f'limit {source.stem} ' + found.group(1).replace(' ', '_'))
     return version, '\n'.join(lines) + '\n'
 
 

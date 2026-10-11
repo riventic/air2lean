@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 MESSAGE = "representation `@bitCast` involving a pointer"
 PTR = {"k": "ptr", "size": "one", "const": False, "child": 0, "ptr_align": 4, "volatile": False,
-       "allowzero": False, "sentinel": False, "host_size": 0, "abi_size": 8, "abi_align": 8}
+       "allowzero": False, "address_space": "generic", "sentinel": False, "host_size": 0, "abi_size": 8, "abi_align": 8}
 
 
 def cast_to_u64(source):
@@ -38,7 +38,7 @@ def pointer_array(types):
 def optional_pointer_field(types):
     types.append(dict(PTR))
     types.append({"k": "optional", "child": len(types) - 1, "abi_size": 8, "abi_align": 8})
-    types.append({"k": "struct", "name": "aggregate_casts.Opt", "layout": "extern",
+    types.append({"k": "struct", "name": "aggregate_casts.Opt", "module": "root", "layout": "extern",
                   "fields": [{"name": "p", "ty": len(types) - 1, "offset": 0}],
                   "abi_size": 8, "abi_align": 8})
     return len(types) - 1
@@ -58,8 +58,7 @@ def main():
             (air / f"{doc['name']}.json").write_text(json.dumps(doc))
             out = Path(temp) / "Gen.lean"
             result = subprocess.run([sys.argv[1], str(air), "-o", str(out), "--namespace",
-                                     "AggregateCastsNegative", "--prefix", "aggregate_casts.",
-                                     "--profile", "legacy-abi64-le"],
+                                     "AggregateCastsNegative", "--prefix", "aggregate_casts."],
                                     capture_output=True, text=True, timeout=300)
             output = result.stdout + result.stderr
             if result.returncode == 0 or MESSAGE not in output:

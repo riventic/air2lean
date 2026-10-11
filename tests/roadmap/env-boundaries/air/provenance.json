@@ -15,7 +15,7 @@
    "std_io15.writeAllClose.json": "660d0203352bcbbe7ef4c0df992ce35e7fd8769e6fb5705eeb648aa04a588ba9"
   },
   "export": "x86_64-linux -mcpu=baseline -OReleaseSafe -fno-error-tracing build-obj",
-  "patched_compiler_sha256": "206856640c7b6b95b79254da322bdaa124ffe3f92696e84148a8e60a56dcdbd1",
+  "patched_compiler_sha256": "476db22912d57dd975d5b0f58ad45107834dc11f997431f874f15b667f5b895e",
   "source": "std_io15.zig",
   "source_sha256": "bc40cceaea83ae18a811b57129f44a919eef375de90dc1d662cafecea953fb77"
  },
@@ -29,7 +29,7 @@
    "std_io16.readClose.json": "5c35aae072363844a1a6ad1faf2266fea0d1ef36d34bd190183908faa3f83fd6"
   },
   "export": "x86_64-linux -mcpu=baseline -OReleaseSafe -fno-error-tracing build-obj",
-  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
+  "patched_compiler_sha256": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
   "source": "std_io16.zig",
   "source_sha256": "aff2e4e0261c705d3ef68814eed5973c44e04a1161db97019da8f4dd38ba5f29"
  }

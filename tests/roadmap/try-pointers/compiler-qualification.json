@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "status": "retained-export-and-native-run; hashes do not attest that a compiler ran",
+  "exporter": {
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
+    "zig_patch_json_zig": "zig-patch/air-json/json.zig of the soundness-wave-3 tree (rebuilt after merging main)",
+    "json_zig_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
+    "install": "built by zig-patch/build.sh from that tree"
+  },
+  "export_command": "ZIG_AIR_JSON_FILTER=<try_pointers.|try_aliases.> zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",
+  "native_command": "zig test <source> -OReleaseSafe  (stock 0.16.0, aarch64-macos host)",
+  "fixtures": {
+    "try_pointers": {
+      "source": "tests/roadmap/try-pointers/try_pointers.zig",
+      "source_sha256": "aad39573829fc836459f05ea466e4d296751bd190610a7b0baa77e08e2207347",
+      "air_dir": "air-fresh/0.16.0",
+      "name_prefix": "try_pointers.",
+      "namespace": "TryPointers",
+      "generated": "TryPointers/Gen.lean",
+      "functions": [
+        "payload8",
+        "payload64",
+        "writeAlias",
+        "cleanup",
+        "coldPayload"
+      ],
+      "required_tags": [
+        "try_ptr",
+        "try_ptr_cold"
+      ],
+      "native": "4 of 4 tests passed",
+      "translation": "fresh export translates to TryPointers/Gen.lean up to the profile header"
+    },
+    "try_aliases": {
+      "source": "tests/roadmap/try-pointers/try_aliases.zig",
+      "source_sha256": "4f0675dc9859a006f40d8a69919116153f4ceb62294f1af1a4b24161204c2710",
+      "air_dir": "aliases/air-fresh/0.16.0",
+      "name_prefix": "try_aliases.",
+      "namespace": "TryAliases",
+      "generated": "aliases/TryAliases/Gen.lean",
+      "functions": [
+        "twoPaths",
+        "resetOnError"
+      ],
+      "required_tags": [
+        "try_ptr"
+      ],
+      "native": "8 of 8 tests passed (4 imported from try_pointers.zig)",
+      "translation": "fresh export translates to aliases/TryAliases/Gen.lean up to the profile header"
+    }
+  },
+  "artifacts": {
+    "air-fresh/0.16.0/try_pointers.cleanup.json": "62871dbaf6779a18a34d8307e84ed33e604facf54e913393cebae4f33d747a81",
+    "air-fresh/0.16.0/try_pointers.coldPayload.json": "6d09207eacc7a9b2646b1b3e26d84dd10ae44799aeabc99bf820eb061f576b10",
+    "air-fresh/0.16.0/try_pointers.payload64.json": "b61781136d93a91235e685e0e30b155361ace78b3bb51654965024da6a3152ea",
+    "air-fresh/0.16.0/try_pointers.payload8.json": "aae46e9404796d499ba5598b1be1b431f5e041c926fba81e85a19f1904a73601",
+    "air-fresh/0.16.0/try_pointers.writeAlias.json": "77b52562b188d1bbc3282bff2051a8081c4ab7dbd0bf943bcd2fc6a7a53a170e",
+    "aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "1ebc03299c68bf7528517e143568a3a0dd17b816ae646d915b14c12f7a36412b",
+    "aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "e81ebeebb1e924cb9bf3dd17c60bd145af3d94e4231325076638bc89a3e10e5b"
+  }
+}
