@@ -5,11 +5,12 @@
 
 Each run starts after every --output path (a file or directory, relative to the current
 directory) is removed. The runs must agree on the exit status, stdout, stderr and the bytes of
-every file under each --output path. Lake's build progress lines (`✔ [3/9] Built X (1.2s)`,
-`Build completed successfully (9 jobs).`) and `real/user/sys` timing lines are dropped from both
-streams first: they record which modules this run had to build and how long they took, which
-depends on the cache state that the first run leaves, not on the worker count. Nothing else is
-normalized. --keep DIR keeps both runs' captures (DIR/sequential, DIR/parallel).
+every file under each --output path. Dropped from both
+streams first: Lake's build progress lines (`✔ [3/9] Built X (1.2s)`, `Build completed
+successfully (9 jobs).`), which record which modules this run had to build and how long they took
+(the cache state the first run leaves, not the worker count), and `real/user/sys` timing lines.
+Made constant: mktemp directory names (`air2lean-NAME.XXXXXX`) and unittest's `Ran N tests in Ts`.
+Nothing else is normalized. --keep DIR keeps both runs' captures (DIR/sequential, DIR/parallel).
 
 Exit status: 0 when the runs agree, 1 with a unified diff of the first differences otherwise.
 """
@@ -27,9 +28,12 @@ import tempfile
 PROGRESS = re.compile(rb'^(?:(?:\xe2\x9c\x94|\xe2\x9a\xa0|\xe2\x9c\x96) )?\[\d+/\d+\] (?:Built|Replayed|Ran|Fetched) .*\n|'
                       rb'^Build completed successfully(?: \(\d+ jobs\))?\.\n|^(?:real|user|sys)\s+\S+\n', re.M)
 
+# Names that differ per run by construction: mktemp directories and unittest's elapsed time.
+RUN_NAMES = re.compile(rb'(air2lean-[A-Za-z-]+)\.[A-Za-z0-9]{6}\b|^(Ran \d+ tests?) in [\d.]+s$', re.M)
+
 
 def normalize(data: bytes) -> bytes:
-    return PROGRESS.sub(b'', data)
+    return RUN_NAMES.sub(lambda m: (m.group(1) + b'.X') if m.group(1) else m.group(2), PROGRESS.sub(b'', data))
 
 
 def capture(command, jobs, outputs, into: Path) -> None:

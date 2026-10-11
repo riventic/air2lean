@@ -152,7 +152,7 @@ job order, after a list of every failed job. A signal stops every job's process 
 
 Users: `scripts/check.sh` checks its examples (AIR export, translation, golden comparison) in
 parallel and builds every module in one `lake build`; `scripts/diff.sh` builds and runs the
-native harnesses and the Lean side of each example in parallel. Under the guard both stay
+native harnesses of the examples in parallel (the Lean side is one `difftest` process). Under the guard both stay
 sequential unless the guard is given `--jobs`; on the shared development Mac use a lane's lock
 and a moderate count:
 
@@ -161,6 +161,21 @@ python3 scripts/build-guard.py --lock ~/.cache/air2lean/build-b.lock --jobs 4 --
   --report /tmp/check.json --log /tmp/check.log -- scripts/check.sh
 ```
 
-`tests/roadmap/parallel/test_par.py` tests the helper offline; `tests/roadmap/parallel/determinism.sh`
+`tests/roadmap/parallel/test_par.py` tests the helper offline; `tests/roadmap/parallel/determinism.py`
 runs a changed script with `AIR2LEAN_JOBS=1` and in parallel and requires identical output and
 generated files.
+
+Cheaper local runs:
+
+- With `AIR2LEAN_CAS_DIR` set, `diff.sh` builds its stock-Zig artifacts through `scripts/cas.py
+  native` ([build-cache.md](build-cache.md)); an unchanged harness, libm or asm archive is not
+  compiled again. Unset, nothing is cached.
+- `scripts/build-mode-docker.sh` cross-compiles the native side on the host (`diff.sh --build-only`,
+  `-target x86_64-linux`) and runs only the binaries in the emulated container;
+  `AIR2LEAN_BUILD_MODE_CROSS=0` builds in the container instead.
+- `AIR2LEAN_CHANGED_FROM=REF` makes the default example selection of `check.sh`, `diff.sh` and
+  `build-mode-docker.sh` only the examples the changes since REF can affect
+  (`scripts/changed-examples.py`; a change outside one example's own files selects all). Local runs
+  only: CI and the merge queue always run every example.
+- `AIR2LEAN_LOCAL_CPUS` / `AIR2LEAN_LOCAL_MEMORY` size the containers of `scripts/local-ci.sh`
+  (defaults 2 and 8g).

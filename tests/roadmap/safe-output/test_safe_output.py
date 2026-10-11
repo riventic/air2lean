@@ -115,7 +115,7 @@ elif kind == 'zig':
         pathlib.Path(os.environ['ZIG_AIR_JSON_DIR'], 'demo.foo.json').write_text('{}')
 elif kind == 'air2lean':
     translate(args[args.index('-o') + 1])
-elif kind == 'lake' and args == ['build', '-q', 'air2lean']:
+elif kind == 'lake' and args == ['build', '-q', '--log-level=error', 'air2lean']:
     pass  # check.sh builds the translator once before its examples.
 elif kind == 'lake' and args[:1] == ['build']:
     if mode == 'build-hang':

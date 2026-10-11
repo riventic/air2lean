@@ -128,6 +128,26 @@ class Workers(unittest.TestCase):
         self.assertEqual(run_par('--print-jobs', env={'AIR2LEAN_JOBS': '3'})[1], '3\n')
 
 
+class Determinism(unittest.TestCase):
+    """tests/roadmap/parallel/determinism.py accepts a par run and rejects a worker-count leak."""
+
+    def determinism(self, script, tmp):
+        out = Path(tmp) / 'out'
+        return subprocess.run([sys.executable, '-B', str(ROOT / 'tests/roadmap/parallel/determinism.py'),
+                               '--jobs', '3', '--output', str(out), '--', 'bash', '-c', script],
+                              capture_output=True, text=True, cwd=tmp)
+
+    def test_identical_and_differing_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ok = self.determinism(f'mkdir out; python3 -B {PAR} -- bash -c "echo {{}} > out/{{}}; echo {{}}" '
+                                  '::: a b c d; echo "[1/2] Built X (0.$RANDOM s)"', tmp)
+            self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+            self.assertIn('identical', ok.stdout)
+            leak = self.determinism('mkdir out; echo $AIR2LEAN_JOBS > out/jobs', tmp)
+            self.assertEqual(leak.returncode, 1, leak.stdout + leak.stderr)
+            self.assertIn('-1\n+3', leak.stderr)
+
+
 class Cancel(unittest.TestCase):
     def test_signal_stops_every_job(self):
         with tempfile.TemporaryDirectory() as tmp:

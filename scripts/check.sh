@@ -235,8 +235,9 @@ for ex in $examples; do
   gen_targets+=("Proofs.$(namespace_of "$ex").Gen")
 done
 [ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
-# Every example runs `lake exe air2lean`: build it once, so that no two examples build it.
-workflow_run_stage lake build -q air2lean
+# Every example runs `lake exe air2lean`: build it once, so that no two examples build it (its
+# warnings are the translator build's, shown where it is built; errors are shown).
+workflow_run_stage lake build -q --log-level=error air2lean
 results_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
 # Each example's stages keep their own timeout; the examples together have none.
 # shellcheck disable=SC2086  # $examples is a space-separated list

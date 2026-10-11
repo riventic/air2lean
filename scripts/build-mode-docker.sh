@@ -5,6 +5,13 @@
 # float model's reference host (Linux x86_64) applies. Writes the differential summary and cases
 # next to the requested output directory (docs/build-modes.md).
 #
+# The native side (harnesses, libm and asm archives) is cross-compiled on the host for
+# x86_64-linux by the host's stock Zig of the same version (`scripts/cas.py host-zig`; with
+# AIR2LEAN_CAS_DIR set, through the shared cache) and only run in the container, so no compiler
+# runs emulated (`diff.sh --build-only`, AIR2LEAN_DIFF_PREBUILT). AIR2LEAN_BUILD_MODE_CROSS=0 builds
+# inside the container instead; both build with `-target x86_64-linux`. zig.sha256 names the
+# compiler that built the binaries.
+#
 # usage: scripts/build-mode-docker.sh <version> <Debug|ReleaseSafe|ReleaseFast|ReleaseSmall> \
 #          <llvm|stage2_x86_64> <output-dir> ["<examples>"]
 # Run it under scripts/build-guard.py (AIR2LEAN_BUILD_LOCK) like every other Zig/Docker workload.
@@ -25,16 +32,15 @@ if [ "${1:-}" = --inside ]; then
   export PATH="$ELAN_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   lake build
   export AIR2LEAN_ZIG=$zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend
-  export AIR2LEAN_DIFF_REPORT=/work/tests/diff/out/report.json
+  export AIR2LEAN_DIFF_REPORT=/work/tests/diff/out/report.json AIR2LEAN_EXAMPLES=$examples
   # Rosetta cannot load the empty RELRO segment of release builds ("bss_size overflow").
-  export AIR2LEAN_DIFF_LINK_FLAGS='-z norelro'
-  if [ -z "$examples" ] && [ "$backend" = stage2_x86_64 ]; then
-    # The self-hosted backend cannot encode examples/asm's lzcnt/popcnt at -mcpu=baseline.
-    source scripts/example-selection.sh
-    examples=$(air2lean_default_examples /work "$version" x86_64 | tr ' ' '\n' | grep -vx asm | tr '\n' ' ')
+  export AIR2LEAN_DIFF_LINK_FLAGS='-z norelro' AIR2LEAN_DIFF_TARGET=x86_64-linux
+  if [ -d /snapshot/native ]; then
+    export AIR2LEAN_DIFF_PREBUILT=/snapshot/native
+    cp /snapshot/native/zig.sha256 /artifacts/zig.sha256
+  else
+    sha256sum "$zig" | cut -d' ' -f1 >/artifacts/zig.sha256
   fi
-  if [ -n "$examples" ]; then export AIR2LEAN_EXAMPLES=$examples; fi
-  sha256sum "$zig" | cut -d' ' -f1 >/artifacts/zig.sha256
   status=0
   bash scripts/diff.sh >/artifacts/diff.log 2>&1 || status=$?
   cp -a /work/tests/diff/out/report.json /work/tests/diff/out/report.json.jsonl /artifacts/ 2>/dev/null || true
@@ -43,10 +49,16 @@ if [ "${1:-}" = --inside ]; then
   exit 0
 fi
 
-[ "$#" -ge 4 ] || { sed -n 9,12p "$0" >&2; exit 2; }
+[ "$#" -ge 4 ] || { sed -n 17,19p "$0" >&2; exit 2; }
 version=$1 optimize=$2 backend=$3 out=$4 examples=${5:-}
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
+if [ -z "$examples" ]; then
+  source scripts/example-selection.sh
+  examples=$(air2lean_default_examples "$repo" "$version" x86_64)
+  # The self-hosted backend cannot encode examples/asm's lzcnt/popcnt at -mcpu=baseline.
+  if [ "$backend" = stage2_x86_64 ]; then examples=$(printf '%s\n' $examples | grep -vx asm | tr '\n' ' '); fi
+fi
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-mode.XXXXXX")
 container=
 cleanup() {
@@ -70,6 +82,13 @@ git ls-files -z | while IFS= read -r -d '' path; do
   if [ -e "$path" ] || [ -L "$path" ]; then printf '%s\0' "$path"; fi
 done >"$snapshot/files"
 COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
+if [ "${AIR2LEAN_BUILD_MODE_CROSS:-1}" != 0 ]; then
+  host_zig=$(python3 -B scripts/cas.py host-zig "$version")
+  AIR2LEAN_ZIG=$host_zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend \
+    AIR2LEAN_DIFF_LINK_FLAGS='-z norelro' AIR2LEAN_DIFF_TARGET=x86_64-linux AIR2LEAN_EXAMPLES=$examples \
+    bash scripts/diff.sh --build-only "$snapshot/native"
+  shasum -a 256 "$host_zig" | cut -d' ' -f1 >"$snapshot/native/zig.sha256"
+fi
 case "$(docker info --format '{{.Architecture}}')" in
   aarch64|arm64) python_arch=arm64 ;;
   x86_64|amd64) python_arch=amd64 ;;
