@@ -8,7 +8,7 @@ import Lean
   rules whose command unifies with the command it executes; the rule's hypotheses become side
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
-  (library atoms such as `junk`; a user may mark an opaque representation predicate).
+  (library atoms such as `Junk`; a user may mark an opaque representation predicate).
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -32,9 +32,22 @@ initialize registerBuiltinAttribute {
   add := fun decl _ kind => fsymRuleExt.add decl kind
 }
 
-/-- Assertion constants that `fsym` keeps opaque in preconditions. -/
-initialize fsymAtomAttr : TagAttribute ←
-  registerTagAttribute `fsym_atom "an assertion that `fsym` keeps opaque"
+/-- Assertion constants that `fsym` keeps opaque in preconditions (also imported ones: the
+library's `Junk` is tagged where `fsym`'s rules are). -/
+initialize fsymAtomExt : SimpleScopedEnvExtension Name NameSet ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.insert n
+    initial := {}
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_atom
+  descr := "an assertion that `fsym` keeps opaque"
+  add := fun decl _ kind => fsymAtomExt.add decl kind
+}
+
+/-- `c` is an `@[fsym_atom]`. -/
+def isFsymAtom (env : Environment) (c : Name) : Bool := (fsymAtomExt.getState env).contains c
 
 end Zig.Full.Auto
 

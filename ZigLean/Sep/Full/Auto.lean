@@ -26,7 +26,7 @@ the generated program `c` (`docs/proof-automation.md`):
   cases. A `throw` must be unreachable: the context is refuted, else the goal is left.
 * **Returns** `pure v`: the goal becomes the frame-preserving update `EUpd P (Q v)`, which
   `fsym` closes when `Q v` is the precondition up to its existentials (found by unification),
-  its facts (by the arithmetic solver), `junk` (which absorbs `up` atoms) and AC of `⋆`;
+  its facts (by the arithmetic solver), `Junk` (which absorbs `up` atoms) and AC of `⋆`;
   otherwise the update goal is left to the caller.
 
 Every step elaborates to applications of `ZigLean/Sep/Full/AutoRules.lean` and the library's
@@ -86,7 +86,7 @@ def unfold1 (e : Expr) : MetaM (Option Expr) := do
     let some fld := s.getAppArgs[info.numParams + info.i]? | return none
     return some (mkAppN fld args[info.numParams + 1:]).headBeta
   if c == sepN || c == empN || c == liftN || c == exN then return none
-  if fsymAtomAttr.hasTag (← getEnv) c then return none
+  if isFsymAtom (← getEnv) c then return none
   let some e' ← unfoldDefinition? e | return none
   let e' := e'.headBeta
   -- a definition by cases on a constructor (`resizePost … true`): reduce the match
@@ -905,7 +905,7 @@ partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
   return #[φ]
 
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
-atoms (up to provable equations of their arguments), drop `up` atoms into `junk`, prove `Q`'s
+atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
 def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
@@ -982,8 +982,8 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     st ← planShares st qsh
     -- final match
     let spat := qats.filter (! ·.isAppOfArity liftN 1)
-    let junkQ := spat.any (·.isConstOf ``Zig.Full.Auto.junk)
-    let spat := spat.filter (! ·.isConstOf ``Zig.Full.Auto.junk)
+    let junkQ := spat.any (·.isConstOf ``Zig.Full.Junk)
+    let spat := spat.filter (! ·.isConstOf ``Zig.Full.Junk)
     let mut used : Array Nat := #[]
     for a in spat do
       let a ← instantiateMVars a
@@ -1013,17 +1013,17 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let M := used.map (pats[·]!)
     unless L.isEmpty || junkQ do throwError "fsym: atoms left over{indentExpr (sepOf L)}"
     let (S, core) ← if junkQ then do
-        let J := mkConst ``Zig.Full.Auto.junk
+        let J := mkConst ``Zig.Full.Junk
         let rec toJunk (xs : List Expr) : MetaM Expr := do
           match xs with
           | [] => mkAppM ``imp_junk_emp #[]
           | [x] =>
-            if x.isConstOf ``Zig.Full.Auto.junk then mkAppOptM ``imp_refl #[J]
+            if x.isConstOf ``Zig.Full.Junk then mkAppOptM ``imp_refl #[J]
             else if x.isAppOfArity ``Zig.Full.FAssn.up 1 then mkAppOptM ``imp_junk_one #[x.appArg!]
             else throwError "fsym: cannot drop{indentExpr x}"
           | x :: rest =>
             let pr ← toJunk rest
-            if x.isConstOf ``Zig.Full.Auto.junk then mkAppM ``imp_junk_junk #[pr]
+            if x.isConstOf ``Zig.Full.Junk then mkAppM ``imp_junk_junk #[pr]
             else if x.isAppOfArity ``Zig.Full.FAssn.up 1 then
               mkAppOptM ``imp_junk_up #[sepOf rest.toArray, x.appArg!, pr]
             else throwError "fsym: cannot drop{indentExpr x}"

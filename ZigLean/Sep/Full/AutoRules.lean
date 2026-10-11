@@ -18,7 +18,8 @@ module.
   stores of `pts`, the fields of a stored slice, the overflow-checked arithmetic of generated code.
 * **Providers from atoms**: `AddrOf`/`Reaches` of a precondition from one of its atoms
   (`known`, `bshare`, an owned `pts` or region), up to associativity and commutativity of `⋆`.
-* **`junk`**: bytes an allocator gave up (padding, leaked frees); an `up` part is absorbed.
+* **`Junk`** (the library's, `Full/AllocSpec.lean`): bytes an allocator gave up (padding, leaked
+  frees); an `up` part is absorbed.
 * **`fsym_norm`** and **`fsym_arith`**: the simp sets for programs and side goals.
 -/
 
@@ -232,21 +233,8 @@ end Arith
 
 /-! ## Junk -/
 
-/-- Bytes that an allocator gave up (padding, the bytes of frees it cannot reuse). -/
-def junk : FAssn := FAssn.ex fun h : Heap => up (fun h' => h' = h)
-
-attribute [fsym_atom] junk
-
-theorem junk_absorb {X : Assn} {r : Res} (h : (up X ⋆ junk) r) : junk r := by
-  obtain ⟨r₁, r₂, hd, rfl, h1, ⟨hj, h2⟩⟩ := h
-  refine ⟨r₁.heap.erase ∪ hj, ?_⟩
-  obtain ⟨-, k1, g1⟩ := h1
-  obtain ⟨e2, k2, g2⟩ := h2
-  refine ⟨?_, by simp [k1, k2, Know.union_none], by simp [g1, g2]⟩
-  show (FHeap.union r₁.heap r₂.heap).erase = _
-  rw [← e2]; exact FHeap.erase_union _ _
-
-theorem junk_emp {r : Res} (h : emp r) : junk r := ⟨Heap.empty, Full.up_emp.mpr h⟩
+-- The library's `Junk` (`Full/AllocSpec.lean`) stays opaque: `fsym` absorbs `up` parts into it.
+attribute [fsym_atom] Junk
 
 /-! ## Entailment combinators (the proofs `fsym` builds for returns) -/
 
@@ -270,15 +258,15 @@ theorem imp_eq (e : X = Y) : ∀ r, X r → Y r := fun _ h => e ▸ h
 theorem imp_lift {φ : Prop} (hφ : φ) (h : ∀ r, X r → Y r) : ∀ r, X r → (⟪φ⟫ ⋆ Y) r :=
   fun r hx => sep_lift.mpr ⟨hφ, h r hx⟩
 
-theorem imp_junk_emp : ∀ r, emp r → junk r := fun _ h => junk_emp h
+theorem imp_junk_emp : ∀ r, emp r → Junk r := fun _ h => junk_emp h
 
-theorem imp_junk_up {Z : Assn} (h : ∀ r, X r → junk r) : ∀ r, (up Z ⋆ X) r → junk r :=
+theorem imp_junk_up {Z : Assn} (h : ∀ r, X r → Junk r) : ∀ r, (up Z ⋆ X) r → Junk r :=
   fun _ hx => junk_absorb (sep_mono_right h hx)
 
-theorem imp_junk_one {Z : Assn} : ∀ r, up Z r → junk r :=
+theorem imp_junk_one {Z : Assn} : ∀ r, up Z r → Junk r :=
   fun _ hx => junk_absorb (sep_emp.mpr hx |> sep_mono_right fun _ h => junk_emp h)
 
-theorem imp_junk_junk (h : ∀ r, X r → junk r) : ∀ r, (junk ⋆ X) r → junk r := by
+theorem imp_junk_junk (h : ∀ r, X r → Junk r) : ∀ r, (Junk ⋆ X) r → Junk r := by
   intro r hx
   obtain ⟨r₁, r₂, hd, rfl, ⟨j1, h1⟩, h2⟩ := hx
   obtain ⟨j2, h2⟩ := h _ h2

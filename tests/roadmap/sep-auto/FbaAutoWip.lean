@@ -21,7 +21,7 @@ def fown (ctx : Ptr) (B : FBuf) : FAssn :=
   FAssn.ex fun e => FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>
     ⟪FOk ctx B e tail ∧ B.ptr.block = some b ∧ ctx.block = some cb⟫ ⋆
     up (pts ctx 8 (BitVec.ofNat 64 e)) ⋆ up (pts (ctx.add 8) 8 (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice)) ⋆
-    known cb B.cA ⋆ known b B.A ⋆ bshare b q (bnd B) ⋆ junk ⋆
+    known cb B.cA ⋆ known b B.A ⋆ bshare b q (bnd B) ⋆ Junk ⋆
     up (regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail)
 
 def ftok (B : FBuf) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (_q : Frac) : FAssn :=

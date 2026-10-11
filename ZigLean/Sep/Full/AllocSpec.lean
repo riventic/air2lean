@@ -184,6 +184,8 @@ theorem junk_absorb {X : Assn} {r : Res} (h : (up X ⋆ Junk) r) : Junk r := by
   show (FHeap.union r₁.heap r₂.heap).erase = _
   rw [← e2]; exact FHeap.erase_union _ _
 
+theorem junk_emp {r : Res} (h : emp r) : Junk r := ⟨Heap.empty, up_emp.mpr h⟩
+
 /-- The separating conjunction of `f 0, …, f (n - 1)`. -/
 def sepN : Nat → (Nat → FAssn) → FAssn
   | 0, _ => emp
