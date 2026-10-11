@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Toy
+import ZigLean.Sep.Full.Extent
 
 /-!
 # Why cells no longer carry their block's size (regression, `docs/sep-full-state.md` §Block extents)
@@ -187,3 +188,11 @@ end Zig.Full.ExtCX
 #print axioms Zig.Full.ExtCX.no_cell_size
 #print axioms Zig.Full.ExtCX.cell_size_bext
 #print axioms Zig.Full.ExtCX.no_free_without_ext
+-- The extent updates (`ZigLean/Sep/Full/Extent.lean`): lend, give back, join at the higher
+-- bound, weaken, and the fact a share gives.
+#print axioms Zig.Full.EUpd.lend
+#print axioms Zig.Full.EUpd.unlend
+#print axioms Zig.Full.EUpd.join
+#print axioms Zig.Full.EUpd.weaken
+#print axioms Zig.Full.bshare_split
+#print axioms Zig.Full.Holds.bshare

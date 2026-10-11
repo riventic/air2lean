@@ -187,6 +187,7 @@
     "ZigLean.Sep.Full.Triple": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Disjoint": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Ghost": ["SEM-02", "SEM-03"],
+    "ZigLean.Sep.Full.Extent": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Atomic": ["SEM-02", "SEM-03", "ORD-01", "THR-08"],
     "ZigLean.Sep.Full.Toy": ["SEM-02", "SEM-03", "ORD-01"],
     "ZigLean.Sep.Full.Logic": ["SEM-02", "SEM-03", "SEM-04"],

@@ -12,6 +12,16 @@ the atomic layout of its words (`apts`) and keep persistent knowledge of the blo
 (`known`). The page allocator needs both (`docs/alloc-page.md`, O1 and O3). Regions stay legacy
 assertions under `up`, so the region library carries over.
 
+**The extent share of a grant** (`docs/sep-full-state.md` §Block extents). A grant of `n` bytes at
+`p` also carries a share `pshare p q (p.off + n)` of the extent of `p`'s block: while the client
+holds the grant, the block is live with at least `p.off + n` bytes, whatever happens to the
+block's other parts. A client uses it for pointers up to the end of the grant that it does not
+own bytes to; an allocator that grants out of a block of its own (a fixed buffer, an arena node, a
+mapping) lends it off its own claim on that block (`EUpd.lend`, `EUpd.weaken`) and takes it back
+in `free` and `resize` (`EUpd.unlend`, `EUpd.join`). The token sees the fraction `q`
+(`FAllocInv.tok`'s last argument), so an allocator that must get its whole extent back (the page
+allocator's `munmap`) knows that `free` returns exactly what it lent.
+
 A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
 cells of an `up` assertion no longer pin their block's size.
 -/
@@ -21,20 +31,28 @@ namespace Full
 
 open FAssn
 
-/-- An allocator invariant over full-state assertions (`AllocInv`). -/
+/-- A share `q` of the extent of `p`'s block, at the lower bound `k`. -/
+def pshare (p : Ptr) (q : Frac) (k : Nat) : FAssn :=
+  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q k
+
+/-- An allocator invariant over full-state assertions (`AllocInv`). The token
+`tok p n k A S K q` of a grant of `n` bytes at `p` with alignment `2 ^ k` in a block with
+address `A`, size `S` and kind `K` (as the region's cells record them) sees the fraction `q` of
+the grant's extent share (`granted`). -/
 structure FAllocInv where
   own : FAssn
-  tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → FAssn
+  tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → FAssn
   fits : Nat → Nat → Prop := fun _ _ => True
 
 namespace FAllocInv
 
 variable (I : FAllocInv)
 
-/-- A region that `I`'s allocator granted (`Zig.granted`). -/
+/-- A region that `I`'s allocator granted (`Zig.granted`): its bytes, the token, and a share of
+its block's extent up to the region's end. -/
 def granted (p : Ptr) (k : Nat) (bs : Array Byte) : FAssn :=
-  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K =>
-    up (regionIn p A S K (2 ^ k) bs) ⋆ I.tok p bs.size k A S K
+  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q =>
+    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆ pshare p q (p.off.toNat + bs.size))
 
 /-- After `alloc` of `len` bytes (`Zig.allocPost`). -/
 def allocPost (len k : Nat) : Option Ptr → FAssn
@@ -89,79 +107,12 @@ theorem FAllocSpec.congr {L : FLogic} {vt vt' : RawVTable} {ctx : Ptr} {I : FAll
   remap s k n ra bs h1 h2 h3 h4 h5 := L.congr (hm s k n ra) (h.remap s k n ra bs h1 h2 h3 h4 h5)
   free s k ra bs h1 h2 h3 := L.congr (hf s k ra) (h.free s k ra bs h1 h2 h3)
 
-/-! ## Legacy specifications, lifted -/
-
-/-- A legacy invariant as a full-state one: its assertions under `up` (any atomic layout, no
-knowledge). -/
-def _root_.Zig.AllocInv.toFull (I : AllocInv) : FAllocInv where
-  own := FAssn.up I.own
-  tok p n k A S K := FAssn.up (I.tok p n k A S K)
-  fits := I.fits
-
 /-- The four entries keep the atomic layout and every block's address. -/
 structure VTame (vt : RawVTable) (ctx : Ptr) : Prop where
   alloc : ∀ len k ra, Tame (vt.alloc ctx len k ra)
   resize : ∀ s k n ra, Tame (vt.resize ctx s k n ra)
   remap : ∀ s k n ra, Tame (vt.remap ctx s k n ra)
   free : ∀ s k ra, Tame (vt.free ctx s k ra)
-
-section Lift
-
-variable {I : AllocInv} {r : Res}
-
-theorem up_granted {p : Ptr} {k : Nat} {bs : Array Byte} :
-    I.toFull.granted p k bs r ↔ up (granted I p k bs) r := by
-  constructor
-  · rintro ⟨A, S, K, h⟩
-    exact up_ex.mpr ⟨A, up_ex.mpr ⟨S, up_ex.mpr ⟨K, sep_up h⟩⟩⟩
-  · intro h
-    obtain ⟨A, h⟩ := up_ex.mp h
-    obtain ⟨S, h⟩ := up_ex.mp h
-    obtain ⟨K, h⟩ := up_ex.mp h
-    exact ⟨A, S, K, up_sep h⟩
-
-theorem up_own_granted {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : (I.toFull.own ⋆ I.toFull.granted p k bs) r) : up (I.own ∗ granted I p k bs) r :=
-  sep_up (sep_mono_right (fun _ h => up_granted.mp h) h)
-
-/-- `up (⌜φ⌝ ∗ granted)`, as a full `⟪φ⟫ ⋆ granted`. -/
-theorem up_lift_granted {φ : Prop} {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : up (⌜φ⌝ ∗ granted I p k bs) r) : (⟪φ⟫ ⋆ I.toFull.granted p k bs) r := by
-  obtain ⟨hφ, h⟩ := up_lift.mp h
-  exact sep_lift.mpr ⟨hφ, up_granted.mpr h⟩
-
-theorem up_allocPost {n k : Nat} {v : Option Ptr} (h : up (allocPost I n k v) r) :
-    I.toFull.allocPost n k v r := by
-  cases v with
-  | none => exact h
-  | some p =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs, h⟩ := up_ex.mp h
-    exact ⟨bs, up_lift_granted h⟩
-
-theorem up_own_granted' {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : up (I.own ∗ granted I p k bs) r) : (I.toFull.own ⋆ I.toFull.granted p k bs) r :=
-  sep_mono_right (fun _ h => up_granted.mpr h) (up_sep h)
-
-theorem up_resizePost {p : Ptr} {k : Nat} {bs : Array Byte} {n : Nat} {v : Bool}
-    (h : up (resizePost I p k bs n v) r) : I.toFull.resizePost p k bs n v r := by
-  cases v with
-  | false => exact up_own_granted' h
-  | true =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs', h⟩ := up_ex.mp h
-    exact ⟨bs', up_lift_granted h⟩
-
-theorem up_remapPost {p : Ptr} {k : Nat} {bs : Array Byte} {n : Nat} {v : Option Ptr}
-    (h : up (remapPost I p k bs n v) r) : I.toFull.remapPost p k bs n v r := by
-  cases v with
-  | none => exact up_own_granted' h
-  | some q =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs', h⟩ := up_ex.mp h
-    exact ⟨bs', up_lift_granted h⟩
-
-end Lift
 
 /-! ## No embedding of the legacy logic
 

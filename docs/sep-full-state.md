@@ -281,6 +281,20 @@ table. It replaces "frame cells carry their block's size".
   (pinned assertions) or `Keeps` (the program keeps every live block outside `E`). The post
   (`upPost`) owns the full extents of the blocks it has bytes of that were pinned or that `P` had
   no bytes of (new blocks). `FTriple.ofTriple_up` is the size-free case (`E` empty, `Keeps`).
+* **Extent updates** (`ZigLean/Sep/Full/Extent.lean`): `EUpd P P'` is a frame-preserving update
+  in a memory (it may change extent claims, unlike `Upd`); `FTriple.eupd`/`eupd_post` (and the
+  `FTotalTriple`, `CTriple` versions), `EUpd.frame`. Rules: `EUpd.lend` (`bauth b S K (q₁+q₂)` to
+  `bauth b S K q₁ ⋆ bshare b q₂ k`, `k ≤ S`), `EUpd.unlend` (back, from any bound),
+  `bshare_split` (split/join at one bound), `EUpd.join` (two shares to one at the higher bound:
+  the share there certifies it, so an allocator takes a grant's lower-bound share back into its
+  own), `EUpd.weaken`; facts `Holds.bshare`, `Holds.bauth`. All are instances of `EUpd.ext1`
+  (`ECell.Step`).
+* **`FAllocSpec` carries the extent share** (stronger contract): `granted p k bs` is
+  `∃ A S K q, up (regionIn …) ⋆ (I.tok p n k A S K q ⋆ pshare p q (p.off + n))`, so a client
+  holding a grant knows that the block has at least `p.off + n` bytes, and `free`/`resize`/`remap`
+  get the share back. The token sees the fraction `q`: an allocator that must collect its whole
+  extent (`munmap`) knows that `free` returns exactly what it lent. `AllocInv.toFull` and the
+  `up_granted` family are gone (a legacy `granted` has no share).
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
