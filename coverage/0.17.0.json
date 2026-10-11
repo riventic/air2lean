@@ -673,7 +673,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -754,7 +756,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -904,7 +908,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -973,7 +979,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1032,7 +1040,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1102,7 +1112,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1223,7 +1235,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1282,7 +1296,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1341,7 +1357,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1407,7 +1425,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1524,7 +1544,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -1584,7 +1606,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -3718,7 +3742,8 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
-          "ZigLean/Float/RoundTrip.lean"
+          "ZigLean/Float/RoundTrip.lean",
+          "ZigLean/Sep/Full/AutoRules.lean"
         ]
       },
       "emission": {
@@ -3780,7 +3805,8 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
-          "ZigLean/Float/RoundTrip.lean"
+          "ZigLean/Float/RoundTrip.lean",
+          "ZigLean/Sep/Full/AutoRules.lean"
         ]
       },
       "emission": {
@@ -3843,7 +3869,8 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
-          "ZigLean/Float/RoundTrip.lean"
+          "ZigLean/Float/RoundTrip.lean",
+          "ZigLean/Sep/Full/AutoRules.lean"
         ]
       },
       "emission": {
@@ -3907,7 +3934,8 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
-          "ZigLean/Float/RoundTrip.lean"
+          "ZigLean/Float/RoundTrip.lean",
+          "ZigLean/Sep/Full/AutoRules.lean"
         ]
       },
       "emission": {
@@ -3970,7 +3998,8 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
-          "ZigLean/Float/RoundTrip.lean"
+          "ZigLean/Float/RoundTrip.lean",
+          "ZigLean/Sep/Full/AutoRules.lean"
         ]
       },
       "emission": {
@@ -4232,6 +4261,9 @@
           "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Full/AllocSpec.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoAttr.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Disjoint.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
@@ -5128,6 +5160,8 @@
           "ZigLean/Sep/Full/Atomic.lean",
           "ZigLean/Sep/Full/AtomicPtr.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Disjoint.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Extent.lean",
@@ -5554,6 +5588,7 @@
           "ZigLean/Conc/Logic.lean",
           "ZigLean/Sep/Bounded.lean",
           "ZigLean/Sep/Cost.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/Full/Tame.lean",
           "ZigLean/Sep/Full/Triple.lean",
           "ZigLean/Sep/Loop.lean",
@@ -5663,7 +5698,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Full/Auto.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -6101,6 +6138,8 @@
           "ZigLean/Sep/AllocSpec/Dispatch.lean",
           "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/AllocSpec/Wrap.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Seq.lean",
@@ -6341,6 +6380,8 @@
           "ZigLean/Sep/AllocSpec/Dispatch.lean",
           "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/AllocSpec/Wrap.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Seq.lean",
@@ -6461,6 +6502,8 @@
           "ZigLean/Sep/AllocSpec/Dispatch.lean",
           "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/AllocSpec/Wrap.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Seq.lean",
@@ -6581,6 +6624,8 @@
           "ZigLean/Sep/AllocSpec/Dispatch.lean",
           "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/AllocSpec/Wrap.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Seq.lean",
@@ -7837,6 +7882,7 @@
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Float/Value.lean",
           "ZigLean/Mem/Parent.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/SentinelRealloc.lean"
         ]
       },
@@ -9215,6 +9261,7 @@
           "ZigLean/Sep/AllocSpec/Norm.lean",
           "ZigLean/Sep/Full/AtomicPtr.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/Full/Extent.lean",
           "ZigLean/Sep/Full/Triple.lean",
           "ZigLean/Sep/Mmap.lean",
@@ -9342,6 +9389,7 @@
           "ZigLean/Sep/AllocSpec/Norm.lean",
           "ZigLean/Sep/Full/AtomicPtr.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/Full/Extent.lean",
           "ZigLean/Sep/Full/Triple.lean",
           "ZigLean/Sep/Mmap.lean",
@@ -10007,6 +10055,8 @@
           "ZigLean/Sep/Full/Atomic.lean",
           "ZigLean/Sep/Full/AtomicPtr.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Disjoint.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Extent.lean",
@@ -10716,6 +10766,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Sep/AllocSpec/Norm.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/VC/Rules.lean"
         ]
       },
@@ -10780,6 +10831,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Sep/AllocSpec/Norm.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/VC/Rules.lean"
         ]
       },
@@ -11008,6 +11060,8 @@
           "ZigLean/Sep/Full/Atomic.lean",
           "ZigLean/Sep/Full/AtomicPtr.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Dispatch.lean",
           "ZigLean/Sep/Full/Ops.lean",
           "ZigLean/Sep/Full/Tame.lean",
@@ -11277,6 +11331,8 @@
           "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Logic.lean",
           "ZigLean/Sep/Full/Ops.lean",
@@ -11400,6 +11456,8 @@
           "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/Auto.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Conc.lean",
           "ZigLean/Sep/Full/Logic.lean",
           "ZigLean/Sep/Full/Ops.lean",
@@ -11870,6 +11928,7 @@
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Full/Atomic.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Disjoint.lean",
           "ZigLean/Sep/Full/Ops.lean",
           "ZigLean/Sep/Full/Tame.lean",
@@ -12050,6 +12109,7 @@
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Full/Atomic.lean",
           "ZigLean/Sep/Full/AtomicRules.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Full/Disjoint.lean",
           "ZigLean/Sep/Full/Ops.lean",
           "ZigLean/Sep/Full/Tame.lean",
@@ -12784,6 +12844,7 @@
           "ZigLean/Basic.lean",
           "ZigLean/Mem/ConstPtr.lean",
           "ZigLean/Sep/AllocSpec/Norm.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Step.lean",
           "ZigLean/VC/Rules.lean"
         ]
@@ -14171,6 +14232,7 @@
           "ZigLean/Sep/AllocSpec/Wrap.lean",
           "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
+          "ZigLean/Sep/Full/AutoRules.lean",
           "ZigLean/Sep/Owned.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/SentinelRealloc.lean"
@@ -15202,6 +15264,7 @@
         "paths": [
           "ZigLean/Lemmas.lean",
           "ZigLean/Sep/DispatchTemplate.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/Step.lean",
           "ZigLean/Vec.lean"
         ]
@@ -18937,16 +19000,19 @@
       "ZigLean/Sep/Cost.lean": "ad7829f62d82e9ef243286c1e9410260ebcd4283bcc673ecd17a45477fa5800b",
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
       "ZigLean/Sep/DispatchTemplate.lean": "fc7c9d6b8ca6e71d75b7f6438bee49ddc4d61a9f015546336df3ecbbc1be7432",
-      "ZigLean/Sep/Full/AllocSpec.lean": "2a8fcc54daa8f1c8afebb0878caea6b3573be003b52b584ebc0dd4fca13ea115",
+      "ZigLean/Sep/Full/AllocSpec.lean": "37921d7d08250dcf584f96d10187a7e3fe77b5a5c29c3db910b7e041ab3ff4f4",
       "ZigLean/Sep/Full/Atomic.lean": "cd23cdf3be7666c074435e38e4b37d0bca96117c4d8f58a1257174192a98d2b8",
       "ZigLean/Sep/Full/AtomicPtr.lean": "6e7564bb7b47e16552588eaf24e937dc785c8b1a9984f5147984c6832256043d",
       "ZigLean/Sep/Full/AtomicRules.lean": "759d8a9cb2d3757d158b82cf0f25566a6169aaab5dff2b8bf54b7ca6d5269f44",
+      "ZigLean/Sep/Full/Auto.lean": "bcc94f245c8718f54159a255b0249ae8c4934c60f3292c4c34eab18b1f618311",
+      "ZigLean/Sep/Full/AutoAttr.lean": "c24fbe33050f5f213ba227d1225353591aa99da5083a3a6b5d8fa495c4a49301",
+      "ZigLean/Sep/Full/AutoRules.lean": "23a6c24a7dcfdcfccd4ab76790c789363c8228130d2501a06e112566bd78670a",
       "ZigLean/Sep/Full/Conc.lean": "200652960e0e30709995b2b09e5bdd16f5e5430efbaf5ffe09c2b0c195cb1cca",
       "ZigLean/Sep/Full/Disjoint.lean": "d3b1bd7c6f79296981b4540c3bc3b8857d040fbf7453699378c6000abbabaea8",
-      "ZigLean/Sep/Full/Dispatch.lean": "855d30826c6fba5a68e5ebe46cd3b35fca29bbafbb9e405847f984c48b062a22",
-      "ZigLean/Sep/Full/Extent.lean": "dd102d7913fd31721492b4f9cd241eac9b6a447269f462a07b6dbc53c6a7a3e0",
+      "ZigLean/Sep/Full/Dispatch.lean": "528ab3094a2581527df6d68a8974413d67590e242ac5716d2f84a1b6939a2b00",
+      "ZigLean/Sep/Full/Extent.lean": "7f08278c73d5b38dd8428eb0de64c48e4d3b0f01e58f429940ac797de9627261",
       "ZigLean/Sep/Full/Ghost.lean": "209341771dc9b786344eecb3536503391e841c9ffb2733be3018cc78780b0646",
-      "ZigLean/Sep/Full/Logic.lean": "194e1b2540377a869e5a99bbf0ef1e4cc15b1e4ba1ea8f67f15e8ef5657fbb46",
+      "ZigLean/Sep/Full/Logic.lean": "453d823882f6c0f4b881dc0d0beb3de3a21e304f3615249259ceefd7be61174e",
       "ZigLean/Sep/Full/Mmap.lean": "fcc89d34d7d4f214c48a264e5bab15ebd8dd2b2ca54c70ab785cab649c758a38",
       "ZigLean/Sep/Full/Ops.lean": "afd6057a7426d2e0b86a85b724e7e5d77fb500732ee5df4309a64804017a981a",
       "ZigLean/Sep/Full/Pinned.lean": "67e8d5d61d5008acd5715a4105abefac2983d9828d1acd49d3fb8794ce376bca",
