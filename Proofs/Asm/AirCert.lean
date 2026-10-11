@@ -11,7 +11,7 @@ open Air2Lean Air2Lean.Sem
 Outside the certificate fragment:
 
 * `asm.bswap32`: inst 1: an instruction outside the fragment
-* `asm.divmod`: inst 2: a local (semantics only; no certificate yet)
+* `asm.divmod`: inst 3: an operand outside the fragment
 * `asm.lzcnt64`: inst 1: an instruction outside the fragment
 * `asm.popcnt64`: inst 1: an instruction outside the fragment
 -/

@@ -30,11 +30,15 @@ EXAMPLES = ['asm', 'atomics', 'basic', 'errors', 'floatconv', 'floats', 'iogroup
 CERTIFIED = {
     'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
     'iogroup': ['debug.assert'],
-    'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.swap'],
+    'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.sumTo',
+                 'pointers.swap'],
     'recursion': ['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'],
     'threads': ['threads.writeFlag'],
     'vectors': ['vectors.sMod', 'vectors.sRem'],
 }
+
+# Certified memory functions with certified calls: `_step` and `_sound`, no `_eq` yet.
+SOUND_ONLY = ['pointers.sumTo']
 
 
 def run(binary, ex, out, *flags):
@@ -76,7 +80,10 @@ def check_example(binary, ex, work):
         # The certificate's stem: the generated name (prefix stripped), other characters as `_`.
         decl = re.sub(r'\W', '_', name.removeprefix(ex + '.'))
         assert re.search(rf'^theorem {decl}_step ', text, re.M), (ex, name)
-        assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M), (ex, name)
+        # Equality with `run`; a function in `Zig.MemM` that calls gets soundness only
+        # (completeness for memory callers is future work, docs/air-semantics.md).
+        assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M) or \
+            (name in SOUND_ONLY and re.search(rf'^theorem {decl}_sound ', text, re.M)), (ex, name)
     if certified:
         assert re.search(r'^theorem run_le_gen ', text, re.M)
 

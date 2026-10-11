@@ -27,6 +27,10 @@ MUTATIONS = [
     ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step'),
     ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step'),
     ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step'),
+    # A loop: the checked increment of the loop counter made wrapping. The loop's AIR also appears
+    # in its field and loop lemmas, so the mutation goes everywhere: the iteration lemma breaks.
+    ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
+     '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body'),
 ]
 
 
@@ -68,13 +72,18 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         for index, (ex, old, new, theorem) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
-            # Mutate the theorem's own function: the AIR def it names.
-            fn = theorem.rsplit('_', 1)[0]
-            start_def = source.index(f'def air_{fn} : Func :=')
-            end_def = source.index('\n\n', start_def)
-            block = source[start_def:end_def]
-            assert block.count(old) == 1, (ex, fn, old)
-            mutated = source[:start_def] + block.replace(old, new) + source[end_def:]
+            if '_loop' in theorem:
+                # A function with loops restates its AIR in its loop lemmas: mutate every copy.
+                assert source.count(old) >= 2, (ex, theorem, old)
+                mutated = source.replace(old, new)
+            else:
+                # Mutate the theorem's own function: the AIR def it names.
+                fn = theorem.rsplit('_', 1)[0]
+                start_def = source.index(f'def air_{fn} : Func :=')
+                end_def = source.index('\n\n', start_def)
+                block = source[start_def:end_def]
+                assert block.count(old) == 1, (ex, fn, old)
+                mutated = source[:start_def] + block.replace(old, new) + source[end_def:]
             mutant = Path(tmp) / f'Mutant{index}.lean'
             mutant.write_text(mutated)
             result = lean(mutant)
