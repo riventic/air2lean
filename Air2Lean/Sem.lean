@@ -464,16 +464,38 @@ def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) :=
     | _, _, _ => stuck
   | none => stuck
 
-/-- The base of item `k` of a plain pointer or a plain slice; a slice checks the index
-(`Zig.checkIndex`). -/
+/-- The item count of a pointer to an array or vector (`*[n]T`, `*@Vector(n, T)`), and whether a
+sentinel follows the items (`*[n:s]T`). A many-item pointer has no length. -/
+def countOf? (f : Func) (t : TyId) : Option (Nat × Bool) :=
+  match f.types[t]? with
+  | some (.ptr size _ c) =>
+    if size == "one" then
+      match f.types[c]? with
+      | some (.array n _ sentinel) => some (n, sentinel)
+      | some (.vector n _) => some (n, false)
+      | _ => none
+    else none
+  | _ => none
+
+/-- The bounds check of an item of a pointer to an array or vector: an index at or past its count
+is illegal behaviour (`Zig.checkIndex`; `Zig.checkSentinelIndex` with a sentinel). -/
+def checkCount (f : Func) (t : TyId) (k : BitVec 64) : MemM Unit :=
+  match countOf? f t with
+  | some (n, sentinel) =>
+    if sentinel then Zig.checkSentinelIndex (BitVec.ofNat 64 n) k else Zig.checkIndex (BitVec.ofNat 64 n) k
+  | none => pure ()
+
 def itemBase (f : Func) (env : Env) (v : Val) (k : BitVec 64) : MemM Zig.Ptr :=
   match operandTy env v with
   | some t =>
     if f.plainSlice t then do
       let (s, _) ← StateT.lift (sliceOperand f env v)
-      Zig.checkIndex s k
+      Zig.checkIndex s.len k
       pure s.ptr
-    else do pure (← StateT.lift (ptrOperand f env v)).1
+    else do
+      let (q, _) ← StateT.lift (ptrOperand f env v)
+      checkCount f t k
+      pure q
   | none => StateT.lift stuck
 
 /-- The size of a type, and the alignment of an item of it behind a pointer of alignment `a`
@@ -554,7 +576,9 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     let (q, a) ← StateT.lift (ptrOperand f env p)
     let k ← StateT.lift (indexOperand f env idx)
     match itemLayout f i.ty a with
-    | some (size, align) => loadAs f i.ty (q.elem size k) align
+    | some (size, align) => do
+      checkCount f ((operandTy env p).getD 0) k
+      loadAs f i.ty (q.elem size k) align
     | none => StateT.lift stuck
   -- An index at or past the length is illegal behaviour (`Zig.checkIndex`).
   | .sliceElemVal sv idx => do
@@ -562,7 +586,7 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     let k ← StateT.lift (indexOperand f env idx)
     match itemLayout f i.ty a with
     | some (size, align) => do
-      Zig.checkIndex s k
+      Zig.checkIndex s.len k
       loadAs f i.ty (s.ptr.elem size k) align
     | none => StateT.lift stuck
   -- `Zig.Slice` is the 64-bit slice: a `slice_len` of another `usize` is outside the fragment.
@@ -1566,6 +1590,14 @@ theorem errGet_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName �
 theorem errGetErr_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
     (Value.ofExcept g e).errGetErr = Value.errName <$> Zig.unwrapErr e := by cases e <;> rfl
 
+/-- A bounds check of an index known in range (a constant index of an array pointer, which the
+translator does not check again). -/
+theorem checkIndex_lt {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    Zig.checkIndex len i = pure () := by simp [Zig.checkIndex, h]
+
+theorem checkSentinelIndex_le {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
+    Zig.checkSentinelIndex len i = pure () := by simp [Zig.checkSentinelIndex, h]
+
 /-! ## Normalization lemmas for certificates -/
 
 namespace Cert
@@ -1647,7 +1679,8 @@ attribute [air_sem] execFunc argsOk valOk valOkIn errIn errUnionIn List.contains
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
   regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
-  Func.plainSlice sliceOperand itemBase itemLayout indexOperand Value.toSlice ptrProject_elem_zero
+  Func.plainSlice sliceOperand itemBase checkCount countOf? checkIndex_lt
+  checkSentinelIndex_le BitVec.toNat_ofNat Nat.reducePow Nat.reduceMod Nat.reduceLT Nat.reduceLeDiff itemLayout indexOperand Value.toSlice ptrProject_elem_zero
   ptrProject_elem_size_zero Nat.min_def ite_self Nat.reduceLeDiff
   Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
   free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self

@@ -344,7 +344,7 @@ to reads of `m₀`. -/
 def Holds (m₀ : Mem) (f : Func) (t : TyId) (s : Zig.Slice) (a : Nat) (items : Array Value) : Prop :=
   ∀ size al j m, itemLayout f t a = some (size, al) → UpToReads m₀ m →
     RelR (fun (p : Value × Mem) (v : Value) => p.1 = v ∧ UpToReads m₀ p.2)
-      ((do Zig.checkIndex s j; loadAs f t (s.ptr.elem size j) al).run m) (Zig.index items j)
+      ((do Zig.checkIndex s.len j; loadAs f t (s.ptr.elem size j) al).run m) (Zig.index items j)
 
 /-- The arguments of a run with the view `V`: no pointers; each viewed `arg` is a slice that
 holds the view's items in `m₀`, which are no pointers either. -/
@@ -1175,7 +1175,7 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
   -- An index at or past the length: `.illegal` on both sides.
   have hout : ∀ size al j m, ¬ j.toNat < s.len.toNat → arr.size = s.len.toNat →
       RelR (fun (p : Value × Mem) (v : Value) => p.1 = v ∧ UpToReads m₀ p.2)
-        ((do Zig.checkIndex s j; loadAs f t (s.ptr.elem size j) al).run m) (Zig.index (arr.map enc) j) := by
+        ((do Zig.checkIndex s.len j; loadAs f t (s.ptr.elem size j) al).run m) (Zig.index (arr.map enc) j) := by
     intro size al j m hj hsize
     have hidx : Zig.index (arr.map enc) j = throw .illegal := by
       unfold Zig.index; rw [dif_neg (by simp [hsize, hj])]

@@ -377,11 +377,9 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Arr
       let _ ← ptrVal a
       unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
   | .ptrAdd _ p n | .elemPtr p n => do
-    -- The semantics checks a slice item pointer's index (illegal behaviour past the length);
-    -- the translator does not.
-    if (sliceOf p).isSome then
-      throw s!"inst {i.id}: a slice item pointer (its index is unchecked in the generated code)"
-    let _ ← ptrVal p
+    -- `slice_elem_ptr`: both sides check the index against the length (`Zig.checkIndex`).
+    if (sliceOf p).isNone || i.op matches .ptrAdd .. then
+      let _ ← ptrVal p
     vals [n]
     unless typed (isIntTy f) n && f.plainPtr i.ty && ptr64 i.ty do
       throw s!"inst {i.id}: pointer arithmetic outside the fragment"
