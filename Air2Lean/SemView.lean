@@ -1,4 +1,5 @@
 import Air2Lean.Sem
+import ZigLean.Mem.Lemmas
 
 /-!
 # Pure-function slices: the view of a slice parameter
@@ -918,5 +919,380 @@ theorem execFunc_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
     | ret v => exact relR_pure ⟨rfl, hm, rfl⟩
     | _ => exact relR_stuck
   · exact relR_stuck
+
+/-! ## The items that `Zig.readSlice` reads are a view -/
+
+/-- No recorded access has observed an access of the running thread that it has not made yet: every
+entry's component of the running thread is at most that thread's own clock. Every memory that a run
+from `Mem.ofGlobals` reaches has this property (a thread's own component only grows, and another
+thread learns it only through a fork, join or release edge). -/
+def _root_.Zig.Mem.ClockWf (m : Mem) : Prop :=
+  ∀ e ∈ m.footprint, e.clock.get m.current ≤ (m.clocks[m.current]!).get m.current
+
+theorem VClock.get_bump (c : VClock) (t i : Nat) :
+    (VClock.bump c t).get i = if i = t then c.get t + 1 else c.get i := by
+  unfold VClock.bump VClock.get
+  generalize hc' : (if t < c.size then c else c ++ Array.replicate (t + 1 - c.size) 0) = c'
+  have hsz : t < c'.size := by
+    subst hc'; split
+    · assumption
+    · simp only [Array.size_append, Array.size_replicate]; omega
+  have hext : ∀ k : Nat, c'[k]?.getD 0 = c[k]?.getD 0 := by
+    intro k
+    subst hc'
+    split
+    · rfl
+    · rw [Array.getElem?_append]
+      split
+      · rfl
+      · rename_i hk
+        rw [Array.getElem?_eq_none (xs := c) (by omega)]
+        simp only [Array.getElem?_replicate]
+        split <;> rfl
+  show (c'.set! t (c'.getD t 0 + 1)).getD i 0 = _
+  simp only [Array.set!_eq_setIfInBounds, Array.getD_eq_getD_getElem?, Array.getElem?_setIfInBounds]
+  by_cases h : i = t
+  · subst h; simp only [↓reduceIte, hsz, Option.getD_some, hext]
+  · simp only [Ne.symm h, ↓reduceIte, hext, h]
+
+theorem VClock.le_bump_mono {a b : VClock} (t : Nat) (h : VClock.le a b = true) :
+    VClock.le (VClock.bump a t) (VClock.bump b t) = true := by
+  rw [VClock.le_iff] at h ⊢
+  intro i
+  rw [VClock.get_bump, VClock.get_bump]
+  split
+  · have := h t; omega
+  · exact h i
+
+theorem VClock.le_bump (a : VClock) (t : Nat) : VClock.le a (VClock.bump a t) = true := by
+  rw [VClock.le_iff]; intro i; rw [VClock.get_bump]; split <;> (try subst_vars) <;> omega
+
+theorem Result.map_ok_inv {α β : Type} {f : α → β} {x : Result α} {b : β}
+    (h : (f <$> x).run = some (.ok b)) : ∃ a, x.run = some (.ok a) ∧ f a = b := by
+  rw [← bind_pure_comp] at h
+  obtain ⟨a, ha, hb⟩ := Result.bind_ok h
+  cases hb
+  exact ⟨a, ha, rfl⟩
+
+/-- `mapM` of a lifted pure function over `Array.range n` in memory: the memory is unchanged and
+each item is the function's value. -/
+theorem mapM_range_ok {β : Type} (g : Nat → Result β) (n : Nat) (m m' : Mem) (arr : Array β)
+    (h : (((Array.range n).mapM (fun i => (liftM (g i) : MemM β))).run m).run = some (.ok (arr, m'))) :
+    m' = m ∧ arr.size = n ∧ ∀ j (hj : j < arr.size), (g j).run = some (.ok arr[j]) := by
+  rw [Array.mapM_eq_mapM_toList, Array.toList_range, StateT.run_map] at h
+  have hl : ∀ (l : List Nat) (r : List β) (m' : Mem),
+      ((l.mapM (fun i => (liftM (g i) : MemM β))).run m).run = some (.ok (r, m')) →
+      m' = m ∧ r.length = l.length ∧
+        ∀ j (hj : j < l.length) (hj' : j < r.length), (g l[j]).run = some (.ok r[j]) := by
+    intro l
+    induction l with
+    | nil =>
+      intro r m' hr
+      simp only [List.mapM_nil, StateT.run_pure] at hr
+      cases hr
+      exact ⟨rfl, rfl, fun j hj => absurd hj (by simp)⟩
+    | cons x l ih =>
+      intro r m' hr
+      rw [List.mapM_cons] at hr
+      simp only [StateT.run_bind, liftM, monadLift, MonadLift.monadLift, StateT.run_lift] at hr
+      obtain ⟨⟨b, m₂⟩, hb, hr⟩ := Result.bind_ok hr
+      obtain ⟨b', hb', hb2⟩ := Result.bind_ok hb
+      cases hb2
+      obtain ⟨⟨bs, m₃⟩, hbs, hr⟩ := Result.bind_ok hr
+      cases hr
+      obtain ⟨rfl, hlen, hall⟩ := ih bs m₃ hbs
+      refine ⟨rfl, by simp [hlen], fun j hj hj' => ?_⟩
+      cases j with
+      | zero => simpa using hb'
+      | succ j => simpa using hall j (by simp at hj; omega) (by simp at hj'; omega)
+  obtain ⟨⟨r, m''⟩, hr, hm⟩ := Result.map_ok_inv h
+  cases hm
+  obtain ⟨rfl, hlen, hall⟩ := hl _ r _ hr
+  simp only [List.length_range] at hlen
+  refine ⟨rfl, by simp [hlen], fun j hj => ?_⟩
+  simp only [List.size_toArray] at hj
+  have := hall j (by simp only [List.length_range]; omega) hj
+  simpa using this
+
+theorem Array.getElem!_set!_self {α : Type} [Inhabited α] (xs : Array α) (t : Nat) (v : α) :
+    (xs.set! t v)[t]! = if t < xs.size then v else xs[t]! := by
+  rw [Array.set!_eq_setIfInBounds]
+  split
+  · rename_i h; rw [getElem!_pos _ t (by simpa using h)]; simp
+  · rw [Array.setIfInBounds_eq_of_size_le (by omega)]
+
+theorem UpToReads.blocks {m₀ m : Mem} (h : UpToReads m₀ m) : m.blocks = m₀.blocks := by
+  have := congrArg Mem.blocks h.rest; exact this
+
+theorem UpToReads.current {m₀ m : Mem} (h : UpToReads m₀ m) : m.current = m₀.current := by
+  have := congrArg Mem.current h.rest; exact this
+
+/-- `m` after a read of `n` bytes at `b`/`o`, recorded by its running thread (`recordAccess`). -/
+def _root_.Zig.Mem.withRead (m : Mem) (b : BlockId) (o n : Nat) : Mem :=
+  let t := m.current
+  let c := VClock.bump (m.clocks[t]!) t
+  { m with clocks := m.clocks.set! t c, footprint := m.footprint.push ⟨t, c, b, o, n, .read⟩ }
+
+theorem UpToReads.solo {m₀ m : Mem} (h : UpToReads m₀ m) : m.solo = m₀.solo := by
+  have h1 := congrArg Mem.current h.rest
+  have h2 := congrArg Mem.threads h.rest
+  simp only at h1 h2
+  simp only [Mem.solo, h1, h2]
+
+/-- A successful `loadBytes`: the access, the race check, the bytes and the new memory. -/
+theorem loadBytes_ok {p : Ptr} {n al : Nat} {m m' : Mem} {bs : Array Byte}
+    (h : ((loadBytes p n al).run m).run = some (.ok (bs, m'))) :
+    ∃ b blk o, m.access p n al = pure (b, blk, o) ∧
+      raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none ∧
+      bs = blk.bytes.extract o (o + n) ∧ m' = m.withRead b o n := by
+  simp only [loadBytes, recordAccess, StateT.run_bind, StateT.run_get, pure_bind, liftM, monadLift,
+    MonadLift.monadLift, StateT.run_lift, bind_assoc] at h
+  obtain ⟨⟨b, blk, o⟩, hacc, h⟩ := Result.bind_ok h
+  split at h
+  · obtain ⟨_, hx, _⟩ := Result.bind_ok h
+    cases hx
+  · rename_i hrc
+    simp only [StateT.run_set, StateT.run_pure, pure_bind] at h
+    cases h
+    exact ⟨b, blk, o, hacc, hrc, rfl, rfl⟩
+
+theorem loadBytes_run {p : Ptr} {n al : Nat} {m : Mem} {b : BlockId} {blk : Block} {o : Nat}
+    (hacc : m.access p n al = pure (b, blk, o))
+    (hrc : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none) :
+    (loadBytes p n al).run m = pure (blk.bytes.extract o (o + n), m.withRead b o n) := by
+  simp only [loadBytes, recordAccess, StateT.run_bind, StateT.run_get, pure_bind, liftM, monadLift,
+    MonadLift.monadLift, StateT.run_lift, bind_assoc, hacc, hrc, StateT.run_set, StateT.run_pure]
+  rfl
+
+theorem throw_ne_pure {α : Type} (e : Zig.Error) (a : α) : (throw e : Result α) ≠ pure a := by
+  intro h; have := congrArg ExceptT.run h; cases this
+
+theorem access_eq {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block} {o : Nat} :
+    m.access p n al = pure (b, blk, o) ↔ p.block = some b ∧ m.blocks[b]? = some blk ∧
+      (blk.live = true ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % al = 0) ∧
+      o = p.off.toNat := by
+  unfold Mem.access
+  cases hpb : p.block with
+  | none => simp only [reduceCtorEq, false_and, iff_false]; exact throw_ne_pure _ _
+  | some b' =>
+    cases hblk : m.blocks[b']? with
+    | none =>
+      simp only [hblk]
+      constructor
+      · intro h; exact absurd h (throw_ne_pure _ _)
+      · rintro ⟨h1, h2, _⟩; cases h1; rw [hblk] at h2; cases h2
+    | some blk' =>
+      simp only [hblk]
+      split
+      · rename_i hc
+        constructor
+        · intro h; cases h; exact ⟨rfl, hblk, hc, rfl⟩
+        · rintro ⟨h1, h2, _, h4⟩; cases h1; rw [hblk] at h2; cases h2; subst h4; rfl
+      · rename_i hc
+        constructor
+        · intro h; cases h
+        · rintro ⟨h1, h2, h3, _⟩; cases h1; rw [hblk] at h2; cases h2; exact absurd h3 hc
+
+/-- An access of an item inside an accessed range. -/
+theorem access_item {m : Mem} {p : Ptr} {L sz A al j : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (hacc : m.access p (L * sz) A = pure (b, blk, o)) (hj : j < L) (hA : al ∣ A) (hal : al ∣ sz) :
+    m.access (p.add (sz * j)) sz al = pure (b, blk, o + sz * j) := by
+  obtain ⟨hb, hblk, ⟨hlive, h0, hend, hmod⟩, rfl⟩ := access_eq.1 hacc
+  have hjL : sz * j + sz ≤ L * sz := by
+    have : sz * (j + 1) ≤ sz * L := Nat.mul_le_mul_left sz hj
+    rw [Nat.mul_comm L sz]; rw [Nat.mul_add, Nat.mul_one] at this; exact this
+  have hoff : (p.off + (sz : Int) * (j : Int)).toNat = p.off.toNat + sz * j := by
+    have : ((sz * j : Nat) : Int) = (sz : Int) * (j : Int) := by push_cast; rfl
+    omega
+  refine access_eq.2 ⟨hb, hblk, ⟨hlive, ?_, ?_, ?_⟩, ?_⟩
+  · simp only [Ptr.add]; omega
+  · simp only [Ptr.add]; push_cast at hend ⊢; omega
+  · simp only [Ptr.add]
+    rw [hoff, ← Nat.add_assoc]
+    apply Nat.mod_eq_zero_of_dvd
+    exact Nat.dvd_add (Nat.dvd_trans hA (Nat.dvd_of_mod_eq_zero hmod)) (Nat.dvd_mul_right_of_dvd hal j)
+  · simp only [Ptr.add]; rw [hoff]
+
+theorem access_congr {m m' : Mem} (h : m.blocks = m'.blocks) (p : Ptr) (n al : Nat) :
+    m.access p n al = m'.access p n al := by
+  unfold Mem.access; rw [h]
+
+theorem Result.eq_pure_of_run {α : Type} {x : Result α} {a : α} (h : x.run = some (.ok a)) : x = pure a :=
+  ExceptT.ext h
+
+theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {al : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    {v : α} (hacc : m.access p (Enc.size α) al = pure (b, blk, o))
+    (hrc : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o (Enc.size α) .read = none)
+    (hdec : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α).run = some (.ok v)) :
+    (Zig.load α al p).run m = pure (v, m.withRead b o (Enc.size α)) := by
+  unfold Zig.load
+  rw [StateT.run_bind, loadBytes_run hacc hrc]
+  simp only [pure_bind, StateT.run_bind, StateT.run_get, liftM, monadLift, MonadLift.monadLift,
+    StateT.run_lift, decodeLoad_of_decode (Result.eq_pure_of_run hdec)]
+
+theorem Array.set!_set! {α : Type} (xs : Array α) (t : Nat) (a b : α) :
+    (xs.set! t a).set! t b = xs.set! t b := by
+  simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds_setIfInBounds]
+
+theorem Array.set!_eq_set!_getElem! {α : Type} [Inhabited α] (xs : Array α) (t : Nat) (b : α) :
+    xs.set! t b = xs.set! t ((xs.set! t b)[t]!) := by
+  rw [Array.getElem!_set!_self]
+  split
+  · rfl
+  · rename_i h
+    simp only [Array.set!_eq_setIfInBounds]
+    rw [Array.setIfInBounds_eq_of_size_le (by omega), Array.setIfInBounds_eq_of_size_le (by omega)]
+
+theorem UpToReads.clocks_size {m₀ m : Mem} (h : UpToReads m₀ m) : m.clocks.size = m₀.clocks.size := by
+  rw [h.clocks]; simp
+
+theorem UpToReads.withRead {m₀ m : Mem} (h : UpToReads m₀ m) (b : BlockId) (o n : Nat) :
+    UpToReads m₀ (m.withRead b o n) := by
+  have hcur := h.current
+  have hsize := h.clocks_size
+  obtain ⟨rs, hfp, hrs⟩ := h.reads
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact h.rest
+  · refine ⟨rs.push ⟨m.current, VClock.bump (m.clocks[m.current]!) m.current, b, o, n, .read⟩, ?_, ?_⟩
+    · simp only [Mem.withRead, hfp, Array.push_append]
+    · intro e he
+      simp only [Array.mem_push] at he
+      rcases he with he | he
+      · exact hrs e he
+      · subst he; exact ⟨hcur, rfl⟩
+  · simp only [Mem.withRead, hcur]
+    rw [h.clocks, Array.set!_set!]
+    exact Array.set!_eq_set!_getElem! _ _ _
+  · simp only [Mem.withRead, hcur]
+    rw [Array.getElem!_set!_self]
+    split
+    · exact VClock.le_trans (hcur ▸ h.own) (VClock.le_bump _ _)
+    · exact hcur ▸ h.own
+
+/-- A read of a sub-range of a range that `m₀`'s race check accepted is accepted in a memory up to
+reads of `m₀` (`Mem.ClockWf`: no entry has seen an access of the running thread after `m₀`). -/
+theorem raceCheck_sub {m₀ m : Mem} (hm : UpToReads m₀ m) (hwf : m₀.ClockWf) {b : BlockId} {o n o' n' : Nat}
+    (h0 : raceCheck m₀ (VClock.bump (m₀.clocks[m₀.current]!) m₀.current) b o n .read = none)
+    (hsub : o ≤ o' ∧ o' + n' ≤ o + n) :
+    raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o' n' .read = none := by
+  unfold raceCheck at h0 ⊢
+  rw [hm.solo]
+  split
+  · rfl
+  · rename_i hsolo
+    rw [if_neg hsolo] at h0
+    obtain ⟨rs, hfp, hrs⟩ := hm.reads
+    unfold raceAt at h0 ⊢
+    rw [hfp, Array.findSome?_append, Option.or_eq_none_iff]
+    simp only [Array.findSome?_eq_none_iff] at h0 ⊢
+    have hcur := hm.current
+    refine ⟨fun e he => ?_, fun e he => ?_⟩
+    · have := h0 e he
+      by_cases hr : racePair e.kind .read = none
+      · split <;> simp_all
+      · split
+        · rename_i hc
+          exfalso
+          rw [if_pos] at this
+          · exact hr this
+          simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc ⊢
+          obtain ⟨⟨⟨hb, h1⟩, h2⟩, hconc⟩ := hc
+          refine ⟨⟨⟨hb, by omega⟩, by omega⟩, ?_⟩
+          -- not concurrent with the earlier clock either
+          unfold VClock.concurrent at hconc ⊢
+          simp only [Bool.and_eq_true, Bool.not_eq_true'] at hconc ⊢
+          have hwfe := hwf e he
+          constructor
+          · -- ¬ e ≤ bump c₀: else e ≤ c' (monotone)
+            cases hle : VClock.le e.clock (VClock.bump (m₀.clocks[m₀.current]!) m₀.current)
+            · rfl
+            · exfalso
+              have h1 : VClock.le (VClock.bump (m₀.clocks[m₀.current]!) m₀.current)
+                  (VClock.bump (m.clocks[m.current]!) m.current) = true := by
+                rw [hcur]; exact VClock.le_bump_mono _ hm.own
+              rw [VClock.le_trans hle h1] at hconc; exact absurd hconc.1 (by simp)
+          · -- ¬ bump c₀ ≤ e: its own component is past e's (`Mem.ClockWf`)
+            cases hle : VClock.le (VClock.bump (m₀.clocks[m₀.current]!) m₀.current) e.clock
+            · rfl
+            · exfalso
+              have := (VClock.le_iff _ _).1 hle m₀.current
+              rw [VClock.get_bump, if_pos rfl] at this
+              omega
+        · rfl
+    · obtain ⟨_, hk⟩ := hrs e he
+      have : racePair e.kind .read = none := by rw [hk] <;> rfl
+      split <;> simp_all
+
+/-- The items that `Zig.readSlice` reads from `m₀` (a call's materialization of a `[]const T`
+argument) are a view of the slice: every later item read of a memory up to reads of `m₀` gives
+the same item (`Holds`). The read's memory is up to reads of `m₀` too. `hload` and `hlay`
+connect the AIR item type with the `Enc` instance; a certificate proves them by evaluation. -/
+theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t : TyId} {s : Zig.Slice}
+    {a A : Nat} {arr : Array α} (enc : α → Value)
+    (hread : ((Zig.readSlice α A s).run m₀).run = some (.ok (arr, m₁)))
+    (hwf : m₀.ClockWf)
+    (hload : ∀ q al, loadAs f t q al = enc <$> Zig.load α al q)
+    (hlay : ∀ size al, itemLayout f t a = some (size, al) →
+      size = Enc.size α ∧ 0 < size ∧ al ∣ A ∧ al ∣ size) :
+    Holds m₀ f t s a (arr.map enc) ∧ arr.size = s.len.toNat ∧ UpToReads m₀ m₁ := by
+  -- An index at or past the length: `.illegal` on both sides.
+  have hout : ∀ size al j m, ¬ j.toNat < s.len.toNat → arr.size = s.len.toNat →
+      RelR (fun (p : Value × Mem) (v : Value) => p.1 = v ∧ UpToReads m₀ p.2)
+        ((do Zig.checkIndex s j; loadAs f t (s.ptr.elem size j) al).run m) (Zig.index (arr.map enc) j) := by
+    intro size al j m hj hsize
+    have hidx : Zig.index (arr.map enc) j = throw .illegal := by
+      unfold Zig.index; rw [dif_neg (by simp [hsize, hj])]
+    rw [hidx]
+    simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind]
+    rfl
+  unfold Zig.readSlice at hread
+  by_cases hL : s.len.toNat = 0
+  · rw [if_pos hL] at hread
+    simp only [StateT.run_pure] at hread
+    cases hread
+    have hsize : (#[] : Array α).size = s.len.toNat := by simp [hL]
+    exact ⟨fun size al j m _ _ => hout size al j m (by omega) hsize, hsize, UpToReads.refl _⟩
+  rw [if_neg hL] at hread
+  by_cases hz : Enc.size α = 0
+  · rw [if_pos hz] at hread
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind] at hread
+    obtain ⟨rfl, hsize, _⟩ := mapM_range_ok _ _ _ _ _ hread
+    refine ⟨fun size al j m hil _ => ?_, hsize, UpToReads.refl _⟩
+    obtain ⟨rfl, hpos, _⟩ := hlay size al hil
+    omega
+  rw [if_neg hz] at hread
+  simp only [StateT.run_bind] at hread
+  obtain ⟨⟨bs, m'⟩, hlb, hmap⟩ := Result.bind_ok hread
+  obtain ⟨b, blk, o, hacc, hrc, rfl, rfl⟩ := loadBytes_ok hlb
+  obtain ⟨rfl, hsize, hdec⟩ := mapM_range_ok _ _ _ _ _ hmap
+  refine ⟨?_, hsize, (UpToReads.refl m₀).withRead b o _⟩
+  intro size al j m hil hm
+  obtain ⟨rfl, hpos, hA, hal⟩ := hlay size al hil
+  by_cases hj : j.toNat < s.len.toNat
+  · have hj' : j.toNat < arr.size := by omega
+    have hacc' : m.access (s.ptr.elem (Enc.size α) j) (Enc.size α) al = pure (b, blk, o + Enc.size α * j.toNat) := by
+      rw [access_congr hm.blocks]
+      exact access_item hacc hj hA hal
+    have hjn : (j.toNat + 1) * Enc.size α ≤ s.len.toNat * Enc.size α := Nat.mul_le_mul_right _ hj
+    have hrc' := raceCheck_sub hm hwf hrc
+      (o' := o + Enc.size α * j.toNat) (n' := Enc.size α)
+      ⟨Nat.le_add_right _ _, by rw [Nat.add_assoc, Nat.mul_comm (Enc.size α) j.toNat]; rw [Nat.add_mul, Nat.one_mul] at hjn; omega⟩
+    have hd := hdec j.toNat hj'
+    rw [Array.extract_extract] at hd
+    have hmin : Min.min (o + (j.toNat + 1) * Enc.size α) (o + s.len.toNat * Enc.size α) =
+        o + Enc.size α * j.toNat + Enc.size α := by
+      rw [Nat.add_mul, Nat.one_mul] at hjn ⊢
+      rw [Nat.mul_comm (Enc.size α)]
+      generalize j.toNat * Enc.size α = P at hjn ⊢
+      generalize s.len.toNat * Enc.size α = Q at hjn ⊢
+      omega
+    rw [hmin, Nat.mul_comm j.toNat] at hd
+    have hidx : Zig.index (arr.map enc) j = pure (enc arr[j.toNat]) := by
+      unfold Zig.index; rw [dif_pos (by simpa using hj')]; simp
+    rw [hidx]
+    simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind, hload,
+      StateT.run_map, load_run hacc' hrc' hd]
+    exact ⟨rfl, hm.withRead _ _ _⟩
+  · exact hout _ _ j m hj hsize
 
 end Air2Lean.Sem
