@@ -57,6 +57,15 @@ and stops if a tracked generated module is not a fresh translation of its commit
 ([generated-code.md](generated-code.md#generated-module-integrity)); the guarded worker
 binds that script's identity as an input.
 
+A tree with uncommitted tracked changes is refused unless `--allow-dirty`
+(`AIR2LEAN_RECEIPT_ALLOW_DIRTY=1` for `check.sh`) is given; the receipt then records
+`tree.dirty_allowed: true`. Release consumers refuse such a receipt:
+`proof-receipt.py verify --release`, `artifact-manifest.py check-manifest` for a chained receipt
+(unless its own `--allow-dirty`), and `scripts/release-record.py`, which rejects a workflow whose
+gate permits a dirty-tree receipt. CI never needs the permission: no verification step writes a
+tracked file ([generated-code.md](generated-code.md#check-trees)), and its last step fails if
+`git status --porcelain` is not empty.
+
 Tool, artifact, lock, attempt and receipt paths must be absolute and physical, with no
 symlink components. Every tracked source file is fingerprinted, including dirty/staged
 contents. A tracked source alias records its literal relative link and the content identity
@@ -116,8 +125,9 @@ immediately rather than being checked after the whole inventory is consumed.
 python3 scripts/proof-receipt.py verify "$FRESH_ATTEMPT"
 ```
 
-Exit 0 reports `status: current`, `checking: not_rerun`, and
-`authentication: not_attested`. Exit 2 means evidence is unavailable, invalid or stale;
+Exit 0 reports `status: current`, `checking: not_rerun`,
+`authentication: not_attested` and `tree` (`clean` or `dirty-allowed`); with `--release` a
+`dirty-allowed` receipt exits 2. Exit 2 means evidence is unavailable, invalid or stale;
 read stderr. Verification rereads the source, tool/library, compiled/profile and receipt
 artifact inventories and reapplies the policy. It does not run Lake or Lean, rebuild
 proofs, assert a digital signature, or turn an incomplete attempt into success.
@@ -127,7 +137,10 @@ are conservative byte identities, not semantic fingerprints or dependency-aware 
 `after.json` names each tracked generated `Gen.lean` and its raw byte identity. A valid
 first-line profile record remains attached to that particular generated module/file.
 No header means `legacy-or-unannotated`; a run label cannot relabel it as a qualified
-schema12 export. Different historical translations remain separately identified.
+schema12 export. Most committed translations carry no header (it is host-specific, and
+verification no longer writes it into the checkout), so a receipt records them as
+`legacy-or-unannotated`; the profile validated for the run is in `scripts/check.sh`'s
+`.lake/check-reports/<version>/<example>.json`, which the receipt does not yet bind. Different historical translations remain separately identified.
 The existing audit names theorem modules and contains their dependency graph; the
 receipt does not infer theorem domains or all-schedules properties from their names.
 
@@ -139,10 +152,14 @@ boundaries and allowed assumptions remain in `audit.json`. Ordinary theorem hypo
 and property domains require reading the theorem and its reviewed documentation.
 
 This is evidence about generated Lean and its checked environment. The receipt states
-`source_correspondence: not_attested` and `native_adequacy: not_attested`. Receipt schema 2
+`source_correspondence: not_attested` and `native_adequacy: not_attested`. Receipt schema 3
 also carries `float_semantics`: the audit's label summary plus each stated numerical theorem's
 label (`ieee`, `compiler-rt@<versions>` or `abstract-spec`), with
-`binary_correspondence: not_claimed` (`docs/float-semantics.md`). It does not
+`binary_correspondence: not_claimed` (`docs/float-semantics.md`), and `caller_obligations`:
+each audited theorem whose kernel dependency graph reaches a generated definition with a
+caller-supplied `std.mem.Allocator` or `std.Io` parameter, with the premises it then rests on
+([ALC-09](premises.md#alc-09), [IOM-01](premises.md#iom-01); the `-- air2lean-premises:`
+markers). Such a theorem is about callers that pass the model allocator or `Io`. It does not
 prove original Zig export, normalization/emission preservation, backend lowering,
 shipping native binaries, foreign behavior, fairness, termination or exhaustive testing.
 A scoped audit is not an all-shipped audit, and one selected translation does not qualify

@@ -1,7 +1,8 @@
 //! air2lean: write the AIR of one function as JSON.
 //! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
 //! Safe short names use `<dir>/<fully qualified name>.json`; other names use a SHA-256
-//! basename (see docs/export-names.md). JSON retains the full name.
+//! basename (see docs/export-names.md), as does every function of a module other than `root`
+//! and `std`. JSON retains the full name and its module (`identity.zig`).
 //! `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
 //! to functions whose fully qualified name starts with one of the prefixes. Instructions outside
 //! the air2lean subset are written with their tag and `"unsupported": true`, so the reader can
@@ -21,6 +22,7 @@ const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
+const Identity = @import("identity.zig");
 
 /// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.0). The
 /// compiler is built by a host zig of its own version (`zig-patch/build.sh`), so
@@ -505,7 +507,7 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
 // Exclusive creation protects fresh files. Repeated analysis may export the same
 // function again: permit this only after validating its existing full JSON name,
 // without truncating first. The advisory lock coordinates cooperating exporters.
-fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8) !Compat.File {
+fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8, module: []const u8) !Compat.File {
     return Compat.createFile(pt, dir, name) catch |err| {
         if (err != error.PathAlreadyExists) return err;
         // Reject stable nonregular paths before a potentially blocking open.
@@ -528,6 +530,9 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
         if (parsed.value != .object) return error.OutputIdentityCollision;
         const identity = parsed.value.object.get("name") orelse return error.OutputIdentityCollision;
         if (identity != .string or !std.mem.eql(u8, identity.string, fqn)) return error.OutputIdentityCollision;
+        // The module completes the identity (docs/air-json.md §Identity).
+        const existing_module = parsed.value.object.get("module") orelse return error.OutputIdentityCollision;
+        if (existing_module != .string or !std.mem.eql(u8, existing_module.string, module)) return error.OutputIdentityCollision;
         try Compat.truncateFile(pt, file);
         return file;
     };
@@ -555,9 +560,15 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     defer Compat.closeDir(pt, &dir);
     var arena = std.heap.ArenaAllocator.init(zcu.gpa);
     defer arena.deinit();
+    const module = Identity.navModule(zcu, func.owner_nav);
+    const storage = Identity.storageName(arena.allocator(), module, fqn) catch |err| {
+        std.log.warn("air2lean: no JSON for {s}: {s}", .{ fqn, @errorName(err) });
+        return;
+    };
     var name_buf: [output_name_capacity]u8 = undefined;
-    const file_name = outputFileName(fqn, &name_buf);
-    const file = openOwnedOutput(pt, dir, file_name, fqn) catch |err| {
+    const file_name = outputFileName(storage, &name_buf);
+    Identity.claim(zcu, .output, "", file_name, @intFromEnum(func.owner_nav));
+    const file = openOwnedOutput(pt, dir, file_name, fqn, module) catch |err| {
         std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
     };
@@ -567,7 +578,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
 
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
     // A partly written file is invalid JSON; say which one, like the open failures above.
-    w.writeFunc(fqn, Type.fromInterned(func.ty), func.owner_nav) catch |err| {
+    w.writeFunc(fqn, Type.fromInterned(func.ty), func) catch |err| {
         std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
         return;
     };
@@ -593,6 +604,8 @@ const W = struct {
     /// The globals that pointer constants point into, in first-encounter order: the `globals`
     /// table. Grows while `writeFunc` drains it, like `queue`.
     globals: std.ArrayListUnmanaged(Global) = .empty,
+    /// The extern functions this body calls, in first-encounter order: the `externs` table.
+    externs: std.ArrayListUnmanaged(InternPool.Index) = .empty,
 
     const Global = union(enum) {
         nav: InternPool.Nav.Index,
@@ -666,7 +679,8 @@ const W = struct {
         try w.j.endObject();
     }
 
-    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, owner_nav: InternPool.Nav.Index) Error!void {
+    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, func: InternPool.Key.Func) Error!void {
+        const owner_nav = func.owner_nav;
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
@@ -680,8 +694,11 @@ const W = struct {
         try w.writeProfile(owner_nav);
         try w.field("name");
         try w.j.write(fqn);
+        try w.field("module");
+        try w.j.write(Identity.navModule(zcu, owner_nav));
         try w.field("src");
         try w.writeSrc(owner_nav);
+        try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
         const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
@@ -690,8 +707,26 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
+        // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
+        // program can resolve to (docs/air-json.md §Extern calls).
+        if (w.exportedName(owner_nav)) |symbol| {
+            try w.field("export");
+            try w.j.beginObject();
+            try w.field("name");
+            try w.j.write(symbol);
+            try w.field("cc");
+            try w.j.write(@tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc));
+            try w.j.endObject();
+        }
         try w.field("body");
         try w.writeBody(w.air.getMainBody());
+        // Only a function that calls an extern function has externs.
+        if (w.externs.items.len > 0) {
+            try w.field("externs");
+            try w.j.beginArray();
+            for (w.externs.items) |e| try w.writeExternEntry(ip.indexToKey(e).@"extern");
+            try w.j.endArray();
+        }
         // Only a function with a pointer constant has globals.
         if (w.globals.items.len > 0) {
             try w.field("globals");
@@ -710,6 +745,42 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
+    /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
+    /// unbound, which the translator rejects.
+    fn exportedName(w: *W, nav_index: InternPool.Nav.Index) ?[]const u8 {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        const nav = ip.getNav(nav_index);
+        const analysis = nav.analysis orelse return null;
+        const inst = analysis.zir_index.resolve(ip) orelse return null;
+        const zir = zcu.navFileScope(nav_index).zir orelse return null;
+        if (zir.getDeclaration(inst).linkage != .@"export") return null;
+        return nav.name.toSlice(ip);
+    }
+
+    /// One `externs` entry: an extern function's linker identity and full function type.
+    fn writeExternEntry(w: *W, e: InternPool.Key.Extern) Error!void {
+        const ip = &w.pt.zcu.intern_pool;
+        const fn_info = ip.indexToKey(e.ty).func_type;
+        try w.j.beginObject();
+        try w.field("name");
+        try w.j.write(e.name.toSlice(ip));
+        try w.field("library");
+        try w.j.write(e.lib_name.toSlice(ip));
+        try w.field("cc");
+        try w.j.write(@tagName(fn_info.cc));
+        try w.field("params");
+        try w.j.beginArray();
+        for (fn_info.param_types.get(ip)) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
+        try w.j.endArray();
+        try w.field("ret");
+        try w.writeTypeRef(Type.fromInterned(fn_info.return_type));
+        try w.field("varargs");
+        try w.j.write(fn_info.is_var_args);
+        try w.j.endObject();
+    }
+
     fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
         return w.air.instructions.items(.data)[@intFromEnum(inst)];
     }
@@ -722,6 +793,13 @@ const W = struct {
 
     fn field(w: *W, name: []const u8) Error!void {
         try w.j.objectField(name);
+    }
+
+    /// The content-addressed key of a generic instance (`Identity.instanceKey`), if it has one.
+    fn writeInstanceKey(w: *W, name: []const u8, f: InternPool.Key.Func) Error!void {
+        const key = Identity.instanceKey(w.pt.zcu, w.gpa, f) orelse return;
+        try w.field(name);
+        try w.j.write(key[0..]);
     }
 
     fn writeInst(w: *W, inst: Air.Inst.Index) Error!void {
@@ -1274,6 +1352,9 @@ const W = struct {
                 .func => |f| {
                     try w.field("func");
                     try w.j.write(ip.getNav(f.owner_nav).fqn.toSlice(ip));
+                    try w.field("module");
+                    try w.j.write(Identity.navModule(zcu, f.owner_nav));
+                    try w.writeInstanceKey("instance_key", f);
                     try w.field("noreturn");
                     try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
                     // A generic instantiation (e.g. `std.Thread.spawn`'s `function` comptime
@@ -1287,12 +1368,27 @@ const W = struct {
                                 .func => |cf| {
                                     try w.field("comptime_fn");
                                     try w.j.write(ip.getNav(cf.owner_nav).fqn.toSlice(ip));
+                                    try w.field("comptime_fn_module");
+                                    try w.j.write(Identity.navModule(zcu, cf.owner_nav));
+                                    try w.writeInstanceKey("comptime_fn_instance_key", cf);
                                     break;
                                 },
                                 else => {},
                             }
                         }
                     }
+                },
+                // An extern function: its symbol; the `externs` table has its declaration.
+                .@"extern" => |e| if (ip.isFunctionType(e.ty)) {
+                    try w.field("extern");
+                    try w.j.write(e.name.toSlice(ip));
+                    try w.field("noreturn");
+                    try w.j.write(Type.fromInterned(e.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
+                    if (std.mem.indexOfScalar(InternPool.Index, w.externs.items, ip_index) == null)
+                        try w.externs.append(w.gpa, ip_index);
+                } else {
+                    try w.field("val");
+                    try w.writeFmt(Compat.fmtValue(w.pt, val));
                 },
                 .err => |e| {
                     try w.field("err");
@@ -1573,8 +1669,13 @@ const W = struct {
         switch (g) {
             .nav => |nav| {
                 const info = Compat.navInfo(zcu, nav);
+                const name = ip.getNav(nav).fqn.toSlice(ip);
+                const module = Identity.navModule(zcu, nav);
+                Identity.claim(zcu, .global, module, name, @intFromEnum(nav));
                 try w.field("name");
-                try w.j.write(ip.getNav(nav).fqn.toSlice(ip));
+                try w.j.write(name);
+                try w.field("module");
+                try w.j.write(module);
                 try w.field("ty");
                 try w.writeTypeRef(Type.fromInterned(info.ty));
                 try w.field("const");
@@ -1607,6 +1708,19 @@ const W = struct {
             try w.queue.append(w.gpa, ty.toIntern());
         }
         return gop.value_ptr.*;
+    }
+
+    /// The `name` and `module` of a struct, enum or union type entry: an identity of this
+    /// type only.
+    fn writeTypeName(w: *W, ty: Type) Error!void {
+        const zcu = w.pt.zcu;
+        const name = Compat.containerTypeName(ty, &zcu.intern_pool);
+        const module = Identity.typeModule(zcu, ty);
+        Identity.claim(zcu, .type, module, name, @intFromEnum(ty.toIntern()));
+        try w.field("name");
+        try w.j.write(name);
+        try w.field("module");
+        try w.j.write(module);
     }
 
     /// Write one full type entry (this type's array element in `types`). Child types are
@@ -1652,6 +1766,10 @@ const W = struct {
                 try w.j.write(info.flags.is_volatile);
                 try w.field("allowzero");
                 try w.j.write(info.flags.is_allowzero);
+                // Every pointer names its address space (`generic` for ordinary memory), so
+                // `*addrspace(.gs) T` cannot be read as a generic pointer.
+                try w.field("address_space");
+                try w.j.write(@tagName(info.flags.address_space));
                 try w.field("sentinel");
                 try w.j.write(info.sentinel != .none);
                 // allocSentinel(u8, n, s): the result pointer type contains the exact
@@ -1749,8 +1867,7 @@ const W = struct {
                 const is_tuple = ty.isTuple(zcu);
                 try w.j.write(if (is_tuple) "tuple" else "struct");
                 if (!is_tuple) {
-                    try w.field("name");
-                    try w.j.write(Compat.containerTypeName(ty, ip));
+                    try w.writeTypeName(ty);
                     try w.field("layout");
                     try w.j.write(@tagName(ty.containerLayout(zcu)));
                 }
@@ -1774,6 +1891,11 @@ const W = struct {
                     }
                     try w.field("ty");
                     try w.writeTypeRef(ty.fieldType(i, zcu));
+                    // A comptime field has no runtime storage (its offset overlaps others).
+                    if (ty.structFieldIsComptime(i, zcu)) {
+                        try w.field("comptime");
+                        try w.j.write(true);
+                    }
                     if (offsets) {
                         try w.field("offset");
                         try w.j.write(ty.structFieldOffset(i, zcu));
@@ -1784,8 +1906,7 @@ const W = struct {
             },
             .@"enum" => {
                 try w.j.write("enum");
-                try w.field("name");
-                try w.j.write(Compat.containerTypeName(ty, ip));
+                try w.writeTypeName(ty);
                 try w.field("tag");
                 try w.writeTypeRef(Compat.enumTagType(ty, zcu));
                 try w.field("exhaustive");
@@ -1805,8 +1926,7 @@ const W = struct {
             },
             .@"union" => {
                 try w.j.write("union");
-                try w.field("name");
-                try w.j.write(Compat.containerTypeName(ty, ip));
+                try w.writeTypeName(ty);
                 try w.field("layout");
                 try w.j.write(@tagName(ty.containerLayout(zcu)));
                 if (!Compat.hasFields(zcu, ty)) {

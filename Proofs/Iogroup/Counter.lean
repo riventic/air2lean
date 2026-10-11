@@ -1,6 +1,8 @@
+import ZigLean.Conc.Unroll
 import Proofs.Iogroup.Gen
 import ZigLean.Conc.LockRules
 import ZigLean.Conc.Share
+import ZigLean.Witness
 
 /-!
 # `groupCounter` over all schedules
@@ -29,6 +31,9 @@ number of tasks that did their increment (`R`). This file proves the rest:
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Iogroup Assn
 
 namespace Iogroup.GroupCounter
+
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+attribute [local irreducible] Proto.WP
 
 /-- Where a thread is, outside the lock's code. -/
 inductive Ph where
@@ -196,7 +201,13 @@ theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
 
 /-- The word: `L.ptr`. -/
-theorem mptr : ((cPtr.add 16).add 0).add 0 = L.ptr := rfl
+theorem mptr : cPtr.add 16 = L.ptr := rfl
+
+/-- A field pointer of the 24-byte `Counter` (block 0) is formed (`ptrProject`, MM-3). -/
+theorem projC {m : Mem} (hb : BlkOk m) {k : Nat} (hk : k ≤ 24) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
 
 /-! ## `lock` -/
 
@@ -625,13 +636,16 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  rw [show cPtr.add 0 = cPtr from rfl]
+  refine WP.bind (WP.callMC_ptrProject (projC hi.2.blk (k := 16) (by decide)) ?_)
+  dsimp only
   -- the read of `io`
   refine WP.bind (wp_io hi hc ht hjt fun m₁ hc₁ ht₁ hi₁ => ?_)
   -- `lock`
   refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t (gTask false) rfl _ G m₁ d hi₁)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
   have hi₂' : proto.inv (upd G₂ t (gHold false hL)) m₂ := hi₂
+  refine WP.bind (WP.callMC_ptrProject (projC hi₂'.2.blk (k := 20) (by decide)) ?_)
+  dsimp only
   -- the load of the counter
   refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
   have hx₂ : (fun u => (upd G₂ t (gHold false hL) u).2) t = .task false := by
@@ -656,6 +670,8 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]) fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
   -- the read of `io`
   have hl₄ := hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))
+  refine WP.bind (WP.callMC_ptrProject (projC hi₄.2.blk (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold true hQ') rfl _ G₂ m₅ d₂ hi₅)))
@@ -1249,21 +1265,21 @@ theorem take_run {m : Mem} (hg : m.groups = grp 3) :
     show ((grp 3).filter (·.1 == gPtr)).map (·.2) = #[1, 2, 3] by decide +kernel]
   rfl
 
-theorem main_spec (io : Io) (d : Nat) :
-    proto.WP 0 (groupCounter io) QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
+    proto.WP 0 (groupCounter io) QM G0 { mem0 σ with current := 0 } d := by
   unfold groupCounter
   -- the `Counter`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 24 8 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
   -- the `Io.Group`: block 1
   have ho₁' : Owned (upd (fun _ => Heap.empty) 0 h₁) m₁ := ho₁
   refine WP.bind (WP.liftMem_owned (alloc_next (R := bytesAt cPtr A 24 .stack
-    (Array.replicate 24 .undef)) 16 8 (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (Array.replicate 24 .undef)) 16 8 (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact hb₁) fun s8 m₂ h₂ hr₂ ho₂ hq₂ hs₂ hm₂ hd₂ => ?_)
   rw [upd_upd] at ho₂
   obtain ⟨rfl, -⟩ := alloc_ok hr₂
@@ -1292,20 +1308,34 @@ theorem main_spec (io : Io) (d : Nat) :
       ((hI ∪ (hW ∪ hC)) ∪ hG) := ⟨_, hG, d0G, rfl, ⟨hI, hW ∪ hC, dI, rfl, hI₁, hW, hC, dWC, rfl, hW₁, hC₁⟩, hbG⟩
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr) (A := A) (S := 24) (K := .stack)
     (k := 0) (a := 8) io rfl (by decide) (by rw [hsI]; decide) (by simp [cPtr]; omega)
-    (by decide)).frame.frame) ho₂ hc₂ (by rw [hs₂.threads, hs₁.threads]; decide)
+    (by decide)).frame.frame) ho₂ hc₂ (by rw [hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact F₂) fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  -- `&counter.mutex` (`ptrProject`, MM-3): owned `io` bytes of the 24-byte block
+  have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left F₃ hs₃'
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left Fc hsc
+  refine WP.bind (WP.callMC_ptrProject (bytesAt_ptrProject_block Fc hsc (k := 16)
+    (by rw [writeBytes_size _ _ _ (by simp [enc_io, hsI])]; omega) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr.add 16) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) mutex0 (by rw [enc_mutex, enc_u32]; rfl) rfl (by decide)
     (by rw [hsW]; decide) (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL.frame) ho₃
-    (hs₃.current.trans hc₂) (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide)
+    (hs₃.current.trans hc₂) (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact F₃) fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
   rw [upd_upd] at ho₄
+  -- `&counter.count` (`ptrProject`, MM-3): owned `io` bytes of the 24-byte block
+  have hs₄' : h₄.Sub m₄.heap := by simpa [upd_self] using ho₄.sub 0
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left F₄ hs₄'
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left Fc hsc
+  refine WP.bind (WP.callMC_ptrProject (bytesAt_ptrProject_block Fc hsc (k := 20)
+    (by rw [writeBytes_size _ _ _ (by simp [enc_io, hsI])]; omega) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 16).add 4) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsC]; decide)
     (by simp [cPtr, Ptr.add]; omega) (by decide)).frameL.frameL.frame) ho₄
     (hs₄.current.trans (hs₃.current.trans hc₂))
-    (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₄)
+    (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₄)
     fun _ m₅ h₅ _ ho₅ F₅ hs₅ _ _ => ?_)
   rw [upd_upd] at ho₅
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
@@ -1313,7 +1343,7 @@ theorem main_spec (io : Io) (d : Nat) :
     (k := 0) (a := 8) group0 enc_group rfl (by decide) (by rw [hsG]; decide)
     (by simp [gPtr]; omega) (by decide)).frameL) ho₅
     (hs₅.current.trans (hs₄.current.trans (hs₃.current.trans hc₂)))
-    (by rw [hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
+    (by rw [hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact F₅) fun _ m₆ h₆ _ ho₆ F₆ hs₆ _ _ => ?_)
   rw [upd_upd] at ho₆
   have hc₆ : m₆.current = 0 :=
@@ -1366,6 +1396,8 @@ theorem main_spec (io : Io) (d : Nat) :
   simp only [StateT.run_bind]
   -- the counter holds 3
   obtain ⟨own, rest, ho, hp, hsz, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
+  refine WP.bind (WP.callMC_ptrProject (projC hbk (k := 20) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4)
     (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; decide) hp
     fun a m₁₂ hQ hr ho' hq hs₁₂ _ _ => ?_)
@@ -1400,29 +1432,38 @@ theorem main_spec (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`groupCounter` gives 3 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem groupCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
+theorem groupCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (groupCounter io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 3 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
+    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec σ io) h
   exact hv
 
 /-- **No run of `groupCounter` gives an error**: no data race on the counter, no deadlock at the
 futex or at `Group.await`, no panic, under every schedule. -/
-theorem groupCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (groupCounter io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec io)
+theorem groupCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (groupCounter io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec σ io)
+
+/-- One schedule completes: under the oracle that always picks option 0, the `Io.Group` counter returns 3 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem groupCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) (mem0 σ)) = some 3 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
 0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined
 and every access to `io` happened before it. The run ends right after the frees, which change no
 thread, clock or footprint entry, so the final memory gives these facts at the free. -/
-theorem groupCounter_reclaim {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+theorem groupCounter_reclaim {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
     {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run dispatch fuel o (groupCounter io) (mem0 σ)).run = some (.ok (v, m))) :
     joinedAll 0 m ∧ Reclaimed m := by
   obtain ⟨_, _, -, hq⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
+    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec σ io) h
   exact hq
+
+nonvacuity_witness take_run := ⟨{ groups := grp 3 }, rfl, trivial⟩
 
 end Iogroup.GroupCounter

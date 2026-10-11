@@ -312,13 +312,26 @@ class ManifestTests(unittest.TestCase):
         (fresh / 'demo.add.json').unlink()
         self.assertEqual(self.check()['links']['air']['removed'], [str(fresh / 'demo.add.json')])
 
-    def test_chained_receipt_attempt(self):
+    def receipt_attempt(self, dirty):
         attempt = self.base / 'attempt'
         attempt.mkdir()
-        for name in ('receipt.json', 'plan.json', 'after.json'):
+        tree = {'head': 'f' * 40, 'tracked_dirty': dirty, 'dirty_allowed': dirty}
+        (attempt / 'receipt.json').write_text(json.dumps({'schema': 2, 'tree': tree}))
+        for name in ('plan.json', 'after.json'):
             (attempt / name).write_text('{"schema": 1}\n')
         (attempt / 'audit.json').write_text(json.dumps({'status': 'pass', 'theorems': [
             {'name': 'toplevel', 'module': 'Proofs.Demo.Proofs', 'allowed': True}]}))
+        return attempt
+
+    def test_dirty_tree_receipt_is_refused_unless_allowed(self):
+        self.record('--receipt', str(self.receipt_attempt(dirty=True)))
+        report = self.check()
+        self.assertEqual((report['status'], report['stale_links']), ('stale', []))
+        self.assertIn('sealed over a dirty tree', report['problems'][0])
+        self.assertEqual(self.check('--allow-dirty')['status'], 'current')
+
+    def test_chained_receipt_attempt(self):
+        attempt = self.receipt_attempt(dirty=False)
         self.record('--receipt', str(attempt))
         manifest = json.loads(self.manifest.read_text())
         self.assertEqual(manifest['chain'][-2]['link'], 'receipt')
@@ -409,7 +422,9 @@ class ManifestTests(unittest.TestCase):
         self.assertIn('no chained native build', err)
 
     def test_relocatable_receipt_inside_repository(self):
-        for name in ('receipt.json', 'plan.json', 'after.json'):
+        tree = {'head': 'f' * 40, 'tracked_dirty': False, 'dirty_allowed': False}
+        self.write('evidence/receipt/receipt.json', json.dumps({'schema': 2, 'tree': tree}) + '\n')
+        for name in ('plan.json', 'after.json'):
             self.write('evidence/receipt/' + name, '{"schema": 2}\n')
         self.write('evidence/receipt/audit.json', json.dumps({'status': 'pass', 'theorems': [
             {'name': 'toplevel', 'module': 'Proofs.Demo.Proofs', 'allowed': True}]}))

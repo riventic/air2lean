@@ -47,8 +47,8 @@ UNCHECKED = ('ReleaseFast', 'ReleaseSmall')
 BACKEND_FLAG = {'llvm': '-fllvm', 'stage2_x86_64': '-fno-llvm'}
 # Differential statuses (scripts/diff-report.py) that are not an exact match.
 EXCLUSIONS = ('ub_excluded', 'illegal_exclusion', 'unspecified_exclusion', 'search_cap',
-              'bounded_no_result', 'host_difference')
-MATCHES = ('value_match', 'error_return_match', 'panic_match')
+              'bounded_no_result', 'host_difference', 'stack_overflow_exclusion', 'unspecified_timer_exclusion')
+MATCHES = ('value_match', 'error_return_match', 'panic_match', 'trap_match')
 RUN_COUNTS = MATCHES + EXCLUSIONS + ('mismatch', 'input_failure', 'native_harness_failure')
 FLOAT_MODE_SOURCES = ('examples', 'tests/diff')
 REQUIRED_CHANGED = ('fast-math',)

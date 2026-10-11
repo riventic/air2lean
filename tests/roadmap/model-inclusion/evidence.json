@@ -1,0 +1,470 @@
+{
+  "schema": "air2lean-model-inclusion-evidence/1",
+  "status": "pass",
+  "summary": {
+    "pass": 40,
+    "xfail": 6
+  },
+  "failures": [],
+  "rows": [
+    {
+      "id": "lists/page/sumRange",
+      "runs": 303,
+      "included": 291,
+      "unevaluated": 12,
+      "native_distinct": 41,
+      "outside_model": [],
+      "status": "pass",
+      "note": "unevaluated: a request above the 1 MiB harness cap"
+    },
+    {
+      "id": "lists/fixed_buffer/sumRange",
+      "runs": 303,
+      "included": 291,
+      "unevaluated": 12,
+      "native_distinct": 41,
+      "outside_model": [],
+      "status": "pass",
+      "note": "unevaluated: a request above the 1 MiB harness cap"
+    },
+    {
+      "id": "lists/arena/sumRange",
+      "runs": 303,
+      "included": 291,
+      "unevaluated": 12,
+      "native_distinct": 41,
+      "outside_model": [],
+      "status": "pass",
+      "note": "unevaluated: a request above the 1 MiB harness cap"
+    },
+    {
+      "id": "lists/debug/sumRange",
+      "runs": 303,
+      "included": 291,
+      "unevaluated": 12,
+      "native_distinct": 41,
+      "outside_model": [],
+      "status": "pass",
+      "note": "unevaluated: a request above the 1 MiB harness cap"
+    },
+    {
+      "id": "lists/page/dupe",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 289,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/fixed_buffer/dupe",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 289,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/arena/dupe",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 289,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/debug/dupe",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 289,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/page/dupeZLen",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 288,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/fixed_buffer/dupeZLen",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 288,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/arena/dupeZLen",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 288,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/debug/dupeZLen",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 288,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/page/evens",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 296,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/fixed_buffer/evens",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 296,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/arena/evens",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 296,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/debug/evens",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 296,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/page/listSum",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 267,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/fixed_buffer/listSum",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 267,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/arena/listSum",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 267,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "lists/debug/listSum",
+      "runs": 300,
+      "included": 300,
+      "native_distinct": 267,
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/threaded/mutexCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":4}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/threaded/handoff",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":7}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/threaded/semaphoreCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":4}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/threaded/rwLockRead",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":2}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/threaded/rwLockSnapshotPair",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":0}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "iogroup/threaded/groupCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":3}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "iogroup/threaded/groupConcurrent",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":2}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/single_threaded/mutexCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":4}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/single_threaded/handoff",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":7}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/single_threaded/semaphoreCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":4}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/single_threaded/rwLockRead",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":2}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "sync/single_threaded/rwLockSnapshotPair",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":0}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "iogroup/single_threaded/groupCounter",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":3}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "iogroup/single_threaded/groupConcurrent",
+      "runs": 8,
+      "included": 0,
+      "native": {
+        "{\"ok\":{\"err\":\"ConcurrencyUnavailable\"}}": 8
+      },
+      "outside_model": [
+        "{\"ok\":{\"err\":\"ConcurrencyUnavailable\"}}"
+      ],
+      "status": "xfail",
+      "divergence": "D-IO-CONCURRENT",
+      "reason": "Found by this gate. Io.Threaded.global_single_threaded has no concurrency, so Group.concurrent returns error.ConcurrencyUnavailable; under the default available spawn policy the model's concurrent always assigns a thread. --spawn-policy fallible includes the error. Same root as D-IO-INLINE (THR-02, IOM-01).",
+      "link": "docs/std-models.md#caller-supplied-allocator-and-io"
+    },
+    {
+      "id": "alloc_probe/page/aliasProbe",
+      "runs": 1,
+      "included": 1,
+      "native": {
+        "0": 1
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "alloc_probe/page/remapProbe",
+      "runs": 1,
+      "included": 0,
+      "native": {
+        "1": 1
+      },
+      "outside_model": [
+        "1"
+      ],
+      "status": "xfail",
+      "divergence": "D-ALLOC-REMAP",
+      "reason": "page_allocator shrinks a []u32 in place and remap returns the slice (native 1); the model's remap of items wider than one byte returns null under every policy.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    {
+      "id": "alloc_probe/fixed_buffer/aliasProbe",
+      "runs": 1,
+      "included": 0,
+      "native": {
+        "42": 1
+      },
+      "outside_model": [
+        "42"
+      ],
+      "status": "xfail",
+      "divergence": "D-ALLOC-ALIAS",
+      "reason": "A FixedBufferAllocator over caller-visible memory returns a block inside that memory (native 42); the model's create always returns a fresh disjoint block (0 or OutOfMemory). Fixed by the translated allocator mode.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    {
+      "id": "alloc_probe/fixed_buffer/remapProbe",
+      "runs": 1,
+      "included": 1,
+      "native": {
+        "error.OutOfMemory": 1
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "alloc_probe/arena/aliasProbe",
+      "runs": 1,
+      "included": 1,
+      "native": {
+        "0": 1
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "alloc_probe/arena/remapProbe",
+      "runs": 1,
+      "included": 0,
+      "native": {
+        "1": 1
+      },
+      "outside_model": [
+        "1"
+      ],
+      "status": "xfail",
+      "divergence": "D-ALLOC-REMAP",
+      "reason": "ArenaAllocator shrinks its last allocation in place and remap returns the slice (native 1); same model root as page_allocator: non-byte remap always fails in the model.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    {
+      "id": "alloc_probe/debug/aliasProbe",
+      "runs": 1,
+      "included": 1,
+      "native": {
+        "0": 1
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "alloc_probe/debug/remapProbe",
+      "runs": 1,
+      "included": 1,
+      "native": {
+        "0": 1
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "io_probe/threaded/cancelProbe",
+      "runs": 8,
+      "included": 0,
+      "native": {
+        "{\"ok\":1}": 8
+      },
+      "outside_model": [
+        "{\"ok\":1}"
+      ],
+      "status": "xfail",
+      "divergence": "D-IO-CANCEL",
+      "reason": "Io.Threaded delivers Group.cancel to the waiting task, whose futexWait returns error.Canceled (native 1); the model's cancel is await and its futexWait never cancels, so every schedule deadlocks.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    {
+      "id": "io_probe/threaded/handoffProbe",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "{\"ok\":5}": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "io_probe/single_threaded/cancelProbe",
+      "runs": 8,
+      "included": 8,
+      "native": {
+        "hang": 8
+      },
+      "outside_model": [],
+      "status": "pass"
+    },
+    {
+      "id": "io_probe/single_threaded/handoffProbe",
+      "runs": 8,
+      "included": 0,
+      "native": {
+        "hang": 8
+      },
+      "outside_model": [
+        "hang"
+      ],
+      "status": "xfail",
+      "divergence": "D-IO-INLINE",
+      "reason": "Io.Threaded.global_single_threaded runs Group.async inline, so the task waits for a store that comes after async returns and the program hangs; under the default available spawn policy every task is a new model thread and the hand-off always completes with 5.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    }
+  ],
+  "scope": "Native results of the listed std implementations on these inputs, each checked against the model outcomes of the listed policies or schedules. Not a proof that the model includes every behavior of these implementations."
+}

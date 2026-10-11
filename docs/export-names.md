@@ -6,7 +6,9 @@ translator reads JSON identities; changing a storage key does not rename a funct
 After all validation guards succeed, emission uses the historical virtual
 `<original full JSON name>.json` order. The key is cached before anonymous
 renumbering, so hashes and numeric project staging paths cannot reorder definitions
-or change which generic instance receives a preferred declaration name. Reads,
+or change which generic instance receives a preferred declaration name. A program
+with content-addressed instances ([AIR JSON §Instances](air-json.md#instances))
+uses the renamed full names instead, which no compiler number affects. Reads,
 validation errors and profile receipts continue using the actual storage paths.
 
 A nonempty ASCII name uses its existing `<name>.json` spelling when it begins
@@ -32,6 +34,17 @@ lock until close. These checks coordinate cooperating exporters;
 output directories are trusted, and this is not protection against concurrent
 path replacement or writers that ignore advisory locks. A failed JSON write still
 reports incomplete output, as before.
+
+A function's full name is a path inside its module ([AIR JSON §Identity](air-json.md#identity)).
+The rules above apply to the functions of the `root` and `std` modules. A function of any
+other module `m` always uses the SHA-256 fallback, over `m:<name>` instead of the name, and its
+JSON `module` completes the identity: re-analysis replaces an existing file only if both its
+`name` and `module` match.
+
+Within one compilation, a filename belongs to the first function that writes it. A
+different function that maps to the same filename (a root and a std function with the same
+full name, or a SHA-256 collision) stops the compiler with an error and exit status 1
+instead of replacing the file.
 
 Golden normalization first verifies the actual raw artifact's receipt hash and
 profile, then checks a reserved filename against the full original JSON name.

@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.memRoundTrip",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 56
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -61,7 +68,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 4,
@@ -70,6 +78,7 @@
    "callee": {
     "ty": 5,
     "func": "noreturn_variants.mk",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -106,7 +115,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 9
   },
   {
    "id": 8,
@@ -115,6 +125,7 @@
    "callee": {
     "ty": 6,
     "func": "noreturn_variants.bump",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -127,7 +138,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 9
   },
   {
    "id": 10,
@@ -136,6 +148,7 @@
    "callee": {
     "ty": 6,
     "func": "noreturn_variants.bump",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -148,7 +161,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 17
   },
   {
    "id": 12,
@@ -164,7 +178,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 17
   },
   {
    "id": 14,
@@ -173,6 +188,7 @@
    "callee": {
     "ty": 8,
     "func": "noreturn_variants.readU",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -185,7 +201,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 16,
@@ -226,6 +243,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -234,6 +252,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.U",
+   "module": "root",
    "layout": "auto",
    "tag": 10,
    "fields": [
@@ -269,6 +288,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -284,6 +304,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(noreturn_variants.U).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 11,
    "exhaustive": true,
    "fields": [

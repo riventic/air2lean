@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.writeTable",
+ "module": "root",
  "params": [
   0,
   1
@@ -188,6 +189,7 @@
        "callee": {
         "ty": 5,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -328,6 +330,7 @@
        "callee": {
         "ty": 5,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -396,6 +399,7 @@
  "globals": [
   {
    "name": "layout.table",
+   "module": "root",
    "ty": 9,
    "const": true,
    "threadlocal": false,
@@ -459,6 +463,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -472,6 +477,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -485,6 +491,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

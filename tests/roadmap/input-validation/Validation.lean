@@ -157,8 +157,9 @@ private def validationChecks : IO Unit := do
     #[{ id := 0, ty := 1, op := .ret (.int 0 1) }]
   require (rejected (checkProgram #[badConstant]) "incompatible type or value form")
     "integer-form boolean constant accepted"
-  let timer := mkFunc "timer" #[.void, .int false 64, .struct "time.Timer" "auto" #[],
-    .ptr "one" false 2] #[] 0
+  -- `std.time.Timer` is reviewed for 0.14.1 and 0.15.2 only (removed in 0.16.0).
+  let timer := { mkFunc "timer" #[.void, .int false 64, .struct "time.Timer" "auto" #[],
+    .ptr "one" false 2] #[] 0 with zigVersion := "0.15.2" }
   require (accepted (checkModelSignature timer "time.Timer.read" #[.undef 3] 1))
     "known Timer model signature rejected"
   require (rejected (checkModelSignature { timer with types := timer.types.set! 2 (.struct "Other" "auto" #[]) }

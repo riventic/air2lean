@@ -12,6 +12,18 @@ one. Each numerical theorem has exactly one label in `assurance/float-semantics.
 
 A compiler-rt label lists the Zig versions it holds for, e.g.
 `{"semantics": "compiler-rt", "zig_versions": ["0.14.1", "0.15.2", "0.16.0"], ...}`.
+
+Every label also lists the target profiles whose float rules it holds for (`targets`, a
+sorted subset of `aarch64-macos` and `x86_64-linux`; `docs/floats.md` §Targets). A theorem
+about a model function used by both targets' translations, or about a translation for each
+target (e.g. `op16_spec`, which reads the target off `Gen.lean`), lists both. A theorem whose
+statement holds for one target's translation only names that target in a premise and lists
+only it: `op80_spec` (`floatopsTarget = .x86_64`, the x87) lists `x86_64-linux`,
+`op80_spec_aarch64` (`.aarch64`, soft-float `f80`) lists `aarch64-macos`. A theorem that names a
+model function that only an aarch64 translation calls (`Zig.Float.softF80Chk`, `divXf3`,
+`divTruncXf3`, `divFloorXf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`) must list
+`aarch64-macos`. This rule is checked on the source only: through its target premise, a theorem
+stated for one target reaches both targets' rules in its dependency closure.
 Each version must be a version in `zig-patch/versions.toml`. The `op*_spec` theorems of
 `Proofs/Floatops` hold for all three versions; `op128_spec_full` does too, with the `f128`
 division and `@sqrt` helpers of the translation's profile. `Float.floorRtLegacyChk_eq`,
@@ -36,7 +48,7 @@ outside `ZigLean/`/`Proofs/` that contain anonymous float `example`s, e.g.
 
 | Command | Build | Rejects |
 |---|---|---|
-| `python3 scripts/float-semantics.py check` | none | a `theorem` in `ZigLean/Float/`, or one whose declaration mentions float types, with no label or exemption; a label that names no declared theorem; an unlisted float check file; a compiler-rt helper in a check without a compiler-rt label; a compiler-rt label in a `Proofs/<Ex>` module whose translation (`Gen.lean` header, else `examples/<ex>/translate.args`) selects `ieee`; a generated header claiming correspondence other than `model`; any malformed or binary-correspondence label |
+| `python3 scripts/float-semantics.py check` | none | a `theorem` in `ZigLean/Float/`, or one whose declaration mentions float types, with no label or exemption; a label that names no declared theorem; a theorem that mentions an aarch64-only model function and whose label omits `aarch64-macos`; an unlisted float check file; a compiler-rt helper in a check without a compiler-rt label; a compiler-rt label in a `Proofs/<Ex>` module whose translation (`Gen.lean` header, else `examples/<ex>/translate.args`) selects `ieee`; a generated header claiming correspondence other than `model`; any malformed or binary-correspondence label |
 | `scripts/assumptions.sh` | yes | on the checked declaration graph: an unlabeled numerical theorem (`unlabeled-numerical-theorem`), a label that contradicts the graph rules above or an exempt theorem that is numerical (`float-semantics-mismatch`), and a label or exemption for an audited module that names no checked theorem or a non-numerical one (`stale-float-semantics-label`) |
 | `python3 scripts/float-semantics.py check-report FILE...` | none | a report or receipt without a float-semantics summary, or with any `binary_correspondence`/`native_correspondence` other than `not_claimed`, `native_adequacy`/`source_correspondence` other than `not_attested`, or `correspondence` other than `model`. For an assumption report with its graph, it also recomputes every label and fails if one differs |
 
@@ -46,8 +58,8 @@ environment. The audit gate is authoritative.
 ## Reports and receipts
 
 `scripts/assumptions.py` adds `float_semantics` to every numerical theorem in the report.
-A labeled theorem gets `scope: stated`, `label`, `semantics`, and `zig_versions` when the
-label is compiler-rt. A generated companion gets `scope: compiler-generated`. Both kinds
+A labeled theorem gets `scope: stated`, `label`, `semantics`, `targets`, and `zig_versions`
+when the label is compiler-rt. A generated companion gets `scope: compiler-generated`. Both kinds
 have `correspondence: model` and `binary_correspondence: not_claimed`. The top-level
 `float_semantics` summary records the registry SHA256 and the number of stated theorems
 per label. A label violation makes the audit fail (exit 1), like an unlisted axiom.

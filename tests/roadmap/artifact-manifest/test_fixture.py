@@ -72,12 +72,12 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(report['status'], 'current' if not expected and not aged else 'stale')
         return report
 
-    def test_unmodified_fixture_is_current_and_receipt_is_schema_two(self):
+    def test_unmodified_fixture_is_current_and_receipt_is_schema_three(self):
         report = self.local([])
         self.assertEqual(report['problems'], [])
         manifest = json.loads((self.repo / FIX / 'manifest.json').read_text())
         self.assertEqual(manifest['provenance']['status'], 'clean')
-        self.assertEqual(json.loads((self.repo / FIX / 'receipt/receipt.json').read_text())['schema'], 2)
+        self.assertEqual(json.loads((self.repo / FIX / 'receipt/receipt.json').read_text())['schema'], 3)
         air = json.loads((self.repo / FIX / 'air/provenance.add.json').read_text())
         self.assertEqual(air['schema'], 12)
         self.assertEqual(manifest['links']['profile']['value']['scope'], 'validated-header')

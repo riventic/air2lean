@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.field",
+ "module": "root",
  "params": [
   0
  ],
@@ -33,7 +34,6 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
@@ -62,6 +62,7 @@
   {
    "k": "struct",
    "name": "zig017.Pair",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

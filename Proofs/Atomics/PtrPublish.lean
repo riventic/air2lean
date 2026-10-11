@@ -419,12 +419,11 @@ theorem recordAt_le' (m : Mem) (b o n : Nat) (k : AccessKind) (u : Nat) :
 /-- The node block that A's allocation makes. -/
 def nodeBlk (m : Mem) : Block :=
   { bytes := Array.replicate 4 .undef, align := 4, kind := .heap, live := true,
-    addr := m.newAddr .heap 4 4 }
+    addr := m.newAddr 4 4 }
 
 /-- The memory after A's allocation succeeded. -/
 def allocM (m : Mem) : Mem :=
-  { m with allocs := m.allocs + 1, blocks := m.blocks.push (nodeBlk m),
-           nextAddr := m.newNext .heap 4 4 }
+  { m with allocs := m.allocs + 1, blocks := m.blocks.push (nodeBlk m) }
 
 /-- `create(u32)`: `OutOfMemory`, or a new heap block. -/
 theorem create_ok {m m' : Mem} {r : Except ErrName Ptr}
@@ -449,7 +448,7 @@ theorem create_ok {m m' : Mem} {r : Except ErrName Ptr}
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
     exact .inl ⟨_, rfl, rfl⟩
   · obtain ⟨q, ha, rfl⟩ := MemM.map_ok h₃
-    obtain ⟨rfl, rfl⟩ := alloc_ok' ha
+    obtain ⟨rfl, rfl⟩ := alloc_ok ha
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
     exact .inr ⟨rfl, rfl⟩
 
@@ -498,7 +497,7 @@ theorem node_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 1 = .s
   have hacc : (allocM m).access nPtr (Enc.size (BitVec 32)) 4 = pure (1, nodeBlk m, 0) :=
     access_of rfl (allocM_node hs1) rfl (by simp [nPtr])
       (by simp [nPtr, nodeBlk, show Enc.size (BitVec 32) = 4 from rfl])
-      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m .heap 4 4 (by decide))
+      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide))
   have ht : (allocM m).current < (allocM m).threads.size := by
     show m.current < m.threads.size; rw [hc, (thr_of hi.thr (.inr (.inr (.inr (.inl hg))))).1]; decide
   have hnr : NoRace (allocM m) 1 0 (Enc.size (BitVec 32)) .write := noRace_of fun e he hb _ _ => by
@@ -522,7 +521,7 @@ theorem step_node {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
   obtain ⟨b, blk, o, hacc, -, rfl⟩ := store_ok h
   have hacc' : (allocM m).access nPtr (Enc.encode (42 : BitVec 32)).size 4 = pure (1, nodeBlk m, 0) :=
     access_of rfl (allocM_node hs1) rfl (by simp [nPtr]) (by rw [size_encode_u32]; simp [nPtr, nodeBlk])
-      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m .heap 4 4 (by decide))
+      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide))
   rw [hacc'] at hacc
   cases hacc
   have ht : m.current < m.threads.size := by
@@ -556,7 +555,7 @@ theorem step_node {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
   have hnode : NodeAt (M.write 1 (nodeBlk m) 0 (Enc.encode (42 : BitVec 32))) := by
     refine ⟨{ nodeBlk m with bytes := writeBytes (nodeBlk m).bytes 0 (Enc.encode (42 : BitVec 32)) },
       ?_, rfl, by show (writeBytes _ _ _).size = 4; rw [writeBytes_size _ _ _ hfit]; simp [nodeBlk], rfl,
-      by simpa [nodeBlk] using Mem.newAddr_mod m .heap 4 4 (by decide)⟩
+      by simpa [nodeBlk] using Mem.newAddr_mod m 4 4 (by decide)⟩
     simp only [Mem.write, Array.set!_eq_setIfInBounds]
     exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hb1).1
   have hg1 : upd G 1 Gh.wrote 1 = .wrote := upd_self _ _ _
@@ -1089,7 +1088,7 @@ theorem step_read {G : ThreadId → Gh} {m m' : Mem} {v : BitVec 32} (hi : Inv G
   rw [hb₁] at h42
   have : (Enc.decode (blk.bytes.extract 0 (0 + Enc.size (BitVec 32))) : Result (BitVec 32)).run =
       some (.ok 42) := h42
-  rw [this] at hdec
+  rw [decodeLoad_run_of_decode this] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht (fun _ h => by cases h) (fun _ h => by cases h) (.inr (.inr (.inl ⟨rfl, rfl, hfin⟩)))⟩
 
@@ -1320,7 +1319,7 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
   refine ⟨by rw [hm₁] <;> rfl, ?_⟩
   have hp₁ : Pre m₁ := by
     rw [hm₁]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0] at he⟩
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.afterAlloc] at he⟩
             b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
             one := rfl }
   clear hm₁ ha₁ hq₁

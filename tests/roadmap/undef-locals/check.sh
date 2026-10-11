@@ -13,7 +13,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/UndefLocals"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The retained translation is the fresh one, byte for byte.
-"$translator" tests/roadmap/undef-locals/air/0.16.0 -o "$work/UndefLocals/Gen.lean" \
+"$translator" tests/roadmap/undef-locals/air/0.16.0 --profile legacy-abi64-le -o "$work/UndefLocals/Gen.lean" \
   --namespace UndefLocals --prefix undef_locals.
 cmp "$work/UndefLocals/Gen.lean" tests/roadmap/undef-locals/UndefLocals/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/UndefLocals/Gen.olean" "$work/UndefLocals/Gen.lean"

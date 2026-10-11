@@ -41,7 +41,7 @@ def main : IO Unit := do
   -- Exact input-validation regression: a self-referential pointer global is error-free.
   let recursiveTypes : Array Ty := #[.void, .ptr "one" false 1]
   let recursiveGlobal : Global := { name := some "recursive_plain", ty := 1, isConst := false, threadlocal := false, isExtern := false, init := some (.ptrConst 1 0 0) }
-  let recursivePlain := { base "recursivePlainGlobal" recursiveGlobal with types := recursiveTypes, layouts := #[scalar 0 1, pointer 8], ret := 0 }
+  let recursivePlain := { base "recursivePlainGlobal" recursiveGlobal with types := recursiveTypes, layouts := #[scalar 0 1, pointer 8], ret := 0, body := #[{id := 0, ty := 0, op := .ret .void}] }
   accept recursivePlain
   -- Direct global API isolates the alias decision before unrelated type-table checks.
   let recursiveCase (name : String) (extra : Array Ty) : Func :=

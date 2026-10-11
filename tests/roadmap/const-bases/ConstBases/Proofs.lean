@@ -55,14 +55,33 @@ theorem maybeSlice_run (m : Mem) :
 theorem resElem_runtime : runtime root resElemPath.projs = ⟨some 0, 24⟩ := rfl
 theorem maybeElem_runtime : runtime root maybeElemPath.projs = ⟨some 0, 15⟩ := rfl
 
+/-- Every offset in `[0, 32]` of the table's block (its 32 bytes) is in bounds of the program-start
+memory, under every placement. -/
+theorem table_inBounds (σ : Placement) (o : Int) (h0 : 0 ≤ o) (h1 : o ≤ 32) :
+    (ConstBases.mem0 σ).inBounds ⟨some 0, o⟩ = true := by
+  obtain ⟨A, hb⟩ : ∃ A, (ConstBases.mem0 σ).blocks[0]? =
+      some ⟨Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : ConstBases.Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : ConstBases.Holder)), 1, .constGlobal, true, A⟩ :=
+    ⟨_, by simp [ConstBases.mem0, Mem.ofGlobals_getElem?]; rfl⟩
+  have hs : (Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : ConstBases.Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : ConstBases.Holder))).size = 32 := by decide +kernel
+  exact inBounds_of rfl hb h0 (by simp only [hs]; omega)
+
 /-- The generated runtime projections (`struct_field_ptr`, `unwrap_errunion_payload_ptr`,
-`ptr_elem_ptr`) from the global's address give the generated constant. -/
-theorem projectRes_identity (m : Mem) :
-    (ConstBases.projectRes root |>.run m).run = (ConstBases.resElemPtr.run m).run := rfl
+`ptr_elem_ptr`) from the global's address give the generated constant: each is in bounds of the
+table's block (checked pointer formation, MM-3), under every placement. -/
+theorem projectRes_identity (σ : Placement) :
+    (ConstBases.projectRes root |>.run (ConstBases.mem0 σ)).run =
+      (ConstBases.resElemPtr.run (ConstBases.mem0 σ)).run := by
+  have o : (errUnionOffsets (Enc.size (Vector (BitVec 8) 3)) (Enc.align (Vector (BitVec 8) 3))).snd = 2 := by
+    decide +kernel
+  simp [ConstBases.projectRes, ConstBases.resElemPtr, root, ptrProject, Ptr.add, Ptr.elem,
+    errPayloadPtr, table_inBounds, zig_unfold, o]
 
 /-- The same for `struct_field_ptr`, `optional_payload_ptr`, `struct_field_ptr`, `ptr_elem_ptr`. -/
-theorem projectMaybe_identity (m : Mem) :
-    (ConstBases.projectMaybe root |>.run m).run = (ConstBases.maybeElemPtr.run m).run := rfl
+theorem projectMaybe_identity (σ : Placement) :
+    (ConstBases.projectMaybe root |>.run (ConstBases.mem0 σ)).run =
+      (ConstBases.maybeElemPtr.run (ConstBases.mem0 σ)).run := by
+  simp [ConstBases.projectMaybe, ConstBases.maybeElemPtr, root, ptrProject, Ptr.add, Ptr.elem,
+    table_inBounds, zig_unfold]
 
 /-! ## Aliasing -/
 
@@ -92,13 +111,13 @@ theorem maybe_res_disjoint {p q : Ptr}
 /-! ## Reads -/
 
 /-- The read through the nested constant pointer gives the payload's element 2. -/
-theorem readResElem_mem0 : run ConstBases.readResElem ConstBases.mem0 = some (.ok 22) := by
+theorem readResElem_mem0 : run ConstBases.readResElem (ConstBases.mem0 .fresh) = some (.ok 22) := by
   decide +kernel
 
 /-- Zig's LLVM backend addresses the payload at the error code (`llvmPayloadOffset 3 1 = 0`):
 its constant reads element 0 instead. The translator rejects the shape on `stage2_llvm`. -/
 theorem llvm_constant_reads_other :
-    run (load (BitVec 8) 1 ⟨some 0, 20 + llvmPayloadOffset 3 1 + 2⟩) ConstBases.mem0 =
+    run (load (BitVec 8) 1 ⟨some 0, 20 + llvmPayloadOffset 3 1 + 2⟩) (ConstBases.mem0 .fresh) =
       some (.ok 20) := by
   decide +kernel
 
@@ -115,7 +134,7 @@ theorem fixed_unbacked :
 theorem unknown_global : resolve blocks ⟨.global 5, []⟩ = .error (.unknownGlobal 5) := rfl
 
 /-- No object is invented: a read through an unbacked address is `.illegal`. -/
-theorem unbacked_read : run (load (BitVec 8) 1 ⟨none, 0x1000⟩) ConstBases.mem0 =
+theorem unbacked_read : run (load (BitVec 8) 1 ⟨none, 0x1000⟩) (ConstBases.mem0 .fresh) =
     some (.error .illegal) := by
   decide +kernel
 

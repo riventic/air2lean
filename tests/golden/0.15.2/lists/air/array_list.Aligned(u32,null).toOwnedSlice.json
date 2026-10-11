@@ -216,7 +216,8 @@
      "callee": {
       "ty": 14,
       "func": "mem.Allocator.remap__anon_929",
-      "noreturn": false
+      "noreturn": false,
+      "instance_key": "fdce5ddbfdcf0812aba0ef8ba84607e161e5e9056e44961b49bdf9bf982e82cc"
      },
      "args": [
       {
@@ -425,7 +426,8 @@
    "callee": {
     "ty": 18,
     "func": "mem.Allocator.alignedAlloc__anon_934",
-    "noreturn": false
+    "noreturn": false,
+    "instance_key": "0b20c0554625a49a7f76b7a87bc73f4d54f95367d628d1cd9325382835688edc"
    },
    "args": [
     {

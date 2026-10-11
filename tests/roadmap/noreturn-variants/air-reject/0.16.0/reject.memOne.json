@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.memOne",
+ "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 16
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -109,7 +116,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 19
   },
   {
    "id": 8,
@@ -125,7 +133,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 19
   },
   {
    "id": 10,
@@ -134,6 +143,7 @@
    "callee": {
     "ty": 6,
     "func": "reject.readOne",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -146,7 +156,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 12,
@@ -180,6 +191,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -188,6 +200,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(noreturn_variants.One).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 9,
    "exhaustive": true,
    "fields": [
@@ -211,6 +224,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -224,6 +238,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -239,6 +254,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.One",
+   "module": "root",
    "layout": "auto",
    "tag": 3,
    "fields": [

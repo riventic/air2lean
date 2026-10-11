@@ -46,7 +46,7 @@ def check_inventory(directory, version):
 
 def checks():
     lines = ["\nprivate def memoryValue (r : Zig.MemM α) : Option α := "
-             "((r.run IndirectCallsNative.mem0).run.bind Except.toOption).map Prod.fst"]
+             "((r.run (IndirectCallsNative.mem0 .fresh)).run.bind Except.toOption).map Prod.fst"]
     m = 2 ** 32
     for n in [0, 3, 255, 0xffffffff]:
         cases = [

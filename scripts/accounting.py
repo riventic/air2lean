@@ -42,6 +42,8 @@ S = REPORT.Status
 # Each comparison status lands in exactly one column; `skipped` rows are selections, not cases.
 COLUMN = {status: 'exact_matches' for status in REPORT.MATCHES} | {
     S.HOST: 'host_differences', S.ILLEGAL: 'illegal', S.UB_EXCLUDED: 'illegal',
+    # A run past the model's stack budget (MM-5, STK-01) is excluded like illegal behaviour.
+    S.STACK_OVERFLOW: 'illegal',
     S.UNSPECIFIED: 'unspecified', S.UNSPECIFIED_TIMER: 'unspecified_timer', S.SEARCH_CAP: 'capped_searches',
     S.BOUNDED_NO_RESULT: 'bounded_no_result', S.MISMATCH: 'mismatches',
     S.INPUT_FAILURE: 'setup_failures', S.NATIVE_HARNESS_FAILURE: 'setup_failures',

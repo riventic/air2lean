@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "array_list.Aligned(u32,null).allocatedSlice",
+ "module": "std",
  "params": [
   0
  ],
@@ -289,6 +290,7 @@
   {
    "k": "struct",
    "name": "array_list.Aligned(u32,null)",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -318,6 +320,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -331,6 +334,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -349,6 +353,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -362,6 +367,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -375,6 +381,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -388,6 +395,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -408,6 +416,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -419,6 +428,7 @@
   {
    "k": "struct",
    "name": "debug.SafetyLock",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -440,6 +450,7 @@
   {
    "k": "enum",
    "name": "debug.SafetyLock.State__enum_1",
+   "module": "std",
    "tag": 8,
    "exhaustive": false,
    "fields": [

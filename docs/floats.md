@@ -4,9 +4,9 @@ The model of `f16`, `f32`, `f64`, `f80` and `f128` (`ZigLean/Float/`) and the ta
 
 ## Reference target
 
-Zig leaves some float results to the target. The model follows **Zig 0.16.0, 0.15.2 and 0.14.1, LLVM backend, `-OReleaseSafe`, x86_64-linux, `-mcpu=baseline`**, the CI target; §Per-version differences lists what differs between the versions. `scripts/floatprobe.sh` (CI step "Float target probe") runs `tests/floatprobe/probe.zig` there and compares its output with `tests/floatprobe/expected.txt`, where `tests/floatprobe/expected.<version>.txt` replaces the lines that differ for that version. A difference means that the target or the Zig version changed a case the model depends on. On a host that is not x86_64-linux, `scripts/diff.sh` counts a mismatch of a function in `tests/diff/<ex>/host.txt` (the float results that differ by target: NaN bits, f80, the sign of a zero) as `host`, not as a failure.
+Zig leaves some float results to the target. The model follows **Zig 0.16.0, 0.15.2 and 0.14.1, LLVM backend, `-OReleaseSafe`, x86_64-linux, `-mcpu=baseline`**, the CI target; §Per-version differences lists what differs between the versions. A translation whose profile targets aarch64-macos follows that target instead where the two differ (§Targets). `scripts/floatprobe.sh` (CI step "Float target probe") runs `tests/floatprobe/probe.zig` there and compares its output with `tests/floatprobe/expected.txt`, where `tests/floatprobe/expected.<version>.txt` replaces the lines that differ for that version. A difference means that the target or the Zig version changed a case the model depends on. On a host that is not x86_64-linux, `scripts/diff.sh` counts a disagreement of two returned values of a function in `tests/diff/<ex>/host.txt` as `host`, not as a failure, only if every differing float satisfies a kind listed for that function (`nan_payload`, `zero_sign`, `libm_ulp`; `scripts/diff-report.py` checks each against the actual bits, [outcome-accounting.md](outcome-accounting.md)). Any other difference is a mismatch, also off the reference target.
 
-The float diff test counts only on this target. On other targets (e.g. arm64 macOS: native f16, other `@min` zero rule, soft f80) exclude the float examples with `AIR2LEAN_EXAMPLES`.
+On aarch64-macos the diff test runs that host's translation (`scripts/check.sh` translates the AIR it exports there; the committed `tests/golden/<version>/<ex>/Gen-darwin.lean` is its golden), so it checks the aarch64 rules of §Targets. Its exclusion pins are `tests/diff/<ex>/unspecified.Darwin-arm64.txt`, which replaces `unspecified.txt` on that host.
 
 ## Semantics
 
@@ -17,19 +17,19 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | `+ - * /` | `add sub mul div_float` | rounded exact result; IEEE 754 rules for inf, NaN and signed zero. `/` on `f128`: §`--float-semantics` group A; `*` on `f128` in compiler-rt mode: group F |
 | `@mulAdd` | `mul_add` (args `[lhs, rhs, addend]`) | rounded once. f16: rounded to f32, then to f16. f80: rounded to f128, then to f80. `compiler-rt` mode: §`--float-semantics` group B. f80 invalid encoding: §`--float-semantics` group C |
 | `@divTrunc`, `@divFloor` | `div_trunc`, `div_floor` | `trunc(a / b)`, `floor(a / b)`: the division rounds first. `f128`: §`--float-semantics` group A |
-| `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the ops themselves; `div_exact` = `/`. `f128`: §`--float-semantics` group A |
+| `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the truncated quotient, or `/` for `div_exact`. A quotient that is not a whole number `q` with `q * b == a` is illegal behaviour: `.illegal` (`Zig.Float.divExactTrunc`, `Zig.Float.divExactChk`). The safety check catches only a NaN quotient, which stays its panic ([illegal-behavior.md](illegal-behavior.md) row 11). `f128`: §`--float-semantics` group A |
 | `@rem` | `rem` | `a − b·trunc(a / b)`, exact (`frem`); the sign of a zero result is the sign of `a`; when the nonzero remainder equals `a`, its original representation is retained. f80 invalid encoding: group C; compiler-rt pseudo-denormal comparison: group G |
 | `@mod` | `mod` | `a < 0 ? rem(rem(a, b) + b, b) : rem(a, b)` (the LLVM lowering). f80 invalid encoding: group C; compiler-rt remainder follows group G |
 | `@sqrt` | `sqrt` | correctly rounded. Before 0.16.0, f128: §Per-version differences |
 | `@floor @ceil @trunc` | `floor ceil trunc_float` | exact. f80 invalid encoding: group C; before 0.16.0, f80 floor/ceil in compiler-rt mode: group H |
 | `@round` | `round` | nearest integer, ties away from zero. f80 invalid encoding: §`--float-semantics` group C |
 | `@abs`, `-x` | `abs`, `neg` | clear or flip the sign bit (also of a NaN) |
-| `@min`, `@max` | `min`, `max` | one NaN operand: the other operand. Two NaNs: NaN. +0 and −0: see below |
+| `@min`, `@max` | `min`, `max` | one quiet NaN operand: the other operand. Two NaNs: NaN. A signaling NaN and a number: group I. +0 and −0: see below |
 | `< <= == != >= >` | `cmp_*` | IEEE: NaN is unordered, `−0 == +0` |
 | `@floatCast` | `fptrunc`, `fpext` | rounded / exact; value/class-changing casts: group C; f80→f16 in `compiler-rt` mode: group E |
 | `@floatFromInt` | `float_from_int` | rounded (also `u128`/`i128`) |
-| `@intFromFloat` | `int_from_float_safe` (0.15.2) | truncate. `x <= floor(min − 1)` or `x >= ceil(max + 1)`: panic `integerPartOutOfBounds` (`.overflow`). NaN: `.unspecified` (the check does not catch it) |
-| `@intFromFloat` | `int_from_float` (0.14.1, or no safety) | truncate; out of range or NaN: `.unspecified` |
+| `@intFromFloat` | `int_from_float_safe` (0.15.2) | truncate. `x <= floor(min − 1)` or `x >= ceil(max + 1)`: panic `integerPartOutOfBounds` (`.overflow`). NaN: `.illegal` (illegal behaviour that the check does not catch) |
+| `@intFromFloat` | `int_from_float` (0.14.1, or no safety) | truncate; out of range or NaN: `.illegal` |
 | `@bitCast` | `bitcast` | the bits; float → int of a NaN: `.unspecified` |
 | `@sin @cos @tan @exp @exp2 @log @log2 @log10` | same names | opaque (§Transcendental functions) |
 
@@ -47,10 +47,11 @@ The reference target uses compiler_rt software routines for f128 arithmetic and 
 
 `ieee` (default; what a proof assumes) returns the model's mathematical result for groups A, B and E–I. `compiler-rt` uses the target helper ports (`ZigLean/Float/CompilerRt.lean`) — needed by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof about an example that opts in states the target helper's behavior. Every numerical theorem is labeled `ieee`, `compiler-rt@<versions>` or `abstract-spec` in `assurance/float-semantics.json`. The audit checks each label against the theorem's dependencies, and no label claims binary correspondence (`docs/float-semantics.md`). `opSpec` in `Proofs/Floatops/Proofs.lean` uses compiler-rt multiplication and remainder; its `op80_spec` additionally excludes a pseudo-denormal numerator so the floor/ceil specification holds across all three versions. `op128_spec_full` covers every `f128` selector: `opSpec128` takes the division and `@sqrt` helpers of the translation's profile (§Per-version differences).
 
-Two more divergences hold in **both modes, always** — the two sides disagree on *which* value is correct, not just on rounding, so the model throws `.unspecified` instead of picking one:
+Three more divergences hold in **both modes, always** — the possible results disagree on *which* value is correct, not just on rounding, so the model throws `.unspecified` instead of picking one:
 
 - **Group C — result-class changes and f80 invalid encodings** (§f80 below): compiler_rt's software `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` read an unnormal/pseudo-infinity/pseudo-NaN operand's raw bits directly and diverge from x87 hardware on them. `@mulAdd` also checks a pseudo-denormal operand: its f128 extension ignores the explicit integer bit, changing its value — `Float.isPseudoDenormalF80` (`ZigLean/Float/Ops.lean`), checked by `fmaChk`/`fmaRtChk` and the cast wrappers below. Pseudo-denormal floor/ceil and remainder differences are modeled by groups G/H in compiler-rt mode. Trunc/round underflow these tiny values to the same signed zero and need no extra guard.
 - **Group D — f32/f64 `@min`/`@max` of `+0` and `−0`** (see the table below): order- and sign-dependent on real SSE hardware.
+- **Group I — `@min`/`@max` (and `@reduce(.Min)`/`.Max`) of a signaling NaN and a non-NaN**, every format and target (`Float.snanVaries`): Zig says that a NaN operand loses, but the lowering (`llvm.minnum`/`maxnum`, LLVM 21 LangRef) returns a quiet NaN for a signaling one, and LLVM may also treat a signaling NaN as quiet. aarch64 `fminnm` returns the NaN; x86_64's `minss` sequence and compiler_rt's `fmin` return the other operand. Both results are permitted (`Float.MinAllowed`). A signaling NaN is a NaN encoding whose quiet bit (the top fraction bit) is clear; for f80 only one with the integer bit set (`Float.isSignalingNaN`).
 
 Group C also covers three direct `@floatCast` cases through `Float.convChk` and
 `Float.convRtChk`, in both modes. f80→f128 rejects invalid encodings and pseudo-denormals:
@@ -86,13 +87,13 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 | Relation | The target may return |
 |---|---|
 | `Float.Allowed x r` (`x` = the model's result) | `x` not NaN: exactly `x`, bit for bit (incl. the sign of a zero and an f80 pseudo-denormal's encoding). `x` NaN: any NaN — sign, payload and, for f80, encoding (incl. unnormals and pseudo-NaNs) unconstrained |
-| `Float.MinAllowed a b r`, `Float.MaxAllowed a b r` | group D (`Float.zeroSignVaries a b`: f32/f64, `+0` and `−0`): `+0` or `−0`. Otherwise `Float.Allowed` of `Float.min a b` / `Float.max a b` |
+| `Float.MinAllowed a b r`, `Float.MaxAllowed a b r` | group D (`Float.zeroSignVaries a b`: f32/f64, `+0` and `−0`): `+0` or `−0`. Group I (`Float.snanVaries a b`): the non-NaN operand or any NaN. Otherwise `Float.Allowed` of `Float.min a b` / `Float.max a b` |
 
 `Float.AllowedSpec c P`: `c` succeeds and `P r` holds for every `r` with `Float.Allowed x r`, where `x` is the model's result. Proof tools:
 
 - Soundness: the model's result is allowed (`Float.Allowed.refl`, `Float.min_allowed`, `Float.max_allowed`, also in the group D case), and so is every value `Float.minChk`/`Float.maxChk` return (`Float.minChk_allowed`).
 - Payload independence: allowed results classify alike (`Float.Allowed.classify_eq`), so `isNaN`, `toRat?`, the comparisons, `Float.add`/`mul`/`div`, `Float.sqrt` and the unguarded `Float.conv` give the same result on every one of them (`Float.Allowed.lt_eq`, `add_eq`, …). The group C guards read bits, not just the class: `Float.convChk` f128→f80 throws for a NaN whose payload lies in the low 49 bits, and the f80 `Chk` guards throw for an unnormal or pseudo-NaN. So a guarded op on an allowed NaN may be `.unspecified` where the model's canonical NaN is not. Group D: every allowed `@min`/`@max` result `== +0` (`Float.MinAllowed.eq_zero`).
-- Errors are not variation: `@intFromFloat` has the same outcome on every allowed operand (`Float.toInt_allowed`). Out of range or ±inf with the safety check stays `.overflow` (illegal behavior), and a NaN of any payload stays `.unspecified`.
+- Errors are not variation: `@intFromFloat` has the same outcome on every allowed operand (`Float.toInt_allowed`). Out of range or ±inf with the safety check stays `.overflow` (illegal behavior), and a NaN of any payload stays `.illegal`.
 
 Clients: `isNan_allowed`, `isNan_zero_div_zero`, `clamp_allowed` (`Proofs/Floats`); `toByte_allowed_overflow`, `toByte_allowed_nan` (`Proofs/Floatconv`). Generated code still calls the deterministic model and the `Chk` guards; the relation is for proofs only.
 
@@ -106,8 +107,23 @@ Clients: `isNan_allowed`, `isNan_zero_div_zero`, `clamp_allowed` (`Proofs/Floats
 | pseudo-infinity, pseudo-NaN | 0x7fff | 0 | NaN |
 | pseudo-denormal | 0 | 1 | the value `1.f × 2^(1 − 16383)` |
 
-The first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` and direct casts to f16 or f128 (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is group C for `@mulAdd` and for a direct cast to f128;
+This table is x86_64's (the x87). On aarch64 every op that reads an f80 operand of any of these three encodings is `.unspecified` (§Targets). On x86_64, the first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` and direct casts to f16 or f128 (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is group C for `@mulAdd` and for a direct cast to f128;
 the model otherwise decodes its value as shown above.
+
+## Targets
+
+The translator accepts the x86_64-linux and aarch64-macos profiles (`Air2Lean/Air/Profile.lean`); a legacy profile is x86_64. Where the targets lower a float op differently, the emitter picks the rule of the profile's `target_triple` (`FCtx.aarch64Floats` in `Air2Lean/Emit.lean`), in both `--float-semantics` modes, so the generated code states that target's rule. The rules differ only here (Zig 0.16.0 `src/codegen/llvm.zig`: `backendSupportsF80`, `intrinsicsAllowed`; aarch64-macos's baseline CPU is `apple_m1`):
+
+| Op | x86_64-linux | aarch64-macos |
+|---|---|---|
+| every `f80` op except `-x`, `@abs`, `@bitCast` | x87 instructions (§f80: an invalid encoding reads as a NaN) | compiler_rt soft-float routines (`__addxf3`, `__ltxf2`, `__truncxfdf2`, …), which read an operand's raw bits. An unnormal, pseudo-infinity, pseudo-NaN or pseudo-denormal operand is `.unspecified` (`Zig.Float.softF80Chk`; Zig defines no value for these encodings) |
+| `f80` `/`, `@divTrunc`, `@divFloor`, `@divExact`, `compiler-rt` mode | `Float.div` (x87 `fdiv`) | `__divxf3`, ported bit for bit (`Zig.Float.divXf3`): not correctly rounded (`0x7ffeffffffffffffffff / 1.0` = `0x7ffefffffffffffffffe`), and a quotient below the normal range, also one that rounds up to the smallest normal, is a signed zero. Equal to compiled Zig on 40,000 random and 232 edge-case divisions. `ieee` mode: `Float.div` |
+| `f80` `@sqrt`, before 0.16.0 | `Float.sqrt` (x87 `fsqrt`) | `__sqrtx` is `sqrtq` of the `f128` extension, which rounds through `f64`: `Zig.Float.sqrtF80ViaF64` |
+| `@mulAdd` on `f16`, `f32`, `f64` | no FMA instruction: compiler_rt (group B), `Float.fmaRtChk`; `ieee` mode `Float.fmaChk` (`f16` through `f32`) | the fused `fmadd` instruction (`f16` with `fullfp16`): one rounding to the format, `Float.fmaFused` in both modes (`compiler-rt` mode `Float.fmaRtFused`, which keeps compiler_rt for `f80`/`f128`) |
+
+Everything else is the same on both targets: `f128` is compiler_rt on both (`long double` is 64-bit on aarch64-macos), `f16` `+ - * / @sqrt` round correctly on both (x86_64 through `f32`), and groups D and I apply to both (aarch64 `fminnm` orders `−0 < +0`, but the model keeps group D target-independent). The diff test's harness tests a float for NaN with `v != v`; on aarch64 an `f80` `!=` is `__nexf2`, which reads an unnormal or pseudo-denormal as a number, so `tests/diff/Diff.lean` renders those by their bits there (`renderedNaN`).
+
+A proof about a translation states the target when the rule differs: `Proofs/Floatops/Proofs.lean` reads it off `Gen.lean` (`floatopsTarget`), states `opN_spec` for both (`@mulAdd`: `FloatTarget.fmaRt`), and has one `f80` theorem per target (`op80_spec` with premise `floatopsTarget = .x86_64`, `op80_spec_aarch64` with `.aarch64`). Every float-semantics label lists the targets it holds for (`docs/float-semantics.md`).
 
 ## Per-version differences
 

@@ -35,6 +35,8 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.Allocator.dupeZ__anon_11266",
+ "module": "std",
+ "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349",
  "params": [
   0,
   1
@@ -110,6 +112,8 @@
    "callee": {
     "ty": 6,
     "func": "mem.Allocator.dupeSentinel__anon_11280",
+    "module": "std",
+    "instance_key": "294b7c9823bd7a920bd4318aabd9bece440acf1ac48a33be7063bcd50f025fa4",
     "noreturn": false
    },
    "args": [
@@ -142,6 +146,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -166,6 +171,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -186,6 +192,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -204,6 +211,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -224,6 +232,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -237,6 +246,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -265,6 +275,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "sentinel_byte": "0",
    "host_size": 0,
@@ -278,6 +289,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -311,6 +323,7 @@
    "child": 19,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -323,6 +336,7 @@
    "child": 20,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -335,6 +349,7 @@
    "child": 21,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -347,6 +362,7 @@
    "child": 22,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

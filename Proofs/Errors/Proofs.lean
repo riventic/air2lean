@@ -1,4 +1,5 @@
 import Proofs.Errors.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/errors/errors.zig`
@@ -169,3 +170,8 @@ theorem sumDigits_spec (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32) :
           some (Except.ok (sumDigitsExit.ret (.error "NotDigit"), l')) := hrun
     rw [ite_eq_right hall, hchange]
     simp [zig_unfold]
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness sumDigits_spec := ⟨#[0x31, 0x32], by decide, trivial⟩
+nonvacuity_witness Zig.unwrapPayload.eq_1 := ⟨Unit, (), trivial⟩

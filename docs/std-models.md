@@ -5,10 +5,83 @@ A std function that an example calls is one of these:
 | Kind | How | Where |
 |---|---|---|
 | Translated | Its AIR is written and translated like user code, so the diff test checks it too. | its name prefix in `examples/<ex>/filter` |
-| Modelled | Not translated. A call to it is a call to a Lean model. | `Air2Lean/StdModels.lean` (`stdModels`), `ZigLean/Mem/Alloc.lean` |
+| Modelled | Not translated. A call to it is a call to a Lean model. Only for the Zig versions its row lists. | `Air2Lean/StdModels.lean` (`stdModels`), `ZigLean/Mem/Alloc.lean` |
 | Panic handler | A noreturn call: a `Zig.Error` constructor. | `panicErrorFor?` (`docs/generated-code.md` §Panics) |
 
 `Check.lean` rejects a call to a function that has no AIR file and no model.
+
+A model or panic handler matches only a function of the `std` module, and the special std
+types (`mem.Allocator`, `Thread`, `Io`) only std types: the translator looks them up by a
+module-qualified key ([AIR JSON §Identity](air-json.md#identity)). A user `Thread.zig` with a
+`spawn` is user code (`root:Thread.spawn`), never the `Thread.spawn` model.
+
+## Version qualification
+
+Every modelled row of `stdModels` lists the Zig versions it is qualified for, each with the
+std file that defines the symbol and that file's SHA-256 at review (`StdReview`). A version
+that is not listed is rejected (`<symbol> qualified Zig <versions>; no reviewed std source for
+Zig <version>`), so a new Zig release (0.17 changes `Allocator.create` and grows `Io`) never
+inherits a model silently. Qualifying a version means reading that version's definition
+against the model and adding its hash; `tests/roadmap/models/test_std_sources.py` recomputes
+every hash from the std sources that are present.
+
+| Rows | std file | Zig versions |
+|---|---|---|
+| `mem.Allocator.create`, `destroy`, `alloc`, `alignedAlloc`, `free`, `dupe`, `remap` | `mem/Allocator.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `mem.Allocator.allocSentinel`, `realloc` | `mem/Allocator.zig` | 0.16.0 |
+| `Thread.spawn`, `join`, `yield` | `Thread.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `atomic.spinLoopHint` | `atomic.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `Io.futexWait`, `futexWaitUncancelable`, `futexWake`, `Io.Group.async`, `concurrent`, `await`, `cancel` | `Io.zig` | 0.16.0 |
+| `Thread.Futex.wait`, `wake`, `timedWait` | `Thread/Futex.zig` | 0.14.1, 0.15.2 |
+| `Thread.Mutex.DarwinImpl.lock`, `unlock`, `tryLock` | `Thread/Mutex.zig` | 0.14.1, 0.15.2 |
+| `time.Timer.start`, `read` | `time.zig` | 0.14.1, 0.15.2 |
+
+Between the reviewed versions the allocator wrappers differ only in alignment types
+(`?u29` → `?Alignment`), sentinel absorption and result-type spelling; spawn and join are
+unchanged; `Thread.yield` on Windows changed, which the model already covers by keeping
+`SystemCannotYield`. `std.Thread.spinLoopHint` is not a declaration in any reviewed version,
+so its historical boundary name is now a rejected row.
+
+## Caller-supplied allocator and Io
+
+A parameter of type `std.mem.Allocator` or `std.Io` is an interface in Zig: the caller picks
+the implementation. The translation replaces it by the one model (`Zig.Allocator`,
+`Zig.Io`), so a theorem about the function is a theorem about callers that pass an allocator
+or `Io` that behaves as that model. The generated code records this caller obligation: the
+line before each `def` whose parameter contains an `Allocator` or an `Io` (directly, or through
+a pointer, slice, optional, error union, struct, union or tuple) is
+
+```lean
+-- air2lean-premises: {"ALC-09":[0]}
+def push (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) (p2 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+```
+
+with the indices of those parameters. `scripts/premises.py` adds the premise
+([ALC-09](premises.md#alc-09), [IOM-01](premises.md#iom-01)) to every theorem that reaches the
+definition, in the source index and in the kernel-graph `compiled` derivation. Nothing else in
+the generated code changes.
+
+The model's outcomes do not include every real std implementation. For the allocator
+examples, `tests/roadmap/model-inclusion` runs the same functions natively with
+`std.heap.page_allocator`, `FixedBufferAllocator`, `ArenaAllocator` and `DebugAllocator`,
+and the `Io` examples with `Io.Threaded` (multi- and single-threaded), and requires each native
+result to be one of the model's outcomes over the allocation policies (or schedules; a native
+hang must be a model deadlock). The known divergences of the
+[models audit](architecture-audit/models.md) (D-ALLOC-ALIAS, D-ALLOC-REMAP, D-IO-INLINE,
+D-IO-CANCEL, and D-IO-CONCURRENT, which this gate found: `global_single_threaded` makes
+`Group.concurrent` return `error.ConcurrencyUnavailable`, outside the default `available`
+policy) are listed in its `expected.json` as expected failures with reason and link; any other
+native result outside the model fails the gate, and so does a known divergence that no longer
+diverges. The model outcomes are a subset of the policies and schedules (the harness's 1 MiB
+request cap and the first four failing attempts), so an inclusion is real; a native result of
+an input above the cap is reported as unevaluated. `evidence.json` records each row (example,
+implementation, function): runs, included, the native results, and its status.
+
+```sh
+AIR2LEAN_EXAMPLES="lists sync iogroup" AIR2LEAN_ZIG=<stock 0.16.0> scripts/diff.sh  # builds difftest
+bash tests/roadmap/model-inclusion/check.sh      # writes evidence.json
+python3 -B tests/roadmap/model-inclusion/inclusion.py validate   # CI: no toolchain
+```
 
 ## `examples/<ex>/filter`
 
@@ -38,7 +111,7 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 
 `size` and `align` come from the call's result or argument type. `dupeZ` (and in 0.16.0 `dupeSentinel`, which it calls) is translated from its AIR (`examples/lists/filter`): it calls `alloc`. `allocSentinel(u8, n, s)` is admitted on Zig 0.16.0 and 0.17.0 when its result is a mutable byte sentinel slice with alignment 1, no packed-pointer host/offset metadata, and an explicit `sentinel_byte` in 0..255. Normalized API callers receive the same guards. The 0.16.0 and 0.17.0 exporters write that comptime value from the result pointer type as decimal text; older exports without it are rejected. It allocates `n + 1` bytes, stores `s` at checked offset `n`, and returns length `n`. The payload remains undefined and owned. Even `n = 0` allocates one byte and consumes an allocation-policy decision. ReleaseSafe `usize` addition overflow panics before allocation, matching `allocWithOptionsRetAddr`; ordinary cap/trace failures return `OutOfMemory`. Wider element types and other compiler versions remain rejected. [Byte sentinel scope and gate](../tests/roadmap/byte-sentinel/README.md) records the passed bounded kernel, fresh-source, 13-row native and overflow qualification, together with the passed ordinary slices/lists generated-source checks and remaining parent-composition/full CI checks. `realloc(s, n)` is admitted on Zig 0.16.0 for alignment-1 nonsentinel byte slices: it tries the selected byte-remap policy, then allocates `n` bytes, copies the retained prefix representation, poisons and frees the old block; failure leaves `s` unchanged. Zig 0.16.0 rejects `realloc` of a sentinel slice at compile time, so a `[:s]u8` client reallocates its absorbed `len + 1`-byte buffer and stores the sentinel at the new length (`Zig.Allocator.reallocSentinel`); a sentinel-typed realloc call is rejected. The raw vtable calls (`rawAlloc`, `rawResize`, `rawRemap`, `rawFree`) are `inline` and remain unrecognized; their model contracts and alignment/size preconditions are in `ZigLean/Sep/RawAlloc.lean`. [Sentinel reallocation scope and gate](../tests/roadmap/sentinel-realloc/README.md). Every other function of `std.mem.Allocator` is outside the subset. A `remap` of a slice with a sentinel is outside the subset.
 
-The name of a generic instance has a number that differs between compiles (`mem.Allocator.dupeZ__anon_16959`). The translator gives each instance a stable number by first use (`Air2Lean/Air/Anon.lean`), so the Lean name is `mem_Allocator_dupeZ__anon_1` in every version and on every host. A golden file of an instance is named `<name>__anon_N.json`.
+The name of a generic instance has a number that differs between compiles (`mem.Allocator.dupeZ__anon_16959`). The translator names an instance by its content-addressed `instance_key` ([AIR JSON §Instances](air-json.md#instances)), so the Lean name is `mem_Allocator_dupeZ__anon_ad013b83a643` in every program, version and host; an instance without a key (a legacy export) gets a stable number by first use (`Air2Lean/Air/Anon.lean`, `mem_Allocator_dupeZ__anon_1`). A std model matches the generic name, whatever the suffix. A golden file of an instance is named `<name>__anon_N.json`.
 
 `Mem.allocPolicy` is an explicit environment parameter: `maxBytes` bounds each request,
 not total live bytes, and `failures` lists zero-based attempted nonzero allocations that
@@ -59,7 +132,7 @@ The coordinator kernel-checked these definitions at `853cef53211d08a62e368739160
 [the policy report](allocation-policy-report.json) records the selected local profile and
 remaining qualification/review gates.
 
-The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails (legacy null/index), or
+The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
 `{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
@@ -93,7 +166,7 @@ profiles and final composed CI remain unqualified.
 | RC11 approximation | An atomic location (`Zig.ALoc`) keeps its writes (`Zig.Msg`) in modification order; the block's bytes are the last one's. A read reads any message that is not older than one that happened before it (its clock is `≤` the reader's) or that the thread read or wrote before (`Mem.seen`); option 0 is the newest. A write goes to any place after those messages, not between an RMW and the message it read; option 0 is the end. An RMW, and a successful `cmpxchg`, reads a message with no RMW after it yet and goes right after it. A plain write to an atomic location becomes a message at the next atomic op. The limits below describe additional outcomes the approximation admits. |
 | Happens-before | A vector clock per thread (`Zig.VClock`). `spawn` bumps the parent's clock and gives the child a copy; `join` merges the joined thread's clock into the caller's. An acquire read (`acquire`, `acq_rel`, `seq_cst`) adopts the message's release clock (`Msg.relClock`): the writer's clock for a release write, joined along the RMWs after it (the release sequence), empty for a relaxed write. Two accesses are concurrent when neither clock is `≤` the other. |
 | Footprint | Every access (`Mem.footprint`) is a byte range, a kind (plain read/write, atomic read/write) and the clock at that time. A failed `cmpxchg` records only an atomic read; a successful one records the read and write, while remaining one scheduler operation. |
-| Race check | Two concurrent accesses to the same bytes, at least one a write and at least one plain (not atomic), is a data race: `.illegal`. Two atomic accesses never race: the schedule orders them. |
+| Race check | Two concurrent accesses to the same bytes, at least one a write and at least one plain (not atomic), is a data race: `.illegal`. Two atomic accesses never race: the schedule orders them. While only the main thread can run (`Mem.solo`: it is current and every spawned thread is joined), no recorded access is concurrent with a new one, so `raceCheck` skips the scan of the footprint (MM-14, `docs/architecture-audit/memory-model.md`). Outcomes are unchanged (`raceCheck_eq_raceAt` for single-thread memories; the concurrent proofs and runtime gates check the rest); a single-thread run is linear instead of quadratic in its accesses. The footprint itself still grows with every access, and freed blocks stay in `Mem.blocks` (block ids are array indices). |
 
 `ConcM.tryCatch` handles errors in a thread's computation. Across a sync boundary, its handler resumes from the shared memory returned by the scheduler, preserving other threads' intervening writes. Errors raised by the scheduler itself during spawn, join, wait, wake or the thread-end check terminate the run before the continuation and bypass that handler.
 
@@ -118,7 +191,7 @@ The restricted `rwLockSnapshotPair` client holds one shared acquisition across t
 - `Thread.Futex.Deadline` is translated (`Thread.Condition` and `ResetEvent` wait through it); its clock (`time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`) is reached only with a timeout. The model has no clock, so a call is `.unsupportedTimer` at run time (a model error distinct from `.unspecified`; the legacy diff counter still pins it at 0), not a rejection.
 - 0.15.2 lowers a field read of a local struct (`b.ready` for `var b: Box`) as a load of the whole struct. The model reads the AIR as it is, so that load races with another thread's atomics on the other fields (`.illegal`), though the compiled code reads the one field. `threadsync.handoff` reads through a pointer, which 0.15.2 lowers as a field load.
 
-**Diff test.** The Lean side of a concurrent function searches the schedules (`tests/diff/ScheduleSearch.lean`'s `searchSchedules`, at most `scheduleCap` runs including probes). It first tries a bounded FIFO of sparse oracle prefixes, then resumes depth-first enumeration for the result that the compiled Zig gave. A schedule with a data race matches any Zig result (the program is undefined; `unspecified.txt`). A search that stops at the cap without Zig's result writes `Zig.Error.capped` (pinned per function in `tests/diff/<ex>/capped.txt`). A capped search is not a demonstrated result match: `scripts/diff.sh` accepts it only within its separately pinned count (default 0). An exhausted search with neither a match nor a data race returns the first schedule's result for comparison.
+**Diff test.** The Lean side of a concurrent function searches the schedules (`tests/diff/ScheduleSearch.lean`'s `searchSchedules`, at most `scheduleCap` runs including probes). It first tries a bounded FIFO of sparse oracle prefixes, then resumes depth-first enumeration for the result that the compiled Zig gave. A schedule with a data race matches any Zig result (the program is undefined; `unspecified.txt`). A search that stops at the cap without Zig's result writes `Zig.Error.capped` (pinned per input in `tests/diff/<ex>/capped.txt`, same format as `unspecified.txt`). A capped search is not a demonstrated result match: `scripts/diff.sh` accepts it only within its separately pinned count (default 0). An exhausted search with neither a match nor a data race returns the first schedule's result for comparison.
 
 **Captured arguments.** Empty tuples become `Unit`, one field retains its scalar target type, and multiple fields become a right-associated product. Pointer fields retain pointer identity; the tuple copy does not copy the pointed-to bytes or grant ownership. In programs with an empty or multi-field capture, the generated `Tgt.spawnInit P target ghost` names the child protocol obligation for the entire capture. The generated `Tgt.captures` classifies every field, and `Zig.Conc.Capture.grant` is the per-argument obligation. Copied values add nothing, every captured pointer or slice region is handed over or shown shared, and unclassified fields cannot be discharged. Proofs explicitly split private heaps with `Owned.fork`, or justify sharing through the global invariant (for example shared atomics). Ordinary aliased writes still fail the model's race check.
 

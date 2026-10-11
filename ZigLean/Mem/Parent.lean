@@ -20,10 +20,8 @@ This is a proof-only module importing `ZigLean.Mem.Lemmas`; it is not imported b
 
 namespace Zig
 
-@[simp] theorem Ptr.add_add (p : Ptr) (a b : Int) : (p.add a).add b = p.add (a + b) := by
-  simp [Ptr.add, Int.add_assoc]
-
-@[simp] theorem Ptr.add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
+-- `Ptr.add_add`, `Ptr.add_zero` and `Ptr.add_block` are in `ZigLean.Mem.Lemmas`.
+attribute [simp] Ptr.add_add
 
 /-- Recovering the parent of a field pointer is the container pointer. -/
 @[simp] theorem Ptr.parent_field (p : Ptr) (off : Int) : (p.add off).add (-off) = p := by
@@ -32,9 +30,6 @@ namespace Zig
 /-- Projecting the field of a recovered parent is the original field pointer. -/
 @[simp] theorem Ptr.field_parent (q : Ptr) (off : Int) : (q.add (-off)).add off = q := by
   cases q; simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
-
-/-- Recovery keeps the allocation: the block is unchanged. -/
-@[simp] theorem Ptr.add_block (p : Ptr) (off : Int) : (p.add off).block = p.block := rfl
 
 /-- A path of field offsets from a container pointer (nested `struct_field_ptr`). -/
 def Ptr.path (p : Ptr) (offs : List Int) : Ptr := offs.foldl Ptr.add p

@@ -36,7 +36,7 @@ def oracles : List (Nat → Nat) :=
    fun i => if i < 4 then 1 else 0, fun i => if i < 8 then 1 else 0, fun i => i / 2 % 2]
 
 def outcomes (d : Tgt → ConcM Tgt Unit) (m : ConcM Tgt Unit) : List (Option (Except Error Unit)) :=
-  oracles.map fun o => ((Sched.run d 200 o m mem0).run).map (·.map (·.1))
+  oracles.map fun o => ((Sched.run d 200 o m (mem0 .fresh)).run).map (·.map (·.1))
 
 def isError : Option (Except Error Unit) → Bool
   | some (.error _) => true

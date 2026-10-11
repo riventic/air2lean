@@ -13,9 +13,15 @@ architecture. A legacy profile without a target (`legacy-abi64-le`) is the x86_6
 model (premise PRF-01). Any other asm is `ASM_VOLATILE_EFFECT`, unless the device contract
 declares it as a device event (`Zig.vasm`).
 
+Every entry also states when the instruction faults (`AsmFault`, S7). An opaque is a total
+function, so without that condition the model of a trapping instruction would return a value:
+`Emit.lean` guards the call with `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on the
+entry's fault condition. `never` is a reviewed claim, not a default.
+
 To add an entry: show that the instruction's outputs depend only on its inputs on the target
 (no flags, memory, counters, entropy, privileged or I/O state is read), that it writes nothing
-outside its outputs and clobbers, and name the committed fixture that needs it. -/
+outside its outputs and clobbers, state every input on which it faults (#DE, #UD, ...), and name
+the committed fixture that needs it. -/
 namespace Air2Lean
 
 inductive AsmSemantics where
@@ -25,6 +31,22 @@ inductive AsmSemantics where
   | spinHint
   deriving BEq, Repr
 
+/-- When an allowlisted instruction faults (a CPU exception, delivered as a signal), as a
+condition on its inputs (AIR order). The model throws `Zig.Error.trap` exactly when it holds. -/
+inductive AsmFault where
+  /-- The instruction faults on no input (reviewed for each entry, see `reason`). -/
+  | never
+  /-- The instruction faults (#DE) exactly when input `k` is zero. -/
+  | zeroInput (k : Nat)
+  deriving BEq, Repr
+
+/-- The Lean `Prop` under which the instruction faults, over its rendered input operands `args`;
+`none` for an instruction that never faults, or for an input index that does not exist. -/
+def AsmFault.condition? (fault : AsmFault) (args : List String) : Option String :=
+  match fault with
+  | .never => none
+  | .zeroInput k => args[k]?.map fun a => s!"{a} = 0"
+
 structure AsmAllowEntry where
   template : String
   /-- Outputs, then inputs, in AIR order. -/
@@ -33,69 +55,79 @@ structure AsmAllowEntry where
   /-- The `target_triple` architecture (`x86_64`, `aarch64`). -/
   target : String
   semantics : AsmSemantics
+  /-- When the instruction faults (`.never` for a spin hint: it has no inputs). -/
+  fault : AsmFault
   reason : String
   reviewerNote : String
   deriving Repr
 
 def asmAllowlist : List AsmAllowEntry := [
   { template := "bswap %[ret]", constraints := ["=r", "0"], clobbers := [], target := "x86_64",
-    semantics := .opaque,
-    reason := "byte swap of one register: the output is a function of the input",
+    semantics := .opaque, fault := .never,
+    reason := "byte swap of one register: the output is a function of the input; bswap faults \
+      on no input",
     reviewerNote := "examples/asm bswap32 (tests/golden/asm/air/asm.bswap32.json); non-volatile" },
   { template := "xorl %%edx, %%edx\n\tdivl %[b]", constraints := ["={eax}", "=&{edx}", "{eax}", "r"],
-    clobbers := [], target := "x86_64", semantics := .opaque,
-    reason := "unsigned 32-bit divide: quotient and remainder are functions of the inputs \
-      (a zero divisor is #DE, which the opaque does not model; the caller's proof states it)",
+    clobbers := [], target := "x86_64", semantics := .opaque, fault := .zeroInput 1,
+    reason := "unsigned 32-bit divide: quotient and remainder are functions of the inputs. \
+      divl raises #DE (SIGFPE) for a zero divisor and for a quotient above 2^32 - 1; the xorl \
+      makes the dividend edx:eax = eax < 2^32, so the quotient always fits and the divisor \
+      (input 1) being zero is the only fault",
     reviewerNote := "examples/asm divmod (tests/golden/asm/air/asm.divmod.json); non-volatile" },
   { template := "lzcnt %[x], %[ret]", constraints := ["=r", "r"], clobbers := ["cc"],
-    target := "x86_64", semantics := .opaque,
-    reason := "leading-zero count: a function of the input; it only clobbers flags",
+    target := "x86_64", semantics := .opaque, fault := .never,
+    reason := "leading-zero count: a function of the input; it only clobbers flags and faults \
+      on no input (a zero input gives the operand size). On a CPU without LZCNT the encoding \
+      runs as bsr: a target-CPU premise (ASM-04), not an input condition",
     reviewerNote := "examples/asm lzcnt64 (tests/golden/asm/air/asm.lzcnt64.json); volatile in \
       the source, but input-determined" },
   { template := "popcnt %[x], %[ret]", constraints := ["=r", "r"], clobbers := [],
-    target := "x86_64", semantics := .opaque,
-    reason := "population count: a function of the input",
+    target := "x86_64", semantics := .opaque, fault := .never,
+    reason := "population count: a function of the input; it faults on no input on a CPU \
+      with POPCNT (on one without it every execution is #UD: a target-CPU premise, ASM-04)",
     reviewerNote := "examples/asm popcnt64 (tests/golden/asm/air/asm.popcnt64.json); non-volatile" },
   -- A01's effect-contract forms (`Air2Lean/AsmContract.lean`, premise ASM-03): the new value of
   -- each read-write or memory output is a function of the register inputs and the old values.
+  -- None faults on an input: the generated wrapper reads and writes each memory operand through
+  -- the model's checked accesses before and after the opaque, and the arithmetic cannot trap.
   { template := "incl %[x]", constraints := ["+m"], clobbers := ["cc"], target := "x86_64",
-    semantics := .opaque,
+    semantics := .opaque, fault := .never,
     reason := "increment of a memory operand: the new value is a function of the old one; it \
       only clobbers flags",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.incm.json; volatile" },
   { template := "incl %[y]", constraints := ["+m"], clobbers := ["cc"], target := "x86_64",
-    semantics := .opaque,
+    semantics := .opaque, fault := .never,
     reason := "increment of a memory operand (a local): the new value is a function of the old one",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.incLocal.json; volatile" },
   { template := "movq %[v], %[x]", constraints := ["=m", "r"], clobbers := [], target := "x86_64",
-    semantics := .opaque,
+    semantics := .opaque, fault := .never,
     reason := "store of a register input to a memory output: the output is the input",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.setm.json; non-volatile" },
   { template := "movl %[a], %%eax\n\txchgl %%eax, %[b]\n\tmovl %%eax, %[a]",
-    constraints := ["+m", "+m"], clobbers := ["rax"], target := "x86_64", semantics := .opaque,
+    constraints := ["+m", "+m"], clobbers := ["rax"], target := "x86_64", semantics := .opaque, fault := .never,
     reason := "swap of two memory operands through eax: each new value is the other old value \
       (xchg with memory is atomic natively; the model has no other thread on these locations)",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.swapm.json; volatile" },
   { template := "addq %[v], %[x]", constraints := ["+r", "r"], clobbers := ["cc"],
-    target := "x86_64", semantics := .opaque,
+    target := "x86_64", semantics := .opaque, fault := .never,
     reason := "64-bit add into a read-write register: a function of both inputs; it only clobbers flags",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.addr.json; non-volatile" },
-  { template := "", constraints := [], clobbers := [], target := "x86_64", semantics := .opaque,
+  { template := "", constraints := [], clobbers := [], target := "x86_64", semantics := .opaque, fault := .never,
     reason := "an empty template executes no instruction: the opaque is a constant",
     reviewerNote := "A01 tests/roadmap/asm-effects/test_cli.py (`plain`, the barrier without its \
       clobber: one hash, two opaques)" },
   { template := "", constraints := [], clobbers := ["memory"], target := "x86_64",
-    semantics := .opaque,
+    semantics := .opaque, fault := .never,
     reason := "A01's compiler barrier (`asmPureRegistry`): no instruction, so no effect in a model \
       that runs accesses in program order; the checker also requires `volatile` and the registry",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.barrier.json and L13 \
       tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.barrier.json; volatile" },
   { template := "pause", constraints := [], clobbers := [], target := "x86_64",
-    semantics := .spinHint,
+    semantics := .spinHint, fault := .never,
     reason := "std.atomic.spinLoopHint on x86_64: no output, no memory effect",
     reviewerNote := "C03 tests/roadmap/idle-loops/air/progress.idle.json; volatile, operand-free" },
   { template := "isb", constraints := [], clobbers := [], target := "aarch64",
-    semantics := .spinHint,
+    semantics := .spinHint, fault := .never,
     reason := "std.atomic.spinLoopHint on aarch64: no output, no memory effect",
     reviewerNote := "C03 docs/progress-hints.md; volatile, operand-free" }]
 

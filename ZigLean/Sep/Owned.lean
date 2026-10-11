@@ -168,17 +168,7 @@ theorem Mem.resetOwned_access_other {m : Mem} {a : AllocId} {p : Ptr} {n al : Na
   exact access_of hpb (by simp [Mem.resetOwned, hblk, hk]) hl h0 hn ha
 
 theorem Mem.Seq.resetOwned {m : Mem} (hst : m.Seq) (a : AllocId) : (m.resetOwned a).Seq :=
-  ⟨hst.single, hst.addr.of_heap rfl fun l c hc => by
-    rw [Mem.heap_resetOwned] at hc
-    simp only [Heap.dropOwned] at hc
-    cases hc' : m.heap l with
-    | none => rw [hc'] at hc; cases hc
-    | some c' =>
-      rw [hc'] at hc
-      by_cases hk : c'.kind = .owned a
-      · simp [hk] at hc
-      · simp only [hk, ↓reduceIte, Option.some.injEq] at hc
-        subst hc; exact ⟨l, _, hc', rfl, rfl⟩⟩
+  ⟨hst.single⟩
 
 /-- The memory after `Owned.reset a`. -/
 def Mem.afterReset (m : Mem) (a : AllocId) (st : OwnedAlloc) : Mem :=
@@ -197,8 +187,7 @@ theorem Owned.reset_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
       (m.afterReset a st).heap = m.heap.dropOwned a ∧ (m.afterReset a st).Seq ∧
       (m.afterReset a st).allocators[a]? = some { st with used := 0, starts := [] } := by
   have hlt : a < m.allocators.size := (Array.getElem?_eq_some_iff.mp hs).1
-  refine ⟨Owned.reset_run hs hl, Mem.heap_resetOwned m a, ⟨(hst.resetOwned a).single,
-    (hst.resetOwned a).addr⟩, ?_⟩
+  refine ⟨Owned.reset_run hs hl, Mem.heap_resetOwned m a, ⟨(hst.resetOwned a).single⟩, ?_⟩
   simp [Mem.afterReset, Mem.resetOwned, Array.set!_eq_setIfInBounds,
     Array.getElem?_setIfInBounds_self_of_lt hlt]
 
@@ -214,7 +203,7 @@ theorem Arena.deinit_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
   let st' : OwnedAlloc := { st with used := 0, starts := [], live := false }
   let m' : Mem := { m.afterReset a st with
     allocators := (m.afterReset a st).allocators.set! a st' }
-  refine ⟨m', ?_, hheap, ⟨hstR.single, hstR.addr⟩, st',
+  refine ⟨m', ?_, hheap, ⟨hstR.single⟩, st',
     by simp [m', Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hlt], rfl⟩
   simp [Arena.deinit, setOwned, zig_unfold, hR, hS, m', st']
 

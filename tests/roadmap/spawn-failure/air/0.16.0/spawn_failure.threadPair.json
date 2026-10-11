@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "spawn_failure.threadPair",
+ "module": "root",
  "params": [
   0
  ],
@@ -150,8 +151,10 @@
    "callee": {
     "ty": 6,
     "func": "Thread.spawn__anon_394",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "spawn_failure.writeWorker"
+    "comptime_fn": "spawn_failure.writeWorker",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -315,8 +318,10 @@
    "callee": {
     "ty": 6,
     "func": "Thread.spawn__anon_394",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "spawn_failure.writeWorker"
+    "comptime_fn": "spawn_failure.writeWorker",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -386,6 +391,7 @@
      "callee": {
       "ty": 16,
       "func": "Thread.join",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -500,6 +506,7 @@
    "callee": {
     "ty": 16,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -537,6 +544,7 @@
    "callee": {
     "ty": 16,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -639,6 +647,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -673,6 +682,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -705,6 +715,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -751,6 +762,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -764,6 +776,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -776,6 +789,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -795,6 +809,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -814,6 +829,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -826,6 +842,7 @@
    "child": 23,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -838,6 +855,7 @@
    "child": 24,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -850,12 +868,14 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   }

@@ -1,5 +1,7 @@
+import ZigLean.Conc.Unroll
 import ZigLean.Conc.WeakCasLemmas
 import Proofs.Atomics.MessagePassing
+import ZigLean.Mem.Witness
 
 /-!
 # `stackPush` over all schedules: a lock-free stack
@@ -132,6 +134,20 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
   join : JoinLe G m
   fp : ∀ e ∈ m.footprint, FpOk G m e
   own : ∀ e ∈ m.footprint, e.tid < m.threads.size ∧ VClock.le e.clock (m.clocks[e.tid]!) = true
+
+/-- A pointer into one of the three 16-byte blocks is formed (`ptrProject`, MM-3). -/
+theorem Inv.proj {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) {b : Nat} (hb : b = 0 ∨ b = 1 ∨ b = 2)
+    {p : Ptr} {f : Ptr → Ptr} (hp : p.block = some b) (h0 : 0 ≤ p.off) (hfb : (f p).block = p.block)
+    (hf0 : 0 ≤ (f p).off) (hp16 : p.off ≤ 16) (hf16 : (f p).off ≤ 16) :
+    (ptrProject p f).run m = pure (f p, m) := by
+  have hblk : ∃ a, BlkAt m b 16 a := by
+    rcases hb with rfl | rfl | rfl
+    · exact ⟨_, hi.b0⟩
+    · exact ⟨_, hi.b1⟩
+    · exact ⟨_, hi.b2⟩
+  obtain ⟨_, blk, hblk', -, hsz, -⟩ := hblk
+  exact ptrProject_run f hfb (inBounds_of hp hblk' h0 (by omega))
+    (inBounds_of (hfb.trans hp) hblk' hf0 (by omega))
 
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
@@ -501,7 +517,7 @@ theorem step_ctx {T : Type} [Enc T] {G : ThreadId → Gh} {m m' : Mem} {u o a : 
   cases hacc
   have hx : blk.bytes.extract o (o + Enc.size T) = curBytes m u o (Enc.size T) := by
     unfold curBytes; rw [hb₂]; rfl
-  rw [hx, hq] at hdec
+  rw [hx, decodeLoad_of_decode hq] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht hact (fun _ h => by cases h) (.inr (.inr (.inr (.inr ⟨hu, rfl⟩))))⟩
 
@@ -1000,13 +1016,21 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hact : Act (upd G u g) m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
   unfold push.loop12
   simp only [StateT.run_bind, pure_bind]
-  rw [show (cPtr u).add 0 = ⟨some u, ((0 : Nat) : Int)⟩ from rfl,
-    show (cPtr u).add 8 = ⟨some u, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr u = ⟨some u, ((0 : Nat) : Int)⟩ from rfl]
+  have hu3 : u = 0 ∨ u = 1 ∨ u = 2 := by omega
   -- `s.s`
   refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi hu ht (by decide) (fun A hA => by omega)
     (ctxS_dec hi hu) e he).elim) fun q m₁ hl => ?_)
   obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi hu ht hact (by decide) (fun A hA => by omega) (ctxS_dec hi hu) hl
   refine ⟨rfl, ?_⟩
+  -- `&s.next`, `&ctx.node` (`ptrProject`, MM-3)
+  refine WP.bind (WP.callMC_ptrProject (hi₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+    rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+  dsimp only
+  refine WP.bind (WP.callMC_ptrProject (hi₁.proj (b := u) (p := ⟨some u, ((0 : Nat) : Int)⟩)
+    (f := (·.add 8)) hu3 rfl (by simp) rfl (by simp [Ptr.add]) (by simp) (by simp [Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some u, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some u, ((8 : Nat) : Int)⟩ from rfl]
   -- `s.node`
   refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₁ hu ht (by decide) (fun A hA => by omega)
     (ctxN_dec hi₁ hu) e he).elim) fun n m₂ hl => ?_)
@@ -1024,6 +1048,14 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hlt : lt false (BitVec.ofNat 64 u) 3 = true := by rcases hu with rfl | rfl <;> rfl
   simp only [hlt, ↓reduceIte, StateT.run_pure, pure_bind]
   -- `next[u] := h`
+  have hf16 : ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off ≤ 16 := by
+    rcases hu with rfl | rfl <;> decide
+  have hf0 : 0 ≤ ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off := by
+    simp [sPtr, Ptr.elem, Ptr.add]; omega
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callMC_ptrProject (hi₂.proj (b := 0) (p := sPtr.add 4)
+    (f := (·.elem 4 (BitVec.ofNat 64 u))) (.inl rfl) rfl (by decide) rfl hf0 (by decide) hf16) ?_)
+  dsimp only
   rw [show (sPtr.add 4).elem 4 (BitVec.ofNat 64 u) = ⟨some 0, ((4 + 4 * u : Nat) : Int)⟩ by
     rcases hu with rfl | rfl <;> rfl]
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
@@ -1041,12 +1073,15 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
     (ctxS_dec hi₃ hu) e he).elim) fun q m₄ hl => ?_))
   obtain ⟨rfl, rfl, hi₄⟩ := step_ctx hi₃ hu ht₃ hact₃ (by decide) (fun A hA => by omega) (ctxS_dec hi₃ hu) hl
   refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.callMC_ptrProject (hi₄.proj (b := u) (p := ⟨some u, ((0 : Nat) : Int)⟩)
+    (f := (·.add 8)) hu3 rfl (by simp) rfl (by simp [Ptr.add]) (by simp) (by simp [Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some u, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some u, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₄ hu ht₃ (by decide) (fun A hA => by omega)
     (ctxN_dec hi₄ hu) e he).elim) fun n m₅ hl => ?_)
   obtain ⟨rfl, rfl, hi₅⟩ := step_ctx hi₄ hu ht₃ hact₃ (by decide) (fun A hA => by omega) (ctxN_dec hi₄ hu) hl
   refine ⟨rfl, ?_⟩
   -- the `cmpxchg` (a stop)
-  rw [show (sPtr.add 0).add 0 = sPtr from rfl]
   simp only [cmpxchgWeakC, StateT.run_bind]
   refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₁ hk₁ => ⟨Gh.cas s.h, hi₅, fun G₁ m₆ hg₁ hi₆ c hcr => ?_⟩)))
   have hi₆' : Inv G₁ { m₆ with current := u } :=
@@ -1128,14 +1163,13 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     rw [StateT.run'_eq]
     refine WP.map ?_
     simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-    rw [show (cPtr n).add 0 = ⟨some n, ((0 : Nat) : Int)⟩ from rfl]
+    rw [show cPtr n = ⟨some n, ((0 : Nat) : Int)⟩ from rfl]
     -- `c.s`
     refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₀ hn ht₀ (by decide) (fun A hA => by omega)
       (ctxS_dec hi₀ hn) e he).elim) fun q m₁ hl => ?_)
     obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ hn ht₀ hact (by decide) (fun A hA => by omega) (ctxS_dec hi₀ hn) hl
     refine ⟨rfl, ?_⟩
     -- the relaxed load of the head (a stop)
-    rw [show (sPtr.add 0).add 0 = sPtr from rfl]
     simp only [atomicLoadC, StateT.run_bind]
     refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₁ hk₁ =>
       ⟨Gh.start n, by rw [← hgu, upd_same]; exact hi₁, fun G₁ m₂ hg₁ hi₂ c hcr => ?_⟩)))
@@ -1512,7 +1546,7 @@ theorem step_rd {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {v w : BitVec 32} (
   have hx : (Enc.decode (blk.bytes.extract (4 + 4 * k) (4 + 4 * k + Enc.size (BitVec 32))) :
       Result (BitVec 32)).run = some (.ok w) := by
     have := hn; unfold NextAt U32At curBytes at this; rw [hb₀] at this; exact this
-  rw [hx] at hdec
+  rw [decodeLoad_run_of_decode hx] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
   exact ⟨hdec.symm, rfl, hi.record ht (.inl hc) (fun _ h => by cases h) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
@@ -1628,7 +1662,7 @@ theorem step_whole {G : ThreadId → Gh} {m m' : Mem} {s : Stack} {w0 w1 w2 : Bi
   rw [hacc₀] at hacc
   cases hacc
   obtain ⟨v, hd⟩ := whole_dec hi hb₀ hn0 hn1 hn2
-  rw [hd] at hdec
+  rw [decodeLoad_of_decode hd] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   subst hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
@@ -1683,6 +1717,20 @@ structure Pre (m : Mem) : Prop extends Solo m where
   b0 : BlkAt m 0 16 4
   b1 : BlkAt m 1 16 8
   b2 : BlkAt m 2 16 8
+
+/-- Before the spawns: a pointer into one of the three 16-byte blocks is formed (`ptrProject`). -/
+theorem Pre.proj {m : Mem} (hp : Pre m) {b : Nat} (hb : b = 0 ∨ b = 1 ∨ b = 2) {o : Nat}
+    {f : Ptr → Ptr} (hfb : (f ⟨some b, (o : Int)⟩).block = some b)
+    (hf0 : 0 ≤ (f ⟨some b, (o : Int)⟩).off) (ho : o ≤ 16) (hf16 : (f ⟨some b, (o : Int)⟩).off ≤ 16) :
+    (ptrProject ⟨some b, (o : Int)⟩ f).run m = pure (f ⟨some b, (o : Int)⟩, m) := by
+  have hblk : ∃ a, BlkAt m b 16 a := by
+    rcases hb with rfl | rfl | rfl
+    · exact ⟨_, hp.b0⟩
+    · exact ⟨_, hp.b1⟩
+    · exact ⟨_, hp.b2⟩
+  obtain ⟨_, blk, hblk', -, hsz, -⟩ := hblk
+  exact ptrProject_run f hfb (inBounds_of rfl hblk' (by simp) (by simp; omega))
+    (inBounds_of hfb hblk' hf0 (by omega))
 
 /-- `main`'s store before its spawns, to block `b` at `o` (`solo_store`). -/
 theorem pre_store {α : Type} [Enc α] {m m' : Mem} {b sz al o a : Nat} {v : α} (h : Pre m)
@@ -1740,7 +1788,8 @@ theorem next_lt (k : Nat) (hk : k < 3) :
     lt false (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) 3 = true := by
   rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
 
-theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 stackPush QM G0 { mem0 σ with current := 0 } d := by
   unfold stackPush
   -- the blocks: the `Stack`, the two `PushCtx`
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
@@ -1757,22 +1806,19 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e2 : s2 = cPtr 2 := by rw [hq₃]; rfl
   subst e2
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  rw [show sPtr.add 0 = ⟨some 0, ((0 : Nat) : Int)⟩ from rfl,
-    show (sPtr.add 4).elem 4 0 = ⟨some 0, ((4 : Nat) : Int)⟩ from rfl,
-    show (sPtr.add 4).elem 4 1 = ⟨some 0, ((8 : Nat) : Int)⟩ from rfl,
-    show (sPtr.add 4).elem 4 2 = ⟨some 0, ((12 : Nat) : Int)⟩ from rfl]
+  rw [show sPtr = ⟨some 0, ((0 : Nat) : Int)⟩ from rfl]
   -- `head = .init(0)`
   refine WP.bind (WP.callRC (fun e he => by
     have he' : (atomic_Value_u32_init 0).run = some (.error e) := he
@@ -1786,7 +1832,11 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   refine ⟨by rw [hp₄.thr, hp₃.thr], ?_⟩
   have hH₄ : U32At m₄ 0 0 0 := by
     unfold U32At; rw [MP.enc_av4] at hh₄; rw [hh₄, MP.enc_av]; exact intOfBytes_rmw 0
-  -- `next = .{ 0, 0, 0 }`
+  -- `next = .{ 0, 0, 0 }` (`&s.next`, then items 1 and 2: `ptrProject`)
+  refine WP.bind (WP.callMC_ptrProject (hp₄.proj (b := 0) (o := 0) (f := (·.add 4)) (.inl rfl)
+    rfl (by simp [Ptr.add]) (by decide) (by simp [Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some 0, ((0 : Nat) : Int)⟩ : Ptr).add 4 = ⟨some 0, ((4 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₄ hp₄.b0 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₅ hs₅ => ?_)
   obtain ⟨hp₅, hz₅, hk₅⟩ := pre_store hp₄ hp₄.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₅
@@ -1795,12 +1845,20 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   refine ⟨by rw [hp₅.thr, hp₄.thr], ?_⟩
   have hH₅ : U32At m₅ 0 0 0 := by
     unfold U32At; rw [hk₅ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₄
+  refine WP.bind (WP.callMC_ptrProject (hp₅.proj (b := 0) (o := 4) (f := (·.elem 4 1)) (.inl rfl)
+    rfl (by simp [Ptr.elem, Ptr.add]) (by decide) (by simp [Ptr.elem, Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some 0, ((4 : Nat) : Int)⟩ : Ptr).elem 4 1 = ⟨some 0, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b0 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₆ hs₆ => ?_)
   obtain ⟨hp₆, -, hk₆⟩ := pre_store hp₅ hp₅.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₆
   refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
   have hH₆ : U32At m₆ 0 0 0 := by
     unfold U32At; rw [hk₆ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₅
+  refine WP.bind (WP.callMC_ptrProject (hp₆.proj (b := 0) (o := 4) (f := (·.elem 4 2)) (.inl rfl)
+    rfl (by simp [Ptr.elem, Ptr.add]) (by decide) (by simp [Ptr.elem, Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some 0, ((4 : Nat) : Int)⟩ : Ptr).elem 4 2 = ⟨some 0, ((12 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b0 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₇ hs₇ => ?_)
   obtain ⟨hp₇, -, hk₇⟩ := pre_store hp₆ hp₆.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₇
@@ -1813,24 +1871,30 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
     unfold U32At; rw [hk₇ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₆
   -- the `PushCtx` of pusher 1
   dsimp only
-  rw [show (cPtr 1).add 0 = ⟨some 1, ((0 : Nat) : Int)⟩ from rfl,
-    show (cPtr 1).add 8 = ⟨some 1, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr 1 = ⟨some 1, ((0 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₇ hp₇.b1 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₈ hs₈ => ?_)
   obtain ⟨hp₈, hs1₈, hk₈⟩ := pre_store hp₇ hp₇.b1 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₈
   refine ⟨by rw [hp₈.thr, hp₇.thr], ?_⟩
+  refine WP.bind (WP.callMC_ptrProject (hp₈.proj (b := 1) (o := 0) (f := (·.add 8)) (by decide)
+    rfl (by simp [Ptr.add]) (by decide) (by simp [Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some 1, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 1, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₈ hp₈.b1 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₉ hs₉ => ?_)
   obtain ⟨hp₉, hn1₉, hk₉⟩ := pre_store hp₈ hp₈.b1 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₉
   refine ⟨by rw [hp₉.thr, hp₈.thr], ?_⟩
   -- the `PushCtx` of pusher 2
   dsimp only
-  rw [show (cPtr 2).add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl,
-    show (cPtr 2).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr 2 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₉ hp₉.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₁₀ hs₁₀ => ?_)
   obtain ⟨hp₁₀, hs2₁₀, hk₁₀⟩ := pre_store hp₉ hp₉.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₁₀
   refine ⟨by rw [hp₁₀.thr, hp₉.thr], ?_⟩
+  refine WP.bind (WP.callMC_ptrProject (hp₁₀.proj (b := 2) (o := 0) (f := (·.add 8)) (by decide)
+    rfl (by simp [Ptr.add]) (by decide) (by simp [Ptr.add])) ?_)
+  dsimp only
+  rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₁₀ hp₁₀.b2 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₁₁ hs₁₁ => ?_)
   obtain ⟨hp₁₁, hn2₁₁, hk₁₁⟩ := pre_store hp₁₀ hp₁₀.b2 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₁₁
@@ -1862,7 +1926,7 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
     funext u; unfold upd G0; split <;> simp_all
   -- the spawns
   refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₁₁, fun G₁ m₁₂ hg₁ hi₁₂ =>
-    ⟨.start 1, by simp [proto], fun child m₁₃ hf => ?_⟩⟩)
+    ⟨.start 1, by simp [proto, cPtr], fun child m₁₃ hf => ?_⟩⟩)
   obtain ⟨rfl, hc₁₃, hi₁₃⟩ := inv_fork1 ((hi₁₂ : Inv G₁ m₁₂).grow (growsAt_current m₁₂ 0) (.inl rfl)) hg₁ rfl hf
   dsimp only
   simp only [StateT.run_bind]
@@ -1885,7 +1949,7 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
       ⟨fun _ => join_ok hi₁₈ (.inr ⟨hg₄, rfl⟩), fun m₁₉ hj => ?_⟩⟩⟩)
   obtain ⟨hc₁₉, hs₁₉, hi₁₉⟩ := inv_join hi₁₈ (.inr ⟨hg₄, rfl, rfl⟩) hfin hj
   -- the acquire load of the head (a stop)
-  rw [show (⟨some 0, ((0 : Nat) : Int)⟩ : Ptr).add 0 = sPtr from rfl]
+  rw [show (⟨some 0, ((0 : Nat) : Int)⟩ : Ptr) = sPtr from rfl]
   simp only [StateT.run_bind, atomicLoadC]
   refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₅ hk₅ => ⟨Gh.ld, hi₁₉, fun G₅ m₂₀ hg₅ hi₂₀ c hcr => ?_⟩)))
   have hi₂₀' : Inv G₅ { m₂₀ with current := 0 } :=
@@ -1907,7 +1971,10 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   refine WP.bind (WP.callRC_ok (x := mul false 100 (BitVec.ofNat 32 b)) (v := BitVec.ofNat 32 (100 * b))
     (by rcases hbk with rfl | rfl <;> rfl) ?_)
   first
-  | -- Zig 0.16.0: `next[k]` through a pointer into the `Stack`
+  | -- Zig 0.16.0: `next[k]` through a pointer into the `Stack` (`&s.next`: `ptrProject`)
+      refine WP.bind (WP.callMC_ptrProject (hi₂₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      dsimp only
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
@@ -1923,6 +1990,11 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
       refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
         (v := BitVec.ofNat 32 (100 * b + 10 * a))
         (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+      refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      dsimp only
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
@@ -2009,17 +2081,56 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
 
 /-- **`stackPush` gives 120 or 210 under every schedule** (every oracle `o`, every `fuel`): both
 nodes are on the stack, the top one first, then the other, then 0. -/
-theorem stackPush_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o stackPush mem0).run = some (.ok (v, m))) :
+theorem stackPush_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o stackPush (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 120 ∨ v = .ok 210 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
 overflow, under every schedule. -/
-theorem stackPush_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o stackPush mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem stackPush_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+
+/-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem stackPush_completes :
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
+  ⟨.fresh, by unroll_sched 10⟩
+
+/-! ## Non-vacuity witnesses
+
+`memW` is `main`'s memory before its spawns as `main_spec` builds it: the `Stack` (head 0,
+`next[0] = 0`) and the two `PushCtx`, so `pre_inv` gives the invariant. -/
+
+/-- A `stack` block of 16 bytes at `addr`. -/
+def blkW (bs : Array Byte) (addr : Nat) : Block :=
+  { bytes := bs ++ Array.replicate (16 - bs.size) .undef, align := 8, kind := .stack, live := true,
+    addr }
+
+def memW : Mem :=
+  { blocks := #[blkW (Enc.encode (0 : BitVec 32) ++ Enc.encode (0 : BitVec 32)) 4096,
+      blkW (Enc.encode sPtr ++ Enc.encode (1 : BitVec 32)) 8192,
+      blkW (Enc.encode sPtr ++ Enc.encode (2 : BitVec 32)) 12288] }
+
+theorem memW_inv : Inv G0 memW :=
+  pre_inv ⟨⟨rfl, rfl, rfl, rfl, fun _ h => by simp [memW] at h⟩, ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩,
+      ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩, ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩⟩
+    (by with_unfolding_all rfl) (by with_unfolding_all rfl)
+    (fun u hu => by rcases hu with rfl | rfl <;> exact ⟨by decide +kernel, by with_unfolding_all rfl⟩)
+
+nonvacuity_witness ctxS_dec := ⟨G0, memW, 1, memW_inv, .inl rfl, trivial⟩
+nonvacuity_witness ctxN_dec := ⟨G0, memW, 1, memW_inv, .inl rfl, trivial⟩
+
+nonvacuity_witness decode_stack :=
+  ⟨Array.replicate 16 (.int 0), 0, 0, 0, 0, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
+nonvacuity_witness u32_blk :=
+  ⟨Witness.mem1 (Enc.encode (0 : BitVec 32)), Witness.blk (Enc.encode (0 : BitVec 32)), 0, 0, rfl,
+    by with_unfolding_all rfl, trivial⟩
 
 end Atomics.Stack

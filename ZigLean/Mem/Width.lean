@@ -66,7 +66,9 @@ end PtrWidth
 def ptrFrags (w : PtrWidth) (p : Ptr) : Array Byte :=
   ((Array.finRange 8).extract 0 w.bytes).map (.ptrFrag p)
 
-/-- A pointer of width `w`: `w.bytes` bytes that each remember the pointer. -/
+/-- A pointer of width `w`: `w.bytes` bytes that each remember the pointer. As for `Enc Ptr`
+(MM-11), `w.bytes` integer bytes read as a pointer give the pointer to that address without a
+block. -/
 @[instance_reducible] def ptrEnc (w : PtrWidth) : Enc Ptr where
   size := w.bytes
   align := w.bytes
@@ -74,6 +76,9 @@ def ptrFrags (w : PtrWidth) (p : Ptr) : Array Byte :=
   decode bs := match (bs[0]? : Option Byte) with
     | some (.ptrFrag p _) =>
       if bs.extract 0 w.bytes == ptrFrags w p then pure p else throw .unspecified
+    | some (.int _) => do
+      let n ← intOfBytes w.bits bs
+      pure ⟨none, n.toNat⟩
     | _ => throw .unspecified
 
 /-- `?*T` of width `w`: `null` is address 0, `w.bytes` zero bytes. -/
@@ -181,6 +186,13 @@ def memmoveOf {n : Nat} (size dstAlign srcAlign : Nat) (dst src : Ptr) (k : BitV
   let _ ← (← get).access dst (k.toNat * size) dstAlign
   let bs ← loadBytes src (k.toNat * size) srcAlign
   storeBytes dst dstAlign bs
+
+/-- `memcpy` (`Zig.memcpy`) with item counts of `n` bits: the counts must agree and the ranges
+must not overlap, else `.illegal` (`docs/illegal-behavior.md`). -/
+def memcpyOf {n : Nat} (size dstAlign srcAlign : Nat) (dst src : Ptr) (k m : BitVec n) :
+    MemM Unit :=
+  if k ≠ m || dst.overlaps src (k.toNat * size) then throw .illegal
+  else memmoveOf size dstAlign srcAlign dst src k
 
 /-- `readSlice` of a slice with a length of `n` bits. -/
 def readSliceOf (α : Type) [Enc α] {n : Nat} (align : Nat) (s : SliceOf n) : MemM (Array α) := do

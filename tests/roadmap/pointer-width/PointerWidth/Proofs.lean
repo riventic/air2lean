@@ -96,11 +96,11 @@ theorem zeros_boundary (a : Allocator) (m : Mem) :
 
 /-- A `View` stored as global 0, its `first` pointing to global 1 (a `u32`). -/
 def wasmMem (len : BitVec 32) : Mem :=
-  Mem.ofGlobals [(Enc.encode ({ first := ⟨some 1, 0⟩, rest := ⟨⟨some 1, 0⟩, len⟩ } : Wasm32.View), 4, .global),
+  Mem.ofGlobals .fresh [(Enc.encode ({ first := ⟨some 1, 0⟩, rest := ⟨⟨some 1, 0⟩, len⟩ } : Wasm32.View), 4, .global),
     (Enc.encode (7 : BitVec 32), 4, .global)]
 
 def x64Mem (len : BitVec 64) : Mem :=
-  Mem.ofGlobals [(Enc.encode ({ first := ⟨some 1, 0⟩, rest := ⟨⟨some 1, 0⟩, len⟩ } : X64.View), 8, .global),
+  Mem.ofGlobals .fresh [(Enc.encode ({ first := ⟨some 1, 0⟩, rest := ⟨⟨some 1, 0⟩, len⟩ } : X64.View), 8, .global),
     (Enc.encode (7 : BitVec 32), 4, .global)]
 
 /-- wasm32: 12 bytes; the length at offset 8. x86_64: 24 bytes; the length at offset 16. -/

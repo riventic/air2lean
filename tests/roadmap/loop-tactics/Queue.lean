@@ -82,10 +82,13 @@ theorem sum_step (hd : Option Ptr) (xs : List (BitVec 32)) (hlen : xs.length ≤
     have hz : (z.setWidth 64).toNat = z.toNat := toNat_setWidth_of_le (by decide)
     have hadd : Zig.add false s.s (z.setWidth 64) = pure (s.s + z.setWidth 64) :=
       add_unsigned_of_lt (by rw [hz]; exact hfit)
+    -- `&node.val` is formed (`ptrProject`, MM-3): in bounds of the owned node
+    have hpr : ptrProject p (·.add 8) m = pure (p.add 8, m) := by
+      simpa [StateT.run] using node_ptrProject_run hnode (hm.trans hfocus) (k := 8) (by omega)
     refine ⟨(.rep6, { s with s := s.s + z.setWidth 64, p := q }), m₂, hL ∪ (hN ∪ hR), ?_, hdj,
       hm₂.trans hfocus.symm, ?_, hst₂⟩
     · simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hv hq
-      simp [sum.loop6, zig_unfold, hp, Zig.optPayload, hv, hq, -Zig.add_unsigned, hadd]
+      simp [sum.loop6, zig_unfold, hp, Zig.optPayload, hpr, hv, hq, -Zig.add_unsigned, hadd]
     · apply loopNext_repeat rfl (n' := zs.length) (by simp at hn; omega)
       refine ⟨ys ++ [z], zs, by simp [hxs], rfl, ?_, ?_⟩
       · show (s.s + z.setWidth 64).toNat = _

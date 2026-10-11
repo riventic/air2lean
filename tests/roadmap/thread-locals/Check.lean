@@ -22,21 +22,21 @@ example {inits : List (BlockId × Array Byte × Nat)} {m m' : Mem} {x : Unit}
       blk.bytes = inits[i].2.1 ∧ blk.kind = .global :=
   ((tlsEnter_init ht h).2.2.2.2.2.2 i hi).2
 -- The main thread's instance is the key block of `mem0`, with the same initial bytes.
-example : ThreadLocals.mem0.blocks[0]?.map (·.bytes) = some (ThreadLocals.tlsInit[0]!.2.1) := rfl
+example : (ThreadLocals.mem0 .fresh).blocks[0]?.map (·.bytes) = some (ThreadLocals.tlsInit[0]!.2.1) := rfl
 
 -- (3) Two workers and `main` increment their own `counter` concurrently: every schedule.
 example {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters ThreadLocals.mem0).run =
+    (h : (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run =
       some (.ok (v, m))) : v = .ok 90908 :=
   ThreadLocals.Counters.twoCounters_spec h
 example {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters ThreadLocals.mem0).run ≠
+    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run ≠
       some (.error e) :=
   ThreadLocals.Counters.twoCounters_safe
 
 -- (4) A thread-local pointer used after its thread ended never gives a result.
 example {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
-    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.leaked ThreadLocals.mem0).run ≠
+    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.leaked (ThreadLocals.mem0 .fresh)).run ≠
       some (.ok (v, m)) :=
   ThreadLocals.Leak.leaked_never_ok
 example {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {b : BlockId} {a : Nat} {v : T}

@@ -20,6 +20,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "big_endian.u64ToHalves",
+ "module": "root",
  "params": [
   0
  ],

@@ -31,7 +31,7 @@ FIXTURE = ROOT / 'tests' / 'roadmap' / 'claims' / 'fixture-report.json'
 O = outcomes.Outcome
 
 
-def case(status, kind=None, schedule=None, function='root'):
+def case(status, kind=None, schedule=None, function='ret'):
     row = {'schema': 1, 'example': 'example', 'function': function, 'status': status}
     if kind is not None:
         row['model_kind'] = kind
@@ -65,6 +65,7 @@ class TaxonomyTests(unittest.TestCase):
             (case('unspecified_exclusion', 'unspecified'), {O.UNSPECIFIED}),
             (case('unspecified_timer_exclusion', 'unspecified_timer'), {O.UNSPECIFIED_TIMER}),
             (case('mismatch', 'deadlock'), {O.DEADLOCK}),
+            (case('stack_overflow_exclusion', 'stack_overflow'), {O.STACK_OVERFLOW}),
             (case('search_cap', 'value', search('capped')), {O.NONDETERMINISTIC_VALID, O.SEARCH_CAP}),
             (case('value_match', 'value', search('witness', True)), {O.NONDETERMINISTIC_VALID, O.DIVERGENCE}),
             (case('bounded_no_result', 'bounded_no_result', search('bounded', True)), {O.DIVERGENCE}),
@@ -94,6 +95,7 @@ class TaxonomyTests(unittest.TestCase):
             'panic': case('panic_match', 'model_panic'),
             'illegal': case('illegal_exclusion', 'illegal'),
             'deadlock': case('mismatch', 'deadlock'),
+            'stack overflow': case('stack_overflow_exclusion', 'stack_overflow'),
         }
         for name, row in refusing.items():
             for claim in outcomes.ABSENCE_CLAIMS:
@@ -131,8 +133,12 @@ class TaxonomyTests(unittest.TestCase):
         native = {'ok': 1}
         self.assertEqual(report.classify(native, timer, report.Kind.VALUE, kind, None), report.Status.UNSPECIFIED_TIMER)
         unspecified = {'fail': 'Zig.Error.unspecified'}
+        # An unspecified result is an exclusion only on an input pinned for it (F3); the timer
+        # constructor is typed apart and never needs a pin.
+        self.assertEqual(report.classify(native, unspecified, report.Kind.VALUE, report.Kind.UNSPECIFIED, None,
+                                         pinned=True), report.Status.UNSPECIFIED)
         self.assertEqual(report.classify(native, unspecified, report.Kind.VALUE, report.Kind.UNSPECIFIED, None),
-                         report.Status.UNSPECIFIED)
+                         report.Status.MISMATCH)
         # The legacy compatibility projection still counts both in its `unspecified` bucket.
         self.assertEqual(report.legacy_bucket(native, timer, False), 'unspecified')
 
@@ -144,14 +150,25 @@ class ClaimsEvidenceTests(unittest.TestCase):
         self.base = Path(temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.diff = self.base / 'diff.json'
+        # A claims report must be bound to this checkout (H1): revision and one artifact digest.
+        spec = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        olean = self.base / 'Fixture.olean'
+        olean.write_bytes(b'compiled fixture')
+        self.report = self.base / 'assurance.json'
+        self.report.write_text(json.dumps(dict(json.loads(FIXTURE.read_text()), freshness={
+            'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'artifacts': [{'module': 'Fixture', 'olean': str(olean), 'olean_sha256': assumptions.file_sha256(olean),
+                           'source': None, 'source_sha256': None}]})))
 
-    def run_check(self, rows, strength='total_correctness', function='example.root', complete=True, diff=True,
+    def run_check(self, rows, strength='total_correctness', function='example.ret', complete=True, diff=True,
                   tamper=None):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                     'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                     'allowed_assumptions': [],
                     'roots': [{'id': 'root', 'function': function, 'air': ['f.json'], 'namespace': 'ClaimFixture',
-                               'prefix': '', 'contracts': ['Fixture.lean'],
+                               'prefix': 'example.', 'contracts': ['Fixture.lean'],
                                'goals': [{'theorem': 'ClaimFixture.ret_total', 'strength': strength, 'domain': 'all'}],
                                'assumptions': [], 'exclusions': []}]}
         path = self.base / 'project.json'
@@ -162,7 +179,9 @@ class ClaimsEvidenceTests(unittest.TestCase):
                    'cases_sha256': hashlib.sha256(cases).hexdigest()}
         self.diff.write_text(json.dumps(tamper(summary) if tamper else summary))
         extra = ['--diff', str(self.diff)] if diff else []
-        result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(FIXTURE), *extra],
+        # The checkout under test may have uncommitted changes (the evidence binding is tested here).
+        result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(self.report),
+                                 '--allow-dirty', *extra],
                                 capture_output=True, text=True, timeout=30)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
@@ -230,7 +249,7 @@ class ClaimsEvidenceTests(unittest.TestCase):
     def test_other_functions_and_unbound_roots_do_not_count(self):
         code, _, err = self.run_check([case('value_match', 'value'), case('search_cap', 'value', search('capped'), 'other')])
         self.assertEqual(code, 0, err)
-        code, result, err = self.run_check([case('search_cap', 'value', search('capped'))], function='root')
+        code, result, err = self.run_check([case('search_cap', 'value', search('capped'))], function='ret')
         self.assertEqual(code, 0, err)
         self.assertIsNone(result['roots'][0]['outcomes'])
 

@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.mkV",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 63
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -66,7 +73,8 @@
      "id": 4,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 16
     },
     {
      "id": 5,
@@ -184,7 +192,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 14,
@@ -218,6 +227,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.V",
+   "module": "root",
    "layout": "auto",
    "tag": 6,
    "fields": [
@@ -250,6 +260,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -266,6 +277,7 @@
   {
    "k": "enum",
    "name": "noreturn_variants.Kind",
+   "module": "root",
    "tag": 8,
    "exhaustive": true,
    "fields": [
@@ -293,6 +305,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

@@ -46,6 +46,27 @@ theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) →
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
   WP.liftM (x := x) herr h
 
+/-- Forming a derived pointer in bounds (`ptrProject`, MM-3): no stop, no error, the memory
+does not change. -/
+theorem WP.callMC_ptrProject {p : Ptr} {f : Ptr → Ptr} {s : σ}
+    {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hin : (ptrProject p f).run m = pure (f p, m)) (h : Q (f p, s) G m n) :
+    P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) fun a m' hr => ?_
+  · rw [hin] at he; cases he
+  · obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
+    exact ⟨rfl, h⟩
+
+/-- Pointer formation in partial correctness (`P.strict = false`): an error satisfies every
+post, and a result is the projection with the memory unchanged. -/
+theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
+    {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop} (hs : P.strict = false)
+    (h : Q (f p, s) G m n) :
+    P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
+  refine WP.callMC (fun _ _ => hs) fun a m' hr => ?_
+  obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
+  exact ⟨rfl, h⟩
+
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)
@@ -226,12 +247,14 @@ theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs 
 theorem load_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
     (h : ((load T a p).run m).run = some (.ok (v, m'))) :
     ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧ NoRace m b o (Enc.size T) .read ∧
-      (Enc.decode (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
+      (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
       m' = m.recordAt b o (Enc.size T) .read := by
   unfold load at h
   obtain ⟨bs, m₁, hl, h₁⟩ := MemM.bind_ok h
   obtain ⟨b, blk, o, ha, hnr, rfl, rfl⟩ := loadBytes_ok hl
-  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₁
+  obtain ⟨m₂, m₃, hg, h₂⟩ := MemM.bind_ok h₁
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
   exact ⟨b, blk, o, ha, hnr, hd, rfl⟩
 
 theorem accessW_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}
@@ -286,29 +309,8 @@ theorem storeUndef_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {x : U
   simp only [Array.size_replicate] at ha ⊢
   exact ⟨b, blk, o, ha, hk, rfl⟩
 
-/-- `alloc` with a fresh address: always for a stack block, and for a heap or owned block when
-the policy reuses no address (`Mem.reuseAddr?`; `hk` is `rfl` there). `alloc_ok'` holds for
-every address policy. -/
+/-- `alloc` under every placement: the new block id, and `Mem.afterAlloc`. -/
 theorem alloc_ok {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
-    (h : ((alloc kind size align).run m).run = some (.ok (q, m')))
-    (hk : m.reuseAddr? kind size align = none := by rfl) :
-    q = ⟨some m.blocks.size, 0⟩ ∧ m' = { m with
-      blocks := m.blocks.push
-        { bytes := Array.replicate size .undef, align, kind, live := true,
-          addr := alignUp m.nextAddr align },
-      nextAddr := alignUp m.nextAddr align + size + 1 } := by
-  unfold alloc at h
-  obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
-  have := MemM.set_ok hs
-  subst this
-  obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₂
-  refine ⟨rfl, ?_⟩
-  simp only [Mem.afterAlloc, Mem.newAddr, Mem.newNext, hk]
-
-/-- `alloc` under every address policy: the new block id, and `Mem.afterAlloc`. -/
-theorem alloc_ok' {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
     (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
     q = ⟨some m.blocks.size, 0⟩ ∧ m' = m.afterAlloc kind size align := by
   unfold alloc at h
@@ -705,8 +707,6 @@ theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
 theorem intOfBytes_rmw {n : Nat} [LawfulEnc (BitVec n)] (v : BitVec n) :
     (intOfBytes n (padTo (intSize n) (intBytes v))).run = some (.ok v) :=
   congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec n) v)
-
-theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
 
 /-- An insert at the end: the location has one more message, and the block has its bytes. -/
 theorem insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
@@ -1179,7 +1179,8 @@ theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
     (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
       VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
     NoRace m b o len k := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   by_cases hb : e.block = b
@@ -1196,14 +1197,29 @@ theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
       · simp [h1]
   · simp [hb]
 
+/-- A thread that is not joined yet: the race check runs (`Mem.solo` is false). -/
+theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]? = some r)
+    (hj : r.joined = false) : m.solo = false := by
+  unfold Mem.solo
+  have : m.threads.all (·.joined) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro hall
+    obtain ⟨hlt, heq⟩ := Array.getElem?_eq_some_iff.mp h
+    have := (Array.all_eq_true.mp hall) t hlt
+    simp only [heq, hj] at this
+    exact Bool.false_ne_true this
+  simp [this]
+
 /-- An entry of block `b` that overlaps an access, whose clock is concurrent with the thread's
-bumped clock, and that races with it by its kind: the access races. -/
+bumped clock, and that races with it by its kind: the access races (unless `m.solo` skips the
+check, which no reachable memory with a concurrent entry does). -/
 theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
     (he : e ∈ m.footprint) (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
-    {err : Error} (hr : racePair e.kind k = some err) : ¬ NoRace m b o len k := by
-  unfold NoRace raceAt
-  rw [Array.findSome?_eq_none_iff]
+    {err : Error} (hr : racePair e.kind k = some err) (hs : m.solo = false) :
+    ¬ NoRace m b o len k := by
+  unfold NoRace raceCheck raceAt
+  rw [hs, if_neg (by decide), Array.findSome?_eq_none_iff]
   intro h
   have := h e he
   simp [hb, h1, h2, hc, hr] at this
@@ -1819,6 +1835,13 @@ def BlkAt (m : Mem) (b size a : Nat) : Prop :=
   ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = size ∧
     blk.kind = .stack ∧ blk.addr % a = 0
 
+/-- A pointer `k` bytes into a block of `size` bytes (one past the end included) is formed
+(`ptrProject`, MM-3). -/
+theorem BlkAt.ptrProject_run {b size a o k : Nat} (hb : BlkAt m b size a) (hk : o + k ≤ size) :
+    (ptrProject ⟨some b, (o : Int)⟩ (·.add k)).run m = pure ((⟨some b, (o : Int)⟩ : Ptr).add k, m) := by
+  obtain ⟨blk, hblk, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hblk rfl (by simp) (by simp; omega)
+
 theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
   unfold alignUp
   rw [ite_eq_right (by omega)]
@@ -1855,6 +1878,31 @@ theorem BlkAt.write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}
 theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb : BlkAt m b sz a) :
     BlkAt m' b sz a := by
   unfold BlkAt; rw [h]; exact hb
+
+/-- A new stack block is `BlkAt` its id, at an address aligned to its alignment: all that holds
+for every placement (`Mem.newAddr_mod`). -/
+theorem BlkAt.alloc (m : Mem) (size a : Nat) (ha : 0 < a) :
+    BlkAt (m.afterAlloc .stack size a) m.blocks.size size a :=
+  ⟨{ bytes := Array.replicate size .undef, align := a, kind := .stack, live := true,
+      addr := m.newAddr size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
+    m.newAddr_mod size a ha⟩
+
+/-- An allocation keeps `BlkAt` of every existing block. -/
+theorem BlkAt.afterAlloc {m : Mem} {b sz a : Nat} (h : BlkAt m b sz a) (kind : BlockKind)
+    (size al : Nat) : BlkAt (m.afterAlloc kind size al) b sz a := by
+  obtain ⟨blk, hb, hl, hs, hk, ha⟩ := h
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  exact ⟨blk, by simp [Mem.afterAlloc, Array.getElem?_push, Nat.ne_of_lt hlt, hb], hl, hs, hk, ha⟩
+
+/-- `BlkAt m b size a` for `m` a chain of `Mem.afterAlloc`s whose block `b` is a stack block of
+`size` bytes and alignment `a` (`BlkAt.alloc`, `BlkAt.afterAlloc`): a function's stack blocks at
+its entry, for every placement. -/
+syntax "blkat_alloc" : tactic
+macro_rules
+  | `(tactic| blkat_alloc) =>
+    `(tactic| first
+      | exact BlkAt.alloc _ _ _ (by decide)
+      | (refine BlkAt.afterAlloc ?_ _ _ _; blkat_alloc))
 
 /-- After a write of `bs` at `o` of block `b`: `bs` there. -/
 theorem curBytes_write_same {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}

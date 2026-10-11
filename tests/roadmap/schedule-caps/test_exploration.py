@@ -118,7 +118,8 @@ class Exploration(unittest.TestCase):
 
     def test_cli_headline_states_schedules_and_limits(self):
         self.seed([({'ok': 1}, {'fail': 'Zig.Error.capped'}, K.VALUE, K.SEARCH_CAP, self.search('capped'))])
-        (self.root/'tests/diff/basic/capped.txt').write_text('foo 1\n')
+        sha = REPORT.hashlib.sha256((self.root/'tests/diff/basic/inputs/foo.jsonl').read_bytes()).hexdigest()
+        (self.root/'tests/diff/basic/capped.txt').write_text(f'foo {sha} 1 capped fixture\n')
         receipt = self.receipt('enum.json', truncated=True)
         out = io.StringIO()
         argv = ['diff-report.py', 'compare', '--summary', str(self.summary), '--root', str(self.root),

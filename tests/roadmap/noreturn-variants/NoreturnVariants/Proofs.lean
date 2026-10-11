@@ -19,7 +19,7 @@ namespace NoreturnVariantsClients
 
 /-- The result of running `f` from `mem0`. -/
 def result {α : Type} (f : MemM α) : Option (Except Error α) :=
-  ((f.run mem0).run).map (·.map Prod.fst)
+  ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
 
 theorem get_mk : (mk 7 >>= get_air2lean1).run = some (.ok 7) := by decide +kernel
 
