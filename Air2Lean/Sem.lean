@@ -360,12 +360,17 @@ def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) :=
     | _, _, _ => stuck
   | none => stuck
 
-/-- The item pointer of a slice or plain pointer operand. -/
-def itemBase (f : Func) (env : Env) (v : Val) : Result Zig.Ptr :=
+/-- The base of item `k` of a plain pointer or a plain slice; a slice checks the index
+(`Zig.checkIndex`). -/
+def itemBase (f : Func) (env : Env) (v : Val) (k : BitVec 64) : MemM Zig.Ptr :=
   match operandTy env v with
-  | some t => if plainSlice f t then do pure (← sliceOperand f env v).1.ptr
-    else do pure (← ptrOperand f env v).1
-  | none => stuck
+  | some t =>
+    if plainSlice f t then do
+      let (s, _) ← StateT.lift (sliceOperand f env v)
+      Zig.checkIndex s k
+      pure s.ptr
+    else do pure (← StateT.lift (ptrOperand f env v)).1
+  | none => StateT.lift stuck
 
 /-- The size of a type, and the alignment of an item of it behind a pointer of alignment `a`
 (an item of an `align(8)` pointer to `u32` is only 4-aligned). -/
@@ -432,9 +437,11 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     | some (size, _), true =>
       do pure (.ptr (← Zig.ptrProject q (if sub then (·.elemSub size k) else (·.elem size k))))
     | _, _ => StateT.lift stuck
+  -- `slice_elem_ptr`: an index at or past the length is illegal behaviour, as for
+  -- `slice_elem_val` (Sema's bounds check is a separate instruction).
   | .elemPtr p idx => do
-    let base ← StateT.lift (itemBase f env p)
     let k ← StateT.lift (indexOperand f env idx)
+    let base ← itemBase f env p k
     match (pointee? f i.ty).bind (layoutOf f), f.plainPtr i.ty with
     | some (size, _), true => do pure (.ptr (← Zig.ptrProject base (·.elem size k)))
     | _, _ => StateT.lift stuck
@@ -454,7 +461,11 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
       Zig.checkIndex s k
       loadAs f i.ty (s.ptr.elem size k) align
     | none => StateT.lift stuck
-  | .sliceLen sv => do pure (.int false 64 (← StateT.lift (sliceOperand f env sv)).1.len)
+  -- `Zig.Slice` is the 64-bit slice: a `slice_len` of another `usize` is outside the fragment.
+  | .sliceLen sv =>
+    if intTy? f i.ty == some (false, 64) then do
+      pure (.int false 64 (← StateT.lift (sliceOperand f env sv)).1.len)
+    else StateT.lift stuck
   | .slicePtr sv =>
     if f.plainPtr i.ty then do pure (.ptr (← StateT.lift (sliceOperand f env sv)).1.ptr)
     else StateT.lift stuck

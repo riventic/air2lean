@@ -179,6 +179,11 @@ structure Scalar where
 /-- The binder of a lambda over a value of this type. -/
 def Scalar.binder (sc : Scalar) : String := if sc.ignoresValue then "_" else "v"
 
+/-- A plain slice of a 64-bit target: `Zig.Slice` (a 32-bit target's is `Zig.Slice32`, and
+`Sem` reads a slice's length and indices as 64-bit). -/
+def slice64 (f : Func) (t : TyId) : Bool :=
+  Sem.plainSlice f t && (f.layouts[t]?.bind (·.size)) == some 16
+
 def scalar? (f : Func) (t : TyId) : Option Scalar :=
   match f.types[t]? with
   | some (.int s w) => some {
@@ -199,7 +204,7 @@ def scalar? (f : Func) (t : TyId) : Option Scalar :=
       decT := fun t => s!"(Value.toPtr {t})" }
     -- A slice of a function in `Zig.MemM` (a pure function's `[]const T` is an `Array`;
     -- `localReason` excludes it).
-    else if Sem.plainSlice f t then some {
+    else if slice64 f t then some {
       lean := "Zig.Slice", enc := fun v => s!"(Value.slice {v})",
       dec := fun i => s!"((args.getD {i} .void).toSlice)",
       inv := "valOk_slice", decVar := fun i => s!"v{i}.toSlice",
@@ -228,8 +233,9 @@ def panicCallee? (name : String) : Option String :=
 def isIntTy (f : Func) (t : TyId) : Bool :=
   match f.types[t]? with | some (.int ..) => true | _ => false
 
-/-- A value type that memory holds in the fragment: an integer, `bool` or plain pointer. -/
-def memValTy (f : Func) (t : TyId) : Bool := (scalar? f t).isSome
+/-- A value type that memory holds in the fragment: an integer, `bool` or plain pointer. Not a
+slice: `Sem.loadAs`/`storeAs` are stuck on one; only a register local's cell holds it. -/
+def memValTy (f : Func) (t : TyId) : Bool := (scalar? f t).isSome && !Sem.plainSlice f t
 
 /-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`. -/
 def simpleVal (f : Func) : Val → Bool
@@ -246,7 +252,7 @@ partial def allInsts (body : Array Inst) : Array Inst :=
 
 /-- Why one instruction is outside the certificate fragment (nested bodies are checked by
 `localReason`, which visits every instruction). -/
-def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array InstId) (i : Inst) :
+def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Array InstId) (i : Inst) :
     Except String Unit := do
   let vals (vs : List Val) : Except String Unit :=
     unless vs.all (simpleVal f) do throw s!"inst {i.id}: an operand outside the fragment"
@@ -267,13 +273,18 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array In
     pure t
   -- A slice operand: an instruction of a plain slice type.
   let sliceOf (v : Val) : Option TyId := match v with
-    | .inst x => (tyOfInst x).filter (Sem.plainSlice f)
+    | .inst x => (tyOfInst x).filter (slice64 f)
     | _ => none
   let sliceVal (v : Val) : Except String TyId := do
     let some t := sliceOf v | throw s!"inst {i.id}: a slice outside the fragment"
     pure t
   -- 64-bit pointers: the translator's `Ptr.elem` (other widths use `Ptr.elemOf`).
   let ptr64 (t : TyId) : Bool := (f.layouts[t]?.bind (·.size)) == some 8
+  -- A register local's cell holds any value of `scalar?`; memory only a `memValTy`.
+  let isReg : Val → Bool
+    | .inst x => regs.contains x
+    | _ => false
+  let cellTy (p : Val) (t : TyId) : Bool := memValTy f t || (isReg p && (scalar? f t).isSome)
   match i.op with
   | .arg _ | .line _ | .dbg .. | .unreach | .trap | .block _ => pure ()
   | .arith _ _ a b | .div _ a b | .minMax _ a b | .bit _ a b => do intRes; vals [a, b]
@@ -283,11 +294,11 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array In
     vals [a, b]
   | .load p => do
     let _ ← ptrVal p
-    unless memValTy f i.ty do throw s!"inst {i.id}: a load of a type outside the fragment"
+    unless cellTy p i.ty do throw s!"inst {i.id}: a load of a type outside the fragment"
   | .store p v => do
     let _ ← ptrVal p
     vals [v]
-    unless typed (memValTy f) v do throw s!"inst {i.id}: a store of a type outside the fragment"
+    unless typed (cellTy p) v do throw s!"inst {i.id}: a store of a type outside the fragment"
   | .fieldPtr b idx => do
     let t ← ptrVal b
     unless f.plainPtr i.ty && (f.fieldOffset? t idx).isSome do
@@ -296,14 +307,18 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array In
     let _ ← ptrVal a
     unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
   | .ptrAdd _ p n | .elemPtr p n => do
-    unless (sliceOf p).isSome do let _ ← ptrVal p
+    -- The semantics checks a slice item pointer's index (illegal behaviour past the length);
+    -- the translator does not.
+    if (sliceOf p).isSome then
+      throw s!"inst {i.id}: a slice item pointer (its index is unchecked in the generated code)"
+    let _ ← ptrVal p
     vals [n]
     unless typed (isIntTy f) n && f.plainPtr i.ty && ptr64 i.ty do
       throw s!"inst {i.id}: pointer arithmetic outside the fragment"
   | .ptrElemVal p n => do
-    let _ ← ptrVal p
+    let t ← ptrVal p
     vals [n]
-    unless typed (isIntTy f) n && memValTy f i.ty do throw s!"inst {i.id}: an item load outside the fragment"
+    unless typed (isIntTy f) n && memValTy f i.ty && ptr64 t do throw s!"inst {i.id}: an item load outside the fragment"
   | .sliceElemVal sl n => do
     let _ ← sliceVal sl
     vals [n]
@@ -333,6 +348,10 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen : Array In
   | .loop _ | .«repeat» _ | .alloc => pure ()  -- checked with the function's shape (`localsReason`)
   | _ => throw s!"inst {i.id}: an instruction outside the fragment"
 
+/-- The registers (`Sem.regAlloc`) of `f`. -/
+def registers (f : Func) : Array InstId :=
+  (allInsts f.body).filterMap fun i => if (i.op matches .alloc) && Sem.regAlloc f i.id then some i.id else none
+
 def callsIn (f : Func) : Array String :=
   (allInsts f.body).filterMap fun i => match i.op with
     | .call (.func n _ _) _ => some n
@@ -349,22 +368,16 @@ def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String 
   let insts := allInsts f.body
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let tyOfInst (x : InstId) := tys[x]?
-  for i in insts do instReason f tyOfInst forLen i
+  let regs := registers f
+  for i in insts do instReason f tyOfInst forLen regs i
   unless (printFunc f).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
 
 /-! ## Locals and loops -/
 
-/-- The operands of a fragment instruction (not its nested bodies). -/
-def opVals : Op → List Val
-  | .arith _ _ a b | .div _ a b | .minMax _ a b | .bit _ a b | .cmp _ a b | .boolAnd a b
-  | .boolOr a b | .store a b => [a, b]
-  | .not a | .intCast a | .trunc a | .br _ a | .ret a | .bitcast a | .fieldPtr a _ | .load a
-  | .condBr a _ _ => [a]
-  | .call c args => c :: args.toList
-  | .switchBr v cs _ =>
-    v :: cs.toList.flatMap fun c => c.items.toList ++ c.ranges.toList.flatMap fun (a, b) => [a, b]
-  | _ => []
+/-- The operands of an instruction (not its nested bodies or debug information): the classifier's
+value and place operands (`Op.effects`), which covers every constructor. -/
+def opVals (op : Op) : List Val := (op.effects.values ++ op.effects.places).toList
 
 def instIdsOf (vs : List Val) : List InstId := vs.filterMap fun | .inst k => some k | _ => none
 
@@ -378,22 +391,15 @@ partial def loopCtx (bs ls : List InstId) (body : Array Inst) :
     | .switchBr _ cs e => cs.flatMap (loopCtx bs ls ·.body) ++ loopCtx bs ls e
     | _ => #[]
 
-/-- The registers (`Sem.regAlloc`) of `f`. -/
-def registers (f : Func) : Array InstId :=
-  (allInsts f.body).filterMap fun i => if (i.op matches .alloc) && Sem.regAlloc f i.id then some i.id else none
-
 /-- The registers a body reads or writes. -/
 def cellsIn (regs : Array InstId) (body : Array Inst) : Array InstId :=
   ((allInsts body).toList.flatMap fun i => instIdsOf (opVals i.op)).eraseDups.filter regs.contains |>.toArray
     |>.qsort (· < ·)
 
-/-- The pointee type of an `alloc`. -/
-def allocChild (f : Func) (a : InstId) : Option TyId :=
-  ((allInsts f.body).find? (·.id == a)).bind fun i => Sem.pointee? f i.ty
-
 /-- Why `f`'s locals or loops are outside the certificate fragment. `sh`: its emitted shape. -/
 def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit := do
   let insts := allInsts f.body
+  let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let allocs := insts.filterMap fun i => if i.op matches .alloc then some i.id else none
   let hasLoop := insts.any (·.op matches .loop _)
   if allocs.isEmpty && !hasLoop then return
@@ -410,11 +416,9 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
     throw "an escaping local inside a nested body or out of the translator's order"
   -- The translator allocates every escaping local at entry: nothing before the last one may
   -- touch memory.
-  match top.findIdx? (·.id == escTop.back?.getD 0) with
-  | some j =>
+  if let some j := escTop.back? >>= fun e => top.findIdx? (·.id == e) then
     unless (top.extract 0 j).all (fun i => i.op matches .arg _ | .line _ | .dbg .. | .alloc) do
       throw "an escaping local allocated after an instruction with effects"
-  | none => pure ()
   -- A register starts undefined; the translator's field starts at its default.
   for a in regs do
     let some j := top.findIdx? (·.id == a) | throw s!"inst {a}: a register local inside a nested body"
@@ -423,7 +427,7 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
     | some (.store (.inst b) v) =>
       unless b == a && !(v matches .undef _) do throw s!"inst {a}: a register local read before it is set"
     | _ => throw s!"inst {a}: a register local read before it is set"
-    unless ((allocChild f a).bind (scalar? f)).isSome do
+    unless ((tys[a]?).bind (Sem.pointee? f) |>.bind (scalar? f)).isSome do
       throw s!"inst {a}: a register local of a type outside the fragment"
     -- The loop lemmas map every register into the frame: it must be set before any loop.
     if (top.extract 0 j).any fun i => (allInsts #[i]).any (·.op matches .loop _) then
@@ -436,7 +440,6 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
   -- the semantics' frame does not name.
   if !sh.escaping.isEmpty && (loopCtx [] [] f.body).any (fun (_, _, _, ls) => !ls.isEmpty) then
     throw "a nested loop in a function with escaping locals"
-  let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   for (l, caps) in sh.loops do
     let some li := insts.find? (·.id == l) | throw s!"inst {l}: a loop the translator does not name"
     let body := match li.op with | .loop b => b | _ => #[]
@@ -458,14 +461,17 @@ def fragment (funcs : Array Func) (memFuncs concFuncs : Array String)
   let budgeted := if memFuncs.isEmpty then #[] else (callGroups funcs).flatMap fun (members, recursive) =>
     if recursive then (members.map (·.name)).filter memFuncs.contains else #[]
   for f in funcs do
-    let reason := if concFuncs.contains f.name then .error "a concurrent function (`Zig.ConcM`)"
+    let reason : Except String (Array String) :=
+      if concFuncs.contains f.name then .error "a concurrent function (`Zig.ConcM`)"
       else if budgeted.contains f.name then
         .error "a recursive function that uses memory (stack budget `Zig.enterFrame`, STK-01)"
-      else
-        let sh := (shapes.find? (·.1 == f.name)).map (·.2) |>.getD default
-        localReason f (memFuncs.contains f.name) sh.forLen >>= fun cs => do
-          localsReason f sh (memFuncs.contains f.name)
-          pure cs
+      else match shapes.find? (·.1 == f.name) with
+        -- Fail closed: without the emitter's shape, its locals, loops and `for` checks are unknown.
+        | none => .error "no emitted certificate shape (`Emit.CertShape`)"
+        | some (_, sh) =>
+          localReason f (memFuncs.contains f.name) sh.forLen >>= fun cs => do
+            localsReason f sh (memFuncs.contains f.name)
+            pure cs
     match reason with
     | .ok cs => cands := cands.push (f, cs)
     | .error e => out := out.push (f.name, e)
@@ -533,7 +539,7 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
   let scalarOf (k : InstId) : Scalar := ((tys[k]?).bind (scalar? f)).getD blank
   let regs := registers f
   let fieldOf (a : InstId) : String := ((sh.fields.find? (·.1 == a)).map (·.2)).getD s!"local{a}"
-  let cellScalar (a : InstId) : Scalar := ((allocChild f a).bind (scalar? f)).getD blank
+  let cellScalar (a : InstId) : Scalar := ((tys[a]?).bind (Sem.pointee? f) |>.bind (scalar? f)).getD blank
   -- The frame of a generated state `t`: `st` with every register's cell, written in increasing
   -- id order (`Frame.setCell_comm`'s normal form). The escaping locals' pointers are in the
   -- environment, and a loop does not change the frame's blocks.
@@ -653,9 +659,10 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
 /-- The certificate file for `funcs` (the translated program, emission order). `declNames`
 maps each fully qualified name to its generated definition in namespace `ns`, which
 `genModule` defines. `memFuncs`/`concFuncs`: the functions the translator emits in `Zig.MemM`
-and `Zig.ConcM` (`memoryFunctions`, `concFunctions`). -/
+and `Zig.ConcM` (`memoryFunctions`, `concFunctions`); `shapes`: each function's emitted
+`CertShape` (`EmitParts.shapes`). -/
 def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String))
-    (genModule : String) (memFuncs concFuncs : Array String) (shapes : Array (String × CertShape) := #[]) :
+    (genModule : String) (memFuncs concFuncs : Array String) (shapes : Array (String × CertShape)) :
     String := Id.run do
   let (frag, out) := fragment funcs memFuncs concFuncs shapes
   let leanDecl (n : String) : String := (declNames.find? (·.1 == n)).map (·.2) |>.getD n
