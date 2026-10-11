@@ -294,10 +294,6 @@ theorem cycle_spec (hint last : Ptr) :
 
 /-! ## The obstruction scenarios are excluded by the precondition -/
 
-theorem Holds.heap_erase {m : Mem} {r rF : Res} (hh : Holds m r rF) :
-    m.heap = r.heap.erase ∪ rF.heap.erase := by
-  rw [← fheap_erase, hh.heap, FHeap.erase_union]
-
 theorem Holds.sepL {m : Mem} {P Q : FAssn} {r rF : Res} (hh : Holds m r rF) (h : (P ⋆ Q) r) :
     ∃ r₁ r₂, P r₁ ∧ Q r₂ ∧ Holds m r₁ ⟨r₂.heap ∪ rF.heap, r₂.know.union rF.know, r₂.gh.add rF.gh⟩ ∧
       Holds m r₂ ⟨r₁.heap ∪ rF.heap, r₁.know.union rF.know, r₁.gh.add rF.gh⟩ := by
@@ -305,9 +301,9 @@ theorem Holds.sepL {m : Mem} {P Q : FAssn} {r rF : Res} (hh : Holds m r rF) (h :
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, h2F⟩ := FHeap.disjoint_union_left.mp hdisj
   refine ⟨r₁, r₂, h1, h2, ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by
-    rw [hheap]; exact FHeap.union_assoc .., hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩,
+    rw [← FHeap.union_assoc]; exact hheap, hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩,
     ⟨FHeap.disjoint_union_right.mpr ⟨hd.symm, h2F⟩, by
-      rw [hheap, ← FHeap.union_assoc, FHeap.union_comm hd, FHeap.union_assoc], hk.right,
+      rw [← FHeap.union_assoc, ← FHeap.union_comm hd]; exact hheap, hk.right,
       hk.left.union hkF, by rw [← Ghost.Ok.assoc, Ghost.add_comm r₂.gh]; exact hg⟩⟩
 
 /-- **O3.** A memory that holds the hint word as `apts` has no atomic location of another
@@ -317,11 +313,19 @@ theorem apts_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq) {p 
     {v : BitVec 64} (hp : apts p v r) {b : BlockId} (hpb : p.block = some b) {l : ALoc}
     (hl : l ∈ m.atomics) (hb : l.block = b) (h1 : p.off.toNat < l.off + l.len)
     (h2 : l.off < p.off.toNat + 8) : l.off = p.off.toNat ∧ l.len = 8 := by
-  obtain ⟨A, S, K, bs, tg, -, -, hsz, -, htg, hab⟩ := hp
-  have ht := tagOk_of_own hh hab hsz htg hpb
+  obtain ⟨A, S, K, bs, -, -, hsz, -, hab⟩ := hp
   have hmem : ALoc.shape l ∈ shapes m :=
     List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩
-  exact overlap_eq hs.2.1 (by decide) ht hmem hb h1 h2
+  -- a byte of the word under `l`: its location is `l`, which its constraint names
+  obtain ⟨x, hx1, hx2, hcov⟩ : ∃ x, p.off.toNat ≤ x ∧ x < p.off.toNat + 8 ∧ Covers b x (ALoc.shape l) := by
+    by_cases ho : p.off.toNat ≤ l.off
+    · exact ⟨l.off, ho, h2, hb, Nat.le_refl _, by have := hs.2.1.1 _ hmem; simp only [ALoc.shape] at this ⊢; omega⟩
+    · exact ⟨p.off.toNat, Nat.le_refl _, by omega, hb, by simp only [ALoc.shape]; omega, h1⟩
+  have hc := abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, hx1, by rw [hsz]; exact hx2⟩
+  have hsat := hh.heap.2 (b, x) _ (by rw [FHeap.union_apply, hc]; rfl)
+  have ht := tagOf_of_mem hs.2.1 hmem hcov
+  simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
+  simpa [ALoc.shape] using hsat
 
 theorem inv_no_odd {hint last : Ptr} {m : Mem} (hs : m.FSeq) {b : BlockId}
     (hpb : hint.block = some b) {l : ALoc} (hl : l ∈ m.atomics) (hb : l.block = b)
@@ -396,11 +400,12 @@ def start : Mem :=
 def hintP : Ptr := ⟨some 0, 0⟩
 def lastP : Ptr := ⟨some 1, 0⟩
 
-/-- The owned bytes of block `b` (address `A`, 8 bytes, a `var` global), with no atomic tag. -/
-def glob (b A : Nat) (bs : Array Byte) : FHeap := fun l =>
-  if l.1 = b ∧ l.2 < 8 then some ⟨⟨bs[l.2]!, A, 8, .global⟩, none⟩ else none
+/-- The owned bytes of block `b` (address `A`, 8 bytes, a `var` global), with the tag
+constraint `tg`. -/
+def glob (b A : Nat) (bs : Array Byte) (tg : Option (Nat × Nat)) : FHeap := fun l =>
+  if l.1 = b ∧ l.2 < 8 then some ⟨⟨bs[l.2]!, A, 8, .global⟩, tg⟩ else none
 
-theorem start_fheap : start.fheap = glob 0 4096 enc0 ∪ glob 1 4112 enc1 := by
+theorem start_fheap : start.fheap = glob 0 4096 enc0 none ∪ glob 1 4112 enc1 none := by
   funext ⟨b, o⟩
   simp only [Mem.fheap, FHeap.union_apply, glob]
   rcases b with _ | _ | b
@@ -412,27 +417,37 @@ theorem start_fheap : start.fheap = glob 0 4096 enc0 ∪ glob 1 4112 enc1 := by
     · simp [Mem.heap, start, enc1_size, ho]
   · simp [Mem.heap, start]
 
-theorem glob_abytes {b A : Nat} {bs : Array Byte} (hs : bs.size = 8) :
-    abytesAt ⟨some b, 0⟩ A 8 .global bs none ⟨glob b A bs, Know.none, Ghost.unit⟩ := by
+theorem glob_abytes {b A : Nat} {bs : Array Byte} {tg : Option (Nat × Nat)} (hs : bs.size = 8) :
+    abytesAt ⟨some b, 0⟩ A 8 .global bs tg ⟨glob b A bs tg, Know.none, Ghost.unit⟩ := by
   refine ⟨rfl, rfl, b, rfl, Int.le_refl 0, fun ⟨x, y⟩ => ?_⟩
   simp [glob, hs]
 
 theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ inv hintP lastP r ∧ start.FSeq := by
-  have hd : FHeap.Disjoint (glob 0 4096 enc0) (glob 1 4112 enc1) := by
+  have hd : FHeap.Disjoint (glob 0 4096 enc0 (some (0, 8))) (glob 1 4112 enc1 none) := by
     intro ⟨b, o⟩; by_cases hb : b = 0 <;> simp [glob, hb]
-  refine ⟨⟨glob 0 4096 enc0 ∪ (glob 1 4112 enc1 ∪ FHeap.empty),
+  -- no atomic location at program start: every constraint holds
+  have hfm : FMatch start (glob 0 4096 enc0 (some (0, 8)) ∪ glob 1 4112 enc1 none) := by
+    refine ⟨?_, fun l fc _ => ?_⟩
+    · rw [← fheap_erase, start_fheap]
+      funext ⟨b, o⟩
+      simp only [FHeap.erase, FHeap.union_apply, glob]
+      split <;> split <;> rfl
+    · cases fc.atom with
+      | none => trivial
+      | some t => exact .inl (by simp [shapes, start, tagOf])
+  refine ⟨⟨glob 0 4096 enc0 (some (0, 8)) ∪ (glob 1 4112 enc1 none ∪ FHeap.empty),
     Know.none.union (Know.none.union Know.none), Ghost.unit.add (Ghost.unit.add Ghost.unit)⟩,
     ⟨fun _ => .inr rfl, ?_, ?_, Know.sub_none _, ?_⟩,
     ⟨⟨none, 0⟩, 0, ?_⟩, ?_⟩
-  · simp [start_fheap]
+  · simpa using hfm
   · simp [Know.union_none]; exact Know.sub_none _
   · simp only [Ghost.add_unit]
     exact ⟨fun _ => .inl fun _ => rfl, 0, fun _ _ => rfl⟩
-  · refine ⟨⟨glob 0 4096 enc0, Know.none, Ghost.unit⟩, ⟨glob 1 4112 enc1 ∪ FHeap.empty, Know.none.union Know.none, Ghost.unit.add Ghost.unit⟩,
-      by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1, Know.none, Ghost.unit⟩, ⟨FHeap.empty, Know.none, Ghost.unit⟩,
+  · refine ⟨⟨glob 0 4096 enc0 (some (0, 8)), Know.none, Ghost.unit⟩, ⟨glob 1 4112 enc1 none ∪ FHeap.empty, Know.none.union Know.none, Ghost.unit.add Ghost.unit⟩,
+      by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1 none, Know.none, Ghost.unit⟩, ⟨FHeap.empty, Know.none, Ghost.unit⟩,
       FHeap.disjoint_empty _, rfl, ?_, ⟨rfl, rfl, rfl, rfl⟩⟩
-    · exact ⟨4096, 8, .global, enc0, none, rfl, by decide, enc0_size,
-        LawfulEnc.decode_encode (α := BitVec 64) _, .inl rfl, glob_abytes enc0_size⟩
+    · exact ⟨4096, 8, .global, enc0, rfl, by decide, enc0_size,
+        LawfulEnc.decode_encode (α := BitVec 64) _, glob_abytes enc0_size⟩
     · refine ⟨⟨4112, 8, .global, enc1, rfl, enc1_size, LawfulEnc.decode_encode (α := Ptr) _,
         abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl, rfl⟩
   · refine ⟨⟨singleThread_empty rfl (by decide)⟩, ⟨by simp [shapes, start], by simp [shapes, start]⟩, ?_⟩

@@ -28,7 +28,7 @@ theorem Holds.split {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.hea
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, -⟩ := FHeap.disjoint_union_left.mp hdisj
   have h2F := (FHeap.disjoint_union_left.mp hdisj).2
-  exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by rw [hheap]; exact FHeap.union_assoc ..,
+  exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by rw [← FHeap.union_assoc]; exact hheap,
     hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩
 
 /-- `c` returns from every memory that holds `P` with some frame. -/
@@ -99,9 +99,7 @@ theorem FTotalTriple.congr (he : ∀ m, m.FSeq → c'.run m = c.run m) (ht : FTo
 theorem FTotalTriple.ofTotal {P : Assn} {Q : α → Assn} (ht : TotalTriple P c Q) (hc : Tame c) :
     FTotalTriple (up P) c (fun v => up (Q v)) := by
   refine ⟨FTriple.ofTriple ht.toPartial hc, fun m r rF hh hp hs => ?_⟩
-  have hm : m.heap = r.heap.erase ∪ rF.heap.erase := by
-    rw [← fheap_erase, hh.heap, FHeap.erase_union]
-  obtain ⟨v, m', -, hr, -⟩ := ht m _ _ (FHeap.erase_disjoint hh.disj) hm hp.1 hs.1
+  obtain ⟨v, m', -, hr, -⟩ := ht m _ _ (FHeap.erase_disjoint hh.disj) hh.heap_erase hp.1 hs.1
   exact ⟨v, m', hr⟩
 
 /-! ## The logic record -/

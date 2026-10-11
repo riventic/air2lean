@@ -8,8 +8,9 @@ import ZigLean.Sep.Full.Disjoint
 
 `FTriple P c Q` is `Triple` (`ZigLean/Sep/Triple.lean`) over full-state resources
 (`ZigLean/Sep/Full/Res.lean`): a memory holds a resource `r` with the frame `rF` (`Holds`) if its
-full heap (live bytes **with their atomic tags**) is exactly the disjoint union of the two, and
-**the knowledge of both is true in it** (every `known b A` names an existing block at its address).
+live bytes are exactly the disjoint union of the two, **each byte meets its atomic tag
+constraint** (`FMatch`), and **the knowledge of both is true in it** (every `known b A` names an
+existing block at its address).
 The memory invariant is `Mem.FSeq`: `Mem.Seq`, a well-formed atomic layout, and live blocks at
 disjoint addresses (`Mem.LiveDisjoint`). The ghost states of a resource and its frame compose
 (`Ghost.Ok`).
@@ -19,7 +20,7 @@ disjoint addresses (`Mem.LiveDisjoint`). The ghost states of a resource and its 
   frame now includes the tags of its bytes and its knowledge.
 * **Lifting** (`ofTriple`): a legacy `Triple P c Q` of a program that keeps the atomic layout and
   every block's address and keeps live blocks apart (`Tame`) is a full triple of `up P` and
-  `up Q`. Every primitive of plain generated code is `Tame` (`Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed
+  `up Q` (the result's bytes are unconstrained). Every primitive of plain generated code is `Tame` (`Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed
   under `pure` and `bind`), so the legacy rules carry over unchanged.
 * **Knowledge** (`know_intro`): owning a byte of block `b` gives `known b A` for its address `A`;
   `ptrAddr` (`@intFromPtr`) of a pointer into `b` needs only `known b A`, so it works after `free`
@@ -35,11 +36,12 @@ open FAssn Conc
 live blocks at disjoint addresses (`Mem.LiveDisjoint`, stage 3 of `docs/sep-full-state.md`). -/
 def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveDisjoint
 
-/-- `m` holds the resource `r` and the frame `rF`: its full heap is exactly their disjoint union,
-their knowledge is true in `m`, and their ghost states compose (`Ghost.Ok`). -/
+/-- `m` holds the resource `r` and the frame `rF`: their disjoint union matches `m` (its live
+bytes, each byte's tag constraint: `FMatch`), their knowledge is true in `m`, and their ghost
+states compose (`Ghost.Ok`). -/
 structure Holds (m : Mem) (r rF : Res) : Prop where
   disj : FHeap.Disjoint r.heap rF.heap
-  heap : m.fheap = r.heap ∪ rF.heap
+  heap : FMatch m (r.heap ∪ rF.heap)
   know : Know.Sub r.know m.kn
   knowF : Know.Sub rF.know m.kn
   ghost : Ghost.Ok r.gh rF.gh
@@ -85,7 +87,7 @@ theorem frame (ht : FTriple P c Q) : FTriple (P ⋆ R) c (fun v => Q v ⋆ R) :=
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨hPF, hRF⟩ := FHeap.disjoint_union_left.mp hdisj
   have := ht m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩
-    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [hheap]; exact FHeap.union_assoc .., hk.left,
+    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [← FHeap.union_assoc]; exact hheap, hk.left,
       hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩ hp hs
   split at this
   · trivial
@@ -93,7 +95,7 @@ theorem frame (ht : FTriple P c Q) : FTriple (P ⋆ R) c (fun v => Q v ⋆ R) :=
   · obtain ⟨r', ⟨hd', hh', hk', hkF', hg'⟩, hq, hs'⟩ := this
     obtain ⟨hQR, hQF⟩ := FHeap.disjoint_union_right.mp hd'
     exact ⟨⟨r'.heap ∪ rR.heap, r'.know.union rR.know, r'.gh.add rR.gh⟩,
-      ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [hh', FHeap.union_assoc],
+      ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [FHeap.union_assoc]; exact hh',
         hk'.union hkF'.left, hkF'.right, Ghost.Ok.assoc.mpr hg'⟩, ⟨r', rR, hQR, rfl, hq, hr⟩, hs'⟩
 
 /-- Frame on the left. -/
@@ -157,11 +159,21 @@ end FTriple
 
 /-- A cell of an owned full heap is a cell of the memory. -/
 theorem Holds.cell {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {c : FCell}
-    (hc : r.heap l = some c) : m.heap l = some c.cell := by
-  have := congrFun hh.heap l
-  rw [FHeap.union_apply, hc, Option.some_or] at this
-  have e := congrArg (Option.map (·.cell)) this
-  simpa [Mem.fheap, Option.map_map] using e
+    (hc : r.heap l = some c) : m.heap l = some c.cell :=
+  hh.heap.cell (by rw [FHeap.union_apply, hc]; rfl)
+
+/-- The live bytes of a memory that holds `r` and `rF`: their cells. -/
+theorem Holds.heap_erase {m : Mem} {r rF : Res} (hh : Holds m r rF) :
+    m.heap = r.heap.erase ∪ rF.heap.erase := by
+  rw [hh.heap.1, FHeap.erase_union]
+
+/-- A frame byte meets its tag constraint. -/
+theorem Holds.tagF {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FCell}
+    (hc : rF.heap l = some fc) : TagSat (shapes m) l.1 l.2 fc.atom := by
+  refine hh.heap.2 l fc ?_
+  rcases hh.disj l with e | e
+  · rw [FHeap.union_apply, e, Option.none_or, hc]
+  · rw [e] at hc; cases hc
 
 /-- **Knowledge from ownership.** Owning a byte of block `b`, whose cell has the address `A`,
 gives `known b A`. -/
@@ -313,15 +325,12 @@ theorem ptrAddr (p : Ptr) : Tame (Zig.ptrAddr p) := of_eq fun m v m' h => by
 end Tame
 
 /-- **Lifting.** A legacy triple of a program that keeps the atomic layout and the block addresses
-is a full triple: the legacy frame is the full frame without its tags, and the tags of the frame
-stay because the layout stays. -/
+is a full triple: the legacy frame is the full frame without its tags, and the frame's tag
+constraints stay true because the layout stays. -/
 theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
     (hc : Tame c) : FTriple (up P) c (fun v => up (Q v)) := by
   intro m r rF hh hp hs
-  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
-  have hm' : m.heap = r.heap.erase ∪ rF.heap.erase := by
-    rw [← fheap_erase, hm, FHeap.erase_union]
-  have := ht m _ _ (FHeap.erase_disjoint hd) hm' hp.1 hs.1
+  have := ht m _ _ (FHeap.erase_disjoint hh.disj) hh.heap_erase hp.1 hs.1
   revert this
   cases hrun : (c.run m).run with
   | none => intro; trivial
@@ -332,41 +341,29 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
       obtain ⟨v, m'⟩ := x
       rintro ⟨hQ, hdQ, hmQ, hq, hs'⟩
       obtain ⟨hsh, hkm, hld⟩ := hc m v m' hrun
-      -- The frame's cells carry `m`'s tags, which are `m'`'s.
-      have hF : ∀ l fc, rF.heap l = some fc → fc.atom = tagOf (shapes m') l.1 l.2 := by
-        intro l fc hl
-        have e := congrFun hm l
-        rcases hd l with h1 | h1
-        · rw [FHeap.union_apply, h1, Option.none_or, hl] at e
-          simp only [Mem.fheap, Option.map_eq_some_iff] at e
-          obtain ⟨c0, -, rfl⟩ := e
-          rw [hsh]
-        · rw [h1] at hl; cases hl
-      let hQ' : FHeap := fun l => (hQ l).map fun c => ⟨c, tagOf (shapes m') l.1 l.2⟩
+      -- The result's bytes are unconstrained; the frame's constraints hold in the same layout.
+      let hQ' : FHeap := fun l => (hQ l).map fun c => ⟨c, none⟩
+      have hQe : hQ'.erase = hQ := by
+        funext l; simp only [FHeap.erase, hQ', Option.map_map]; cases hQ l <;> rfl
       refine ⟨⟨hQ', Know.none, Ghost.unit⟩,
-        ⟨fun l => ?_, ?_, Know.sub_none _, hkF.trans hkm, by rw [← hp.2.2]; exact hg⟩,
-        ⟨?_, rfl, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
+        ⟨fun l => ?_, ⟨?_, fun l fc hl => ?_⟩, Know.sub_none _, hh.knowF.trans hkm,
+          by rw [← hp.2.2]; exact hh.ghost⟩,
+        ⟨by show Q v hQ'.erase; rw [hQe]; exact hq, rfl, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
       · rcases hdQ l with e | e
         · left; simp [hQ', e]
         · right
           cases h2 : rF.heap l with
           | none => rfl
           | some fc => simp [FHeap.erase, h2] at e
-      · funext l
-        simp only [Mem.fheap, hmQ, FHeap.union_apply, Heap.union_apply, hQ']
-        cases hql : hQ l with
-        | some c => rfl
+      · rw [FHeap.erase_union, hQe, hmQ]
+      · cases e : hQ l with
+        | some c0 =>
+          simp only [FHeap.union_apply, hQ', e, Option.map_some, Option.some_or,
+            Option.some.injEq] at hl
+          subst hl; trivial
         | none =>
-          simp only [Option.none_or, Option.map_none]
-          cases h2 : rF.heap l with
-          | none => simp [FHeap.erase, h2]
-          | some fc =>
-            simp only [FHeap.erase, h2, Option.map_some]
-            rw [← hF l fc h2]
-      · show Q v (fun l => (hQ' l).map (·.cell))
-        have : (fun l => (hQ' l).map (·.cell)) = hQ := by
-          funext l; simp only [hQ', Option.map_map]; cases hQ l <;> rfl
-        rw [this]; exact hq
+          simp only [FHeap.union_apply, hQ', e, Option.map_none, Option.none_or] at hl
+          rw [hsh]; exact hh.tagF hl
 
 /-! ## Address disjointness of live blocks (stage 3) -/
 

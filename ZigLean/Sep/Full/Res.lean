@@ -16,18 +16,23 @@ frame keeps them (`docs/alloc-page.md`, obstructions O1 and O3):
 
 A full-state resource `Res` has three parts:
 
-* `heap : FHeap`: owned live bytes, each with its legacy `Cell` **and its atomic tag**
-  (`FCell.atom`: the start and length of the atomic location over the byte, or `none`). Owning a
-  byte owns its atomic layout, so the frame rule keeps the layout of the frame's bytes, and an
-  atomic points-to (`apts`) can require the layout an atomic op needs.
+* `heap : FHeap`: owned live bytes, each with its legacy `Cell` **and an atomic tag constraint**
+  (`FCell.atom`): `some (o, len)` says that the atomic location over the byte is `(o, len)` or
+  that there is none; `none` constrains nothing (`TagSat`). The frame rule keeps the frame's
+  constraints, and an atomic points-to (`apts`) can require the layout an atomic op leaves.
+  A constraint, not an equation: an atomic op on owned bytes may retire a location that also
+  covers frame bytes (memory reused for another object), which leaves those bytes without a
+  location, and that meets every constraint (`docs/sep-full-state.md` §Atomic tags;
+  `tests/roadmap/sep-full/ExactTags.lean` shows that exact tags break the frame rule).
 * `know : Know`: **persistent knowledge** of block addresses, `known b A`: block `b` exists and
   has address `A`. Block ids are never reused and a block's address never changes, so this
   knowledge stays true after `free` (it is not ownership: it is duplicable, `known_dup`).
 * `gh : Ghost`: ghost epoch ledgers of named grants (§Ghost state below, rules in `Ghost.lean`); no primitive
   reads or changes them.
 
-`Mem.fheap m` is the full heap of a memory (live bytes with their tags); `Mem.kn m` its
-knowledge (every block, live or dead, with its address).
+`Mem.fheap m` is the full heap of a memory (live bytes with their exact tags); a full heap `h`
+matches `m` (`FMatch m h`) if its cells are `m`'s live bytes and each byte meets its tag
+constraint. `Mem.kn m` is the memory's knowledge (every block, live or dead, with its address).
 
 Nothing here is reachable from `ZigLean.lean`: it is proof-only.
 -/
@@ -176,6 +181,30 @@ def _root_.Zig.Mem.fheap (m : Mem) : FHeap := fun l =>
 
 @[simp] theorem fheap_erase (m : Mem) : m.fheap.erase = m.heap := by
   funext l; simp only [FHeap.erase, Mem.fheap, Option.map_map]; cases m.heap l <;> rfl
+
+/-- The tag constraint `t` holds of byte `x` of block `b` in the layout `sh`: `none` constrains
+nothing; `some s`: the location over the byte is `s`, or there is none. -/
+def TagSat (sh : List Shape) (b x : Nat) : Option (Nat × Nat) → Prop
+  | none => True
+  | some s => tagOf sh b x = none ∨ tagOf sh b x = some s
+
+/-- The full heap `h` matches `m`: its cells are exactly `m`'s live bytes, and each of its bytes
+meets its atomic tag constraint. -/
+def FMatch (m : Mem) (h : FHeap) : Prop :=
+  m.heap = h.erase ∧ ∀ l fc, h l = some fc → TagSat (shapes m) l.1 l.2 fc.atom
+
+theorem FMatch.cell {m : Mem} {h : FHeap} (hm : FMatch m h) {l : Loc} {fc : FCell}
+    (hl : h l = some fc) : m.heap l = some fc.cell := by
+  rw [hm.1]; simp [FHeap.erase, hl]
+
+/-- A memory's own full heap (exact tags) matches it. -/
+theorem FMatch.fheap (m : Mem) : FMatch m m.fheap := by
+  refine ⟨(fheap_erase m).symm, fun l fc hl => ?_⟩
+  simp only [Mem.fheap, Option.map_eq_some_iff] at hl
+  obtain ⟨c, -, rfl⟩ := hl
+  cases e : tagOf (shapes m) l.1 l.2 with
+  | none => trivial
+  | some s => exact .inr e
 
 /-- Two memories with the same live bytes and the same atomic layout have the same full heap. -/
 theorem fheap_congr {m m' : Mem} (hh : m'.heap = m.heap) (hs : shapes m' = shapes m) :
@@ -420,11 +449,11 @@ def abytesAt (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (tg : Optio
     then some ⟨⟨bs[l.2 - p.off.toNat]!, A, S, K⟩, tg⟩ else none
 
 /-- **Atomic points-to** `p ↦ₐ v` for a 64-bit word: the 8 bytes at the 8-aligned `p` hold `v`,
-and their atomic layout is either none (no atomic op yet) or exactly one location `(p.off, 8)`.
-So an atomic op on it never hits the mixed-size policy (O3). -/
-def apts (p : Ptr) (v : BitVec 64) : FAssn := fun r => ∃ A S K bs tg,
+and their tag constraint is the location `(p.off, 8)`: the layout over them is that location or
+none (no atomic op yet). So an atomic op on it never hits the mixed-size policy (O3). -/
+def apts (p : Ptr) (v : BitVec 64) : FAssn := fun r => ∃ A S K bs,
   (A + p.off.toNat) % 8 = 0 ∧ K ≠ .constGlobal ∧ bs.size = 8 ∧ intOfBytes 64 bs = pure v ∧
-  (tg = none ∨ tg = some (p.off.toNat, 8)) ∧ abytesAt p A S K bs tg r
+  abytesAt p A S K bs (some (p.off.toNat, 8)) r
 
 section Laws
 

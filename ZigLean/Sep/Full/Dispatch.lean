@@ -206,7 +206,7 @@ theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
   obtain ⟨R, hR, -⟩ := vtR_split hi hp.1
   obtain ⟨h₁, h₂, -, he, ⟨A, S, K, bs, -, hsz, -, hb⟩, -⟩ := hR
   have hm : m.heap = h₁ ∪ (h₂ ∪ rF.heap.erase) := by
-    rw [← fheap_erase, hh.heap, FHeap.erase_union, he, Heap.union_assoc]
+    rw [hh.heap_erase, he, Heap.union_assoc]
   obtain ⟨b, blk, hacc, -⟩ := bytesAt_access (q := vtp.add (8 * i)) (k := 0) (n := 8) (a := 1) hb hm
     (by simp [Ptr.add]) (by decide) (by rw [hsz]; decide) (Nat.mod_one _)
   obtain ⟨hqb, hblk, -, h0, hn, -⟩ := access_eq hacc
