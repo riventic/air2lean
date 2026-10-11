@@ -201,8 +201,10 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   hides the mapping's size): [alloc-page.md](alloc-page.md).
 * Full-state restatement: `FAllocSpec` (`ZigLean/Sep/Full/AllocSpec.lean`,
   [sep-full-state.md](sep-full-state.md)) has the same entries and conditions over full-state
-  assertions. `FAllocSpec.ofTotal` lifts a total `AllocSpec` of a vtable whose entries are `Tame`
-  (the FixedBufferAllocator: `FBA.fallocSpec`). The page allocator's `free`, `resize` and `remap`
+  assertions, and a grant also carries a share of its block's extent (`pshare`, the stronger
+  contract of block extents). The FixedBufferAllocator is proved against it natively
+  (`FBA.fallocSpec`, `tests/roadmap/alloc-fba/AllocFba/Full.lean`: the invariant holds a share of
+  the buffer block's extent, so no pin byte). The page allocator's `free`, `resize` and `remap`
   are proved against it, and its `alloc` for alignments up to a page
   (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
   The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,

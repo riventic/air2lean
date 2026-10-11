@@ -295,6 +295,12 @@ table. It replaces "frame cells carry their block's size".
   get the share back. The token sees the fraction `q`: an allocator that must collect its whole
   extent (`munmap`) knows that `free` returns exactly what it lent. `AllocInv.toFull` and the
   `up_granted` family are gone (a legacy `granted` has no share).
+* **Native rules for generated code** (`ZigLean/Sep/Full/Ops.lean`): `ptrAddr`, `checkAlign`,
+  `ptrEqAddr` and `ptrProject` as total full-state rules that read the memory through providers
+  (`AddrOf`: knowledge or an owned cell; `Reaches`: an owned byte or an extent share), and the
+  lifted `load`/`store` of `pts`. The FixedBufferAllocator is proved with them
+  (`FBA.fallocSpec`): its invariant holds a share of the buffer block's extent at the buffer's
+  end instead of a pin byte; a grant gets half of it, `free`/`resize` join it back.
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
@@ -579,8 +585,9 @@ also what a `deinit` that requires every grant back needs.
    2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
       `FAllocSpec.ofTotal` turns a legacy total `AllocSpec` of a `VTame` vtable into a full one
       (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`gen_norm`), and the
-      OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. The FixedBufferAllocator gets
-      `FBA.fallocSpec` this way (`tests/roadmap/alloc-fba/AllocFba/Full.lean`). The page
+      OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. (`FAllocSpec.ofTotal` is gone with
+      block extents; the FixedBufferAllocator's `FBA.fallocSpec` is now a native full-state proof,
+      `tests/roadmap/alloc-fba/AllocFba/Full.lean`, with the rules of `ZigLean/Sep/Full/Ops.lean`.) The page
       allocator's `free`, `resize` and `remap` are proved against it
       (`tests/roadmap/alloc-translated/PageSpec.lean`), and its `alloc` for alignments up to a
       page (`PageAlloc.lean`, `docs/alloc-page.md`; larger alignments: O5). The wrapper contracts and the FBA client stay on the legacy
