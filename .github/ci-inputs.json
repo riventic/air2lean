@@ -22,10 +22,8 @@
       "note": "reads commit identity: the theorem-universe gate of the dispatch regressions binds its assumptions report to HEAD (scripts/assumptions.py verify_fresh); untraced"
     },
     "test/0.16.0/lean": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "reads commit identity (git rev-parse HEAD: a freshness binding to the revision, run 38175631570); untraced"
     },
     "test/0.16.0/inputs": {
       "inputs": [
