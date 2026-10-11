@@ -1,12 +1,18 @@
 import ThreadTuples.Gen
 
 open Zig
+
+/-- A spawn that this test expects to succeed (an `available` environment). -/
+private def spawnT {T : Type} (t : T) : ConcM T ThreadId := do
+  match ← ConcM.sync (.spawn t) with
+  | .ok tid => pure tid
+  | .error _ => throw .panic
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
 
 private def result (o : Nat → Nat) (x : ConcM ThreadTuples.Tgt (Except ErrName (BitVec 32))) :
     Option Nat :=
-  match (Sched.run ThreadTuples.dispatch 500 o x {}).run with
+  match (Sched.run ⟨.any, .available⟩ ThreadTuples.dispatch 500 o x {}).run with
   | some (.ok (.ok n, _)) => some n.toNat
   | _ => none
 
@@ -17,8 +23,8 @@ private def sharedPlain : ConcM ThreadTuples.Tgt Unit := do
   let other ← ConcM.liftMem (alloc .heap 4 4)
   ConcM.liftMem (store 4 out (0#32))
   ConcM.liftMem (store 4 other (0#32))
-  let one ← ConcM.sync (.spawn (.mixedWorker (1, out, 2, other)))
-  let two ← ConcM.sync (.spawn (.mixedWorker (3, out, 4, other)))
+  let one ← spawnT (.mixedWorker (1, out, 2, other))
+  let two ← spawnT (.mixedWorker (3, out, 4, other))
   let _ ← ConcM.sync (.join one)
   let _ ← ConcM.sync (.join two)
   pure ()
@@ -26,11 +32,11 @@ private def sharedPlain : ConcM ThreadTuples.Tgt Unit := do
 def main : IO Unit := do
   for seed in List.range 16 do
     let oracle := fun turn => seed + turn * 7
-    require ((Sched.run ThreadTuples.dispatch 100 oracle ThreadTuples.empty {}).run matches
+    require ((Sched.run ⟨.any, .available⟩ ThreadTuples.dispatch 100 oracle ThreadTuples.empty {}).run matches
       some (.ok (.ok (), _))) s!"zero argument worker failed at schedule {seed}"
-    require ((Sched.run ThreadTuples.dispatch 100 oracle ThreadTuples.genericEmpty {}).run matches
+    require ((Sched.run ⟨.any, .available⟩ ThreadTuples.dispatch 100 oracle ThreadTuples.genericEmpty {}).run matches
       some (.ok (.ok (), _))) s!"generic zero argument worker failed at schedule {seed}"
-    require ((Sched.run ThreadTuples.dispatch 500 oracle sharedPlain {}).run matches
+    require ((Sched.run ⟨.any, .available⟩ ThreadTuples.dispatch 500 oracle sharedPlain {}).run matches
       some (.error .illegal)) s!"shared plain pointers escaped race check: {seed}"
     require (result oracle (ThreadTuples.groupMixed {} 10 2) == some 680)
       s!"Io.Group tuple failed: {seed}"

@@ -638,7 +638,7 @@ theorem main_spec (d : Nat) :
   obtain ⟨hsz₁₁, r1₁₁, r2₁₁, k1₁₁, k2₁₁, hn₁₁⟩ := hsh
   obtain ⟨tls1, hr1⟩ := r1₁₁
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₁]; decide, ⟨_, B, .inl rfl⟩, by
-    simp [Thread.joinValid, hr1]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun hfin => ⟨fun _ => join_run hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₁
@@ -694,7 +694,7 @@ theorem main_spec (d : Nat) :
   obtain ⟨hsz₁₃, r1₁₃, r2₁₃, k1₁₃, k2₁₃, hn₁₃⟩ := hsh
   obtain ⟨tls2, hr2⟩ := r2₁₃
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₃]; decide, ⟨_, B, .inr rfl⟩, by
-    simp [Thread.joinValid, hr2]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr2]⟩,
     fun hfin => ⟨fun _ => join_run hr2 rfl rfl, fun m₁₄ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₃
@@ -716,7 +716,7 @@ theorem main_spec (d : Nat) :
     rw [hth₁₄] at hr
     obtain ⟨i, hi, he⟩ := Array.mem_iff_getElem.mp hr
     have hi' : i < 3 := by simpa [hsz₁₃] using hi
-    have hget : (m₁₃.threads.setIfInBounds 2 { (⟨0, false, tls2⟩ : ThreadRec) with joined := true })[i]? = some r := by
+    have hget : (m₁₃.threads.setIfInBounds 2 { ({ spawner := 0, joined := false, tls := tls2 } : ThreadRec) with joined := true })[i]? = some r := by
       rw [Array.getElem?_eq_getElem hi, he]
     rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
     · rw [Array.getElem?_setIfInBounds_ne (by decide), hi₁₃.t0] at hget; cases hget; rfl
@@ -763,18 +763,18 @@ theorem main_spec (d : Nat) :
 
 /-- **`twoCounters` returns 90908 under every schedule**: each worker read 9 from its own
 `counter` and `main` read 8 from its own. -/
-theorem twoCounters_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run = some (.ok (v, m))) :
+theorem twoCounters_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run = some (.ok (v, m))) :
     v = .ok 90908 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) mem0_size main_spec h
   exact hv
 
 /-- **No run of `twoCounters` gives an error**: the concurrent increments of the three
 instances do not race. -/
-theorem twoCounters_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
-  proto.run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
+theorem twoCounters_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
     main_spec
 
 end ThreadLocals.Counters

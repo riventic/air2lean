@@ -86,7 +86,7 @@ def registry_with_eventually():
     """The registry plus the fixture's own concurrent head, as a batch8-style head would plug in."""
     statement = theorems_of(FIXTURE)['ClaimFixture.countdown_total']['statement']
     return dict(HEADS, **{EVENTUALLY: {'module': statement['head']['module'], 'fingerprint': statement['head']['fingerprint'],
-                                       'claims': list(claims.CLAIMS), 'program': 3, 'state': [4]}})
+                                       'claims': list(claims.CLAIMS), 'program': 4, 'state': [5]}})
 
 
 class ClassifyTests(unittest.TestCase):

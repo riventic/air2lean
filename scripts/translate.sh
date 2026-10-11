@@ -17,6 +17,7 @@ Options:
   --prefix PREFIX           Strip this prefix from Lean names (default: input basename + '.')
   --filter PREFIXES         Comma-separated AIR name prefixes (default: --prefix)
   --float-semantics MODE    ieee (default) or compiler-rt; forwarded to air2lean
+  --assume-no-lb            Accept relaxed load-then-store code (premise ORD-02); forwarded
   --overwrite               Replace an existing OUTPUT after a successful check (default)
   --no-clobber              Refuse to replace an existing OUTPUT, even one created concurrently
   --timeout SECONDS         Per-stage limit (default 3600; 0 disables); the stage's process
@@ -39,7 +40,7 @@ zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_ZIG_AIR:-}
 input='' output='' namespace='' prefix='' filter='' float_semantics=ieee
 overwrite=--overwrite workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
-prefix_set=0 filter_set=0 positional_only=0
+prefix_set=0 filter_set=0 positional_only=0 assume_no_lb=()
 while [ "$#" -gt 0 ]; do
   if [ "$positional_only" = 1 ]; then
     [ -z "$input" ] || { workflow_error "unexpected argument: $1"; exit 2; }
@@ -49,6 +50,7 @@ while [ "$#" -gt 0 ]; do
     --help | -h) usage; exit 0 ;;
     --) positional_only=1; shift ;;
     --overwrite | --no-clobber) overwrite=$1; shift ;;
+    --assume-no-lb) assume_no_lb=(--assume-no-lb); shift ;;
     -o | --namespace | --zig-version | --zig-air | --prefix | --filter | --float-semantics | --timeout)
       [ "$#" -ge 2 ] || { workflow_error "missing value for $1"; exit 2; }
       case "$1" in
@@ -139,7 +141,8 @@ if [ ! -f "${jsons[0]}" ]; then
 fi
 printf '3/4 Translating AIR to Lean\n' >&2
 if ! workflow_run_stage "$repo_root/.lake/build/bin/air2lean" "$work/air" -o "$stage/Gen.lean" \
-    --namespace "$namespace" --prefix "$prefix" --float-semantics "$float_semantics"; then
+    --namespace "$namespace" --prefix "$prefix" --float-semantics "$float_semantics" \
+    ${assume_no_lb[@]+"${assume_no_lb[@]}"}; then
   workflow_error 'translation failed; check the reported subset/model limitation; output was not changed'; exit 1
 fi
 [ -f "$stage/Gen.lean" ] || { workflow_error 'translator did not write fresh Lean output'; exit 1; }

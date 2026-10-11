@@ -1633,16 +1633,18 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
   | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unsupportedTimer)"
-  -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`).
+  -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`). `async`
+  -- is an oracle choice under every policy (a thread, the caller, deferred), so it always gets
+  -- the task's caller execution; `concurrent` gets a thread unless the policy is fallible.
   | .groupAsync | .groupConcurrent =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     let capture := rv (args[2]?.getD .void)
-    let op := if fn == .groupAsync then "groupAsyncC" else "groupConcurrentC"
-    let op := if fc.spawnSemantics == .fallible then
-      (if fn == .groupAsync then "groupAsyncWithPolicyC .fallible" else "groupConcurrentWithPolicyC .fallible")
-      else op
-    let fallback := if fc.spawnSemantics == .fallible && fn == .groupAsync then
+    let policy := if fc.spawnSemantics == .fallible then ".fallible" else ".available"
+    let op := if fn == .groupAsync then s!"groupAsyncWithPolicyC {policy}"
+      else if fc.spawnSemantics == .fallible then "groupConcurrentWithPolicyC .fallible"
+      else "groupConcurrentC"
+    let fallback := if fn == .groupAsync then
       let body := fc.spawnFallback spawnFn
       s!" (({body}) {capture})"
       else ""
@@ -1659,10 +1661,9 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let result := match fc.tyOfId ret with | .future r => r | _ => ret
     let resultTy := fc.emitTyOf result
     let mk := s!"(fun futureSlot => Tgt.{futureCtorName target} futureSlot {capture})"
-    let call := if fc.spawnSemantics == .fallible then
-      s!"Zig.asyncWithPolicyC (α := {resultTy}) .fallible {mk} \
-        (({fc.spawnFallback (futureEagerKey spawnFn)}) {capture})"
-      else s!"Zig.asyncC (α := {resultTy}) {mk}"
+    let policy := if fc.spawnSemantics == .fallible then ".fallible" else ".available"
+    let call := s!"Zig.asyncWithPolicyC (α := {resultTy}) {policy} {mk} \
+      (({fc.spawnFallback (futureEagerKey spawnFn)}) {capture})"
     fc.storageExpr result call
   -- `Future(T).await(&f, io)`, `.cancel(&f, io)`: `ret` is `T`.
   | .futureAwait | .futureCancel =>
@@ -3326,7 +3327,7 @@ def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
 
 /-- Shared body text for a definition and its opt-in unfolding theorem. -/
 def emitFunctionBody (fc : FCtx) (localsName exitName : String)
-    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) (ownerCheck : Bool := false) : String :=
   let bodyStr := emitStmts fc #[] body.toList
   -- The `M`-do-block's `σ`/`ε` never appear as a literal type anywhere inside it (`(← get)`,
   -- `.br<k>`, …), so without this ascription nothing pins them down for the elaborator.
@@ -3365,8 +3366,10 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
+  -- The owner check of a mutex unlock (`ownerCheckedUnlocks`): before any other step.
+  let checkLines := if ownerCheck then ["  Zig.mutexOwnerCheck p0"] else []
   String.intercalate "\n"
-    (["do"] ++ enterLines ++ allocLines ++
+    (["do"] ++ checkLines ++ enterLines ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++ leaveLines ++
      ["  match e with"] ++ matchLines)
 
@@ -3510,6 +3513,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let loops := (allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false).reverse
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty || !fc.dispatchTys.isEmpty
   let functionBody := emitFunctionBody fc localsName exitName f.ret f.body hasNonRetExit
+    (fc.conc && ownerCheckedUnlocks.contains f.name)
   { types := [localsStr, exitStr]
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList
@@ -4324,11 +4328,11 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     let complete := withStorageEnc structNames f.types f.errorSetBits r
       "Zig.Future.complete futureSlot futureResult" f.layouts
     (nm, name, args, kind, complete, fields.map (captureClass f.types))
-  let spawnFallbacks := if spawnSemantics == .fallible then
-    emitSpawnFallbacksWithStorage funcs targetDescriptions ++
-      futureDescriptions.map fun (nm, name, args, kind, _, _) =>
-        (futureEagerKey nm, emitFutureEager name args kind)
-    else #[]
+  -- Every `Io.Group.async` and `Io.async` call needs the task's caller execution (the eager
+  -- outcome) under every spawn policy (`groupAsyncWithPolicyC`, `asyncWithPolicyC`).
+  let spawnFallbacks := emitSpawnFallbacksWithStorage funcs targetDescriptions ++
+    futureDescriptions.map fun (nm, name, args, kind, _, _) =>
+      (futureEagerKey nm, emitFutureEager name args kind)
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
