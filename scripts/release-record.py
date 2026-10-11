@@ -219,30 +219,45 @@ NATIVE_JOBS = {
 }
 
 
-def native_plan(name, job, commands):
-    """A matrix-free native job (`NATIVE_JOBS`): GitHub names it `name`; only GitHub evidence covers it.
+# Jobs without gates: `lake` pre-builds the Lake cache the test rows restore (each row still runs
+# `lake build` itself) and `all-checks` aggregates the other jobs' results.
+SUPPORT_JOBS = {'lake', 'all-checks'}
 
-    Its commands are keyed `<name>::<step>` (step names may repeat the test job's). A step whose
-    condition reads another step's outputs (a cache hit) is tool setup, not a gate.
+
+def native_plan(name, job, commands, expression):
+    """A native job (`NATIVE_JOBS`) per matrix row (GitHub's row name), or once without a matrix.
+
+    Only GitHub evidence covers it. Its commands are keyed `<name>::<step>` (step names may repeat
+    the test job's). A step whose condition reads another step's outputs (a cache hit) is tool
+    setup, not a gate; other conditions are evaluated per row as in the test job.
     """
+    rows = [None]
     if job.get('strategy') is not None:
-        raise ReleaseError('%s: the %s job must not have a matrix' % (WORKFLOW, name))
+        rows = ((job['strategy'].get('matrix') or {}).get('include')) or []
+        if not rows or any(not isinstance(row, dict) for row in rows):
+            raise ReleaseError('%s: the %s job matrix needs an include list' % (WORKFLOW, name))
     steps = job.get('steps') or []
     names = [step.get('name') for step in steps]
     if None in names or len(set(names)) != len(names):
         raise ReleaseError('%s: every %s step needs a unique name' % (WORKFLOW, name))
-    gates = []
-    for step in steps:
-        if 'run' not in step:
-            continue
-        condition = step.get('if', True)
-        if not isinstance(condition, bool) and 'steps.' in str(condition):
-            continue
-        if condition is not True:
-            raise ReleaseError('%s: %s step %r: unsupported condition %r' % (WORKFLOW, name, step['name'], condition))
-        commands[name + '::' + step['name']] = {key: step[key] for key in ('env', 'run') if key in step}
-        gates.append(step['name'])
-    return {'name': name, 'matrix': None, 'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': []}
+    plans = []
+    for row in rows:
+        context = {'matrix.%s' % key: value for key, value in (row or {}).items()}
+        context.update({'runner.os': 'macOS' if name == 'macos' else 'Linux', 'github.workspace': '/work'})
+        gates, skipped = [], []
+        for step in steps:
+            condition = step.get('if', True)
+            if 'run' not in step or (not isinstance(condition, bool) and 'steps.' in str(condition)):
+                continue
+            try:
+                applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
+            except (ValueError, IndexError) as error:
+                raise ReleaseError('%s: %s step %r: unsupported condition: %s' % (WORKFLOW, name, step['name'], error))
+            commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
+            (gates if applies else skipped).append(step['name'])
+        plans.append({'name': name if row is None else job_name(name, row), 'matrix': None,
+                      'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': skipped})
+    return plans
 
 
 def build_plan(root, revision):
@@ -254,9 +269,9 @@ def build_plan(root, revision):
     workflow = parse_workflow_yaml(text)
     expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
-    if set(jobs) - set(NATIVE_JOBS) != {'test'}:
-        raise ReleaseError('%s: only the test, macos, aarch64-linux and bitops-native-arm jobs are qualified for release records'
-                           % WORKFLOW)
+    if set(jobs) - set(NATIVE_JOBS) - SUPPORT_JOBS != {'test'}:
+        raise ReleaseError('%s: only the test, %s jobs are qualified for release records'
+                           % (WORKFLOW, ', '.join(sorted(set(NATIVE_JOBS) | SUPPORT_JOBS))))
     job = jobs['test']
     rows = (((job.get('strategy') or {}).get('matrix') or {}).get('include')) or []
     steps = job.get('steps') or []
@@ -287,7 +302,10 @@ def build_plan(root, revision):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.append(native_plan(name, jobs[name], commands))
+            plan_jobs.extend(native_plan(name, jobs[name], commands, expression))
+    for name in sorted(SUPPORT_JOBS & set(jobs)):
+        plan_jobs.append({'name': name, 'matrix': None, 'reproduce': 'not a gate', 'gates': [],
+                          'not_applicable': []})
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
