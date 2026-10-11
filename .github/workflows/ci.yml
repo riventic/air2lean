@@ -8,10 +8,11 @@ on:
 permissions:
   contents: read
 
-# A new push to the same PR cancels the run of the older commit. Runs on main finish: they are
-# the merged commit's evidence, and the caches they save are the ones every PR can restore.
+# A new push to the same PR cancels the run of the older commit. Every run on main finishes (one
+# group per commit): it is that merge commit's evidence, and the caches main saves are the ones
+# every PR can restore.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -20,7 +21,7 @@ jobs:
   # leaves out (and runs `lake build` itself), so a miss is only slower.
   lake:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,13 +65,20 @@ jobs:
         if: steps.lookup.outputs.cache-hit != 'true'
         run: python3 scripts/local-ci-steps.py --prune-cache
 
+      # Every tracked ZigLean module, not only the library roots: the rows build optional modules.
+      # A failure here only means no new cache: the rows still run, build and report themselves.
       - name: Build the root package and its proofs
+        id: build
         if: steps.lookup.outputs.cache-hit != 'true'
-        run: lake build ZigLean Air2Lean air2lean Proofs AssuranceTools
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mapfile -t modules < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
+          lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
 
       # Saved only by this job, after a successful build: the test rows restore it read-only.
       - name: Save the Lake build (root package)
-        if: steps.lookup.outputs.cache-hit != 'true'
+        if: steps.lookup.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -86,7 +94,7 @@ jobs:
   test:
     needs: lake
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:

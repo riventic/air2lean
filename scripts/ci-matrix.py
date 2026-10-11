@@ -4,7 +4,7 @@
   ci-matrix.py check [--root DIR]    fail when a generated matrix region is stale
   ci-matrix.py write [--root DIR]    rewrite the generated regions
 
-Each Zig version that compatibility.json declares gets `golden` and `lean` rows in the `test`
+Each Zig version that compatibility.json declares for x86_64-linux gets `golden` and `lean` rows in the `test`
 job; the default version also gets the parts that run once (`inputs`, `native`, `audit`,
 `receipt`, one row per T06 build mode) and one mutation row per line of
 scripts/mutation-shards.txt. A version in RESTRICTED runs the examples that
@@ -36,7 +36,7 @@ def region(job):
 def rows(root):
     compat = json.loads((root/'compatibility.json').read_text(encoding='utf-8'))
     default = compat['zig']['default']
-    versions = [v['version'] for v in compat['zig']['versions']]
+    versions = [v['version'] for v in compat['zig']['versions'] if 'x86_64-linux' in v['hosts']]
     shards = len([l for l in (root/'scripts/mutation-shards.txt').read_text().splitlines() if l.strip()])
 
     def row(version, part, **shard):

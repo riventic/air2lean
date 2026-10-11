@@ -72,8 +72,12 @@ coverage_check() {
   tarball="$cache/zig-$version.tar.xz"
   if [ ! -f "$tarball" ]; then
     local part
-    mkdir -p "$cache" && part=$(mktemp "$cache/zig-$version.part.XXXXXX") \
-      && curl -fsSL --output "$part" "$url" && mv "$part" "$tarball" || return 1
+    mkdir -p "$cache" && part=$(mktemp "$cache/zig-$version.part.XXXXXX") || return 1
+    if ! curl -fsSL --output "$part" "$url" || ! echo "$sha256  $part" | shasum -a 256 -c - >/dev/null; then
+      rm -f "$part"
+      return 1
+    fi
+    mv "$part" "$tarball" || return 1
   fi
   echo "$sha256  $tarball" | shasum -a 256 -c - >/dev/null || return 1
   mkdir "$scratch/$version" && tar -xJf "$tarball" -C "$scratch/$version" --strip-components=1 || return 1
