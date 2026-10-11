@@ -33,15 +33,17 @@ keeps integer or pointer handles to freed memory, has the same problem.
 
 A resource (`Res`, in `ZigLean/Sep/Full/Res.lean`) has two parts.
 
-1. **Owned bytes with their atomic layout.** `heap : FHeap` maps each location to an `FCell`,
-   which is the legacy `Cell` plus `atom : Option (Nat × Nat)`, the start and length of the atomic
-   location covering the byte (`tagOf (shapes m)`). Owning a byte also owns its atomic layout.
-   * The frame rule keeps the layout of the frame's bytes.
-   * A precondition can require the layout that an atomic op needs. The atomic points-to is
-     `apts p v`: the 8 bytes at the 8-aligned `p` hold `v`, and their tag is either `none` (no
-     atomic op yet) or exactly `(p.off, 8)`.
-   * An atomic op on owned bytes creates or reuses a location over those bytes only, so it
-     changes only owned tags.
+1. **Owned bytes with a constraint on their atomic layout.** `heap : FHeap` maps each location
+   to an `FCell`, which is the legacy `Cell` plus `atom : Option (Nat × Nat)`, a **tag
+   constraint** (§Atomic tags are constraints): `some (o, len)` says that the atomic location
+   covering the byte (`tagOf (shapes m)`) is `(o, len)` or that there is none; `none` says nothing.
+   * The frame rule keeps the frame's constraints true.
+   * A precondition can require the layout that an atomic op leaves. The atomic points-to is
+     `apts p v`: the 8 bytes at the 8-aligned `p` hold `v`, and their constraint is `(p.off, 8)`.
+   * An atomic op on owned bytes, whatever their layout, creates or reuses a location over those
+     bytes only, and may retire locations over them (`retireAt`); retiring only removes
+     locations, so every frame constraint stays true. The rules take any owned word
+     (`wpts`, any constraint) and leave an `apts`.
 2. **Persistent block knowledge.** `know : Know` is a set of pairs `(b, A)`. The assertion
    `known b A` means "block `b` exists and has address `A`".
    * Block ids are never reused, and a block's address never changes. `free` flips `live`; on P2,
@@ -54,15 +56,16 @@ A resource (`Res`, in `ZigLean/Sep/Full/Res.lean`) has two parts.
 
 A memory holds `r` with frame `rF` (`Holds`) when two things are true:
 
-* `m.fheap = r.heap ∪ rF.heap` exactly, and the two heaps are disjoint;
+* `r.heap ∪ rF.heap` matches `m` (`FMatch`): its cells are exactly `m`'s live bytes, each byte
+  meets its tag constraint (`TagSat`), and the two heaps are disjoint;
 * both knowledge sets are true in `m`, i.e. contained in `Mem.kn m` (every block, live or dead,
   with its address).
 
 The memory invariant is `Mem.FSeq := Mem.Seq ∧ ShapesWF (shapes m) ∧ Mem.LiveDisjoint m`: every
 atomic location has a byte, no two overlap, and no two live blocks share an address (stage 3,
-below). `locIdx` only creates a location where none overlaps, and every new block is placed clear
-of the live ones (`Mem.ofGlobals_liveDisjoint` for the start), so every reachable memory satisfies
-this.
+below). `locIdx` only creates a location where none overlaps (after retiring the overlapping
+ones), and every new block is placed clear of the live ones (`Mem.ofGlobals_liveDisjoint` for the
+start), so every reachable memory satisfies this.
 
 `FTriple P c Q` (in `ZigLean/Sep/Full/Triple.lean`) is `Triple` with `Holds` in place of the heap
 split and `FSeq` in place of `Seq`.
@@ -82,10 +85,49 @@ overlapping bytes must not coexist, and mixed sizes must be ruled out. Putting t
 byte gets this for free:
 
 * disjointness of byte ownership is disjointness of layout ownership;
-* `apts` is just "owned bytes with a uniform tag";
+* `apts` is just "owned bytes with a uniform constraint";
 * plain loads and stores ignore tags, so every legacy rule still applies.
 
 `apts` is the derived `↦ₐ`. It also frames like bytes.
+
+### Atomic tags are constraints (semantic decision, alloc M2)
+
+The first version read the tags exactly: `Holds` required `m.fheap = r.heap ∪ rF.heap`, tags
+included. That is unsound for an atomic op on bytes owned as plain bytes (`up`, any layout), which
+the arena needs (a node's header comes from its child allocator as a plain region and is then
+accessed atomically). A location may cover owned bytes **and frame bytes**: a 16-byte (`u128`)
+location, or any location over memory that was split between owners after it was used. An atomic
+op on the owned bytes retires that location (`retireAt`: memory reused for another object, which
+the model allows when every access to the old location happened before), so the frame's bytes
+lose their tag, and no resource holds the new memory with the same frame. Kernel-checked:
+`tests/roadmap/sep-full/ExactTags.lean`, `no_plain_atomic_triple` (against a copy of the old
+`Holds`).
+
+So a tag is a constraint. `some t`: the location over the byte is `t` or none; `none`: no
+constraint (`TagSat`). Then:
+
+* **Retire keeps the frame.** `retireAt` removes locations and never touches a block's bytes; a
+  removed location leaves its bytes without a location, which meets every constraint
+  (`TagSat.mono`). The new location covers only the op's own bytes. So `holds_after` holds for
+  any constraint on the word, and the frame's cell values are unchanged (the op writes only the
+  owned bytes; a load writes nothing).
+* **Every read is the bytes.** In one thread the op reads the newest message of its location,
+  which has the block's bytes in every case: an existing location of the op's shape gets a new
+  message when the bytes differ or a plain write happened since (`locIdx`); a new location and a
+  location that replaces retired ones start with the bytes. So a rule's value comes from the
+  owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
+  read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
+  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
+* **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
+  layout over the word (`Toy.apts_layout`, O3: a memory with a 4-byte location at the hint holds
+  no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
+* **Plain bytes.** Constraints can be dropped (`Res.untag`, `FTriple.untag`), so an atomic rule
+  applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
+  (`plain_atomic_triple`).
+
+No theorem statement changed: the rules with `apts` preconditions are corollaries of the general
+ones (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, `atomicLoadAsW`), and `FAllocSpec`,
+`AllocSpec` and the allocator specifications are unchanged.
 
 ### Why knowledge, and not owning the dead block
 
@@ -121,7 +163,7 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Disjoint` | `Mem.LiveDisjoint`, `LDMono.set`/`push`/`grow`, `Mem.newAddr_addrFree` | live blocks have disjoint address ranges (`Block.clearOf`); every block update of the memory model keeps it |
 | `Triple` | `Holds.apart`, `FTriple.apart` | owned bytes of two different blocks lie in disjoint address ranges (`LiveDisjoint` is part of `FSeq`) |
 | `Ghost` | `Upd.alloc`/`issue`/`retire`/`reassign`/`bump`, `gfrag_mem`, `FTriple.upd`/`upd_post`/`mem`, `Upd.frame` | epoch ledgers of named grants (§Ghost state): frame-preserving updates; a token of the current epoch names a grant the authority records |
-| `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
+| `Atomic` | `locIdx_post`, `locIdx_noErr_single`, `holds_after`, `FTriple.untag` | `locIdx` in one thread, any layout: no error, the new location only over the bytes, overlapping ones retired, newest message = the bytes; the frame's constraints stay true |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
 | `AtomicPtr` | `FTriple.atomicLoadUnorderedEnc`, `FTriple.cmpxchgPtr` | pointer-valued `aptsE`: the `unordered` load reads the value; a strong `cmpxchg` with the held value succeeds |
@@ -163,12 +205,12 @@ sequential run that compares the value it just read needs no address.
   It now covers the frame's tags and knowledge. It is non-trivial for primitives because each
   primitive rule must re-establish `Holds m' r' rF` for an arbitrary `rF`:
   * the frame's bytes are unchanged;
-  * their tags are unchanged, because a new location covers only owned bytes (`holds_after`,
-    `locIdx_post`'s tag equation);
+  * their constraints stay true, because a new location covers only owned bytes and a retired
+    one leaves its bytes without a location (`holds_after`, `locIdx_post`'s tag statement);
   * the frame's knowledge stays true (`KMono`: blocks are only pushed or replaced with the same
     address).
 * **Lifting.** `FTriple.ofTriple` uses the legacy triple on the erased heaps. `Tame` gives
-  `shapes m' = shapes m`, so the frame's tags in `m'` are the tags in `m`; `KMono` gives the frame's
+  `shapes m' = shapes m`, so the frame's constraints hold in `m'` as in `m`; `KMono` gives the frame's
   knowledge. This is the only place where the old logic's guarantee ("live frame bytes
   unchanged") must be extended.
 * **Knowledge.** A `Holds` memory contains every fact in `r.know`. `KMono` holds for every
@@ -181,8 +223,7 @@ sequential run that compares the value it just read needs no address.
   is in no `Mem.kn`.
 * **Layout.** `ShapesWF` is part of `FSeq`, and every atomic rule re-establishes it
   (`locIdx_post`). `tagOf` is the first location covering a byte. Under `ShapesWF` it is the only
-  one (`tagOf_of_mem`), so a uniform tag over owned bytes determines what `locIdx` finds
-  (`overlap_eq`).
+  one (`tagOf_of_mem`), so a constraint over owned bytes bounds what `locIdx` finds.
 * **Adequacy.** A client proof starts from a memory that holds its precondition. `start_inv`
   shows such a memory for the toy, and `cycle_from_start` applies the spec to the real run. A
   full triple quantifies over fewer memories than `Triple (up P)`: exactly those whose full state
@@ -328,15 +369,17 @@ also what a `deinit` that requires every grant back needs.
 ## Concurrency (RC11 approximation, `ZigLean/Conc`)
 
 * **Ownership by threads** (`Mem.Owns`, `Owned` in `Conc/Csl.lean`) is about legacy heaps. It
-  carries over by putting `FHeap`s in the parts. A thread's part then owns its tags too, so an
-  atomic op of thread `t` on its own word does not change another part's tags (`holds_after`
-  generalises: the new location covers only `t`'s bytes).
+  carries over by putting `FHeap`s in the parts. A thread's part then owns its constraints too,
+  so an atomic op of thread `t` on its own word keeps another part's constraints (`holds_after`
+  generalises: the new location covers only `t`'s bytes). With several threads a retire can
+  throw `.unspecified` (a racing access to the old location); a concurrent rule needs the
+  constraint `(o, n)` over its word, as `apts` has.
 * **Knowledge is thread-independent.** `KMono` holds for every step of every thread (spawn, join,
   futex and atomic ops do not touch block addresses). So `known` facts are stable under the rely
   and can live in any thread's ghost value or in `Proto.inv`. This is the Iris notion of a
   persistent proposition.
 * **Shared atomic words** (`Conc/Word.lean`: `Word.Ok` requires "no other location overlaps").
-  This is `TagOk` for a word that no thread owns. The full-state version keeps the word in the
+  This is the constraint `(o, n)` for a word that no thread owns. The full-state version keeps the word in the
   protocol invariant as `apts` contents with tag `some (o, n)`.
 * **A process-shared PageAllocator** then has `Proto.inv ⊇ ∃ v, hint ↦ₐ v ∗ addrOf v …`, and each
   thread's `alloc` is a `WP` proof that opens the invariant around the `unordered` load and the

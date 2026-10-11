@@ -3,16 +3,23 @@ import ZigLean.Sep.Full.Triple
 /-!
 # Atomic points-to (prototype, `docs/sep-full-state.md`)
 
-Rules for `atomic_load` and `atomic_store` of a 64-bit word that the precondition owns as `apts`
+Rules for `atomic_load` and `atomic_store` of a 64-bit word that the precondition owns
 (`ZigLean/Sep/Full/Res.lean`), in a sequential run (choice `0`, the only option of one thread:
-the newest message, a write at the end). The atomic layout is part of the owned bytes, so:
+the newest message, a write at the end):
 
-* the op cannot hit the mixed-size policy (`locIdx` cannot throw `.unspecified`): the bytes carry
-  no location, or exactly the location `(p.off, 8)` (obstruction O3);
-* the op changes the layout only of the owned bytes (a new location over them), so the frame's
-  tags stay;
+* in one thread the op never throws (`locIdx_noErr_single`): a location over the bytes of
+  another offset or size is retired, since every access to it happened before
+  (`ZigLean/Mem/Thread.lean`, `retireAt`);
+* the op puts a location only over the owned bytes (`locIdx_post`), and a retired location
+  leaves its other bytes without one, so every frame constraint stays true (`holds_after`;
+  atomic tags are constraints, `docs/sep-full-state.md` §Atomic tags are constraints);
 * in a sequential run the newest message has the block's bytes (`locIdx` adds a message when they
-  differ), so the op reads and writes the owned bytes like a plain access.
+  differ, a new location starts with them), so the op reads and writes the owned bytes like a
+  plain access.
+
+The rules take any owned word (`wpts`, whatever its constraint) and leave an `apts`; the `apts`
+versions are corollaries. `FTriple.untag` and `wpts_of_up` apply them to bytes owned as plain
+(`up`) bytes.
 -/
 
 namespace Zig
@@ -21,11 +28,6 @@ namespace Full
 open FAssn Conc Conc.Proto
 
 /-! ## The layout after `locIdx` -/
-
-/-- The bytes `o..o+len` of block `b` carry no location, or all the location `(o, len)`. -/
-def TagOk (sh : List Shape) (b o len : Nat) : Prop :=
-  (∀ x, o ≤ x → x < o + len → tagOf sh b x = none) ∨
-  (∀ x, o ≤ x → x < o + len → tagOf sh b x = some (o, len))
 
 theorem shape_mem {m : Mem} {i : Nat} (hi : i < m.atomics.size) :
     ALoc.shape m.atomics[i] ∈ shapes m := by
@@ -43,23 +45,6 @@ theorem shapes_set {a : Array ALoc} {i : Nat} {l : ALoc} (hi : i < a.size)
     split
     · subst_vars; exact hs
     · rfl
-
-/-- A location overlapping the bytes `o..o+len` of block `b` (with `TagOk`) is `(b, o, len)`. -/
-theorem overlap_eq {sh : List Shape} (hw : ShapesWF sh) {b o len : Nat} (hlen : 0 < len)
-    (ht : TagOk sh b o len)
-    {s : Shape} (hs : s ∈ sh) (hb : s.1 = b) (h1 : o < s.2.1 + s.2.2) (h2 : s.2.1 < o + len) :
-    s.2.1 = o ∧ s.2.2 = len := by
-  have hpos := hw.1 s hs
-  obtain ⟨x, hx1, hx2, hc⟩ : ∃ x, o ≤ x ∧ x < o + len ∧ Covers b x s := by
-    by_cases ho : o ≤ s.2.1
-    · exact ⟨s.2.1, ho, h2, hb, Nat.le_refl _, by omega⟩
-    · exact ⟨o, Nat.le_refl _, by omega, hb, by omega, h1⟩
-  have e := tagOf_of_mem hw hs hc
-  rcases ht with h | h
-  · rw [h _ hx1 hx2] at e; cases e
-  · rw [h _ hx1 hx2] at e
-    simp only [Option.some.injEq, Prod.mk.injEq] at e
-    exact ⟨e.1.symm, e.2.symm⟩
 
 theorem pos_of_back {M : Array Msg} {c : Array Byte} (h : (M.back?.map (·.bytes)).getD #[] = c)
     (hc : 0 < c.size) : 0 < M.size := by
