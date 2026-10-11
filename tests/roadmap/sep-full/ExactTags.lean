@@ -53,8 +53,7 @@ theorem run1_heap : (run1.map fun r => r.map fun x => x.2.heap (0, 0)) =
 def r : Res := ⟨fun l => if l.1 = 0 ∧ 8 ≤ l.2 then m0.fheap l else none, Know.none, Ghost.unit⟩
 def rF : Res := ⟨fun l => if l.1 = 0 ∧ l.2 < 8 then m0.fheap l else none, Know.none, Ghost.unit⟩
 
-theorem ok_unit : Ghost.Ok Ghost.unit Ghost.unit :=
-  ⟨fun _ => .inl fun _ => rfl, 0, fun _ _ => rfl⟩
+theorem ok_unit : Ghost.Ok Ghost.unit Ghost.unit := (GOk.unit {}).1
 
 theorem m0_heap (l : Loc) : m0.heap l = if l.1 = 0 ∧ l.2 < 16 then some ⟨.int 0, 16, 16, .heap⟩ else none := by
   obtain ⟨b, o⟩ := l

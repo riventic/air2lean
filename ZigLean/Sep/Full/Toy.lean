@@ -70,28 +70,60 @@ theorem FTriple.panicIf {c : Prop} [Decidable c] (hc : ¬ c) :
 
 theorem FTriple.load' {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
     FTriple (up (pts p a v)) (load T a p) (fun x => ⟪x = v⟫ ⋆ up (pts p a v)) :=
-  (FTriple.ofTriple (Triple.load hn) (Tame.load T a p)).post fun _ _ h =>
-    sep_lift.mpr (up_lift.mp h)
+  (FTriple.ofTriple_up (Triple.load hn) (Tame.load T a p) (SizeFree.pts p a v)
+    (Keeps.load T a p)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
 
 theorem FTriple.store' {T : Type} [Enc T] [LawfulEnc T] {p : Ptr} {a : Nat} {v : T}
     (hn : 0 < Enc.size T) (w : T) :
     FTriple (up (pts p a v)) (store a p w) (fun _ => up (pts p a w)) :=
-  FTriple.ofTriple (Triple.store hn w) (Tame.store a p w)
+  FTriple.ofTriple_up (Triple.store hn w) (Tame.store a p w) (SizeFree.pts p a v) (Keeps.store a p w)
 
-theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align)
+/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent. -/
+theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
-    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat =>
-      ⟪p.off = 0 ∧ A % align = 0⟫ ⋆ up (bytesAt p A size kind (Array.replicate size .undef))) :=
-  (FTriple.ofTriple (Triple.alloc kind size align ha hk) (Tame.alloc kind size align)).conseq
-    (fun _ h => up_emp.mpr h)
-    (fun _ _ h => by
-      obtain ⟨A, h⟩ := up_ex.mp h
-      exact ⟨A, sep_lift.mpr (up_lift.mp h)⟩)
+    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
+  refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
+  refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
+    (Triple.alloc kind size align ha hk) (Tame.alloc kind size align)
+    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
+    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
+    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
+  obtain ⟨E', ⟨hq, hk', hg⟩, hcov⟩ := id h
+  obtain ⟨A, hq⟩ := hq
+  obtain ⟨⟨h0, hA⟩, hb⟩ := Zig.sep_lift.mp hq
+  obtain ⟨b, hpb, -, hl⟩ := id hb
+  have hc := hl (b, p.off.toNat)
+  rw [if_pos ⟨rfl, Nat.le_refl _, by simp; omega⟩] at hc
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
+  obtain ⟨fc, hfc, he⟩ := hc
+  have hx := upPost_bext (b := b) (S := size) (K := kind) h ⟨_, fc, hfc, by rw [he], by rw [he], fun h => h.elim⟩
+  obtain ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', e, x, hbx⟩, h2⟩ := hx
+  obtain ⟨A', x⟩ := up_ex.mp x
+  obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
+  exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
 
-theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
-    (h0 : p.off = 0) (hpos : 0 < S) :
-    FTriple (up (bytesAt p A S K bs)) (free p) (fun _ => emp) :=
-  (FTriple.ofTriple (Triple.free hS h0 hpos) (Tame.free p)).post fun _ _ h => up_emp.mp h
+/-- `free` of a whole block: its bytes and its full extent go. -/
+theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    FTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) := by
+  have hcells : ∀ h, bytesAt p A S K bs h → ∀ l c, h l = some c → l.1 = b ∧ c.size = S ∧ c.kind = K := by
+    intro h hb l c hc
+    obtain ⟨b', hb', -, hl⟩ := hb
+    rw [hpb] at hb'; cases hb'
+    rw [hl l] at hc
+    split at hc
+    · rename_i hin; cases hc; exact ⟨hin.1, rfl, rfl⟩
+    · cases hc
+  refine ((FTriple.ofTriple (E := fun x => if x = b then some (S, K) else none) (B := fun x => x = b)
+    (Triple.free hS h0 hpos) (Tame.free p) (fun h hp l c hc => (hcells h hp l c hc).1)
+    (fun h hp l c S' K' hc hE => by
+      obtain ⟨e, hs, hk⟩ := hcells h hp l c hc
+      simp only [e, if_pos] at hE; cases hE; exact ⟨hs, hk⟩)
+    (SizeFree.of_pinned fun h hp l c hc => by simp [(hcells h hp l c hc).1])
+    (.inl fun x hx => by simp [hx])).forgetExt.pre fun _ h => up_sep_bext h).post
+    fun _ _ h => up_emp.mp h
 
 end Helpers
 
@@ -143,10 +175,11 @@ def inv (hint last : Ptr) : FAssn :=
   FAssn.ex fun q : Ptr => FAssn.ex fun a : Int =>
     apts hint (BitVec.ofInt 64 (a + 4096)) ⋆ (up (pts last 8 q) ⋆ addrOf q a)
 
-/-- A fresh page mapping, owned by the caller. -/
+/-- A fresh page mapping, owned by the caller: its bytes and its full extent. -/
 def newMap (p : Ptr) : FAssn :=
-  FAssn.ex fun A : Nat =>
-    ⟪p.off = 0 ∧ A % 4096 = 0⟫ ⋆ up (bytesAt p A 4096 .heap (Array.replicate 4096 .undef))
+  FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    ⟪p.block = some b ∧ p.off = 0 ∧ A % 4096 = 0⟫ ⋆
+      (up (bytesAt p A 4096 .heap (Array.replicate 4096 .undef)) ⋆ bext b 4096 .heap)
 
 /-! ## The program -/
 
@@ -227,24 +260,21 @@ theorem sep_cell_left {P Q : FAssn} {r : Res} {b : BlockId} {A : Nat} (h : (P �
 theorem mapPage_spec :
     FTriple emp mapPage (fun pa => newMap pa.1 ⋆ addrOf pa.1 pa.2) := by
   unfold mapPage
-  refine FTriple.bind (FTriple.alloc' .heap 4096 4096 (by decide)) fun p => ?_
-  refine FTriple.ex fun A => ?_
-  refine FTriple.fact (φ := (p.off = 0 ∧ A % 4096 = 0) ∧ ∃ b, p.block = some b)
-    (fun r hr => ⟨lift_fact hr, by obtain ⟨⟨b, hb, -⟩, -⟩ := lift_drop hr; exact ⟨b, hb⟩⟩) ?_
-  rintro ⟨⟨h0, hA⟩, b, hb⟩
+  refine FTriple.bind (FTriple.alloc' .heap 4096 4096 (by decide) (by decide)) fun p => ?_
+  refine FTriple.ex fun A => FTriple.ex fun b => FTriple.lift fun ⟨hb, h0, hA⟩ => ?_
   obtain ⟨blk, off⟩ := p
   simp only at h0 hb
   subst h0 hb
   refine FTriple.know_intro (b := b) (A := A) (fun r hr => ?_) ?_
-  · obtain ⟨r₁, r₂, -, rfl, ⟨-, he, -⟩, h2⟩ := hr
-    obtain ⟨x, fc, hx, hfa⟩ := up_bytes_cell rfl (by simp) h2
-    exact ⟨x, fc, by simp [he, hx, FHeap.empty], hfa⟩
+  · obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hr
+    obtain ⟨x, fc, hx, hfa⟩ := up_bytes_cell rfl (by simp) h1
+    exact ⟨x, fc, by simp [hx], hfa⟩
   refine FTriple.bind (FTriple.pre (FTriple.frame (FTriple.ptrAddr (b := b) (A := A) 0))
     (fun r hr => sep_comm hr)) fun y => ?_
   refine FTriple.fact (fun r hr => sep_fact_left hr fun _ x => lift_fact x) fun e => ?_
   exact FTriple.ret' _ fun r hr => sep_comm (sep_mono
     (fun _ k => (⟨A, sep_lift.mpr ⟨e.symm, lift_drop k⟩⟩ : addrOf ⟨some b, 0⟩ y _))
-    (fun _ x => (⟨A, x⟩ : newMap ⟨some b, 0⟩ _)) hr)
+    (fun _ x => (⟨A, b, sep_lift.mpr ⟨⟨rfl, rfl, hA⟩, x⟩⟩ : newMap ⟨some b, 0⟩ _)) hr)
 
 theorem publish_spec (hint last q p : Ptr) (v : BitVec 64) (a : Int) :
     FTriple (apts hint v ⋆ up (pts last 8 q)) (publish hint last p a)
@@ -280,7 +310,7 @@ theorem toyAlloc_spec (hint last : Ptr) :
 theorem toyFree_spec (hint last p : Ptr) :
     FTriple (inv hint last ⋆ newMap p) (toyFree p) (fun _ => inv hint last) := by
   refine (FTriple.frameL (R := inv hint last) ?_).post fun _ _ h => sep_emp.mp h
-  exact FTriple.ex fun A => FTriple.lift fun h0 => FTriple.free' (by simp) h0.1 (by decide)
+  exact FTriple.ex fun A => FTriple.ex fun b => FTriple.lift fun h0 => FTriple.free' h0.1 (by simp) h0.2.1 (by decide)
 
 def cycle (hint last : Ptr) : MemM Ptr :=
   toyAlloc hint last >>= fun p => toyFree p >>= fun _ => toyAlloc hint last
@@ -301,10 +331,10 @@ theorem Holds.sepL {m : Mem} {P Q : FAssn} {r rF : Res} (hh : Holds m r rF) (h :
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, h2F⟩ := FHeap.disjoint_union_left.mp hdisj
   refine ⟨r₁, r₂, h1, h2, ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by
-    rw [← FHeap.union_assoc]; exact hheap, hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩,
+    rw [← FHeap.union_assoc]; exact hheap, hk.left, hk.right.union hkF, GOk.assoc.mp hg⟩,
     ⟨FHeap.disjoint_union_right.mpr ⟨hd.symm, h2F⟩, by
       rw [← FHeap.union_assoc, ← FHeap.union_comm hd]; exact hheap, hk.right,
-      hk.left.union hkF, by rw [← Ghost.Ok.assoc, Ghost.add_comm r₂.gh]; exact hg⟩⟩
+      hk.left.union hkF, by rw [← GOk.assoc, Ghost.add_comm r₂.gh]; exact hg⟩⟩
 
 /-- **O3.** A memory that holds the hint word as `apts` has no atomic location of another
 offset or size over it (`docs/alloc-page.md`'s `odd` memory, with a 4-byte location at the hint,
@@ -355,8 +385,9 @@ theorem inv_last_block {hint last : Ptr} {m : Mem} {r rF : Res} (hh : Holds m r 
   obtain ⟨_, r₂, _, h2, _, hh₂⟩ := Holds.sepL hh hi
   obtain ⟨r₃, r₄, h3, h4, hh₃, hh₄⟩ := Holds.sepL hh₂ h2
   refine ⟨q, ?_, fun b hb => ?_⟩
-  · obtain ⟨⟨A, S, K, bs, hal, hbs, hdec, hbt, -⟩, -⟩ := h3
-    have hm := Holds.heap_erase hh₃
+  · obtain ⟨A, S, K, bs, hal, hbs, hdec, hbt, -⟩ :=
+      upE_fix (SizeFree.pts last 8 q) (fun _ _ _ _ _ _ _ h => by cases h) hh₃ (upE_none.mpr h3)
+    have hm := hh₃.fix.heap_exact hh₃.fix_exact hh₃.fix_exactF
     obtain ⟨b', blk, hacc, hblk, -, -, hx⟩ := bytesAt_access (q := last) (k := 0)
       (n := Enc.size Ptr) (a := 1) hbt hm (by simp [Ptr.add]) (by decide) (by omega)
       (Nat.mod_one _)
@@ -427,10 +458,11 @@ theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none, Ghost.unit�
     intro ⟨b, o⟩; by_cases hb : b = 0 <;> simp [glob, hb]
   -- no atomic location at program start: every constraint holds
   have hfm : FMatch start (glob 0 4096 enc0 (some (0, 8)) ∪ glob 1 4112 enc1 none) := by
-    refine ⟨?_, fun l fc _ => ?_⟩
-    · rw [← fheap_erase, start_fheap]
-      funext ⟨b, o⟩
-      simp only [FHeap.erase, FHeap.union_apply, glob]
+    refine ⟨fun l => ?_, fun l fc _ => ?_⟩
+    · have := (FMatch.fheap start).1 l
+      rw [this, start_fheap]
+      obtain ⟨b, o⟩ := l
+      simp only [FHeap.union_apply, glob]
       split <;> split <;> rfl
     · cases fc.atom with
       | none => trivial
@@ -442,7 +474,7 @@ theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none, Ghost.unit�
   · simpa using hfm
   · simp [Know.union_none]; exact Know.sub_none _
   · simp only [Ghost.add_unit]
-    exact ⟨fun _ => .inl fun _ => rfl, 0, fun _ _ => rfl⟩
+    exact GOk.unit _
   · refine ⟨⟨glob 0 4096 enc0 (some (0, 8)), Know.none, Ghost.unit⟩, ⟨glob 1 4112 enc1 none ∪ FHeap.empty, Know.none.union Know.none, Ghost.unit.add Ghost.unit⟩,
       by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1 none, Know.none, Ghost.unit⟩, ⟨FHeap.empty, Know.none, Ghost.unit⟩,
       FHeap.disjoint_empty _, rfl, ?_, ⟨rfl, rfl, rfl, rfl⟩⟩

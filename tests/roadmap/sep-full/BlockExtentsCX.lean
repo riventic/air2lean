@@ -1,69 +1,29 @@
-import ZigLean.Sep.Full.Triple
 import ZigLean.Sep.Full.Toy
 
 /-!
-# Block extents: what the legacy lift loses (phase-2 obstruction, `docs/sep-full-state.md` §Block extents)
+# Why cells no longer carry their block's size (regression, `docs/sep-full-state.md` §Block extents)
 
-Kernel-checked against a copy of the approved `Holds` (not in `ZigLean/Sep/Full` yet).
+The full-state logic first matched a resource's cells exactly, size and mapping start included
+(`HoldsCell` below, a copy of the old `Holds`). Then every change of a block's size changes the
+cells of every owner of one of its bytes, so the owner of a block cannot grow it in place while
+others hold bytes in it (O-G, `docs/alloc-arena.md`: the arena grows its first node through
+`page_allocator` while clients hold grants in it). The logic now compares cells without their
+size (`Cell.norm`, `FMatch`) and makes a block's extent a resource of its own (`bext`, shares).
 
-`HoldsN` is the block-extent `Holds` of `docs/sep-full-state.md` §Block extents: cells are
-compared after normalization (`Cell.norm`: size 0, `.mapped lo` as `.mapped 0`), and a resource
-has an exclusive extent component `ext`, exact in the memory (live, size, kind).
+What a cell no longer gives, and where it comes from now:
 
-* `cell_size_triple` / `no_cell_size_triple`: in today's model, a byte's cell pins its block's
-  size, so `ptrProject` one past a size that only a cell records is formed. Under `HoldsN` the
-  same lifted precondition holds in a memory whose block is shorter, and the step throws. This is
-  `FBA.own`'s pin byte (`buffer.ptr + end_index` with `end_index = cap` and the pin before the
-  buffer) and the arena's `NodeFacts.fit` (`buf + end_index` of a full node).
-* `free_triple_today` / `no_free_without_ext`: in today's model, owning every byte of a block is
-  enough to end it. Under `HoldsN` the frame may own the block's extent, so no lift of a step
-  that ends or resizes a block exists without `bext` in its precondition. This is
-  `PageSpec.free_spec`/`resize_spec`/`remap_spec` (munmap/mremap), whose tokens are `up`
-  (`inv_legacy : LegacyTokens (inv own) legacy own`), so they cannot carry `bext`.
+* **The size, beyond the owned bytes.** `cell_size_old`: in the old model a byte whose cell
+  records size `2` makes `q + 2` formable. `no_cell_size`: in the new model the same `up`
+  precondition holds in a memory whose block has one byte, and the step throws. So a legacy
+  assertion that reads a size from a cell lifts only if it is size-free or its block's extent is
+  owned (`FTriple.ofTriple`); `cell_size_bext`: with the extent the step is formed. (The
+  fixed-buffer allocator's pin byte and the arena's `NodeFacts.fit` read sizes this way.)
+* **Ending the block.** `no_free_without_ext`: owning every byte is not enough to `free` a block,
+  since the frame may own its extent; `FTriple.free'` takes the extent.
 -/
 
 namespace Zig.Full.ExtCX
 open FAssn
-
-def BlockKind.norm : BlockKind → BlockKind
-  | .mapped _ => .mapped 0
-  | k => k
-
-def Cell.norm (c : Cell) : Cell := { c with size := 0, kind := BlockKind.norm c.kind }
-
-abbrev Ext := BlockId → Option (Nat × BlockKind)
-
-structure XRes where
-  res : Res
-  ext : Ext
-
-def ExtExact (m : Mem) (e : Ext) : Prop :=
-  ∀ b S K, e b = some (S, K) → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
-    blk.bytes.size = S ∧ blk.kind = K
-
-/-- The approved `Holds` (normalized cells, exclusive exact extents). -/
-structure HoldsN (m : Mem) (r rF : XRes) : Prop where
-  disj : FHeap.Disjoint r.res.heap rF.res.heap
-  heap : ∀ l, (m.heap l).map Cell.norm = ((r.res.heap ∪ rF.res.heap) l).map (Cell.norm ∘ FCell.cell)
-  tags : ∀ l fc, (r.res.heap ∪ rF.res.heap) l = some fc → TagSat (shapes m) l.1 l.2 fc.atom
-  extDisj : ∀ b, r.ext b = none ∨ rF.ext b = none
-  ext : ExtExact m r.ext
-  extF : ExtExact m rF.ext
-  know : Know.Sub r.res.know m.kn
-  knowF : Know.Sub rF.res.know m.kn
-  ghost : Ghost.Ok r.res.gh rF.res.gh
-
-abbrev XAssn := XRes → Prop
-
-/-- A legacy assertion: its bytes (any tags), no knowledge, no ghost state, no extents. -/
-def upX (P : Assn) : XAssn := fun r => up P r.res ∧ r.ext = fun _ => none
-
-def FTripleN {α : Type} (P : XAssn) (c : MemM α) (Q : α → XAssn) : Prop :=
-  ∀ m r rF, HoldsN m r rF → P r → m.FSeq →
-    match (c.run m).run with
-    | none => True
-    | some (.error _) => False
-    | some (.ok (v, m')) => ∃ r', HoldsN m' r' rF ∧ Q v r' ∧ m'.FSeq
 
 /-! ## The memory: one live 1-byte heap block at address 16 -/
 
@@ -85,9 +45,6 @@ theorem seq1 : m1.FSeq := by
   simp only [m1] at hb hb'
   rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
 
-theorem ok_unit : Ghost.Ok Ghost.unit Ghost.unit :=
-  ⟨fun _ => .inl fun _ => rfl, 0, fun _ _ => rfl⟩
-
 /-- A resource owning byte `(0, 0)` with the cell `c`. -/
 def own1 (c : Cell) : FHeap := fun l => if l = (0, 0) then some ⟨c, none⟩ else none
 
@@ -104,13 +61,36 @@ theorem own1_bytesAt (S : Nat) :
     · subst hb; have : o ≠ 0 := h rfl; simp; omega
     · simp [hb]
 
-/-- `m1` holds a resource that owns byte `(0, 0)` with a cell recording size `S`, and the frame
-`rF`, which owns no bytes. -/
-theorem holds1 (S : Nat) (eF : Ext) (heF : ExtExact m1 eF) :
-    HoldsN m1 ⟨⟨own1 ⟨.int 0, 16, S, .heap⟩, Know.none, Ghost.unit⟩, fun _ => none⟩
-      ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, eF⟩ := by
-  refine ⟨fun _ => .inr rfl, fun l => ?_, fun l fc hfc => ?_, fun _ => .inl rfl,
-    fun _ _ _ h => (by cases h), heF, Know.sub_none _, Know.sub_none _, (by simpa using ok_unit)⟩
+/-- The frame's full extent of block 0. -/
+def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
+
+theorem gF_ok : GOk m1 Ghost.unit gF := by
+  refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
+    fun b => ?_⟩, 0, fun _ _ => rfl⟩, fun b => ?_⟩
+  · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
+    split
+    · exact ECell.auth1_valid 1 .heap
+    · exact ECell.valid_unit
+  · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
+    split
+    · rename_i hb; subst hb
+      refine ⟨fun S K h => ?_, fun k h => ?_⟩
+      · simp only [ECell.auth1] at h
+        split at h
+        · rename_i e; simp only [Prod.mk.injEq] at e; obtain ⟨rfl, rfl⟩ := e
+          exact ⟨blk1, rfl, rfl, rfl, rfl, by decide⟩
+        · cases h
+      · simp only [ECell.auth1] at h
+        split at h
+        · rename_i e; subst e; exact ⟨blk1, rfl, rfl, by decide, by decide⟩
+        · simp [Frac.zero] at h
+    · exact (ExtTrue.unit m1) b
+
+/-- `m1` holds a resource that owns byte `(0, 0)` with a cell recording size `S`, and a frame
+with the ghost state `g` and no bytes. -/
+theorem holds1 (S : Nat) (g : Ghost) (hg : GOk m1 Ghost.unit g) :
+    Holds m1 ⟨own1 ⟨.int 0, 16, S, .heap⟩, Know.none, Ghost.unit⟩ ⟨FHeap.empty, Know.none, g⟩ := by
+  refine ⟨fun _ => .inr rfl, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _, Know.sub_none _, hg⟩
   · rw [m1_heap]
     by_cases h : l = (0, 0)
     · simp [h, own1, Cell.norm, BlockKind.norm]
@@ -122,76 +102,88 @@ theorem holds1 (S : Nat) (eF : Ext) (heF : ExtExact m1 eF) :
       · cases hfc
     simp [TagSat, this]
 
-/-! ## 1. A cell no longer pins its block's size (FBA's pin byte, the arena's `NodeFacts.fit`) -/
+/-! ## 1. A cell no longer pins its block's size -/
 
-/-- **Today**: a byte whose cell records size `2` makes `q + 2` formable (the cell is the block's,
-size included). -/
-theorem cell_size_triple {A : Nat} {x : Byte} :
-    FTriple (up (bytesAt q A 2 .heap #[x])) (ptrProject q (·.add 2))
-      (fun p => ⟪p = q.add 2⟫ ⋆ up (bytesAt q A 2 .heap #[x])) := by
-  refine FTriple.of_run fun m r rF hh hp hs => ?_
+/-- The old `Holds`: the cells match the memory's live bytes exactly, size included. -/
+structure HoldsCell (m : Mem) (r rF : Res) : Prop where
+  disj : FHeap.Disjoint r.heap rF.heap
+  heap : m.heap = (r.heap ∪ rF.heap).erase
+
+/-- The old triple, over `HoldsCell`. -/
+def FTripleCell {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
+  ∀ m r rF, HoldsCell m r rF → P r → m.FSeq →
+    match (c.run m).run with
+    | none => True
+    | some (.error _) => False
+    | some (.ok (v, m')) => ∃ r', HoldsCell m' r' rF ∧ Q v r' ∧ m'.FSeq
+
+/-- **Old model**: a byte whose cell records size `2` makes `q + 2` formable. -/
+theorem cell_size_old {A : Nat} {x : Byte} :
+    FTripleCell (up (bytesAt q A 2 .heap #[x])) (ptrProject q (·.add 2))
+      (fun _ => up (bytesAt q A 2 .heap #[x])) := by
+  intro m r rF hh hp hs
   obtain ⟨⟨b, hb, -, hl⟩, -⟩ := id hp
   have hq : q.block = some 0 := rfl
   rw [hq] at hb; cases hb
   have h0 := hl (0, 0)
   simp only [q, show ((0 : Int)).toNat = 0 from rfl] at h0
-  have hc : r.heap.erase (0, 0) = some ⟨x, A, 2, .heap⟩ := by simpa using h0
-  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
-  obtain ⟨fc, hfc, hcell⟩ := hc
-  obtain ⟨blk, hblk, -, -, -, hsz⟩ := hh.block hfc
-  have hsz2 : blk.bytes.size = 2 := by rw [← hsz, hcell]
-  exact ⟨_, m, r, ptrProject_add_run (inBounds_of rfl hblk (by decide) (by simp [q]))
-    (inBounds_of rfl hblk (by simp [q, Ptr.add]) (by simp [q, Ptr.add, hsz2])),
-    hh, sep_lift.mpr ⟨rfl, ⟨⟨0, rfl, by decide, hl⟩, hp.2⟩⟩, hs⟩
+  have hc : m.heap (0, 0) = some ⟨x, A, 2, .heap⟩ := by
+    rw [hh.heap, FHeap.erase_union]; simp only [Heap.union_apply]; simp [h0]
+  obtain ⟨blk, hblk, -, _, he⟩ := Mem.heap_some hc
+  have hsz : blk.bytes.size = 2 := by have := congrArg Cell.size he; simpa using this.symm
+  rw [ptrProject_add_run (inBounds_of rfl hblk (by decide) (by simp [q]))
+    (inBounds_of rfl hblk (by simp [q, Ptr.add]) (by simp [q, Ptr.add, hsz]))]
+  exact ⟨r, hh, hp, hs⟩
 
 theorem run_project : ((ptrProject q (·.add 2)).run m1).run = some (.error .illegal) := by
   first | rfl | simp [ptrProject, StateT.run, Mem.inBounds, m1, blk1, q, Ptr.add]
 
-/-- **Approved model**: the same lifted precondition holds in `m1`, whose block has 1 byte, and
-`q + 2` throws `.illegal`. So no lift of `cell_size_triple` exists, for any postcondition. -/
-theorem no_cell_size_triple (Q : Ptr → XAssn) :
-    ¬ FTripleN (upX (bytesAt q 16 2 .heap #[.int 0])) (ptrProject q (·.add 2)) Q := by
+/-- **New model**: the same `up` precondition holds in `m1`, whose block has one byte, and `q + 2`
+throws `.illegal`: no triple, for any postcondition. -/
+theorem no_cell_size (Q : Ptr → FAssn) :
+    ¬ FTriple (up (bytesAt q 16 2 .heap #[.int 0])) (ptrProject q (·.add 2)) Q := by
   intro h
-  have hx := h m1 _ _ (holds1 2 (fun _ => none) fun _ _ _ e => by cases e)
-    ⟨⟨own1_bytesAt 2, rfl, rfl⟩, rfl⟩ seq1
+  have hx := h m1 _ _ (holds1 2 Ghost.unit (by simpa [gF] using GOk.unit m1)) ⟨own1_bytesAt 2, rfl, rfl⟩ seq1
   rw [run_project] at hx
   exact hx
 
-/-! ## 2. Owning every byte no longer ends a block (PageSpec's munmap/mremap through `up` tokens) -/
+/-- **New model, with the extent**: the block's full extent gives its size. -/
+theorem cell_size_bext {A : Nat} {x : Byte} :
+    FTriple (up (bytesAt q A 2 .heap #[x]) ⋆ bext 0 2 .heap) (ptrProject q (·.add 2))
+      (fun _ => up (bytesAt q A 2 .heap #[x]) ⋆ bext 0 2 .heap) := by
+  refine FTriple.of_run fun m r rF hh hp hs => ?_
+  have hE := up_sep_bext hp
+  have hauth : 0 < ((r.gh.add rF.gh).extent 0).auth (2, .heap) := by
+    rw [hE.2.2]; simp [Ghost.add, ECell.add, Ghost.exts, ECell.auth1]; omega
+  obtain ⟨blk, hblk, -, hsz, -, -⟩ := (hh.ghost.2 0).1 2 .heap hauth
+  exact ⟨_, m, r, ptrProject_add_run (inBounds_of rfl hblk (by decide) (by simp [q]))
+    (inBounds_of rfl hblk (by simp [q, Ptr.add]) (by simp [q, Ptr.add, hsz])), hh, hp, hs⟩
 
-/-- **Today**: owning every byte of a block is enough to free it (`FTriple.free'`). -/
-theorem free_triple_today {A : Nat} {x : Byte} :
-    FTriple (up (bytesAt q A 1 .heap #[x])) (free q) (fun _ => emp) :=
-  FTriple.free' rfl rfl (by decide)
+/-! ## 2. Owning every byte no longer ends a block -/
 
 theorem run_free : ∃ m', ((free q).run m1).run = some (.ok ((), m')) ∧
     m'.blocks[0]? = some { blk1 with live := false } :=
   ⟨_, rfl, rfl⟩
 
-/-- **Approved model**: the frame owns the block's extent `bext 0 1 .heap`; `free` ends the block,
-so no resource holds `m'` with that frame. No lift of `free_triple_today` exists. -/
-theorem no_free_without_ext (Q : Unit → XAssn) :
-    ¬ FTripleN (upX (bytesAt q 16 1 .heap #[.int 0])) (free q) Q := by
+/-- **New model**: the frame owns the block's full extent; `free` ends the block, so no resource
+holds the memory after it with that frame. `FTriple.free'` takes the extent. -/
+theorem no_free_without_ext (Q : Unit → FAssn) :
+    ¬ FTriple (up (bytesAt q 16 1 .heap #[.int 0])) (free q) Q := by
   intro h
-  let eF : Ext := fun b => if b = 0 then some (1, .heap) else none
-  have heF : ExtExact m1 eF := by
-    intro b S K e
-    by_cases hb : b = 0
-    · subst hb; simp only [eF, if_pos rfl, Option.some.injEq, Prod.mk.injEq] at e
-      obtain ⟨rfl, rfl⟩ := e
-      exact ⟨blk1, rfl, rfl, rfl, rfl⟩
-    · simp [eF, hb] at e
-  have hx := h m1 _ _ (holds1 1 eF heF) ⟨⟨own1_bytesAt 1, rfl, rfl⟩, rfl⟩ seq1
+  have hx := h m1 _ _ (holds1 1 gF gF_ok) ⟨own1_bytesAt 1, rfl, rfl⟩ seq1
   obtain ⟨m', hr, hb⟩ := run_free
   rw [hr] at hx
   obtain ⟨r', hh, -, -⟩ := hx
-  obtain ⟨blk, hblk, hlive, -, -⟩ := hh.extF 0 1 .heap (by simp [eF])
+  have hauth : 0 < ((r'.gh.add gF).extent 0).auth (1, .heap) := by
+    simp [Ghost.add, ECell.add, gF, Ghost.atExt, ECell.auth1]
+  obtain ⟨blk, hblk, hlive, -⟩ := (hh.ghost.2 0).1 1 .heap hauth
   rw [hb] at hblk; cases hblk
   simp at hlive
 
 end Zig.Full.ExtCX
 
-#print axioms Zig.Full.ExtCX.cell_size_triple
-#print axioms Zig.Full.ExtCX.no_cell_size_triple
-#print axioms Zig.Full.ExtCX.free_triple_today
+-- `ci.yml` (Full-state separation logic) requires only the standard axioms.
+#print axioms Zig.Full.ExtCX.cell_size_old
+#print axioms Zig.Full.ExtCX.no_cell_size
+#print axioms Zig.Full.ExtCX.cell_size_bext
 #print axioms Zig.Full.ExtCX.no_free_without_ext

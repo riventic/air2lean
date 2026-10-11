@@ -29,7 +29,7 @@ theorem Holds.split {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.hea
   obtain ⟨h1F, -⟩ := FHeap.disjoint_union_left.mp hdisj
   have h2F := (FHeap.disjoint_union_left.mp hdisj).2
   exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by rw [← FHeap.union_assoc]; exact hheap,
-    hk.left, hk.right.union hkF, Ghost.Ok.assoc.mp hg⟩
+    hk.left, hk.right.union hkF, GOk.assoc.mp hg⟩
 
 /-- `c` returns from every memory that holds `P` with some frame. -/
 def FReturns (P : FAssn) (c : MemM α) : Prop :=
@@ -94,13 +94,27 @@ theorem FTotalTriple.congr (he : ∀ m, m.FSeq → c'.run m = c.run m) (ht : FTo
     FTotalTriple P c' Q :=
   ⟨ht.1.congr he, fun m r rF hh hp hs => by rw [he m hs]; exact ht.2 m r rF hh hp hs⟩
 
-/-- **Lifting a total triple** of a program that keeps the atomic layout and the block addresses
-(`FTriple.ofTriple`, and it returns because the legacy triple returns from the erased heaps). -/
-theorem FTotalTriple.ofTotal {P : Assn} {Q : α → Assn} (ht : TotalTriple P c Q) (hc : Tame c) :
-    FTotalTriple (up P) c (fun v => up (Q v)) := by
-  refine ⟨FTriple.ofTriple ht.toPartial hc, fun m r rF hh hp hs => ?_⟩
-  obtain ⟨v, m', -, hr, -⟩ := ht m _ _ (FHeap.erase_disjoint hh.disj) hh.heap_erase hp.1 hs.1
+/-- **Lifting a total triple** (`FTriple.ofTriple`; it returns because the legacy triple returns
+from the memory's actual cells). -/
+theorem FTotalTriple.ofTotal {P : Assn} {Q : α → Assn} {E : BlockId → Option (Nat × BlockKind)}
+    {B : BlockId → Prop} (ht : TotalTriple P c Q) (hc : Tame c)
+    (hB : ∀ h, P h → ∀ l c, h l = some c → B l.1)
+    (hpin : ∀ h, P h → ∀ l c S K, h l = some c → E l.1 = some (S, K) → c.size = S ∧ c.kind = K)
+    (hsf : SizeFree E P) (hk : (∀ b, B b → (E b).isSome) ∨ Keeps (fun b => (E b).isSome) c) :
+    FTotalTriple (upE P E) c (fun v => upPost (Q v) B E) := by
+  refine ⟨FTriple.ofTriple ht.toPartial hc hB hpin hsf hk, fun m r rF hh hp hs => ?_⟩
+  obtain ⟨v, m', -, hr, -⟩ := ht m _ _ (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj))
+    (hh.fix.heap_exact hh.fix_exact hh.fix_exactF) (upE_fix hsf hpin hh hp) hs.1
   exact ⟨v, m', hr⟩
+
+/-- `FTotalTriple.ofTotal` for a size-free precondition and a program that keeps every block. -/
+theorem FTotalTriple.ofTotal_up {P : Assn} {Q : α → Assn} (ht : TotalTriple P c Q) (hc : Tame c)
+    (hsf : SizeFree (fun _ => none) P) (hk : Keeps (fun _ => False) c) :
+    FTotalTriple (up P) c (fun v => up (Q v)) :=
+  ⟨FTriple.ofTriple_up ht.toPartial hc hsf hk, fun m r rF hh hp hs =>
+    (FTotalTriple.ofTotal (E := fun _ => none) (B := fun _ => True) ht hc (fun _ _ _ _ _ => trivial)
+      (fun _ _ _ _ _ _ _ h => by cases h) hsf (.inr (fun m v m' h b blk _ => hk m v m' h b blk id))).2
+      m r rF hh (upE_none.mpr hp) hs⟩
 
 /-! ## The logic record -/
 

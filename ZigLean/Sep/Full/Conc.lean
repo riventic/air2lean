@@ -219,15 +219,20 @@ theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty) (ht : CTri
   have hh₁ : Holds m r₁ rF := by
     obtain ⟨hd', hm, hk, hkF, hg⟩ := hh
     simp only [e, FHeap.union_empty] at hd' hm
-    exact ⟨hd', hm, hk.left, hkF, Ghost.Ok.mono hg⟩
+    exact ⟨hd', hm, hk.left, hkF, GOk.mono hg⟩
   exact ht n m r₁ rF hh₁ h1 hs
 
-/-- A legacy total triple of a `Tame` step, with a full-state frame `H` (`FTotalTriple.ofTotal`). -/
+/-- A legacy total triple of a `Tame` step, with a full-state frame `H` (`FTotalTriple.ofTotal`,
+with its side conditions). -/
 theorem step {H : FAssn} {X : Assn} {c : MemM α} {Y : α → Assn} {f : α → ConcM Tgt β}
-    {S : β → FAssn} (ht : TotalTriple X c Y) (hc : Tame c)
-    (hf : ∀ v, CTriple (H ⋆ up (Y v)) (f v) S) :
-    CTriple (H ⋆ up X) (ConcM.liftMem c >>= f) S :=
-  bind (liftMem (FTotalTriple.ofTotal ht hc).toPartial.frameL) hf
+    {S : β → FAssn} {E : BlockId → Option (Nat × BlockKind)} {B : BlockId → Prop}
+    (ht : TotalTriple X c Y) (hc : Tame c)
+    (hB : ∀ h, X h → ∀ l c, h l = some c → B l.1)
+    (hpin : ∀ h, X h → ∀ l c S K, h l = some c → E l.1 = some (S, K) → c.size = S ∧ c.kind = K)
+    (hsf : SizeFree E X) (hk : (∀ b, B b → (E b).isSome) ∨ Keeps (fun b => (E b).isSome) c)
+    (hf : ∀ v, CTriple (H ⋆ upPost (Y v) B E) (f v) S) :
+    CTriple (H ⋆ upE X E) (ConcM.liftMem c >>= f) S :=
+  bind (liftMem (FTotalTriple.ofTotal ht hc hB hpin hsf hk).toPartial.frameL) hf
 
 /-- A `MemM` step that returns `v` and leaves the memory as it is. -/
 theorem pureStep {c : MemM α} {v : α} {f : α → ConcM Tgt β} {S : β → FAssn}

@@ -66,18 +66,21 @@ end GCell
 /-! ## Ghost states with one name -/
 
 /-- The ghost state with cell `c` at `γ` and nothing elsewhere. -/
-def Ghost.at (γ : Nat) (c : GCell) : Ghost := fun γ' => if γ' = γ then c else GCell.unit
+def Ghost.at (γ : Nat) (c : GCell) : Ghost :=
+  ⟨fun γ' => if γ' = γ then c else GCell.unit, fun _ => ECell.unit⟩
 
 theorem Ghost.at_add (γ : Nat) (c c' : GCell) : (Ghost.at γ c).add (Ghost.at γ c') = Ghost.at γ (c.add c') := by
-  funext γ'; simp only [Ghost.add, Ghost.at]; split <;> simp
+  ext1
+  · funext γ'; simp only [Ghost.add, Ghost.at]; split <;> simp
+  · funext b; simp [Ghost.add, Ghost.at]
 
 /-- **A local update** at one name: if every cell that `c` composes validly with also composes
 validly with `c'`, replacing `c` by `c'` keeps every frame valid. -/
 theorem Ghost.Ok.update {γ : Nat} {c c' : GCell} {g : Ghost}
     (h : ∀ d, (c.add d).Valid → (c'.add d).Valid) (hok : Ghost.Ok (Ghost.at γ c) g) :
     Ghost.Ok (Ghost.at γ c') g := by
-  obtain ⟨hv, N, hN⟩ := hok
-  refine ⟨fun γ' => ?_, N + γ + 1, fun γ' hγ => ?_⟩
+  obtain ⟨⟨hv, hx⟩, N, hN⟩ := hok
+  refine ⟨⟨fun γ' => ?_, fun b => by simpa [Ghost.add, Ghost.at] using hx b⟩, N + γ + 1, fun γ' hγ => ?_⟩
   · have := hv γ'
     simp only [Ghost.add, Ghost.at] at this ⊢
     split at this
@@ -153,7 +156,7 @@ theorem gauth_gfrag_intro {γ e i : Nat} {M : GMap} {g : GRegion} :
 and knowledge, by one of `P'` that composes with every ghost frame the old one composed with. -/
 def Upd (P P' : FAssn) : Prop :=
   ∀ r, P r → ∀ g, Ghost.Ok r.gh g →
-    ∃ r', P' r' ∧ r'.heap = r.heap ∧ r'.know = r.know ∧ Ghost.Ok r'.gh g
+    ∃ r', P' r' ∧ r'.heap = r.heap ∧ r'.know = r.know ∧ r'.gh.extent = r.gh.extent ∧ Ghost.Ok r'.gh g
 
 /-- What an authority `●(e, M)` and a token `◯(e, i ↦ g)` say about a frame `d` they compose
 with: the map records the grant, and `d` holds no token for it. -/
@@ -176,20 +179,20 @@ namespace Upd
 
 variable {P P' P'' R : FAssn}
 
-theorem of_imp (h : ∀ r, P r → P' r) : Upd P P' := fun r hp _ hg => ⟨r, h r hp, rfl, rfl, hg⟩
+theorem of_imp (h : ∀ r, P r → P' r) : Upd P P' := fun r hp _ hg => ⟨r, h r hp, rfl, rfl, rfl, hg⟩
 
 theorem trans (h₁ : Upd P P') (h₂ : Upd P' P'') : Upd P P'' := fun r hp g hg => by
-  obtain ⟨r₁, h1, e1, k1, g1⟩ := h₁ r hp g hg
-  obtain ⟨r₂, h2, e2, k2, g2⟩ := h₂ r₁ h1 g g1
-  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, g2⟩
+  obtain ⟨r₁, h1, e1, k1, x1, g1⟩ := h₁ r hp g hg
+  obtain ⟨r₂, h2, e2, k2, x2, g2⟩ := h₂ r₁ h1 g g1
+  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, x2.trans x1, g2⟩
 
 /-- Updates frame. -/
 theorem frame (h : Upd P P') : Upd (P ⋆ R) (P' ⋆ R) := by
   rintro _ ⟨r₁, r₂, hd, rfl, hp, hr⟩ g hg
-  obtain ⟨r₁', hp', e, k, hg'⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
+  obtain ⟨r₁', hp', e, k, x, hg'⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
   refine ⟨⟨r₁'.heap ∪ r₂.heap, r₁'.know.union r₂.know, r₁'.gh.add r₂.gh⟩,
     ⟨r₁', r₂, by rw [e]; exact hd, rfl, hp', hr⟩, by simp [e], by simp [k],
-    Ghost.Ok.assoc.mpr hg'⟩
+    by simp [Ghost.add, x], Ghost.Ok.assoc.mpr hg'⟩
 
 theorem frameL (h : Upd P P') : Upd (R ⋆ P) (R ⋆ P') :=
   trans (of_imp fun _ h => sep_comm h) (trans (frame h) (of_imp fun _ h => sep_comm h))
@@ -201,15 +204,16 @@ theorem single {γ : Nat} {c c' : GCell} {P P' : FAssn}
     (h : ∀ d, (c.add d).Valid → (c'.add d).Valid) : Upd P P' := fun r hr g hg => by
   have e := hp r hr
   subst e
-  exact ⟨_, hp', rfl, rfl, Ghost.Ok.update h hg⟩
+  exact ⟨_, hp', rfl, rfl, rfl, Ghost.Ok.update h hg⟩
 
 /-- **A new ledger** at a name no frame uses, with no grant. -/
 theorem alloc : Upd emp (FAssn.ex fun γ => gauth γ 0 GMap.empty) := by
   rintro r ⟨h0, k0, g0⟩ g hg
   rw [g0] at hg
-  obtain ⟨hv, N, hN⟩ := hg
+  obtain ⟨⟨hv, hx⟩, N, hN⟩ := hg
   refine ⟨⟨FHeap.empty, Know.none, Ghost.at N (GCell.auth1 0 GMap.empty)⟩, ⟨N, rfl, rfl, rfl⟩,
-    h0.symm, k0.symm, fun γ => ?_, N + 1, fun γ hγ => ?_⟩
+    h0.symm, k0.symm, by rw [g0]; rfl, ⟨fun γ => ?_, fun b => by simpa [Ghost.add, Ghost.at, Ghost.unit] using hx b⟩,
+    N + 1, fun γ hγ => ?_⟩
   · have hv' := hv γ
     simp only [Ghost.unit_add] at hv'
     simp only [Ghost.add, Ghost.at]
@@ -281,7 +285,7 @@ end Upd
 theorem gfrag_mem {γ e i : Nat} {M : GMap} {g : GRegion} {r : Res} {gF : Ghost}
     (h : (gauth γ e M ⋆ gfrag γ e i g) r) (hg : Ghost.Ok r.gh gF) : M i = some g := by
   rw [gauth_gfrag h] at hg
-  have := hg.1 γ
+  have := hg.1.1 γ
   simp only [Ghost.add, Ghost.at, ↓reduceIte] at this
   rw [GCell.add_assoc] at this
   exact (GCell.valid_pair this).2.1
@@ -295,9 +299,9 @@ variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
 /-- A ghost update of the precondition. -/
 theorem upd (hu : Upd P P') (ht : FTriple P' c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
-  obtain ⟨r', hp', e, k, hg⟩ := hu r hp rF.gh hh.ghost
+  obtain ⟨r', hp', e, k, x, hg⟩ := hu r hp rF.gh hh.ghost.1
   exact ht m r' rF ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
-    hh.knowF, hg⟩ hp' hs
+    hh.knowF, ⟨hg, by have := hh.ghost.2; simpa [Ghost.add, x] using this⟩⟩ hp' hs
 
 /-- A ghost update of the postcondition. -/
 theorem upd_post (ht : FTriple P c Q) (hu : ∀ v, Upd (Q v) (Q' v)) : FTriple P c Q' := by
@@ -307,9 +311,9 @@ theorem upd_post (ht : FTriple P c Q) (hu : ∀ v, Upd (Q v) (Q' v)) : FTriple P
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hs'⟩ := this
-    obtain ⟨r'', hq', e, k, hg⟩ := hu _ r' hq rF.gh hh'.ghost
+    obtain ⟨r'', hq', e, k, x, hg⟩ := hu _ r' hq rF.gh hh'.ghost.1
     exact ⟨r'', ⟨by rw [e]; exact hh'.disj, by rw [e]; exact hh'.heap, by rw [k]; exact hh'.know,
-      hh'.knowF, hg⟩, hq', hs'⟩
+      hh'.knowF, ⟨hg, by have := hh'.ghost.2; simpa [Ghost.add, x] using this⟩⟩, hq', hs'⟩
 
 /-- The fact `M i = some g` of a token of the current epoch, in a precondition. -/
 theorem mem {γ e i : Nat} {M : GMap} {g : GRegion} {R : FAssn}
@@ -318,7 +322,7 @@ theorem mem {γ e i : Nat} {M : GMap} {g : GRegion} {R : FAssn}
   intro m r rF hh hp hs
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := id hp
   have hg := hh.ghost
-  have : Ghost.Ok r₁.gh (r₂.gh.add rF.gh) := Ghost.Ok.assoc.mp hg
+  have : Ghost.Ok r₁.gh (r₂.gh.add rF.gh) := Ghost.Ok.assoc.mp hg.1
   exact ht (gfrag_mem h1 this) m _ rF hh hp hs
 
 end FTriple

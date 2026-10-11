@@ -120,7 +120,10 @@ translated replacement or a register entry (`ROADMAP.md`, `docs/remaining-accept
 Steps, one PR each, in this order:
 
 1. **FBA client port** (prerequisite of L1). Lift the client proofs that use the fixed-buffer
-   model onto `FBA.fallocSpec` through the generated wrappers (`ZigLean/Sep/Full/Wrappers.lean`).
+   model onto `FBA.fallocSpec` through the generated wrappers. The full-state wrapper contracts
+   (`ZigLean/Sep/Full/Wrappers.lean`, through the legacy embedding `FLogic.legacy`) were removed
+   with block extents (`docs/sep-full-state.md` §Block extents); they are to be restated over
+   `FAllocSpec` directly first.
    Blocker: `tame` does not see through the `StateT.run (match …)` that `gen_norm` leaves in the
    generated wrappers (one matcher per generated `match`); it needs a `StateT`-level `Tame` rule
    or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,

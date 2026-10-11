@@ -398,7 +398,7 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, bs.size)
       then tagOf (shapes m') b' x = some (p.off.toNat, bs.size)
       else tagOf (shapes m') b' x = none ∨ tagOf (shapes m') b' x = tagOf (shapes m) b' x)
-    (hkn : KMono m m') :
+    (hkn : KMono m m' ∧ KeepsExt m m') :
     ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
   obtain ⟨-, -, b0, hb0, h0, hl⟩ := id hab
   rw [hpb] at hb0; cases hb0
@@ -408,8 +408,8 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
   -- outside the word, the resource has nothing: the union is the frame
   have hout : ∀ l, ¬ (l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) →
       r.heap l = none := fun l hc => by rw [hl l, if_neg hc]
-  refine ⟨⟨h', Know.none, Ghost.unit⟩, ⟨fun l => ?_, ⟨funext fun l => ?_, fun l fc hfc => ?_⟩,
-    Know.sub_none _, hh.knowF.trans hkn, by rw [← hab.2.1]; exact hh.ghost⟩,
+  refine ⟨⟨h', Know.none, Ghost.unit⟩, ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩,
+    Know.sub_none _, hh.knowF.trans hkn.1, by rw [← hab.2.1]; exact hh.ghost.keep hkn.2⟩,
     rfl, rfl, b, hpb, h0, fun l => rfl⟩
   · by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
     · right
@@ -420,12 +420,12 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
     by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
     · have hc' : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size := by rw [hsz]; exact hc
       rw [if_pos hc]
-      simp only [FHeap.erase, FHeap.union_apply, h']
+      simp only [FHeap.union_apply, h']
       rw [if_pos hc']; rfl
     · have hc' : ¬ (l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size) := by
         rw [hsz]; exact hc
-      rw [if_neg hc, hh.heap.1]
-      simp only [FHeap.erase, FHeap.union_apply, h', hc', ↓reduceIte, hout l hc, Option.none_or]
+      rw [if_neg hc, hh.heap.1 l]
+      simp only [FHeap.union_apply, h', hc', ↓reduceIte, hout l hc, Option.none_or]
   · obtain ⟨x, y⟩ := l
     by_cases hc : x = b ∧ p.off.toNat ≤ y ∧ y < p.off.toNat + bs.size
     · have hc' : x = b ∧ p.off.toNat ≤ y ∧ y < p.off.toNat + bs'.size := by rw [hsz]; exact hc
@@ -478,8 +478,8 @@ theorem Holds.untag {m : Mem} {r rF : Res} (hh : Holds m r rF) : Holds m r.untag
   · rcases hh.disj l with e | e
     · left; simp [Res.untag, e]
     · right; exact e
-  · rw [hh.heap.1]; funext l
-    simp only [FHeap.erase, FHeap.union_apply, Res.untag]
+  · intro l; rw [hh.heap.1 l]
+    simp only [FHeap.union_apply, Res.untag]
     cases r.heap l <;> rfl
   · simp only [FHeap.union_apply, Res.untag] at hl
     cases e : r.heap l with
@@ -553,7 +553,51 @@ theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array 
   LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb id rfl
     (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _) h hd
 
-theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' := KMono.of_blocks h
+theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' ∧ KeepsExt m m' :=
+  ⟨KMono.of_blocks h, KeepsExt.of_blocks h⟩
+
+/-- A write inside a block keeps every address and every extent. -/
+theorem kmono_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk)
+    (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
+    (hn : o + bs.size ≤ blk.bytes.size) : KMono m m' ∧ KeepsExt m m' :=
+  ⟨KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl h,
+    KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl
+      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl h⟩
+
+/-! ### Reading the actual extent (`FTriple.of_fix`) -/
+
+/-- Owned bytes with their block's actual size and kind. -/
+theorem abytesAt_fix {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r) (hpos : 0 < bs.size) :
+    ∃ S' K', K'.norm = K.norm ∧ abytesAt p A S' K' bs tg (r.fix m) := by
+  obtain ⟨hk, hg, b, hb, h0, hl⟩ := hab
+  have hin : (b, p.off.toNat).1 = b ∧ p.off.toNat ≤ (b, p.off.toNat).2 ∧
+      (b, p.off.toNat).2 < p.off.toNat + bs.size := ⟨rfl, Nat.le_refl _, by simp; omega⟩
+  have hc := hl (b, p.off.toNat)
+  rw [if_pos hin] at hc
+  obtain ⟨blk, hblk, -, -, -, -, hkn⟩ := hh.block hc
+  refine ⟨blk.bytes.size, blk.kind, hkn.symm, hk, hg, b, hb, h0, fun l => ?_⟩
+  simp only [Res.fix, FHeap.fix, hl l]
+  by_cases hc' : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+  · rw [if_pos hc', if_pos hc']; simp [hc'.1, hblk]
+  · rw [if_neg hc', if_neg hc']; rfl
+
+theorem norm_ne_constGlobal {K K' : BlockKind} (h : K'.norm = K.norm) (hK : K ≠ .constGlobal) :
+    K' ≠ .constGlobal := by
+  rintro rfl; cases K <;> simp_all [BlockKind.norm]
+
+theorem wpts_fix {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {v : BitVec 64}
+    (h : wpts p v r) : wpts p v (r.fix m) := by
+  obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := h
+  obtain ⟨S', K', hn, hab'⟩ := abytesAt_fix hh hab (by omega)
+  exact ⟨A, S', K', bs, tg, hal, norm_ne_constGlobal hn hK, hsz, hv, hab'⟩
+
+theorem apts_fix {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {v : BitVec 64}
+    (h : apts p v r) : apts p v (r.fix m) := by
+  obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := h
+  obtain ⟨S', K', hn, hab'⟩ := abytesAt_fix hh hab (by omega)
+  exact ⟨A, S', K', bs, hal, norm_ne_constGlobal hn hK, hsz, hv, hab'⟩
 
 theorem heap_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m'.heap = m.heap := by
   funext l; simp [Mem.heap, h]
@@ -571,9 +615,9 @@ word is an `apts`. -/
 theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     FTriple (wpts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p)
       (fun w => ⟪w = v⟫ ⋆ apts p v) := by
-  intro m r rF hh hp hs
+  refine FTriple.of_fix (fun _ _ _ hh hp => wpts_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_erase
+  have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
@@ -635,7 +679,7 @@ theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
           rw [heap_of_blocks hblocks]
           split
           · rename_i hin
-            exact hh.cell (abytesAt_cell hab hpb hin)
+            exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩,
@@ -657,9 +701,9 @@ theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
 end). -/
 theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     FTriple (wpts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) := by
-  intro m r rF hh hp hs
+  refine FTriple.of_fix (fun _ _ _ hh hp => wpts_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, -, hab⟩ := hp
-  have hm := hh.heap_erase
+  have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
@@ -669,8 +713,8 @@ theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     rw [hpb] at hb0; cases hb0
     have hr := hl0 (b, p.off.toNat)
     rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr
-    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hh.cell hr)
-    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hh.cell hr)
+    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hxr _ _ hr)
+    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hxr _ _ hr)
     rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
     simp only [Cell.mk.injEq] at hc
     exact ⟨hc.2.2.2.symm, hlo⟩
@@ -733,8 +777,7 @@ theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
           rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode w)) hblocks, hwr, henc,
             hsz, hA, hS, hKb])
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-        (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) })
-          hblk rfl hblocks)
+        (kmono_write hblk hblocks (by rw [henc]; omega))
       refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode w) (by rw [henc, ← hsz]; exact hab'), ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
       unfold storeM observeM

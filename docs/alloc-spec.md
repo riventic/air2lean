@@ -34,8 +34,9 @@ a page allocator a prefix of a mapping.
 of a program that keeps the atomic layout and every block's address (`Full.Tame`; every
 primitive of generated plain-memory code is). `Logic.partial` is `Triple` (a diverging call
 satisfies every triple), `Logic.total` is `TotalTriple`; both are `Logic.Sound` (their triples
-are partial triples). `FLogic.legacy FL O` is the full-state logic `FL` with the allocator state
-`O` framed around every assertion. Every result below is stated for an arbitrary `L`.
+are partial triples). Every result below is stated for an arbitrary `L`. (The full-state
+embedding `FLogic.legacy` was removed with block extents: an `up` cell no longer pins its
+block's size, so it is not a `Logic`; `docs/sep-full-state.md` §Block extents.)
 
 **The vtable.** `RawVTable` is the semantics of the four `std.mem.Allocator.VTable` entries
 (Zig 0.16.0), each taking the context pointer `ctx` (`Allocator.ptr`), the alignment as the
@@ -204,9 +205,11 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   (the FixedBufferAllocator: `FBA.fallocSpec`). The page allocator's `free`, `resize` and `remap`
   are proved against it, and its `alloc` for alignments up to a page
   (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
-  `FAllocSpec.toLegacy` turns an `FAllocSpec` whose tokens are legacy assertions into an
-  `AllocSpec` in `FLogic.legacy FL O`, so every wrapper contract below holds in the full-state
-  logic, with the allocator state `O` framed (`ZigLean/Sep/Full/Wrappers.lean`).
+  The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,
+  `ZigLean/Sep/Full/Wrappers.lean`) were removed with block extents (they went through
+  `FLogic.legacy`, which is unsound there, `tests/roadmap/sep-full/BlockExtentsCX.lean`); the
+  wrapper contracts are to be restated over `FAllocSpec` directly (open item of the FBA client
+  port, [allocator-model.md](allocator-model.md) step 1).
 
 ## Relation to the legacy models it replaces
 

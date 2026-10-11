@@ -253,10 +253,39 @@ sequential run that compares the value it just read needs no address.
   * a moving `mremap` ends the old block and pushes the new one at `Mem.newAddr`
     (`LDMono.set_dead_push`).
 
-## Block extents (design, alloc M2 O-G; not implemented yet)
+## Block extents (alloc M2 O-G)
 
-Status: design approved by the coordinator (2026-10-11), phases below. Nothing in this section
-is in the code yet. It replaces "frame cells carry their block's size".
+Status: design approved by the coordinator (2026-10-11), phases below. Phase 2 (the model and the
+Full layer) is in the code; the allocator re-proofs (FBA, page allocator, arena) follow, see the
+table. It replaces "frame cells carry their block's size".
+
+**As implemented (phase 2).**
+
+* Extents live in the ghost state (`Ghost.extent : BlockId → ECell`, `Res.lean`): per block,
+  authority claims `auth (S, K)` (exclusive, exact) and nonnegative fractional shares at lower
+  bounds `sh k` (`Frac`). `Ghost.Ok` requires at most one authority claim and at most the whole
+  fraction; `Holds.ghost : GOk m r.gh rF.gh` adds `ExtTrue m`: an authority claim names a live
+  block of that size and kind, a share at `k` a live block of at least `k` bytes, both with a live
+  byte (`mappedLo < size`). `bext b S K` is the authority holding the whole fraction (`bauth b S K
+  1`); `bshare b q k` is a share. Shrinking or ending a block needs `bext` (so the frame holds no
+  share); growth keeps every share true.
+* `FMatch` compares `Cell.norm` (size `0`, `.mapped lo` as `.mapped 0`). In-bounds facts come from
+  ownership: `Holds.block` (an owned byte `x` gives a live block of more than `x` bytes, with
+  `mappedLo ≤ x`). Rules that need exact cells read them off `Res.fix m` (`FTriple.of_fix`,
+  `Holds.fix`, `Holds.congrF`).
+* `Holds.apart` / `FTriple.apart`: owned byte `x` of `b` and `x'` of `b'` give
+  `A + x < A' ∨ A' + x' < A` (no cell sizes).
+* **The bridge** is one theorem, `FTriple.ofTriple` (`FTotalTriple.ofTotal`): precondition
+  `upE P E` (the legacy `P` with the full extents `E`), `P`'s bytes in blocks `B`, `P` size-free
+  outside `E` (`SizeFree E P`), `E`-cells recording `E`, and either every block of `B` pinned by `E`
+  (pinned assertions) or `Keeps` (the program keeps every live block outside `E`). The post
+  (`upPost`) owns the full extents of the blocks it has bytes of that were pinned or that `P` had
+  no bytes of (new blocks). `FTriple.ofTriple_up` is the size-free case (`E` empty, `Keeps`).
+* Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
+  (`newMap` includes it).
+* Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
+  `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound
+  here (`tests/roadmap/sep-full/BlockExtentsCX.lean`, `no_cell_size`).
 
 ### The problem (O-G)
 

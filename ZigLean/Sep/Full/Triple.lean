@@ -976,6 +976,135 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
         simp only [E', hb]
         rw [if_pos ⟨hlv, by omega, ⟨l.2, by simp [hc0]⟩, hBE⟩, he]
 
+/-- Ghost state can be forgotten from a held resource. -/
+theorem Holds.dropGhost {m : Mem} {r rF : Res} {a b : Ghost} (hh : Holds m r rF) (hg : r.gh = a.add b) :
+    Holds m ⟨r.heap, r.know, a⟩ rF :=
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, GOk.mono (by rw [← hg]; exact hh.ghost)⟩
+
+/-- A lifted triple whose post's extents are forgotten. -/
+theorem FTriple.forgetExt {α : Type} {P : FAssn} {c : MemM α} {Q : α → Assn}
+    {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)}
+    (ht : FTriple P c (fun v => upPost (Q v) B E)) : FTriple P c (fun v => up (Q v)) := by
+  intro m r rF hh hp hs
+  have := ht m r rF hh hp hs
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', ⟨E', ⟨hq, hk, hg⟩, -⟩, hs'⟩ := this
+    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E') (by rw [hg, Ghost.unit_add]),
+      ⟨hq, hk, rfl⟩, hs'⟩
+
+/-- **Lifting a size-free legacy triple** of a program that keeps every live block: the legacy
+pre- and postcondition under `up`. -/
+theorem FTriple.ofTriple_up {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
+    (ht : Triple P c Q) (hc : Tame c) (hsf : SizeFree (fun _ => none) P)
+    (hk : Keeps (fun _ => False) c) : FTriple (up P) c (fun v => up (Q v)) :=
+  (FTriple.ofTriple (E := fun _ => none) (B := fun _ => True) ht hc (fun _ _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ _ h => by cases h) hsf (.inr (fun m v m' h b blk _ => hk m v m' h b blk id))).forgetExt.pre
+    fun _ h => upE_none.mpr h
+
+/-- A legacy `bytesAt`-style assertion: its bytes are size-free. -/
+theorem SizeFree.bytesAt_ex {p : Ptr} {bs : Array Byte} {φ : Nat → Nat → BlockKind → Prop}
+    (hφ : ∀ A S K S' K', φ A S K → K'.norm = K.norm → φ A S' K') :
+    SizeFree (fun _ => none) (fun h => ∃ A S K, φ A S K ∧ bytesAt p A S K bs h) := by
+  intro h h' ⟨A, S, K, hφA, b, hb, h0, hl⟩ hn _ hco
+  by_cases hpos : bs.size = 0
+  · refine ⟨A, S, K, hφA, b, hb, h0, fun l => ?_⟩
+    have e := hn l
+    rw [hl l, if_neg (by omega)] at e
+    cases e' : h' l with
+    | none => rw [if_neg (by omega)]
+    | some _ => rw [e'] at e; cases e
+  · -- the cell at `p` gives the block's size and kind in `h'`
+    have hin : (b, p.off.toNat).1 = b ∧ p.off.toNat ≤ (b, p.off.toNat).2 ∧
+        (b, p.off.toNat).2 < p.off.toNat + bs.size := ⟨rfl, Nat.le_refl _, by simp; omega⟩
+    have e0 := hn (b, p.off.toNat)
+    rw [hl _, if_pos hin] at e0
+    cases e1 : h' (b, p.off.toNat) with
+    | none => rw [e1] at e0; cases e0
+    | some c0 =>
+      rw [e1] at e0
+      have hk0 := congrArg Cell.kind (Option.some.inj e0)
+      simp only [Cell.norm] at hk0
+      refine ⟨A, c0.size, c0.kind, hφ A S K c0.size c0.kind hφA hk0.symm, b, hb, h0, fun l => ?_⟩
+      have e := hn l
+      rw [hl l] at e
+      split
+      · rename_i hc
+        rw [if_pos hc] at e
+        cases e2 : h' l with
+        | none => rw [e2] at e; cases e
+        | some c =>
+          rw [e2] at e
+          have hc' := Option.some.inj e
+          obtain ⟨hs, hk⟩ := hco l (b, p.off.toNat) c c0 e2 e1 hc.1
+          simp only [Cell.norm, Cell.mk.injEq] at hc'
+          cases c; simp_all
+      · rename_i hc
+        rw [if_neg hc] at e
+        cases e2 : h' l with
+        | none => rfl
+        | some _ => rw [e2] at e; cases e
+
+/-- `pts` is size-free. -/
+theorem SizeFree.pts {T : Type} [Enc T] (p : Ptr) (a : Nat) (v : T) :
+    SizeFree (fun _ => none) (pts p a v) := by
+  intro h h' hp hn hE hco
+  obtain ⟨A, S, K, bs, hal, hsz, hdec, hb, hK⟩ := hp
+  obtain ⟨A', S', K', ⟨hal', hK'⟩, hb'⟩ := SizeFree.bytesAt_ex (p := p) (bs := bs)
+    (φ := fun A _ K => (A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal)
+    (fun A S K S' K' ⟨h1, h2⟩ hk => ⟨h1, fun e => h2 (by subst e; cases K <;> simp_all [BlockKind.norm])⟩)
+    h h' ⟨A, S, K, ⟨hal, hK⟩, hb⟩ hn hE hco
+  exact ⟨A', S', K', bs, hal', hsz, hdec, hb', hK'⟩
+
+theorem ExtTrue.unit (m : Mem) : ExtTrue m Ghost.unit.extent := fun _ =>
+  ⟨fun _ _ h => by simp [Ghost.unit, ECell.unit] at h, fun _ h => by
+    simp [Ghost.unit, ECell.unit, Frac.zero] at h⟩
+
+theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
+  ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by simpa [Ghost.add, Ghost.unit] using ECell.valid_unit⟩,
+    0, fun _ _ => rfl⟩, by simpa using ExtTrue.unit m⟩
+
+/-- The full extents of `E` with the one of `b` split off. -/
+theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockId} {S : Nat}
+    {K : BlockKind} (h : E b = some (S, K)) :
+    Ghost.exts E = (Ghost.atExt b (ECell.auth1 S K Frac.one)).add
+      (Ghost.exts fun x => if x = b then none else E x) := by
+  ext1
+  · funext γ; simp [Ghost.add, Ghost.atExt, Ghost.exts]
+  · funext x
+    simp only [Ghost.add, Ghost.atExt, Ghost.exts]
+    by_cases hx : x = b
+    · subst hx; simp [h]
+    · simp [hx]
+
+/-- A legacy assertion with the full extent of one block. -/
+theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
+    (h : (up P ⋆ bext b S K) r) : upE P (fun x => if x = b then some (S, K) else none) r := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨hp, k1, g1⟩, ⟨h2, k2, g2⟩⟩ := h
+  refine ⟨by simpa [h2] using hp, by simp [k1, k2, Know.union_none], ?_⟩
+  simp only [g1, g2, Ghost.unit_add]
+  ext1
+  · funext γ; simp [Ghost.atExt, Ghost.exts]
+  · funext x; simp only [Ghost.atExt, Ghost.exts]; split <;> simp_all
+
+/-- A lifted post with a byte of block `b` whose extent it owns: the legacy part, the full extent
+of `b`, and other extents (no bytes, no knowledge). -/
+theorem upPost_bext {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)} {r : Res}
+    {b : BlockId} {S : Nat} {K : BlockKind} (h : upPost Q B E r)
+    (hc : ∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.size = S ∧ fc.cell.kind = K ∧ (B b → (E b).isSome)) :
+    ((up Q ⋆ bext b S K) ⋆ fun r => r.heap = FHeap.empty ∧ r.know = Know.none) r := by
+  obtain ⟨E', ⟨hq, hk, hg⟩, hcov⟩ := h
+  obtain ⟨x, fc, hfc, hs, hkd, hBE⟩ := hc
+  have hE : E' b = some (S, K) := by rw [hcov (b, x) fc hfc hBE, hs, hkd]
+  refine ⟨⟨r.heap, Know.none, Ghost.atExt b (ECell.auth1 S K Frac.one)⟩,
+    ⟨FHeap.empty, Know.none, Ghost.exts fun x => if x = b then none else E' x⟩,
+    FHeap.disjoint_empty _, ?_, ⟨⟨r.heap, Know.none, Ghost.unit⟩,
+      ⟨FHeap.empty, Know.none, Ghost.atExt b (ECell.auth1 S K Frac.one)⟩, FHeap.disjoint_empty _,
+      by simp [Know.union_none], ⟨hq, rfl, rfl⟩, rfl, rfl, rfl⟩, rfl, rfl⟩
+  rw [res_eta r, hk, hg, Ghost.exts_split hE]
+  simp [Know.union_none]
+
 /-! ## Address disjointness of live blocks (stage 3) -/
 
 /-- **Owned bytes of two different blocks lie at disjoint addresses**: owning byte `x` of `b`

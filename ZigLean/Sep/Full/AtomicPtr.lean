@@ -26,6 +26,12 @@ open FAssn Conc Conc.Proto
 def aptsE {α : Type} [Enc α] (p : Ptr) (v : α) : FAssn := fun r => ∃ A S K bs,
   (A + p.off.toNat) % 8 = 0 ∧ K ≠ .constGlobal ∧ bs.size = 8 ∧ Enc.decode bs = pure v ∧
   abytesAt p A S K bs (some (p.off.toNat, 8)) r
+theorem aptsE_fix {α : Type} [Enc α] {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {v : α}
+    (h : aptsE p v r) : aptsE p v (r.fix m) := by
+  obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := h
+  obtain ⟨S', K', hn, hab'⟩ := abytesAt_fix hh hab (by omega)
+  exact ⟨A, S', K', bs, hal, norm_ne_constGlobal hn hK, hsz, hv, hab'⟩
+
 
 theorem hbFloorPos_le (m : Mem) (li : Nat) :
     hbFloorPos m li = 0 ∨ hbFloorPos m li < (m.atomics[li]!).msgs.size := by
@@ -116,9 +122,9 @@ theorem unorderedPrep_noErr {size align : Nat} {p : Ptr} {m : Mem} {b o : Nat} {
 /-- **`unordered` atomic load** of an owned pointer-valued word (sequential: choice 0). -/
 theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
     FTriple (aptsE p v) (atomicLoadUnorderedEncAt α 0 8 p) (fun w => ⟪w = v⟫ ⋆ aptsE p v) := by
-  intro m r rF hh hp hs
+  refine FTriple.of_fix (fun _ _ _ hh hp => aptsE_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_erase
+  have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
@@ -186,7 +192,7 @@ theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
           rw [heap_of_blocks hblocks]
           split
           · rename_i hin
-            exact hh.cell (abytesAt_cell hab hpb hin)
+            exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hsz]; exact htag b' x) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
@@ -277,9 +283,9 @@ theorem accessW_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (p : Ptr) (n a
 theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
     FTriple (aptsE p v) (cmpxchgPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) := by
-  intro m r rF hh hp hs
+  refine FTriple.of_fix (fun _ _ _ hh hp => aptsE_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_erase
+  have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
@@ -288,8 +294,8 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     rw [hpb] at hb0; cases hb0
     have hr := hl0 (b, p.off.toNat)
     rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr
-    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hh.cell hr)
-    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hh.cell hr)
+    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hxr _ _ hr)
+    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hxr _ _ hr)
     rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
     simp only [Cell.mk.injEq] at hc
     exact ⟨hc.2.2.2.symm, hlo⟩
@@ -461,8 +467,7 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode new)) hblocks, hwr, henc,
               hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-          (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode new) })
-            hblk rfl hblocks)
+          (kmono_write hblk hblocks (by rw [henc]; omega))
         refine ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
           by rw [← hsz]; exact hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩

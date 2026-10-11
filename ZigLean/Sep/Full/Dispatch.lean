@@ -189,10 +189,17 @@ theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
       (fun f => ⟪f = fns[i]⟫ ⋆ up (vtR vtp fns)) := by
   intro m r rF hh hp hs
   obtain ⟨R, hR, back⟩ := vtR_split hi hp.1
-  refine (((FTotalTriple.ofTotal ((ptsR_load (p := vtp.add (8 * i)) (a := 8) (v := fns[i])
-    (by decide)).frame (R := R)) (Tame.load Ptr 8 _)).toPartial).post fun f r' hq => ?_)
-    m r rF hh ⟨hR, hp.2⟩ hs
-  obtain ⟨hq, hk, hg⟩ := hq
+  have hsf : SizeFree (fun _ => none) (ptsR (vtp.add (8 * i)) 8 fns[i]) := by
+    intro h h' hp' hn hE hco
+    obtain ⟨A, S, K, bs, hal, hsz, hdec, hb⟩ := hp'
+    obtain ⟨A', S', K', hal', hb'⟩ := SizeFree.bytesAt_ex (p := vtp.add (8 * i)) (bs := bs)
+      (φ := fun A _ _ => (A + (vtp.add (8 * i)).off.toNat) % 8 = 0) (fun _ _ _ _ _ h _ => h)
+      h h' ⟨A, S, K, hal, hb⟩ hn hE hco
+    exact ⟨A', S', K', bs, hal', hsz, hdec, hb'⟩
+  refine ((((FTotalTriple.ofTotal_up (ptsR_load (p := vtp.add (8 * i)) (a := 8) (v := fns[i])
+    (by decide)) (Tame.load Ptr 8 _) hsf (Keeps.load Ptr 8 _)).toPartial.frame (R := up R))).post
+      fun f r' hq => ?_) m r rF hh (up_sep ⟨hR, hp.2⟩) hs
+  obtain ⟨hq, hk, hg⟩ := sep_up hq
   obtain ⟨hv, hq⟩ := Zig.sep_lift.mp (Zig.sep_assoc hq)
   exact sep_lift.mpr ⟨hv, back _ hq, hk, hg⟩
 
@@ -204,14 +211,20 @@ theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
       (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ up (vtR vtp fns)) := by
   refine FTriple.of_run fun m r rF hh hp hs => ?_
   obtain ⟨R, hR, -⟩ := vtR_split hi hp.1
-  obtain ⟨h₁, h₂, -, he, ⟨A, S, K, bs, -, hsz, -, hb⟩, -⟩ := hR
-  have hm : m.heap = h₁ ∪ (h₂ ∪ rF.heap.erase) := by
-    rw [hh.heap_erase, he, Heap.union_assoc]
-  obtain ⟨b, blk, hacc, -⟩ := bytesAt_access (q := vtp.add (8 * i)) (k := 0) (n := 8) (a := 1) hb hm
-    (by simp [Ptr.add]) (by decide) (by rw [hsz]; decide) (Nat.mod_one _)
-  obtain ⟨hqb, hblk, -, h0, hn, -⟩ := access_eq hacc
+  obtain ⟨h₁, h₂, -, he, ⟨A, S, K, bs, -, hsz, -, b, hqb, h0, hl⟩, -⟩ := hR
+  have hs8 : bs.size = 8 := hsz
+  -- the entry's last byte is owned: the block reaches past the entry (ownership, `Holds.block`)
+  have hc := hl (b, (vtp.add (8 * i)).off.toNat + 7)
+  rw [if_pos ⟨rfl, by omega, by omega⟩] at hc
+  have hc' : r.heap.erase (b, (vtp.add (8 * i)).off.toNat + 7) = some
+      ⟨bs[(vtp.add (8 * i)).off.toNat + 7 - (vtp.add (8 * i)).off.toNat]!, A, S, K⟩ := by
+    rw [he]; simp [hc]
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hc'
+  obtain ⟨fc, hfc, -⟩ := hc'
+  obtain ⟨blk, hblk, -, hx, -⟩ := hh.block hfc
   have hvb : vtp.block = some b := by simpa [Ptr.add] using hqb
-  exact ⟨_, m, r, ptrProject_add_run (inBounds_of hvb hblk hv (by simp [Ptr.add] at hn; omega))
+  have hoff : (vtp.add (8 * i)).off = vtp.off + 8 * i := by simp [Ptr.add]
+  exact ⟨_, m, r, ptrProject_add_run (inBounds_of hvb hblk hv (by omega))
     (inBounds_of hqb hblk h0 (by omega)), hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩
 
 /-! ## `std.mem.Allocator` -/
