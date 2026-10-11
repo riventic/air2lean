@@ -1304,9 +1304,4 @@ theorem checkIndex_bind_of_lt {α : Type} {n : Nat} {len i : BitVec n} (h : i.to
     (x : MemM α) : (checkIndex len i >>= fun _ => x) = x := by
   simp [checkIndex_of_lt h]
 
-/-- An index at most the length passes the bounds check of an operand with a sentinel. -/
-theorem checkSentinelIndex_of_le {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
-    checkSentinelIndex len i = pure () := by
-  simp [checkSentinelIndex, h]
-
 end Zig

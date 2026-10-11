@@ -1406,6 +1406,9 @@ def FCtx.itemAlign (fc : FCtx) (v : Val) : Nat :=
 def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
   match fc.valTy v with | .ptr "slice" .. => true | _ => false
 
+/-- A sentinel follows the items of the slice or pointer type `t` (`[:s]T`, `[*:s]T`). -/
+def FCtx.tySentinel (fc : FCtx) (t : TyId) : Bool := (fc.layouts[t]?).any (·.sentinel)
+
 /-- The count of the array or vector that the single-item pointer `v` points to, and whether a
 sentinel follows its items (`*[n:s]T`). -/
 def FCtx.pointeeCount? (fc : FCtx) (v : Val) : Option (Nat × Bool) :=
@@ -1422,7 +1425,7 @@ it has no length. -/
 def FCtx.itemCount? (fc : FCtx) (v : Val) (rv : String) : Option (String × Bool) :=
   if fc.isSlice v then
     some (if v matches .inst _ then s!"{rv}.len" else s!"({rv}).len",
-      ((fc.valTyId? v).bind (fc.layouts[·]?)).any (·.sentinel))
+      (fc.valTyId? v).any fc.tySentinel)
   else (fc.pointeeCount? v).map fun (n, sentinel) => (s!"({n} : BitVec {fc.ptrBits})", sentinel)
 
 /-- The item pointer and the item count of the slice or array pointer `v`, as terms. -/
@@ -1442,10 +1445,13 @@ def FCtx.indexCheck? (fc : FCtx) (v i : Val) (rv : Val → String) : Option Stri
   else (fc.itemCount? v (rv v)).map fun (len, sentinel) =>
     s!"{if sentinel then "Zig.checkSentinelIndex" else "Zig.checkIndex"} {len} {rv i}"
 
-/-- The memory term `body` after the bounds check of item `i` of `v` (`FCtx.indexCheck?`). -/
-def FCtx.guardIndex (fc : FCtx) (v i : Val) (rv : Val → String) (body : String) : String :=
+/-- `body` after the bounds check of item `i` of `v` (`FCtx.indexCheck?`): a memory term, or
+with `lift` a term of the function's monad, which then lifts the check (`FCtx.callMName`). -/
+def FCtx.guardIndex (fc : FCtx) (v i : Val) (rv : Val → String) (body : String)
+    (lift : Bool := false) : String :=
   match fc.indexCheck? v i rv with
-  | some check => s!"{check} >>= fun _ => {body}"
+  | some check => if lift then s!"{fc.callMName} ({check}) >>= fun _ => {body}"
+    else s!"{check} >>= fun _ => {body}"
   | none => body
 
 /-- `v` is a pointer to memory: not a place. -/
@@ -1576,7 +1582,7 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
   | .free =>
-    let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
+    let sentinel := (fc.valTyId? (arg 1)).any fc.tySentinel
     s!"Zig.Allocator.{if sentinel then "freeSentinel" else fc.widthFn "free" "freeOf"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
   | .realloc => s!"Zig.Allocator.realloc {a} {rv (arg 1)} {rv (arg 2)}"
@@ -2748,10 +2754,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := fc.projectExpr p inst.ty base s!"·.{elem} {size} {rv i}"
       (zero := size == 0 || i matches .int _ 0)
     -- Forming `&s[i]` past the length is illegal also when no access follows.
-    let expr := match fc.indexCheck? p i rv with
-      | some check => s!"{fc.callMName} ({check}) >>= fun _ => {expr}"
-      | none => expr
-    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.guardIndex p i rv expr (lift := true)); (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id
       s!"{fc.callMName} ({fc.guardIndex p i rv (fc.loadItem p (rv p) (rv i))})"
@@ -2773,7 +2776,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | some (.slicePtr s) => fc.itemCount? s (rv s)
       | some (.bitcast a) => fc.itemCount? a (rv a)
       | _ => none
-    let resultSentinel := (fc.layouts[inst.ty]?).any (·.sentinel)
+    let resultSentinel := fc.tySentinel inst.ty
     -- A sentinel slicing reads the item at its end, which must be an item of the source unless
     -- the source's own sentinel is there.
     let checks := (srcLen.map fun (n, srcSentinel) =>
@@ -2812,7 +2815,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let hasLen (v : Val) : Bool :=
       fc.isSlice v || match fc.valTy v, fc.pointeeOf v with | .ptr "one" .., .array .. => true | _, _ => false
     let (dptr, dn) := fc.itemsOf dst (rv dst)
-    let (_, sn) := fc.itemsOf src (rv src)
+    let (sptr, sn) := fc.itemsOf src (rv src)
     let n := if hasLen dst then dn else sn
     -- Sema passes a slice source as its `slice_ptr`; its count is the slice's length.
     let slicePtrOf : Option Val := match src with
@@ -2822,7 +2825,6 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _ => none
     let m := if hasLen src then sn
       else ((slicePtrOf.bind fun sl => fc.itemCount? sl (rv sl)).map (·.1)).getD n
-    let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
     let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
     let call := if move then s!"{fc.widthFn "Zig.memmove" "Zig.memmoveOf"} {args}"
