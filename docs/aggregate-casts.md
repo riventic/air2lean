@@ -3,8 +3,8 @@
 Up to Zig 0.16.0, `@bitCast` of an array, `extern` struct or `extern` union reinterprets the
 value's **in-memory representation**, padding included. Zig 0.17.0 changed `@bitCast` to the
 logical bit order and made `extern` struct and union casts compile errors. The rules below
-apply to AIR with `zig_version` 0.14.1, 0.15.2 or 0.16.0 only (`memoryBitCastVersion`,
-`Air2Lean/Check.lean`). Any other version, and a checker context without a version, rejects
+apply to AIR with `zig_version` 0.14.1, 0.15.2 or 0.16.0 only (`ZigVersion.bitCast` is `.memory`,
+`reprCastApplies` in `Air2Lean/Check.lean`). Any other version, and a checker context without a version, rejects
 them.
 
 ## Representation casts
