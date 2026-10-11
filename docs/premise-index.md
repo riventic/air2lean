@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3101 theorems in 183 files.
+3113 theorems in 183 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 812 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 819 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 661 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
@@ -24,7 +24,7 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 55 | Caller-supplied `Allocator` behaves as the std model |
 | [IOM-01](premises.md#iom-01) | 361 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 1594 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1601 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 198 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 21 | `Io.Group` tasks are model threads |
@@ -35,36 +35,36 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1342 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1342 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 482 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 1353 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1353 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 493 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 531 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 178 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 114 | Opaque libm transcendentals |
+| [MTH-01](premises.md#mth-01) | 189 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 125 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
 | [ASM-01](premises.md#asm-01) | 17 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2966 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2518 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1306 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2978 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2525 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1317 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
-| [SEM-06](premises.md#sem-06) | 88 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2518 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 101 | The native stack holds every call chain |
+| [SEM-06](premises.md#sem-06) | 95 | Canonical AIR fragment semantics |
+| [SEM-07](premises.md#sem-07) | 2525 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 108 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3101 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1548 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1548 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 131 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 3113 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1555 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1555 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 142 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -901,6 +901,7 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, S
 
 | Theorem | Premises |
 |---|---|
+| `Pointers.AirCert.callee_0` | SEM-01, TRU-01 |
 | `Pointers.AirCert.addTo_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.addTo_fix` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.delay_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
@@ -909,6 +910,16 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, S
 | `Pointers.AirCert.dueOf_fix` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.same_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.same_fix` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.air_sumTo_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_body` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_comm` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_exits` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_step` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_fix` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.swap_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.swap_fix` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.gen_fixpoint` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
@@ -923,6 +934,7 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, S
 | `Pointers.AirCert.same_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.swap_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Pointers.AirCert.swap_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_sound` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Pointers/Proofs.lean`
 
