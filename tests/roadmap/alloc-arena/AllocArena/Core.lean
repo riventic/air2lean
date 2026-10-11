@@ -250,10 +250,11 @@ def OV.nodes (w : OV) : List NodeV :=
   | none => []
   | some N => w.node N :: w.rest
 
-/-- A grant lies in a block of one of the nodes `ns`, with that node's address and kind labels,
-at a nonnegative offset. -/
+/-- A grant lies in a block of one of the nodes `ns`, with that node's address label and a kind
+label of the same normal form (a node that its child grows in place may get another kind label,
+`FAllocInv.rresizePost`), at a nonnegative offset. -/
 def GrantOk (ns : List NodeV) : GRegion → Prop
-  | (p, _, _, A, K) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K = nd.K
+  | (p, _, _, A, K) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K.norm = nd.K.norm
 
 /-- A grant's length does not matter to `GrantOk`. -/
 theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat} {K : BlockKind}
@@ -593,7 +594,7 @@ theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {
   obtain ⟨-, nd, hnd, hblk, hA, hK⟩ := hgr _ _ hMi
   simp only [OV.nodes, hfirst] at hnd
   rcases List.mem_cons.mp hnd with rfl | hm
-  · exact ⟨hA, congrArg BlockKind.norm hK⟩
+  · exact ⟨hA, hK⟩
   · have hb' : nd.N.block = some v.bN := by rw [← hblk, hbp, hb]
     have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K (v.L CI γ e ctx s G) :=
       Owns.within (X := v.nR) (Owns.region (a := 8) (bs := Enc.encode v.w.nxt)
@@ -1295,7 +1296,7 @@ theorem OV.body_split {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Pt
 
 /-- `GrantOk` reads only the nodes' pointers and labels. -/
 theorem GrantOk.mono {ns ns' : List NodeV}
-    (h : ∀ nd ∈ ns, ∃ nd' ∈ ns', nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K = nd.K) {g : GRegion}
+    (h : ∀ nd ∈ ns, ∃ nd' ∈ ns', nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K.norm = nd.K.norm) {g : GRegion}
     (hg : GrantOk ns g) : GrantOk ns' g := by
   obtain ⟨p, n, q, A, K⟩ := g
   obtain ⟨h0, nd, hnd, hb, hA, hK⟩ := hg
@@ -1436,7 +1437,7 @@ theorem alloc_carve_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} {N : 
   -- the new state
   have hwf : OV.Facts (OV.carve w N n ai t2) := by
     have hmem : ∀ nd ∈ w.nodes, ∃ nd' ∈ ({ w with qh := w.qh.half } : OV).nodes,
-        nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K = nd.K := fun nd hnd => by
+        nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K.norm = nd.K.norm := fun nd hnd => by
       simp only [OV.nodes, hfirst, List.mem_cons] at hnd ⊢
       rcases hnd with rfl | hnd
       · exact ⟨_, Or.inl rfl, rfl, rfl, rfl⟩
@@ -1580,6 +1581,87 @@ theorem push_node_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w
   have e0 : nd.N.add (24 + ((0 : Nat) : Int)) = nd.N.add 24 := by simp
   rw [e0]
   exact of_eq (by simp only [UsedRest]; ac_rfl) h
+
+/-- Two adjacent regions of one block with the same labels are one. -/
+theorem up_region_join {p q : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte}
+    {r : Res} (hq : q = p.add bs.size)
+    (h : (up (regionIn p A S K a bs) ⋆ up (regionIn q A S K a' bs')) r) :
+    up (regionIn p A S K a (bs ++ bs')) r := by
+  subst hq
+  obtain ⟨⟨h₁, h₂, hd₁, he, x1, x2⟩, hk, hg⟩ := sep_up h
+  exact ⟨by rw [he]; exact regionIn_join ⟨h₁, h₂, hd₁, rfl, x1, x2⟩, hk, hg⟩
+
+/-- The arena's resources on a first node `N` without the node's words, regions, token and share. -/
+def OV.restE (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
+  up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
+    gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
+    UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
+
+theorem OV.bodyE_eq {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} (w : OV) (N : Ptr) :
+    w.bodyE CI γ e ctx N = ((apts N (BitVec.ofNat 64 w.sz) ⋆
+      up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      (CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
+      up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail)) ⋆ w.restE CI γ e ctx N) := by
+  simp only [OV.bodyE, OV.restE]; ac_rfl
+
+/-- The arena's variables after the child grew the first node in place to `sz'` bytes (labels
+`S'`, `K'`), the new bytes `t` appended to the tail. -/
+def OV.grow (w : OV) (sz' S' : Nat) (K' : BlockKind) (t : Array Byte) : OV :=
+  { w with sz := sz', S := S', K := K', tail := w.tail ++ t }
+
+/-- **The first node grown in place by its child** (O-G; `FAllocSpec.resize` refined: the arena
+gives the child its token and its kept part `qh` of the node's share, no bytes): the `size`
+word holds the new size, the token and the share are at the new size, the new bytes join the
+tail; the node's regions take the new labels (`EUpd.relabel`; a kind of the same normal form). -/
+theorem grow_node_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {N : Ptr}
+    (hfirst : w.first = some N) {sz' S' : Nat} {K' : BlockKind} (hK : K'.norm = w.K.norm)
+    (hnf' : NodeFacts N w.A sz') (hlt : w.sz < sz') {t : Array Byte} (ht : t.size = sz' - w.sz) :
+    EUpd ((apts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+        (CI.tok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
+        up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆
+        w.restE CI γ e ctx N)
+      (⟪(w.grow sz' S' K' t).Facts⟫ ⋆ (w.grow sz' S' K' t).bodyE CI γ e ctx N) := by
+  obtain ⟨hc16, hfin, hff, hgr, hacct, hqq⟩ := hw
+  have hff' := hff
+  simp only [OV.FirstFacts, hfirst] at hff'
+  obtain ⟨hnf, hei, htail⟩ := hff'
+  have hwf : (w.grow sz' S' K' t).Facts := by
+    have hnodes : (w.grow sz' S' K' t).nodes = ⟨N, w.A, S', K', sz', w.qn, w.qh⟩ :: w.rest := by
+      simp [OV.grow, OV.nodes, hfirst, OV.node]
+    have hnodes0 : w.nodes = w.node N :: w.rest := by simp [OV.nodes, hfirst]
+    refine ⟨hc16, hfin, ?_, fun i g hi => GrantOk.mono (fun nd hnd => ?_) (hgr i g hi), fun b => ?_,
+      fun nd hnd => ?_⟩
+    · simp only [OV.FirstFacts, OV.grow, hfirst]
+      exact ⟨hnf', by omega, by simp only [Array.size_append, htail, ht]; have := hnf.hdr; omega⟩
+    · rw [hnodes0] at hnd; rw [hnodes]
+      rcases List.mem_cons.mp hnd with rfl | hnd
+      · exact ⟨_, List.mem_cons_self .., rfl, rfl, hK⟩
+      · exact ⟨nd, List.mem_cons_of_mem _ hnd, rfl, rfl, rfl⟩
+    · rw [hnodes]
+      show _ = poolOn b w.pn w.pf + grantsOn b w.M w.mN
+      rw [← hacct b, hnodes0]; rfl
+    · rw [hnodes] at hnd
+      rcases List.mem_cons.mp hnd with rfl | hnd
+      · exact hqq (w.node N) (by rw [hnodes0]; exact List.mem_cons_self ..)
+      · exact hqq nd (by rw [hnodes0]; exact List.mem_cons_of_mem _ hnd)
+  refine EUpd.trans (EUpd.of_imp (P' := (up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail)) ⋆ (apts N (BitVec.ofNat 64 sz') ⋆
+      (CI.tok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
+      up (regionIn (N.add w.sz) w.A S' K' 1 t) ⋆ w.restE CI γ e ctx N)) fun _ h => of_eq (by ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frame (EUpd.trans (EUpd.frame (EUpd.relabel (S' := S') hK))
+    (EUpd.frameL (EUpd.relabel (S' := S') hK)))) ?_
+  refine EUpd.of_imp fun r h => sep_lift.mpr ⟨hwf, ?_⟩
+  have h0 := hnf.off0
+  have hend : (N.add (24 + w.ei)).add (w.tail.size : Int) = N.add w.sz := by
+    simp only [Ptr.add, Ptr.mk.injEq, true_and, htail]; omega
+  have h := of_eq (Q := (up (regionIn (N.add (24 + w.ei)) w.A S' K' 1 w.tail) ⋆
+      up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆ (up (regionIn (N.add 16) w.A S' K' 8 (Enc.encode w.nxt)) ⋆
+      apts N (BitVec.ofNat 64 sz') ⋆ (CI.tok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
+      w.restE CI γ e ctx N)) (by ac_rfl) h
+  have h := sep_mono_left (Q := up (regionIn (N.add (24 + w.ei)) w.A S' K' 1 (w.tail ++ t)))
+    (fun _ x => up_region_join hend.symm x) h
+  simp only [OV.bodyE, OV.restE, OV.grow] at h ⊢
+  exact of_eq (by ac_rfl) h
 
 /-! ## Proof tactics of the entries
 
