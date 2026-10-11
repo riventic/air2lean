@@ -302,7 +302,7 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
     else (do
       throw .outOfBounds)) : Zig.CM Tgt pushLocals pushExit) with
   | .br20 => (do
-    let i25 ← Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
+    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i18) >>= fun _ => Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
     let i26 ← pure ((← get).h)
     Zig.store (α := BitVec 32) 4 i25 i26
     match ← ((do

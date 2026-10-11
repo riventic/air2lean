@@ -108,7 +108,7 @@ def bumpAt (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM bumpAtLocals bumpAtExit) with
     | .br3 => (do
-      let i8 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 p1))
+      let i8 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1) >>= fun _ => Zig.callM (Zig.ptrProject p0 (·.elem 1 p1))
       let i9 ← Zig.load (BitVec 8) 1 i8
       let i10 ← pure (Zig.addWrap i9 (1 : BitVec 8))
       Zig.store (α := BitVec 8) 1 i8 i10
@@ -334,7 +334,7 @@ def indexOfScalar.loop4 (p0 : BitVec 8) : Zig.MM indexOfScalarLocals indexOfScal
     let i7 ← pure (i5)
     let i8 ← pure (Zig.lt false i7 (12 : BitVec 64))
     if i8 then (do
-      let i10 ← Zig.callM (Zig.load (BitVec 8) 1 ((⟨some 1, 0⟩ : Zig.Ptr).elem 1 i5))
+      let i10 ← Zig.callM (Zig.checkSentinelIndex (12 : BitVec 64) i5 >>= fun _ => Zig.load (BitVec 8) 1 ((⟨some 1, 0⟩ : Zig.Ptr).elem 1 i5))
       match ← ((do
         let i12 ← pure (i10 == p0)
         if i12 then (do
@@ -410,7 +410,7 @@ def localArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM localArrLocals localArrExit) with
     | .br5 => (do
-      let i10 ← Zig.callM (Zig.ptrProject i1 (·.elem 1 i3))
+      let i10 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) i3) >>= fun _ => Zig.callM (Zig.ptrProject i1 (·.elem 1 i3))
       let i11 ← Zig.load (BitVec 8) 1 i10
       let i12 ← Zig.add false i11 (1 : BitVec 8)
       Zig.store (α := BitVec 8) 1 i10 i12
@@ -478,7 +478,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
           else (do
             throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
         | .br27 => (do
-          let i32 ← Zig.callM (Zig.checkIndex p0 i24 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i24))
+          let i32 ← Zig.callM (Zig.checkIndex p0.len i24 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i24))
           let i33 ← pure ((← get).i)
           let i34 ← pure p0.len
           let i35 ← pure (Zig.lt false i33 i34)
@@ -488,7 +488,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
             else (do
               throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
           | .br36 => (do
-            let i41 ← Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i33))
+            let i41 ← Zig.callM (Zig.checkIndex p0.len i33) >>= fun _ => Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i33))
             let i42 ← pure ((← get).j)
             let i43 ← pure p0.len
             let i44 ← pure (Zig.lt false i42 i43)
@@ -498,7 +498,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
               else (do
                 throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
             | .br45 => (do
-              let i50 ← Zig.callM (Zig.checkIndex p0 i42 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i42))
+              let i50 ← Zig.callM (Zig.checkIndex p0.len i42 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i42))
               Zig.store (α := BitVec 32) 4 i41 i50
               let i52 ← pure ((← get).j)
               let i53 ← pure p0.len
@@ -509,7 +509,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
                 else (do
                   throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
               | .br55 => (do
-                let i60 ← Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i52))
+                let i60 ← Zig.callM (Zig.checkIndex p0.len i52) >>= fun _ => Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i52))
                 Zig.store (α := BitVec 32) 4 i60 i32
                 pure .br23)
               | e => pure e)
@@ -608,7 +608,7 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM sentinelArrLocals sentinelArrExit) with
     | .br20 => (do
-      let i25 ← Zig.callM (Zig.load (BitVec 8) 1 (i18.elem 1 p0))
+      let i25 ← Zig.callM (Zig.checkSentinelIndex (3 : BitVec 64) p0 >>= fun _ => Zig.load (BitVec 8) 1 (i18.elem 1 p0))
       let i26 ← Zig.callR (Zig.vindex (#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 4) p0)
       let i27 ← pure (Zig.addWrap i25 i26)
       let i28 ← Zig.callM (Zig.ptrProject i17 (·.add 4))
@@ -653,7 +653,7 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
           throw .outOfBounds)) : Zig.MM subZLocals subZExit) with
       | .br15 => (do
         let i20 ← Zig.callM (Zig.checkSliceEnd p0.len p1 i11 1 >>= fun _ => pure (⟨i4, i11⟩ : Zig.Slice))
-        let i21 ← Zig.callM (Zig.checkSentinelIndex i20 i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
+        let i21 ← Zig.callM (Zig.checkSentinelIndex i20.len i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
         let i22 ← pure ((0 : BitVec 8) == i21)
         match ← ((do
           if i22 then (do
