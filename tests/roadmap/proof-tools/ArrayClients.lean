@@ -48,12 +48,12 @@ theorem generated_bumpAt_array (p : Ptr) (xs : List (BitVec 8)) (i : BitVec 64)
     cases hproj : ((ptrProject p (·.elem 1 i)).run m).run with
     | none =>
       simp only [ExceptT.run, StateT.run] at hproj
-      simp [Slices.bumpAt, zig_unfold, hi4, hproj]
+      simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj]
     | some formed =>
       cases formed with
       | error e =>
         simp only [ExceptT.run, StateT.run] at hproj
-        simp [Slices.bumpAt, zig_unfold, hi4, hproj]
+        simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj]
       | ok qm =>
         obtain ⟨q, m'⟩ := qm
         obtain ⟨rfl, rfl⟩ := ptrProject_ok (q := q) (m' := m') (by
@@ -62,35 +62,35 @@ theorem generated_bumpAt_array (p : Ptr) (xs : List (BitVec 8)) (i : BitVec 64)
         cases hload : ((load (BitVec 8) 1 (p.elem 1 i)).run m').run with
         | none =>
           simp only [ExceptT.run, StateT.run] at hload
-          simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload]
+          simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload]
         | some result =>
           simp only [ExceptT.run, StateT.run] at hload
           cases result with
-          | error e => simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload]
+          | error e => simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload]
           | ok pair =>
             obtain ⟨value, afterLoad⟩ := pair
             cases hstore : ((store 1 (p.elem 1 i) (Zig.addWrap value 1)).run afterLoad).run with
             | none =>
               simp only [ExceptT.run, StateT.run, BitVec.ofNat_eq_ofNat] at hstore
-              simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload, hstore]
+              simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload, hstore]
             | some stored =>
               simp only [ExceptT.run, StateT.run, BitVec.ofNat_eq_ofNat] at hstore
               cases stored with
-              | error e => simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload, hstore]
+              | error e => simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload, hstore]
               | ok pair' =>
                 obtain ⟨unit, afterStore⟩ := pair'
                 cases unit
                 cases hlast : ((load (BitVec 8) 1 (p.elem 1 3)).run afterStore).run with
                 | none =>
                   simp only [ExceptT.run, StateT.run, BitVec.ofNat_eq_ofNat] at hlast
-                  simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload, hstore, hlast]
+                  simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload, hstore, hlast]
                 | some loaded =>
                   simp only [ExceptT.run, StateT.run, BitVec.ofNat_eq_ofNat] at hlast
                   cases loaded with
-                  | error e => simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload, hstore, hlast]
+                  | error e => simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload, hstore, hlast]
                   | ok pair'' =>
                     obtain ⟨last, afterRead⟩ := pair''
-                    simp [Slices.bumpAt, zig_unfold, hi4, hproj, hload, hstore, hlast]
+                    simp [Slices.bumpAt, zig_unfold, checkIndex, hi4, hproj, hload, hstore, hlast]
   rw [hbody]
   -- `&xs[i]` (`ptrProject`, MM-3)
   refine Triple.bind (Triple.frame (R := R) (Triple.arr_ptrProject (T := BitVec 8) (Nat.le_of_lt hi)))
