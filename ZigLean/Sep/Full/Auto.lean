@@ -38,6 +38,8 @@ namespace Zig.Full.Auto
 open Lean Meta Elab Tactic
 
 initialize registerTraceClass `fsym
+initialize registerTraceClass `fsym.arith
+initialize registerTraceClass `fsym.prof
 
 /-! ## Expressions -/
 
@@ -144,11 +146,22 @@ partial def headKey (e : Expr) : Name :=
     | .fvar _ => `fvar
     | _ => .anonymous
 
-/-- Unify when the heads agree. -/
-def unifyKeyed (a b : Expr) : MetaM Bool := do
+/-- Unify when the heads agree. Applications of one constant are unified argument by argument
+(without unfolding the constant when the arguments differ: `load (BitVec 64) …` against
+`load Ptr …` fails without unfolding `load`). -/
+partial def unifyKeyed (a b : Expr) : MetaM Bool := do
   let ka := headKey a
   let kb := headKey b
   if ka != kb && ka != .anonymous && kb != .anonymous then return false
+  let a := a.consumeMData
+  let b := b.consumeMData
+  if let .const ca _ := a.getAppFn then
+    if let .const cb _ := b.getAppFn then
+      if ca == cb && a.getAppNumArgs == b.getAppNumArgs then
+        unless ← isDefEq a.getAppFn b.getAppFn do return false
+        for (x, y) in a.getAppArgs.zip b.getAppArgs do
+          unless ← unifyKeyed x y do return false
+        return true
   isDefEq a b
 
 /-- Unify atoms when the heads agree, without unfolding values. -/
@@ -160,16 +173,6 @@ def unifyAtom (a b : Expr) : MetaM Bool := do
 
 /-! ## Solvers -/
 
-/-- The arithmetic solver for side goals. -/
-syntax "fsym_arith" : tactic
-macro_rules
-  | `(tactic| fsym_arith) => `(tactic| first
-      | assumption
-      | omega
-      | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul] at *; omega)
-      | bv_omega
-      | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] at *; omega))
-
 /-- Run a tactic on a goal; `true` if it closed the goal (else the state is restored). -/
 def closeWith (g : MVarId) (tac : Syntax) : TacticM Bool := do
   let s ← saveState
@@ -179,27 +182,21 @@ def closeWith (g : MVarId) (tac : Syntax) : TacticM Bool := do
     s.restore; return false
   catch _ => s.restore; return false
 
-/-- The user definitions (generated code, invariants) that occur in `e`. -/
-def userConsts (e : Expr) : MetaM (Array Name) := do
-  let mut out := #[]
-  for c in e.getUsedConstants do
-    if out.contains c then continue
-    if ← isLibrary c then continue
-    let some info := (← getEnv).find? c | continue
-    unless info.isDefinition do continue
-    if (← getProjectionFnInfo? c).isSome then continue
-    if isAuxRecursor (← getEnv) c || isMatcherCore (← getEnv) c then continue
-    out := out.push c
-  return out
+/-- `e` is `2 ^ x` (natural numbers, `x` not a literal). -/
+def isSymPow (e : Expr) : Bool :=
+  e.isAppOfArity ``HPow.hPow 6 && (e.getAppArgs[4]!.nat? == some 2) &&
+    (e.getAppArgs[5]!.nat?).isNone && (e.getArg! 0).isConstOf ``Nat
 
-/-- The subterms `2 ^ x` (natural numbers, `x` not a literal) of `e`. -/
-partial def twoPows (e : Expr) : Array Expr :=
-  go e #[]
+/-- The subterms `2 ^ x` (`isSymPow`) and `z % 2 ^ x` of `e`. -/
+partial def powTerms (e : Expr) : Array Expr × Array Expr :=
+  go e (#[], #[])
 where
-  go (e : Expr) (acc : Array Expr) : Array Expr :=
-    let acc := if e.isAppOfArity ``HPow.hPow 6 && (e.getAppArgs[4]!.nat? == some 2) &&
-        (e.getAppArgs[5]!.nat?).isNone && (e.getArg! 0).isConstOf ``Nat && !acc.contains e
-      then acc.push e else acc
+  go (e : Expr) (acc : Array Expr × Array Expr) : Array Expr × Array Expr :=
+    let (ps, ms) := acc
+    let ps := if isSymPow e && !ps.contains e then ps.push e else ps
+    let ms := if e.isAppOfArity ``HMod.hMod 6 && (e.getArg! 0).isConstOf ``Nat && isSymPow e.appArg! &&
+        !ms.contains e then ms.push e else ms
+    let acc := (ps, ms)
     match e with
     | .app f a => go a (go f acc)
     | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
@@ -207,9 +204,307 @@ where
     | .mdata _ b | .proj _ _ b => go b acc
     | _ => acc
 
+/-- The hypotheses (propositions) of the context. -/
+def propHyps : MetaM (Array LocalDecl) := do
+  let mut out := #[]
+  for d in ← getLCtx do
+    unless d.isImplementationDetail do
+      if ← isProp d.type then out := out.push d
+  return out
+
+/-- The facts of the arithmetic solver: proofs (over the goal's hypotheses) of propositions in
+normal form. `omega` and the discharger work from these, not from the raw context. -/
+initialize dischFacts : IO.Ref (Array Expr) ← IO.mkRef #[]
+
+/-- `omega` proves `ty` from `facts` (proof terms); the state is kept clean on failure. -/
+def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+  let s ← saveState
+  try
+    let m ← mkFreshExprMVar ty
+    let before := (← getLCtx).lastDecl.map (·.fvarId)
+    let some g ← m.mvarId!.falseOrByContra | return some (← instantiateMVars m)
+    g.withContext do
+      let neg := match (← getLCtx).lastDecl with
+        | some d => if some d.fvarId != before then #[d.toExpr] else #[]
+        | none => #[]
+      Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
+    return some (← instantiateMVars m)
+  catch _ => s.restore; return none
+
+/-- Probes of `extraFacts` (a mask or remainder fact for a term), per run of `fsym`: a proof
+(reused where its free variables are in scope), or the number of facts it failed with (retried
+only with more facts). -/
+initialize probeCache : IO.Ref (Std.HashMap Expr (Expr ⊕ Nat)) ← IO.mkRef {}
+
+/-- A cached probe for `key`: `run` with `n` facts. -/
+def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
+  let lctx ← getLCtx
+  match (← probeCache.get).get? key with
+  | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
+  | some (.inr m) => if n ≤ m then return none
+  | none => pure ()
+  let r ← run
+  probeCache.modify (·.insert key (match r with | some pf => .inl pf | none => .inr n))
+  return r
+
+/-- The subterms `a &&& b` of natural numbers in `e`. -/
+partial def natAnds (e : Expr) : Array Expr :=
+  go e #[]
+where
+  go (e : Expr) (acc : Array Expr) : Array Expr :=
+    let acc := if e.isAppOfArity ``HAnd.hAnd 6 && (e.getArg! 0).isConstOf ``Nat && !acc.contains e
+      then acc.push e else acc
+    match e with
+    | .app f a => go a (go f acc)
+    | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+    | .mdata _ b | .proj _ _ b => go b acc
+    | _ => acc
+
+/-- The widths `w` of the terms `x.toNat` (`x : BitVec w`, `w` a literal) of `e`. -/
+partial def bvWidths (e : Expr) : Array Nat :=
+  go e #[]
+where
+  go (e : Expr) (acc : Array Nat) : Array Nat :=
+    let acc := if e.isAppOfArity ``BitVec.toNat 2 then
+        match (e.getArg! 0).nat? with
+        | some w => if acc.contains w then acc else acc.push w
+        | none => acc
+      else acc
+    match e with
+    | .app f a => go a (go f acc)
+    | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+    | .mdata _ b | .proj _ _ b => go b acc
+    | _ => acc
+
+/-- Facts for `omega` about the symbolic powers of two `2 ^ x` of the target and the facts,
+which `omega` treats as atoms: `0 < 2 ^ x`; `2 ^ x < 2 ^ c` from `x < c` (`c` a literal); a mask
+`a &&& b` with `b = 2 ^ x - 1` (`a % 2 ^ x`) or, for a word `a` of width `w`,
+`b = 2 ^ w - 2 ^ x` (`a - a % 2 ^ x`), by `omega`; and for a remainder `z % 2 ^ x`: it is below
+`2 ^ x` and at most `z`, `z - z % 2 ^ x` is a multiple, and it is `z` (`z < 2 ^ x`) or `0`
+(`z = 2 ^ x`) where `omega` shows so. Returns the new facts. -/
+def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
+  let mut srcs := #[tgt]
+  for f in facts do srcs := srcs.push (← instantiateMVars (← inferType f))
+  let mut pows := #[]
+  let mut ands := #[]
+  -- the widths of the words in scope (`2 ^ w - 2 ^ x` masks)
+  let mut widths : Array Nat := #[]
+  for e in srcs do
+    for x in (powTerms e).1 do unless pows.contains x do pows := pows.push x
+    for x in natAnds e do unless ands.contains x do ands := ands.push x
+    for w in bvWidths e do unless widths.contains w do widths := widths.push w
+  let mut out : Array Expr := #[]
+  for p in pows do
+    let x := p.getAppArgs[5]!
+    out := out.push (← mkAppM ``Nat.two_pow_pos #[x])
+    for f in facts do
+      let ty ← instantiateMVars (← inferType f)
+      let lt := ty.isAppOfArity ``LT.lt 4
+      unless lt || ty.isAppOfArity ``LE.le 4 do continue
+      unless ty.appFn!.appArg! == x do continue
+      let some c := ty.appArg!.nat? | continue
+      let lit := mkNatLit (2 ^ c)
+      let pf ← if lt then mkAppM ``Nat.pow_lt_pow_right #[← mkAppM ``Nat.one_lt_two #[], f]
+        else mkAppM ``Nat.pow_le_pow_right #[← mkAppM ``Nat.two_pos #[], f]
+      out := out.push (← mkExpectedTypeHint pf (← mkAppM (if lt then ``LT.lt else ``LE.le) #[p, lit]))
+  -- masks
+  for t in ands do
+    let a := t.appFn!.appArg!
+    let b := t.appArg!
+    for p in pows do
+      let x := p.getAppArgs[5]!
+      let base := facts ++ out
+      let found ← probe (mkApp2 (mkConst `fsym.mask) t p) base.size do
+        if let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[p, mkNatLit 1])) then
+          pure (some (← mkAppOptM ``land_low #[a, b, x, h]))
+        else
+          let mut r := none
+          for w in widths do
+            let some hj ← omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit w]) | continue
+            let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[mkNatLit (2 ^ w), p])) | continue
+            let some ha ← omegaFacts base (← mkAppM ``LT.lt #[a, mkNatLit (2 ^ w)]) | continue
+            r := some (← mkAppOptM ``land_high #[a, b, x, mkNatLit w, ha, hj, h])
+            break
+          pure r
+      if let some pf := found then out := out.push pf; break
+  -- remainders by symbolic powers (also those the masks introduced)
+  let mut mods := #[]
+  for e in srcs ++ (← out.mapM inferType) do
+    for x in (powTerms e).2 do unless mods.contains x do mods := mods.push x
+  for m in mods do
+    let z := m.appFn!.appArg!
+    let M := m.appArg!
+    let pos ← mkAppM ``Nat.two_pow_pos #[M.getAppArgs[5]!]
+    out := out.push (← mkAppM ``Nat.mod_lt #[z, pos])
+    out := out.push (← mkAppM ``Nat.mod_le #[z, M])
+    out := out.push (← mkAppM ``sub_mod_self_mod #[z, M])
+    let base := facts ++ out
+    let r ← probe (mkApp (mkConst `fsym.mod) m) base.size do
+      if let some h ← omegaFacts base (← mkAppM ``LT.lt #[z, M]) then
+        return some (← mkAppM ``Nat.mod_eq_of_lt #[h])
+      if let some h ← omegaFacts base (← mkEq z M) then
+        return some (← mkAppM ``mod_eq_zero_of_eq #[h])
+      return none
+    if let some pf := r then out := out.push pf
+  return out
+
+/-- `t % M = c` from a fact `u % M = c` with `t = u` (by `omega`): `omega` treats a remainder by
+a symbolic `M` as an atom. -/
+def modCongr (facts : Array Expr) (tgt : Expr) : MetaM (Option Expr) := do
+  let some (_, l, c) := tgt.eq? | return none
+  unless l.isAppOfArity ``HMod.hMod 6 && (l.getArg! 0).isConstOf ``Nat do return none
+  let M := l.appArg!
+  let tt := l.appFn!.appArg!
+  for f in facts do
+    let ty ← instantiateMVars (← inferType f)
+    let some (_, l2, c2) := ty.eq? | continue
+    unless l2.isAppOfArity ``HMod.hMod 6 && l2.appArg! == M && c2 == c do continue
+    let u := l2.appFn!.appArg!
+    let some e ← omegaFacts facts (← mkEq tt u) | continue
+    let fn ← withLocalDeclD `x (mkConst ``Nat) fun x => do mkLambdaFVars #[x] (← mkAppM ``HMod.hMod #[x, M])
+    let e1 ← mkExpectedTypeHint (← mkCongrArg fn e) (← mkEq l l2)
+    return some (← mkEqTrans e1 f)
+  return none
+
+/-- The `fsym_arith` normal form of each hypothesis, per run of `fsym` (by `FVarId`; a
+hypothesis' type only changes up to definitional equality): `none` if unchanged, else the new
+proposition and its proof (over the original hypotheses only). -/
+initialize hypCache : IO.Ref (Std.HashMap FVarId (Option (Expr × Expr))) ← IO.mkRef {}
+
+/-- The simp context of the arithmetic solver: `fsym_arith` with its simprocs and Lean's. -/
+def arithSimpCtx : MetaM (Simp.Context × Simp.SimprocsArray) := do
+  let some ext ← getSimpExtension? `fsym_arith | throwError "fsym: no fsym_arith"
+  let mut thms ← ext.getTheorems
+  -- conditional rewrites (side conditions by `omegaDisch`): no wrap-around first
+  for n in [``toNat_add_nowrap, ``toNat_sub_nowrap, ``toNat_mul_nowrap, ``toNat_ofNat_nowrap,
+      ``toNat_ofInt_nowrap] do
+    thms ← thms.addConst n (prio := 10000)
+  for n in [``pow_mod_elim, ``Nat.mod_eq_of_lt, ``Int.emod_eq_of_lt, ``sub_wrap, ``Int.toNat_add,
+      ``Int.toNat_add_nat, ``Nat.add_zero, ``Nat.zero_add, ``Int.add_zero, ``Int.zero_add, ``Int.one_mul,
+      ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
+      ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
+      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self] do
+    thms ← thms.addConst n
+  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
+  if let some pe ← Simp.getSimprocExtension? `fsym_arith then procs := procs.push (← pe.getSimprocs)
+  return (ctx, procs)
+
+/-- Side conditions the discharger proved, per run of `fsym`; a proof is reused where its free
+variables are in scope. -/
+initialize dischCache : IO.Ref (Std.HashMap Expr (Option Expr)) ← IO.mkRef {}
+
+/-- The discharger of the arithmetic simp set (no wrap-around, `pow_mod_elim`, …): the bound of
+a word, else the side goal in normal form by `omega` from the current facts (`dischFacts`);
+cached. -/
+def omegaDisch : Simp.Discharge := fun e => do
+  let r : MetaM (Option Expr) := do
+    let e ← instantiateMVars e
+    let lctx ← getLCtx
+    if let some (some pf) := (← dischCache.get).get? e then
+      if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
+    let facts ← dischFacts.get
+    let out ← do
+      -- `x.toNat < 2 ^ w`
+      let wordBound : MetaM (Option Expr) := do
+        unless e.isAppOfArity ``LT.lt 4 do return none
+        let x := e.appFn!.appArg!
+        unless x.isAppOfArity ``BitVec.toNat 2 do return none
+        let pf ← mkAppM ``BitVec.isLt #[x.appArg!]
+        if ← isDefEq (← inferType pf) e then return some pf else return none
+      match ← wordBound with
+      | some pf => pure (some pf)
+      | none =>
+        let (ctx, procs) ← arithSimpCtx
+        let (r, _) ← simp e ctx procs
+        if r.expr.isTrue then
+          match r.proof? with
+          | some eq => pure (some (← mkOfEqTrue eq))
+          | none => pure (some (mkConst ``True.intro))
+        else
+          let extra ← extraFacts facts r.expr
+          match ← omegaFacts (facts ++ extra) r.expr with
+          | none => pure none
+          | some pf => match r.proof? with
+            | some eq => pure (some (← mkEqMPR eq pf))
+            | none => pure (some pf)
+    if let some pf := out then dischCache.modify (·.insert e (some pf))
+    return out
+  r
+
+/-- The facts of the current context: its hypotheses in normal form, each normalized with the
+facts before it (`none`: a hypothesis normalized to `False`, with its proof). -/
+def normFacts : MetaM (Array Expr × Option Expr) := do
+  let (ctx, procs) ← arithSimpCtx
+  let mut facts : Array Expr := #[]
+  for d in ← propHyps do
+    let r ← match (← hypCache.get).get? d.fvarId with
+      | some r => pure r
+      | none =>
+        let ty ← instantiateMVars d.type
+        dischFacts.set facts
+        let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
+        let out ← if r.expr == ty then pure none else
+          match r.proof? with
+          | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
+          | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
+        hypCache.modify (·.insert d.fvarId out)
+        pure out
+    match r with
+    | none => facts := facts.push d.toExpr
+    | some (t, pf) =>
+      if t.isFalse then return (facts, some pf)
+      unless t.isTrue do facts := facts.push pf
+  return (facts, none)
+
+/-- The arithmetic solver on one goal: its hypotheses as facts in `fsym_arith` normal form
+(values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
+definitions of values unfolded), the target in normal form, facts about symbolic powers of two
+and masks (`extraFacts`), then `omega`; unless `quick`, also the congruence of remainders
+(`modCongr`). -/
+def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
+  if ← closeWith g (← `(tactic| assumption)) then return true
+  let s ← saveState
+  try
+    let tgt0 ← instantiateMVars (← g.getType)
+    let h0 ← IO.getNumHeartbeats
+    let (facts, ff) ← normFacts
+    trace[fsym.prof] "normFacts {((← IO.getNumHeartbeats) - h0) / 1000}"
+    if let some f := ff then
+      g.assign (← mkFalseElim tgt0 f); return true
+    dischFacts.set facts
+    let (ctx, procs) ← arithSimpCtx
+    let (r, _) ← simp tgt0 ctx procs (discharge? := some omegaDisch)
+    let close (pf : Expr) : MetaM Unit := do
+      match r.proof? with
+      | some eq => g.assign (← mkEqMPR eq pf)
+      | none => g.assign (← mkExpectedTypeHint pf tgt0)
+    if r.expr.isTrue then close (mkConst ``True.intro); return true
+    let h0 ← IO.getNumHeartbeats
+    let extra ← extraFacts facts r.expr
+    let all := facts ++ extra
+    trace[fsym.prof] "extra {((← IO.getNumHeartbeats) - h0) / 1000} facts {facts.size}+{extra.size}"
+    trace[fsym.arith] "omega {r.expr} from {← all.mapM fun f => inferType f}"
+    let h1 ← IO.getNumHeartbeats
+    let ok ← omegaFacts all r.expr
+    trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
+    if let some pf := ok then close pf; return true
+    unless quick do
+      if let some pf ← modCongr all r.expr then close pf; return true
+    s.restore; return false
+  catch ex =>
+    trace[fsym.arith] "exception {ex.toMessageData}"
+    s.restore; return false
+
+/-- `fsym_arith`: the arithmetic solver (`arithCore`) as a tactic. -/
+elab "fsym_arith" : tactic => do
+  let g ← getMainGoal
+  unless ← arithCore g do throwError "fsym_arith: not proved"
+  replaceMainGoal []
+
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
-goals it did not prove. -/
-partial def arithGoals (g : MVarId) : TacticM (List MVarId) := g.withContext do
+goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts). -/
+partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
   if ← g.isAssigned then return []
   let t ← instantiateMVars (← g.getType)
   let t' ← whnfR t
@@ -223,40 +518,22 @@ partial def arithGoals (g : MVarId) : TacticM (List MVarId) := g.withContext do
   if t'.isAppOfArity ``And 2 then
     let g ← g.replaceTargetDefEq t'
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
-    return (← arithGoals g1) ++ (← arithGoals g2)
+    return (← arithGoals g1 quick) ++ (← arithGoals g2 quick)
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
-  -- `0 < 2 ^ x` for the symbolic powers of two of the goal and the context
-  let mut g := g
-  let mut pows : Array Expr := #[]
-  let mut srcs := #[t]
-  for d in ← getLCtx do
-    unless d.isImplementationDetail do
-      if ← isProp d.type then srcs := srcs.push (← instantiateMVars d.type)
-  for e in srcs do
-    for x in twoPows e do
-      unless pows.contains x do pows := pows.push x
-  for x in pows do
-    let pf ← mkAppM ``Nat.two_pow_pos #[x.getAppArgs[5]!]
-    g ← g.assert `hpow (← inferType pf) pf
-    g ← (·.2) <$> g.intro1
-  if ← closeWith g (← `(tactic| fsym_arith)) then return []
-  if ← closeWith g (← `(tactic| fsym_fact)) then return []
-  -- unfold the user definitions of the goal and the context
-  let mut cs ← userConsts t
-  for d in ← getLCtx do
-    unless d.isImplementationDetail do
-      if ← isProp d.type then cs := cs ++ (← userConsts (← instantiateMVars d.type))
-  let cs' := cs.foldl (fun acc c => if acc.contains c then acc else acc.push c) #[]
-  if !cs'.isEmpty then
-    let ids : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
-      cs'.mapM fun c => `(Lean.Parser.Tactic.simpLemma| $(mkIdent c):ident)
-    if ← closeWith g (← `(tactic| (simp only [$ids,*] at *; fsym_arith))) then return []
+  if let some (_, x, y) := t.eq? then
+    if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
+  if ← arithCore g quick then return []
+  unless quick do
+    if ← closeWith g (← `(tactic| fsym_fact)) then return []
   return [g]
 
-def arith (g : MVarId) : TacticM Bool := do
+def arith (g : MVarId) (quick := false) : TacticM Bool := do
   let s ← saveState
-  if (← arithGoals g).isEmpty then return true
+  let h0 ← IO.getNumHeartbeats
+  let ok := (← arithGoals g quick).isEmpty
+  trace[fsym.prof] "arith {((← IO.getNumHeartbeats) - h0) / 1000} {ok} {quick}: {← instantiateMVars (← g.getType)}"
+  if ok then return true
   s.restore; return false
 
 /-- Prove `x = y` of assertions by AC of `⋆`. -/
@@ -274,6 +551,12 @@ def acEq (x y : Expr) : TacticM Expr := do
 
 /-- Prove `t` (a `_.block = _` goal) from the context, possibly assigning a block variable. -/
 def solveBlock (t : Expr) : MetaM (Option Expr) := do
+  -- `(p.add k).block = p.block`: definitional
+  if let some (_, l, r) := t.eq? then
+    if !l.hasExprMVar && !r.hasExprMVar && r.isAppOf ``Zig.Ptr.block then
+      let s ← saveState
+      if ← isDefEq l r then return some (← mkEqRefl l)
+      s.restore
   let lctx ← getLCtx
   let hyps := lctx.foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
   for h in hyps do
@@ -557,7 +840,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         for i in [0:ats.size] do
           unless used[i]! do
             let s' ← saveState
-            if ← unifyKeyed a ats[i]! then
+            if ← unifyAtom a ats[i]! then
               used := used.set! i true; found := true; break
             s'.restore
         unless found do s.restore; return none
@@ -653,7 +936,7 @@ partial def proveEqGoal (g : MVarId) : TacticM Bool := g.withContext do
   if ty.isConstOf ``Zig.Ptr then
     return ← closeWith g (← `(tactic| (apply Zig.Full.Auto.ptr_ext' <;>
       first | rfl | fsym_arith | (simp only [fsym_arith] at *; simp only [*]))))
-  if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g
+  if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g (quick := true)
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
@@ -710,9 +993,9 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
       mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
   return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
 
-def proveArith (ty : Expr) : TacticM (Option Expr) := do
+def proveArith (ty : Expr) (quick := false) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
-  if ← arith m.mvarId! then return some (← instantiateMVars m)
+  if ← arith m.mvarId! quick then return some (← instantiateMVars m)
   trace[fsym] "arith failed: {ty}"
   return none
 
@@ -752,7 +1035,7 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option St) :=
       let mut j := i
       let mut cur := r
       -- the start
-      let zero ← proveArith (← mkEq qo po)
+      let zero ← proveArith (← mkEq qo po) (quick := true)
       if zero.isNone then
         let k ← mkAppM ``HSub.hSub #[← offNat qp, ← offNat p]
         let some hk ← proveArith (← mkAppM ``LE.le #[k, size]) | throwError "k"
@@ -774,7 +1057,7 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option St) :=
           if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
-        if (← proveArith (← mkEq n sz)).isNone then
+        if (← proveArith (← mkEq n sz) (quick := true)).isNone then
           let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) | throwError "n"
           let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
             ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))
@@ -908,6 +1191,11 @@ partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
 def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
+  let h0 ← IO.getNumHeartbeats
+  let r ← closeEntail' g
+  trace[fsym.prof] "entail {((← IO.getNumHeartbeats) - h0) / 1000}"
+  return r
+where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
   try
     let t ← instantiateMVars (← g.getType)
@@ -949,7 +1237,8 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
       for f in facts do
         for φ in ← conjuncts f.appArg! do
           if let some (_, l, _) := φ.eq? then
-            if l.isAppOfArity ``Array.size 2 && (← instantiateMVars l.appArg!) == qbs then sized := true
+            if l.isAppOfArity ``Array.size 2 then
+              if (← instantiateMVars l.appArg!) == qbs then sized := true
       if sized && qbs.hasExprMVar then continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
@@ -965,7 +1254,8 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
       for f in facts do
         for φ in ← conjuncts f.appArg! do
           if let some (_, l, r) := φ.eq? then
-            if l.isAppOfArity ``Array.size 2 && (← instantiateMVars l.appArg!) == qbs then n? := some r
+            if l.isAppOfArity ``Array.size 2 then
+              if (← instantiateMVars l.appArg!) == qbs then n? := some r
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
@@ -1072,9 +1362,12 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     TacticM (List MVarId) := do
   if fuel == 0 then return [g]
   trace[fsym] "walk {fuel}"
+  let h0 ← IO.getNumHeartbeats
   let g ← normPre g
+  let h1 ← IO.getNumHeartbeats
   trace[fsym] "pre done {← g.getType}"
   let g ← simpProg g extra
+  trace[fsym.prof] "pre {(h1-h0)/1000} prog {((← IO.getNumHeartbeats)-h1)/1000}"
   trace[fsym] "prog done"
   g.withContext do
   let (g, L, α, P, c, Q) ← view g
@@ -1090,8 +1383,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let s ← saveState
     try
       let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.of_false _ ?_)) g | throwError "x"
-      if ← closeWith g' (← `(tactic| first | contradiction | omega | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul] at *; omega)))
-        then return []
+      if ← closeWith g' (← `(tactic| contradiction)) then return []
+      if ← arithCore g' then return []
       s.restore
     catch _ => s.restore
     trace[fsym] "reachable panic"
@@ -1105,10 +1398,10 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       let f ← withLocalDeclD `c (← inferType c) fun x => mkLambdaFVars #[x] (mkT L α P x Q)
       g.replaceTargetEq (mkT L α P (if pos then t else e) Q) (← mkCongrArg f eq)
     let hp ← mkFreshExprMVar cond
-    if ← arith hp.mvarId! then
+    if ← arith hp.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hp) true) user extra (fuel - 1)
     let hn ← mkFreshExprMVar (mkNot cond)
-    if ← arith hn.mvarId! then
+    if ← arith hn.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
     let (sp, sn) ← g.byCases cond `hc
     let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
@@ -1139,9 +1432,16 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     else do
       let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.bind_pure _ ?_)) g | throwError "fsym"
       return ← walk g' user extra fuel
+  let h2 ← IO.getNumHeartbeats
   for r in ← rules user do
-    if let some (k, left) ← tryRule g r x f then
+    let h3 ← IO.getNumHeartbeats
+    let res ← tryRule g r x f
+    let d := ((← IO.getNumHeartbeats) - h3) / 1000
+    if d > 300 then trace[fsym.prof] "try {d} {r} {res.isSome}"
+    if let some (k, left) := res then
+      trace[fsym.prof] "rule {((← IO.getNumHeartbeats)-h2)/1000} {r}"
       return left ++ (← walk k user extra (fuel - 1))
+  trace[fsym.prof] "norule {((← IO.getNumHeartbeats)-h2)/1000}"
   if let some x' ← unfoldCmd x then
     let c' ← mkAppM ``Bind.bind #[x', f]
     let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
@@ -1176,7 +1476,13 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       if ty' != d.type then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
     pure g
+  hypCache.set {}
+  dischCache.set {}
+  dischFacts.set #[]
+  probeCache.set {}
+  let h0 ← IO.getNumHeartbeats
   let gs ← walk g user extra 400
+  trace[fsym] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
   replaceMainGoal gs
 
 end Zig.Full.Auto

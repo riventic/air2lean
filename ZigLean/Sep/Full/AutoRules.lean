@@ -213,23 +213,200 @@ variable {w : Nat} {P : FAssn}
 theorem read_pure {α : Type} {v : α} : FTotalTriple P (pure v : MemM α) (fun r => ⟪r = v⟫ ⋆ P) :=
   (FTotalTriple.ret (Q := fun r => ⟪r = v⟫ ⋆ P) v).pre fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
+/-- A word result with its value: the step rules below leave `r` opaque with the fact
+`r.toNat = …` (a symbolic execution in SSA form), so later terms mention `r` and not the
+growing expression that computed it. -/
+theorem read_val {v : BitVec w} {n : Nat} (h : v.toNat = n) :
+    FTotalTriple P (pure v : MemM (BitVec w)) (fun r => ⟪r.toNat = n⟫ ⋆ P) :=
+  (FTotalTriple.ret (Q := fun r => ⟪r.toNat = n⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨h, hp⟩
+
 /-- A checked unsigned `+` that does not overflow. -/
 @[fsym] theorem add_step {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) :
-    FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w)) (fun r => ⟪r = a + b⟫ ⋆ P) := by
+    FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w))
+      (fun r => ⟪r.toNat = a.toNat + b.toNat⟫ ⋆ P) := by
   have e : Zig.add false a b = pure (a + b) := by
     simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
     rw [if_neg (by simp; omega)]
-  rw [e]; exact read_pure
+  rw [e]; exact read_val (BitVec.toNat_add_of_lt h)
 
-/-- A checked unsigned `-` that does not overflow. -/
+/-- A checked unsigned `-` that does not overflow (its value stated without truncated
+subtraction, which `omega` would case-split on). -/
 @[fsym] theorem sub_step {a b : BitVec w} (h : b.toNat ≤ a.toNat) :
-    FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w)) (fun r => ⟪r = a - b⟫ ⋆ P) := by
+    FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w))
+      (fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) := by
   have e : Zig.sub false a b = pure (a - b) := by
     simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
     rw [if_neg (by simp; omega)]
-  rw [e]; exact read_pure
+  have hv : (a - b).toNat + b.toNat = a.toNat := by
+    rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
+  rw [e]
+  exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
+    fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+
+/-- A checked unsigned `%` by a nonzero divisor. -/
+@[fsym] theorem rem_step {a b : BitVec w} (h : b ≠ 0) :
+    FTotalTriple P (StateT.lift (Zig.rem false a b) : MemM (BitVec w))
+      (fun r => ⟪r.toNat = a.toNat % b.toNat⟫ ⋆ P) := by
+  have e : Zig.rem false a b = pure (a % b) := by
+    simp only [Zig.rem, h, Bool.false_eq_true, ↓reduceIte]; rfl
+  rw [e]; exact read_val BitVec.toNat_umod
+
+/-- A checked unsigned `/` by a nonzero divisor. -/
+@[fsym] theorem divTrunc_step {a b : BitVec w} (h : b ≠ 0) :
+    FTotalTriple P (StateT.lift (Zig.divTrunc false a b) : MemM (BitVec w))
+      (fun r => ⟪r.toNat = a.toNat / b.toNat⟫ ⋆ P) := by
+  have e : Zig.divTrunc false a b = pure (a / b) := by
+    simp only [Zig.divTrunc, h, Bool.false_eq_true, ↓reduceIte]; rfl
+  rw [e]; exact read_val BitVec.toNat_udiv
 
 end Arith
+
+section Values
+
+variable {w : Nat}
+
+/-! The overflow bits of `@addWithOverflow` and friends, and shifts, as values. -/
+
+theorem addWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.addWithOverflow s a b).fst = a + b := rfl
+theorem subWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.subWithOverflow s a b).fst = a - b := rfl
+theorem mulWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.mulWithOverflow s a b).fst = a * b := rfl
+
+theorem ovbit_ne (c : Bool) : ((if c = true then (1 : BitVec 1) else 0) != 0#1) = c := by
+  cases c <;> rfl
+
+theorem addWithOverflow_snd (a b : BitVec w) :
+    ((Zig.addWithOverflow false a b).snd != 0#1) = decide (2 ^ w ≤ a.toNat + b.toNat) := by
+  simp only [Zig.addWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.uaddOverflow]
+theorem subWithOverflow_snd (a b : BitVec w) :
+    ((Zig.subWithOverflow false a b).snd != 0#1) = decide (a.toNat < b.toNat) := by
+  simp only [Zig.subWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.usubOverflow]
+theorem mulWithOverflow_snd (a b : BitVec w) :
+    ((Zig.mulWithOverflow false a b).snd != 0#1) = decide (2 ^ w ≤ a.toNat * b.toNat) := by
+  simp only [Zig.mulWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.umulOverflow]
+
+theorem ovbit_eq (c : Bool) : ((if c = true then (1 : BitVec 1) else 0) = 0#1) = (c = false) := by
+  cases c <;> decide
+theorem addWithOverflow_snd_eq (a b : BitVec w) :
+    ((Zig.addWithOverflow false a b).snd = 0#1) = (a.toNat + b.toNat < 2 ^ w) := by
+  simp only [Zig.addWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.uaddOverflow]
+  simp
+theorem subWithOverflow_snd_eq (a b : BitVec w) :
+    ((Zig.subWithOverflow false a b).snd = 0#1) = (b.toNat ≤ a.toNat) := by
+  simp only [Zig.subWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.usubOverflow]
+  simp
+theorem mulWithOverflow_snd_eq (a b : BitVec w) :
+    ((Zig.mulWithOverflow false a b).snd = 0#1) = (a.toNat * b.toNat < 2 ^ w) := by
+  simp only [Zig.mulWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.umulOverflow]
+  simp
+theorem shl_eq {m : Nat} (a : BitVec w) (b : BitVec m) : Zig.shl a b = BitVec.ofNat w (a.toNat * 2 ^ b.toNat) := by
+  apply BitVec.eq_of_toNat_eq
+  simp [Zig.shl, BitVec.toNat_shiftLeft, Nat.shiftLeft_eq]
+
+theorem sub_one_mod {W J : Nat} (hW : 0 < W) (hJ : 0 < J) : (W - 1 + J % W) % W = (J - 1) % W := by
+  have hd := Nat.div_add_mod J W
+  have hr := Nat.mod_lt J hW
+  generalize J / W = q at hd
+  generalize J % W = r at hd hr ⊢
+  subst hd
+  rcases Nat.eq_zero_or_pos r with rfl | h0
+  · have hq : 0 < q := Nat.pos_of_ne_zero (by rintro rfl; simp at hJ)
+    have := Nat.le_mul_of_pos_right W hq
+    rw [Nat.add_zero, Nat.mod_eq_of_lt (by omega : W - 1 < W),
+      show W * q + 0 - 1 = W * (q - 1) + (W - 1) by rw [Nat.mul_sub_one]; omega,
+      Nat.mul_add_mod, Nat.mod_eq_of_lt (by omega)]
+  · rw [show W - 1 + r = W + (r - 1) by omega, Nat.add_mod_left, show W * q + r - 1 = W * q + (r - 1) by omega,
+      Nat.mul_add_mod]
+
+/-- The low mask `2 ^ j - 1` of width `w`. -/
+theorem toNat_lowMask (j : Nat) : (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1).toNat = (2 ^ j - 1) % 2 ^ w := by
+  rcases w with _ | w
+  · simp [Nat.mod_one]
+  have h1 : 1 % 2 ^ (w + 1) = 1 := Nat.mod_eq_of_lt (Nat.one_lt_two_pow (by omega))
+  rw [BitVec.toNat_sub, BitVec.toNat_ofNat, BitVec.toNat_ofNat, h1]
+  exact sub_one_mod (Nat.two_pow_pos _) (Nat.two_pow_pos _)
+
+theorem mask_mod (x j : Nat) (hx : x < 2 ^ w) : x &&& ((2 ^ j - 1) % 2 ^ w) = x % 2 ^ j := by
+  rcases Nat.lt_or_ge j w with h | h
+  · rw [Nat.mod_eq_of_lt (by have := Nat.pow_lt_pow_right (by omega : 1 < 2) h; omega),
+      Nat.and_two_pow_sub_one_eq_mod]
+  · have e : (2 ^ j - 1) % 2 ^ w = 2 ^ w - 1 := by
+      obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
+      have hd := Nat.two_pow_pos d
+      have hw := Nat.two_pow_pos w
+      rw [Nat.pow_add, show 2 ^ w * 2 ^ d - 1 = 2 ^ w * (2 ^ d - 1) + (2 ^ w - 1) by
+        rw [Nat.mul_sub_one]; have := Nat.le_mul_of_pos_right (2 ^ w) hd; omega]
+      rw [Nat.mul_add_mod, Nat.mod_eq_of_lt (by omega)]
+    rw [e, Nat.and_two_pow_sub_one_eq_mod, Nat.mod_eq_of_lt hx,
+      Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by omega) h))]
+
+theorem and_not_add_and (z m : BitVec w) : (z &&& ~~~m).toNat + (z &&& m).toNat = z.toNat := by
+  have h0 : (z &&& ~~~m) &&& (z &&& m) = 0#w := by
+    ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_zero]
+    cases z[i] <;> cases m[i] <;> rfl
+  rw [← BitVec.toNat_add_of_and_eq_zero h0, BitVec.add_eq_or_of_and_eq_zero _ _ h0]
+  congr 1
+  ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_or]
+  cases z[i] <;> cases m[i] <;> rfl
+
+/-! **Masks** (`std.mem.alignForward`, `isPowerOfTwo`): `x &&& (2 ^ j - 1)` is `x % 2 ^ j` and
+`x &&& ~~~(2 ^ j - 1)` is `x - x % 2 ^ j`, for any width and any `j`. -/
+
+theorem and_lowMask (x : BitVec w) (j : Nat) :
+    (x &&& (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)).toNat = x.toNat % 2 ^ j := by
+  rw [BitVec.toNat_and, toNat_lowMask, mask_mod _ _ x.isLt]
+theorem and_lowMask' (x : BitVec w) (j : Nat) :
+    (x &&& BitVec.ofNat w (2 ^ j - 1)).toNat = x.toNat % 2 ^ j := by
+  rw [BitVec.toNat_and, BitVec.toNat_ofNat, mask_mod _ _ x.isLt]
+theorem and_not_lowMask (x : BitVec w) (j : Nat) :
+    (x &&& ~~~(BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)).toNat = x.toNat - x.toNat % 2 ^ j := by
+  have := and_not_add_and x (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)
+  rw [and_lowMask] at this; omega
+theorem and_not_lowMask' (x : BitVec w) (j : Nat) :
+    (x &&& ~~~BitVec.ofNat w (2 ^ j - 1)).toNat = x.toNat - x.toNat % 2 ^ j := by
+  have := and_not_add_and x (BitVec.ofNat w (2 ^ j - 1))
+  rw [and_lowMask'] at this; omega
+
+/-- An exponent reduced modulo a bound it is below (`2 ^ (k % 64)` from a `u6` shift count). -/
+theorem pow_mod_elim {b x m : Nat} (h : x < m) : b ^ (x % m) = b ^ x := by rw [Nat.mod_eq_of_lt h]
+
+/-- Masks of natural numbers known by facts (the arithmetic solver's `addFacts`). -/
+theorem land_low {a b j : Nat} (h : b = 2 ^ j - 1) : a &&& b = a % 2 ^ j := by
+  subst h; exact Nat.and_two_pow_sub_one_eq_mod a j
+theorem land_high' {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
+    a &&& b = a - a % 2 ^ j := by
+  have hjw : 2 ^ j ≤ 2 ^ w := Nat.pow_le_pow_right (by omega) hj
+  have hp := Nat.two_pow_pos j
+  have t := and_not_lowMask' (BitVec.ofNat w a) j
+  rw [BitVec.toNat_and, BitVec.toNat_not, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt (by omega : 2 ^ j - 1 < 2 ^ w)] at t
+  rw [h, ← t]; congr 1; omega
+
+/-- `land_high'` without truncated subtraction. -/
+theorem land_high {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
+    (a &&& b) + a % 2 ^ j = a := by
+  rw [land_high' ha hj h]; have := Nat.mod_le a (2 ^ j); omega
+
+/-! **No wrap-around**: the value of a word operation whose result fits (conditional rewrites of
+the arithmetic solver, side conditions by `omega`). -/
+
+theorem toNat_add_nowrap {x y : BitVec w} (h : x.toNat + y.toNat < 2 ^ w) : (x + y).toNat = x.toNat + y.toNat :=
+  BitVec.toNat_add_of_lt h
+theorem toNat_sub_nowrap {x y : BitVec w} (h : y.toNat ≤ x.toNat) : (x - y).toNat = x.toNat - y.toNat :=
+  BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)
+theorem toNat_mul_nowrap {x y : BitVec w} (h : x.toNat * y.toNat < 2 ^ w) : (x * y).toNat = x.toNat * y.toNat := by
+  rw [BitVec.toNat_mul, Nat.mod_eq_of_lt h]
+theorem toNat_ofNat_nowrap {n : Nat} (h : n < 2 ^ w) : (BitVec.ofNat w n).toNat = n := by
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
+theorem toNat_ofInt_nowrap {i : Int} (h0 : 0 ≤ i) (h : i < 2 ^ w) : (BitVec.ofInt w i).toNat = i.toNat := by
+  rw [BitVec.toNat_ofInt]; congr 1; exact Int.emod_eq_of_lt h0 (by exact_mod_cast h)
+theorem sub_wrap {M a b : Nat} (hb : b ≤ a) (ha : a < M) : (M - b + a) % M = a - b := by
+  rw [show M - b + a = M + (a - b) by omega, Nat.add_mod_left, Nat.mod_eq_of_lt (by omega)]
+theorem mod_eq_zero_of_eq {z M : Nat} (h : z = M) : z % M = 0 := by subst h; exact Nat.mod_self z
+
+/-- `z` rounded down to a multiple of `M` is one. -/
+theorem sub_mod_self_mod (z M : Nat) : (z - z % M) % M = 0 := Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
+
+end Values
 
 /-! ## Junk -/
 
@@ -393,6 +570,59 @@ simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 
 attribute [fsym_arith] Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
+
+attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_fst addWithOverflow_snd
+  subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
+attribute [fsym_arith high] addWithOverflow_snd_eq subWithOverflow_snd_eq mulWithOverflow_snd_eq
+attribute [fsym_arith high] and_lowMask and_lowMask' and_not_lowMask and_not_lowMask'
+
+open Lean Meta Simp in
+/-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`
+is `x`): a user definition whose body is a projection of one of its parameters. -/
+dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  if e.getAppNumArgs == 0 then return .continue
+  let env ← getEnv
+  if let some idx := env.getModuleIdxFor? c then
+    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
+      return .continue
+  let some (.defnInfo info) := env.find? c | return .continue
+  let isAccessor ← lambdaTelescope info.value fun xs body => do
+    let body := body.consumeMData
+    if xs.size != e.getAppNumArgs then return false
+    match body with
+    | .proj _ _ s => return s.isFVar && xs.contains s
+    | _ =>
+      let .const f _ := body.getAppFn | return false
+      let some pi ← getProjectionFnInfo? f | return false
+      let some s := body.getAppArgs[pi.numParams]? | return false
+      return body.getAppNumArgs == pi.numParams + 1 && s.isFVar && xs.contains s
+  unless isAccessor do return .continue
+  let some e' ← withTransparency .default (unfoldDefinition? e) | return .continue
+  let e' ← withTransparency .default (whnfCore e'.headBeta)
+  if e' != e && (e.find? (· == e')).isSome then return .done e'
+  return .continue
+
+open Lean Meta Simp in
+/-- A user definition (an invariant's, generated code's) with an arithmetic or logical value
+(`Nat`, `Int`, `BitVec`, `Bool`, `Prop`) is transparent to the arithmetic solver: unfolded
+(`bnd B`, `FOk …`). Monadic generated code is not touched (its value is a program). -/
+dsimproc [fsym_arith] unfoldUserValue (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  let env ← getEnv
+  if let some idx := env.getModuleIdxFor? c then
+    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
+      return .continue
+  let some (.defnInfo info) := env.find? c | return .continue
+  if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
+  if info.value.getUsedConstants.contains c then return .continue
+  if (← isInstance c) then return .continue
+  let ty ← whnfR (← inferType e)
+  let ok := ty.isProp || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool ||
+    ty.isAppOfArity ``BitVec 1
+  unless ok do return .continue
+  let some e' ← withTransparency .default (unfoldDefinition? e) | return .continue
+  return .visit e'.headBeta
 
 /-! ## Sizes of the library's encodings -/
 
