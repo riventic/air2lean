@@ -54,6 +54,14 @@ inductive Value where
   | cell (id : InstId)
   /-- A slice `[]T`: its item pointer and length (`Zig.Slice`). -/
   | slice (s : Zig.Slice)
+  /-- An optional `?T` of a payload that is not a pointer: `null`, or the payload. -/
+  | optNone
+  | optSome (v : Value)
+  /-- An error union `E!T`: the payload, or an error by name (`Zig.ErrName`). -/
+  | errOk (v : Value)
+  | errErr (name : String)
+  /-- An error of an error set, by name. -/
+  | errName (name : String)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
@@ -138,6 +146,24 @@ theorem litBV_eq_ofInt (w : Nat) (n : Int) : litBV w n = BitVec.ofInt w n := by
     conv => rhs; rw [this]
     rw [BitVec.ofInt_natCast]
 
+/-- An optional type whose payload is not a pointer (a pointer optional `?*T` is an address,
+outside the fragment). -/
+def plainOpt (f : Func) (t : TyId) : Bool :=
+  match f.types[t]? with
+  | some (.optional c) => !(f.types[c]? matches some (.ptr ..))
+  | _ => false
+
+def isErrorUnion (f : Func) (t : TyId) : Bool := f.types[t]? matches some (.errorUnion ..)
+
+/-- The payload of an optional or error-union constant: an integer, `bool` or `void`. -/
+def constVal (f : Func) : Val → Result Value
+  | .int t n => match tyOf f t with
+    | .int s w => pure (.int s w (litBV w n))
+    | _ => stuck
+  | .bool b => pure (.bool b)
+  | .void => pure .void
+  | _ => stuck
+
 /-- An operand's value. -/
 def operand (f : Func) (env : Env) : Val → Result Value
   | .inst id => match env id with
@@ -148,6 +174,11 @@ def operand (f : Func) (env : Env) : Val → Result Value
     | _ => stuck
   | .bool b => pure (.bool b)
   | .void => pure .void
+  | .optNull t => if plainOpt f t then pure .optNone else stuck
+  | .optSome t v => if plainOpt f t then do pure (.optSome (← constVal f v)) else stuck
+  | .err _ n => pure (.errName n)
+  | .errUnionErr t n => if isErrorUnion f t then pure (.errErr n) else stuck
+  | .errUnionOk t v => if isErrorUnion f t then do pure (.errOk (← constVal f v)) else stuck
   | _ => stuck
 
 /-- An operand's AIR type: an instruction's from the environment, a constant's own. -/
@@ -162,6 +193,41 @@ def Value.asInt (w : Nat) : Value → Result (BitVec w)
 
 def Value.asBool : Value → Result Bool
   | .bool b => pure b
+  | _ => stuck
+
+/-- `is_non_null` of an optional. -/
+def Value.optIsSome : Value → Result Bool
+  | .optSome _ => pure true
+  | .optNone => pure false
+  | _ => stuck
+
+/-- `optional_payload`: the payload; `null` panics (`Zig.optPayload`). -/
+def Value.optGet : Value → Result Value
+  | .optSome v => pure v
+  | .optNone => throw .panic
+  | _ => stuck
+
+/-- `is_err` of an error union (`Zig.isErr`). -/
+def Value.errIsErr : Value → Result Bool
+  | .errErr _ => pure true
+  | .errOk _ => pure false
+  | _ => stuck
+
+/-- `unwrap_errunion_payload`: the payload; an error panics (`Zig.unwrapPayload`). -/
+def Value.errGet : Value → Result Value
+  | .errOk v => pure v
+  | .errErr _ => throw .panic
+  | _ => stuck
+
+/-- `unwrap_errunion_err`: the error; a payload panics (`Zig.unwrapErr`). -/
+def Value.errGetErr : Value → Result Value
+  | .errErr n => pure (.errName n)
+  | .errOk _ => throw .panic
+  | _ => stuck
+
+/-- `wrap_errunion_err`: an error union holding the error `v`. -/
+def Value.errWrap : Value → Result Value
+  | .errName n => pure (.errErr n)
   | _ => stuck
 
 /-- The integer type of an instruction's result, or `none`. -/
@@ -294,6 +360,20 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
       | .int _ _ x => pure (.int s₂ m (Zig.trunc m x))
       | _ => stuck
     | none => stuck
+  -- Optionals (`?T`, not a pointer optional) and error unions.
+  | .isNonNull a => if plainOpt f ((operandTy env a).getD 0) then do
+      pure (.bool (← (← operand f env a).optIsSome)) else stuck
+  | .isNull a => if plainOpt f ((operandTy env a).getD 0) then do
+      pure (.bool (!(← (← operand f env a).optIsSome))) else stuck
+  | .optPayload a => if plainOpt f ((operandTy env a).getD 0) then do
+      (← operand f env a).optGet else stuck
+  | .wrapOptional a => if plainOpt f i.ty then do pure (.optSome (← operand f env a)) else stuck
+  | .isErr a => do pure (.bool (← (← operand f env a).errIsErr))
+  | .isNonErr a => do pure (.bool (!(← (← operand f env a).errIsErr)))
+  | .errPayload a => do (← operand f env a).errGet
+  | .errCode a => do (← operand f env a).errGetErr
+  | .wrapErrPayload a => if isErrorUnion f i.ty then do pure (.errOk (← operand f env a)) else stuck
+  | .wrapErr a => if isErrorUnion f i.ty then do (← operand f env a).errWrap else stuck
   -- `@bitCast` between integers of one width: the same bits (any other `bitcast` of a value is
   -- outside the fragment; a pointer `bitcast` is `evalMem`'s).
   | .bitcast a => match intTy? f i.ty with
@@ -496,6 +576,26 @@ def valOk (t : Ty) (v : Value) : Bool :=
   | .ptr size _ _, .slice _ => size == "slice"
   | _, _ => false
 
+/-- `valOk` with the payload types of optionals and error unions: `?T` holds `null` or a `T`;
+`E!T` a `T` or an error of `E` (any name if `E` is `anyerror` or inferred). -/
+def valOkIn (f : Func) : Nat → TyId → Value → Bool
+  | 0, _, _ => false
+  | n + 1, t, v =>
+    match f.types[t]?, v with
+    | some (.optional c), .optNone => !(f.types[c]? matches some (.ptr ..))
+    | some (.optional c), .optSome w => !(f.types[c]? matches some (.ptr ..)) && valOkIn f n c w
+    | some (.errorUnion _ p), .errOk w => valOkIn f n p w
+    | some (.errorUnion s _), .errErr name => errIn f s name
+    | some (.errorSet _), .errName name => errIn f t name
+    | some ty, w => valOk ty w
+    | none, _ => false
+where
+  errIn (f : Func) (s : TyId) (name : String) : Bool :=
+    match f.types[s]? with
+    | some (.errorSet (some names)) => names.contains name
+    | some (.errorSet none) => true
+    | _ => false
+
 /-! ## Register locals
 
 An `alloc` whose address is never taken — every use is the pointer of a `load` or `store`, or
@@ -508,7 +608,8 @@ the address, so the `alloc` stays a block. -/
 /-- `v` does not name the instruction `a`. A composite constant counts as possibly naming it. -/
 def clearOf (a : InstId) : Val → Bool
   | .inst b => b != a
-  | .int .. | .bool _ | .void | .undef _ | .func .. => true
+  | .int .. | .bool _ | .void | .undef _ | .func .. | .optNull _ | .err .. | .errUnionErr .. => true
+  | .optSome _ v | .errUnionOk _ v => clearOf a v
   | _ => false
 
 /-- `op` uses `a` (directly, not in its nested bodies) at most as the pointer of `load`/`store`
@@ -520,7 +621,9 @@ def regUse (a : InstId) : Op → Bool
   | .arith _ _ x y | .div _ x y | .minMax _ x y | .bit _ x y | .cmp _ x y | .boolAnd x y
   | .boolOr x y => clearOf a x && clearOf a y
   | .not x | .intCast x | .trunc x | .br _ x | .ret x | .bitcast x | .fieldPtr x _
-  | .condBr x _ _ | .sliceLen x | .slicePtr x => clearOf a x
+  | .condBr x _ _ | .sliceLen x | .slicePtr x | .isNonNull x | .isNull x | .optPayload x
+  | .wrapOptional x | .isErr x | .isNonErr x | .errPayload x | .errCode x | .wrapErrPayload x
+  | .wrapErr x | .«try» x _ => clearOf a x
   | .ptrAdd _ x y | .elemPtr x y | .ptrElemVal x y | .sliceElemVal x y => clearOf a x && clearOf a y
   | .call c args => clearOf a c && args.toList.all (clearOf a ·)
   | .switchBr v cs _ => clearOf a v && cs.toList.all fun sc =>
@@ -537,7 +640,7 @@ termination_by l => (sizeOf l, 0)
 
 def regInst (a : InstId) (i : Inst) : Bool :=
   regUse a i.op && match _h : i.op with
-    | .block b | .loop b => regBody a b.toList
+    | .block b | .loop b | .«try» _ b => regBody a b.toList
     | .condBr _ t e => regBody a t.toList && regBody a e.toList
     | .switchBr _ cs e => regCases a cs.toList && regBody a e.toList
     | _ => true
@@ -644,6 +747,12 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
       execBody c rest (env.set i.id i.ty v)
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
+  -- `try`: the payload continues; an error runs the error body (it ends in an exit).
+  | .«try» v errBody => do
+    match ← liftR (operand c.func env v) with
+    | .errOk x => execBody c rest (env.set i.id i.ty x)
+    | .errErr _ => execBody c errBody.toList env
+    | _ => liftR stuck
   | .sliceElemVal (.inst k) idx =>
     match c.view k with
     | some items => do
@@ -694,10 +803,11 @@ decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
 end
 
-/-- Do the arguments match the parameter types, one for one? -/
+/-- Do the arguments match the parameter types, one for one? (`valOkIn`, through two levels of
+optionals and error unions.) -/
 def argsOk (f : Func) : List TyId → List Value → Bool
   | [], [] => true
-  | t :: ts, v :: vs => valOk (tyOf f t) v && argsOk f ts vs
+  | t :: ts, v :: vs => valOkIn f 3 t v && argsOk f ts vs
   | _, _ => false
 
 /-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
@@ -737,7 +847,7 @@ theorem argsOk_nil {f : Func} {args : List Value} (h : argsOk f [] args = true) 
 
 theorem argsOk_cons {f : Func} {t : TyId} {ts : List TyId} {args : List Value}
     (h : argsOk f (t :: ts) args = true) :
-    ∃ v vs, args = v :: vs ∧ valOk (tyOf f t) v = true ∧ argsOk f ts vs = true := by
+    ∃ v vs, args = v :: vs ∧ valOkIn f 3 t v = true ∧ argsOk f ts vs = true := by
   cases args with
   | nil => simp [argsOk] at h
   | cons v vs => simp only [argsOk, Bool.and_eq_true] at h; exact ⟨v, vs, rfl, h⟩
@@ -808,7 +918,7 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
     (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
-  case case27 => intros; unfold execSwitch; repeat' mono_step
+  case case28 => intros; unfold execSwitch; repeat' mono_step
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
@@ -1080,6 +1190,7 @@ def wfInst (bs ls : List InstId) (i : Inst) : Bool :=
   | .br t _ => bs.contains t
   | .«repeat» t => ls.contains t
   | .condBr _ t e => wfBody bs ls t.toList && wfBody bs ls e.toList
+  | .«try» _ b => wfBody bs ls b.toList
   | .switchBr _ cs e => wfCases bs ls cs.toList && wfBody bs ls e.toList
   | _ => true
 termination_by (sizeOf i, 1)
@@ -1259,11 +1370,11 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
       | br t v => exact absurd rfl (hne t v)
       | rep t => simpa [exitOk] using he
       | ret v => simp [exitOk]
-  case case26 =>
+  case case27 =>
     intro s w x el env ih bs ls _ hel
     simp only [execSwitch]
     exact ih bs ls hel
-  case case27 =>
+  case case28 =>
     intro s w x sc more el env ihb ihm bs ls hc hel
     simp only [wfCases, Bool.and_eq_true] at hc
     unfold execSwitch
@@ -1271,7 +1382,7 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
     apply ok_ite
     · exact ihb bs ls hc.1
     · exact ihm bs ls hc.2 hel
-  case case28 =>
+  case case29 =>
     intro id body env ih bs ls h
     simp only [execLoop]
     refine ok_mono (ok_loop (ok_mono (ih bs (id :: ls) h) (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_)) ?_
@@ -1390,6 +1501,51 @@ theorem lift_map_run {α β : Type} (X : Result α) (g : α → β) (m : Zig.Mem
     (StateT.lift (g <$> X) : MemM β).run m = (fun r => (g r, m)) <$> X := by
   simp only [StateT.run_lift, bind_pure_comp, Functor.map_map, Function.comp_def]
 
+/-- An optional as a value (the encoding of a generated `Option α`). -/
+def Value.ofOpt {α : Type} (g : α → Value) : Option α → Value
+  | some a => .optSome (g a)
+  | none => .optNone
+
+/-- An error union as a value (the encoding of a generated `Except Zig.ErrName α`). -/
+def Value.ofExcept {α : Type} (g : α → Value) : Except Zig.ErrName α → Value
+  | .ok a => .errOk (g a)
+  | .error n => .errErr n
+
+/-! Optionals and error unions, by constructor (a symbolic encoded value is rewritten by the
+`_ofOpt`/`_ofExcept` lemmas instead). -/
+theorem Value.optIsSome_some (v : Value) : (Value.optSome v).optIsSome = pure true := rfl
+theorem Value.optIsSome_none : Value.optNone.optIsSome = pure false := rfl
+theorem Value.optGet_some (v : Value) : (Value.optSome v).optGet = pure v := rfl
+theorem Value.optGet_none : Value.optNone.optGet = throw .panic := rfl
+theorem Value.errIsErr_ok (v : Value) : (Value.errOk v).errIsErr = pure false := rfl
+theorem Value.errIsErr_err (n : String) : (Value.errErr n).errIsErr = pure true := rfl
+theorem Value.errGet_ok (v : Value) : (Value.errOk v).errGet = pure v := rfl
+theorem Value.errGet_err (n : String) : (Value.errErr n).errGet = throw .panic := rfl
+theorem Value.errGetErr_ok (v : Value) : (Value.errOk v).errGetErr = throw .panic := rfl
+theorem Value.errGetErr_err (n : String) : (Value.errErr n).errGetErr = pure (.errName n) := rfl
+theorem Value.errWrap_name (n : String) : (Value.errName n).errWrap = pure (.errErr n) := rfl
+
+theorem ofOpt_some {α : Type} (g : α → Value) (a : α) : Value.ofOpt g (some a) = .optSome (g a) := rfl
+theorem ofOpt_none {α : Type} (g : α → Value) : Value.ofOpt g none = .optNone := rfl
+theorem ofExcept_ok {α : Type} (g : α → Value) (a : α) : Value.ofExcept g (.ok a) = .errOk (g a) := rfl
+theorem ofExcept_error {α : Type} (g : α → Value) (n : Zig.ErrName) :
+    Value.ofExcept g (.error n) = .errErr n := rfl
+
+theorem optIsSome_ofOpt {α : Type} (g : α → Value) (o : Option α) :
+    (Value.ofOpt g o).optIsSome = pure o.isSome := by cases o <;> rfl
+
+theorem optGet_ofOpt {α : Type} (g : α → Value) (o : Option α) :
+    (Value.ofOpt g o).optGet = g <$> Zig.optPayload o := by cases o <;> rfl
+
+theorem errIsErr_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errIsErr = pure (Zig.isErr e) := by cases e <;> rfl
+
+theorem errGet_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errGet = g <$> Zig.unwrapPayload e := by cases e <;> rfl
+
+theorem errGetErr_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errGetErr = Value.errName <$> Zig.unwrapErr e := by cases e <;> rfl
+
 /-! ## Normalization lemmas for certificates -/
 
 namespace Cert
@@ -1448,14 +1604,17 @@ theorem ptrProject_elem_size_zero (p : Zig.Ptr) (k : BitVec 64) :
 /-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
 theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
 
-attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+attribute [air_sem] execFunc argsOk valOk valOkIn valOkIn.errIn execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   evalMem ptrOperand operandTy Func.plainPtr loadAs storeAs Func.fieldOffset? pointee? ptrAlignOf layoutOf
   Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
   Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
   Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def
   Option.bind_eq_bind String.reduceBEq String.reduceBNe Nat.reduceBEq Nat.reduceBNe Option.getD_none
   Bool.false_eq_true Bool.true_eq_false natCast_ofNat Int.natCast_zero
-  operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
+  operand constVal plainOpt isErrorUnion Value.optIsSome_some Value.optIsSome_none Value.optGet_some
+  Value.optGet_none Value.errIsErr_ok Value.errIsErr_err Value.errGet_ok Value.errGet_err
+  Value.errGetErr_ok Value.errGetErr_err Value.errWrap_name Env.set Value.asInt Value.asBool ofOpt_some ofOpt_none ofExcept_ok
+  ofExcept_error optIsSome_ofOpt optGet_ofOpt errIsErr_ofExcept errGet_ofExcept errGetErr_ofExcept Zig.isNonErr arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
   List.getElem_cons_zero StateT.run'_eq StateT.run_bind StateT.run_pure StateT.run_map

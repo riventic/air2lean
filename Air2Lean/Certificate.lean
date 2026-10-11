@@ -111,6 +111,17 @@ partial def printOp : Op → Option String
   | .sliceLen sl => some s!"(.sliceLen {printVal sl})"
   | .slicePtr sl => some s!"(.slicePtr {printVal sl})"
   | .call c args => some s!"(.call {printVal c} {arr printVal args})"
+  | .isNonNull a => some s!"(.isNonNull {printVal a})"
+  | .isNull a => some s!"(.isNull {printVal a})"
+  | .optPayload a => some s!"(.optPayload {printVal a})"
+  | .wrapOptional a => some s!"(.wrapOptional {printVal a})"
+  | .isErr a => some s!"(.isErr {printVal a})"
+  | .isNonErr a => some s!"(.isNonErr {printVal a})"
+  | .errPayload a => some s!"(.errPayload {printVal a})"
+  | .errCode a => some s!"(.errCode {printVal a})"
+  | .wrapErrPayload a => some s!"(.wrapErrPayload {printVal a})"
+  | .wrapErr a => some s!"(.wrapErr {printVal a})"
+  | .«try» v b => return s!"(.try {printVal v} {← printBody b})"
   | .block b => return s!"(.block {← printBody b})"
   | .loop b => return s!"(.loop {← printBody b})"
   | .br t v => some s!"(.br {t} {printVal v})"
@@ -217,10 +228,22 @@ def scalar? (f : Func) (t : TyId) : Option Scalar :=
   | _ => none
 
 def retScalar? (f : Func) (t : TyId) : Option Scalar :=
+  -- The payload of an optional or error union: an integer or `bool` (`void` for `E!void`).
+  let payload (c : TyId) : Option (String × String) :=
+    match f.types[c]? with
+    | some .void => some ("Unit", "(fun _ => Value.void)")
+    | some (.ptr ..) => none
+    | _ => (scalar? f c).map fun sc => (sc.lean, s!"(fun x => {sc.enc "x"})")
   match f.types[t]? with
   | some .void => some {
       lean := "Unit", enc := fun _ => "Value.void", dec := fun _ => "()",
       inv := "valOk_void", decVar := fun _ => "()", ignoresValue := true }
+  | some (.optional c) => (payload c).map fun (lean, g) =>
+      { lean := s!"Option ({lean})", enc := fun v => s!"(Value.ofOpt {g} {v})", dec := fun _ => "none",
+        inv := "", decVar := fun _ => "none" }
+  | some (.errorUnion _ c) => (payload c).map fun (lean, g) =>
+      { lean := s!"Except Zig.ErrName ({lean})", enc := fun v => s!"(Value.ofExcept {g} {v})",
+        dec := fun _ => "(.error \"\")", inv := "", decVar := fun _ => "(.error \"\")" }
   | _ => scalar? f t
 
 /-- A safety-panic handler of `Sem.panicOf?`'s literal table (not a generic instance). -/
@@ -272,16 +295,27 @@ def viewParams (f : Func) : Except String (Array ViewParam) := do
     out := out.push { idx, arg := arg.id, sliceTy := p, item, sc, ptrAlign := pa, align := Nat.min pa ia }
   pure out
 
-/-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`. -/
+/-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`, or an
+optional or error-union constant of one (`Sem.constVal`). -/
 def simpleVal (f : Func) : Val → Bool
-  | .inst _ | .bool _ | .void => true
+  | .inst _ | .bool _ | .void | .err .. => true
   | .int t _ => isIntTy f t
+  | .optNull t => Sem.plainOpt f t
+  | .errUnionErr t _ => Sem.isErrorUnion f t
+  | .optSome t v => Sem.plainOpt f t && constPayload f v
+  | .errUnionOk t v => Sem.isErrorUnion f t && constPayload f v
   | _ => false
+where
+  constPayload (f : Func) : Val → Bool
+    | .int t _ => isIntTy f t
+    | .bool _ | .void => true
+    | _ => false
 
 partial def allInsts (body : Array Inst) : Array Inst :=
   body.flatMap fun i => #[i] ++ match i.op with
     | .block b | .loop b => allInsts b
     | .condBr _ t e => allInsts t ++ allInsts e
+    | .«try» _ b => allInsts b
     | .switchBr _ cs e => allInsts e ++ cs.flatMap (allInsts ·.body)
     | _ => #[]
 
@@ -370,6 +404,19 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Arr
     let _ ← sliceVal sl
     unless f.plainPtr i.ty do throw s!"inst {i.id}: a slice pointer outside the fragment"
   | .slice .. => throw s!"inst {i.id}: a slicing (the translator checks its bounds, which no AIR operation does)"
+  -- Optionals (not pointer optionals) and error unions as values (`Sem.Value.optSome`, `errOk`, …).
+  | .isNonNull a | .isNull a | .optPayload a => do
+    vals [a]
+    unless typed (Sem.plainOpt f) a do throw s!"inst {i.id}: an optional outside the fragment"
+  | .wrapOptional a => do
+    vals [a]
+    unless Sem.plainOpt f i.ty do throw s!"inst {i.id}: an optional outside the fragment"
+  | .isErr a | .isNonErr a | .errPayload a | .errCode a | .«try» a _ => do
+    vals [a]
+    unless typed (Sem.isErrorUnion f) a do throw s!"inst {i.id}: an error union outside the fragment"
+  | .wrapErrPayload a | .wrapErr a => do
+    vals [a]
+    unless Sem.isErrorUnion f i.ty do throw s!"inst {i.id}: an error union outside the fragment"
   | .boolAnd a b | .boolOr a b => vals [a, b]
   | .not a => vals [a]
   | .intCast a | .trunc a => do intRes; vals [a]
@@ -437,6 +484,7 @@ partial def loopCtx (bs ls : List InstId) (body : Array Inst) :
     | .loop b => #[(i, b, bs, ls)] ++ loopCtx bs (i.id :: ls) b
     | .condBr _ t e => loopCtx bs ls t ++ loopCtx bs ls e
     | .switchBr _ cs e => cs.flatMap (loopCtx bs ls ·.body) ++ loopCtx bs ls e
+    | .«try» _ b => loopCtx bs ls b
     | _ => #[]
 
 /-- The registers a body reads or writes. -/

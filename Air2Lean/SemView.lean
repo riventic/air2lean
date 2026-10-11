@@ -131,6 +131,7 @@ theorem UpToReads.refl (m : Mem) : UpToReads m m where
 /-- A frame of a run with a view: no stack blocks, and no pointer in its registers. -/
 def Value.noPtr : Value → Bool
   | .ptr _ => false
+  | .optSome v | .errOk v => v.noPtr
   | _ => true
 
 def FrOk (fr : Frame) : Prop := fr.blocks = [] ∧ ∀ k v, fr.cells k = some v → v.noPtr = true
@@ -301,6 +302,12 @@ theorem okR_bind {α β : Type} {P : β → Prop} {x : Result α} {f : α → Re
   obtain ⟨a, _, hf⟩ := Result.bind_ok hb
   exact h a b hf
 
+theorem okR_bind' {α β : Type} {P : β → Prop} {Q : α → Prop} {x : Result α} {f : α → Result β}
+    (hx : OkR Q x) (h : ∀ a, Q a → OkR P (f a)) : OkR P (x >>= f) := by
+  intro b hb
+  obtain ⟨a, ha, hf⟩ := Result.bind_ok hb
+  exact h a (hx a ha) b hf
+
 theorem okR_map {α β : Type} {P : β → Prop} {x : Result α} {f : α → β} (h : ∀ a, P (f a)) :
     OkR P (f <$> x) := by
   rw [← bind_pure_comp]; exact okR_bind fun a => okR_pure (h a)
@@ -338,7 +345,7 @@ termination_by l => (sizeOf l, 0)
 
 def roNested (f : Func) (V : InstId → Option (Array Value)) (VT : InstId → TyId) (i : Inst) : Bool :=
   roInst f V VT i && match _h : i.op with
-    | .block b | .loop b => roBody f V VT b.toList
+    | .block b | .loop b | .«try» _ b => roBody f V VT b.toList
     | .condBr _ t e => roBody f V VT t.toList && roBody f V VT e.toList
     | .switchBr _ cs e => roCases f V VT cs.toList && roBody f V VT e.toList
     | _ => true
@@ -402,6 +409,10 @@ theorem EnvOk.set {f : Func} {V : InstId → Option (Array Value)} {args : List 
     · subst_vars; rw [hV] at hk; cases hk
     · exact h.2 k items t' w hk he
 
+theorem constVal_noPtr (f : Func) (v : Val) : OkR (·.noPtr = true) (constVal f v) := by
+  intro w hw
+  cases v <;> simp only [constVal] at hw <;> (repeat' split at hw) <;> first | (cases hw; rfl) | cases hw
+
 theorem operand_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
     (h : EnvOk f V args env) (v : Val) : OkR (·.noPtr = true) (operand f env v) := by
   intro w hw
@@ -411,29 +422,47 @@ theorem operand_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : L
     cases hk : env k with
     | none => rw [hk] at hw; cases hw
     | some p => obtain ⟨t', u⟩ := p; rw [hk] at hw; cases hw; exact h.1 k t' w hk
-  | int t n =>
+  | optSome t v =>
     simp only [operand] at hw
-    split at hw <;> cases hw; rfl
-  | bool b => cases hw; rfl
-  | void => cases hw; rfl
-  | _ => cases hw
+    split at hw
+    · obtain ⟨a, ha, hw⟩ := Result.bind_ok hw
+      cases hw; exact constVal_noPtr f v a ha
+    · cases hw
+  | errUnionOk t v =>
+    simp only [operand] at hw
+    split at hw
+    · obtain ⟨a, ha, hw⟩ := Result.bind_ok hw
+      cases hw; exact constVal_noPtr f v a ha
+    · cases hw
+  | _ =>
+    simp only [operand] at hw
+    repeat' split at hw
+    all_goals first | (cases hw; rfl) | cases hw
 
-/-- Under `EnvOk` no operand is a pointer, so every access through one is stuck. -/
+theorem optGet_ok {w : Value} (h : w.noPtr = true) : OkR (·.noPtr = true) w.optGet := by
+  intro v hv; cases w <;> simp only [Value.optGet] at hv <;> (try cases hv) <;> exact h
+
+theorem errGet_ok {w : Value} (h : w.noPtr = true) : OkR (·.noPtr = true) w.errGet := by
+  intro v hv; cases w <;> simp only [Value.errGet] at hv <;> (try cases hv) <;> exact h
+
+theorem errGetErr_ok {w : Value} : OkR (·.noPtr = true) w.errGetErr := by
+  intro v hv; cases w <;> simp only [Value.errGetErr] at hv <;> cases hv <;> rfl
+
+theorem errWrap_ok {w : Value} : OkR (·.noPtr = true) w.errWrap := by
+  intro v hv; cases w <;> simp only [Value.errWrap] at hv <;> cases hv <;> rfl
+
+/-- Under `EnvOk` no operand is a pointer, so an access through one has no value. -/
 theorem ptrOperand_none {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
-    (h : EnvOk f V args env) (v : Val) : (ptrOperand f env v).run = none := by
-  unfold ptrOperand
-  split
-  · rw [Result.run_bind']
-    rcases ho : (operand f env v).run with _ | (e | w)
-    · rfl
-    · exfalso
-      cases v <;> simp only [operand] at ho
-      · split at ho <;> cases ho
-      · split at ho <;> cases ho
-      all_goals cases ho
-    · have := operand_noPtr h v w ho
-      cases w <;> simp only [Value.noPtr, Bool.false_eq_true] at this <;> (dsimp only; split <;> first | rfl | (exfalso; simp_all))
-  · rfl
+    (h : EnvOk f V args env) (v : Val) : OkR (fun _ => False) (ptrOperand f env v) := by
+  intro p hp
+  unfold ptrOperand at hp
+  split at hp
+  · obtain ⟨w, hw, hm⟩ := Result.bind_ok hp
+    have := operand_noPtr h v w hw
+    cases w with
+    | ptr q => simp [Value.noPtr] at this
+    | _ => revert hm; split <;> intro hm <;> first | contradiction | (cases hm; done)
+  · cases hp
 
 theorem relR_self {α : Type} {P : α → Prop} {r : Result α} (h : OkR P r) :
     RelR (fun a b => a = b ∧ P a) r r := by
@@ -458,12 +487,15 @@ theorem memFree_lift {α : Type} {P : α → Prop} {r : Result α} (h : OkR P r)
     MemFree P (StateT.lift r) :=
   ⟨r, h, fun m => by simp only [StateT.run_lift]; rfl⟩
 
-theorem memFree_none {α β : Type} {P : β → Prop} {r : Result α} (h : r.run = none)
+theorem memFree_none {α β : Type} {P : β → Prop} {r : Result α} (h : OkR (fun _ => False) r)
     (g : α → MemM β) : MemFree P (StateT.lift r >>= g) := by
-  refine ⟨stuck, okR_stuck, fun m => ?_⟩
+  refine ⟨r >>= fun _ => stuck, okR_bind fun _ => okR_stuck, fun m => ?_⟩
   apply ExceptT.ext
-  simp only [StateT.run_bind, StateT.run_lift, ExceptT.run_bind, h]
-  rfl
+  simp only [StateT.run_bind, StateT.run_lift, ExceptT.run_bind, ExceptT.run_map]
+  rcases hr : r.run with _ | (e | a)
+  · rfl
+  · rfl
+  · exact (h a hr).elim
 
 theorem memFree_liftPure {α β : Type} {P : β → Prop} (r : Result α) (g : α → β) (h : ∀ a, P (g a)) :
     MemFree P (StateT.lift r >>= fun a => pure (g a)) :=
@@ -471,14 +503,20 @@ theorem memFree_liftPure {α β : Type} {P : β → Prop} (r : Result α) (g : �
     rw [StateT.run_bind, StateT.run_lift]
     simp only [StateT.run_pure, bind_assoc, pure_bind, bind_pure_comp, Functor.map_map, Function.comp_def]⟩
 
-theorem evalPure_noPtr (f : Func) (env : Env) (i : Inst) : OkR (·.noPtr = true) (evalPure f env i) := by
+theorem evalPure_noPtr {f : Func} {V : InstId → Option (Array Value)} {args : List Value} {env : Env}
+    (h : EnvOk f V args env) (i : Inst) : OkR (·.noPtr = true) (evalPure f env i) := by
   obtain ⟨id, ty, op⟩ := i
   cases op <;> simp only [evalPure] <;> (try unfold intBin) <;>
   repeat' (first
     | exact okR_stuck
     | exact okR_throw
-    | ((with_reducible apply okR_pure); rfl)
+    | ((with_reducible apply okR_pure); first | rfl | (simp only [Value.noPtr]; assumption))
+    | (refine okR_bind' (operand_noPtr h _) fun _ _ => ?_)
     | ((with_reducible apply okR_bind); intro _)
+    | (exact optGet_ok ‹_›)
+    | (exact errGet_ok ‹_›)
+    | exact errGetErr_ok
+    | exact errWrap_ok
     | split)
 
 /-- The slice operand `.inst k`: the slice that `k` holds, at its type's alignment. -/
@@ -504,7 +542,7 @@ theorem evalMem_memFree {f : Func} {V : InstId → Option (Array Value)} {args :
     (hop : match i.op with | .elemPtr .. | .slicePtr _ | .sliceElemVal .. => False | _ => True) :
     MemFree (·.noPtr = true) (evalMem f env i) := by
   obtain ⟨id, ty, op⟩ := i
-  have hpure := evalPure_noPtr f env ⟨id, ty, op⟩
+  have hpure := evalPure_noPtr h ⟨id, ty, op⟩
   cases op <;> simp only at hop <;> simp only [evalMem]
   all_goals first
     | exact memFree_lift hpure
@@ -656,11 +694,11 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
     simp only [roBody, Bool.and_eq_true] at hro
     simp only [execBody]
     exact ih hro.1 hro.2 henv
-  case case26 =>
+  case case27 =>
     intro s w x el env ih _ hel henv
     simp only [execSwitch]
     exact ih hel henv
-  case case27 =>
+  case case28 =>
     intro s w x sc more el env ihb ihm hc hel henv
     simp only [roCases, Bool.and_eq_true] at hc
     unfold execSwitch
@@ -668,7 +706,7 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
       split
       · exact ihb hc.1 henv
       · exact ihm hc.2 hel henv
-  case case28 =>
+  case case29 =>
     intro id body env ih hb henv
     simp only [execLoop]
     exact sim_loop _ (ih hb henv)
@@ -817,9 +855,20 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
     simp only [execInst]
     exact ih hrest henv
   case case23 =>
+    intro i rest env v errBody hop ihok iherr hro hrest henv
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    have hri := roNested_inst hro
+    simp only [roNested, Bool.and_eq_true] at hro
+    simp only [execInst]
+    refine sim_bind (sim_liftR _ (operand_noPtr henv v)) fun w hw => ?_
+    cases w with
+    | errOk x => exact ihok x hrest (henv.set _ _ _ hw (roInst_view hri (by simp)))
+    | errErr n => exact iherr hro.2 henv
+    | _ => exact sim_liftR _ fun _ h => by cases h
+  case case24 =>
     intro i rest env k idx hop items hv
     simp at hv
-  case case24 =>
+  case case25 =>
     intro i rest env k idx hop _ ih hro hrest henv
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
     have hri := roNested_inst hro
@@ -851,8 +900,8 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
       split at hv
       · cases hv; exact hitems _ (Array.getElem_mem _)
       · cases hv
-  case case25 =>
-    intro i rest env h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15 h16 h17 ih hro hrest henv
+  case case26 =>
+    intro i rest env h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15 h16 h18 h17 ih hro hrest henv
     obtain ⟨id, ty, op⟩ := i
     have hri := roNested_inst hro
     have hop := roInst_evalMem hri fun k idx h => h17 k idx h
@@ -877,6 +926,7 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
       | (exfalso; apply h15; rfl)
       | (exfalso; apply h16; rfl)
       | (exfalso; apply h17; rfl)
+      | (exfalso; apply h18; rfl)
       | (simp only [execInst]
          exact sim_bind (sim_liftMem (evalMem_memFree henv _ hop)) fun v hv =>
            ih v hrest (henv.set _ _ _ hv hid))
