@@ -425,6 +425,9 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
     | _ => throw s!"inst {a}: a register local read before it is set"
     unless ((allocChild f a).bind (scalar? f)).isSome do
       throw s!"inst {a}: a register local of a type outside the fragment"
+    -- The loop lemmas map every register into the frame: it must be set before any loop.
+    if (top.extract 0 j).any fun i => (allInsts #[i]).any (·.op matches .loop _) then
+      throw s!"inst {a}: a register local allocated after a loop"
   for (k, t) in sh.blockTys do
     if sh.brT.contains k && !(f.types[t]? matches some .void) && (scalar? f t).isNone then
       throw s!"inst {k}: a block value outside the fragment"

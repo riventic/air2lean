@@ -10,6 +10,8 @@ Needs `lake build Proofs.<Ex>.AirCert Air2Lean.Main` (every committed certificat
 (d) Slices and pointer arithmetic: the Zig 0.15.2 files of tests/golden/slices (the example has
     no committed certificate: its golden mixes versions) certify the expected functions, and the
     fresh certificate checks.
+(e) PlacementCounterexample.lean: an extra block changes a later allocation's address, so a
+    memory extension cannot relate a promoted local to a block.
 """
 import argparse
 import json
@@ -96,6 +98,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
     args = parser.parse_args()
+    # The placement counterexample behind register locals (docs/air-semantics.md §Locals).
+    result = lean(ROOT / 'tests/roadmap/air-semantics/PlacementCounterexample.lean')
+    assert result.returncode == 0, result.stdout + result.stderr
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')

@@ -149,7 +149,8 @@ not preserved by a later allocation. ZigLean's placement oracle proposes an addr
 promoted local therefore shifts the id, and with it the address, of every later block. Values
 differ, not just memories. From the same memory, with a placement that puts block 1 high and
 block 2 low, `allocStack 4 4; q ← allocStack 4 4; ptrLt q g` gives `true`, and
-`q ← allocStack 4 4; ptrLt q g` gives `false` (checked by `decide +kernel`). Only a statement
+`q ← allocStack 4 4; ptrLt q g` gives `false` (checked by `decide +kernel` in
+`tests/roadmap/air-semantics/PlacementCounterexample.lean`). Only a statement
 "for every `σ` there is a `σ'`", with `σ'` built from the semantics' own run (a prophecy
 placement), would hold. That needs a whole-program simulation, not one normalization per
 function.
