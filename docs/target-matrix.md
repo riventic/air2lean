@@ -90,6 +90,10 @@ translation paths ([aarch64-abi.md](aarch64-abi.md)). The checker requires each 
 | --- | --- | --- | --- |
 | 0.16.0 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
 | 0.16.0 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+| 0.15.2 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
+| 0.15.2 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+| 0.14.1 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
+| 0.14.1 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
 
 The `aarch64-linux` job installs only the checksum-pinned stock Zig and runs the probe
 and compare. Like `macos`, it is a native-runner job that `scripts/local-ci.sh` does not

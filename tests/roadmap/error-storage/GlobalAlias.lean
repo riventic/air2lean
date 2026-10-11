@@ -24,7 +24,7 @@ private def errorGlobal := global 0 (.err 0 "Beta")
 private def structGlobal := global 5 (.agg 5 #[.int 1 37, .err 0 "Gamma"])
 private def unionGlobal := global 6 (.errUnionOk 6 (.int 1 53))
 private def base (name : String) (g : Global) : Func :=
-  {dialect := .ofVersion .v0_16_0, name := "folded_alias." ++ name, params := #[], ret := 1, types, layouts, globals := #[g], body := #[]}
+  {dialect := { Dialect.ofVersion .v0_16_0 with backend := "stage2_x86_64" }, name := "folded_alias." ++ name, params := #[], ret := 1, types, layouts, globals := #[g], body := #[]}
 private def loadAt (name : String) (g : Global) (pty off : Nat) : Func :=
   {base name g with body := #[{id := 0, ty := 1, op := .load (.ptrConst pty 0 off)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}
 private def accept (f : Func) : IO Unit := do
