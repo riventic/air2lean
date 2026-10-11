@@ -139,6 +139,43 @@ pub fn parentOf(p: *u32) *S {
     return @fieldParentPtr("b", p);
 }
 
+/// `&s[i]` without safety: forming an item pointer at or past the length is illegal, also with
+/// no access through it (AIR `slice_elem_ptr`).
+pub fn itemPtrUnsafe(s: []u32, i: usize) *u32 {
+    @setRuntimeSafety(false);
+    return &s[i];
+}
+
+/// `&s[i]` of a sentinel slice: the sentinel at the length is an item, past it is illegal.
+pub fn sentinelItemPtr(s: [:0]u8, i: usize) *u8 {
+    @setRuntimeSafety(false);
+    return &s[i];
+}
+
+/// `&p[i]` of an array pointer past its length (AIR `ptr_elem_ptr`).
+pub fn arrayItemPtr(p: *[4]u32, i: usize) *u32 {
+    @setRuntimeSafety(false);
+    return &p[i];
+}
+
+/// `p[i]` of an array pointer past its length (AIR `ptr_elem_val`).
+pub fn arrayItem(p: *const [4]u32, i: usize) u32 {
+    @setRuntimeSafety(false);
+    return p[i];
+}
+
+/// `p[i]` of a sentinel array pointer: the sentinel at the length is an item.
+pub fn sentinelArrayItem(p: *const [3:0]u8, i: usize) u8 {
+    @setRuntimeSafety(false);
+    return p[i];
+}
+
+/// `&p[i]` of a many-item pointer: no length, so only the allocation bounds it.
+pub fn manyItemPtr(p: [*]u32, i: usize) *u32 {
+    @setRuntimeSafety(false);
+    return &p[i];
+}
+
 comptime {
     _ = &divExactSafe;
     _ = &divExactUnsafe;
@@ -152,6 +189,12 @@ comptime {
     _ = &copyOverlapUnsafe;
     _ = &copyLenUnsafe;
     _ = &itemUnsafe;
+    _ = &itemPtrUnsafe;
+    _ = &sentinelItemPtr;
+    _ = &arrayItemPtr;
+    _ = &arrayItem;
+    _ = &sentinelArrayItem;
+    _ = &manyItemPtr;
     _ = &sliceEnd;
     _ = &sliceArray;
     _ = &sentinelBytes;

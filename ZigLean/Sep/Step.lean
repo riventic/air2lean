@@ -233,7 +233,8 @@ end Zig
 
 open Lean.Parser.Tactic in
 /-- Normalize the command of a `Triple`/`TotalTriple` goal: unfold the given definitions,
-push `StateT.run` inward, flatten binds and decide branches with the given facts. -/
+push `StateT.run` inward, flatten binds and decide branches with the given facts. An item
+bounds check (`Zig.checkIndex`, `Zig.checkSentinelIndex`) is a branch too. -/
 syntax (name := sepUnfold) "sep_unfold" (" [" (simpStar <|> simpErase <|> simpLemma),* "]")? : tactic
 
 macro_rules
@@ -244,7 +245,8 @@ macro_rules
         StateT.run_lift, monadLift, MonadLift.monadLift, Zig.callM, Zig.optPayload,
         Zig.StateT.lift_pure_eq, map_bind, map_pure, pure_bind, bind_assoc, Option.isSome_some,
         Option.isSome_none, ↓reduceIte, Bool.false_eq_true, Zig.lt, Zig.le, Zig.gt, Zig.ge,
-        BitVec.ult, BitVec.ule, BitVec.reduceToNat, decide_eq_true_eq, $args,*])
+        BitVec.ult, BitVec.ule, BitVec.reduceToNat, decide_eq_true_eq, Zig.checkIndex,
+        Zig.checkSentinelIndex, $args,*])
 
 namespace Zig.SepStep
 

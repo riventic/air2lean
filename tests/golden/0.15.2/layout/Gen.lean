@@ -1426,7 +1426,7 @@ def writeTable (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM writeTableLocals writeTableExit) with
     | .br3 => (do
-      let i8 ← Zig.callM (Zig.ptrProject (⟨some 3, 0⟩ : Zig.Ptr) (·.elem 4 p0))
+      let i8 ← Zig.callM (Zig.checkIndex (3 : BitVec 64) p0) >>= fun _ => Zig.callM (Zig.ptrProject (⟨some 3, 0⟩ : Zig.Ptr) (·.elem 4 p0))
       let i9 ← pure (i8)
       Zig.store (α := BitVec 32) 4 i9 p1
       let i11 ← Zig.callR (Zig.vindex (#v[(10 : BitVec 32), (20 : BitVec 32), (30 : BitVec 32)] : Vector (BitVec 32) 3) p0)

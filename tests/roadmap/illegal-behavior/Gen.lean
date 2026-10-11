@@ -18,6 +18,32 @@ instance : Zig.Enc S where
 /-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
 def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
+structure arrayItemLocals where
+  deriving Inhabited
+
+inductive arrayItemExit where
+  | ret (v : BitVec 32)
+
+def arrayItem (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 32) 4 (p0.elem 4 p1))
+    pure (.ret i2)) : Zig.MM arrayItemLocals arrayItemExit).run' (default : arrayItemLocals)
+  match e with
+  | .ret v => pure v
+
+structure arrayItemPtrLocals where
+  deriving Inhabited
+
+inductive arrayItemPtrExit where
+  | ret (v : Zig.Ptr)
+
+def arrayItemPtr (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1) >>= fun _ => Zig.callM (Zig.ptrProject p0 (·.elem 4 p1))
+    pure (.ret i2)) : Zig.MM arrayItemPtrLocals arrayItemPtrExit).run' (default : arrayItemPtrLocals)
+  match e with
+  | .ret v => pure v
+
 structure copyLenUnsafeLocals where
   deriving Inhabited
 
@@ -154,8 +180,8 @@ def forArray.loop13 (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MM forArrayLocals forA
     let i16 ← pure (i14)
     let i17 ← pure (Zig.lt false i16 (3 : BitVec 64))
     if i17 then (do
-      let i19 ← Zig.callM (Zig.checkIndex p0 i14 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i14))
-      let i20 ← Zig.callM (Zig.load (BitVec 32) 4 (p1.elem 4 i14))
+      let i19 ← Zig.callM (Zig.checkIndex p0.len i14 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i14))
+      let i20 ← Zig.callM (Zig.checkIndex (3 : BitVec 64) i14 >>= fun _ => Zig.load (BitVec 32) 4 (p1.elem 4 i14))
       let i21 ← pure ((← get).sum)
       let i22 ← pure (Zig.addWrap i19 i20)
       let i23 ← pure (Zig.addWrap i21 i22)
@@ -277,8 +303,8 @@ def forLenMem.loop16 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM
     let i20 ← pure (i8)
     let i21 ← pure (Zig.lt false i19 i20)
     if i21 then (do
-      let i23 ← Zig.callM (Zig.checkIndex i6 i17 >>= fun _ => Zig.load (BitVec 32) 4 (i6.ptr.elem 4 i17))
-      let i24 ← Zig.callM (Zig.checkIndex i7 i17 >>= fun _ => Zig.load (BitVec 32) 4 (i7.ptr.elem 4 i17))
+      let i23 ← Zig.callM (Zig.checkIndex i6.len i17 >>= fun _ => Zig.load (BitVec 32) 4 (i6.ptr.elem 4 i17))
+      let i24 ← Zig.callM (Zig.checkIndex i7.len i17 >>= fun _ => Zig.load (BitVec 32) 4 (i7.ptr.elem 4 i17))
       let i25 ← pure ((← get).sum)
       let i26 ← pure (Zig.addWrap i23 i24)
       let i27 ← pure (Zig.addWrap i25 i26)
@@ -442,6 +468,19 @@ def forRangeFrom (p0 : Array (BitVec 32)) (p1 : BitVec 64) (p2 : BitVec 64) : Zi
   | .ret v => pure v
   | _ => throw .panic
 
+structure itemPtrUnsafeLocals where
+  deriving Inhabited
+
+inductive itemPtrUnsafeExit where
+  | ret (v : Zig.Ptr)
+
+def itemPtrUnsafe (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.checkIndex p0.len p1) >>= fun _ => Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 p1))
+    pure (.ret i2)) : Zig.MM itemPtrUnsafeLocals itemPtrUnsafeExit).run' (default : itemPtrUnsafeLocals)
+  match e with
+  | .ret v => pure v
+
 structure itemUnsafeLocals where
   deriving Inhabited
 
@@ -451,8 +490,21 @@ inductive itemUnsafeExit where
 def itemUnsafe (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 32) := do
   let e ← ((do
     let i2 ← Zig.load (Zig.Slice) 8 p0
-    let i3 ← Zig.callM (Zig.checkIndex i2 p1 >>= fun _ => Zig.load (BitVec 32) 4 (i2.ptr.elem 4 p1))
+    let i3 ← Zig.callM (Zig.checkIndex i2.len p1 >>= fun _ => Zig.load (BitVec 32) 4 (i2.ptr.elem 4 p1))
     pure (.ret i3)) : Zig.MM itemUnsafeLocals itemUnsafeExit).run' (default : itemUnsafeLocals)
+  match e with
+  | .ret v => pure v
+
+structure manyItemPtrLocals where
+  deriving Inhabited
+
+inductive manyItemPtrExit where
+  | ret (v : Zig.Ptr)
+
+def manyItemPtr (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.ptrProject p0 (·.elem 4 p1))
+    pure (.ret i2)) : Zig.MM manyItemPtrLocals manyItemPtrExit).run' (default : manyItemPtrLocals)
   match e with
   | .ret v => pure v
 
@@ -470,6 +522,19 @@ def parentOf (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+structure sentinelArrayItemLocals where
+  deriving Inhabited
+
+inductive sentinelArrayItemExit where
+  | ret (v : BitVec 8)
+
+def sentinelArrayItem (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.checkSentinelIndex (3 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (p0.elem 1 p1))
+    pure (.ret i2)) : Zig.MM sentinelArrayItemLocals sentinelArrayItemExit).run' (default : sentinelArrayItemLocals)
+  match e with
+  | .ret v => pure v
+
 structure sentinelBytesLocals where
   deriving Inhabited
 
@@ -483,6 +548,19 @@ def sentinelBytes (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Slice) := do
     let i4 ← Zig.sub false p1 (0 : BitVec 64)
     let i5 ← Zig.callM (Zig.checkSliceEnd p0.len (0 : BitVec 64) i4 1 >>= fun _ => Zig.checkSentinelByte i3 i4 (0 : BitVec 8) >>= fun _ => pure (⟨i3, i4⟩ : Zig.Slice))
     pure (.ret i5)) : Zig.MM sentinelBytesLocals sentinelBytesExit).run' (default : sentinelBytesLocals)
+  match e with
+  | .ret v => pure v
+
+structure sentinelItemPtrLocals where
+  deriving Inhabited
+
+inductive sentinelItemPtrExit where
+  | ret (v : Zig.Ptr)
+
+def sentinelItemPtr (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
+  let e ← ((do
+    let i2 ← Zig.callM (Zig.checkSentinelIndex p0.len p1) >>= fun _ => Zig.callM (Zig.ptrProject p0.ptr (·.elem 1 p1))
+    pure (.ret i2)) : Zig.MM sentinelItemPtrLocals sentinelItemPtrExit).run' (default : sentinelItemPtrLocals)
   match e with
   | .ret v => pure v
 

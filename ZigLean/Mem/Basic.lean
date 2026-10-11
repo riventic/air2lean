@@ -744,10 +744,14 @@ def memcpy (size dstAlign srcAlign : Nat) (dst src : Ptr) (n m : BitVec 64) : Me
   if n ≠ m || dst.overlaps src (n.toNat * size) then throw .illegal
   else memmove size dstAlign srcAlign dst src n
 
-/-- `slice_elem_val` in memory: an index at or past the length is illegal behaviour that only
-Sema's bounds check (`outOfBounds`) catches, so the model checks it itself: `.illegal`. -/
-def checkIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
-  if i.toNat < s.len.toNat then pure () else throw .illegal
+/-- Item `i` of an operand with `len` items: a slice's length, or the count of the array or
+vector that a pointer points to (`slice_elem_val`, `slice_elem_ptr`, `ptr_elem_val`,
+`ptr_elem_ptr`). An index at or past the length is illegal behaviour that only Sema's bounds
+check (`outOfBounds`) catches, so the model checks it itself: `.illegal`. Forming the pointer
+`&s[i]` is already illegal; the item does not need to be read. A many-item pointer has no
+length and no check. -/
+def checkIndex {n : Nat} (len i : BitVec n) : MemM Unit :=
+  if i.toNat < len.toNat then pure () else throw .illegal
 
 /-- Slicing `[start..start + len]` of an operand with `srcLen` items: an end past the length is
 illegal behaviour that only Sema's bounds check (`outOfBounds`) catches: `.illegal`. `extra` is
@@ -761,10 +765,10 @@ object is illegal behaviour that nothing checks: `.illegal`. -/
 def checkParent (size align : Nat) (q : Ptr) : MemM Unit := do
   let _ ← (← get).access q size align
 
-/-- `checkIndex` for a slice with a sentinel (`[:s]T`): its sentinel item, at the length, is an
-item too (Sema reads it to check sentinel slicing). -/
-def checkSentinelIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
-  if i.toNat ≤ s.len.toNat then pure () else throw .illegal
+/-- `checkIndex` for an operand with a sentinel (`[:s]T`, `*[n:s]T`): its sentinel item, at the
+length, is an item too (Sema's bounds check is `i ≤ len`). -/
+def checkSentinelIndex {n : Nat} (len i : BitVec n) : MemM Unit :=
+  if i.toNat ≤ len.toNat then pure () else throw .illegal
 
 /-- The items of `s`, for a call to a pure function with a `[]const T` parameter. An undefined
 byte in any item throws `.unspecified`, also in an item that the function does not read.

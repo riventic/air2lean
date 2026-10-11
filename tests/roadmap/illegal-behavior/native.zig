@@ -53,4 +53,9 @@ pub fn main() void {
     std.debug.print("forArray 4/3 {d}\n", .{ib.forArray(items[0..4], items[0..3])});
     var lone: u32 = 7;
     std.debug.print("parentOf lone {}\n", .{@intFromPtr(ib.parentOf(&lone)) + 4 == @intFromPtr(&lone)});
+    var words = [_]u32{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    const base = @intFromPtr(&words);
+    std.debug.print("itemPtrUnsafe &s[len] offset {d}\n", .{@intFromPtr(ib.itemPtrUnsafe(words[0..2], 2)) - base});
+    std.debug.print("arrayItemPtr &a[4] offset {d}\n", .{@intFromPtr(ib.arrayItemPtr(words[0..4], 4)) - base});
+    std.debug.print("arrayItem a[4] {d}\n", .{ib.arrayItem(words[0..4], 4)});
 }

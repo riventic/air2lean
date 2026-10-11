@@ -464,9 +464,11 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
     (by rw [Ptr.elem_eq]; exact bytesAt_inBounds hbuf hmB hlen4 hpos)
   refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], hc, h₄, hd₄, hm₆,
     A, S, K, hA, hK, hb₄⟩
+  -- Item `len` of the slice of `len + 1` items passes the bounds check of `&items[len]`.
+  have hidx : len.toNat < (len.toNat + 1) % 18446744073709551616 := by omega
   simp only [StateT.run] at l₁ l₂ l₃ s₄ l₅ l₆ hpr
   simp [array_list_Aligned_u32_null_addOneAssumeCapacity, zig_unfold, l₁, l₂, l₃, s₄, l₅, l₆,
-    debug_assert, Zig.lt, hu1, hu2, hno', hmod, hsub, hpr, f₁, f₂, f₃, f₄]
+    debug_assert, Zig.lt, hu1, hu2, hno', hmod, hsub, hpr, f₁, f₂, f₃, f₄, checkIndex, hidx]
 
 /-! ## `ensureTotalCapacityPrecise` -/
 

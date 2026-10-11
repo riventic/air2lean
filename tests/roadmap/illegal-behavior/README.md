@@ -8,7 +8,7 @@ safety check before it.
 | --- | --- |
 | `ib.zig`, `air/`, `Gen.lean` | functions that reach unchecked illegal behaviour, their 0.16.0 ReleaseSafe AIR (`-target x86_64-linux -mcpu=baseline`) and its retained translation |
 | `Cases.lean` | the generated functions on each input class: `.illegal`, and a legal control row |
-| `Runtime.lean` | the runtime ops (`Zig.Float.divExactTrunc`, `Zig.memcpy`, `Zig.checkIndex`, `Zig.checkAddr`, …) directly |
+| `Runtime.lean` | the runtime ops (`Zig.Float.divExactTrunc`, `Zig.memcpy`, `Zig.checkIndex`, `Zig.checkSentinelIndex`, `Zig.checkAddr`, …) directly |
 | `mutations.py` | emitter-output mutants that drop one op's check; `Cases.lean` must reject each |
 | `probe.zig`, `probe-air/`, `expected.json`, `probes.py` | IB the translator rejects, and the documented gaps, each translated alone |
 | `forlen.zig`, `for-air/<version>/` | `for` over a slice and a range or an array without safety, exported by every supported version: each translation has the patched Sema's length check (`.illegal`), and an export without `unchecked_ib` is rejected (`expected.json`) |

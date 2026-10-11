@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3078 theorems in 181 files.
+3079 theorems in 181 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -50,18 +50,18 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2943 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2494 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2944 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2495 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1262 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2494 | Block addresses are the environment's placement |
+| [SEM-07](premises.md#sem-07) | 2495 | Block addresses are the environment's placement |
 | [STK-01](premises.md#stk-01) | 57 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3078 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3079 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1527 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1527 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
@@ -328,6 +328,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.pre_store_noErr` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Atomics.Stack.pre_inv` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Atomics.Stack.next_ptr` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Atomics.Stack.next_idx` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Atomics.Stack.next_lt` | SEM-01, TRU-01 |
 | `Atomics.Stack.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |

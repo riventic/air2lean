@@ -436,7 +436,7 @@ def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals pa
     let i91 ← pure (i89)
     let i92 ← pure (Zig.lt false i91 (4 : BitVec 64))
     if i92 then (do
-      let i94 ← Zig.callMC (Zig.load (Zig.ThreadId) 8 (i25.elem 8 i89))
+      let i94 ← Zig.callMC (Zig.checkIndex (4 : BitVec 64) i89 >>= fun _ => Zig.load (Zig.ThreadId) 8 (i25.elem 8 i89))
       let _i95 ← Zig.joinC i94
       pure .br90)
     else (do
@@ -454,7 +454,7 @@ def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt para
     let i63 ← pure (i57)
     let i64 ← pure (Zig.lt false i62 i63)
     if i64 then (do
-      let i66 ← Zig.callMC (Zig.checkIndex i56 i60 >>= fun _ => Zig.load (Zig.ThreadId) 8 (i56.ptr.elem 8 i60))
+      let i66 ← Zig.callMC (Zig.checkIndex i56.len i60 >>= fun _ => Zig.load (Zig.ThreadId) 8 (i56.ptr.elem 8 i60))
       let _i67 ← Zig.joinC i66
       pure .br61)
     else (do
@@ -471,8 +471,8 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
     let i35 ← pure (i33)
     let i36 ← pure (Zig.lt false i35 (4 : BitVec 64))
     if i36 then (do
-      let i38 ← Zig.callMC (Zig.ptrProject i25 (·.elem 8 i33))
-      let i39 ← Zig.callMC (Zig.ptrProject i4 (·.elem 16 i33))
+      let i38 ← Zig.callMC (Zig.checkIndex (4 : BitVec 64) i33) >>= fun _ => Zig.callMC (Zig.ptrProject i25 (·.elem 8 i33))
+      let i39 ← Zig.callMC (Zig.checkIndex (4 : BitVec 64) i33) >>= fun _ => Zig.callMC (Zig.ptrProject i4 (·.elem 16 i33))
       let i40 ← pure (i39)
       let i41 ← Zig.spawnC (Tgt.bump i40)
       match i41 with
@@ -520,7 +520,7 @@ def parallelCounter.loop9 (p0 : BitVec 32) (i1 : Zig.Ptr) (i4 : Zig.Ptr) : Zig.C
     let i12 ← pure (i10)
     let i13 ← pure (Zig.lt false i12 (4 : BitVec 64))
     if i13 then (do
-      let i15 ← Zig.callMC (Zig.ptrProject i4 (·.elem 16 i10))
+      let i15 ← Zig.callMC (Zig.checkIndex (4 : BitVec 64) i10) >>= fun _ => Zig.callMC (Zig.ptrProject i4 (·.elem 16 i10))
       let i16 ← pure i15
       Zig.store (α := Zig.Ptr) 8 i16 i1
       let i18 ← Zig.callMC (Zig.ptrProject i15 (·.add 8))
