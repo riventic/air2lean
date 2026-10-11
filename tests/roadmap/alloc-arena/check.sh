@@ -6,10 +6,11 @@
 # x86_64-linux); they elaborate; the one-thread results equal the native ones (Eval.lean; the stock
 # arena's O-E run is illegal where native code has undefined behaviour); obstructions
 # O-A and O-E are kernel-checked (ArenaObstruction.lean); `free`, `resize` and `remap` are proved
-# against FAllocSpec (ArenaSpec.lean, also instantiated for the patched module); an alloc that reserves nothing is rejected (mutant.sh); the
-# admissions fail closed (test_cli.py).
+# against FAllocSpec for each module (ArenaSpec*.lean, by the shared tactics of AllocArena/Core.lean);
+# an alloc that reserves nothing is rejected (mutant.sh); the admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
-# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops`; runs no compiler. With
+# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.AllocSpec.Ops
+# ZigLean.Sep.AllocSpec.Region ZigLean.Range`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
 # against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).
 set -euo pipefail
@@ -54,26 +55,15 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
-# ArenaSpec.lean: `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant; it
-# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`. The patch does not change these
-# entries (checked: the generated definitions are the same text), so the same proofs, instantiated
-# for the patched module, must check too.
-python3 - "$here/AllocArena/ArenaLinux.lean" "$here/AllocArena/ArenaFixedLinux.lean" <<'EOF'
-import re, sys
-def defs(path):
-    parts = re.split(r'\n(?=def |structure |inductive |instance |mutual|partial_fixpoint|end )', open(path).read())
-    return {m.group(1): p for p in parts if (m := re.match(r'(?:def|structure|inductive) (\S+)', p))}
-stock, fixed = defs(sys.argv[1]), defs(sys.argv[2])
-# What ArenaSpec unfolds: the three entries, their callees and the types of their locals.
-names = ['heap_ArenaAllocator_' + n for n in ('free', 'resize', 'remap', 'loadFirstNode', 'Node_loadBuf',
-         'Node_Size_toInt', 'Node_Size', 'freeLocals', 'resizeLocals', 'remapLocals')] + ['debug_assert']
-diff = [n for n in names if n not in stock or stock[n] != fixed.get(n)]
-assert not diff, f'the patch changes {diff}: instantiating ArenaSpec for it is not justified'
-EOF
-sed -e 's/AllocArena\.ArenaLinux/AllocArena.ArenaFixedLinux/g' \
-  -e 's/AllocArena\.ArenaSpec/AllocArena.ArenaSpecFixed/g' "$here/ArenaSpec.lean" > "$work/ArenaSpecFixed.lean"
-for spec in "$here/ArenaSpec.lean" "$work/ArenaSpecFixed.lean"; do
-  "${lean_cmd[@]}" "$spec" > "$work/spec.txt"
+# The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
+cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Core.olean" "$work/AllocArena/Core.lean"
+# `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant, stated for each
+# module and proved by the shared tactics, which are elaborated against that module's code: the stock
+# arena on both targets and the patched one (whose `free` and `resize` add a bounds check). Each file
+# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`.
+for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
+  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
   python3 - "$work/spec.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()

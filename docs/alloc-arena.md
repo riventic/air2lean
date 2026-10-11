@@ -1,13 +1,15 @@
 # The translated `ArenaAllocator` (allocator milestone 2)
 
 Status: translation, executable checks, kernel-checked obstructions and a mutant are done.
-`free`, `resize` and `remap` of the stock arena are proved against `FAllocSpec` (`ArenaSpec`) over
-an invariant whose tokens are ghost tokens of the arena's current epoch that name their regions
-(O-A), with live-block disjointness for O-F. **The stock arena does not satisfy `FAllocSpec`'s
+`free`, `resize` and `remap` of the stock arena (x86_64-linux, aarch64-macos) and of the patched
+one are proved against `FAllocSpec` over an invariant whose tokens are ghost tokens of the arena's
+current epoch that name their regions (O-A), with live-block disjointness for O-F. The invariant,
+its lemmas and the proof tactics are one shared layer (`AllocArena/Core.lean`), elaborated against
+each module. **The stock arena does not satisfy `FAllocSpec`'s
 `alloc` field for any child** (O-E, O-B below): its node sizes grow without bound, so every child
 eventually refuses a request or the arena's own size arithmetic overflows. A patch that fixes
 this ([upstream draft](upstream/arena-oob-gep.md), `upstream/arena-fix.patch`) is translated from
-real AIR and runs as natively; its proof, `alloc` and `reset` are not done yet (§What is proved).
+real AIR and runs as natively; its `alloc` and `reset` are not proved yet (§What is proved).
 Fixture: [`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md). The plan and the
 earlier milestone: [alloc-spec.md](alloc-spec.md), [allocator-model.md](allocator-model.md),
 [alloc-page.md](alloc-page.md).
@@ -142,8 +144,9 @@ free list) is not attempted.
 
 ## What is proved and checked
 
-* `ArenaSpec.free_spec`, `resize_spec`, `remap_spec` (`tests/roadmap/alloc-arena/ArenaSpec.lean`):
-  the stock arena's translated `free`, `resize` and `remap` (x86_64-linux) meet `FAllocSpec`'s
+* `ArenaSpec.free_spec`, `resize_spec`, `remap_spec` (`tests/roadmap/alloc-arena/ArenaSpec.lean`;
+  `ArenaSpecMacos.lean` for aarch64-macos, `ArenaSpecFixed.lean` for the patched arena):
+  the arena's translated `free`, `resize` and `remap` meet `FAllocSpec`'s
   fields, e.g. `FLogic.partial.T (I.own ⋆ I.granted s.ptr k bs) (Sched.soloRun fuel free) (fun _ =>
   I.own)` with `I = inv CI γ e ctx`, for every child invariant `CI`, epoch `e` and depth `fuel`,
   from the generated code only. The invariant (`own`): the arena struct with `used_list`/`free_list`
@@ -167,16 +170,30 @@ free list) is not attempted.
 * `ArenaObstruction.foreign_free_panics` (O-A) and `ArenaObstruction.oob_free_illegal` (O-E),
   from the generated code and `mem0 .fresh`, by kernel evaluation; `arena_oom_free` (`Eval.lean`)
   shows O-E from real runs.
+* **One proof, every module.** Each generated module has its own `Tgt` and its own copies of the
+  std types, so no generated term of one module is a term of another. The specification is
+  therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
+  ownership and run lemmas, and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
+  `arena_loadBuf`), and each module states the theorems and proves them with these tactics,
+  elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
+  (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,
+  so the check passes).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
-  (`expected-fixed.txt`), `check.sh` builds that native run. The patch does not change `free`,
-  `resize` and `remap` (the generated code is the same), and `check.sh` checks `ArenaSpec.lean`
-  instantiated for the patched module too (`AllocArena.ArenaSpecFixed`, by renaming the module).
+  (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an
+  earlier draft of the patch, which looped forever when a request fit a node whose buffer was
+  shorter than the request's reservation.
 * `mutant.sh`: an `alloc` whose fast path reserves nothing (the `end_index` bump adds `0`) hands
   out the same bytes twice; `Eval.lean` rejects it at `arena_three` (331 instead of 321: the third
   allocation gets the second one's bytes; two allocations do not show it, the first comes from a
   new node).
-* Library rules the entries need (each its own commit): the named-grant ledger
+* Library rules the entries need (each its own commit): **indirect calls through a read-only
+  vtable** (`ZigLean/Sep/Full/Dispatch.lean`, generic over the interface): `callIndirect` is the
+  generated chain that tests the loaded function pointer against the program's candidates
+  (folded by `rfl` lemmas), `CTriple.callIndirect`/`tableCall` read it by the selected arm,
+  `vtR` holds a vtable's entries read-only; for `std.mem.Allocator`, `CAllocSpec.dispatch`: the
+  dispatch through a vtable meets the specification of the implementation it selects. The
+  named-grant ledger
   (`ZigLean/Sep/Full/Ghost.lean`: `Upd.issue`/`retire`/`reassign`/`bump`, `gfrag_mem`);
   `FTriple.atomicLoadPtr`, `FTriple.cmpxchgHit`, `FTriple.atomicLoadAs`
   (`ZigLean/Sep/Full/AtomicRules.lean`); the `CTriple` step rules `pureStep`, `facts`, `preM`,
@@ -192,7 +209,8 @@ Not proved yet, in order:
   above, the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
   call site tests the loaded function pointer against every allocator function of the program;
   with the child's vtable read-only, as `Dispatch.vtR`, it selects the child's entry),
-  `Upd.issue` under a fresh id for each grant, `defer pushFreeList`.
+  `Upd.issue` under a fresh id for each grant, `defer pushFreeList`. The child's specification
+  enters as `CAllocSpec (CVTable.dispatch tables fns) cctx CI` (`Full/Dispatch.lean`).
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
   `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
   calls the child's `free`/`resize`/`alloc`.

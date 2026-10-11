@@ -106,8 +106,8 @@ holds a reservation past the buffer.
 **Evidence.** The patched arena is translated from its real AIR (`arena-fixed-linux`,
 `AllocArena/ArenaFixedLinux.lean`) and equals its native run on every fixture client
 (`Eval.lean`). Its proof against `FAllocSpec` is in progress ([alloc-arena.md](../alloc-arena.md)
-§What is proved): `free`, `resize` and `remap`, which the patch does not change, are proved for
-the stock and for the patched module over an invariant with `end_index <= buf.len`. That the
+§What is proved): `free`, `resize` and `remap` are proved for the stock and for the patched
+module (with its bounds check) over an invariant with `end_index <= buf.len`. That the
 patched `alloc` keeps this invariant (with the child's `FAllocSpec`), and `reset`, are not proved
 yet, so the patch is not yet proved correct.
 

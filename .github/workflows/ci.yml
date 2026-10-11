@@ -777,15 +777,15 @@ jobs:
           lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
           bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
-      # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked, `free`
-      # proved against FAllocSpec (ArenaSpec.lean).
+      # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked, `free`,
+      # `resize`, `remap` proved against FAllocSpec for the stock and patched modules (ArenaSpec*.lean).
       - name: Translated ArenaAllocator
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops
+          lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range
           bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
