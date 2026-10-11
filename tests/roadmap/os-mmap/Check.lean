@@ -73,6 +73,23 @@ def value {α : Type} [Inhabited α] (c : MemM α) (m : Mem := {}) : α :=
 #guard tag (run (mmap lx none 4096 3 0x22 3 0)) == "Zig.Error.unspecified"
 #guard tag (run (mmap lx none 4096 3 0x22 noFd 4096)) == "Zig.Error.unspecified"
 #guard tag (run (mmapRW 0)) == "Zig.Error.illegal"
+-- The address space: a mapping whose pages would end above `addrLimit` is `error.OutOfMemory`
+-- (one attempt, no block), at a proposed address or at the fallback `Mem.top`; one that ends
+-- exactly at it succeeds. macOS: `MACH_VM_MAX_ADDRESS`.
+#guard lx.addrLimit == 2 ^ 47 && Target.macos.addrLimit == 0x7FFFFE000000
+#guard
+  let m0 : Mem := { place := ⟨fun _ => some (2 ^ 47 - 8192)⟩ }
+  value (mmapRW 8193) m0 == .error "OutOfMemory" && (final (mmapRW 8193) m0).blocks.size == 0 &&
+    (final (mmapRW 8193) m0).allocs == 1 && tag (run (mmapRW 8192) m0) == "ok" &&
+    ((final (mmapRW 8192) m0).blocks[0]!).addr == 2 ^ 47 - 8192
+#guard
+  let dead : Block := { bytes := #[], align := 1, kind := .heap, live := false, addr := 2 ^ 64 - 4097 }
+  let m0 : Mem := { blocks := #[dead] }
+  value (mmapRW 1) m0 == .error "OutOfMemory"
+#guard
+  let m0 : Mem := { place := ⟨fun _ => some (0x7FFFFE000000 - 16384)⟩ }
+  value (mmap .macos none 16385 3 0x1002 noFd 0) m0 == .error "OutOfMemory" &&
+    tag (run (mmap .macos none 16384 3 0x1002 noFd 0) m0) == "ok"
 -- macOS encoding.
 #guard tag (run (mmap .macos none 10 3 0x1002 noFd 0)) == "ok"
 #guard ((final (mmap .macos none 10 3 0x1002 noFd 0)).blocks[0]!).addr % 16384 == 0
@@ -171,6 +188,21 @@ def adj : Mem := { place := ⟨fun b => if b = 1 then some 8192 else none⟩ }
   let m0 : Mem := { allocPolicy := { fails := fun i _ => i == 1 } }
   let c := do let s ← mapOk 4096; remap s 8192
   value c m0 == .error "OutOfMemory" && ((final c m0).blocks[0]!).bytes.size == 4096
+-- The address space: an in-place growth ending exactly at `addrLimit` succeeds; one past it, and
+-- a move past it, are `error.OutOfMemory` with the mapping unchanged.
+#guard
+  let m0 : Mem := { place := ⟨fun b => if b == 0 then some (2 ^ 47 - 8192) else none⟩ }
+  let c := do let s ← mapOk 4096; remap s 8192 0
+  tag (run c m0) == "ok" && ((final c m0).blocks[0]!).bytes.size == 8192
+#guard
+  let m0 : Mem := { place := ⟨fun b => if b == 0 then some (2 ^ 47 - 4096) else none⟩ }
+  let c := do let s ← mapOk 4096; remap s 8192 0
+  value c m0 == .error "OutOfMemory" && ((final c m0).blocks[0]!).bytes.size == 4096
+#guard
+  let m0 : Mem := { place := ⟨fun b => if b == 0 then some (2 ^ 47 - 4096) else none⟩ }
+  let c := do let s ← mapOk 4096; remap s 8192
+  value c m0 == .error "OutOfMemory" && ((final c m0).blocks[0]!).live &&
+    (final c m0).blocks.size == 1
 -- new_len = 0 (EINVAL): outside the model.
 #guard tag (run (do let s ← mapOk 4096; remap s 0)) == "Zig.Error.unspecified"
 -- Not a whole live mapping, a heap block, after munmap: illegal.

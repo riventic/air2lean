@@ -75,6 +75,9 @@ theorem checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) :
     Tame (Zig.checkSliceEnd srcLen start len extra) := by
   unfold Zig.checkSliceEnd; exact ite (pure' _) (throw _)
 
+theorem checkIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkIndex len i) := by
+  unfold Zig.checkIndex; exact ite (pure' _) (throw _)
+
 theorem checkSentinelIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkSentinelIndex len i) := by
   unfold Zig.checkSentinelIndex; exact ite (pure' _) (throw _)
 
@@ -191,8 +194,8 @@ theorem _root_.Zig.Mem.addrFree_set_dead {m : Mem} {b : BlockId} {blk : Block} {
   · exact h i hi
 
 /-- `Mem.mappingRoom` as a statement about the other blocks. -/
-theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {b : BlockId} {blk : Block} {lo len : Nat}
-    (h : m.mappingRoom b blk lo len = true) (j : BlockId) (o : Block) (hj : j ≠ b)
+theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {L : Nat} {b : BlockId} {blk : Block} {lo len : Nat}
+    (h : m.mappingRoom L b blk lo len = true) (j : BlockId) (o : Block) (hj : j ≠ b)
     (ho : m.blocks[j]? = some o) : o.clearOf (blk.addr + lo) len = true := by
   unfold Mem.mappingRoom at h
   simp only [Bool.and_eq_true, Array.all_eq_true] at h
@@ -241,7 +244,10 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
     · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
       exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
     split at h6
-    · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
+    · split at h6
+      · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+        exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+      obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
       obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h7
       obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
       obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h9
@@ -353,6 +359,7 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.ptrEqAddr _ _
   | with_reducible exact Tame.checkAlign _ _
   | with_reducible exact Tame.checkSliceEnd _ _ _ _
+  | with_reducible exact Tame.checkIndex _ _
   | with_reducible exact Tame.checkSentinelIndex _ _
   | with_reducible exact Tame.memcpy _ _ _ _ _ _ _
   | with_reducible exact Tame.ptrProject _ _

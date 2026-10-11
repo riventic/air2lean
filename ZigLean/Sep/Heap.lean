@@ -32,6 +32,9 @@ def empty : Heap := fun _ => none
 /-- No location is in both heaps. -/
 def Disjoint (h₁ h₂ : Heap) : Prop := ∀ l, h₁ l = none ∨ h₂ l = none
 
+/-- Every cell of `h₁` is a cell of `h`. -/
+def Sub (h₁ h : Heap) : Prop := ∀ l c, h₁ l = some c → h l = some c
+
 /-- The cells of both heaps (`h₁` first; the two are disjoint where this is used). -/
 def union (h₁ h₂ : Heap) : Heap := fun l => (h₁ l).or (h₂ l)
 

@@ -36,6 +36,11 @@
  },
  "name": "threads.parallelCounter",
  "module": "root",
+ "src": {
+  "file": "threads.zig",
+  "module": "threads",
+  "decl_line": 23
+ },
  "params": [
   0
  ],
@@ -51,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -62,7 +68,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 45
   },
   {
    "id": 5,
@@ -109,7 +116,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 10,
@@ -164,7 +172,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 10
   },
   {
    "id": 16,
@@ -253,7 +262,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 22
           },
           {
            "id": 25,
@@ -305,7 +315,8 @@
            "id": 29,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 72
           },
           {
            "id": 30,
@@ -383,7 +394,8 @@
    "id": 37,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 38,
@@ -419,7 +431,8 @@
    "id": 41,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 42,
@@ -474,7 +487,8 @@
    "id": 47,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 20
   },
   {
    "id": 48,
@@ -587,7 +601,8 @@
            "id": 58,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 9
+           "line": 9,
+           "column": 31
           },
           {
            "id": 60,
@@ -603,7 +618,8 @@
            "id": 62,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 9
+           "line": 9,
+           "column": 31
           },
           {
            "id": 63,
@@ -613,6 +629,7 @@
             "ty": 21,
             "func": "Thread.spawn__func_0",
             "module": "std",
+            "instance_key": "0e83ec0d980dfa6a2e9df05dd61704f0cf37ffc49968864c2c4f1c386bf25798",
             "noreturn": false,
             "comptime_fn": "threads.bump",
             "comptime_fn_module": "root"
@@ -660,7 +677,8 @@
              "id": 65,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 7
+             "line": 7,
+             "column": 14
             },
             {
              "id": 66,
@@ -685,7 +703,8 @@
              "id": 68,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 7
+             "line": 7,
+             "column": 19
             },
             {
              "id": 69,
@@ -701,7 +720,8 @@
              "id": 70,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 7
+             "line": 7,
+             "column": 26
             },
             {
              "id": 71,
@@ -960,7 +980,8 @@
                      "id": 94,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 7
+                     "line": 7,
+                     "column": 50
                     },
                     {
                      "id": 95,
@@ -976,7 +997,8 @@
                      "id": 96,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 7
+                     "line": 7,
+                     "column": 50
                     },
                     {
                      "id": 97,
@@ -998,7 +1020,8 @@
                      "id": 98,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 7
+                     "line": 7,
+                     "column": 51
                     },
                     {
                      "id": 99,
@@ -1076,7 +1099,8 @@
              "id": 106,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 9
+             "line": 9,
+             "column": 15
             },
             {
              "id": 107,
@@ -1127,7 +1151,8 @@
            "id": 112,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 10
+           "line": 10,
+           "column": 9
           },
           {
            "id": 113,
@@ -1143,7 +1168,8 @@
            "id": 114,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 10
+           "line": 10,
+           "column": 17
           },
           {
            "id": 115,
@@ -1176,7 +1202,8 @@
            "id": 117,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 11
+           "line": 11,
+           "column": 5
           },
           {
            "id": 118,
@@ -1273,7 +1300,8 @@
    "id": 127,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 12
+   "line": 12,
+   "column": 10
   },
   {
    "id": 128,
@@ -1390,7 +1418,8 @@
            "id": 139,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 12
+           "line": 12,
+           "column": 31
           },
           {
            "id": 140,
@@ -1416,7 +1445,8 @@
            "id": 142,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 12
+           "line": 12,
+           "column": 31
           },
           {
            "id": 143,
@@ -1438,7 +1468,8 @@
            "id": 144,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 12
+           "line": 12,
+           "column": 32
           },
           {
            "id": 145,
@@ -1516,7 +1547,8 @@
    "id": 152,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 13
+   "line": 13,
+   "column": 24
   },
   {
    "id": 153,
@@ -1532,12 +1564,18 @@
    "id": 154,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 13
+   "line": 13,
+   "column": 24
   },
   {
    "id": 155,
    "tag": "dbg_inline_block",
    "ty": 0,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 20
+   },
    "body": [
     {
      "id": 156,
@@ -1594,7 +1632,8 @@
      "id": 161,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 40
     },
     {
      "id": 162,
@@ -1631,7 +1670,8 @@
      "id": 165,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 166,
@@ -1650,7 +1690,8 @@
    "id": 167,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 13
+   "line": 13,
+   "column": 5
   },
   {
    "id": 168,
@@ -2199,6 +2240,7 @@
    "size": "one",
    "const": true,
    "child": 47,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -2212,6 +2254,7 @@
    "size": "one",
    "const": false,
    "child": 48,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -2229,14 +2272,209 @@
    "name": "mem.Allocator.VTable",
    "module": "std",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 49,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 50,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 51,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 52,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
    "module": "std",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "completion",
+     "ty": 53,
+     "offset": 24
+    },
+    {
+     "name": "child_tid",
+     "ty": 54,
+     "offset": 16
+    },
+    {
+     "name": "parent_tid",
+     "ty": 55,
+     "offset": 20
+    },
+    {
+     "name": "mapped",
+     "ty": 56,
+     "offset": 0
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 57,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 58,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 59,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 60,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Thread.Completion__enum_1)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 61,
+     "offset": 0
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(i32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 55,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 62,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  },
+  {
+   "k": "enum",
+   "name": "Thread.Completion__enum_1",
+   "module": "std",
+   "tag": 62,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "running",
+     "value": "0"
+    },
+    {
+     "name": "detached",
+     "value": "1"
+    },
+    {
+     "name": "completed",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

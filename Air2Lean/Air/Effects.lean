@@ -190,8 +190,9 @@ private def switchValues (v : Val) (cases : Array SwitchCase) : Array Val :=
 private def switchBodies (cases : Array SwitchCase) (elseBody : Array Inst) : Array (Array Inst) :=
   cases.map (·.body) ++ #[elseBody]
 
-/-- The classifier (module doc). No wildcard arm: classify every new constructor here. -/
-def Op.effects (op : Op) : Effects :=
+/-- The classifier (module doc) under `--allocator-model mode` (which std calls are models). No
+wildcard arm: classify every new constructor here. -/
+def Op.effectsIn (mode : AllocatorModel) (op : Op) : Effects :=
   match op with
   | .arg _ => .pure #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
@@ -239,7 +240,7 @@ def Op.effects (op : Op) : Effects :=
   | .call callee args =>
     let (memoryOnly, sync, control) := match callee with
       | .func name noreturn .. =>
-        (modelledStdFn name, (threadFn? name).isSome, if noreturn then Control.exit else .next)
+        (modelledStdFn name mode, (threadFn? name).isSome, if noreturn then Control.exit else .next)
       | _ => (false, false, .next)
     { Effects.pure (#[callee] ++ args) with cls := .call, memoryOnly, sync, control }
   | .block body => .flow .control (.block body) #[]
@@ -266,6 +267,10 @@ def Op.effects (op : Op) : Effects :=
     { Effects.pure (inputs.filterMap (·.ref)) with
       cls := .asm, places := refs, access := refs.map (·, .asmStore)
       memoryOnly := op.isSpinHint, sync := op.isSpinHint }
+
+/-- `Op.effectsIn` of the default allocator model; every fact but `memoryOnly` of a call is the
+same in both models. -/
+def Op.effects (op : Op) : Effects := op.effectsIn .std
 
 /-- How `Emit.lean`'s `emitStmts` emits an op: the op table's emitter column. -/
 inductive EmitRoute where

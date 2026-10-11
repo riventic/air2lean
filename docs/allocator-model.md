@@ -48,7 +48,10 @@ original rejection.
   `Zig.returnAddress`: the next value of the explicit oracle `Mem.arbitrary` (query `k` gives
   `arbitrary[k]`, `0` past the end). A theorem over every initial memory therefore covers every
   sequence of return addresses. Allocators only pass the value along. The result must be a
-  `usize`.
+  `usize`. The generated program-start memory takes the oracle as a parameter
+  (`mem0 σ (arbitrary := #[])`), so a statement about `mem0` quantifies over it too, and the
+  `-- air2lean-profile:` header of a translated module records `"allocator_model":"translated"`
+  (its trust base is OSM-01, not the allocator model).
 - **Integer pointer constants** (`@ptrFromInt(c)` at comptime, the exporter's
   `{"unsupported": "int", "off": c}`): a pointer without a block, `⟨none, c⟩`, so every access
   through it is `.illegal`. This is the zero-length allocation sentinel of
@@ -103,7 +106,7 @@ free of error storage (`Node` and its bytes), `*anyopaque` fields in such a grap
 Allocator milestone 1 proves the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba`,
 `FBA.allocSpec`, `FBA.fallocSpec`) and the translated `PageAllocator`
 (`tests/roadmap/alloc-translated`: `free`/`resize`/`remap` on x86_64-linux and aarch64-macos,
-`alloc` on x86_64-linux for alignments up to a page, partial correctness) against the generic
+`alloc` on x86_64-linux for every alignment, partial correctness) against the generic
 specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
 code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
 hand-written models below. They are not removed in milestone 1; each step removes one only after
