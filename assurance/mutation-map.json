@@ -136,7 +136,12 @@
           "category": "other"
         },
         {
-          "name": "slice-index-unchecked",
+          "name": "item-read-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "item-pointer-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         },
@@ -2256,7 +2261,12 @@
           "category": "other"
         },
         {
-          "name": "slice-index-unchecked",
+          "name": "item-read-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "item-pointer-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         },

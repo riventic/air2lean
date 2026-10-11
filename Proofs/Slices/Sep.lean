@@ -101,7 +101,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
   by_cases hlt : s.i.toNat < s.j.toNat
   · have hio : Zig.add false s.i 1 = pure (s.i + 1) := by simp [Zig.add, BitVec.uaddOverflow]; omega
     have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
-    sep_unfold [reverse.loop15, hlt, Zig.checkIndex,
+    sep_unfold [reverse.loop15, hlt,
       show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
     have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
