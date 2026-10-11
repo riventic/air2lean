@@ -2,9 +2,9 @@
   "schema": 1,
   "status": "retained-export-and-native-run; hashes do not attest that a compiler ran",
   "exporter": {
-    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 59b90ea989358bec4e81e4545514a3d54f2b2b91b2421ac07534a66a8cf91be7",
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 40759ec6b90f207e56328b791cd4e1bf83a2537057910e7dbb55e555e3fb7528",
     "zig_patch_json_zig": "zig-patch/air-json/json.zig of the batch-10 integration tree",
-    "json_zig_sha256": "022d9b94ac8feaeb36d93b3d9aacea78a0f9726d5a753b33ecebd1646570ba49",
+    "json_zig_sha256": "a9c31f3ccab71caa7f4fd287c16f7e7c1db1e40bd45debc362e72da5a4780e46",
     "install": "built by zig-patch/build.sh from that tree"
   },
   "export_command": "ZIG_AIR_JSON_FILTER=<try_pointers.|try_aliases.> zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",
