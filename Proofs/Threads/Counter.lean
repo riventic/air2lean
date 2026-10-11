@@ -260,7 +260,9 @@ theorem cntAt_locIdx {tot li : Nat} {m m₁ : Mem} (hc : CntOk tot m)
   cases hf : m.atomics.findIdx? isCnt with
   | none =>
     obtain ⟨htot, hdec, hno⟩ := hnone hf
-    obtain ⟨rfl, rfl⟩ := Proto.locIdx_new hf h
+    obtain ⟨rfl, rfl⟩ := Proto.locIdx_new hf (fun l hl hb _ _ => by
+      have := Array.findIdx?_eq_none_iff.mp hf l hl
+      simp [isCnt, hb, (honly l hl hb).1] at this) h
     change CntAt tot m.atomics.size
       { m with atomics := m.atomics.push (loc0 m), nextMsg := m.nextMsg + 1 } ∧ _
     have hget : (m.atomics.push (loc0 m))[m.atomics.size]! = loc0 m := by

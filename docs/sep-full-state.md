@@ -144,7 +144,8 @@ addrOf ⟨some b, off⟩ a := ∃ A, ⟪A + off = a⟫ ⋆ known b A     -- know
 
 The invariant owns only knowledge of the mapping, so `toyFree_spec` keeps it, and `cycle_spec`
 (alloc, then free, then alloc) goes through. Compare the legacy obstruction theorems:
-`alloc_no_triple_at_start` builds a memory `odd`, and `alloc_no_triple_after_free` builds
+`alloc_no_triple_at_start` built a memory `odd` (O3, since resolved in the model: an ordered
+mixed-size access retires the old location), and `alloc_no_triple_after_free` builds
 `hintedLost`, each with the same heap as a good memory. In the full logic both differ from the
 good memory in the resources a precondition can see. `odd` differs in the hint bytes' tag
 (`inv_no_odd`); `hintedLost` lacks the knowledge `known 6 A` (`inv_no_lost`).

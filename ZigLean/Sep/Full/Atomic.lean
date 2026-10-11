@@ -109,7 +109,6 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
     ShapesWF (shapes m₁) ∧
     ∀ b' x, tagOf (shapes m₁) b' x =
       if Covers b' x (b, o, len) then some (o, len) else tagOf (shapes m) b' x := by
-  have hupd := locIdx_updates h
   cases hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
   | some i =>
     obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
@@ -130,7 +129,7 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
       simp
     have hsh : shapes m₁ = shapes m := by
       rw [hm₁]; exact shapes_set hlt (by simp [ALoc.shape, hget])
-    refine ⟨hupd, by simp only [hsz]; exact hlt, by rw [hat, hget]; exact hp.1,
+    refine ⟨⟨_, _, hm₁⟩, by simp only [hsz]; exact hlt, by rw [hat, hget]; exact hp.1,
       by rw [hat, hget]; exact hp.2, by rw [hat]; exact hpos, by rw [hat]; exact hback,
       by rw [hsh]; exact hw, fun b' x => ?_⟩
     rw [hsh]
@@ -141,7 +140,6 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
       simpa [ALoc.shape, hp.2, hl] using this
     · rfl
   | none =>
-    obtain ⟨rfl, hm₁⟩ := locIdx_new hi h
     -- No location overlaps the bytes: one would be `(b, o, len)`, found by `findIdx?`.
     have hno : ∀ s ∈ shapes m, s.1 = b → o < s.2.1 + s.2.2 → s.2.1 < o + len → False := by
       intro s hs hb h1 h2
@@ -151,11 +149,13 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
       have := Array.findIdx?_eq_none_iff.mp hi m.atomics[j] (Array.getElem_mem hj)
       simp only [ALoc.shape] at hb ho
       simp [hb, ho] at this
+    obtain ⟨rfl, hm₁⟩ := locIdx_new hi (fun l hl hb h1 h2 =>
+      hno (Full.ALoc.shape l) (List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩) hb h1 h2) h
     have hsh : shapes m₁ = shapes m ++ [(b, o, len)] := by
       rw [hm₁]; simp [shapes, ALoc.shape]
     have hat : m₁.atomics[m.atomics.size]! = firstLoc m b o len := by
       rw [hm₁]; simp [firstLoc, firstMsg]
-    refine ⟨hupd, by rw [hm₁]; simp, by rw [hat]; rfl, by rw [hat]; rfl,
+    refine ⟨⟨_, _, hm₁⟩, by rw [hm₁]; simp, by rw [hat]; rfl, by rw [hat]; rfl,
       by rw [hat]; simp [firstLoc], by rw [hat]; simp [ALoc.lastBytes, firstLoc, firstMsg], ?_,
       fun b' x => ?_⟩
     · rw [hsh]

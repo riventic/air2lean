@@ -10,12 +10,15 @@ import ZigLean.Sep.Full.AllocSpec
 bytes) splits into the precondition's part and a frame. Two parts of `Mem` that the translated
 `std.heap.PageAllocator.alloc` (Zig 0.16.0, x86_64-linux) reads are not in the heap:
 
-* **O3, atomic locations.** `addr_hint` is read with `@atomicLoad(.unordered)` and written with
-  `@cmpxchgStrong`. The model keeps atomic locations in `Mem.atomics`; a location of another size
-  at the same bytes makes `locIdx` throw `.unspecified`. `odd` has the heap of `mem0` (the program
-  start) and such a location, so no precondition that holds at program start gives a triple for
-  `alloc` (`alloc_no_triple_at_start`), and no allocator invariant that holds at program start
-  satisfies `AllocSpec` (`not_allocSpec_at_start`), in any sound logic.
+* **O3, atomic locations (resolved by the model, regression).** `addr_hint` is read with
+  `@atomicLoad(.unordered)` and written with `@cmpxchgStrong`. The model keeps atomic locations in
+  `Mem.atomics`; a location of another size at the same bytes used to make `locIdx` throw
+  `.unspecified` whatever the order of the accesses, so no precondition that held at program
+  start gave a triple for `alloc`. Under the mixed-size policy of `ZigLean/Mem/Thread.lean`
+  (`retireAt`) an overlapping location whose accesses all happened before the new access is
+  retired, as LLVM allows; only a racing mixed-size access is `.unspecified`, and a sequential
+  memory has none. `odd` (the heap of `mem0` and a 4-byte location at `addr_hint`) now gives a
+  result (`alloc_odd`).
 * **O1, dead blocks.** After `free` of the last allocation, `addr_hint` points into an unmapped
   (dead) block; the next `alloc` reads its address (`@intFromPtr`) and checks the alignment of the
   derived hint (`@ptrFromInt` to `[*]align(page_size_min) u8`). Dead blocks are not in the heap.
@@ -91,7 +94,8 @@ theorem odd_heap : odd.heap = (mem0 .fresh).heap := rfl
 theorem odd_seq : odd.Seq := seq_of_blocks rfl (by decide)
 
 set_option maxHeartbeats 0 in
-theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = some .unspecified := by
+/-- **O3 regression.** The 4-byte location is retired; `alloc` does not fail. -/
+theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = none := by
   decide +kernel
 
 /-- `alloc` ignores the context pointer and the return address. -/
@@ -102,26 +106,6 @@ theorem alloc_args (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) :
     delta heap_PageAllocator_alloc; rfl
   show (fun m => Sched.run dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len _ ra) m) = _
   rw [e]; rfl
-
-set_option maxHeartbeats 0 in
-/-- **O3.** No precondition that holds in (a part of) the heap at program start makes
-`alloc(1 byte, alignment 1)` a triple of any sound logic. -/
-theorem alloc_no_triple_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
-    (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
-    (hm : (mem0 .fresh).heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
-  intro ht
-  rw [alloc_args] at ht
-  exact no_error_of_triple (hL ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
-
-/-- So no allocator invariant that holds at program start and admits a 1-byte request satisfies
-`AllocSpec`, in any sound logic. -/
-theorem not_allocSpec_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (I : AllocInv)
-    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ (mem0 .fresh).heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
-    ¬ AllocSpec L vt c I := by
-  intro hs
-  obtain ⟨hP, hF, hd, hm, hp⟩ := hI
-  exact alloc_no_triple_at_start L hL c 0 I.own _ hd hm hp
-    (hs.alloc 1 0 0 (by decide) (by decide) hfit)
 
 /-! ## O1: the hint points into a dead block -/
 

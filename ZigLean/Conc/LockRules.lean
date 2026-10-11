@@ -389,7 +389,7 @@ theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G
       (by rw [hg]; exact hi.loc.plain i _ hl) h
     exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ h => h, .of_eq rfl⟩
   | none =>
-    obtain ⟨rfl, rfl⟩ := locIdx_new hf h
+    obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hi.loc.only) h
     have hno : ∀ i l, ¬ L.Loc m i l := fun i l hl => by rw [hl.1] at hf; cases hf
     let nl : ALoc := firstLoc m L.b L.o 4
     have hnl : L.Loc { m with atomics := m.atomics.push nl, nextMsg := m.nextMsg + 1 }

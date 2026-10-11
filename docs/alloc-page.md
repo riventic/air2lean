@@ -18,19 +18,20 @@ part and a frame. Everything in `Mem` outside the live bytes is unconstrained.
 
 | | what the allocator reads | why no assertion constrains it | evidence |
 |---|---|---|---|
-| O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes makes `locIdx` throw `.unspecified` | `not_allocSpec_at_start`, `alloc_no_triple_at_start` |
+| O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes made `locIdx` throw `.unspecified`. Resolved in the model: an overlapping location whose accesses all happened before is retired (`retireAt`); only racing mixed sizes are `.unspecified` | `alloc_odd` (regression: no error) |
 | O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing gives `.illegal` (a misaligned block, `.panic`, is not mechanised) | `alloc_no_triple_after_free` |
 | O2 | the size of the mapping, in `free` (`munmap(ptr[0..alignForward(len)])`) and `resize`/`remap` (tail `munmap`, `mremap` of the whole mapping) | `granted I p k bs = region p (2^k) bs ∗ I.tok p n k` hides the block of the region; when `len` is a page multiple the mapping has no tail for the token to own, so no token pins the mapping's size: with a larger mapping whose extra pages are in the frame, `free` is a legal prefix `munmap` that changes the frame's cells | argument below (not mechanised) |
 
 The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (checked by
 `check.sh`, axioms `propext`, `Classical.choice`, `Quot.sound`):
 
-* `not_allocSpec_at_start : ∀ L c I, (∃ split of mem0's heap with I.own) → I.fits 1 0 → ¬ AllocSpec L vt c I`
-  — the analogue of `Static.not_allocSpec`. `vt` is assembled from the translated entry
-  functions (not read from the generated vtable global); `alloc` (a `ConcM` function: it reaches
-  sync ops at the atomics) is the scheduler's run of one thread (fuel 16, oracle `0`).
-* `alloc_no_triple_at_start`: `odd` has `mem0`'s heap and a 4-byte atomic location at
-  `addr_hint`; `alloc(1, align 1)` from it throws `.unspecified` (`decide +kernel`).
+* `vt` is assembled from the translated entry functions (not read from the generated vtable
+  global); `alloc` (a `ConcM` function: it reaches sync ops at the atomics) is the scheduler's run
+  of one thread (fuel 16, oracle `0`).
+* O3 is resolved in the model (regression `alloc_odd`): `odd` has `mem0`'s heap and a 4-byte
+  atomic location at `addr_hint`. `alloc(1, align 1)` from it used to throw `.unspecified`
+  (`not_allocSpec_at_start`, `alloc_no_triple_at_start`). The mixed-size policy now retires a
+  location whose accesses all happened before (`retireAt`, `docs/weak-cas.md`), so it succeeds.
 * `alloc_no_triple_after_free`: `hinted` is the state after `alloc` then `free` (the `#guard`s
   check that the real run reaches this shape and that `alloc` succeeds from it); `hintedLost` has
   the same heap and no block 6; `alloc` from it throws `.illegal`. Both have no atomic location,

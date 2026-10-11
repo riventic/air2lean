@@ -606,10 +606,21 @@ theorem locIdx_found {m m' : Mem} {b o len i r : Nat}
       · rfl
     simp only [Array.set!_eq_setIfInBounds, e]
 
-/-- The first atomic op at `(b, o)`: a new location, with the block's bytes as its first
-message. -/
+/-- No location overlaps the bytes `o..o+len` of block `b`: every overlapping one would start at
+`o`, and none does. -/
+theorem noOverlap_of_only {m : Mem} {b o len : Nat}
+    (hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none)
+    (honly : ∀ l ∈ m.atomics, l.block = b → l.off < o + len → o < l.off + l.len → l.off = o) :
+    ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len → False := by
+  intro l hl hb h1 h2
+  have := Array.findIdx?_eq_none_iff.mp hi l hl
+  simp [hb, honly l hl hb h2 h1] at this
+
+/-- The first atomic op at `(b, o)`, where no location overlaps the bytes: a new location, with
+the block's bytes as its first message. -/
 theorem locIdx_new {m m' : Mem} {b o len r : Nat}
     (hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none)
+    (hno : ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len → False)
     (h : ((locIdx b o len).run m).run = some (.ok (r, m'))) :
     r = m.atomics.size ∧ m' = { m with
       atomics := m.atomics.push
@@ -622,7 +633,10 @@ theorem locIdx_new {m m' : Mem} {b o len r : Nat}
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   simp only [hi] at h₁
   split at h₁
-  · exact (MemM.throw_ok h₁).elim
+  · rename_i hc
+    obtain ⟨l, hl, hc⟩ := Array.any_eq_true'.mp hc
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
+    exact (hno l hl hc.1.1 hc.1.2 hc.2).elim
   · obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
     have := MemM.set_ok hs
     subst this
@@ -648,7 +662,7 @@ theorem locIdx_single {m m₁ : Mem} {b o len li : Nat}
     li = 0 ∧ ∃ l k, m₁ = { m with atomics := #[l], nextMsg := k } ∧
       ((m.atomics = #[] ∧ l = firstLoc m b o len) ∨ m.atomics = #[l]) := by
   rcases h0 with ha | ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
-  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) h
+  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) (by rw [ha]; simp) h
     exact ⟨by rw [ha]; rfl, firstLoc m b o len, m.nextMsg + 1, by rw [ha]; rfl, .inl ⟨ha, rfl⟩⟩
   · have hfind : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some 0 := by
       rw [ha]; simp [hlb, hlo]
@@ -891,29 +905,45 @@ theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} 
   obtain ⟨rfl, rfl⟩ := he
   exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
 
+/-- A mixed-size access that retires locations changes only `atomics`, `seen` and `nextMsg`. -/
+theorem retireAt_updates {m m' : Mem} {b o len li : Nat}
+    (h : ((retireAt b o len).run m).run = some (.ok (li, m'))) :
+    ∃ a s next, m' = { m with atomics := a, seen := s, nextMsg := next } := by
+  unfold retireAt at h
+  obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  dsimp only at h1
+  split at h1
+  · exact (MemM.throw_ok h1).elim
+  · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+    have := MemM.set_ok hs
+    subst this
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+    exact ⟨_, _, _, rfl⟩
+
 theorem locIdx_updates {m m' : Mem} {b o len li : Nat}
     (h : ((locIdx b o len).run m).run = some (.ok (li, m'))) :
-    ∃ a next, m' = { m with atomics := a, nextMsg := next } := by
+    ∃ a s next, m' = { m with atomics := a, seen := s, nextMsg := next } := by
   unfold locIdx at h
   obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   split at h1
   · dsimp only at h1
     split at h1
-    · exact (MemM.throw_ok h1).elim
+    · exact retireAt_updates h1
     · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
       have := MemM.set_ok hs
       subst this
       obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact ⟨_, _, rfl⟩
+      exact ⟨_, _, _, rfl⟩
   · dsimp only at h1
     split at h1
-    · exact (MemM.throw_ok h1).elim
+    · exact retireAt_updates h1
     · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
       have := MemM.set_ok hs
       subst this
       obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact ⟨_, _, rfl⟩
+      exact ⟨_, _, _, rfl⟩
 
 theorem casMarkWrite_ok {n align : Nat} {p : Ptr} {m m₁ m₂ : Mem} {b o li : Nat} {blk : Block}
     (ha : m.accessW p (intSize n) align = pure (b, blk, o))
@@ -921,7 +951,7 @@ theorem casMarkWrite_ok {n align : Nat} {p : Ptr} {m m₁ m₂ : Mem} {b o li : 
       some (.ok (li, m₁)))
     (h : ((casMarkWrite n align p).run m₁).run = some (.ok ((), m₂))) :
     NoRace m₁ b o (intSize n) .atomicWrite ∧ m₂ = m₁.recordAt b o (intSize n) .atomicWrite := by
-  obtain ⟨a, next, hmem⟩ := locIdx_updates hl
+  obtain ⟨a, sn, next, hmem⟩ := locIdx_updates hl
   have ha₁ : m₁.accessW p (intSize n) align = pure (b, blk, o) := by
     rw [hmem]; exact ha
   unfold casMarkWrite at h
