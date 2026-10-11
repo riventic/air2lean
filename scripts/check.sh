@@ -11,6 +11,11 @@
 # translations in place of the committed ones. Its path is written to
 # $AIR2LEAN_CHECK_REPORT_DIR/build-tree; later steps that build this version's proofs run there.
 #
+# Steps 1-2 run for each example in parallel (scripts/par.py: AIR2LEAN_JOBS workers, bounded by
+# memory), each example's output written in example order, so the output and every file are the
+# same for any number of workers. Every example is checked; a failure lists the failed ones and
+# stops before step 3. Step 3 builds every module in one `lake build` (Lake runs it in parallel).
+#
 # Usage: check.sh
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
@@ -34,6 +39,7 @@
 #                         also when the test runs in a check tree. Default: tests/diff/out/report.json.
 #   AIR2LEAN_STAGE_TIMEOUT  Seconds per stage (AIR dump, translation, lake build, diff) (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
+#   AIR2LEAN_JOBS         Examples checked at once (steps 1-2; scripts/par.py). Default: the CPU count.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -54,10 +60,11 @@ workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
 case "$workflow_stage_timeout" in
   '' | *[!0-9]*) echo "error: AIR2LEAN_STAGE_TIMEOUT must be whole seconds (0 disables)" >&2; exit 2 ;;
 esac
-air_dir='' cmp_dir=''
+air_dir='' cmp_dir='' results_dir=''
 cleanup() {
   [ -z "$air_dir" ] || rm -rf -- "$air_dir"
   [ -z "$cmp_dir" ] || rm -rf -- "$cmp_dir"
+  [ -z "$results_dir" ] || rm -rf -- "$results_dir"
 }
 trap cleanup EXIT
 trap 'workflow_interrupt 129' HUP
@@ -75,29 +82,17 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 air_export=()
 [ -z "${AIR2LEAN_CAS_DIR:-}" ] || air_export=(python3 -B "$repo_root/scripts/cas.py" air --)
 
-# The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
-# (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
-# version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
-if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
-  examples=$AIR2LEAN_EXAMPLES
-else
-  source "$repo_root/scripts/example-selection.sh"
-  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
-fi
-gen_targets=()
-replacements=()
 report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
-rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
-if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
-  # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
-  python3 scripts/normalize-generated.py proof-status
-fi
+# <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
+# `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
+namespace_of() { printf '%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"; }
 
-for ex in $examples; do
-  # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
-  # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
-  Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
-  gen_targets+=("Proofs.$Ex.Gen")
+if [ "${1:-}" = --example ]; then
+  # Steps 1-2 for one example, run by scripts/par.py below. When the checkout's module is not
+  # this translation, the `--replace` operand of scripts/check-tree.py is written to $3.
+  [ "$#" = 3 ] || { echo "usage: check.sh --example <ex> <result-file>" >&2; exit 2; }
+  ex=$2 result=$3
+  Ex=$(namespace_of "$ex")
   # One golden set for every Zig version (tests/golden/<ex>/air/). A file in
   # tests/golden/<version>/<ex>/air/ replaces the shared file of the same name for that version
   # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
@@ -213,14 +208,44 @@ for ex in $examples; do
   fi
   # Build and test the new translation: the checkout's module only when it is the same one.
   if ! python3 scripts/normalize-generated.py compare "Proofs/$Ex/Gen.lean" "$generated" "$report" 2>/dev/null; then
-    replacements+=(--replace "Proofs/$Ex/Gen.lean=$report_dir/$ex.Gen.lean")
+    printf '%s\n' "Proofs/$Ex/Gen.lean=$report_dir/$ex.Gen.lean" >"$result"
   fi
+  exit 0  # The EXIT trap removes air_dir and cmp_dir.
+fi
+[ "$#" = 0 ] || { echo "usage: check.sh" >&2; exit 2; }
 
-  rm -rf "$air_dir" "$cmp_dir"
-  air_dir='' cmp_dir=''
+# The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
+# (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
+# version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
+rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
+if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
+  # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
+  python3 scripts/normalize-generated.py proof-status
+fi
+
+gen_targets=()
+for ex in $examples; do
+  case "$ex" in *[!a-zA-Z0-9_-]* | "") echo "error: invalid example: $ex" >&2; exit 1 ;; esac
+  gen_targets+=("Proofs.$(namespace_of "$ex").Gen")
+done
+[ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
+# Every example runs `lake exe air2lean`: build it once, so that no two examples build it.
+workflow_run_stage lake build -q air2lean
+results_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
+# Each example's stages keep their own timeout; the examples together have none.
+# shellcheck disable=SC2086  # $examples is a space-separated list
+workflow_run_jobs --mem-mib 512 -- "$BASH" "$repo_root/scripts/check.sh" --example {} "$results_dir/{}" ::: $examples
+replacements=()
+for ex in $examples; do
+  if [ -s "$results_dir/$ex" ]; then replacements+=(--replace "$(cat "$results_dir/$ex")"); fi
 done
 
-[ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 tree=$repo_root
 if [ "${#replacements[@]}" -gt 0 ]; then
   tree=${AIR2LEAN_CHECK_TREE:-$repo_root/.lake/check-tree/$zig_version}

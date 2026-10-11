@@ -115,6 +115,8 @@ elif kind == 'zig':
         pathlib.Path(os.environ['ZIG_AIR_JSON_DIR'], 'demo.foo.json').write_text('{}')
 elif kind == 'air2lean':
     translate(args[args.index('-o') + 1])
+elif kind == 'lake' and args == ['build', '-q', 'air2lean']:
+    pass  # check.sh builds the translator once before its examples.
 elif kind == 'lake' and args[:1] == ['build']:
     if mode == 'build-hang':
         hang()
@@ -462,7 +464,7 @@ class Check(Stubbed):
         super().setUp()
         self.repo = self.base / 'repo'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('check.sh', 'workflow-common.sh', 'safe-output.py'):
+        for name in ('check.sh', 'workflow-common.sh', 'safe-output.py', 'par.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
         (self.repo / 'examples/demo').mkdir(parents=True)
         (self.repo / 'examples/demo/demo.zig').write_text('export fn foo() u32 { return 1; }\n')

@@ -125,14 +125,22 @@ functions_of() {
 
 echo "== building zig harnesses ==" >&2
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
-for ex in $examples; do
+# One job per example (scripts/par.py: AIR2LEAN_JOBS workers, output in example order). A harness
+# writes only tests/diff/out/zig/<ex>/; each case keeps its own deadline and memory limit
+# (tests/diff/common.zig `forkCall`).
+native_harness() {
+  local ex=$1
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
   # shellcheck disable=SC2086  # $backend_flag is empty or one flag
   "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$build_dir/$ex" \
     --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" \
     -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig
   "$build_dir/$ex"
-done
+}
+export -f native_harness
+export zig_bin optimize backend_flag build_dir
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/par.py --mem-mib 1024 -- "$BASH" -c 'set -euo pipefail; native_harness "$1"' native_harness {} ::: $examples
 
 diff_phase=build_libm
 echo "== building libm ==" >&2
@@ -237,9 +245,19 @@ echo "== building + running lean side ==" >&2
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
-(cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
-# Diff.lean runs only the examples this script compares.
-AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
+# The schedule search test, then Diff.lean once per compared example (it writes only
+# tests/diff/out/lean/<ex>/), in parallel (scripts/par.py).
+model_side() {
+  if [ "$1" = ScheduleSearchTest ]; then
+    cd tests/diff && lake env lean --run ScheduleSearchTest.lean
+  else
+    AIR2LEAN_EXAMPLES=$1 tests/diff/.lake/build/bin/difftest
+  fi
+}
+export -f model_side
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/par.py --mem-mib 2048 -- "$BASH" -c 'set -euo pipefail; model_side "$1"' model_side {} \
+  ::: ScheduleSearchTest $examples
 
 # Classifies one JSONL output line into $kind (ok|fail|diverge) and $val. For ok: `null` as the
 # literal string "null"; an error union's `{"err":"Name"}` as "err:Name"; otherwise the decimal
