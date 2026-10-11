@@ -171,7 +171,8 @@ FILE_SUFFIXES = ('.py', '.sh', '.lean', '.zig', '.json', '.md', '.toml', '.txt',
 
 
 def changed_paths(root):
-    base = subprocess.run(['git', '-C', str(root), 'merge-base', 'origin/main', 'HEAD'],
+    # AIR2LEAN_LOCAL_BASE: compare with another revision than origin/main.
+    base = subprocess.run(['git', '-C', str(root), 'merge-base', os.environ.get('AIR2LEAN_LOCAL_BASE', 'origin/main'), 'HEAD'],
                           capture_output=True, text=True)
     if base.returncode:
         return None
