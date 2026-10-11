@@ -214,7 +214,12 @@ instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wa
 (observed in 0.16.0). `Check.lean`'s `checkLlvmPayloadConstant` fails closed for them. -/
 def euPayloadMisplacedBackends : List String := [Target.llvmBackend, "stage2_wasm"]
 
-def misplacesEuPayload (d : Dialect) : Bool := euPayloadMisplacedBackends.contains d.backend
+/-- The dialect may use a backend of `euPayloadMisplacedBackends`: it names one, or it names none
+(a legacy schema 1–11 file, a constructed function: `unverified`), so the backend that compiled
+the program is unknown and the LLVM backend, the default of every optimized build, cannot be
+excluded. -/
+def misplacesEuPayload (d : Dialect) : Bool :=
+  euPayloadMisplacedBackends.contains d.backend || d.backend == "unverified"
 
 end Dialect
 

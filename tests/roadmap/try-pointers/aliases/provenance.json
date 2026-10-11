@@ -13,8 +13,8 @@
     "TryAliases/Gen.lean": "6b1c5ed62d83873a252a5a2a2fc8e00903de165b8c3bf25fe59d77a905405a7a"
   },
   "qualification": {
-    "compiler_export": "pending",
-    "native": "pending",
-    "lean": "pending"
+    "compiler_export": "passed: ../compiler-qualification.json (air-fresh/0.16.0 translates to the retained TryAliases/Gen.lean up to the profile header)",
+    "native": "passed: ../compiler-qualification.json (zig test try_aliases.zig, 8 of 8)",
+    "lean": "pending: proofs and runtime run on the retained hand-written-AIR translation, not on the export"
   }
 }
