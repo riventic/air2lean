@@ -58,6 +58,15 @@ theorem half_add_half (q : Frac) : q.half.add q.half = q := eq (by simp only [ad
 
 theorem half_pos {q : Frac} (h : 0 < q.val) : 0 < q.half.val := by simp only [half]; grind
 
+/-- What is left of `q` after its part `q'`. -/
+def diff (q q' : Frac) (h : q'.val ≤ q.val) : Frac := ⟨q.val - q'.val, by grind⟩
+
+theorem add_diff {q q' : Frac} (h : q'.val ≤ q.val) : q'.add (q.diff q' h) = q :=
+  eq (by simp only [add, diff]; grind)
+
+theorem diff_pos {q q' : Frac} (h : q'.val < q.val) : 0 < (q.diff q' (Rat.le_of_lt h)).val := by
+  simp only [diff]; grind
+
 end Frac
 
 /-! ## The claims on one block -/
@@ -1004,6 +1013,80 @@ theorem EUpd.revoke {e' : Nat} (he : e < e') :
     · simp [ECell.shareT, ECell.share]
     · have : γ₁ ≠ γp := fun x => hnp γ e' ep (x ▸ hls)
       simp [ECell.shareT, ECell.tshare, this]
+
+open Classical in
+/-- A child's weight grows with its receipts' fraction. -/
+theorem cwt_le_of_ftot {ls : LStat} {w : STag} {β : Nat → Nat → Rat} {γ e : Nat} {R R' : Nat → Frac}
+    {n n' : Nat} (h : ftot R n ≤ ftot R' n') : cwt ls w β γ e R n ≤ cwt ls w β γ e R' n' := by
+  unfold cwt; split
+  · grind
+  · split <;> grind
+
+/-- **Weaken a receipt's bound**: a receipt claims less at a lower bound (and gives back a share
+at the lower bound). Any ledger status; the fraction is unchanged. -/
+theorem EUpd.rweaken (h : k' ≤ k) : EUpd (brcpt b q k γ e) (brcpt b q k' γ e) := by
+  refine EUpd.ext1L (L := Ghost.unit) (fun _ => rfl) (b := b) (c := ECell.rcpt γ e q k)
+    (c' := ECell.rcpt γ e q k') fun r hr => ?_
+  have hq := hr.1
+  refine ⟨by rw [Ghost.unit_add]; exact brcpt_eq hr, by rw [Ghost.unit_add]; exact ⟨hq, rfl, rfl, rfl⟩,
+    fun ls _ _ => ⟨by funext x; simp, fun d n N E => ⟨Max.max n (k + 1), N, E, fun ⟨β, hb⟩ => ⟨β, ?_⟩⟩,
+      fun j hj => ?_, fun hf γ₁ e₁ j hfu => ?_, fun γ₁ _ _ hz e₁ j => ?_⟩⟩
+  · -- every world weighs no more below `n` than before below `max n (k + 1)`
+    have hm : ∀ w, ((ECell.rcpt γ e q k').add d).mass ls β w n N E ≤
+        ((ECell.rcpt γ e q k).add d).mass ls β w (Max.max n (k + 1)) N E := fun w => by
+      have h1 : ftot (((ECell.rcpt γ e q k').add d).tg w) n ≤
+          ftot (((ECell.rcpt γ e q k).add d).tg w) (Max.max n (k + 1)) := by
+        rw [ECell.ftot_tg_add, ECell.ftot_tg_add, ECell.ftot_rcpt_tg, ECell.ftot_rcpt_tg]
+        have := ftot_mono (d.tg w) (Nat.le_max_left n (k + 1)); grind
+      have h2 := gsum_le (f := fun γ₁ e₁ => cwt ls w β γ₁ e₁ (((ECell.rcpt γ e q k').add d).rc γ₁ e₁) n)
+        (g := fun γ₁ e₁ => cwt ls w β γ₁ e₁ (((ECell.rcpt γ e q k).add d).rc γ₁ e₁) (Max.max n (k + 1)))
+        (fun γ₁ e₁ => cwt_le_of_ftot (by
+          rw [ECell.ftot_rc_add, ECell.ftot_rc_add, ECell.ftot_rcpt, ECell.ftot_rcpt]
+          have := ftot_mono (d.rc γ₁ e₁) (Nat.le_max_left n (k + 1)); have := q.nonneg
+          simp only [show k < Max.max n (k + 1) by omega, and_true]
+          split <;> split <;> grind)) N E
+      simp only [ECell.mass]; grind
+    exact ⟨Rat.le_trans (hm none) hb.1, fun γ₁ e₁ h1 h2 ha => Rat.le_trans (hm _) (hb.2 γ₁ e₁ h1 h2 ha)⟩
+  · -- the receipt at `k'` is covered by the one at `k`
+    left
+    rcases hj with ⟨u, -, hp⟩ | ⟨γ₁, e₁, hl, hp⟩
+    · rw [ECell.rcpt_tg] at hp; simp at hp
+    · rw [ECell.rcpt_rc_val] at hp
+      split at hp
+      · rename_i hx; obtain ⟨rfl, rfl, rfl⟩ := hx
+        exact ⟨k, h, .inr ⟨γ₁, e₁, hl, by rw [ECell.rcpt_rc_val]; simp [hq]⟩⟩
+      · simp at hp
+  · refine ⟨by simp, ?_⟩
+    rw [ECell.rcpt_rc_val]
+    split
+    · rename_i hx; obtain ⟨rfl, rfl, -⟩ := hx
+      have := (hf γ₁ e₁ k hfu).2; rw [ECell.rcpt_rc_val] at this; simp at this; grind
+    · rfl
+  · refine ⟨by simp, ?_⟩
+    rw [ECell.rcpt_rc_val]
+    split
+    · rename_i hx; obtain ⟨rfl, rfl, -⟩ := hx
+      have := (hz e₁ k).2; rw [ECell.rcpt_rc_val] at this; simp at this; grind
+    · rfl
+
+/-- **Join two receipts** of one tag at the lower bound (`EUpd.rweaken`, `brcpt_split`): a
+grant's receipt that was split, part returned and lent again at another bound, is one receipt
+again. -/
+theorem EUpd.rjoin {q₁ q₂ : Frac} {k₁ k₂ : Nat} :
+    EUpd (brcpt b q₁ k₁ γ e ⋆ brcpt b q₂ k₂ γ e) (brcpt b (q₁.add q₂) (Min.min k₁ k₂) γ e) :=
+  EUpd.trans (EUpd.frame (EUpd.rweaken (Nat.min_le_left k₁ k₂)))
+    (EUpd.trans (EUpd.frameL (EUpd.rweaken (Nat.min_le_right k₁ k₂)))
+      (EUpd.of_imp fun r h => by
+        obtain ⟨r₁, r₂, -, -, h1, h2⟩ := id h
+        exact (brcpt_split h1.1 h2.1).mpr h))
+
+/-- **Give a tagged share back** against a receipt at any bound: the share is weakened to the
+receipt's bound first (`EUpd.weaken`, `EUpd.returnT`). -/
+theorem EUpd.returnTw :
+    EUpd (gauthP γ e M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e))
+      (gauthP γ e M p ⋆ bshare b q k p) :=
+  EUpd.trans (EUpd.frameL (EUpd.frame (EUpd.weaken (Nat.min_le_left k' k))))
+    (EUpd.returnT (Nat.min_le_right k' k))
 
 end Tags
 

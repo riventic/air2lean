@@ -319,11 +319,15 @@ theorem FAllocInv.granted_intro (I : FAllocInv) {p : Ptr} {k A S : Nat} {K : Blo
 /-- **The whole-region `resize` is a corollary of the refined one**: a client that holds the whole
 grant splits off the bytes a shrink releases, keeps the rest (relabelled to the new token's labels:
 `EUpd.relabel`) and joins the new bytes of a growth to it. -/
-theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
-    (h : FAllocSpec L vt ctx I) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
-    (hk : k < 64) (hn : 0 < n.toNat) (hf : I.fits n.toNat k) (hs : s.len.toNat = bs.size)
-    (hb : 0 < bs.size) :
-    L.T (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra) (I.resizePost s.ptr k bs n.toNat) := by
+theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {s : Slice}
+    {k : Nat} {n : BitVec 64} {bs : Array Byte}
+    (hr : ∀ (A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte), q'.val ≤ q.val →
+      (n.toNat < s.len.toNat → q' = q) →
+      L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+        FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
+        (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
+    (hs : s.len.toNat = bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k bs) c (I.resizePost s.ptr k bs n.toNat) := by
   refine L.pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
       FAssn.ex fun q : Frac =>
         up (regionIn s.ptr A S K (2 ^ k) bs) ⋆ (I.own ⋆ I.held s.ptr bs.size k A S K q q)) ?_ ?_
@@ -339,8 +343,7 @@ theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I :
   · -- a shrink: split off the released bytes
     have hks : (bs.extract 0 n.toNat).size = n.toNat := by simp; omega
     have hts : (bs.extract n.toNat bs.size).size = bs.size - n.toNat := by simp
-    have ht := h.resize s k n ra A S K q q (bs.extract n.toNat bs.size) hk hn hf (by omega) hq
-      (fun _ => rfl)
+    have ht := hr A S K q q (bs.extract n.toNat bs.size) hq (fun _ => rfl)
     rw [hs] at ht
     refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat))) ht)
       fun r hr => ?_) fun v => ?_
@@ -388,7 +391,7 @@ theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I :
         if_pos (Nat.le_of_lt hcut), Array.extract_size] at this
   · -- a growth (or the same length): the whole region stays with the client
     have hle : bs.size ≤ n.toNat := Nat.le_of_not_lt hcut
-    have ht := h.resize s k n ra A S K q q #[] hk hn hf (by omega) hq (fun h' => absurd (hs ▸ h') hcut)
+    have ht := hr A S K q q #[] hq (fun h' => absurd (hs ▸ h') hcut)
     rw [hs] at ht
     simp only [FAllocInv.relBytes, if_neg hcut, sep_emp_eq] at ht
     refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) bs)) ht)
@@ -432,6 +435,14 @@ theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I :
       refine EUpd.of_imp fun r hr => ?_
       rw [sep_assoc_eq] at hr
       refine sep_mono_right (fun _ x => FAllocInv.granted_intro I (sep_comm x)) hr
+
+/-- **The whole-region `resize` of an allocator** (`FAllocInv.resize_granted_of`). -/
+theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
+    (h : FAllocSpec L vt ctx I) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
+    (hk : k < 64) (hn : 0 < n.toNat) (hf : I.fits n.toNat k) (hs : s.len.toNat = bs.size)
+    (hb : 0 < bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra) (I.resizePost s.ptr k bs n.toNat) :=
+  I.resize_granted_of (fun A S K q q' tl h1 h2 => h.resize s k n ra A S K q q' tl hk hn hf (by omega) h1 h2) hs
 
 /-! ## No embedding of the legacy logic
 
