@@ -4,7 +4,6 @@ import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Ghost
-import ZigLean.Sep.Full.Dispatch
 import ZigLean.Range
 
 /-!
@@ -13,10 +12,12 @@ import ZigLean.Range
 Everything the proofs of the arena's entries need that does not depend on the generated module:
 the invariant (`own`, `inv`), the variables of a precondition (`OV`, `FV`), ownership and run
 lemmas, and the **proof tactics** of the entries (`arena_free`, `arena_resize`, `arena_remap`,
-`arena_loadBuf`, `arena_toInt`). Each generated module (`AllocArena/ArenaLinux.lean`,
+`arena_loadBuf`, `arena_toInt`; `arena_free_checked`, `arena_resize_checked` for the patched
+arena's bounds check). Each generated module (`AllocArena/ArenaLinux.lean`,
 `ArenaFixedLinux.lean`, …) has its own spawn-target type `Tgt` and its own copies of the std
 types, so no generated term of one is a term of another. The specification files
-(`ArenaSpec.lean`: the stock arena, `ArenaSpecFixed.lean`: the patched one) state the theorems for
+(`ArenaSpec.lean`, `ArenaSpecMacos.lean`: the stock arena on x86_64-linux and aarch64-macos,
+`ArenaSpecFixed.lean`: the patched one) state the theorems for
 their module and prove them with these tactics, which are elaborated against that module's code
 (their identifiers resolve there: `hygiene false`). Nothing here mentions a generated definition.
 The invariant and the proof are documented in `ArenaSpec.lean` and `docs/alloc-arena.md`.

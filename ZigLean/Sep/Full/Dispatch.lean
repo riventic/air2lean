@@ -12,8 +12,10 @@ function pointer against every address-taken function of the callee's type, in a
 
     if f == ⟨some b₁, 0⟩ then call₁ else if f == ⟨some b₂, 0⟩ then call₂ else … else throw .illegal
 
-`callIndirect f arms` is that chain over the list `arms` of (function pointer, call) pairs. The
-`dispatch_fold` simp set folds a generated chain into it (the lemmas are `rfl`), and
+`callIndirect f arms` is that chain over the list `arms` of (function pointer, call) pairs.
+`simp only [callIndirect_fold_one, callIndirect_fold_cons]` folds a generated chain into it (the
+lemmas are `rfl`; not `@[simp]`, so they neither fire in unrelated goals nor loop against
+`callIndirect`'s equations), and
 `CTriple.callIndirect` reads it: if the arm that `f` selects (`arms.lookup f`) meets a triple, so
 does the call. A `Table` is the program's candidates for one function type, as functions of the
 call's arguments.
@@ -52,11 +54,11 @@ section Fold
 variable {m : Type → Type} [MonadExceptOf Error m] {f c : Ptr} {x : m α}
 
 /-- The innermost arm of a generated chain. -/
-@[simp] theorem callIndirect_fold_one :
+theorem callIndirect_fold_one :
     (if f == c then x else (throw .illegal : m α)) = callIndirect f [(c, x)] := rfl
 
 /-- One more arm of a generated chain. -/
-@[simp] theorem callIndirect_fold_cons {arms : List (Ptr × m α)} :
+theorem callIndirect_fold_cons {arms : List (Ptr × m α)} :
     (if f == c then x else callIndirect f arms) = callIndirect f ((c, x) :: arms) := rfl
 
 end Fold

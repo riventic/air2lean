@@ -6,8 +6,8 @@ import AllocArena.Core
 
 The same statements as `ArenaSpec.lean` for the arena of `upstream/arena-fix.patch`
 (`AllocArena/ArenaFixedLinux.lean`), with the same invariant (`AllocArena.Core`). The patched
-`free` and `resize` first load the node's size and return when `end_index` is past the buffer
-(a racing `alloc`'s reservation, `docs/upstream/arena-oob-gep.md`); the invariant keeps
+`free` and `resize` load the node's size after `end_index` and return when `end_index` is past
+the buffer (a racing `alloc`'s reservation, `docs/upstream/arena-oob-gep.md`); the invariant keeps
 `end_index` within the buffer, so they go on as the stock ones do (`arena_bounds`).
 -/
 

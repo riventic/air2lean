@@ -8,8 +8,9 @@ The assertions of `ZigLean/Sep/` (`Assn`) range over `Mem.heap`, the live bytes.
 frame keeps them (`docs/alloc-page.md`, obstructions O1 and O3):
 
 * **the atomic layout** (`Mem.atomics`): an atomic op at bytes that already carry an atomic
-  location of another offset or size throws `.unspecified` (the mixed-size policy of
-  `ZigLean/Mem/Thread.lean`);
+  location of another offset or size throws `.unspecified` if an access to that location is
+  concurrent with it, and retires the location otherwise (the mixed-size policy of
+  `ZigLean/Mem/Thread.lean`, `retireAt`);
 * **the metadata of dead blocks**: `ptrAddr` (`@intFromPtr`) of a pointer into a freed block reads
   the block's address, and throws `.illegal` only if the block does not exist at all.
 
