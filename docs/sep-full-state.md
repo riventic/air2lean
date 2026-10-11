@@ -361,8 +361,11 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   bytes that stop being live and gets those that become live; frame bytes keep their normalized
   cells), `Holds.trim`, and the rules `FTotalTriple.munmapTail'`, `munmapPrefix'` (the live start
   moves: a kind of the same normal form), `mremapShrink'` (each from `bext` and the released bytes
-  only) and `mremapGrow'` (growth in place without `MAYMOVE` from `bext` alone, `LDMono.grow` from
-  `Mem.mappingRoom`; the new bytes go to the caller). A whole mapping (`mmap`, a whole `munmap`, a
+  only) and `mremapGrow'` (growth in place without `MAYMOVE`, `LDMono.grow` from
+  `Mem.mappingRoom`; the new bytes go to the caller). Growth needs only the authority with any
+  fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
+  grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
+  place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
   growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).

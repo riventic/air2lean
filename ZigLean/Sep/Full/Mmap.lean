@@ -89,25 +89,16 @@ def reblockRes (m m' : Mem) (b : BlockId) (nb : Block) : Res :=
   ⟨fun l => if l.1 = b ∧ m.heap l = none then (m'.heap l).map (⟨·, none⟩) else none, Know.none,
     Ghost.exts (extOne b nb.bytes.size nb.kind)⟩
 
-/-- **One block's extent changes under its full extent** (module doc): block `b` becomes `nb` at
-the same address with a kind of the same normal form, its live bytes keep their values, and the
-resource owns `b`'s full extent and exactly the bytes that stop being live (`X`'s cells). Then
-the new memory holds `reblockRes` (the bytes that became live and `nb`'s full extent) with the
-same frame. -/
-theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S : Nat}
-    {K : BlockKind} {X : Assn} (hh : Holds m r rF) (hp : (up X ⋆ bext b S K) r)
-    (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
-    (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
-    (hk : nb.kind.norm = blk.kind.norm) (hlo : nb.kind.mappedLo < nb.bytes.size)
+/-- The heap part of `Holds.reblock`: block `b` becomes `nb` (same address, kind of the same
+normal form, live bytes keep their values), and the resource's bytes are exactly those that stop
+being live. Then `reblockRes`'s new bytes and the frame match the new memory. -/
+theorem Holds.reblock_heap {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block}
+    (hh : Holds m r rF) (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
+    (hsh : shapes m' = shapes m) (ha : nb.addr = blk.addr) (hk : nb.kind.norm = blk.kind.norm)
     (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
-    (hX : ∀ h, X h → ∀ l, h l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none)) :
-    Holds m' (reblockRes m m' b nb) rF := by
-  obtain ⟨hXr, -, hrg⟩ := up_sep_bext hp
-  replace hrg : r.gh = Ghost.exts (extOne b S K) := hrg
-  have hdom : ∀ l, r.heap l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none) := fun l => by
-    have := hX _ hXr l
-    simp only [FHeap.erase, ne_eq, Option.map_eq_none_iff] at this
-    exact this
+    (hdom : ∀ l, r.heap l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none)) :
+    FHeap.Disjoint (reblockRes m m' b nb).heap rF.heap ∧
+      FMatch m' ((reblockRes m m' b nb).heap ∪ rF.heap) := by
   have hget := blocks_set_get hb hbs
   have hb' : m'.blocks[b]? = some nb := by rw [hget]; simp
   have hoth : ∀ l : Loc, l.1 ≠ b → m'.heap l = m.heap l := fun ⟨x, o⟩ hx => by
@@ -115,14 +106,7 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
   have hFlive : ∀ l fc, rF.heap l = some fc → m.heap l ≠ none := fun l fc h => by
     obtain ⟨c, hc, -⟩ := hh.swap.cellN h; rw [hc]; simp
   have hold := hh.heap.1
-  -- the frame's claims on `b` are dormant
-  have hok : Ghost.Ok (Ghost.exts (extOne b S K)) rF.gh := by
-    have := hh.ghost.1; rwa [hrg] at this
-  have hdorm : (rF.gh.extent b).Dormant rF.gh.ls := by
-    have := full_excl hok (b := b) (S := S) (K := K) (by simp [Ghost.exts, extOne])
-    rwa [Ghost.ls_exts_add] at this
-  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _,
-    hh.knowF.trans (KMono.set hb ha hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_⟩⟩
+  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩⟩
   · -- disjoint
     by_cases hc : l.1 = b ∧ m.heap l = none
     · right
@@ -177,6 +161,37 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
       | none => rw [e, Option.map_none, Option.none_or] at hfc; rw [hsh]; exact hh.tagF hfc
       | some c => rw [e, Option.map_some, Option.some_or] at hfc; cases hfc; trivial
     · rw [Option.none_or] at hfc; rw [hsh]; exact hh.tagF hfc
+
+/-- **One block's extent changes under its full extent** (module doc): block `b` becomes `nb` at
+the same address with a kind of the same normal form, its live bytes keep their values, and the
+resource owns `b`'s full extent and exactly the bytes that stop being live (`X`'s cells). Then
+the new memory holds `reblockRes` (the bytes that became live and `nb`'s full extent) with the
+same frame. -/
+theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S : Nat}
+    {K : BlockKind} {X : Assn} (hh : Holds m r rF) (hp : (up X ⋆ bext b S K) r)
+    (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
+    (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
+    (hk : nb.kind.norm = blk.kind.norm) (hlo : nb.kind.mappedLo < nb.bytes.size)
+    (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
+    (hX : ∀ h, X h → ∀ l, h l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none)) :
+    Holds m' (reblockRes m m' b nb) rF := by
+  obtain ⟨hXr, -, hrg⟩ := up_sep_bext hp
+  replace hrg : r.gh = Ghost.exts (extOne b S K) := hrg
+  have hdom : ∀ l, r.heap l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none) := fun l => by
+    have := hX _ hXr l
+    simp only [FHeap.erase, ne_eq, Option.map_eq_none_iff] at this
+    exact this
+  have hget := blocks_set_get hb hbs
+  have hb' : m'.blocks[b]? = some nb := by rw [hget]; simp
+  -- the frame's claims on `b` are dormant
+  have hok : Ghost.Ok (Ghost.exts (extOne b S K)) rF.gh := by
+    have := hh.ghost.1; rwa [hrg] at this
+  have hdorm : (rF.gh.extent b).Dormant rF.gh.ls := by
+    have := full_excl hok (b := b) (S := S) (K := K) (by simp [Ghost.exts, extOne])
+    rwa [Ghost.ls_exts_add] at this
+  obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
+  refine ⟨hdisj, hmatch, Know.sub_none _,
+    hh.knowF.trans (KMono.set hb ha hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_⟩⟩
   · -- no frame claim on `b` (the only block of the new extents)
     have : x = b := Classical.byContradiction fun hne => by simp [extOne, hne] at hx
     subst this; exact hdorm
@@ -204,6 +219,119 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
         simp [Ghost.add, Ghost.exts, extOne, hx]
       rw [e1]
       rw [e2, Ghost.ls_exts_add] at ht
+      obtain ⟨h1, h2⟩ := ht
+      refine ⟨fun S' K' hp' => ?_, fun k hk' => ?_⟩
+      · obtain ⟨blk0, hb0, rest⟩ := h1 S' K' hp'
+        exact ⟨blk0, by rw [hget, if_neg hx]; exact hb0, rest⟩
+      · obtain ⟨blk0, hb0, rest⟩ := h2 k hk'
+        exact ⟨blk0, by rw [hget, if_neg hx]; exact hb0, rest⟩
+
+/-- The resource after `Holds.grow`: the bytes that became live and the authority over `nb`'s
+extent with the fraction `q`. -/
+def growRes (m m' : Mem) (b : BlockId) (nb : Block) (q : Frac) : Res :=
+  ⟨(reblockRes m m' b nb).heap, Know.none, Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)⟩
+
+/-- A cell whose authority claim moves: the shares stay. -/
+theorem ECell.auth1_move {S S' : Nat} {K K' : BlockKind} {q : Frac} {d : ECell}
+    (hv : ((ECell.auth1 S K q).add d).Valid) :
+    (∀ x, d.auth x = 0) ∧ ((ECell.auth1 S' K' q).add d).Valid ∧
+      (ECell.auth1 S' K' q).add d =
+        { ((ECell.auth1 S K q).add d) with auth := (ECell.auth1 S' K' q).auth } := by
+  obtain ⟨h1, h2, h3⟩ := hv
+  have hz : ∀ x, d.auth x = 0 := fun x => by
+    have := h1 x
+    by_cases hx : x = (S, K)
+    · subst hx; simp [ECell.add, ECell.auth1] at this; omega
+    · rcases Nat.eq_zero_or_pos (d.auth x) with h | h
+      · exact h
+      · exact absurd (h2 (S, K) x (by simp [ECell.add, ECell.auth1]; omega)
+          (by simp only [ECell.add]; omega)).symm hx
+  have he : (ECell.auth1 S' K' q).add d =
+      { ((ECell.auth1 S K q).add d) with auth := (ECell.auth1 S' K' q).auth } := by
+    ext <;> simp [ECell.add, ECell.auth1, hz]
+  refine ⟨hz, ⟨fun x => ?_, fun x y hx hy => ?_, fun n => ?_⟩, he⟩
+  · simp only [ECell.add, hz, Nat.add_zero, ECell.auth1]; split <;> omega
+  · simp only [ECell.add, hz, Nat.add_zero, ECell.auth1] at hx hy
+    split at hx <;> split at hy <;> simp_all
+  · rw [he, ECell.total_eq]; have := h3 n; rw [ECell.total_eq] at this; exact this
+
+/-- **A block grows under a partial authority**: the resource holds the authority over `b`'s
+extent with any fraction `q` (the shares of `1 - q` are out); `b` grows in place (same address and
+kind, at least as many bytes, the live bytes keep their values). Every share stays true (the block
+only grows), so the new memory holds the new bytes and the authority over the grown extent with
+the same fraction. -/
+theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S : Nat}
+    {K : BlockKind} {q : Frac} (hh : Holds m r rF) (hp : Zig.Full.bauth b S K q r)
+    (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
+    (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
+    (hk : nb.kind = blk.kind) (hsz : blk.bytes.size ≤ nb.bytes.size)
+    (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte) :
+    Holds m' (growRes m m' b nb q) rF := by
+  obtain ⟨blk0, hb0, hl0, hS, hK, hlo⟩ := hh.bauth (sep_emp.mpr hp)
+  rw [hb] at hb0; cases hb0
+  obtain ⟨hr0, -, hrg⟩ := hp
+  have hget := blocks_set_get hb hbs
+  have hb' : m'.blocks[b]? = some nb := by rw [hget]; simp
+  have hdom : ∀ l, r.heap l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none) := by
+    rintro ⟨x, o⟩
+    rw [hr0]
+    simp only [FHeap.empty, ne_eq, not_true_eq_false, false_iff, not_and, Decidable.not_not]
+    rintro rfl hm
+    rw [Mem.heap_of hb'] at ⊢
+    rw [Mem.heap_of hb] at hm
+    split at hm
+    · rename_i hc
+      rw [dif_pos ⟨hl, by omega, by rw [hk]; exact hc.2.2⟩]; simp
+    · exact absurd rfl hm
+  obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha (by rw [hk]) hkeep hdom
+  have hok := hh.ghost.1
+  rw [hrg] at hok
+  -- the cell of `b` before and after
+  have hvb := hok.1.2 b
+  have ecb : ∀ c : ECell, ((Ghost.atExt b c).add rF.gh).extent b = c.add (rF.gh.extent b) := by
+    intro c; simp [Ghost.add, Ghost.atExt]
+  have ecx : ∀ (c : ECell) x, x ≠ b → ((Ghost.atExt b c).add rF.gh).extent x = rF.gh.extent x := by
+    intro c x hx; simp [Ghost.add, Ghost.atExt, hx]
+  have els : ∀ c, ((Ghost.atExt b c).add rF.gh).ls = rF.gh.ls := by
+    intro c; funext γ e p; simp [Ghost.ls, Ghost.add, Ghost.atExt]
+  rw [ecb, els] at hvb
+  obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
+  refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hbs), ?_⟩
+  show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
+  refine ⟨⟨⟨fun γ => ?_, fun x => ?_⟩, ?_⟩, fun x => ?_⟩
+  · have := hok.1.1 γ; simpa [Ghost.add, Ghost.atExt] using this
+  · show ((((Ghost.atExt b _).add rF.gh).extent x).Valid ∧ _)
+    rw [els]
+    by_cases hx : x = b
+    · subst hx; rw [ecb, he]; exact ⟨he ▸ hv', hvb.2⟩
+    · have := hok.1.2 x; rw [ecx _ _ hx, els] at this; rw [ecx _ _ hx]; exact this
+  · obtain ⟨N, hN⟩ := hok.2
+    refine ⟨N, fun γ hγ => ⟨?_, fun x e k => ?_, fun γ' e' M e => ?_⟩⟩
+    · have := (hN γ hγ).1; simpa [Ghost.add, Ghost.atExt] using this
+    · have := (hN γ hγ).2.1 x e k
+      by_cases hx : x = b
+      · subst hx; rw [ecb] at this ⊢; rw [he]; exact this
+      · rw [ecx _ _ hx] at this ⊢; exact this
+    · have := (hN γ hγ).2.2 γ' e' M e; simpa [Ghost.add, Ghost.atExt] using this
+  · show ECell.TrueIn _ _ _ _
+    have ht := hh.ghost.2 x
+    rw [hrg] at ht
+    change ECell.TrueIn _ m _ _ at ht
+    rw [els] at ht ⊢
+    by_cases hx : x = b
+    · subst hx
+      rw [ecb] at ht ⊢
+      refine ⟨fun S' K' hp' => ?_, fun k hk' => ?_⟩
+      · simp only [ECell.add, hz, Nat.add_zero, ECell.auth1] at hp'
+        split at hp'
+        · rename_i e; simp only [Prod.mk.injEq] at e; obtain ⟨rfl, rfl⟩ := e
+          exact ⟨nb, hb', hl, rfl, rfl, by rw [hk, hK]; omega⟩
+        · cases hp'
+      · rw [he] at hk'
+        obtain ⟨blk1, hb1, -, hk1, -⟩ := ht.2 k hk'
+        rw [hb] at hb1; cases hb1
+        exact ⟨nb, hb', hl, by omega, by rw [hk, hK]; omega⟩
+    · rw [ecx _ _ hx] at ht ⊢
       obtain ⟨h1, h2⟩ := ht
       refine ⟨fun S' K' hp' => ?_, fun k hk' => ?_⟩
       · obtain ⟨blk0, hb0, rest⟩ := h1 S' K' hp'
@@ -429,34 +557,36 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
-/-- A resource after `Holds.reblock` that owns the bytes that became live as `P`. -/
-theorem reblockRes_up {m m' : Mem} {b : BlockId} {nb : Block} {P : Assn}
-    (hP : P (reblockRes m m' b nb).heap.erase) :
-    (up P ⋆ bext b nb.bytes.size nb.kind) (reblockRes m m' b nb) :=
-  ⟨⟨(reblockRes m m' b nb).heap, Know.none, Ghost.unit⟩,
-    ⟨FHeap.empty, Know.none, Ghost.exts (extOne b nb.bytes.size nb.kind)⟩,
-    fun _ => .inr rfl, by simp [reblockRes, FHeap.union_empty, Know.union_none, Ghost.unit_add],
-    ⟨hP, rfl, rfl⟩, rfl, rfl, exts_extOne b _ _⟩
+/-- A resource after `Holds.grow` that owns the bytes that became live as `P`. -/
+theorem growRes_up {m m' : Mem} {b : BlockId} {nb : Block} {q : Frac} {P : Assn}
+    (hP : P (growRes m m' b nb q).heap.erase) :
+    (up P ⋆ bauth b nb.bytes.size nb.kind q) (growRes m m' b nb q) :=
+  ⟨⟨(growRes m m' b nb q).heap, Know.none, Ghost.unit⟩,
+    ⟨FHeap.empty, Know.none, Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)⟩,
+    fun _ => .inr rfl, by simp [growRes, FHeap.union_empty, Know.union_none, Ghost.unit_add],
+    ⟨hP, rfl, rfl⟩, rfl, rfl, rfl⟩
 
-/-- What `mremap` without `MAYMOVE` returns for a growth from the full extent: the extent of the
-grown mapping and its new bytes `[S, lo + n)` (`mremapFill`), or `error.OutOfMemory` and the
-extent unchanged. -/
-def mremapGrowPost (P : Nat) (b : BlockId) (S lo n : Nat) (newLen : BitVec 64) :
+/-- What `mremap` without `MAYMOVE` returns for a growth under the authority `q` over the
+mapping's extent: the authority over the grown extent and the new bytes `[S, lo + n)`
+(`mremapFill`), or `error.OutOfMemory` and the authority unchanged. -/
+def mremapGrowPost (P : Nat) (b : BlockId) (S lo n : Nat) (q : Frac) (newLen : BitVec 64) :
     Except ErrName Slice → FAssn
   | .ok s => ⟪s = ⟨⟨some b, (lo : Int)⟩, newLen⟩⟫ ⋆ FAssn.ex fun A : Nat =>
       up (bytesAt ⟨some b, (S : Int)⟩ A (lo + n) (.mapped lo) (mremapFill P (S - lo) n)) ⋆
-        bext b (lo + n) (.mapped lo)
-  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ bext b S (.mapped lo)
+        bauth b (lo + n) (.mapped lo) q
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ bauth b S (.mapped lo) q
 
-/-- **mremap, growth in place, from the extent alone.** Without `MAYMOVE` the mapping grows in
+/-- **mremap, growth in place, from the authority alone.** Without `MAYMOVE` the mapping grows in
 place where the pages after it are free (`Mem.mappingRoom`) and fails with `error.OutOfMemory`
-otherwise. The existing bytes stay with whoever owns them; the new ones go to the caller. -/
+otherwise. The authority may hold any fraction `q` of the extent (`bext` is `q = 1`): growth keeps
+every share true. The existing bytes stay with whoever owns them; the new ones go to the caller. -/
 theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId}
-    {S lo : Nat} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    {S lo : Nat} {q : Frac} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
     (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
     (hn : S - lo < newLen.toNat) :
-    FTotalTriple (bext b S (.mapped lo)) (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none)
-      (mremapGrowPost os.pageSize b S lo newLen.toNat newLen) := by
+    FTotalTriple (bauth b S (.mapped lo) q)
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none)
+      (mremapGrowPost os.pageSize b S lo newLen.toNat q newLen) := by
   refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
   obtain ⟨blk, hb, hl, hsz, hK, hlo⟩ := hh.bauth (sep_emp.mpr hpre)
   simp only [BlockKind.mappedLo] at hlo
@@ -490,29 +620,22 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
   have hb₂ : m₂.blocks[b]? = some nb := by rw [blocks_set_get hb₁ rfl]; simp [nb, fill]
   have hheap := heap_mapped hb₁ hl hK
   have hheap' := heap_mapped (blk := nb) hb₂ hl hK
-  have hh₂ := Holds.reblock (m' := m₂) (nb := nb) (X := Assn.emp) hh₁
-    (sep_comm (sep_emp.mpr hpre) |> sep_mono_left fun _ h => up_emp.mpr h) hb₁ rfl rfl hl rfl rfl
-    (by rw [hK, hnbs]; simp only [BlockKind.mappedLo]; omega)
+  have hh₂ := Holds.grow (m' := m₂) (nb := nb) hh₁ hpre hb₁ rfl rfl hl rfl rfl
+    (by simp only [nb, Array.size_append]; omega)
     (fun o c c' hc hc' => by
       obtain ⟨_, e1, -, ho1, rfl⟩ := Mem.heap_some hc
       obtain ⟨_, e2, -, ho2, rfl⟩ := Mem.heap_some hc'
       rw [hb₁] at e1; cases e1; rw [hb₂] at e2; cases e2
       simp [nb, Array.getElem_append_left ho1])
-    (fun h hX l => by
-      rw [show h = Heap.empty from hX]
-      simp only [Heap.empty, ne_eq, not_true_eq_false, false_iff, not_and, Decidable.not_not]
-      rintro rfl hm
-      have := (hheap l.2).mp hm
-      exact Classical.byContradiction fun hc => hc ((hheap' l.2).mpr ⟨this.1, by omega⟩) |>.elim)
   refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩, ⟨Mem.Seq.replace hs.1.single,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
       (by rw [hnbs]; have := le_alignUp n os.pageSize; omega)
       (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho) rfl hs₁.2.2⟩⟩
-  have hup := reblockRes_up (m := m₁) (m' := m₂) (b := b) (nb := nb)
+  have hup := growRes_up (m := m₁) (m' := m₂) (b := b) (nb := nb) (q := q)
     (P := bytesAt ⟨some b, (blk.bytes.size : Int)⟩ blk.addr (lo + n) (.mapped lo) fill) ?_
   · rw [hnbs, show nb.kind = .mapped lo from hK] at hup; exact hup
   refine ⟨b, rfl, Int.natCast_nonneg _, fun ⟨x, o⟩ => ?_⟩
-  simp only [reblockRes, FHeap.erase, Int.toNat_natCast]
+  simp only [growRes, reblockRes, FHeap.erase, Int.toNat_natCast]
   by_cases hx : x = b
   · subst hx
     simp only [true_and]
