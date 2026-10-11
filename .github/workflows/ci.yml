@@ -1379,6 +1379,20 @@ jobs:
           export LEAN_PATH=$(lake env printenv LEAN_PATH)
           bash tests/roadmap/aggregate-casts/check.sh --native
 
+      # L-series long tail: error values as parameters (L10), vector casts (L09) on the
+      # committed 0.14.1-0.17.0 exports (retained translations, proofs, native outputs of every
+      # version, negative tests, semantic mutants) and this host's native probes.
+      - name: Language long tail (error parameters, vector casts)
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE_0_16: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.VecCast Air2Lean air2lean
+          export AIR2LEAN_LEAN=$(lake env which lean)
+          export LEAN_PATH=$(lake env printenv LEAN_PATH)
+          bash tests/roadmap/lang-long-tail/check.sh --native
+
       # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
       # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
       # tables per profile; their vector images against L09's encoding (docs/aarch64-abi.md).
