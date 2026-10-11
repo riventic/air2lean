@@ -79,6 +79,9 @@ def main():
         (big, "target_triple", "powerpc64-linux-musl", "model ABI scope"),
         (big, "endian", "middle", "little/big-endian memory model"),
         (big, "backend", "stage2_c", "outside the big-endian model (stage2_llvm only)"),
+        # The exporter names the profile by its byte order; the translator never renames it.
+        (big, "name", "abi64-le-v1", "unsupported profile 'abi64-le-v1' (want 'abi64-be-v1')"),
+        (little, "name", "abi64-be-v1", "unsupported profile 'abi64-be-v1' (want 'abi64-le-v1')"),
     ]:
         bad = one(target_docs, name)
         bad[name]["profile"][field] = value

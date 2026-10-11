@@ -1,5 +1,6 @@
 import Std.Data.HashSet
 import Air2Lean.Air.Identity
+import Air2Lean.Air.Dialect
 
 /-!
 # Internal IR
@@ -217,10 +218,6 @@ def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes))
 `laneBitPtr`. -/
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
-
-/-- The versions whose comptime lane pointers into bit-packed vectors are modelled as
-bit-pointers (`lanePtrLayout`); 0.17.0 has no native lane-pointer evidence yet. -/
-def lanePtrVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 
 /-- A lane pointer that `normalize` made a bit-pointer into the vector's integer
 (`Zig.loadLane`/`Zig.storeLane`). -/
@@ -691,7 +688,9 @@ def externSymbol? (callee : String) : Option String :=
   if callee.startsWith "extern:" then some (callee.drop 7).toString else none
 
 structure Func where
-  zigVersion : String
+  /-- The version and target facts of the program (`Dialect.ofProfile`): Zig version, target
+  architecture, pointer width, byte order, error width, backend and build mode. -/
+  dialect : Dialect
   name : String
   params : Array TyId
   ret : TyId
@@ -700,19 +699,6 @@ structure Func where
   /-- `layouts[i]` is the layout of `types[i]`. -/
   layouts : Array Layout
   globals : Array Global
-  /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
-  Legacy profiles and hand-built functions keep the default 16. -/
-  errorSetBits : Nat := 16
-  /-- The schema-12 profile's code generator (`stage2_llvm`, `stage2_x86_64`, …); legacy
-  schemas and constructed functions are `unverified`. Backend-specific constant lowering
-  checks (`Check.lean`) read it. -/
-  backend : String := "unverified"
-  /-- The profile's target architecture (`x86_64`, `aarch64`); empty for a legacy profile, whose
-  reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
-  targetArch : String := ""
-  /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
-  (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
-  bigEndian : Bool := false
   /-- The identities of the AIR file (`Identity.rewrite`), its own first; `checkProgram`
   checks them across the program. Hand-built functions have none. -/
   identities : Array Identity.Record := #[]
@@ -720,5 +706,8 @@ structure Func where
   externs : Array ExternDecl := #[]
   /-- `some`: an `export fn`, the definition of this linker symbol. -/
   exportDecl : Option ExportDecl := none
+
+/-- The width of every stored error code (`Dialect.errorSetBits`). -/
+abbrev Func.errorSetBits (f : Func) : Nat := f.dialect.errorSetBits
 
 end Air2Lean
