@@ -104,6 +104,32 @@ class Driver(unittest.TestCase):
             self.assertEqual(json.loads(output)['status'], 'excluded')
             launch.assert_not_called()
 
+    def test_windows_records_every_version_with_x87_rows(self):
+        """x86_64-windows-gnu (docs/windows-target.md): f80 long double, 64-bit atomics, and the
+        x87 precision control of the main thread (64 bits from 0.15.2 on) and a spawned one."""
+        for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+            text = (EXPECTED.parent / version / 'x86_64-windows-gnu-ReleaseSafe.txt').read_text()
+            self.assertIn('meta arch x86_64\nmeta os windows\nmeta abi gnu\nmeta cpu x86_64\n', text)
+            self.assertIn('float c_longdouble 16 16 80', text)
+            self.assertIn('feature cx16 0\n', text)
+            self.assertIn('limit atomic_u256 expected_64-bit_integer_type_or_smaller', text)
+            self.assertNotIn('atomic u128', text)
+            main_cw = '027f' if version == '0.14.1' else '037f'
+            self.assertIn(f'x87 main cw {main_cw} ', text)
+            self.assertIn('x87 thread cw 027f f80_third 3ffdaaaaaaaaaaaaa800\n', text)
+
+    def test_runner_is_labelled_and_skips_the_host_check(self):
+        self.assertEqual(abi.execution(()), {'native': True})
+        self.assertEqual(abi.execution(('scripts/wine-run.sh',)),
+                         {'native': False, 'runner': 'scripts/wine-run.sh'})
+        with patch.object(abi.platform, 'system', return_value='Darwin'), \
+                patch.object(abi.platform, 'machine', return_value='arm64'), \
+                patch.object(abi.subprocess, 'run', side_effect=OSError('no compiler')) as launch:
+            code, _ = main('check', '--zig', __file__, '--target', 'x86_64-windows-gnu',
+                           '--runner', 'scripts/wine-run.sh')
+        self.assertEqual(code, 1)
+        launch.assert_called()
+
     def test_observation_without_version_fails(self):
         code, output = main('compare', '--target', 'aarch64-linux-gnu', self.observed('meta arch aarch64\n'))
         self.assertEqual(code, 1, output)

@@ -25,7 +25,7 @@ Every schema-12 function has a mandatory `profile` object:
 | Field | Accepted value or meaning |
 | --- | --- |
 | `name` | The model profile of the byte order: `"abi64-le-v1"` for a little-endian target (also a 32-bit one), `"abi64-be-v1"` for a big-endian one; the exporter writes it and a name that differs from `endian`'s is rejected |
-| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `aarch64-linux-gnu` (Zig 0.14.1, 0.15.2 and 0.16.0 only), `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
+| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `aarch64-linux-gnu` (Zig 0.14.1, 0.15.2 and 0.16.0 only), `x86_64-windows-gnu` ([windows-target.md](windows-target.md)), `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
 | `pointer_bits` | `64` for x86_64/aarch64/s390x, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
 | `endian` | The triple's byte order: `"little"` for x86_64/aarch64/wasm32, `"big"` for s390x; any other value or a mismatch is rejected |
 | `abi` | Target ABI tag; must equal the triple's ABI component before a version suffix |
@@ -295,6 +295,18 @@ unlike `generic`'s) are profile errors. The declared divergences are outside the
 translation: a noncanonical `f80` operand is `.unspecified` (`softF80Chk`), the pre-0.16.0 `@sqrt`
 is the `f64`-precision helper, and `cmpxchg` and `.Max`/`.Min` on a padded width are rejected
 (`PADDED_ATOMIC`).
+
+## Windows (x86_64-windows-gnu)
+
+`x86_64-windows-gnu` is a row of `Target.qualified` with the x86_64-linux layouts and float
+lowering (`c_longdouble` is the x87 `f80`, atomics stop at 64 bits) for Zig 0.17.0, 0.16.0, 0.15.2
+and 0.14.1, each with a T04 probe record (`tests/roadmap/aarch64-abi/expected/<zig>/x86_64-windows-gnu-ReleaseSafe.txt`,
+`T04.windowsGnu`); any other ABI is a profile error. The row has no OS layer (`Target.osLayer`):
+the checker rejects the std thread, futex, `Io` and timer models and `threadlocal` globals there,
+and a call of a Windows OS function is an unbound extern. Its x87 precision control is per thread
+(`Target.x87ThreadPrecision`): the `f80` ops that depend on it are rejected unless
+`--assume-x87-extended`, which the header records (`"admission": "x87-extended"`). See
+[windows-target.md](windows-target.md).
 
 ## Byte order (big endian)
 

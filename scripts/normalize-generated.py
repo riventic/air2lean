@@ -63,7 +63,7 @@ def profile_for_air(doc):
     if any(not isinstance(p[k], str) or not p[k] for k in string_fields):
         raise ValueError("profile string fields must not be empty or malformed")
     # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos/
-    # aarch64-linux (gnu, Zig 0.14.1-0.16.0: `Target.qualified`), 32-bit wasm32-freestanding/
+    # aarch64-linux/x86_64-windows (both gnu, Zig 0.14.1-0.17.0: `Target.qualified`), 32-bit wasm32-freestanding/
     # wasm32-wasi pointers or the 64-bit big-endian s390x-linux model (named `abi64-be-v1` by the
     # exporter), and a 1..32-bit error integer.
     big = p["endian"] == "big"
@@ -78,9 +78,10 @@ def profile_for_air(doc):
     target = (triple[0], triple[1].split(".")[0]) if len(triple) == 3 else None
     if (len(triple) != 3 or triple[2].split(".")[0] != p["abi"] or
             target not in {("x86_64", "linux"), ("aarch64", "macos"), ("aarch64", "linux"),
-                           ("s390x", "linux"), ("wasm32", "freestanding"), ("wasm32", "wasi")}):
+                           ("x86_64", "windows"), ("s390x", "linux"), ("wasm32", "freestanding"),
+                           ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
-    if target == ("aarch64", "linux") and (p["abi"] != "gnu" or
+    if target in {("aarch64", "linux"), ("x86_64", "windows")} and (p["abi"] != "gnu" or
                                            version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
@@ -122,7 +123,11 @@ def fresh_linux_profile(doc, expected_version):
     return profile
 
 
-ADMISSIONS = {"unqualified-build-mode", "no-libc", "unqualified-build-mode,no-libc"}
+# The translator's admission opt-ins, in the order the header lists them.
+ADMISSION_ORDER = ("unqualified-build-mode", "no-libc", "x87-extended")
+# Every nonempty ordered subset, as the header spells it (`a,b`).
+ADMISSIONS = {",".join(a for i, a in enumerate(ADMISSION_ORDER) if mask >> i & 1)
+              for mask in range(1, 2 ** len(ADMISSION_ORDER))}
 
 
 def split_generated(data, required=False):
@@ -136,7 +141,7 @@ def split_generated(data, required=False):
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
     # `admission` is present only when the translator was given an admission opt-in, in this
     # order: `--allow-unqualified-build-mode` (docs/build-modes.md), `--assume-no-libc`
-    # (docs/floats.md §Targets).
+    # (docs/floats.md §Targets), `--assume-x87-extended` (docs/windows-target.md).
     if (not isinstance(metadata, dict) or
             set(metadata) - {"admission"} != {"profile", "float_semantics", "correspondence"} or
             metadata.get("admission", "no-libc") not in ADMISSIONS or

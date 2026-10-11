@@ -251,14 +251,17 @@ def windowsDivergencesIn (version : String) : List (String × String) :=
   let padded := [
     ("rmw u40 Max 7890abcdef 8987654321", "unsigned Max of a padded u40 compares the sign-extended cell: not the unsigned maximum (padded width)"),
     ("rmw u40 Min 7890abcdef 8987654321", "unsigned Min of a padded u40 compares the sign-extended cell: not the unsigned minimum (padded width)")]
+  let sqrt128 := ("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")
   if version == "0.17.0" then [thread]
   else if version == "0.14.1" then
     let x87 (row : String) := (row, "Zig 0.14.1's WinStartup leaves the main thread's x87 precision control at 53 bits")
+    -- 0.14.1's padded i40 `Max` errs on the other operand order than later versions'.
     [thread, x87 "x87 main", x87 "fop f80 1/3", x87 "fop f80 sqrt(2)", x87 "fop f80 tiny*1.5",
-      x87 "fop f80 min_normal-tiny", x87 "fop f80 mulAdd(1+e,1-e,-1)"] ++ paddedDivergences ++ padded
+      x87 "fop f80 min_normal-tiny", x87 "fop f80 mulAdd(1+e,1-e,-1)", sqrt128] ++
+      paddedDivergences.take 3 ++ padded ++
+      [("rmw i40 Max 7890abcdef 8987654321", "signed Max of a positive i40 cell and a negative operand returns the operand: the native i40 Max is not the signed maximum (padded width)")]
   else
-    [thread] ++ paddedDivergences ++ padded ++
-      (if version == "0.15.2" then [("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")] else [])
+    [thread] ++ paddedDivergences ++ padded ++ (if version == "0.15.2" then [sqrt128] else [])
 
 def divergencesIn (triple version : String) : List (String × String) :=
   if triple.startsWith "aarch64-" then aarch64DivergencesIn version else windowsDivergencesIn version

@@ -11,6 +11,12 @@ ReleaseSafe. Each profile has three pieces of evidence:
 3. A Lean check tied to that file. Kernel-checked layout tables are compared with the file, and
    the recorded results are compared with the model.
 
+The same probe, script and `Model.lean` also qualify **x86_64-windows-gnu** (table
+`T04.windowsGnu`; its feature rows are x86's, it adds the x87 control-word rows, and its atomic
+rows stop at the target's 64 bits); see [windows-target.md](windows-target.md). Its records were
+made through `--runner scripts/wine-run.sh`, which the status line labels `"native": false`: a
+local check, not native evidence.
+
 The translator accepts both profiles (`Target.qualified` in `Air2Lean/Air/Dialect.lean`;
 [profiles.md](profiles.md#aarch64-abi-profiles-t04)). aarch64-linux only for the Zig versions
 with an expected file (`Target.aarch64Probed`: 0.17.0, 0.16.0, 0.15.2 and 0.14.1, on both
