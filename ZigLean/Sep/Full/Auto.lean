@@ -90,6 +90,16 @@ def unfold1 (e : Expr) : MetaM (Option Expr) := do
   let some e' ← unfoldDefinition? e | return none
   return some e'.headBeta
 
+/-- Reduce the projections of structure values in `e` (`(finv ctx B).tag` to its field). -/
+def reduceProjs (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    let .const c _ := x.getAppFn | return .continue
+    let some info ← getProjectionFnInfo? c | return .continue
+    if info.fromClass then return .continue
+    match ← unfold1 x with
+    | some x' => return .visit x'
+    | none => return .continue)
+
 /-- Unfold an assertion atom while it unfolds to a combination of assertions (not to a raw
 predicate `fun r => …`). -/
 partial def unfoldAtom (e : Expr) : MetaM Expr := do
@@ -136,6 +146,13 @@ def unifyKeyed (a b : Expr) : MetaM Bool := do
   if ka != kb && ka != .anonymous && kb != .anonymous then return false
   isDefEq a b
 
+/-- Unify atoms when the heads agree, without unfolding values. -/
+def unifyAtom (a b : Expr) : MetaM Bool := do
+  let ka := headKey a
+  let kb := headKey b
+  if ka != kb && ka != .anonymous && kb != .anonymous then return false
+  withReducibleAndInstances (isDefEq a b)
+
 /-! ## Solvers -/
 
 /-- The arithmetic solver for side goals. -/
@@ -144,9 +161,9 @@ macro_rules
   | `(tactic| fsym_arith) => `(tactic| first
       | assumption
       | omega
-      | (simp only [fsym_arith] at *; omega)
+      | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul] at *; omega)
       | bv_omega
-      | (simp only [fsym_arith, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] at *; omega))
+      | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] at *; omega))
 
 /-- Run a tactic on a goal; `true` if it closed the goal (else the state is restored). -/
 def closeWith (g : MVarId) (tac : Syntax) : TacticM Bool := do
@@ -157,12 +174,55 @@ def closeWith (g : MVarId) (tac : Syntax) : TacticM Bool := do
     s.restore; return false
   catch _ => s.restore; return false
 
-def arith (g : MVarId) : TacticM Bool := do
-  if ← g.isAssigned then return true
+/-- The user definitions (generated code, invariants) that occur in `e`. -/
+def userConsts (e : Expr) : MetaM (Array Name) := do
+  let mut out := #[]
+  for c in e.getUsedConstants do
+    if out.contains c then continue
+    if ← isLibrary c then continue
+    let some info := (← getEnv).find? c | continue
+    unless info.isDefinition do continue
+    if (← getProjectionFnInfo? c).isSome then continue
+    if isAuxRecursor (← getEnv) c || isMatcherCore (← getEnv) c then continue
+    out := out.push c
+  return out
+
+/-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
+goals it did not prove. -/
+partial def arithGoals (g : MVarId) : TacticM (List MVarId) := g.withContext do
+  if ← g.isAssigned then return []
   let t ← instantiateMVars (← g.getType)
+  let t' ← whnfR t
+  let t' ← if t'.isAppOfArity ``And 2 then pure t' else
+    match t.getAppFn with
+    | .const c _ => if ← isLibrary c then pure t' else
+        match ← unfold1 t with
+        | some u => whnfR u
+        | none => pure t'
+    | _ => pure t'
+  if t'.isAppOfArity ``And 2 then
+    let g ← g.replaceTargetDefEq t'
+    let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
+    return (← arithGoals g1) ++ (← arithGoals g2)
   if !t.hasFVar && !t.hasMVar then
-    if ← closeWith g (← `(tactic| decide)) then return true
-  closeWith g (← `(tactic| fsym_arith))
+    if ← closeWith g (← `(tactic| decide)) then return []
+  if ← closeWith g (← `(tactic| fsym_arith)) then return []
+  -- unfold the user definitions of the goal and the context
+  let mut cs ← userConsts t
+  for d in ← getLCtx do
+    unless d.isImplementationDetail do
+      if ← isProp d.type then cs := cs ++ (← userConsts (← instantiateMVars d.type))
+  let cs' := cs.foldl (fun acc c => if acc.contains c then acc else acc.push c) #[]
+  if !cs'.isEmpty then
+    let ids : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
+      cs'.mapM fun c => `(Lean.Parser.Tactic.simpLemma| $(mkIdent c):ident)
+    if ← closeWith g (← `(tactic| (simp only [$ids,*] at *; fsym_arith))) then return []
+  return [g]
+
+def arith (g : MVarId) : TacticM Bool := do
+  let s ← saveState
+  if (← arithGoals g).isEmpty then return true
+  s.restore; return false
 
 /-- Prove `x = y` of assertions by AC of `⋆`. -/
 def acEq (x y : Expr) : TacticM Expr := do
@@ -202,60 +262,45 @@ def blockOf (p : Expr) : MetaM (Option (Expr × Expr)) := do
   let some pf ← solveBlock t | return none
   return some (← instantiateMVars b, pf)
 
+/-- Prove `ty` by the lemma `n`: its conclusion is unified with `ty`, its hypotheses are proved
+from the context (blocks) or by arithmetic. -/
+def proveBy (n : Name) (ty : Expr) : TacticM Expr := do
+  let f ← mkConstWithFreshMVarLevels n
+  let (args, _, concl) ← forallMetaTelescope (← inferType f)
+  unless ← isDefEq concl ty do throwError "fsym: {n} does not apply"
+  for a in args do
+    let a ← instantiateMVars a
+    unless a.isMVar do continue
+    let t ← instantiateMVars (← inferType a)
+    unless ← isProp t do continue
+    if (t.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+      let some pf ← solveBlock t | throwError "fsym: block of {t}"
+      a.mvarId!.assign pf
+    else unless ← arith a.mvarId! do throwError "fsym: side condition {t}"
+  instantiateMVars (mkAppN f args)
+
+/-- Provider lemmas: `AddrOf` and `Reaches` of one atom. -/
+def addrLemmas : List Name := [``AddrOf.known, ``AddrOf.region]
+def reachLemmas : List Name := [``Reaches.share, ``Reaches.pts, ``Reaches.region]
+
 /-- Candidates for a provider goal `AddrOf b A P` or `Reaches b K P`: proofs that assign `A`/`K`. -/
 def providerCands (t : Expr) : TacticM (Array (TacticM Expr)) := do
   let t ← instantiateMVars t
-  let args := t.getAppArgs
-  let (isAddr, b, P) := if t.isAppOfArity ``AddrOf 3 then (true, args[0]!, args[2]!)
-    else (false, args[0]!, args[2]!)
+  let isAddr := t.isAppOfArity ``AddrOf 3
+  let P := t.appArg!
   let ats := atoms P
   let mut out := #[]
   for i in [0:ats.size] do
     let a := ats[i]!
     let rest := sepOf (ats.eraseIdx! i)
-    let close (h : Expr) : TacticM Expr := do
-      let e ← acEq P (mkSep a rest)
-      let lem := if isAddr then ``AddrOf.of_atom else ``Reaches.of_atom
-      let pf ← mkAppM lem #[h, e]
-      unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
-      return pf
-    if isAddr then
-      if a.isAppOfArity ``Zig.Full.known 2 then
-        out := out.push do
-          unless ← isDefEq a.appFn!.appArg! b do throwError "block"
-          close (← mkAppOptM ``AddrOf.known #[a.appFn!.appArg!, a.appArg!])
-      else if a.isAppOfArity ``Zig.Full.FAssn.up 1 && a.appArg!.isAppOfArity ``Zig.regionIn 6 then
-        let ra := a.appArg!.getAppArgs
-        out := out.push do
-          let some (b', hb) ← blockOf ra[0]! | throwError "block"
-          unless ← isDefEq b' b do throwError "block"
-          let hpos ← mkFreshExprMVar (← mkAppM ``LT.lt #[mkNatLit 0, ← mkAppM ``Array.size #[ra[5]!]])
-          unless ← arith hpos.mvarId! do throwError "size"
-          close (← mkAppM ``AddrOf.region #[hb, hpos])
-    else
-      if a.isAppOfArity ``Zig.Full.bshare 4 then
-        let ba := a.getAppArgs
-        out := out.push do
-          unless ← isDefEq ba[0]! b do throwError "block"
-          unless ← isDefEq ba[3]! (← mkAppOptM ``Option.none #[none]) do throwError "tag"
-          close (← mkAppOptM ``Reaches.share #[ba[0]!, ba[2]!, ba[1]!])
-      else if a.isAppOfArity ``Zig.Full.FAssn.up 1 && a.appArg!.isAppOfArity ``Zig.pts 5 then
-        let pa := a.appArg!.getAppArgs
-        out := out.push do
-          let some (b', hb) ← blockOf pa[2]! | throwError "block"
-          unless ← isDefEq b' b do throwError "block"
-          let hn ← mkFreshExprMVar (← mkAppM ``LT.lt #[mkNatLit 0,
-            ← mkAppOptM ``Zig.Enc.size #[pa[0]!, pa[1]!]])
-          unless ← arith hn.mvarId! do throwError "size"
-          close (← mkAppOptM ``Reaches.pts #[none, pa[0]!, pa[1]!, pa[2]!, pa[3]!, pa[4]!, hb, hn])
-      else if a.isAppOfArity ``Zig.Full.FAssn.up 1 && a.appArg!.isAppOfArity ``Zig.regionIn 6 then
-        let ra := a.appArg!.getAppArgs
-        out := out.push do
-          let some (b', hb) ← blockOf ra[0]! | throwError "block"
-          unless ← isDefEq b' b do throwError "block"
-          let hpos ← mkFreshExprMVar (← mkAppM ``LT.lt #[mkNatLit 0, ← mkAppM ``Array.size #[ra[5]!]])
-          unless ← arith hpos.mvarId! do throwError "size"
-          close (← mkAppM ``Reaches.region #[hb, hpos])
+    for n in (if isAddr then addrLemmas else reachLemmas) do
+      out := out.push do
+        let ty := mkApp3 t.getAppFn t.getAppArgs[0]! t.getAppArgs[1]! a
+        let h ← proveBy n ty
+        let e ← acEq P (mkSep a rest)
+        let pf ← mkAppM (if isAddr then ``AddrOf.of_atom else ``Reaches.of_atom) #[h, e]
+        unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
+        return pf
   return out
 
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates.
@@ -277,7 +322,7 @@ partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) := do
           | some [] => return some []
           | some left => if first?.isNone then first? := some (← saveState, left)
           | none => pure ()
-        catch _ => pure ()
+        catch ex => trace[fsym] "provider candidate: {ex.toMessageData}"
         s.restore
       match first? with
       | some (s, left) => s.restore; return some left
@@ -323,6 +368,46 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         return g'
   return g
 
+/-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
+`x.block = y.block` (definitionally or by a fact), `b₂` is replaced by `b₁`. -/
+partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
+  let hyps := (← getLCtx).foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
+  let mut someEqs := #[]
+  let mut blkEqs := #[]
+  for d in hyps do
+    let ty ← instantiateMVars d.type
+    let some (_, l, r) := ty.eq? | continue
+    unless l.isAppOfArity ``Zig.Ptr.block 1 do continue
+    if r.isAppOfArity ``Option.some 2 && r.appArg!.isFVar then someEqs := someEqs.push (d, l, r.appArg!)
+    else if r.isAppOfArity ``Zig.Ptr.block 1 then blkEqs := blkEqs.push d
+  for i in [0:someEqs.size] do
+    for j in [i+1:someEqs.size] do
+      let (d1, l1, b1) := someEqs[i]!
+      let (d2, l2, b2) := someEqs[j]!
+      if b1 == b2 then continue
+      -- `l1 = l2`
+      let link? : Option Expr ← do
+        if ← withReducible (isDefEq l1 l2) then pure (some (← mkEqRefl l1))
+        else
+          let mut found := none
+          for d in blkEqs do
+            let ty ← instantiateMVars d.type
+            let some (_, a, b) := ty.eq? | continue
+            if (← withReducible (isDefEq a l1)) && (← withReducible (isDefEq b l2)) then
+              found := some d.toExpr; break
+            if (← withReducible (isDefEq a l2)) && (← withReducible (isDefEq b l1)) then
+              found := some (← mkEqSymm d.toExpr); break
+          pure found
+      let some link := link? | continue
+      -- `some b1 = some b2`
+      let e ← mkEqTrans (← mkEqTrans (← mkEqSymm d1.toExpr) link) d2.toExpr
+      let pf ← mkAppM ``Option.some.inj #[e]
+      let g ← g.assert `hblk (← mkEq b1 b2) pf
+      let (h, g) ← g.intro1
+      let g ← subst g h
+      return ← unifyBlocks g
+  return g
+
 /-- Normalize the precondition: unfold, flatten, move facts and existentials into the context. -/
 partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withContext do
   if fuel == 0 then return g
@@ -331,14 +416,14 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let e := e.consumeMData.headBeta
     if e.isAppOfArity sepN 2 then return mkSep (← leaves e.appFn!.appArg!) (← leaves e.appArg!)
     unfoldAtom e
-  let Pu ← leaves P
+  let Pu ← reduceProjs (← leaves P)
   let ats := atoms Pu
   let isFact (a : Expr) := a.isAppOfArity liftN 1 || a.isAppOfArity exN 2
   let facts := ats.filter isFact
   let others := ats.filter (! isFact ·)
   let P2 := if facts.isEmpty then sepOf others else mkSep facts[0]! (sepOf (facts.eraseIdx! 0 ++ others))
   if P2 == P then
-    if facts.isEmpty then return g
+    if facts.isEmpty then return ← unifyBlocks g
   -- `P` to `Pu` by unfolding (definitional), `Pu` to `P2` by AC
   let g ← if P2 == P then pure g else do
     let e ← acEq Pu P2
@@ -346,7 +431,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let pf ← mkAppOptM ``pre_eq #[L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
     g.assign pf
     pure g2.mvarId!
-  if facts.isEmpty then return g
+  if facts.isEmpty then return ← unifyBlocks g
   let a := facts[0]!
   if a.isAppOfArity liftN 1 then
     let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.lift_sep _ fun h => ?_)) g
@@ -413,7 +498,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
   let s ← saveState
   try
     let (_, L, α, P, _, Q) ← view g
-    let (args, _, concl) ← forallMetaTelescopeReducing (← inferType rule)
+    let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
     unless concl.isAppOfArity ``FTotalTriple 4 do s.restore; return none
     let ca := concl.getAppArgs
@@ -441,10 +526,18 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       for i in [0:ats.size] do
         unless used[i]! do rest := rest.push ats[i]!
       R := sepOf rest
+    for a in args do
+      if ← a.mvarId!.isAssigned then continue
+      let ty ← instantiateMVars (← inferType a)
+      if (← isClass? ty).isSome then
+        if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
+          discard <| isDefEq a inst
     let sides := (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
       isProp (← inferType a)).toList.map (·.mvarId!)
-    let some left ← solveSides sides | s.restore; return none
+    let some left ← solveSides sides | do
+      trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
+      s.restore; return none
     -- every argument must be determined
     for a in args do
       let a ← instantiateMVars a
@@ -508,8 +601,254 @@ where
     withLocalDeclD `r (mkConst ``Zig.Full.Res) fun r => do
       mkForallFVars #[r] (← mkArrow (mkApp x r) (mkApp y r))
 
-/-- Close `EUpd P Q` when `Q` is `P` up to existentials (unification), facts (arithmetic),
-`junk` (absorbing `up` atoms) and AC of `⋆`. Unproved facts are left as goals. -/
+/-! ## Updates into a postcondition: the planner -/
+
+/-- Prove `x = y`: pointers by block and offset, numbers by arithmetic, applications of one
+function by congruence (one level at a time). -/
+partial def proveEqGoal (g : MVarId) : TacticM Bool := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let some (ty, x, y) := t.eq? | return false
+  if ← withReducibleAndInstances (isDefEq x y) then
+    g.assign (← mkEqRefl x); return true
+  let ty ← whnfR ty
+  if ty.isConstOf ``Zig.Ptr then
+    return ← closeWith g (← `(tactic| (apply Zig.Full.Auto.ptr_ext' <;>
+      first | rfl | fsym_arith | (simp only [fsym_arith] at *; simp only [*]))))
+  if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g
+  if ty.isAppOfArity ``BitVec 1 then
+    if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
+  let (fx, fy) := (x.getAppFn, y.getAppFn)
+  unless fx.isConst && fx == fy && x.getAppNumArgs == y.getAppNumArgs do return false
+  let s ← saveState
+  try
+    let gs ← evalTacticAt (← `(tactic| congr 1)) g
+    for g' in gs do
+      unless ← proveEqGoal g' do s.restore; return false
+    return true
+  catch _ => s.restore; return false
+
+def proveEq (x y : Expr) : TacticM (Option Expr) := do
+  if x == y then return some (← mkEqRefl x)
+  let m ← mkFreshExprMVar (← mkEq x y)
+  let s ← saveState
+  if ← proveEqGoal m.mvarId! then return some (← instantiateMVars m)
+  s.restore; return none
+
+/-- Unify a pattern atom `q` (with metavariables) with `p` argument by argument; a
+`BitVec.ofNat w ?m` against a value `v` takes `?m := v.toNat`. Arguments that still differ
+must be provably equal (checked by the caller). -/
+partial def matchArgs (q p : Expr) : MetaM Bool := do
+  let q ← instantiateMVars q
+  if q.isAppOfArity ``BitVec.ofNat 2 && q.appArg!.isMVar && !p.isAppOfArity ``BitVec.ofNat 2 then
+    let v ← mkAppM ``BitVec.toNat #[p]
+    return ← isDefEq q.appArg! v
+  if ← withReducibleAndInstances (isDefEq q p) then return true
+  if q.getAppFn.isConst && q.getAppFn == p.getAppFn && q.getAppNumArgs == p.getAppNumArgs then
+    for (x, y) in q.getAppArgs.zip p.getAppArgs do
+      unless ← matchArgs x y do return false
+    return true
+  return !q.hasExprMVar && (q.isFVar == p.isFVar || true) && !(← inferType q).isSort
+
+/-- The planner's state: the atoms of the resource and `EUpd P₀ (sepOf ats)`. -/
+structure St where
+  ats : Array Expr
+  pf : Expr
+
+def St.init (P : Expr) : TacticM St := do
+  let ats := atoms P
+  return { ats, pf := ← mkAppM ``atom_eq #[← acEq P (sepOf ats)] }
+
+/-- Replace the atoms at `idx` by `outs` (nonempty) by `h : EUpd (sepOf consumed) (sepOf outs)`. -/
+def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM St := do
+  let X := sepOf (idx.map (st.ats[·]!))
+  let rest := ((List.range st.ats.size).filter (! idx.contains ·)).toArray.map (st.ats[·]!)
+  let newAts := outs ++ rest
+  let cur := sepOf st.ats
+  let loc ← if rest.isEmpty then
+      mkAppM ``eupd_ac #[h, ← acEq cur X, ← acEq (sepOf outs) (sepOf newAts)]
+    else
+      let R := sepOf rest
+      mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
+  return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
+
+def proveArith (ty : Expr) : TacticM (Option Expr) := do
+  let m ← mkFreshExprMVar ty
+  if ← arith m.mvarId! then return some (← instantiateMVars m) else return none
+
+def regionArgs? (e : Expr) : Option (Array Expr) :=
+  if e.isAppOfArity ``Zig.Full.FAssn.up 1 && e.appArg!.isAppOfArity ``Zig.regionIn 6 then
+    some e.appArg!.getAppArgs else none
+
+def shareArgs? (e : Expr) : Option (Array Expr) :=
+  if e.isAppOfArity ``Zig.Full.bshare 4 then some e.getAppArgs else none
+
+def mkRegion (p A S K a bs : Expr) : MetaM Expr := do
+  return mkApp (mkConst ``Zig.Full.FAssn.up) (← mkAppM ``Zig.regionIn #[p, A, S, K, a, bs])
+
+def offNat (p : Expr) : MetaM Expr := do mkAppM ``Int.toNat #[← mkAppM ``Zig.Ptr.off #[p]]
+
+/-- Carve the region atom `q` of the postcondition (bytes possibly unknown; `n?` its size from a
+fact) out of a region of the state: split at its start (with its alignment) and at its end. -/
+def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option St) := do
+  let (qp, qA, qS, qK, qa, qbs) := (q[0]!, q[1]!, q[2]!, q[3]!, q[4]!, q[5]!)
+  let some (qb, _) ← blockOf qp | return none
+  for i in [0:st.ats.size] do
+    let some r := regionArgs? st.ats[i]! | continue
+    let s0 ← saveState
+    let (p, A, S, K, a, bs) := (r[0]!, r[1]!, r[2]!, r[3]!, r[4]!, r[5]!)
+    try
+      let some (b, _) ← blockOf p | throwError "block"
+      unless ← isDefEq b qb do throwError "block"
+      unless (← isDefEq qA A) && (← isDefEq qS S) && (← isDefEq qK K) do throwError "labels"
+      let po ← mkAppM ``Zig.Ptr.off #[p]
+      let qo ← mkAppM ``Zig.Ptr.off #[qp]
+      let size ← mkAppM ``Array.size #[bs]
+      let some _ ← proveArith (← mkAppM ``LE.le #[po, qo]) | throwError "lo"
+      let hiT ← mkAppM ``LE.le #[qo, ← mkAppM ``HAdd.hAdd #[po,
+        ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt, size]]]
+      let some _ ← proveArith hiT | throwError "hi {hiT}"
+      let mut st := st
+      let mut j := i
+      let mut cur := r
+      -- the start
+      let zero ← proveArith (← mkEq qo po)
+      if zero.isNone then
+        let k ← mkAppM ``HSub.hSub #[← offNat qp, ← offNat p]
+        let some hk ← proveArith (← mkAppM ``LE.le #[k, size]) | throwError "k"
+        let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
+          ← mkAppM ``HAdd.hAdd #[A, ← offNat p], k], qa]) (mkNatLit 0)) | throwError "align"
+        let h ← mkAppOptM ``up_region_split #[p, A, S, K, a, qa, bs, k, hk, ha]
+        let p2 ← mkAppM ``Zig.Ptr.add #[p, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt, k]]
+        let bs1 ← mkAppM ``Array.extract #[bs, mkNatLit 0, k]
+        let bs2 ← mkAppM ``Array.extract #[bs, k, size]
+        st ← st.step #[i] #[← mkRegion p A S K a bs1, ← mkRegion p2 A S K qa bs2] h
+        j := 1
+        cur := #[p2, A, S, K, qa, bs2]
+      -- the end
+      let n? := n?.orElse fun _ => none
+      let n? ← match n? with
+        | some n => pure (some n)
+        | none => do
+          let qbs ← instantiateMVars qbs
+          if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
+      if let some n := n? then
+        let sz ← mkAppM ``Array.size #[cur[5]!]
+        if (← proveArith (← mkEq n sz)).isNone then
+          let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) | throwError "n"
+          let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
+            ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))
+            | throwError "align1"
+          let h ← mkAppOptM ``up_region_split #[cur[0]!, cur[1]!, cur[2]!, cur[3]!, cur[4]!,
+            mkNatLit 1, cur[5]!, n, hk, ha]
+          let c1 ← mkAppM ``Array.extract #[cur[5]!, mkNatLit 0, n]
+          let p3 ← mkAppM ``Zig.Ptr.add #[cur[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt, n]]
+          let c2 ← mkAppM ``Array.extract #[cur[5]!, n, sz]
+          st ← st.step #[j] #[← mkRegion cur[0]! cur[1]! cur[2]! cur[3]! cur[4]! c1,
+            ← mkRegion p3 cur[1]! cur[2]! cur[3]! (mkNatLit 1) c2] h
+          j := 0
+          cur := cur.set! 5 c1
+      -- alignment
+      unless ← isDefEq qa cur[4]! do
+        let some hd ← proveArith (← mkAppM ``Dvd.dvd #[qa, cur[4]!]) | throwError "dvd"
+        let h ← mkAppOptM ``up_region_weaken #[cur[0]!, cur[1]!, cur[2]!, cur[3]!, cur[4]!, qa,
+          cur[5]!, hd]
+        st ← st.step #[j] #[← mkRegion cur[0]! cur[1]! cur[2]! cur[3]! qa cur[5]!] h
+        j := 0
+      -- the bytes
+      let qbs ← instantiateMVars qbs
+      if qbs.hasExprMVar then
+        unless ← isDefEq qbs cur[5]! do throwError "bytes"
+      return some st
+    catch ex =>
+      trace[fsym] "carve: {ex.toMessageData}"
+      s0.restore
+  return none
+
+/-- Join two adjacent regions of the state (the second at the end of the first). -/
+def joinOnce (st : St) : TacticM (Option St) := do
+  for i in [0:st.ats.size] do
+    let some r1 := regionArgs? st.ats[i]! | continue
+    for j in [0:st.ats.size] do
+      if i == j then continue
+      let some r2 := regionArgs? st.ats[j]! | continue
+      let s0 ← saveState
+      try
+        unless (← isDefEq r1[1]! r2[1]!) && (← isDefEq r1[2]! r2[2]!) && (← isDefEq r1[3]! r2[3]!) do
+          throwError "labels"
+        let pe ← mkAppM ``Zig.Ptr.add #[r1[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
+          ← mkAppM ``Array.size #[r1[5]!]]]
+        let some e ← proveEq r2[0]! pe | throwError "adjacent"
+        let r2' ← mkRegion pe r2[1]! r2[2]! r2[3]! r2[4]! r2[5]!
+        let some e' ← proveEq st.ats[j]! r2' | throwError "eq"
+        let _ := e
+        let st ← st.step #[j] #[r2'] (← mkAppM ``atom_eq #[e'])
+        -- now `r2'` is at 0, `r1` moved
+        let some i' := st.ats.findIdx? (· == st.ats[0]! |> fun _ => false) |> fun _ =>
+          (st.ats.toList.findIdx? (fun x => x == mkApp (mkConst ``Zig.Full.FAssn.up)
+            (mkAppN (mkConst ``Zig.regionIn) r1))) | throwError "lost"
+        let h ← mkAppOptM ``up_region_join #[r1[0]!, r1[1]!, r1[2]!, r1[3]!, r1[4]!, r2[4]!, r1[5]!, r2[5]!]
+        let joined ← mkRegion r1[0]! r1[1]! r1[2]! r1[3]! r1[4]! (← mkAppM ``HAppend.hAppend #[r1[5]!, r2[5]!])
+        return some (← st.step #[i', 0] #[joined] h)
+      catch ex =>
+        trace[fsym] "join: {ex.toMessageData}"
+        s0.restore
+  return none
+
+/-- Shares: join those of one block, split for the postcondition's shares of that block,
+weaken to their bounds. -/
+def planShares (st : St) (qshares : Array (Array Expr)) : TacticM St := do
+  let mut st := st
+  -- join
+  let mut again := true
+  while again do
+    again := false
+    let ss := (List.range st.ats.size).filterMap fun i => (shareArgs? st.ats[i]!).map (i, ·)
+    for (i, x) in ss do
+      for (j, y) in ss do
+        if i < j && x[0]! == y[0]! && x[3]! == y[3]! then
+          let h ← mkAppOptM ``share_join #[x[0]!, x[1]!, x[2]!, x[3]!, y[1]!, y[2]!]
+          let out := mkAppN (mkConst ``Zig.Full.bshare) #[x[0]!, ← mkAppM ``Frac.add #[x[1]!, y[1]!],
+            ← mkAppM ``Max.max #[x[2]!, y[2]!], x[3]!]
+          st ← st.step #[i, j] #[out] h
+          again := true
+          break
+      if again then break
+  -- split
+  for i0 in [0:st.ats.size] do
+    let some x := shareArgs? st.ats[i0]! | continue
+    let want := (← qshares.filterM fun q => withNewMCtxDepth (isDefEq q[0]! x[0]!)).size
+    let mut have_ := 1
+    let mut idx := i0
+    let mut xa := x
+    while have_ < want do
+      let h ← mkAppOptM ``share_halves #[xa[0]!, xa[1]!, xa[2]!, xa[3]!]
+      let hf ← mkAppM ``Frac.half #[xa[1]!]
+      let out := mkAppN (mkConst ``Zig.Full.bshare) #[xa[0]!, hf, xa[2]!, xa[3]!]
+      st ← st.step #[idx] #[out, out] h
+      idx := 0
+      xa := xa.set! 1 hf
+      have_ := have_ + 1
+  -- assign fractions and weaken bounds
+  let mut used : Array Nat := #[]
+  for q in qshares do
+    for i in [0:st.ats.size] do
+      if used.contains i then continue
+      let some x := shareArgs? st.ats[i]! | continue
+      let s0 ← saveState
+      if (← isDefEq q[0]! x[0]!) && (← isDefEq q[3]! x[3]!) && (← isDefEq q[1]! x[1]!) then
+        let qk ← instantiateMVars q[2]!
+        if ← isDefEq qk x[2]! then used := used.push i; break
+        if let some hle ← proveArith (← mkAppM ``LE.le #[qk, x[2]!]) then
+          let h ← mkAppOptM ``share_weaken #[x[0]!, x[1]!, x[2]!, qk, x[3]!, hle]
+          st ← st.step #[i] #[mkAppN (mkConst ``Zig.Full.bshare) #[x[0]!, x[1]!, qk, x[3]!]] h
+          used := used.map (fun k => if k < i then k + 1 else k) |>.push 0
+          break
+      s0.restore
+  return st
+
+/-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
+atoms (up to provable equations of their arguments), drop `up` atoms into `junk`, prove `Q`'s
+facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
 def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
   try
@@ -517,31 +856,86 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let P := t.appFn!.appArg!
     let Q := t.appArg!
     let (Qi, pQ) ← instQ Q
-    let pats := atoms P
     let qats := atoms Qi
     let facts := qats.filter (·.isAppOfArity liftN 1)
+    -- block facts first
+    for f in facts do
+      let φ ← instantiateMVars f.appArg!
+      if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+        discard <| solveBlock φ
+    let mut st ← St.init P
+    -- pre-assign by the atoms that unify outright
+    for a in qats do
+      if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome then continue
+      for x in st.ats do
+        let s' ← saveState
+        if ← unifyAtom a x then break
+        s'.restore
+    for a in qats do
+      if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome then continue
+      if (← instantiateMVars a).hasExprMVar then
+        for x in st.ats do
+          if headKey a != headKey x then continue
+          let s' ← saveState
+          if ← matchArgs a x then
+            if (← proveEq x (← instantiateMVars a)).isSome then break
+          s'.restore
+    -- regions: join the adjacent ones, then carve
+    repeat
+      let some st' ← joinOnce st | break
+      st := st'
+    for a in qats do
+      let some q := regionArgs? (← instantiateMVars a) | continue
+      -- a size fact `q.bs.size = n`
+      let mut n? := none
+      for f in facts do
+        let φ ← instantiateMVars f.appArg!
+        if let some (_, l, r) := φ.eq? then
+          if l.isAppOfArity ``Array.size 2 && l.appArg! == q[5]! then n? := some r
+      let mut done := false
+      if let some st' ← carve st q n? then st := st'; done := true
+      while !done do
+        let some st' ← joinOnce st | break
+        st := st'
+        if let some st' ← carve st q n? then st := st'; done := true
+      unless done do throwError "fsym: no region of the state holds{indentExpr a}"
+    -- shares
+    let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
+    st ← planShares st qsh
+    -- final match
     let spat := qats.filter (! ·.isAppOfArity liftN 1)
     let junkQ := spat.any (·.isConstOf ``Zig.Full.Auto.junk)
     let spat := spat.filter (! ·.isConstOf ``Zig.Full.Auto.junk)
-    let mut used := Array.replicate pats.size false
-    let mut M := #[]
+    let mut used : Array Nat := #[]
     for a in spat do
+      let a ← instantiateMVars a
       let mut found := false
-      for i in [0:pats.size] do
-        unless used[i]! do
+      for i in [0:st.ats.size] do
+        if used.contains i then continue
+        let s' ← saveState
+        if ← unifyAtom a st.ats[i]! then
+          used := used.push i; found := true; break
+        s'.restore
+      unless found do
+        for i in [0:st.ats.size] do
+          if used.contains i then continue
+          if headKey a != headKey st.ats[i]! then continue
           let s' ← saveState
-          if ← unifyKeyed a pats[i]! then
-            used := used.set! i true; found := true; M := M.push pats[i]!; break
+          if ← matchArgs a st.ats[i]! then
+            let a' ← instantiateMVars a
+            if let some e ← proveEq st.ats[i]! a' then
+              st ← st.step #[i] #[a'] (← mkAppM ``atom_eq #[e])
+              used := used.map (fun k => if k < i then k + 1 else k) |>.push 0
+              found := true; break
           s'.restore
-      unless found do throwError "fsym: the precondition has no atom for{indentExpr a}"
-    let mut L := #[]
-    for i in [0:pats.size] do
-      unless used[i]! do L := L.push pats[i]!
+      unless found do throwError "fsym: the state has no atom for{indentExpr a}"
+    let pats := st.ats
+    let P := sepOf pats
+    let L := ((List.range pats.size).filter (! used.contains ·)).toArray.map (pats[·]!)
+    let M := used.map (pats[·]!)
     unless L.isEmpty || junkQ do throwError "fsym: atoms left over{indentExpr (sepOf L)}"
-    -- core : ∀ r, P r → S r, with S the spatial part
     let (S, core) ← if junkQ then do
         let J := mkConst ``Zig.Full.Auto.junk
-        -- leftover to junk
         let rec toJunk (xs : List Expr) : MetaM Expr := do
           match xs with
           | [] => mkAppM ``imp_junk_emp #[]
@@ -558,44 +952,36 @@ def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
         let pj ← toJunk L.toList
         let Lx := sepOf L
         if M.isEmpty then
-          let e ← acEq P Lx
-          pure (J, ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[e], pj])
+          pure (J, ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← acEq P Lx], pj])
         else
-          let Pm := sepOf (M.push Lx)
-          let S := sepOf (M.push J)
-          let e ← acEq P Pm
-          -- identity on `M`, `pj` on the last
           let rec frame (ms : List Expr) : MetaM Expr := do
             match ms with
             | [] => pure pj
             | m :: rest => mkAppM ``imp_sep #[← mkAppOptM ``imp_refl #[m], ← frame rest]
-          pure (S, ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[e], ← frame M.toList])
+          pure (sepOf (M.push J), ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← acEq P (sepOf (M.push Lx))],
+            ← frame M.toList])
       else do
         let S := sepOf M
-        let e ← acEq P S
-        pure (S, ← mkAppM ``imp_eq #[e])
-    -- facts
+        pure (S, ← mkAppM ``imp_eq #[← acEq P S])
     let mut left := []
     let mut body := core
     let mut T := S
     for f in facts.reverse do
       let φ ← instantiateMVars f.appArg!
       let hφ ← mkFreshExprMVar φ
-      unless ← arith hφ.mvarId! do left := hφ.mvarId! :: left
+      left := (← arithGoals hφ.mvarId!) ++ left
       body ← mkAppM ``imp_lift #[hφ, body]
       T := mkSep f T
-    -- `T` is `Qi` up to AC
     let T' ← instantiateMVars T
     let Qi ← instantiateMVars Qi
     let eT ← acEq T' Qi
     let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[body, ← mkAppM ``imp_eq #[eT]], pQ]
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
-      let ms ← getMVars pf
-      for m in ms do
+      for m in ← getMVars pf do
         unless left.contains m do
           unless ← isProp (← m.getType) do throwError "fsym: undetermined witness ?{m.name}"
-    g.assign (← mkAppM ``eupd_of_imp #[pf])
+    g.assign (← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``eupd_of_imp #[pf]])
     return left
   catch ex =>
     trace[fsym] "entailment: {ex.toMessageData}"
@@ -626,7 +1012,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let s ← saveState
     try
       let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.of_false _ ?_)) g | throwError "x"
-      if ← closeWith g' (← `(tactic| first | contradiction | omega | (simp only [fsym_arith] at *; omega)))
+      if ← closeWith g' (← `(tactic| first | contradiction | omega | (simp only [fsym_arith, Nat.reduceMod, Nat.reducePow, Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul] at *; omega)))
         then return []
       s.restore
     catch _ => s.restore

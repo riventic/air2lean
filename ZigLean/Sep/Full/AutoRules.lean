@@ -286,7 +286,53 @@ theorem imp_junk_junk (h : ∀ r, X r → junk r) : ∀ r, (junk ⋆ X) r → ju
 
 theorem eupd_of_imp (h : ∀ r, P r → X r) : EUpd P X := EUpd.of_imp h
 
+/-- A local update, reordered: the planner's step. -/
+theorem eupd_frame_ac {R P' : FAssn} (h : EUpd X Y) (e1 : P = (X ⋆ R)) (e2 : (Y ⋆ R) = P') :
+    EUpd P P' := e1 ▸ e2 ▸ h.frame
+
+theorem eupd_ac {P' : FAssn} (h : EUpd X Y) (e1 : P = X) (e2 : Y = P') : EUpd P P' := e1 ▸ e2 ▸ h
+
 end Imp
+
+/-! ## Regions and shares (the planner's local steps) -/
+
+section Plan
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte}
+
+theorem up_region_split {k : Nat} (hk : k ≤ bs.size) (ha : (A + p.off.toNat + k) % a' = 0) :
+    EUpd (up (regionIn p A S K a bs))
+      (up (regionIn p A S K a (bs.extract 0 k)) ⋆ up (regionIn (p.add k) A S K a' (bs.extract k bs.size))) :=
+  EUpd.of_imp fun _ h => Full.up_sep ⟨Region.regionIn_split h.1 hk ha, h.2⟩
+
+theorem up_region_join :
+    EUpd (up (regionIn p A S K a bs) ⋆ up (regionIn (p.add bs.size) A S K a' bs'))
+      (up (regionIn p A S K a (bs ++ bs'))) :=
+  EUpd.of_imp fun _ h => by
+    have h' := Full.sep_up h
+    exact ⟨Region.regionIn_join h'.1, h'.2⟩
+
+theorem up_region_weaken (hd : a' ∣ a) :
+    EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a' bs)) :=
+  EUpd.of_imp fun _ h => ⟨Region.regionIn_weaken h.1 hd, h.2⟩
+
+variable {b : BlockId} {q : Frac} {k k' : Nat} {t : STag}
+
+theorem share_halves : EUpd (bshare b q k t) (bshare b q.half k t ⋆ bshare b q.half k t) :=
+  EUpd.of_imp fun _ h => (bshare_split (Frac.half_pos h.1) (Frac.half_pos h.1)).mp
+    (by rw [Frac.half_add_half]; exact h)
+
+theorem share_weaken (h : k' ≤ k) : EUpd (bshare b q k t) (bshare b q k' t) := EUpd.weaken h
+
+theorem share_join {q₂ : Frac} {k₂ : Nat} :
+    EUpd (bshare b q k t ⋆ bshare b q₂ k₂ t) (bshare b (q.add q₂) (Max.max k k₂) t) := EUpd.join
+
+end Plan
+
+theorem atom_eq {X Y : FAssn} (e : X = Y) : EUpd X Y := e ▸ EUpd.of_imp fun _ h => h
+
+theorem ptr_ext' {p q : Ptr} (h1 : p.block = q.block) (h2 : p.off = q.off) : p = q := by
+  cases p; cases q; simp_all
 
 /-! ## Simp sets -/
 
@@ -304,7 +350,16 @@ theorem lift_ite {α : Type} {c : Prop} [Decidable c] (x y : Result α) :
 theorem lift_optPayload_some {α : Type} (a : α) :
     (StateT.lift (optPayload (some a)) : MemM α) = pure a := rfl
 
-attribute [fsym_norm] lift_bind lift_ite lift_optPayload_some Option.elim_none Option.elim_some
+theorem run_ite' {σ α : Type} {m : Type → Type} [Monad m] {c : Prop} [Decidable c]
+    (x y : StateT σ m α) (s : σ) : (if c then x else y).run s = if c then x.run s else y.run s := by
+  split <;> rfl
+
+theorem run_throw' {σ α : Type} (e : Error) (s : σ) : (throw e : StateT σ Result α).run s = throw e := rfl
+
+theorem result_throw_bind {α β : Type} (e : Error) (f : α → Result β) : (throw e : Result α) >>= f = throw e :=
+  rfl
+
+attribute [fsym_norm] run_ite' run_throw' result_throw_bind lift_bind lift_ite lift_optPayload_some Option.elim_none Option.elim_some
   Zig.call StateT.run_monadLift StateT.run_lift liftM monadLift MonadLift.monadLift
 
 attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_callM Norm.run_callR
@@ -333,5 +388,19 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
 attribute [fsym_arith] BitVec.toNat_ofNat BitVec.toNat_ofInt BitVec.toNat_add BitVec.toNat_eq
   BitVec.lt_def BitVec.le_def decide_eq_true_eq decide_eq_false_iff_not Bool.not_eq_true
   Bool.not_eq_true' beq_iff_eq bne_iff_ne Int.natCast_add Int.natCast_mul Int.toNat_natCast
+
+open Lean Meta Simp in
+/-- `x &&& m` for a literal mask `m = 2 ^ k - 1`: `x % 2 ^ k` (for `omega`). -/
+simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
+  let_expr HAnd.hAnd _ _ _ _ x m := e | return .continue
+  let some n := m.nat? | return .continue
+  let n1 := n + 1
+  if n1 &&& n != 0 then return .continue
+  let k := n1.log2
+  let pf := mkApp2 (mkConst ``Nat.and_two_pow_sub_one_eq_mod) x (mkNatLit k)
+  let rhs ← mkAppM ``HMod.hMod #[x, mkNatLit n1]
+  return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
+
+attribute [fsym_arith] Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
 
 end Zig.Full.Auto
