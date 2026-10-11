@@ -3754,7 +3754,7 @@ def arena_page (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
           else (do
             throw .outOfBounds)) : Zig.CM Tgt arena_pageLocals arena_pageExit) with
         | .br32 => (do
-          let i37 ← Zig.callMC (Zig.checkIndex v17 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v17.ptr.elem 1 (0 : BitVec 64)))
+          let i37 ← Zig.callMC (Zig.checkIndex v17.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v17.ptr.elem 1 (0 : BitVec 64)))
           let i38 ← Zig.intCast false false 64 i37
           let i39 ← Zig.add false i29 i38
           let i40 ← Zig.load (heap_ArenaAllocator) 8 i1
@@ -4312,7 +4312,7 @@ def arena_sum.loop27 (i9 : Zig.Slice) (i25 : BitVec 64) : Zig.CM Tgt arena_sumLo
     let i31 ← pure (i25)
     let i32 ← pure (Zig.lt false i30 i31)
     if i32 then (do
-      let i34 ← Zig.callMC (Zig.checkIndex i9 i28 >>= fun _ => Zig.load (BitVec 8) 1 (i9.ptr.elem 1 i28))
+      let i34 ← Zig.callMC (Zig.checkIndex i9.len i28 >>= fun _ => Zig.load (BitVec 8) 1 (i9.ptr.elem 1 i28))
       let i35 ← pure ((← get).sum)
       let i36 ← Zig.intCast false false 64 i34
       let i37 ← Zig.add false i35 i36
@@ -4447,7 +4447,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
             else (do
               throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
           | .br47 => (do
-            let i52 ← Zig.callMC (Zig.checkIndex v9 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v9.ptr.elem 1 (0 : BitVec 64)))
+            let i52 ← Zig.callMC (Zig.checkIndex v9.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v9.ptr.elem 1 (0 : BitVec 64)))
             let i53 ← Zig.intCast false false 64 i52
             let i54 ← pure v19.len
             let i55 ← pure (Zig.lt false (0 : BitVec 64) i54)
@@ -4457,7 +4457,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
               else (do
                 throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
             | .br56 => (do
-              let i61 ← Zig.callMC (Zig.checkIndex v19 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v19.ptr.elem 1 (0 : BitVec 64)))
+              let i61 ← Zig.callMC (Zig.checkIndex v19.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v19.ptr.elem 1 (0 : BitVec 64)))
               let i62 ← Zig.intCast false false 64 i61
               let i63 ← Zig.mul false (10 : BitVec 64) i62
               let i64 ← Zig.add false i53 i63
@@ -4469,7 +4469,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
                 else (do
                   throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
               | .br67 => (do
-                let i72 ← Zig.callMC (Zig.checkIndex v29 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v29.ptr.elem 1 (0 : BitVec 64)))
+                let i72 ← Zig.callMC (Zig.checkIndex v29.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v29.ptr.elem 1 (0 : BitVec 64)))
                 let i73 ← Zig.intCast false false 64 i72
                 let i74 ← Zig.mul false (100 : BitVec 64) i73
                 let i75 ← Zig.add false i64 i74

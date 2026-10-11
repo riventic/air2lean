@@ -104,23 +104,23 @@ def never : Nat → Nat := fun _ => 0
 return (`Sched.spuriousWake`), and takes the spurious return before `setter` stored. -/
 def spurious : Nat → Nat := follow [0, 0, 1]
 
-theorem waitOnce_sleep : valueOf (Sched.run dispatch 40 never waitOnce {}) = some 1 := by
+theorem waitOnce_sleep : valueOf (Sched.run ⟨.any, .available⟩ dispatch 40 never waitOnce {}) = some 1 := by
   decide +kernel
 
 /-- The negative: a spurious return lets `waitOnce` read `0`, which violates "the result is
 `1`". -/
-theorem waitOnce_spurious : valueOf (Sched.run dispatch 40 spurious waitOnce {}) = some 0 := by
+theorem waitOnce_spurious : valueOf (Sched.run ⟨.any, .available⟩ dispatch 40 spurious waitOnce {}) = some 0 := by
   decide +kernel
 
-theorem waitLoop_sleep : valueOf (Sched.run dispatch 60 never (waitLoop 4) {}) = some 1 := by
+theorem waitLoop_sleep : valueOf (Sched.run ⟨.any, .available⟩ dispatch 60 never (waitLoop 4) {}) = some 1 := by
   decide +kernel
 
-theorem waitLoop_spurious : valueOf (Sched.run dispatch 60 spurious (waitLoop 4) {}) = some 1 := by
+theorem waitLoop_spurious : valueOf (Sched.run ⟨.any, .available⟩ dispatch 60 spurious (waitLoop 4) {}) = some 1 := by
   decide +kernel
 
 /-- Two spurious returns in a row, then a sleep. -/
 theorem waitLoop_spurious_twice :
-    valueOf (Sched.run dispatch 60 (follow [0, 0, 1, 0, 0, 0, 1]) (waitLoop 4) {}) = some 1 := by
+    valueOf (Sched.run ⟨.any, .available⟩ dispatch 60 (follow [0, 0, 1, 0, 0, 0, 1]) (waitLoop 4) {}) = some 1 := by
   decide +kernel
 
 end Cancel.Spurious

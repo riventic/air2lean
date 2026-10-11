@@ -1,0 +1,153 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "runtime_tags.neverTail",
+ "module": "root",
+ "src": {
+  "file": "runtime_tags.zig",
+  "module": "runtime_tags",
+  "decl_line": 143
+ },
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "export": {
+  "name": "neverTail",
+  "cc": "x86_64_sysv"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "aggregate_init",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "struct_field_val",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "index": 0
+  },
+  {
+   "id": 4,
+   "tag": "call_never_tail",
+   "ty": 0,
+   "callee": {
+    "ty": 3,
+    "func": "runtime_tags.helper",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 0,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) u32"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

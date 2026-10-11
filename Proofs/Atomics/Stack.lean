@@ -1053,8 +1053,12 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hf0 : 0 ≤ ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off := by
     simp [sPtr, Ptr.elem, Ptr.add]; omega
   simp only [StateT.run_bind]
-  refine WP.bind (WP.callMC_ptrProject (hi₂.proj (b := 0) (p := sPtr.add 4)
-    (f := (·.elem 4 (BitVec.ofNat 64 u))) (.inl rfl) rfl (by decide) rfl hf0 (by decide) hf16) ?_)
+  -- `&next[u]`: the bounds check (`u < 3`), then the pointer
+  refine WP.bind (WP.bind (WP.callMC_checkIndex (len := (3 : BitVec 64)) (i := BitVec.ofNat 64 u)
+    (by rcases hu with rfl | rfl <;> decide) ?_))
+  dsimp only
+  refine WP.callMC_ptrProject (hi₂.proj (b := 0) (p := sPtr.add 4)
+    (f := (·.elem 4 (BitVec.ofNat 64 u))) (.inl rfl) rfl (by decide) rfl hf0 (by decide) hf16) ?_
   dsimp only
   rw [show (sPtr.add 4).elem 4 (BitVec.ofNat 64 u) = ⟨some 0, ((4 + 4 * u : Nat) : Int)⟩ by
     rcases hu with rfl | rfl <;> rfl]
@@ -1680,7 +1684,7 @@ theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi :
 
 /-- `main`'s end: the frees of the three blocks; the result. -/
 theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi : Inv G m)
-    (hg : G 0 = .ld) (hv : v = 120 ∨ v = 210) :
+    (hg : G 0 = .ld) (hc : m.current = 0) (hv : v = 120 ∨ v = 210) :
     proto.WP 0 (do
       Zig.free sPtr
       Zig.free (cPtr 1)
@@ -1689,20 +1693,23 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi.b0
   obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi.b1
   obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ e he).elim) fun _ m₁ hf₁ => ?_)
+  -- each access happened before `main` (both joins): the ends of the blocks race with nothing
+  have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
+    freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₁) hl₁ e he).elim) fun _ m₂ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hnr _ _) e he).elim) fun _ m₂ hf₂ => ?_)
   obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₂) hl₂ e he).elim) fun _ m₃ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hnr _ _) e he).elim) fun _ m₃ hf₃ => ?_)
   obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
   cases hb'
   refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi.thr hg⟩⟩
@@ -1782,6 +1789,11 @@ theorem pre_inv {m : Mem} (h : Pre m) (hh : U32At m 0 0 0) (hn0 : NextAt m 0 0)
 theorem next_ptr (k : Nat) (hk : k < 3) :
     (sPtr.add 4).elem 4 (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) =
       ⟨some 0, ((4 + 4 * k : Nat) : Int)⟩ := by
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
+
+/-- `next[k]` with `k < 3` passes the bounds check of the `[3]u32` item read. -/
+theorem next_idx (k : Nat) (hk : k < 3) :
+    checkIndex (3 : BitVec 64) (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) = pure () := by
   rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
 
 theorem next_lt (k : Nat) (hk : k < 3) :
@@ -1978,7 +1990,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
       rw [next_ptr b hb3]
       -- `next[top]`
       refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₁ hg₂₁ hc₂₁ hbk hnb e he).elim) fun v m₂₂ hl => ?_)
@@ -1998,7 +2010,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
       rw [next_ptr b hb3]
       -- `next[top]` again
       have hnb₂ := nextAt_congr (m := m₂₁) (m' := m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hnb
@@ -2009,7 +2021,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt a ha3, next_idx a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
       rw [next_ptr a ha3]
       have hna₃ := nextAt_congr (m := m₂₁) (m' := (m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read).recordAt 0
         (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hna
@@ -2019,7 +2031,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
         (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
       refine WP.pure' ?_
-      exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+      exact main_end hi₂₄ hg₂₁ (by first | exact hc₂₁ | simp [Mem.recordAt, hc₂₁]) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
   | -- Zig 0.15.2: a load of the whole `Stack`, then an index into its `next`
     obtain ⟨w1, w2, hn1, hn2, hw⟩ : ∃ w1 w2 : BitVec 32, NextAt m₂₁ 1 w1 ∧ NextAt m₂₁ 2 w2 ∧
         ((a = 1 ∧ b = 2 ∧ w1 = 0 ∧ w2 = 1) ∨ (a = 2 ∧ b = 1 ∧ w1 = 2 ∧ w2 = 0)) := by
@@ -2075,30 +2087,30 @@ theorem main_spec (σ : Placement) (d : Nat) :
     refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
       (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
     refine WP.pure' ?_
-    exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+    exact main_end hi₂₄ hg₂₁ (by first | exact hc₂₁ | simp [Mem.recordAt, hc₂₁]) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
 
 /-! ## The results -/
 
 /-- **`stackPush` gives 120 or 210 under every schedule** (every oracle `o`, every `fuel`): both
 nodes are on the stack, the top one first, then the other, then 0. -/
-theorem stackPush_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o stackPush (mem0 σ)).run = some (.ok (v, m))) :
+theorem stackPush_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o stackPush (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 120 ∨ v = .ok 210 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
 overflow, under every schedule. -/
-theorem stackPush_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+theorem stackPush_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem stackPush_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 /-! ## Non-vacuity witnesses

@@ -315,14 +315,46 @@ theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) 
 /-! ## Ghost state: epoch ledgers (`docs/sep-full-state.md` §Ghost state)
 
 A ghost cell is an epoch ledger of named grants. `auth` counts authorities `●(e, M)`: the current
-epoch `e` and the grant map `M` (grant id ↦ the region it names, a start pointer and a length);
+epoch `e` and the grant map `M` (grant id ↦ the region it names: a start pointer, a length and the
+lent extent fraction);
 a valid state has at most one per name. `frag (e, i, g)` counts tokens `◯(e, i ↦ g)`. Composition
 adds both counts, so it is total; `Ghost.Valid` (part of `Holds`) rules out two authorities, a
 token of the current epoch that the map does not record (or two for one id), and tokens of a
 later epoch. -/
 
-/-- A region named by a ledger token: its start pointer and its length in bytes. -/
-abbrev GRegion := Ptr × Nat
+/-- A nonnegative fraction (of a block's extent, §Block extents below). -/
+structure Frac where
+  val : Rat
+  nonneg : 0 ≤ val
+
+namespace Frac
+
+theorem eq {a b : Frac} (h : a.val = b.val) : a = b := by
+  cases a; cases b; simp only at h; subst h; rfl
+
+def zero : Frac := ⟨0, Rat.le_refl⟩
+
+def one : Frac := ⟨1, by decide⟩
+
+def add (a b : Frac) : Frac := ⟨a.val + b.val, by have := a.nonneg; have := b.nonneg; grind⟩
+
+theorem add_comm (a b : Frac) : a.add b = b.add a := eq (by simp only [add]; grind)
+
+theorem add_assoc (a b c : Frac) : (a.add b).add c = a.add (b.add c) := eq (by simp only [add]; grind)
+
+@[simp] theorem add_zero (a : Frac) : a.add zero = a := eq (by simp only [add, zero]; grind)
+
+@[simp] theorem zero_add (a : Frac) : zero.add a = a := eq (by simp only [add, zero]; grind)
+
+instance : DecidableEq Frac := fun a b =>
+  decidable_of_iff (a.val = b.val) ⟨eq, fun h => h ▸ rfl⟩
+
+end Frac
+
+/-- A region named by a ledger token: its start pointer, its length in bytes, and the fraction of
+its block's extent lent with it (`FAllocInv.granted`'s share), so that the allocator returns the
+share against exactly the receipt it holds for the grant. -/
+abbrev GRegion := Ptr × Nat × Frac
 
 /-- A ledger's grant map: grant id ↦ the region granted under it. -/
 abbrev GMap := Nat → Option GRegion
@@ -390,31 +422,6 @@ K` is the authority with all of the fraction (`1`, at bound `0`): only it may sh
 block, and then no other resource holds a share. Shares split off the authority (`bshare`) let a
 client keep "the block has at least `off + n` bytes" while it holds a grant. -/
 
-/-- A nonnegative fraction. -/
-structure Frac where
-  val : Rat
-  nonneg : 0 ≤ val
-
-namespace Frac
-
-theorem eq {a b : Frac} (h : a.val = b.val) : a = b := by
-  cases a; cases b; simp only at h; subst h; rfl
-
-def zero : Frac := ⟨0, Rat.le_refl⟩
-
-def one : Frac := ⟨1, by decide⟩
-
-def add (a b : Frac) : Frac := ⟨a.val + b.val, by have := a.nonneg; have := b.nonneg; grind⟩
-
-theorem add_comm (a b : Frac) : a.add b = b.add a := eq (by simp only [add]; grind)
-
-theorem add_assoc (a b c : Frac) : (a.add b).add c = a.add (b.add c) := eq (by simp only [add]; grind)
-
-@[simp] theorem add_zero (a : Frac) : a.add zero = a := eq (by simp only [add, zero]; grind)
-
-@[simp] theorem zero_add (a : Frac) : zero.add a = a := eq (by simp only [add, zero]; grind)
-
-end Frac
 
 /-! ## Finite sums of fractions (epoch-tagged shares, `docs/sep-full-state.md` §Epoch-tagged shares) -/
 

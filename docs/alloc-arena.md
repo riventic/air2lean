@@ -142,10 +142,11 @@ node in place through the child (`child_allocator.rawResize(node, …)`) while c
 inside it. `FAllocSpec.resize` needs the region's bytes, which the arena does not own, and frame
 cells record their block's size. With `page_allocator` as the child, `mremap` growth in place
 changes the size that the clients' cells record. So the arena's `FAllocSpec.alloc` fails for
-every invariant, although natively nothing is wrong. Resolution (approved, not implemented):
-size-free cells and extent resources, and a stronger `FAllocSpec.resize` that grows from the
-token alone ([sep-full-state.md](sep-full-state.md) §Block extents, with phases). The patched
-`alloc` proof waits for it.
+every invariant, although natively nothing is wrong. Resolution (approved; the model, the Full
+layer, the FixedBufferAllocator, the page allocator and the arena's `free`/`resize`/`remap` are
+done): size-free cells and extent resources, and a stronger `FAllocSpec` whose grants carry a
+share of their block's extent ([sep-full-state.md](sep-full-state.md) §Block extents, with
+phases). The patched `alloc` proof waits for the remaining phases.
 
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
@@ -160,19 +161,37 @@ free list) is not attempted.
   fields, e.g. `FLogic.partial.T (I.own ⋆ I.granted s.ptr k bs) (Sched.soloRun fuel free) (fun _ =>
   I.own)` with `I = inv CI γ e ctx`, for every child invariant `CI`, epoch `e` and depth `fuel`,
   from the generated code only. The invariant (`own`): the arena struct with `used_list`/`free_list`
-  as pointer-valued atomic words, the epoch ledger's authority `gauth γ e M` (`M`: the grants of
-  this epoch; empty without a first node), the first node (header words: `size` and `end_index` as
-  integer atomic words, `next`; the child's token; the unused tail of its buffer), the other used
-  nodes and the free list as `next`-linked chains, the child's `own`, and `Junk` (bytes that frees
-  of earlier allocations leaked back). The token of a grant names it: `∃ i, gfrag γ e i (p, n)`.
+  as pointer-valued atomic words, the epoch ledger's authority `gauthP γ e M CI.tag` (`M`: the
+  grants of this epoch, each with its lent fraction; empty without a first node; the ledger's
+  parent is the child's tag), the first node (header words: `size` and `end_index` as integer
+  atomic words, `next`; the child's token with the fraction `qn` it lent; the part `qh` of the
+  node's extent share that the arena keeps; the unused tail of its buffer), the other used nodes
+  and the free list as `next`-linked chains (each with its token and kept share), the child's
+  `own`, `Junk` (bytes that frees of earlier allocations leaked back), one receipt per grant
+  (`Rcpts`) and the pool of shares that frees gave back (`Pool`). The token of a grant names it
+  with its fraction: `∃ i, gfrag γ e i (p, n, q)`; the grant's share is tagged with the epoch
+  (`FAllocInv.tag = some (γ, e)`), so a reset can revoke it.
+  * **Block extents** ([sep-full-state.md](sep-full-state.md) §Block extents). A cell no longer
+    records its block's size, so the node's size comes from its extent share: the child's grant
+    carries `pshare N qn (N.off + sz) CI.tag` (the stronger `FAllocSpec`), and the arena keeps a
+    part of it. The share is true while its tag is active, which the child's state witnesses
+    (`FAllocInv.act`, an obligation of every allocator invariant: automatic for an untagged child,
+    and for an arena from its own ledger and its child's `act`, so an arena over an arena works
+    the same way). O-F (the slice ends at `buf + end_index` only if it lies in the first node)
+    uses the slice's owned bytes, the node's share and `Mem.LiveDisjoint.addr_ne` (two live blocks
+    share no byte address). A slice's bytes that rejoin the node's tail are relabeled as the
+    node's (`EUpd.relabel`: a cell's size is a label, its kind counts up to `BlockKind.norm`).
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
-    (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant is retired
-    (`Upd.retire`).
+    (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
+    against its receipt into the pool (`EUpd.returnT`) and the grant is retired (`Upd.retire`):
+    `free_ghost`.
   * `resize`: a slice that is not the first node's last one only shrinks (cut bytes to junk); the
     last one moves `end_index` back (cut bytes rejoin the tail) or into the tail when it has room
     (`Node.loadBuf` reads the `size` word: `FTriple.atomicLoadAs`; clearing the `resizing` bit of an
     even size is the size: `toInt_ofBits`). A successful resize re-points the grant at the new
-    length (`Upd.reassign`). `remap` is `resize` and returns `memory.ptr`.
+    length (`Upd.reassign`); a shrink weakens the share's bound (`shrink_ghost`), a growth returns
+    the share, joins it into the node's kept share and lends it again at the new end
+    (`grow_ghost`). `remap` is `resize` and returns `memory.ptr`.
   * Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit of the stock arena**: the invariant keeps `end_index` within the first
   node's buffer (`OV.Facts`: `24 + ei ≤ sz`), which a failed `alloc` breaks; the stock arena has no
@@ -183,8 +202,10 @@ free list) is not attempted.
 * **One proof, every module.** Each generated module has its own `Tgt` and its own copies of the
   std types, so no generated term of one module is a term of another. The specification is
   therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
-  ownership and run lemmas, and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
-  `arena_loadBuf`), and each module's file states the theorems with one command
+  ownership and run lemmas, the resource updates that end each branch (`free_last_upd`,
+  `free_other_upd`, `resize_shrink_upd`, `resize_grow_upd`, `resize_other_upd`,
+  `resize_false_of`), and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
+  `arena_loadBuf`, which walk the generated code), and each module's file states the theorems with one command
   (`arena_spec_statements`, `checked` for the patched arena) and proves them with these tactics,
   elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
   (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,

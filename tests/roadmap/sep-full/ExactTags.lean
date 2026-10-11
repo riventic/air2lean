@@ -37,7 +37,7 @@ def FTripleExact {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop
 
 def z8 : Array Byte := Array.replicate 8 (.int 0)
 def blk0 : Block := { bytes := Array.replicate 16 (.int 0), align := 16, kind := .heap, live := true, addr := 16 }
-def msg0 : Msg := Msg.mk 0 (Array.replicate 16 (.int 0)) #[] #[] none
+def msg0 : Msg := Msg.mk 0 (Array.replicate 16 (.int 0)) #[] #[] none none
 def loc0 : ALoc := ALoc.mk 0 0 16 #[msg0]
 /-- One 16-byte block whose bytes carry one 16-byte atomic location. -/
 def m0 : Mem := { blocks := #[blk0], atomics := #[loc0], nextMsg := 1 }

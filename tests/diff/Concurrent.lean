@@ -33,7 +33,7 @@ private def payload : Except Zig.ErrName (BitVec 32) → String
 def runWith {Tgt α : Type} [ReturnedError α] (fuel : Nat)
     (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
     (main : Zig.ConcM Tgt α) (render : α → String) : Runner := fun o =>
-  let (r, opts) := Zig.Sched.runTrace dispatch fuel o main m0
+  let (r, opts) := Zig.Sched.runTrace ⟨.any, .available⟩ dispatch fuel o main m0
   let out : Observation := match r with
     | none => DiffOutcome.noResult
     | some (.error e) => DiffOutcome.failure e

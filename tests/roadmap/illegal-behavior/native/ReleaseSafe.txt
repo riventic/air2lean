@@ -19,3 +19,6 @@ forLen 2/3 6
 forLenMem 2/3 6
 forRange 3/5 9
 parentOf lone true
+itemPtrUnsafe &s[len] offset 8
+arrayItemPtr &a[4] offset 16
+arrayItem a[4] 5

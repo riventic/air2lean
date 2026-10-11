@@ -256,8 +256,9 @@ sequential run that compares the value it just read needs no address.
 ## Block extents (alloc M2 O-G)
 
 Status: design approved by the coordinator (2026-10-11), phases below. Phase 2 (the model and the
-Full layer) is in the code, and the FixedBufferAllocator and the page allocator (Linux and macOS)
-are re-proved against the stronger `FAllocSpec`; the arena follows, see the table. It replaces "frame cells carry their block's size".
+Full layer) is in the code, and the FixedBufferAllocator, the page allocator (Linux and macOS)
+and the arena's `free`/`resize`/`remap` (stock Linux and macOS, patched) are re-proved against the
+stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It replaces "frame cells carry their block's size".
 
 **As implemented (phase 2).**
 
@@ -337,6 +338,35 @@ are re-proved against the stronger `FAllocSpec`; the arena follows, see the tabl
   `bshare_split`, `EUpd.join`, `EUpd.weaken` hold for every tag (`ECell.StepT`, `EUpd.ext1T`);
   `Holds.bshare` takes the tag's activity in the resource (automatic for an untagged share;
   `Holds.bshareT` is gone). Regression: `tests/roadmap/sep-full/NestedTags.lean`.
+* **Allocators with tagged grants** (step 4, the arena's `free`/`resize`/`remap`, coordinator
+  decisions 2026-10-11):
+  * A ledger's grant records the lent fraction (`GRegion := Ptr × Nat × Frac`): the arena's token
+    is `gfrag γ e i (p, n, q)`, so `free` and `resize` return the share against exactly the
+    receipt the arena keeps for grant `i` (one per grant id, `Rcpts`; returned shares go to a
+    pool until the node goes back to the child).
+  * `FAllocInv.act`: an allocator's `own` witnesses that the tag of its grants' shares is active
+    (`Act`). It is a field with the default proof `Act.root`, so every untagged invariant (the
+    FixedBufferAllocator, the page allocator, `pinnedInv`) has it unchanged; the arena proves it
+    from its ledger (`act_gauthP`, parent `CI.tag`) and its child's `act`. An allocator that holds
+    a child's grants reads their bounds with it (`FAllocInv.act_within`, `Holds.pshareW`), with
+    no hypothesis on the child.
+  * General pieces in the library: `Within X P` with the `within` tactic (find a part of a
+    separating conjunction; `Holds.bshareW`, `Owns.within` in the arena), `EUpd.ex`/`exAll`/
+    `lift`/`withFact`, `EUpd.pweaken` (a grant share's bound), `pshare_iff`, `EUpd.relabel` (a
+    region's cells with another size label and a kind of the same normal form: labels carry no
+    information), `Mem.LiveDisjoint.addr_ne` (two live blocks share no byte address), `Junk` (one
+    definition for every allocator), `sepN` (an indexed separating conjunction).
+* **Native OS mapping rules** (step 5, `ZigLean/Sep/Full/Mmap.lean`): one general step
+  `Holds.reblock` (a block's extent changes under its `bext`; the resource gives up exactly the
+  bytes that stop being live and gets those that become live; frame bytes keep their normalized
+  cells), `Holds.trim`, and the rules `FTotalTriple.munmapTail'`, `munmapPrefix'` (the live start
+  moves: a kind of the same normal form), `mremapShrink'` (each from `bext` and the released bytes
+  only) and `mremapGrow'` (growth in place without `MAYMOVE`, `LDMono.grow` from
+  `Mem.mappingRoom`; the new bytes go to the caller). Growth needs only the authority with any
+  fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
+  grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
+  place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
+  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
@@ -498,7 +528,7 @@ of tags:
 * **A tagged share's bound needs its tag's activity** (`Holds.bshare`, argument `Act r.gh.ls t`):
   the ledgers of the whole chain must be in the resource. An arena owns its child allocator
   (`CI.own`), so an arena over an arena holds the outer ledger's authority; the arena proof
-  (step 4) needs `CI.own` to witness `Act CI.tag` (trivial for `none`).
+  (step 4) needs `CI.own` to witness `Act CI.tag` (trivial for `none`): `FAllocInv.act`.
 * FBA and the page allocator (tag `none`) keep their statements; their checks pass unchanged.
 * Regression `tests/roadmap/sep-full/NestedTags.lean`: `nested_reset` goes from `bext` through
   an outer grant, an inner ledger under it and an inner grant, to `bext` again after the outer
@@ -511,9 +541,9 @@ of tags:
 |---|---|---|---|
 | 1 | design | this section | done |
 | 2 | model | `Res.ext`, `bsize` in `know`, normalized `FMatch`, `Holds`; re-prove `Res`, `Triple`, `Atomic`, `AtomicPtr`, `AtomicRules`, `Disjoint`, `Ghost`, `Seq`, `Tame`, `Toy`, `Conc`, `Dispatch`; the two bridges | 1–2 phases |
-| 3 | OS rules | native full-state `mmap` (fresh `bext`), `munmap` whole/prefix/tail, `mremap` grow (`bext` only) and shrink (`bext` + tail), and move | 1 phase |
+| 3 | OS rules | native full-state `munmap` prefix/tail, `mremap` grow in place (`bext` only) and shrink (`bext` + tail); `mmap`, whole `munmap` and move through the pinned bridge | done |
 | 4 | spec | refined `FAllocSpec.resize`, old form as a corollary, `toLegacy` and wrappers adjusted | ½ phase |
-| 5 | re-proofs | FBA (`resize` from the token; `bsize` of the buffer; no pin byte), `PageSpec` linux+macOS (token = `bext` + tail), arena `free`/`resize`/`remap` (the invariant records that every grant lies in a used node, for O-F without the slice's bytes) | 2–3 phases |
+| 5 | re-proofs | FBA (`resize` from the token; `bsize` of the buffer; no pin byte), `PageSpec` linux+macOS (token = `bext` + tail), arena `free`/`resize`/`remap` (O-F from the slice's bytes and the node's extent share) | done |
 | 6 | arena `alloc` | patched arena for every `CAllocSpec` child (dispatch through `CVTable.dispatch` + `vtR`; `fits` per O-C); page child instance; O-G regression (`8`-byte grant, then `alloc(5000)`) | 2–3 phases |
 | 7 | the rest | `reset` (stock and patched), the `Unroll` fix-group cut, `not_fallocSpec_arena` | 1–2 phases |
 
@@ -547,7 +577,7 @@ revoked. This is what ghost state is for: logical resources that live only in th
 is an **epoch ledger of named grants** (`ZigLean/Sep/Full/Res.lean`, rules in `Ghost.lean`):
 
 ```
-abbrev GRegion := Ptr × Nat              -- a region: start pointer, length in bytes
+abbrev GRegion := Ptr × Nat × Frac       -- a region: start pointer, length, lent extent fraction
 abbrev GMap := Nat → Option GRegion      -- grant id ↦ the region granted under it
 structure GCell where
   auth : Nat × GMap → Nat          -- how many authorities ●(e, M): current epoch e, grant map M

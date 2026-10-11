@@ -65,6 +65,10 @@ FIXTURES = [
      ["--namespace", "IdleLoop", "--prefix", "progress."], "exact"),
     ("tests/roadmap/packed-fields/PackedFields/Gen.lean", "tests/roadmap/packed-fields/air/0.16.0",
      ["--namespace", "PackedFields", "--prefix", "packed_fields."], "exact"),
+    ("tests/roadmap/packed-fields/PackedFieldsFresh/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm",
+     ["--namespace", "PackedFieldsFresh", "--prefix", "packed_fields."], "exact"),
+    ("tests/roadmap/packed-fields/PackedFieldsX86/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/x86_64",
+     ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/spawn-failure/SpawnFailure/Gen.lean", "tests/roadmap/spawn-failure/air/0.16.0",
      ["--namespace", "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"], "exact"),
     # Its check.sh compares with normalize-generated.py compare (body only); schema-11 AIR.
@@ -90,6 +94,8 @@ FIXTURES = [
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
      ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
+    ("Proofs/ProvenanceGap/Gen.lean", "assurance/provenance-gap/air",
+     ["--namespace", "ProvenanceGap", "--prefix", "gap."], "exact"),
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
@@ -130,6 +136,12 @@ FIXTURES = [
      ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
       "--allocator-model", "translated"], "exact")
     for prog in ("page", "fba") for target in ("linux", "macos")
+] + [
+    # tests/roadmap/alloc-arena/check.sh: the stock arena (both targets) and the patched one.
+    (f"tests/roadmap/alloc-arena/AllocArena/{module}.lean", f"tests/roadmap/alloc-arena/air/0.16.0/{d}",
+     ["--namespace", f"AllocArena.{module}", "--prefix", "arena.", "--allocator-model", "translated"], "exact")
+    for d, module in (("arena-linux", "ArenaLinux"), ("arena-macos", "ArenaMacos"),
+                      ("arena-fixed-linux", "ArenaFixedLinux"))
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")

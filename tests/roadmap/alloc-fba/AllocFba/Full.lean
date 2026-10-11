@@ -48,18 +48,6 @@ structure FBuf where
   K : BlockKind
   cA : Nat
 
-/-- Bytes the allocator has given up (padding, non-last frees). -/
-def Junk : FAssn := FAssn.ex fun h : Heap => up (fun h' => h' = h)
-
-theorem junk_absorb {X : Assn} {r : Res} (h : (up X ⋆ Junk) r) : Junk r := by
-  obtain ⟨r₁, r₂, hd, rfl, h1, ⟨hj, h2⟩⟩ := h
-  refine ⟨r₁.heap.erase ∪ hj, ?_⟩
-  obtain ⟨-, k1, g1⟩ := h1
-  obtain ⟨e2, k2, g2⟩ := h2
-  refine ⟨?_, by simp [k1, k2, Know.union_none], by simp [g1, g2]⟩
-  show (FHeap.union r₁.heap r₂.heap).erase = _
-  rw [← e2]; exact FHeap.erase_union _ _
-
 /-- The struct word `end_index = e`. -/
 def wEnd (ctx : Ptr) (e : Nat) : FAssn := up (pts ctx 8 (BitVec.ofNat 64 e))
 

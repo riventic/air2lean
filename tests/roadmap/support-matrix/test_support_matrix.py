@@ -185,8 +185,8 @@ class Agreement(Scratch):
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_ci_example_list_must_match_selection(self):
-        self.edit('.github/workflows/ci.yml', 'floats errors variants pointers layout"',
-                  'floats errors variants pointers layout slices"')
+        self.edit('.github/workflows/ci.yml', 'pointers recursion variants"',
+                  'pointers recursion slices variants"')
         self.assertProblem('CI 0.14.1 examples')
 
     def test_readme_examples_table_names_every_example(self):

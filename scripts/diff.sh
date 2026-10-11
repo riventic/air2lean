@@ -52,6 +52,8 @@
 #   AIR2LEAN_DIFF_BACKEND   Native code generator: llvm or stage2_x86_64 (-fno-llvm). Unset: Zig's default.
 #   AIR2LEAN_DIFF_LINK_FLAGS  Extra build-exe flags for the harness (the emulated x86_64 runs pass
 #                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
+#   AIR2LEAN_DIFF_ZIG_CACHE  Zig global cache dir for the stock-zig builds of this script (the
+#                       harnesses and libm). Unset: Zig's default. CI keeps one per build mode.
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
 #                       (not `asm` on a host that is not x86_64, and not an example whose
 #                       examples/<ex>/zig-versions does not list the zig's version, as in check.sh).
@@ -81,6 +83,7 @@ trap finish_diff EXIT
 python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root"
 
 zig_bin=${AIR2LEAN_ZIG:-zig}
+if [ -n "${AIR2LEAN_DIFF_ZIG_CACHE:-}" ]; then export ZIG_GLOBAL_CACHE_DIR=$AIR2LEAN_DIFF_ZIG_CACHE; fi
 optimize=${AIR2LEAN_DIFF_OPTIMIZE:-ReleaseSafe}
 backend_flag=
 case "${AIR2LEAN_DIFF_BACKEND:-}" in

@@ -2,7 +2,8 @@
 
 Two aarch64 profiles are qualified separately: **aarch64-linux-gnu** (`-mcpu=baseline` =
 `generic`) and **aarch64-macos-none** (`-mcpu=baseline` = `apple_m1`). Both use stock Zig
-0.16.0, the LLVM backend and ReleaseSafe. Each profile has three pieces of evidence:
+(0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
+ReleaseSafe. Each profile has three pieces of evidence:
 
 1. A native probe run. `scripts/aarch64-abi.py` runs only on the profile's own host. It does
    not use an emulator or cross execution.
@@ -15,12 +16,13 @@ profiles (`Air2Lean/Air/Profile.lean`). No native differential test or proof bui
 that host. See [target-matrix.md](target-matrix.md).
 
 ```sh
-# On the profile's host (aarch64 Linux or Apple silicon macOS), with stock Zig 0.16.0:
+# On the profile's host (aarch64 Linux or Apple silicon macOS), with a stock Zig whose version
+# has an expected file (0.16.0, 0.15.2, 0.14.1):
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-gnu
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
 python3 scripts/aarch64-abi.py compare --target aarch64-linux-gnu OBSERVED.txt
-lake build ZigLean.VecMem ZigLean.Float.Allowed
+lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
 lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
   tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
 python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
@@ -42,12 +44,25 @@ python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
   - the f80 invalid encodings: unnormal, pseudo-infinity, pseudo-NaN and pseudo-denormal;
   - atomic cells `u8`…`u128`, including `u24` and `u40`, each with padding `00` and `ff`:
     size, alignment, raw cell bytes, then cmpxchg, fetch-add, xchg and load results;
-  - `std.atomic.cache_line`.
+  - `std.atomic.cache_line`;
+  - synchronization boundaries (`rmw`, `order`, `atomic_ext`, `litmus` rows): every
+    `@atomicRmw` operation (`Xchg`, `Add`, `Sub`, `And`, `Nand`, `Or`, `Xor`, `Max`, `Min`) on
+    `u8`/`i8`, `u24`/`i24`, `u40`/`i40`, `u64`/`i64` and `u128`/`i128` cells, with operands that
+    separate signed from unsigned `Max`/`Min`; the result of every ordering the compiler accepts
+    for load, store, RMW and `cmpxchg`; `bool`, enum, pointer, `f32` and `f64` cells; and three
+    threaded litmus tests with a deterministic outcome on a conforming target (message passing
+    with release/acquire: no stale read in 100000 rounds; store buffering with `seq_cst`: never
+    both zero; four threads adding to `u8`, `u24`, `u128` and a `cmpxchgWeak` loop on `u64`: the
+    exact sum). A relaxed litmus test is not recorded, because its outcome is not deterministic.
 - L09's `tests/roadmap/vector-layouts/probe.zig`: bit-packed vector sizes, alignments and
   memory images.
-- `tests/roadmap/aarch64-abi/atomic-limit.zig`: a `u256` `@atomicRmw`. The compiler must
-  reject it with "expected 128-bit integer type or smaller". This records the widest
-  atomic integer.
+- `tests/roadmap/aarch64-abi/limits/*.zig`: programs the compiler must reject, one `limit` row
+  each with the first compile error. `atomic_u256` (a `u256` `@atomicRmw`: "expected 128-bit
+  integer type or smaller") records the widest atomic integer. The others record the
+  boundaries of the memory orderings (a `release` load, an `acquire` store, an `unordered` RMW,
+  a `cmpxchg` whose failure ordering is stronger than its success ordering or is `release`) and
+  of the cell types (an array or a vector; `Add` on a `bool`; `And` on a float). An atomic
+  `f80` is not listed: Zig 0.16.0 and 0.15.2 hand the module to LLVM, which aborts on it.
 
 ## Expected results and compare
 
@@ -85,7 +100,7 @@ gives NaN). Each atomic line must be the sequential result of the model's `cmpxc
 
 ### Declared divergences
 
-These results differ from the model on **both** profiles. `Model.lean` lists them. It
+These results differ from the model on **both** profiles (and on every recorded Zig version). `Model.lean` lists them. It
 prints each one as a divergence and never counts it as a match. It fails if a listed case
 starts to match (the list is stale) or if an unlisted case diverges.
 
@@ -95,9 +110,21 @@ starts to match (the list is stale) or if an unlisted case diverges.
 | `f80 pseudo-denormal + 0` | encoding kept (`0000_8000…`) | normalized (`0001_8000…`) |
 | `u24` cmpxchg, padding byte `ff` | **fails**, although the 24-bit values are equal | succeeds |
 | `u40` cmpxchg, padding bytes `ff` | **fails**, although the 40-bit values are equal | succeeds |
+| `i24` and `i40` `@atomicRmw` `Max`, negative cell and positive operand | **keeps the negative cell**: not the signed maximum | the signed maximum |
 
 The model allows `unnormal + 0` itself, because it classifies the returned unnormal as a NaN.
 The divergence shows up in `isnan`.
+
+Zig 0.14.1 and 0.15.2 have two more divergences, on both profiles. Their soft-float `@sqrt`
+of `f80` and `f128` is correct to `f64` precision only (`sqrt(2)` = `3fff b504f333f9de68 00…` for
+`f80`, where 0.16.0 gives `…de6484`), so the correctly rounded model disagrees. `Model.lean`
+lists them for those versions only; otherwise the 0.15.2 and 0.14.1 files equal the 0.16.0
+files line for line (apart from `meta zig`).
+
+The signed `Max` row is an unsound corner of the model: the model's `RmwOp.apply` is the
+signed maximum, and the native result of a padded signed width (`i24`, `i40`) is not. `Min` and
+the unpadded widths (`i8`, `i64`, `i128`) agree. The translator's atomic checker does not
+reject padded widths yet.
 
 The cmpxchg rows are a synchronization boundary. Zig widens a `u24`/`u40` atomic to its
 4-/8-byte ABI cell and compares the whole cell, padding included. A plain store writes only
@@ -110,7 +137,7 @@ the atomic. The widening comes from Zig's frontend lowering, so other targets pr
 the same way. This has been observed only on aarch64. Widths without padding (`u8`,
 `u16`, `u32`, `u64`, `u128`) match on both profiles, with either padding.
 
-## Per-profile observations (Zig 0.16.0, ReleaseSafe)
+## Per-profile observations (every recorded Zig version, ReleaseSafe)
 
 The two expected files differ only in these lines:
 
@@ -138,7 +165,10 @@ Not covered:
 - other modes (ReleaseFast: [build-modes.md](build-modes.md));
 - `compiler-rt` float mode, libm and the float operations not listed above;
 - vector float arithmetic;
-- multi-threaded atomic behaviour (one thread runs the probe);
-- ordering strength (LDAR/STLR vs LL/SC);
-- other Zig versions. A new version needs its own `expected/<version>/` files; without
-  them `compare` reports `excluded`.
+- weak orderings (`monotonic` message passing, relaxed store buffering): outcomes are
+  allowed, not forced, so nothing deterministic can be recorded; the model's weak-memory
+  semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
+- instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
+- atomics on `f80`, and the `-mcpu` features other than `baseline`;
+- other Zig versions (0.17.0 included). A new version needs its own `expected/<version>/`
+  files; without them `compare` reports `excluded`.

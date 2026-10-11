@@ -43,6 +43,15 @@ theorem clearOf_iff {blk : Block} {A n : Nat} :
         blk.addr + blk.bytes.size ≤ A) := by
   simp [Block.clearOf, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, or_assoc]
 
+/-- **Two live blocks share no byte address**: byte `x` of a live block `b` and byte `x'` of a
+live block `b' ≠ b` lie at different addresses (`Mem.LiveDisjoint`). -/
+theorem _root_.Zig.Mem.LiveDisjoint.addr_ne {m : Mem} (h : m.LiveDisjoint) {b b' : BlockId}
+    {blk blk' : Block} (hbb : b ≠ b') (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk')
+    (hl : blk.live = true) (hl' : blk'.live = true) {x x' : Nat} (hx : x < blk.bytes.size)
+    (hx' : x' < blk'.bytes.size) : blk.addr + x ≠ blk'.addr + x' := by
+  have := clearOf_iff.mp (h b b' blk blk' hbb hb hb' hl')
+  rcases this with h | h | h | h | h <;> simp_all <;> omega
+
 /-- A block that keeps its address, does not grow and does not come to life stays clear of a
 range inside the old one. -/
 theorem clearOf_shrink {blk blk' : Block} {A n A' n' : Nat} (h : blk.clearOf A n = true)

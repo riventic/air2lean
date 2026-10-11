@@ -8,127 +8,270 @@ on:
 permissions:
   contents: read
 
-# A new push to the same PR cancels the run of the older commit.
+# A new push to the same PR cancels the run of the older commit. Every run on main finishes (one
+# group per commit): it is that merge commit's evidence, and the caches main saves are the ones
+# every PR can restore.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  # Builds the root Lake package once and saves it under a key over every Lean source, so the
+  # test rows below restore a finished build. Not a gate: each row rebuilds whatever a cache miss
+  # leaves out (and runs `lake build` itself), so a miss is only slower.
+  lake:
     runs-on: ubuntu-24.04
-    # The 0.16.0 full job also runs the three T06 build-mode differential runs (~15 min), the
-    # kernel replays and the proof receipt; it takes ~80 min, so it gets 150 until the job split.
-    timeout-minutes: ${{ (matrix.zig == '0.16.0' && matrix.full && !matrix.mutate) && 150 || 90 }}
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # An exact entry means there is nothing to build: skip the download, the install and the build.
+      - name: Look up the Lake build (root package)
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          lookup-only: true
+
+      - name: Install elan
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # The latest older entry, built on incrementally.
+      - name: Restore an older Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          restore-keys: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: Prune absent-source Lake modules
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      # Every tracked ZigLean module, not only the library roots: the rows build optional modules.
+      # A failure here only means no new cache: the rows still run, build and report themselves.
+      - name: Build the root package and its proofs
+        id: build
+        if: steps.lookup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mapfile -t modules < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
+          lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
+
+      # Saved only by this job, after a successful build: the test rows restore it read-only.
+      - name: Save the Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
+  # One row per (Zig version, part): scripts/ci-matrix.py derives the rows from
+  # compatibility.json. Every step names its part in its `if`; a version has `golden` (pipeline,
+  # diff test, proofs) and `lean` (version-dependent regressions) rows, and the default version
+  # also the parts that run once (offline checks and translator gates in `inputs`; `native`;
+  # `audit`; `receipt`; one row per T06 build mode) and the mutation shards.
+  test:
+    needs: lake
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Full jobs: every example, the float probe, the diff test and the proofs.
+          # BEGIN test rows (scripts/ci-matrix.py write)
           - zig: "0.16.0"
+            part: "golden"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "lean"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "inputs"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "native"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "audit"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "receipt"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "Debug"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "ReleaseFast"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "ReleaseSmall"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.17.0"
+            part: "golden"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.17.0"
+            part: "lean"
             examples: ""
             full: true
             mutate: false
           - zig: "0.15.2"
+            part: "golden"
             examples: ""
             full: true
             mutate: false
-          # 0.17.0 is in qualification (docs/zig-0.17-ci.md): a full job, but gates whose
-          # source/native qualification is version-specific stay on their qualified versions.
-          # The default and the mutation shards stay on 0.16.0 until 0.17.0 is qualified.
-          - zig: "0.17.0"
+          - zig: "0.15.2"
+            part: "lean"
             examples: ""
             full: true
             mutate: false
-          # 0.14.1: `floatconv` is excluded (0.14.1 lowers `@intFromFloat` without the check,
-          # zig-patch/0.14.1/TAGS.md), `slices` (no `@memmove`) and `lists` (its
-          # `ArrayListUnmanaged` is another type, docs/std-models.md). Its std cannot build the
-          # diff harness; the stale-Gen.lean check shows the translation is the one that the
-          # full jobs test, and the proof step builds the proofs against it.
           - zig: "0.14.1"
-            examples: "basic recursion options floatops floats errors variants pointers layout"
+            part: "golden"
+            examples: "basic errors floatops floats layout options pointers recursion variants"
             full: false
             mutate: false
-          # The mutation test, on the default version, in 5 jobs (one per line of
-          # scripts/mutation-shards.txt): they run in parallel with the full jobs.
-          # scripts/mutate.sh builds all it needs.
+          - zig: "0.14.1"
+            part: "lean"
+            examples: "basic errors floatops floats layout options pointers recursion variants"
+            full: false
+            mutate: false
           - zig: "0.16.0"
+            part: "mutation"
             examples: ""
             full: false
             mutate: true
             shard: 1
           - zig: "0.16.0"
+            part: "mutation"
             examples: ""
             full: false
             mutate: true
             shard: 2
           - zig: "0.16.0"
+            part: "mutation"
             examples: ""
             full: false
             mutate: true
             shard: 3
           - zig: "0.16.0"
+            part: "mutation"
             examples: ""
             full: false
             mutate: true
             shard: 4
           - zig: "0.16.0"
+            part: "mutation"
             examples: ""
             full: false
             mutate: true
             shard: 5
+          # END test rows
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Offline compiler inventory regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 tests/roadmap/inventory/test_inventory.py
 
       # S2: the committed op table covers every normalizeOp tag and every Op constructor;
       # the classifier and the analyses that read it keep no wildcard arm.
       - name: Op effects table source checks
+        if: ${{ matrix.part == 'inputs' }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/op-effects/test_op_table.py --self-test
 
       - name: Profile golden pipeline regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -B tests/roadmap/profiles/test_golden_pipeline.py
 
       # L14: emitted tags need a committed compiler-generated fixture (or an explicit
       # emitted-unfixtured request); rejected tags need the translator's reason and guidance.
       - name: Runtime tag fixture and guidance gate
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+        run: |
+          python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+          python3 -B tests/roadmap/runtime-tags/test_provenance.py
 
       - name: Schedule exploration cap accounting regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
 
       - name: Counterexample bundle regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
 
       - name: Local Lake cache hygiene regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 tests/roadmap/local-ci/test_cache.py
 
       # Fixture receipts/audits/diff summaries only; no Lean, Lake or Zig.
       - name: Verification coverage report regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 
       # Synthetic diff summaries only; capped/timer/unsupported outcomes refuse absence claims.
       - name: Outcome taxonomy regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
 
       # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
       - name: Host and skipped-case accounting regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/host-accounting/test_accounting.py
 
       # Stub translator, Lake and audit; real build-guard and claims. No Lean, Lake or Zig.
       - name: Project check and reproducibility record regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
@@ -136,6 +279,7 @@ jobs:
       # I01 project.py export: stub compiler and translator (fixed point, unexported-root
       # reports, empty-export failure, flag preservation). The real-compiler case is skipped here.
       - name: Project export regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/project-export -p 'test_*.py' -v
@@ -143,7 +287,7 @@ jobs:
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
@@ -152,7 +296,7 @@ jobs:
       # (Air2Lean/Air/Dialect.lean) spells a Zig version in translator code; it lists exactly
       # compatibility.json's versions.
       - name: No Zig version literals outside the dialect registry
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -163,7 +307,7 @@ jobs:
       # declares maps to native execution, target probe and proof steps of a CI job on that
       # host; foreign-golden compilation does not count (docs/target-matrix.md).
       - name: Declared target matrix is natively backed
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -173,18 +317,23 @@ jobs:
 
       # Offline fixture repositories.
       - name: Artifact manifest provenance regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
-      # Committed receipt-chained fixture (fresh schema-12 export, schema-2 receipt, native identity):
-      # edit-one-link tests on copies plus the offline recheck. No Zig, Lake or Lean.
-      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py regenerate WORKDIR.
-      - name: Provenance fixture edit-one-link tests and recheck
+      # Two committed receipt-chained fixtures (fresh schema-12 exports, schema-3 receipts, native identity):
+      # edit-one-link and receipt-replay tests on copies, the offline recheck and the offline replay of
+      # each committed receipt against the tree (no revision needed). No Zig, Lake or Lean.
+      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py --fixture NAME regenerate WORKDIR.
+      - name: Provenance fixtures edit-one-link tests, recheck and receipt replay
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_fixture.py
-          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py check
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all check
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all replay
 
       # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
       - name: Asm wrapper harness offline regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -192,13 +341,16 @@ jobs:
           python3 tests/roadmap/asm-wrappers/audit.py
 
       - name: Semantic fingerprint classification regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -I -B tests/roadmap/stable-generation/test_fingerprints.py
 
       - name: Modular output invalidation key regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -I -B tests/roadmap/modular-output/test_keys.py
 
       # Offline, over the committed Proofs/<Ex>/Gen.lean files the index describes.
       - name: Theorem premise reference and index
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           python3 -B tests/roadmap/premises/test_premises.py
           python3 -B scripts/premises.py check
@@ -208,18 +360,21 @@ jobs:
       # W3: the real-allocator/Io inclusion checker and its committed evidence (the native and
       # model runs are local: tests/roadmap/model-inclusion/check.sh).
       - name: Model inclusion evidence
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           python3 -B tests/roadmap/model-inclusion/test_inclusion.py
           python3 -B tests/roadmap/model-inclusion/inclusion.py validate
 
       # Offline: tutorial layout, README sections and premise lists match the index.
       - name: Tutorial layout regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -B -m unittest discover -s tests/roadmap/tutorials -v
 
       # Offline, over the committed Gen.lean files whose hashes it compares: every listed
       # theorem has a current recorded check per translation, and no document labels a
       # single-step or single-schedule theorem as holding under every schedule.
       - name: Theorem inventory scope and check results
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
           python3 -B scripts/theorem-inventory.py check
@@ -227,6 +382,7 @@ jobs:
       # V03: independent (non-Lean) structural validation of every committed golden AIR file,
       # then the stage trust report: each stage's class, premises, checkers and CI-run tests.
       - name: Independent AIR export validation and trust report
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/export-validation/test_validate_air.py
@@ -236,6 +392,7 @@ jobs:
 
       # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
       - name: Float-semantics label regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v
@@ -243,6 +400,7 @@ jobs:
 
       # Q07: synthetic inventories and stub runners; consumes coverage.py diff, runs no compiler.
       - name: Upgrade qualification driver regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
@@ -250,6 +408,7 @@ jobs:
       # Q02: every register ID maps to negative tests and designated mutants; complete rows
       # need both. The Python-side mutants run in memory against existing regressions.
       - name: Mutation map and Python-side mutants
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
@@ -258,10 +417,12 @@ jobs:
 
       # P02: the report script surfaces Lean errors and open obligations (no Lean is run).
       - name: Verification condition report script regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 -B -m unittest discover -s tests/roadmap/vcs -p 'test_*.py' -v
 
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/build-modes -v
@@ -269,7 +430,7 @@ jobs:
 
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       - name: Check compiler-derived coverage inventory
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           source_temp=$(mktemp -d "$RUNNER_TEMP/air-inventory.XXXXXX")
@@ -284,9 +445,11 @@ jobs:
             --source "$source_temp/source" --os linux --inventory 'coverage/${{ matrix.zig }}.json'
 
       - name: Shell check regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: scripts/review-checks.sh
 
       - name: Build guard offline regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
@@ -294,6 +457,7 @@ jobs:
       # I08: stub-only interrupt/timeout/partial-write regressions for translate.sh, check.sh
       # and proof receipts (docs/safe-output.md); no compiler or Lean run.
       - name: Safe output and cancellation regressions
+        if: ${{ matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -304,34 +468,40 @@ jobs:
       # Q01 (docs/fuzzing.md): generator determinism, shrinker minimality against synthetic
       # oracles and typed Zig generator invariants; no translator, compiler or Lean run.
       - name: Fuzz generator and shrinker regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: tests/roadmap/fuzz/check.sh --light
 
       # X01 (docs/c-frontend.md): the committed C front-end coverage record matches the
       # corpus, its summary and the doc's generated tables; C generator invariants. The heavy
       # translate-c/AIR/Lean run is local: tests/roadmap/c-frontend/check.sh --heavy OUT_DIR.
       - name: C front-end coverage record check
+        if: ${{ matrix.part == 'inputs' }}
         run: tests/roadmap/c-frontend/check.sh --light
 
       - name: Performance budget gate regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           python3 tests/roadmap/perf-budgets/test_perf_budgets.py
           python3 scripts/perf-budgets.py validate
 
       - name: First-use workflow regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 tests/usability/workflow.py
 
       - name: Release compatibility metadata and doctor regressions
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           set -euo pipefail
           python3 scripts/compat.py check
+          python3 scripts/ci-matrix.py check
           python3 -m unittest discover -s tests/roadmap/distribution -v
 
       # Offline fixture repositories (docs/release-record.md). The ledger check verifies each
       # entry's reviewed revision and baseline hash; the shallow checkout fetches only those
       # commits. Local CI snapshots have no origin or history: structure only there.
       - name: Release record and review ledger regressions
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -362,13 +532,13 @@ jobs:
       # The float model follows the reference target (x86_64-linux); this checks that the
       # target still gives the results it depends on (docs/floats.md).
       - name: Float target probe
-        if: matrix.full
+        if: ${{ matrix.part == 'golden' && matrix.full }}
         run: scripts/floatprobe.sh
 
       # Q05: 0.14.1's std cannot build the float probe's compat writer, so its target probe is
       # the bounded ABI probe against the 0.14.1 contracts (tests/roadmap/abi-probes/0.14.1/).
       - name: ABI target probe (0.14.1)
-        if: ${{ matrix.zig == '0.14.1' && !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && matrix.zig == '0.14.1' && !matrix.mutate }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -410,14 +580,26 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       # Not the check trees (scripts/check-tree.py): each run derives them from this cache. The
-      # exclusion only applies to matched entries, hence `.lake/*` rather than `.lake`.
+      # exclusion only applies to matched entries, hence `.lake/*` rather than `.lake`. Read-only:
+      # the `lake` job saves it, so fixture oleans that steps compile here never enter the cache.
       - name: Cache Lake build (root package)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      # Stock-Zig native harness builds of scripts/diff.sh (AIR2LEAN_DIFF_ZIG_CACHE), one cache per
+      # row that runs them. Zig's cache is content-addressed, so a stale or missing entry only
+      # costs time. Exact key only: a changed source starts an empty cache instead of growing one.
+      - name: Cache native differential harness builds
+        if: ${{ matrix.part == 'golden' || matrix.part == 'Debug' || matrix.part == 'ReleaseFast' || matrix.part == 'ReleaseSmall' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: zig-diff-${{ runner.os }}-${{ matrix.zig }}-${{ matrix.part }}-${{ hashFiles('examples/**/*.zig', 'tests/diff/**/*.zig', 'scripts/diff.sh') }}
 
       - name: Cache Lake build (tests/diff package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -434,20 +616,21 @@ jobs:
       # Every tracked generated module must be the current translator's output for its
       # committed AIR (docs/generated-code.md).
       - name: Generated modules are fresh translations of committed AIR
+        if: ${{ matrix.part == 'inputs' }}
         run: |
           python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
           python3 -B scripts/gen-integrity.py check
 
       # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
       - name: Translator timing flag preservation
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
 
       # Q06 (docs/perf-budgets.md): translate + elaborate every budgeted golden workload and fail
       # on a gross time/memory regression or any change of emitted Lean. Portable limits are
       # generous multiples of the recorded baseline so runner noise does not trip them.
       - name: Performance budget regression gate (portable)
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           export LEAN_NUM_THREADS=1
@@ -459,7 +642,7 @@ jobs:
       # and admission, module identity, unchecked memcpy, volatile asm, claim binding, emitter
       # placeholders).
       - name: Trust-chain audit counterexamples (fixed cases)
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed \
             addrspace comptime-field build-mode legacy-default unknown-key missing-flag \
@@ -468,11 +651,11 @@ jobs:
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: python3 -I -B tests/roadmap/stable-generation/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Modular output split and invalidation on golden AIR
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           python3 -I -B tests/roadmap/modular-output/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake env lean tests/roadmap/modular-output/Split.lean
@@ -481,7 +664,7 @@ jobs:
       # committed Proofs/{Basic,Recursion}/AirCert.lean are current and kernel-check, their AIR is
       # the decoded golden AIR, and a one-operator AIR mutation breaks that function's theorem.
       - name: AIR semantics certificates
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
@@ -489,7 +672,7 @@ jobs:
           python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           proof_api_dir="$RUNNER_TEMP/proof-api"
@@ -522,13 +705,13 @@ jobs:
           grep -Fq 'not definitionally equal' "$proof_api_dir/lemmas-changed.log"
 
       - name: Public exporter filename qualification
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: bash scripts/check-export-names.sh
 
       - name: Module identity regression (B1)
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -539,7 +722,7 @@ jobs:
           python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed std-name-spoof std-type-spoof
 
       - name: Instance identity (S1.1)
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: |
@@ -548,70 +731,70 @@ jobs:
           bash tests/roadmap/instance-identity/check.sh
 
       - name: Build optional separation proof tools
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
           lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Separation normalization regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Normalize.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Normalize.log"
 
       - name: Separation client regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
 
       - name: Explicit array framing regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Array.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Array.log"
 
       - name: Memory-backed array reassembly and generated clients
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
 
       - name: Symbolic-execution step regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Steps.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Steps.log"
           lake env lean tests/roadmap/proof-tools/StepClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/StepClients.log"
 
       - name: Total correctness regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
       - name: Concrete runs of programs with loops (unroll_sched)
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
       - name: Generic allocator specification
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/alloc-spec"
           lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
 
       - name: Full-state separation logic
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Dispatch 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Dispatch 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # Atomic tags are constraints: the exact-tag counterexample and the plain-bytes rule.
           lake env lean tests/roadmap/sep-full/ExactTags.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/exact-tags.log"
           python3 - "$RUNNER_TEMP/sep-full/exact-tags.log" <<'EOF'
@@ -640,8 +823,15 @@ jobs:
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
 
+      - name: Generic sync specifications (futex, mutex, event, wait group, condition)
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/thread-specs"
+          lake build ZigLean.Conc.Spec.Sys ZigLean.Conc.Spec.Futex ZigLean.Conc.Spec.FutexToy ZigLean.Conc.Spec.Mutex ZigLean.Conc.Spec.MutexToy ZigLean.Conc.Spec.IoMutex ZigLean.Conc.Spec.Event ZigLean.Conc.Spec.Count ZigLean.Conc.Spec.WaitGroup ZigLean.Conc.Spec.Cond 2>&1 | tee "$RUNNER_TEMP/thread-specs/build.log"
+
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/loop-tactics"
@@ -654,7 +844,7 @@ jobs:
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
 
       - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
@@ -664,7 +854,7 @@ jobs:
           done
 
       - name: Validate AIR input and whole-program signatures
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/input-validation"
@@ -679,7 +869,7 @@ jobs:
       # Q01: committed shrunk reproducers, then a small seeded malformed-AIR budget; any
       # failure is shrunk into $RUNNER_TEMP/air-fuzz/failures (docs/fuzzing.md).
       - name: Malformed AIR JSON fuzzing
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           fuzz_dir="$RUNNER_TEMP/air-fuzz"
@@ -692,7 +882,7 @@ jobs:
       # exported with the patched compiler, translated, and the Lean values must equal native.
       # Larger ranges are a manual job (docs/fuzzing.md).
       - name: Generated Zig differential fuzzing
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -702,7 +892,7 @@ jobs:
       # L12: explicit `ExternInit` external initial state, generated-client proofs and
       # rejection of every absent/partly undefined global initializer. Hand-written AIR only.
       - name: Global initialization and external initial state
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean.Sep
@@ -711,7 +901,7 @@ jobs:
       # Q01 fuzz seeds 18/19/39: comptime-resolved locals (dead address-0 placeholders dropped,
       # a read one rejected); retained translations, native-value guards and a native zig test.
       - name: Comptime-resolved locals
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
@@ -722,14 +912,14 @@ jobs:
       # G1: extern calls bound to translated `export fn` definitions (evaluated per Zig version)
       # or to a registry model with a premise; CALLEE_EXTERN_UNBOUND otherwise. Committed AIR only.
       - name: Extern C calls
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
 
       - name: Validate check-only diagnostic collection
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           diagnostics_evidence_dir="$RUNNER_TEMP/diagnostics"
@@ -744,12 +934,24 @@ jobs:
           bash tests/roadmap/diagnostics-complete/export.sh "$PWD/zig-air-${{ matrix.zig }}/bin/zig" "$diagnostics_evidence_dir/air"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/diagnostics-complete/test_cli.py "$PWD/.lake/build/bin/air2lean" \
             --export-air "$diagnostics_evidence_dir/air" 2>&1 | tee "$diagnostics_evidence_dir/complete.log"
+
+      # P08: counterexample reports on a real patched export carry I05 source spans, and the
+      # replay also runs the native Zig program (stock zig) on the counterexample input.
+      - name: Counterexample spans and Zig-side replay
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          python3 -I -B tests/roadmap/counterexamples/test_goal.py
+          python3 -I -B tests/roadmap/counterexamples/test_real_export.py
+
       # L13: exporter-schema fixtures, the default rejection, the reviewed asm allowlist
       # (ASM_VOLATILE_EFFECT) and the opt-in device contract; fresh real exports of the fixtures
       # with the patched compiler; device-trace proofs on the generated UART driver and rdtsc
       # client and their semantic mutants (docs/volatile-effects.md).
       - name: Volatile rejection and device effects
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: |
@@ -767,7 +969,7 @@ jobs:
       # A cmpxchg or RMW .Max/.Min on a padded integer width compares the whole ABI cell
       # natively: rejected with PADDED_ATOMIC (docs/diagnostics.md). Hand-written AIR only.
       - name: Reject padded-width atomic comparisons
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/padded-atomics/test_cli.py --self-test
@@ -776,13 +978,13 @@ jobs:
       # Zig's shift-count safety check (`shiftRhsTooBig`) maps to `.overflow`: committed
       # patched-compiler AIR for 0.14.1, 0.15.2 and 0.16.0, no compiler needed.
       - name: Shift-count panic mapping
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: python3 -B tests/roadmap/bitops-native/shift-panic/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
       # S2: `air2lean --print-op-table` is the committed coverage/op-table/op-table.json, and an
       # unknown or unlisted tag is rejected rather than decoded or skipped.
       - name: Op effects table and unknown-tag rejection
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/op-effects/test_op_table.py "$PWD/.lake/build/bin/air2lean"
 
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
@@ -790,7 +992,7 @@ jobs:
       # `undefined` operand. A store of `undefined` to a local: byte locals whose undefined
       # parts read as `.unspecified`, copied without decoding. Hand-written AIR only.
       - name: Undefined constant operands
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
@@ -800,14 +1002,14 @@ jobs:
       # retained 0.16.0 fixtures, emitter mutants that drop a check are killed, translator
       # probes, and the trust-chain audit's unchecked-memcpy case stays fixed.
       - name: Illegal behaviour
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           bash tests/roadmap/illegal-behavior/check.sh
       # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
       # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
       - name: Translated allocators
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
@@ -819,7 +1021,7 @@ jobs:
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked, `free`,
       # `resize`, `remap` proved against FAllocSpec for the stock and patched modules (ArenaSpec*.lean).
       - name: Translated ArenaAllocator
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
@@ -829,7 +1031,7 @@ jobs:
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops
@@ -837,26 +1039,28 @@ jobs:
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
+          bash tests/roadmap/packed-fields/compiler.sh --check
       # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
       # proofs of the native values and fail-closed rejections. Runs no compiler.
       - name: Noreturn union variants
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/noreturn-variants/check.sh
       - name: First-use CLI diagnostics
+        if: ${{ matrix.part == 'inputs' }}
         run: python3 tests/usability/cli.py
 
       # Synthetic 0.17.0 AIR (no compiler output): tag table, @divCeil, new/renamed tag
       # translation and rejections, and the 0.16.0 goldens rewritten to 0.17.0 spelling.
       - name: Zig 0.17.0 translator regressions
-        if: ${{ !matrix.mutate && matrix.zig == '0.17.0' }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           set -euo pipefail
           lake env lean --run tests/roadmap/zig017/Tags.lean
@@ -865,7 +1069,7 @@ jobs:
       # Logical-order @bitCast (docs/bitcast-semantics.md): the committed 0.17.0 AIR, its
       # translation, the ZigLean.BitCast lemmas, and the same cases natively with stock 0.17.0.
       - name: Zig 0.17.0 bitcast semantics
-        if: ${{ !matrix.mutate && matrix.zig == '0.17.0' }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           set -euo pipefail
           tests/roadmap/bitcast-017/check.sh
@@ -876,7 +1080,7 @@ jobs:
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
       - name: External model contracts
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_MODEL_EVIDENCE: ${{ runner.temp }}/model-contracts
         run: |
@@ -891,7 +1095,7 @@ jobs:
       # posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
       # proofs about the generated code. Fresh export: tests/roadmap/env-boundaries/export.sh.
       - name: Environment-operation boundary
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Env ZigLean.Env.Linux air2lean
@@ -900,7 +1104,7 @@ jobs:
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.
       - name: Flow timestamp artifact-only proofs and provenance guards
-        if: matrix.full && matrix.zig == '0.16.0'
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           TMPDIR: ${{ runner.temp }}
           FLOW_TIME_SOURCE: ${{ runner.temp }}/absent-flow-checkout/time.zig
@@ -917,7 +1121,7 @@ jobs:
       # Full 0.16 qualification also exports baseline Linux AIR and executes finite native calls.
       # Detailed evidence stays in RUNNER_TEMP, outside the cached .lake tree; no upload step.
       - name: Progress hint qualification
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG: ${{ github.workspace }}/host-zig/zig
@@ -930,12 +1134,12 @@ jobs:
           fi
 
       - name: Finite progress kernel contracts
-        if: ${{ matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: lake env lean tests/roadmap/progress/Total.lean
 
       # Opt-in timed interpreter only: no translated source call, OS clock or futex backend.
       - name: Deadline case contracts and solver budget path
-        if: ${{ matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean.Conc.TimedBudget ZigLean.Conc.TimedCall
@@ -947,13 +1151,13 @@ jobs:
       # Translated worker idle loop: safety under every schedule, progress only under the
       # explicit THR-09 fairness premise, and a starving schedule (docs/progress-hints.md).
       - name: Worker idle-loop safety, fairness-premised progress and starvation
-        if: ${{ matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: bash tests/roadmap/idle-loops/check.sh
 
       # C02: thread-local storage. Retained 0.16.0/0.15.2 exports translate unchanged; per-thread
       # counters over every schedule; a use after the owning thread ended never returns.
       - name: Thread-local storage instances, initialization and lifetime
-        if: ${{ matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean.Conc.TlsLemmas
@@ -961,7 +1165,7 @@ jobs:
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
-        if: matrix.full && matrix.zig == '0.16.0'
+        if: ${{ matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -1002,13 +1206,13 @@ jobs:
           PY_CHECK
 
       - name: Nullable mutation classifier regressions
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: python3 -B tests/roadmap/null-pointers/test_classify_mutant.py
 
       # The scalar C/allowzero fragment is qualified on 0.16.0. Use this job's
       # patched exporter and separately installed matching shipping compiler.
       - name: Scalar nullable pointer source and semantic gate
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_NULL_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_NULL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
@@ -1017,7 +1221,7 @@ jobs:
         run: tests/roadmap/null-pointers/check.sh
 
       - name: Byte sentinel allocation source, ownership and kernel mutations
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_SENTINEL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1027,7 +1231,7 @@ jobs:
           bash tests/roadmap/byte-sentinel/check.sh
 
       - name: Sentinel reallocation, raw allocator contracts and realloc recognition
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_SENTINEL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1037,7 +1241,7 @@ jobs:
       # Selected policy correspondence on the native 64-bit reference CI host. Keep
       # reports in RUNNER_TEMP, outside cached .lake directories; no artifact upload.
       - name: Allocation policy proofs, correspondence and semantic mutations
-        if: matrix.full
+        if: ${{ matrix.part == 'lean' && matrix.full }}
         env:
           AIR2LEAN_ALLOCATION_REPORT_DIR: ${{ runner.temp }}/allocation-policy-${{ matrix.zig }}
         run: |
@@ -1050,18 +1254,18 @@ jobs:
 
       # M01: allocator identity, arena/fixed-buffer policies and the arena client proof.
       - name: Allocator identity proofs and model regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: bash tests/roadmap/allocator-identity/check.sh
 
       # M05: opt-in address reuse, lifetime safety from provenance, stale @ptrFromInt.
       - name: Address reuse proofs and model regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         run: bash tests/roadmap/address-reuse/check.sh
 
       # L06: nested constant pointer bases (ZigLean/Mem/ConstPtr.lean, proof-only): retained
       # translation, generated-client proofs and CLI rejections; the native stage2_x86_64 run.
       - name: Nested constant pointer bases (L06)
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
@@ -1073,7 +1277,7 @@ jobs:
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
       - name: Thread tuple source and ownership gate
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1098,7 +1302,7 @@ jobs:
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
 
       - name: Fallible thread assignment and group fallback gate
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1111,7 +1315,7 @@ jobs:
           bash tests/roadmap/spawn-failure/check.sh --full
 
       - name: Io.Future model, proofs and schedules (C08)
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1127,7 +1331,7 @@ jobs:
           lake env lean --run tests/roadmap/models/StdModels.lean
 
       - name: Finite symbolic error-storage model and checker controls
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           storage_evidence_dir="$RUNNER_TEMP/error-storage-controls"
@@ -1142,7 +1346,7 @@ jobs:
       # L10: error-code widths. Width-quantified proofs (proof-only module) and the
       # hand-written 16/8/10/17-bit fixtures; only the default width has native evidence.
       - name: Error-code widths (--error-limit) proofs, fixtures and rejections
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
@@ -1151,18 +1355,28 @@ jobs:
       # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
       # separation-logic rules and kernel-checked examples, and the runtime regressions.
       - name: OS page-mapping model rules and runtime regressions
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.Mmap
           lake env lean tests/roadmap/os-mmap/Check.lean
+
+      # OSF/OST/OSY/OSK/OSG/OSM-02: the trusted OS thread primitives (futex, clone/pthread,
+      # clocks, interrupts, macOS malloc): proof-only rules with kernel-checked schedules, and
+      # runtime regressions over every schedule.
+      - name: OS thread primitive models, rules and runtime regressions
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane
       # pointers: the native lanes.zig test, a fresh export, the committed translations,
       # theorems and kernel-checked runs.
       - name: Vector memory layouts, compiler probe, lane pointers and checker controls
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1183,7 +1397,7 @@ jobs:
       # L07: Zig ≤0.16 representation casts and optional-pointer rules: retained translation,
       # proofs, checker version gate, and this host's native probe against the model.
       - name: Aggregate representation casts and optional-pointer rules
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
@@ -1196,12 +1410,19 @@ jobs:
       # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
       # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
       # tables per profile; their vector images against L09's encoding (docs/aarch64-abi.md).
-      - name: aarch64 ABI profile proofs (T04)
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+      - name: aarch64 ABI profile driver tests (T04)
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
+
+      - name: aarch64 ABI profile proofs (T04, 0.16.0)
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
@@ -1211,9 +1432,39 @@ jobs:
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
 
+      - name: aarch64 ABI profile proofs (T04, 0.15.2)
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.15.2/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
+      - name: aarch64 ABI profile proofs (T04, 0.14.1)
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.14.1/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1243,7 +1494,7 @@ jobs:
       # 0.14/0.15 exporter APIs were source-inspected; their synthetic fixtures are
       # checked in this gate, without claiming native/export qualification for them.
       - name: Pointer try ownership, native and fresh source regressions
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1254,6 +1505,7 @@ jobs:
           lake build ZigLean.Sep.Try ZigLean.Sep.Discard
           python3 -m unittest discover -s tests/roadmap/try-pointers -v
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
+          bash tests/roadmap/try-pointers/check.sh --check-qualification
           bash tests/roadmap/try-pointers/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-source.XXXXXX")
           trap 'rm -rf "$fresh"' EXIT
@@ -1266,7 +1518,7 @@ jobs:
 
       # L04 aliasing/cleanup: retained AIR is hand-written; export comparison is pending.
       - name: Pointer try alias and cleanup rules
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1285,7 +1537,7 @@ jobs:
       # T02: wasm32 and x86_64 translations of one source, layouts, both-profile proofs and
       # the 32-bit rejections; native layout/boundary tests, wasm32-wasi under Node's WASI.
       - name: Pointer-width profiles (wasm32, x86_64)
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
@@ -1299,7 +1551,7 @@ jobs:
       # T03: s390x (big endian) and x86_64 translations of one source, both-order proofs, the
       # big-endian rejections, and the native program on s390x under qemu-user and on the host.
       - name: Byte order (s390x big endian, x86_64)
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1328,45 +1580,47 @@ jobs:
       # (another version's or OS's) is built and tested in a check tree; the steps below that
       # build this version's proofs run in .lake/check-reports/<version>/build-tree.
       - name: Golden AIR, translate, build, differential test
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
 
-      # T06: the same differential examples in the other optimize modes on LLVM, checked against
-      # the committed x86_64-linux run records (docs/build-modes.md). ReleaseFast and
-      # ReleaseSmall exclude the inputs on which the model throws (illegal behaviour there).
-      - name: Native build-mode differential runs (Debug, ReleaseFast, ReleaseSmall on LLVM)
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+      # T06: the same differential examples in another optimize mode on LLVM (one row per mode),
+      # checked against the committed x86_64-linux run records (docs/build-modes.md). ReleaseFast
+      # and ReleaseSmall exclude the inputs on which the model throws (illegal behaviour there).
+      - name: Native build-mode differential run (Debug, ReleaseFast or ReleaseSmall on LLVM)
+        if: ${{ matrix.part == 'Debug' || matrix.part == 'ReleaseFast' || matrix.part == 'ReleaseSmall' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: |
           set -euo pipefail
+          mode='${{ matrix.part }}'
           mkdir -p "$RUNNER_TEMP/build-modes"
+          summary="$RUNNER_TEMP/build-modes/$mode.json"
+          # Inexact float @divExact is a pinned model .illegal (no mismatch to triage since the
+          # soundness batch); `record --verify` requires exactly the committed counts. The record
+          # check runs even when the differential run failed.
           failed=0
-          for mode in Debug ReleaseFast ReleaseSmall; do
-            summary="$RUNNER_TEMP/build-modes/$mode.json"
-            # Inexact float @divExact is a pinned model .illegal (no mismatch to triage since the
-            # soundness batch); `record --verify` requires exactly the committed counts.
-            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
-            python3 scripts/build-modes.py record --verify --summary "$summary" \
-              --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
-              --mode "$mode" --backend llvm --explicit-backend \
-              || failed=1
-          done
+          AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+            AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
+          python3 scripts/build-modes.py record --verify --summary "$summary" \
+            --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
+            --mode "$mode" --backend llvm --explicit-backend \
+            || failed=1
           [ "$failed" -eq 0 ]
 
       # The summaries behind the build-mode check, so that a changed example set can be
       # re-recorded (`build-modes.py record --summary ... --zig-sha256 ...`, docs/build-modes.md).
       - name: Upload the build-mode differential summaries
-        if: ${{ !cancelled() && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !cancelled() && matrix.part == 'Debug' || !cancelled() && matrix.part == 'ReleaseFast' || !cancelled() && matrix.part == 'ReleaseSmall' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}-${{ matrix.part }}
           path: ${{ runner.temp }}/build-modes/
           if-no-files-found: warn
           retention-days: 30
@@ -1374,7 +1628,7 @@ jobs:
       # A failed check hands out the AIR that this host dumped: the golden files of this OS
       # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
       - name: Upload the dumped AIR
-        if: failure() && !matrix.mutate
+        if: ${{ matrix.part == 'golden' && failure() && !matrix.mutate }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: air-${{ matrix.zig }}-${{ strategy.job-index }}
@@ -1385,7 +1639,7 @@ jobs:
       # Q04: this version/target's row of the accounting table (exact matches only in the
       # headline) and the README legacy-version claims checked against the summary actually run.
       - name: Per-version differential accounting and support claims
-        if: ${{ matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && matrix.full && !matrix.mutate }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -1400,7 +1654,7 @@ jobs:
       # Kept even when the differential gate fails: an incomplete summary records why.
       # `python3 scripts/accounting.py publish` consumes these across versions.
       - name: Upload the differential summary
-        if: ${{ !cancelled() && matrix.full && !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !cancelled() && matrix.full && !matrix.mutate }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
@@ -1409,7 +1663,7 @@ jobs:
           retention-days: 30
 
       - name: Typed outcomes and bounded schedule regressions
-        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || matrix.part == 'golden' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
           summary="$PWD/tests/diff/out/report.json"  # check.sh writes it in the checkout.
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)  # The modules check.sh built.
@@ -1443,7 +1697,7 @@ jobs:
       # The proofs must hold for this version's translation too (0.14.1 has its own `layout`,
       # `variants` and `floatops` translations): built where check.sh built it.
       - name: Build proofs
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)  # The modules check.sh built.
           cd "$tree"
@@ -1470,7 +1724,7 @@ jobs:
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
       # assembly/libm policy is reviewed for this profile and the pinned Lean release.
       - name: Audit theorem dependencies and assumptions
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
         run: |
@@ -1486,7 +1740,7 @@ jobs:
       # policy and kernel replay. Exit codes alone accept `sorry`. The three files that need a
       # gate-time translation are audited by their gates (theorem_universe.py GATES).
       - name: Theorem universe audit
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
         run: |
@@ -1502,7 +1756,7 @@ jobs:
       # asm opaques (S7), receipt schema skew (F1), unaudited theorem files (F2), untyped host
       # differences and unpinned exclusions (F3), stale evidence (H1).
       - name: Architecture-audit claim fixtures
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
@@ -1513,7 +1767,7 @@ jobs:
       # Same premise tables over the kernel dependency graph of the audited translation.
       # --strict: the committed source index must cover every kernel-derived premise (D03).
       - name: Map audited theorems to premise IDs
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         run: |
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
             --output "$RUNNER_TEMP/air2lean-premises.json" --strict
@@ -1521,7 +1775,7 @@ jobs:
       # A03: real generated asm wrappers under a test-only interpretation, five wrapper
       # mutants, and the harness kept out of the audited theorem dependencies.
       - name: Generated asm wrappers, interpretation and mutations
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -1533,14 +1787,14 @@ jobs:
       # aliases, registry `memory` clobber), frame/alias proofs on the generated wrappers, CLI
       # rejections, and the wrappers under the A03 interpretation with six effect mutants.
       - name: Asm effect contract
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           lake build ZigLean Proofs.Asm.Effects
           bash tests/roadmap/asm-effects/check.sh
 
       - name: Assurance environment regressions
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
         run: |
@@ -1553,7 +1807,7 @@ jobs:
 
       # Claim strength is derived from extracted theorem types; overstated goals are rejected.
       - name: Claim strength regressions
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
@@ -1561,7 +1815,7 @@ jobs:
 
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
       - name: Outcome taxonomy Lean fixture
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
         run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
@@ -1570,14 +1824,14 @@ jobs:
       # with its expected error. `lake build Proofs` above built the imported modules. This and
       # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
@@ -1585,7 +1839,7 @@ jobs:
           lake env lean tutorials/memory-safety/Controls.lean
 
       - name: Integer bit operations regression and differential gate
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
           AIR2LEAN_ZIG: zig
@@ -1599,7 +1853,7 @@ jobs:
       # (aarch64-macos and native aarch64-linux come from their own jobs) must be reproduced.
       # 0.17.0 has no wide bit-operation evidence yet (qualify.py VERSIONS).
       - name: Wide integer bit operations native differential (x86_64-linux, aarch64-linux)
-        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.14.1' || matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.15.2' || matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -1617,7 +1871,7 @@ jobs:
 
       # Check source-linked VCs against the pointer translation that check.sh built.
       - name: Build optional verification conditions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1626,7 +1880,7 @@ jobs:
           lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
       - name: Result verification condition regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1634,7 +1888,7 @@ jobs:
           lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
 
       - name: Memory verification condition regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1642,7 +1896,7 @@ jobs:
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
       - name: Verification condition client regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1651,7 +1905,7 @@ jobs:
 
       # Reflect committed loop-free translations into the VC AST; loops must request invariants.
       - name: Automatic verification condition extraction regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1659,7 +1913,7 @@ jobs:
           lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
 
       - name: Verification condition report regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
@@ -1673,7 +1927,7 @@ jobs:
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
       # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
       - name: Loop-switch dispatch regressions
-        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.14.1' || matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' || matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
@@ -1688,7 +1942,7 @@ jobs:
 
       # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
       - name: Dispatch-loop template regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
@@ -1702,7 +1956,7 @@ jobs:
           fi
 
       - name: Local-place parent pointer regressions
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_LOCAL_PARENT_ZIG_VERSION: ${{ matrix.zig }}
@@ -1711,7 +1965,7 @@ jobs:
         run: bash tests/roadmap/local-parent/check.sh
 
       - name: Callable-address table and indirect call regressions
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_INDIRECT_CALLS_ZIG_VERSION: ${{ matrix.zig }}
@@ -1722,7 +1976,7 @@ jobs:
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate }}
         env:
           AIR2LEAN_REVIEW_ZIG14: ${{ matrix.zig == '0.14.1' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG15: ${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
@@ -1735,7 +1989,7 @@ jobs:
           scripts/review.sh
 
       - name: Weak CAS safety qualification
-        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG: ${{ github.workspace }}/host-zig/zig
@@ -1744,7 +1998,7 @@ jobs:
 
       # Source scan over the theorem universe: placeholders and kernel escape hatches.
       - name: Check for sorry/admit/native_decide and kernel escape hatches
-        if: matrix.full
+        if: ${{ matrix.part == 'lean' && matrix.full }}
         run: scripts/no-sorry.sh
 
       # 0.15.2 on macOS: `Thread.Mutex` is `os_unfair_lock` (tests/golden/0.15.2/threadsync/
@@ -1752,7 +2006,7 @@ jobs:
       # check tree, so the checkout's Proofs/Threadsync/Gen.lean is never replaced. These
       # modules import no other example's translation.
       - name: Build threadsync proofs (macOS translation)
-        if: ${{ !matrix.mutate && matrix.zig == '0.15.2' }}
+        if: ${{ matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.15.2-darwin \
             --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-darwin.lean
@@ -1768,7 +2022,7 @@ jobs:
             || { cat "$RUNNER_TEMP/negative-macos.log" >&2; exit 1; }
 
       - name: Mutation check
-        if: matrix.mutate
+        if: ${{ matrix.part == 'mutation' && matrix.mutate }}
         env:
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
@@ -1778,13 +2032,13 @@ jobs:
 
       # Each mutation of the shard was killed by the regression assurance/mutation-kills.json names.
       - name: Mutation kill evidence
-        if: matrix.mutate
+        if: ${{ matrix.part == 'mutation' && matrix.mutate }}
         run: python3 -B scripts/mutation-map.py kills verify --log "$RUNNER_TEMP/mutation-kills.log"
 
       # Keep the selected generated/profile context and final compiled library together.
       # This owns its sole guard; evidence stays outside cached .lake, with no upload.
       - name: Revision-bound theorem audit receipt
-        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate && runner.os == 'Linux' }}
+        if: ${{ matrix.part == 'receipt' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate && runner.os == 'Linux' }}
         run: |
           set -euo pipefail
           repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
@@ -1855,7 +2109,8 @@ jobs:
           bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
-          # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest.
+          # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest,
+          # including the I07 provenance fixture's root (analyzed AIR + this receipt on one root).
           python3 tests/roadmap/coverage-report/real_run.py "$receipt_parent/attempt" .lake/build/bin/air2lean
 
       # Verification must not change its own inputs: no step may modify, delete or add a
@@ -1869,38 +2124,55 @@ jobs:
           fi
 
   # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
-  # (assurance/target-matrix.json, docs/target-matrix.md). One job without a matrix, since
-  # macOS runner concurrency is limited; each evidence step binds AIR2LEAN_ZIG_VERSION.
+  # (assurance/target-matrix.json, docs/target-matrix.md): one row per version whose hosts include
+  # aarch64-macos (scripts/ci-matrix.py). Each evidence step binds AIR2LEAN_ZIG_VERSION.
   # WASM is not a declared target (T02/T05).
   macos:
     runs-on: macos-14
-    timeout-minutes: 180
+    timeout-minutes: 90
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # BEGIN macos rows (scripts/ci-matrix.py write)
+          - zig: "0.17.0"
+          - zig: "0.16.0"
+          - zig: "0.15.2"
+          # END macos rows
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Stock aarch64-macos releases bootstrap zig-patch/build.sh and build the native
-      # probes/harnesses. sha256 from https://ziglang.org/download/index.json
+      # The stock aarch64-macos release of this row's version bootstraps zig-patch/build.sh and
+      # builds the native probes/harnesses. sha256 from https://ziglang.org/download/index.json
       # ("<version>" -> "aarch64-macos".shasum), confirmed by downloading and hashing each.
       - name: Install stock zig (aarch64-macos)
         run: |
           set -euo pipefail
-          install_zig() {
-            curl -fL --output "$RUNNER_TEMP/zig-$1.tar.xz" \
-              "https://ziglang.org/download/$1/zig-aarch64-macos-$1.tar.xz"
-            echo "$2  $RUNNER_TEMP/zig-$1.tar.xz" | shasum -a 256 -c -
-            mkdir -p "$RUNNER_TEMP/host-zig-$1"
-            tar -xJf "$RUNNER_TEMP/zig-$1.tar.xz" -C "$RUNNER_TEMP/host-zig-$1" --strip-components=1
-            [ "$("$RUNNER_TEMP/host-zig-$1/zig" version)" = "$1" ]
-          }
-          install_zig 0.17.0 b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a
-          install_zig 0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
-          install_zig 0.15.2 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
+          versions='${{ matrix.zig }}'
+          # 0.14.1 has no row of its own; its aarch64 ABI qualification runs in the 0.15.2 row.
+          if [ "$versions" = 0.15.2 ]; then versions="$versions 0.14.1"; fi
+          for version in $versions; do
+            case "$version" in
+              0.17.0) sha256=b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a ;;
+              0.16.0) sha256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489 ;;
+              0.15.2) sha256=3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b ;;
+              0.14.1) sha256=39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa ;;
+              *) echo "no pinned aarch64-macos stock zig for $version" >&2; exit 1 ;;
+            esac
+            curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+              "https://ziglang.org/download/$version/zig-aarch64-macos-$version.tar.xz"
+            echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | shasum -a 256 -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$version"
+            tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$version/zig" version)" = "$version" ]
+          done
 
       # Builds and executes probe.zig for aarch64-macos-none (docs/profiles.md).
       - name: macOS ABI target probe (0.16.0)
+        if: matrix.zig == '0.16.0'
         env:
           AIR2LEAN_ZIG_VERSION: "0.16.0"
         run: |
@@ -1915,6 +2187,7 @@ jobs:
       # 0.15.2's contracts (tests/roadmap/abi-probes/0.15.2/) differ from 0.16.0's only in
       # the LLVM feature names (zcm vs zcm_fpr64/zcm_gpr64).
       - name: macOS ABI target probe (0.15.2)
+        if: matrix.zig == '0.15.2'
         env:
           AIR2LEAN_ZIG_VERSION: "0.15.2"
         run: |
@@ -1925,17 +2198,38 @@ jobs:
               --output "$RUNNER_TEMP/abi-0.15.2-aarch64-macos-none-$mode.json"
           done
 
-      # T04: the native aarch64-macos-none probe against its versioned expected results.
+      # T04: the native aarch64-macos-none probe against its versioned expected results, for each
+      # Zig version with recorded results.
       - name: aarch64-macos ABI qualification (T04, 0.16.0)
+        if: matrix.zig == '0.16.0'
         env:
           AIR2LEAN_ZIG_VERSION: "0.16.0"
         run: |
           set -euo pipefail
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
-            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-ReleaseSafe.txt"
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.16.0-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.15.2)
+        if: matrix.zig == '0.15.2'
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.15.2-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.14.1)
+        if: matrix.zig == '0.15.2'
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.14.1-ReleaseSafe.txt"
 
       # Zig 0.17.0 (in qualification) contract: tests/roadmap/abi-probes/0.17.0/ (LLVM 22 features).
       - name: macOS ABI target probe (0.17.0)
+        if: matrix.zig == '0.17.0'
         env:
           AIR2LEAN_ZIG_VERSION: "0.17.0"
         run: |
@@ -1946,41 +2240,24 @@ jobs:
               --output "$RUNNER_TEMP/abi-0.17.0-aarch64-macos-none-$mode.json"
           done
 
-      - name: Cache patched zig 0.17.0 (macOS)
-        id: cache-zig-air-17
+      - name: Cache patched zig (macOS)
+        id: cache-zig-air
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: zig-air-0.17.0/
-          key: zig-air-macos-arm64-0.17.0-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.17.0/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+          path: zig-air-${{ matrix.zig }}/
+          key: zig-air-macos-arm64-${{ matrix.zig }}-${{ hashFiles('zig-patch/air-json/*.zig', format('zig-patch/{0}/hook.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
 
-      - name: Cache patched zig 0.16.0 (macOS)
-        id: cache-zig-air-16
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: zig-air-0.16.0/
-          key: zig-air-macos-arm64-0.16.0-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.16.0/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
-
-      - name: Cache patched zig 0.15.2 (macOS)
-        id: cache-zig-air-15
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: zig-air-0.15.2/
-          key: zig-air-macos-arm64-0.15.2-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.15.2/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
-
-      # One retry per version, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB
-      # bound that Zig's build.zig declares for compiling the compiler; --maxrss lets it start.
+      # One retry, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB bound that Zig's
+      # build.zig declares for compiling the compiler; --maxrss lets it start.
       - name: Build patched zig (macOS)
-        if: steps.cache-zig-air-17.outputs.cache-hit != 'true' || steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
+        if: steps.cache-zig-air.outputs.cache-hit != 'true'
         env:
           AIR2LEAN_ZIG_MAXRSS: "8000000000"
         run: |
           set -euo pipefail
-          for v in 0.17.0 0.16.0 0.15.2; do
-            if [ ! -x "zig-air-$v/bin/zig" ]; then
-              PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
-                || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
-            fi
-          done
+          v='${{ matrix.zig }}'
+          PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+            || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
 
       # zig-patch/versions.toml [ci.elan] pins elan v4.2.4's Linux asset; this is the same
       # release's aarch64-apple-darwin asset (sha256 = the release asset digest, confirmed).
@@ -1995,19 +2272,29 @@ jobs:
           "$RUNNER_TEMP/elan-init" --default-toolchain none -y
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      # Keyed on every Lean source like the Linux `lake` job; restore-then-incremental, so a miss
+      # or an older entry only costs build time.
       - name: Cache Lake build (macOS root package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Cache Lake build (macOS tests/diff package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tests/diff/.lake
           key: lake-diff-macos-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      # As in the test job: the stock-Zig harness builds of scripts/diff.sh only, exact key.
+      - name: Cache native differential harness builds (macOS)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: zig-diff-${{ runner.os }}-${{ matrix.zig }}-golden-${{ hashFiles('examples/**/*.zig', 'tests/diff/**/*.zig', 'scripts/diff.sh') }}
 
       - name: Prune absent-source Lake modules
         run: python3 scripts/local-ci-steps.py --prune-cache
@@ -2018,82 +2305,36 @@ jobs:
       # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
       # overrides, translated, built and differentially tested against native Zig (host-listed
       # float differences count as `host`, scripts/diff.sh). Never writes a tracked file: a
-      # translation that differs from the committed module is built in a check tree.
-      - name: macOS golden AIR, translate, differential test (0.16.0)
-        env:
-          AIR2LEAN_CI: "1"
-          AIR2LEAN_ZIG_VERSION: "0.16.0"
-          AIR2LEAN_DIFF: "1"
-          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
-          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
-          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.16.0/report.json
-        run: scripts/check.sh
-
-      # Q04/Q05: this version's macOS row of the accounting table (docs/host-accounting.md).
-      # Kept even when the differential gate fails: an incomplete summary records why.
-      - name: Upload the macOS differential summary (0.16.0)
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: diff-summary-0.16.0-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/diff-summary/0.16.0/report.json
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: macOS proofs (0.16.0)
-        env:
-          AIR2LEAN_ZIG_VERSION: "0.16.0"
-        run: |
-          tree=$(cat .lake/check-reports/0.16.0/build-tree)
-          cd "$tree"
-          lake build Proofs
-
-      - name: macOS golden AIR, translate, differential test (0.17.0)
-        env:
-          AIR2LEAN_CI: "1"
-          AIR2LEAN_ZIG_VERSION: "0.17.0"
-          AIR2LEAN_DIFF: "1"
-          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.17.0/zig
-          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.17.0
-          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.17.0/report.json
-        run: scripts/check.sh
-
-      - name: macOS proofs (0.17.0)
-        env:
-          AIR2LEAN_ZIG_VERSION: "0.17.0"
-        run: |
-          tree=$(cat .lake/check-reports/0.17.0/build-tree)
-          cd "$tree"
-          lake build Proofs
-
-      # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects
+      # translation that differs from the committed module is built in a check tree. 0.15.2's
+      # Thread.Mutex is os_unfair_lock here: check.sh selects
       # tests/golden/0.15.2/threadsync/Gen-darwin.lean and the proofs build against it natively.
-      - name: macOS golden AIR, translate, differential test (0.15.2)
+      - name: macOS golden AIR, translate, differential test
         env:
           AIR2LEAN_CI: "1"
-          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_DIFF: "1"
-          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
-          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
-          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.15.2/report.json
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-${{ matrix.zig }}/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/${{ matrix.zig }}
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/${{ matrix.zig }}/report.json
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
 
       # Q04/Q05: this version's macOS row of the accounting table (docs/host-accounting.md).
       # Kept even when the differential gate fails: an incomplete summary records why.
-      - name: Upload the macOS differential summary (0.15.2)
-        if: ${{ !cancelled() }}
+      - name: Upload the macOS differential summary
+        if: ${{ !cancelled() && matrix.zig == '0.16.0' || !cancelled() && matrix.zig == '0.15.2' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: diff-summary-0.15.2-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/diff-summary/0.15.2/report.json
+          name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/diff-summary/${{ matrix.zig }}/report.json
           if-no-files-found: warn
           retention-days: 30
 
-      - name: macOS proofs (0.15.2)
+      - name: macOS proofs
         env:
-          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
         run: |
-          tree=$(cat .lake/check-reports/0.15.2/build-tree)
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           lake build Proofs
 
@@ -2106,25 +2347,26 @@ jobs:
             exit 1
           fi
 
-      # L02: wide bit operations, native aarch64-macos (0.14.1 has no macOS patched compiler).
+      # L02: wide bit operations, native aarch64-macos (0.14.1 has no macOS patched compiler;
+      # 0.17.0 has no wide bit-operation evidence yet).
       - name: macOS wide integer bit operations native differential
+        if: matrix.zig == '0.16.0' || matrix.zig == '0.15.2'
         run: |
           set -euo pipefail
-          for v in 0.16.0 0.15.2; do
-            python3 -B tests/roadmap/bitops-native/qualify.py run --version "$v" \
-              --zig-air "$PWD/zig-air-$v/bin/zig" --zig "$RUNNER_TEMP/host-zig-$v/zig" \
-              --targets aarch64-macos --exec aarch64-macos=host \
-              --evidence "$RUNNER_TEMP/bitops-native-$v.json"
-            python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native-$v.json" \
-              --committed "tests/roadmap/bitops-native/evidence/$v.json"
-          done
+          v='${{ matrix.zig }}'
+          python3 -B tests/roadmap/bitops-native/qualify.py run --version "$v" \
+            --zig-air "$PWD/zig-air-$v/bin/zig" --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+            --targets aarch64-macos --exec aarch64-macos=host \
+            --evidence "$RUNNER_TEMP/bitops-native-$v.json"
+          python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native-$v.json" \
+            --committed "tests/roadmap/bitops-native/evidence/$v.json"
 
       # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
       - name: Upload the dumped Darwin AIR
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: air-macos-arm64
+          name: air-macos-arm64-${{ matrix.zig }}
           path: ${{ runner.temp }}/air-out
           if-no-files-found: ignore
           retention-days: 7
@@ -2141,16 +2383,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # sha256 from https://ziglang.org/download/index.json ("0.16.0" -> "aarch64-linux".shasum).
-      - name: Install stock zig (aarch64-linux)
+      # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
+      - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
         run: |
           set -euo pipefail
-          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" \
-            https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
-          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
-          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
-          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
+          while read -r version sha256; do
+            curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+              "https://ziglang.org/download/$version/zig-aarch64-linux-$version.tar.xz"
+            echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | sha256sum -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$version"
+            tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$version/zig" version)" = "$version" ]
+          done <<'EOF'
+          0.16.0 ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+          0.15.2 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
+          0.14.1 f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+          EOF
 
       - name: aarch64-linux ABI qualification (T04, 0.16.0)
         env:
@@ -2158,15 +2406,118 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
-            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt"
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.16.0-ReleaseSafe.txt"
+
+      - name: aarch64-linux ABI qualification (T04, 0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.15.2-ReleaseSafe.txt"
+
+      - name: aarch64-linux ABI qualification (T04, 0.14.1)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.14.1-ReleaseSafe.txt"
 
       - name: Upload aarch64-linux observation
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: abi-aarch64-linux
-          path: ${{ runner.temp }}/aarch64-linux-gnu-ReleaseSafe.txt
+          path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
+
+  # T06: the four optimize modes on LLVM, natively on aarch64-linux hardware, verified against the
+  # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
+  # floatops and floatconv are left out (excluded_examples in the records): the translation has no
+  # aarch64-linux float model (tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md).
+  # `record --verify` requires exactly the committed counts. In ReleaseFast and ReleaseSmall the ~700 inputs that are illegal behaviour crash the tested call (SIGSEGV/SIGBUS): the
+  # hosted image routes core dumps to systemd-coredump and apport, which run for every crash even
+  # with RLIMIT_CORE 0 and stall the runner. The harness therefore makes its children
+  # undumpable and kills a case after a deadline (tests/diff/common.zig, docs/build-modes.md).
+  build-modes-aarch64-linux:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install stock zig 0.16.0 (aarch64-linux)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
+          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
+          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
+          echo "$RUNNER_TEMP/host-zig-0.16.0" >> "$GITHUB_PATH"
+
+      - name: Install elan (aarch64-linux)
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-linux-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator
+        run: lake build
+
+      - name: Native build-mode differential runs (aarch64-linux, LLVM)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
+          source scripts/example-selection.sh
+          examples=$(for e in $(air2lean_default_examples . 0.16.0 aarch64); do
+            case "$e" in floatops|floatconv) ;; *) printf '%s ' "$e" ;; esac
+          done)
+          for mode in ReleaseSafe Debug ReleaseFast ReleaseSmall; do
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
+            AIR2LEAN_EXAMPLES="$examples" AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
+            python3 scripts/build-modes.py record --verify --summary "$summary" \
+              --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
+              --mode "$mode" --backend llvm --explicit-backend \
+              --excluded-examples tests/roadmap/build-modes/reproducers/excluded-float-aarch64-linux.json \
+              || failed=1
+          done
+          [ "$failed" -eq 0 ]
+
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30
 
   # L02: the wide bit-operation corpus on native aarch64-linux hardware. No Lean here: the
   # native stream must equal the Lean stream recorded in the committed evidence, which the
@@ -2208,3 +2559,18 @@ jobs:
               --evidence "tests/roadmap/bitops-native/evidence/$version.json" || failed="$failed $version"
           done
           [ -z "$failed" ] || { echo "native aarch64-linux bit-operation mismatch on:$failed" >&2; exit 1; }
+
+  # The single status to require: green only when every job above succeeded (a skipped or
+  # cancelled job fails it too). The split into rows must not let a missing job pass a merge.
+  all-checks:
+    if: always()
+    needs: [lake, test, macos, aarch64-linux, build-modes-aarch64-linux, bitops-native-arm]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every CI job succeeded
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [ "$(echo "$RESULTS" | jq -c 'unique')" = '["success"]' ]

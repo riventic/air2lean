@@ -134,12 +134,12 @@ effect. -/
 theorem checkAddr_ok {align n : Nat} (h : n % align = 0) : checkAddr align false n = pure () := by
   simp [checkAddr, h]
 
-theorem checkIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat) :
-    checkIndex s i = pure () := by
+theorem checkIndex_ok {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    checkIndex len i = pure () := by
   simp [checkIndex, h]
 
-theorem checkSentinelIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat ≤ s.len.toNat) :
-    checkSentinelIndex s i = pure () := by
+theorem checkSentinelIndex_ok {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
+    checkSentinelIndex len i = pure () := by
   simp [checkSentinelIndex, h]
 
 /-- `@memcpy` with equal counts whose ranges the precondition shows apart is `@memmove`. -/

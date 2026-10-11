@@ -75,7 +75,7 @@ theorem checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) :
     Tame (Zig.checkSliceEnd srcLen start len extra) := by
   unfold Zig.checkSliceEnd; exact ite (pure' _) (throw _)
 
-theorem checkSentinelIndex (s : Slice) (i : BitVec 64) : Tame (Zig.checkSentinelIndex s i) := by
+theorem checkSentinelIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkSentinelIndex len i) := by
   unfold Zig.checkSentinelIndex; exact ite (pure' _) (throw _)
 
 theorem checkAlign (al : Nat) (p : Ptr) : Tame (Zig.checkAlign al p) := by

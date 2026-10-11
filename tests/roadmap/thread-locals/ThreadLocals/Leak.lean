@@ -190,9 +190,9 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
 
 /-- **A pointer to a thread-local used after its thread ended never gives a result**, under
 every schedule and every fuel: each run throws or runs out of fuel. -/
-theorem leaked_never_ok {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
-    (Sched.run dispatch fuel o leaked (mem0 .fresh)).run ≠ some (.ok (v, m)) := fun h => by
-  obtain ⟨_, _, hq⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
+theorem leaked_never_ok (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
+    (Sched.run env dispatch fuel o leaked (mem0 .fresh)).run ≠ some (.ok (v, m)) := fun h => by
+  obtain ⟨_, _, hq⟩ := proto.run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun h => by cases h) mem0_threads main_spec h
   exact hq
 

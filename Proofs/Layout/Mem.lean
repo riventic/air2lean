@@ -285,7 +285,7 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
       simp [Ptr.elem, Ptr.add, Enc.encode, padTo, intBytes, intSize, intAlign, alignUp]
       omega))
   simp only [StateT.run] at hst hpr
-  simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst, hpr]
+  simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst, hpr, checkIndex]
 
 /-! ## Non-vacuity and liveness witnesses: one value in one block -/
 

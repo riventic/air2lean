@@ -45,9 +45,11 @@ def Kernel.begin (s : Kernel) (readChoice : Nat) (p : Ptr) (expected : BitVec 32
   return (none, { mem := { m with waiters := m.waiters.push (r.owner, p) },
                   registration := some r })
 
-/-- Wake changes queue bookkeeping only; it supplies no happens-before edge. -/
+/-- Wake changes queue bookkeeping only; it supplies no happens-before edge. The timed kernel
+serves one registration per owner and wakes in queue order (no oracle choice of waiters, unlike
+`Sched`). -/
 def Kernel.wake (s : Kernel) (p : Ptr) (n : Nat) : Kernel :=
-  match h : ((Thread.futexWake p n).run s.mem).run with
+  match h : ((Thread.futexWake p n []).run s.mem).run with
   | some (.ok (_, mem)) => { s with mem := mem }
   | some (.error _) => by cases h
   | none => by cases h

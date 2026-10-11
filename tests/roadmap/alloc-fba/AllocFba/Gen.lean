@@ -1260,7 +1260,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
           else (do
             throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
         | .br25 => (do
-          let i30 ← Zig.callM (Zig.ptrProject v15.ptr (·.elem 1 (7 : BitVec 64)))
+          let i30 ← Zig.callM (Zig.checkIndex v15.len (7 : BitVec 64)) >>= fun _ => Zig.callM (Zig.ptrProject v15.ptr (·.elem 1 (7 : BitVec 64)))
           let i31 ← pure (Zig.addWrap p0 (1 : BitVec 8))
           Zig.store (α := BitVec 8) 1 i30 i31
           match ← ((do
@@ -1283,7 +1283,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
               else (do
                 throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
             | .br45 => (do
-              let i50 ← Zig.callM (Zig.checkIndex v15 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (0 : BitVec 64)))
+              let i50 ← Zig.callM (Zig.checkIndex v15.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (0 : BitVec 64)))
               let i51 ← Zig.intCast false false 32 i50
               let i52 ← pure v15.len
               let i53 ← pure (Zig.lt false (3 : BitVec 64) i52)
@@ -1293,7 +1293,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                 else (do
                   throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
               | .br54 => (do
-                let i59 ← Zig.callM (Zig.checkIndex v15 (3 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (3 : BitVec 64)))
+                let i59 ← Zig.callM (Zig.checkIndex v15.len (3 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (3 : BitVec 64)))
                 let i60 ← Zig.intCast false false 32 i59
                 let i61 ← Zig.add false i51 i60
                 let i62 ← pure v15.len
@@ -1304,7 +1304,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                   else (do
                     throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
                 | .br64 => (do
-                  let i69 ← Zig.callM (Zig.checkIndex v15 (7 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (7 : BitVec 64)))
+                  let i69 ← Zig.callM (Zig.checkIndex v15.len (7 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (7 : BitVec 64)))
                   let i70 ← Zig.intCast false false 32 i69
                   let i71 ← Zig.add false i61 i70
                   let _i72 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 i4 v15)
@@ -1327,7 +1327,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                       else (do
                         throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
                     | .br84 => (do
-                      let i89 ← Zig.callM (Zig.ptrProject v74.ptr (·.elem 1 (11 : BitVec 64)))
+                      let i89 ← Zig.callM (Zig.checkIndex v74.len (11 : BitVec 64)) >>= fun _ => Zig.callM (Zig.ptrProject v74.ptr (·.elem 1 (11 : BitVec 64)))
                       Zig.store (α := BitVec 8) 1 i89 p0
                       let i91 ← pure v74.len
                       let i92 ← pure (Zig.lt false (11 : BitVec 64) i91)
@@ -1337,7 +1337,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                         else (do
                           throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
                       | .br93 => (do
-                        let i98 ← Zig.callM (Zig.checkIndex v74 (11 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v74.ptr.elem 1 (11 : BitVec 64)))
+                        let i98 ← Zig.callM (Zig.checkIndex v74.len (11 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v74.ptr.elem 1 (11 : BitVec 64)))
                         Zig.store (α := BitVec 8) 1 (⟨some 0, 15⟩ : Zig.Ptr) i98
                         let _i100 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 i4 v74)
                         pure (.ret i71))
@@ -1534,7 +1534,7 @@ def fba_dupe (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
         else (do
           throw .outOfBounds)) : Zig.MM fba_dupeLocals fba_dupeExit) with
       | .br22 => (do
-        let i27 ← Zig.callM (Zig.checkIndex v11 (2 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v11.ptr.elem 1 (2 : BitVec 64)))
+        let i27 ← Zig.callM (Zig.checkIndex v11.len (2 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v11.ptr.elem 1 (2 : BitVec 64)))
         let _i28 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 i4 v11)
         pure (.ret i27))
       | e => pure e)
@@ -1582,7 +1582,7 @@ def fba_realloc_move (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
         else (do
           throw .outOfBounds)) : Zig.MM fba_realloc_moveLocals fba_realloc_moveExit) with
       | .br15 => (do
-        let i20 ← pure v5.ptr
+        let i20 ← Zig.callM (Zig.checkIndex v5.len (0 : BitVec 64)) >>= fun _ => pure v5.ptr
         Zig.store (α := BitVec 8) 1 i20 p0
         match ← ((do
           let i23 ← Zig.callM (mem_Allocator_alloc__anon_a8254a5f2b74 i4 (1 : BitVec 64))
@@ -1612,7 +1612,7 @@ def fba_realloc_move (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
               else (do
                 throw .outOfBounds)) : Zig.MM fba_realloc_moveLocals fba_realloc_moveExit) with
             | .br40 => (do
-              let i45 ← Zig.callM (Zig.checkIndex v30 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v30.ptr.elem 1 (0 : BitVec 64)))
+              let i45 ← Zig.callM (Zig.checkIndex v30.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v30.ptr.elem 1 (0 : BitVec 64)))
               pure (.ret i45))
             | e => pure e)
           | e => pure e)
@@ -1665,7 +1665,7 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator
           else (do
             throw .outOfBounds)) : Zig.MM mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Locals mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Exit) with
         | .br21 => (do
-          let i26 ← Zig.callM (Zig.ptrProject v15.ptr (·.elem 1 p1))
+          let i26 ← Zig.callM (Zig.checkIndex v15.len p1) >>= fun _ => Zig.callM (Zig.ptrProject v15.ptr (·.elem 1 p1))
           Zig.store (α := BitVec 8) 1 i26 (7 : BitVec 8)
           let i28 ← pure v15.ptr
           let i29 ← pure i28
@@ -1680,7 +1680,7 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator
               throw .outOfBounds)) : Zig.MM mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Locals mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Exit) with
           | .br34 => (do
             let i39 ← Zig.callM (Zig.checkSliceEnd v15.len (0 : BitVec 64) i30 1 >>= fun _ => pure (⟨i29, i30⟩ : Zig.Slice))
-            let i40 ← Zig.callM (Zig.checkSentinelIndex i39 i30 >>= fun _ => Zig.load (BitVec 8) 1 (i39.ptr.elem 1 i30))
+            let i40 ← Zig.callM (Zig.checkSentinelIndex i39.len i30 >>= fun _ => Zig.load (BitVec 8) 1 (i39.ptr.elem 1 i30))
             let i41 ← pure ((7 : BitVec 8) == i40)
             match ← ((do
               if i41 then (do
@@ -1807,7 +1807,7 @@ def fba_sentinel (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
         else (do
           throw .outOfBounds)) : Zig.MM fba_sentinelLocals fba_sentinelExit) with
       | .br15 => (do
-        let i20 ← Zig.callM (Zig.checkSentinelIndex v5 p0 >>= fun _ => Zig.load (BitVec 8) 1 (v5.ptr.elem 1 p0))
+        let i20 ← Zig.callM (Zig.checkSentinelIndex v5.len p0 >>= fun _ => Zig.load (BitVec 8) 1 (v5.ptr.elem 1 p0))
         let _i21 ← Zig.callM (mem_Allocator_free__anon_4cd0e3a7c1bf i4 v5)
         pure (.ret i20))
       | e => pure e)

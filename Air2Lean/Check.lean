@@ -2067,8 +2067,9 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
 
 /-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
 (`Dialect.euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
-affected payload of its global. Other backends lower these constants with the payload offset
-that the model uses. -/
+affected payload of its global. A legacy profile with no backend (`Dialect.misplacesEuPayload`) is
+treated alike. Other backends lower these constants with the payload offset that the model
+uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
   unless f.dialect.misplacesEuPayload do return
@@ -2076,10 +2077,12 @@ private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) 
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
+    let legacyNote := if f.dialect.backend == BuildProfile.unverified then
+      " (a legacy profile names no backend, so the LLVM backend cannot be excluded)" else ""
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
       alignment-1 error-union payload, which this backend lowers at the error code \
       (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
-      outside the {f.dialect.backend} profile"
+      outside the {f.dialect.backend} profile{legacyNote}"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
@@ -3420,6 +3423,92 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
           | _ => false
         | _ => false
       require (errorUnit && canceled) "error{Canceled}!void result"
+
+/-- The read of an atomic op with this order stays unordered with later accesses (no acquire). -/
+private def readUnordered : AtomicOrder → Bool
+  | .acquire | .acqRel | .seqCst => false
+  | _ => true
+
+/-- The write of an atomic op with this order stays unordered with earlier accesses (no
+release). -/
+private def writeUnordered : AtomicOrder → Bool
+  | .release | .acqRel | .seqCst => false
+  | _ => true
+
+/-- The address of a pointer operand, as a key: a field or element pointer (`fieldPtr`,
+`elemPtr`) of an address is that address and the field or index, so two computations of the
+same field (`self.n` in two inlined `atomic.Value` calls) have the same key. -/
+partial def ptrKey (defs : Std.HashMap InstId Op) (v : Val) (fuel : Nat := 64) : String :=
+  match fuel, v with
+  | n + 1, .inst id =>
+    match defs.get? id with
+    | some (.fieldPtr b i) => s!"{ptrKey defs b n}.{i}"
+    | some (.elemPtr b i) => s!"{ptrKey defs b n}[{ptrKey defs i n}]"
+    | _ => reprStr v
+  | _, _ => reprStr v
+
+/-- An RMW order that orders every earlier read before every later write in program order (C11:
+an acquire-release or sequentially consistent RMW, both an acquire and a release). A load (only an
+acquire, even `seq_cst`) or a store (only a release) does not. -/
+private def fullOrder : AtomicOrder → Bool
+  | .acqRel | .seqCst => true
+  | _ => false
+
+/-- The load-buffering shape (audit #4, premise ORD-02) on a straight-line path: a relaxed atomic
+read (a load, an RMW, a `cmpxchg` without acquire), then an atomic store, RMW or `cmpxchg`
+without release to another address (`ptrKey`), with no acquire-release or sequentially consistent
+RMW (`fullOrder`), call or branch between.
+A `block` that its own `br` leaves at its end (an inlined call) is straight-line code. C11
+(unlike RC11) and Arm allow the read to see a write that comes after the write in another thread; the model has no
+promises, so it never produces that outcome. `loads` are the addresses of the relaxed reads since
+the last reset; the result is the write instruction of a shape, or the reads at the end of
+`insts` (`target`: the enclosing block). -/
+partial def loadBufferingScan (key : Val → String) (insts : Array Inst) (loads : Array String)
+    (target : Option InstId) : Except InstId (Array String) := do
+  let mut loads := loads
+  for i in insts do
+    match i.op with
+    | .block b => loads ← loadBufferingScan key b loads (some i.id)
+    | .atomicLoad p o => if readUnordered o then loads := loads.push (key p)
+    | .atomicStore p _ o => if writeUnordered o && loads.any (· != key p) then throw i.id
+    | .atomicRmw _ o p _ =>
+      if writeUnordered o && loads.any (· != key p) then throw i.id
+      if fullOrder o then loads := #[]
+      else if readUnordered o then loads := loads.push (key p)
+    | .cmpxchg _ p _ _ s f =>
+      if writeUnordered s && loads.any (· != key p) then throw i.id
+      -- the failure path is a read with order `f` alone: it orders no earlier read
+      if readUnordered s || readUnordered f then loads := loads.push (key p)
+    | .br t _ => if some t != target then loads := #[]
+    | .loop b =>
+      let _ ← loadBufferingScan key b #[] none; loads := #[]
+    | .condBr _ t e =>
+      let _ ← loadBufferingScan key t #[] none; let _ ← loadBufferingScan key e #[] none
+      loads := #[]
+    | .switchBr _ cs e | .loopSwitchBr _ cs e =>
+      for c in cs do let _ ← loadBufferingScan key c.body #[] none
+      let _ ← loadBufferingScan key e #[] none; loads := #[]
+    | .«try» _ e | .tryPtr _ e => let _ ← loadBufferingScan key e #[] none; loads := #[]
+    | .call .. | .«repeat» _ | .switchDispatch .. => loads := #[]
+    | _ => pure ()
+  return loads
+
+/-- The write instruction of a load-buffering shape in `f` (`loadBufferingScan`). -/
+def loadBufferingShape? (f : Func) : Option InstId :=
+  let defs : Std.HashMap InstId Op := f.allInsts.foldl (fun d i => d.insert i.id i.op) {}
+  match loadBufferingScan (ptrKey defs) f.body #[] none with
+  | .error id => some id
+  | .ok _ => none
+
+/-- Reject the load-buffering shape (`loadBufferingShape?`) unless the user assumes that the
+compiled code shows no load buffering (`--assume-no-lb`, premise ORD-02). The check is narrow
+(straight-line code in one function); ORD-02 stays a premise of every theorem with atomics. -/
+def checkLoadBuffering (funcs : Array Func) : Except String Unit := do
+  for f in funcs do
+    if let some id := loadBufferingShape? f then
+      throw s!"{f.name}: inst {id}: a relaxed atomic read followed by a relaxed atomic write to \
+        another location (load buffering) is outside the model, which has no promises; pass \
+        --assume-no-lb to assume the compiled code shows no load buffering (premise ORD-02)"
 
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/

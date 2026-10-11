@@ -472,8 +472,8 @@ theorem alloc_threadFree (c : Ptr) (len : BitVec 64) (a : mem_Alignment) (ra : B
 
 /-- So a one-thread scheduler run of `alloc` is its sequential reading (`Sched.run_eq_seqRun`). -/
 theorem alloc_run (c : Ptr) (len : BitVec 64) (a : mem_Alignment) (ra : BitVec 64) (m : Mem) :
-    Sched.run dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len a ra) m =
+    Sched.run Sched.soloEnv dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len a ra) m =
       (Sched.seqRun 16 (heap_PageAllocator_alloc c len a ra)).run m :=
-  Sched.run_eq_seqRun dispatch 16 (alloc_threadFree c len a ra) m
+  Sched.run_eq_seqRun Sched.soloEnv dispatch 16 (alloc_threadFree c len a ra) m
 
 end AllocTranslated.PageAlloc

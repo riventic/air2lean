@@ -167,8 +167,9 @@ theorem cell_size_bext {A : Nat} {x : Byte} :
 /-! ## 2. Owning every byte no longer ends a block -/
 
 theorem run_free : ∃ m', ((free q).run m1).run = some (.ok ((), m')) ∧
-    m'.blocks[0]? = some { blk1 with live := false } :=
-  ⟨_, rfl, rfl⟩
+    m'.blocks[0]? = some { blk1 with live := false } := by
+  have hr : m1.freeRaces 0 1 = false := freeRaces_of_singleThread seq1.1.single 0 1
+  exact ⟨_, by simp [free, q, m1, blk1] at hr ⊢; simp [hr]; rfl, rfl⟩
 
 /-- **New model**: the frame owns the block's full extent; `free` ends the block, so no resource
 holds the memory after it with that frame. `FTriple.free'` takes the extent. -/
