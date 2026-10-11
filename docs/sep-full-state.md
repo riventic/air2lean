@@ -311,6 +311,27 @@ are re-proved against the stronger `FAllocSpec`; the arena follows, see the tabl
   page allocator (`PageSpec.pinned`, Linux and macOS) is proved this way; its `alloc` gets the new
   mapping's extent from the bridge's post and keeps it through legacy read steps
   (`CTriple.step_bext`). `PageSpec.inv_legacy` is gone with the wrapper contracts.
+* **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
+  shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
+  (`Ghost.ep g γ e`: ledger `γ` is at epoch `e`): `ECell.TagOk` bounds the counted fraction
+  `ECell.wsum` (the untagged fraction plus, per tag, `tagWt`: the larger of tagged shares and
+  receipts while the epoch is current, the receipts once it is past, nothing otherwise) by `1`,
+  and forbids tags of a future epoch; `ECell.Req` is a live claim (an untagged share, a tagged
+  share of a current epoch, a receipt of a current or past epoch), and only live claims must be
+  true (`ECell.TrueIn`, `ExtTrue m g` over the whole ghost state). `Ghost.Fin` bounds the ledger
+  names that tags use, so `Upd.alloc` takes a name no tag uses. `Upd` keeps the extent claims
+  and every true claim true (`Ghost.valid_led_change`); `Upd.bump` turns the old epoch's tagged
+  shares dormant and keeps its receipts live. `full_excl`: the full extent leaves the frame only
+  dormant claims on the block (`ECell.Dormant`), which is what the bridge and every shrink need.
+  Updates of one block's claims are `ECell.StepE` (under every ledger status that contains the
+  resource's ledgers, `EUpd.ext1L`); the untagged rules are `ECell.Step`. New rules:
+  `EUpd.lendT` (`gauth γ e M ⋆ bshare b q k` to `gauth ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q
+  k γ e)`, `k' ≤ k`), `EUpd.returnT` (back), `EUpd.revoke` (`gauth γ e' M ⋆ brcpt b q k γ e`,
+  `e < e'`, to the untagged share), `Holds.bshareT` (with the ledger's authority, a tagged share
+  gives the bound). `FAllocInv.tag` (default `none`) tags `granted`'s share (`pshare … I.tag`);
+  the FixedBufferAllocator and the page allocator keep `none` and are unchanged. Not done yet:
+  tagged split/join/weaken (not needed by the arena plan: each grant gets its own tagged share)
+  and the nested parent tag (below).
 * Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
   (`newMap` includes it).
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and

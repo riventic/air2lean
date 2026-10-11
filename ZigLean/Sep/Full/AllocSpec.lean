@@ -18,7 +18,9 @@ holds the grant, the block is live with at least `p.off + n` bytes, whatever hap
 block's other parts. A client uses it for pointers up to the end of the grant that it does not
 own bytes to; an allocator that grants out of a block of its own (a fixed buffer, an arena node, a
 mapping) lends it off its own claim on that block (`EUpd.lend`, `EUpd.weaken`) and takes it back
-in `free` and `resize` (`EUpd.unlend`, `EUpd.join`). The token sees the fraction `q`
+in `free` and `resize` (`EUpd.unlend`, `EUpd.join`). An allocator that revokes its grants (an
+arena's `reset`) hands out shares tagged with its ledger's epoch (`FAllocInv.tag`, `EUpd.lendT`).
+The token sees the fraction `q`
 (`FAllocInv.tok`'s last argument), so an allocator that must get its whole extent back (the page
 allocator's `munmap`) knows that `free` returns exactly what it lent.
 
@@ -31,18 +33,21 @@ namespace Full
 
 open FAssn
 
-/-- A share `q` of the extent of `p`'s block, at the lower bound `k`. -/
-def pshare (p : Ptr) (q : Frac) (k : Nat) : FAssn :=
-  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q k
+/-- A share `q` of the extent of `p`'s block, at the lower bound `k`, with the epoch tag `t`. -/
+def pshare (p : Ptr) (q : Frac) (k : Nat) (t : Option (Nat × Nat) := none) : FAssn :=
+  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q k t
 
 /-- An allocator invariant over full-state assertions (`AllocInv`). The token
 `tok p n k A S K q` of a grant of `n` bytes at `p` with alignment `2 ^ k` in a block with
 address `A`, size `S` and kind `K` (as the region's cells record them) sees the fraction `q` of
-the grant's extent share (`granted`). -/
+the grant's extent share (`granted`). `tag` is the epoch tag of that share
+(`docs/sep-full-state.md` §Epoch-tagged shares): `none` for an allocator that never revokes its
+grants, `some (γ, e)` for one whose grants die with epoch `e` of its ledger `γ` (an arena). -/
 structure FAllocInv where
   own : FAssn
   tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → FAssn
   fits : Nat → Nat → Prop := fun _ _ => True
+  tag : Option (Nat × Nat) := none
 
 namespace FAllocInv
 
@@ -52,7 +57,7 @@ variable (I : FAllocInv)
 its block's extent up to the region's end. -/
 def granted (p : Ptr) (k : Nat) (bs : Array Byte) : FAssn :=
   FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q =>
-    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆ pshare p q (p.off.toNat + bs.size))
+    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆ pshare p q (p.off.toNat + bs.size) I.tag)
 
 /-- After `alloc` of `len` bytes (`Zig.allocPost`). -/
 def allocPost (len k : Nat) : Option Ptr → FAssn

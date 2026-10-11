@@ -67,12 +67,18 @@ def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
 
 theorem gF_ok : GOk m1 Ghost.unit gF := by
   refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
-    fun b => ?_⟩, 0, fun _ _ => rfl⟩, fun b => ?_⟩
+    fun b => ?_⟩, 0, fun _ _ => ⟨rfl, fun b e k => ?_⟩⟩, fun b => ?_⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
-    · exact ECell.auth1_valid 1 .heap
-    · exact ECell.valid_unit
+    · have := (ECell.dormant_unit (Ghost.ep ⟨fun γ => GCell.unit.add GCell.unit,
+        fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit⟩)).auth1_ok
+        (S := 1) (K := .heap)
+      rwa [ECell.add_unit] at this
+    · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
+    split <;> exact ⟨rfl, rfl⟩
+  · show ECell.TrueIn _ _ _ _
+    simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
     · rename_i hb; subst hb
       refine ⟨fun S K h => ?_, fun k h => ?_⟩
@@ -81,10 +87,8 @@ theorem gF_ok : GOk m1 Ghost.unit gF := by
         · rename_i e; simp only [Prod.mk.injEq] at e; obtain ⟨rfl, rfl⟩ := e
           exact ⟨blk1, rfl, rfl, rfl, rfl, by decide⟩
         · cases h
-      · simp only [ECell.auth1] at h
-        split at h
-        · rename_i e; subst e; exact ⟨blk1, rfl, rfl, by decide, by decide⟩
-        · simp [Frac.zero] at h
+      · have := (ECell.dormant_unit _).req_auth1 (by rwa [ECell.add_unit])
+        subst this; exact ⟨blk1, rfl, rfl, by decide, by decide⟩
     · exact (ExtTrue.unit m1) b
 
 /-- `m1` holds a resource that owns byte `(0, 0)` with a cell recording size `S`, and a frame
@@ -196,3 +200,15 @@ end Zig.Full.ExtCX
 #print axioms Zig.Full.EUpd.weaken
 #print axioms Zig.Full.bshare_split
 #print axioms Zig.Full.Holds.bshare
+-- Epoch-tagged shares (`docs/sep-full-state.md` §Epoch-tagged shares): lend a tagged share with
+-- a receipt, give it back during its epoch, revoke a past epoch's share, the fact a tagged share
+-- gives, the ledger updates that read the tags (new ledger, next epoch), the full extent leaving
+-- only dormant claims, and the legacy bridge.
+#print axioms Zig.Full.EUpd.lendT
+#print axioms Zig.Full.EUpd.returnT
+#print axioms Zig.Full.EUpd.revoke
+#print axioms Zig.Full.Holds.bshareT
+#print axioms Zig.Full.Upd.alloc
+#print axioms Zig.Full.Upd.bump
+#print axioms Zig.Full.full_excl
+#print axioms Zig.Full.FTriple.ofTriple

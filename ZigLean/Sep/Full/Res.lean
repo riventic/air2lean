@@ -410,124 +410,6 @@ theorem add_assoc (a b c : Frac) : (a.add b).add c = a.add (b.add c) := eq (by s
 
 end Frac
 
-/-- The extent claims on one block: authority claims `(S, K) ↦ count` and the fraction held at
-each lower bound. -/
-@[ext] structure ECell where
-  auth : Nat × BlockKind → Nat
-  sh : Nat → Frac
-
-namespace ECell
-
-def unit : ECell := ⟨fun _ => 0, fun _ => Frac.zero⟩
-
-def add (a b : ECell) : ECell := ⟨fun x => a.auth x + b.auth x, fun k => (a.sh k).add (b.sh k)⟩
-
-theorem add_comm (a b : ECell) : a.add b = b.add a := by
-  ext x <;> simp [add, Nat.add_comm, Frac.add_comm]
-
-theorem add_assoc (a b c : ECell) : (a.add b).add c = a.add (b.add c) := by
-  ext x <;> simp [add, Nat.add_assoc, Frac.add_assoc]
-
-@[simp] theorem add_unit (a : ECell) : a.add unit = a := by ext x <;> simp [add, unit]
-
-@[simp] theorem unit_add (a : ECell) : unit.add a = a := by ext x <;> simp [add, unit]
-
-/-- The fraction held at the bounds below `n`. -/
-def total (c : ECell) : Nat → Rat
-  | 0 => 0
-  | n + 1 => c.total n + (c.sh n).val
-
-theorem total_nonneg (c : ECell) : ∀ n, 0 ≤ c.total n
-  | 0 => Rat.le_refl
-  | n + 1 => by have := total_nonneg c n; have := (c.sh n).nonneg; simp only [total]; grind
-
-theorem total_add (a b : ECell) : ∀ n, (a.add b).total n = a.total n + b.total n
-  | 0 => by simp only [total]; grind
-  | n + 1 => by have := total_add a b n; simp only [total, add, Frac.add] at *; grind
-
-/-- At most one authority claim, held once, and at most the whole fraction. -/
-def Valid (c : ECell) : Prop :=
-  (∀ x, c.auth x ≤ 1) ∧ (∀ x y, 0 < c.auth x → 0 < c.auth y → x = y) ∧ ∀ n, c.total n ≤ 1
-
-theorem Valid.of_add {a b : ECell} (h : (a.add b).Valid) : a.Valid := by
-  obtain ⟨h1, h2, h3⟩ := h
-  refine ⟨fun x => ?_, fun x y hx hy => h2 x y ?_ ?_, fun n => ?_⟩
-  · have := h1 x; simp only [add] at this; omega
-  · simp only [add]; omega
-  · simp only [add]; omega
-  · have := h3 n; rw [total_add] at this; have := total_nonneg b n; grind
-
-theorem valid_unit : unit.Valid :=
-  ⟨fun _ => Nat.zero_le _, fun _ _ h => absurd h (Nat.lt_irrefl 0), fun n => by
-    have : ∀ n, unit.total n = 0 := fun n => by
-      induction n with
-      | zero => rfl
-      | succ n ih => simp only [total, ih]; show (0 : Rat) + 0 = 0; grind
-    rw [this]; decide⟩
-
-end ECell
-
-/-- Ghost state: ledgers by ghost name (`GName := Nat`) and extent claims by block. -/
-@[ext] structure Ghost where
-  led : Nat → GCell
-  extent : BlockId → ECell
-
-namespace Ghost
-
-def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit⟩
-
-def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b)⟩
-
-def Valid (g : Ghost) : Prop := (∀ γ, (g.led γ).Valid) ∧ ∀ b, (g.extent b).Valid
-
-/-- Finitely many names in use (a fresh name exists). -/
-def Fin (g : Ghost) : Prop := ∃ N, ∀ γ, N ≤ γ → g.led γ = GCell.unit
-
-/-- `g₁` and `g₂` compose: their sum is valid and finite. -/
-def Ok (g₁ g₂ : Ghost) : Prop := Valid (add g₁ g₂) ∧ Fin (add g₁ g₂)
-
-theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
-  ext1
-  · funext γ; exact GCell.add_comm _ _
-  · funext b; exact ECell.add_comm _ _
-
-theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
-  ext1
-  · funext γ; exact GCell.add_assoc _ _ _
-  · funext b; exact ECell.add_assoc _ _ _
-
-@[simp] theorem add_unit (g : Ghost) : g.add unit = g := by ext1 <;> funext x <;> simp [add, unit]
-
-@[simp] theorem unit_add (g : Ghost) : unit.add g = g := by ext1 <;> funext x <;> simp [add, unit]
-
-theorem Ok.assoc {a b c : Ghost} : Ok (a.add b) c ↔ Ok a (b.add c) := by
-  unfold Ok; rw [add_assoc]
-
-theorem Ok.comm {a b : Ghost} : Ok a b ↔ Ok b a := by
-  unfold Ok; rw [add_comm]
-
-/-- Ghost state can be dropped: validity and finiteness are closed under removing a part. -/
-theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
-  obtain ⟨⟨hv, hx⟩, N, hN⟩ := h
-  refine ⟨⟨fun γ => ?_, fun x => ?_⟩, N, fun γ hγ => ?_⟩
-  · have := hv γ
-    have e : ((a.add b).add c).led γ = ((a.led γ).add (c.led γ)).add (b.led γ) := by
-      simp only [add]; rw [GCell.add_assoc, GCell.add_comm (b.led γ), ← GCell.add_assoc]
-    rw [e] at this
-    exact GCell.Valid.of_add this
-  · have := hx x
-    have e : ((a.add b).add c).extent x = ((a.extent x).add (c.extent x)).add (b.extent x) := by
-      simp only [add]; rw [ECell.add_assoc, ECell.add_comm (b.extent x), ← ECell.add_assoc]
-    rw [e] at this
-    exact ECell.Valid.of_add this
-  · have := hN γ hγ
-    simp only [add, GCell.add, GCell.unit, GCell.mk.injEq] at this ⊢
-    obtain ⟨h1, h2⟩ := this
-    exact ⟨funext fun x => by have := congrFun h1 x; omega,
-      funext fun x => by have := congrFun h2 x; omega⟩
-
-end Ghost
-
 /-! ## Finite sums of fractions (epoch-tagged shares, `docs/sep-full-state.md` §Epoch-tagged shares) -/
 
 /-- The fraction `f` holds at the bounds below `n`. -/
@@ -634,10 +516,77 @@ theorem gsum_single {f g : Nat → Nat → Rat} {γ₀ e₀ : Nat} {δ : Rat} (h
       have := esum_le (fun e => h N e (by intro x; cases x; exact hN rfl)) E
       grind
 
-/-! ## Ledger status and the weight of a tag -/
+theorem esum_mono {f : Nat → Rat} (h : ∀ e, 0 ≤ f e) {E E' : Nat} (hE : E ≤ E') : esum f E ≤ esum f E' := by
+  induction E' with
+  | zero => rw [Nat.le_zero.mp hE]; exact Rat.le_refl
+  | succ E' ih =>
+    rcases Nat.lt_or_ge E (E' + 1) with hn | hn
+    · have := ih (by omega); have := h E'; simp only [esum]; grind
+    · rw [show E = E' + 1 by omega]; exact Rat.le_refl
 
-/-- Ledger `γ`'s authority is at epoch `e`. -/
-def Ghost.ep (g : Ghost) (γ e : Nat) : Prop := ∃ M, 0 < (g.led γ).auth (e, M)
+theorem gsum_mono {f : Nat → Nat → Rat} (h : ∀ γ e, 0 ≤ f γ e) {N N' E E' : Nat} (hN : N ≤ N')
+    (hE : E ≤ E') : gsum f N E ≤ gsum f N' E' := by
+  have step : ∀ N, gsum f N E ≤ gsum f N E' := fun N => by
+    induction N with
+    | zero => exact Rat.le_refl
+    | succ N ih => have := esum_mono (h N) hE; simp only [gsum]; grind
+  have := step N
+  have : gsum f N E' ≤ gsum f N' E' := by
+    induction N' with
+    | zero => rw [Nat.le_zero.mp hN]; exact Rat.le_refl
+    | succ N' ih =>
+      rcases Nat.lt_or_ge N (N' + 1) with hn | hn
+      · have := ih (by omega); have := esum_nonneg (h N') E'; simp only [gsum]; grind
+      · rw [show N = N' + 1 by omega]; exact Rat.le_refl
+  grind
+
+theorem le_esum {f : Nat → Rat} (h : ∀ e, 0 ≤ f e) {e : Nat} : ∀ {E}, e < E → f e ≤ esum f E
+  | 0, he => absurd he (Nat.not_lt_zero _)
+  | E + 1, he => by
+    simp only [esum]
+    by_cases x : e = E
+    · subst x; have := esum_nonneg h e; grind
+    · have := le_esum h (e := e) (E := E) (by omega); have := h E; grind
+
+theorem le_gsum {f : Nat → Nat → Rat} (h : ∀ γ e, 0 ≤ f γ e) {γ e E : Nat} (he : e < E) :
+    ∀ {N}, γ < N → f γ e ≤ gsum f N E
+  | 0, hγ => absurd hγ (Nat.not_lt_zero _)
+  | N + 1, hγ => by
+    simp only [gsum]
+    by_cases x : γ = N
+    · subst x; have := gsum_nonneg h γ E; have := le_esum (h γ) he; grind
+    · have := le_gsum h (γ := γ) he (N := N) (by omega); have := esum_nonneg (h N) E; grind
+
+theorem gsum_zero {f : Nat → Nat → Rat} (h : ∀ γ e, f γ e ≤ 0) (N E : Nat) : gsum f N E ≤ 0 := by
+  have := gsum_le (f := f) (g := fun _ _ => 0) h N E
+  have z : ∀ N, gsum (fun _ _ => (0 : Rat)) N E = 0 := fun N => by
+    induction N with
+    | zero => rfl
+    | succ N ih =>
+      have ze : ∀ E, esum (fun _ => (0 : Rat)) E = 0 := fun E => by
+        induction E with
+        | zero => rfl
+        | succ E ih => simp only [esum, ih]; grind
+      simp only [gsum, ih, ze]; grind
+  rw [z] at this; exact this
+
+theorem ftot_zero {f : Nat → Frac} (h : ∀ k, (f k).val = 0) : ∀ n, ftot f n = 0
+  | 0 => rfl
+  | n + 1 => by simp only [ftot, ftot_zero h n, h n]; grind
+
+theorem le_ftot (f : Nat → Frac) {k : Nat} : ∀ {n}, k < n → (f k).val ≤ ftot f n
+  | 0, h => absurd h (Nat.not_lt_zero _)
+  | n + 1, h => by
+    simp only [ftot]
+    by_cases x : k = n
+    · subst x; have := ftot_nonneg f k; grind
+    · have := le_ftot f (k := k) (n := n) (by omega); have := (f n).nonneg; grind
+
+theorem ftot_congr {f g : Nat → Frac} (h : ∀ k, (f k).val = (g k).val) : ∀ n, ftot f n = ftot g n
+  | 0 => rfl
+  | n + 1 => by simp only [ftot, ftot_congr h n, h n]
+
+/-! ## Ledger status and the weight of a tag -/
 
 open Classical in
 /-- The weight of the tag `(γ, e)` with tagged fractions `T` and receipts `R` (by bound), below
@@ -679,6 +628,17 @@ theorem tagWt_le {ep ep' : Nat → Nat → Prop} (hsub : ∀ γ e, ep' γ e → 
       rw [if_neg hne, if_pos ⟨e', he, hsub _ _ hp⟩]; exact hRl
     · rw [if_neg h2]; exact tagWt_nonneg _ _ _ _ _ _
 
+theorem tagWt_ge_T {ep : Nat → Nat → Prop} {γ e : Nat} {T R : Nat → Frac} {n : Nat} (h : ep γ e) :
+    ftot T n ≤ tagWt ep γ e T R n := by
+  unfold tagWt; rw [if_pos h]; grind
+
+theorem tagWt_ge_R {ep : Nat → Nat → Prop} {γ e : Nat} {T R : Nat → Frac} {n : Nat}
+    (h : ep γ e ∨ ∃ e', e < e' ∧ ep γ e') : ftot R n ≤ tagWt ep γ e T R n := by
+  unfold tagWt
+  by_cases h1 : ep γ e
+  · rw [if_pos h1]; grind
+  · rw [if_neg h1, if_pos (h.resolve_left h1)]; exact Rat.le_refl
+
 /-- A valid ledger cell has at most one epoch. -/
 theorem GCell.Valid.ep_uniq {c : GCell} (h : c.Valid) {e e' : Nat} {M M' : GMap}
     (h1 : 0 < c.auth (e, M)) (h2 : 0 < c.auth (e', M')) : e = e' := by
@@ -690,16 +650,353 @@ theorem GCell.Valid.ep_uniq {c : GCell} (h : c.Valid) {e e' : Nat} {M M' : GMap}
       · have := h0 _ y; omega
     · have := h0 _ x; omega
 
-/-- The extent claims of `e` are true in `m`: an authority claim `(S, K)` names a live block of
-size `S` and kind `K`, and a share at bound `k` a live block of at least `k` bytes; in both cases
-the block has a live byte (`mappedLo < size`). -/
-def ExtTrue (m : Mem) (e : BlockId → ECell) : Prop :=
-  ∀ b : BlockId, (∀ (S : Nat) (K : BlockKind), 0 < (e b).auth (S, K) → ∃ blk : Block, m.blocks[b]? = some blk ∧ blk.live = true ∧
-      blk.bytes.size = S ∧ blk.kind = K ∧ K.mappedLo < S) ∧
-    (∀ k : Nat, 0 < ((e b).sh k).val → ∃ blk : Block, m.blocks[b]? = some blk ∧ blk.live = true ∧
+/-- The extent claims on one block: authority claims `(S, K) ↦ count`, the fraction held at
+each lower bound, and the epoch-tagged fractions and receipts by tag `(γ, e)` and bound
+(`docs/sep-full-state.md` §Epoch-tagged shares). -/
+@[ext] structure ECell where
+  auth : Nat × BlockKind → Nat
+  sh : Nat → Frac
+  /-- Tagged shares: ledger `γ`, epoch `e`, lower bound `k`. -/
+  tsh : Nat → Nat → Nat → Frac
+  /-- Receipts of tagged shares lent out: ledger `γ`, epoch `e`, lower bound `k`. -/
+  rc : Nat → Nat → Nat → Frac
+
+namespace ECell
+
+def unit : ECell := ⟨fun _ => 0, fun _ => Frac.zero, fun _ _ _ => Frac.zero, fun _ _ _ => Frac.zero⟩
+
+def add (a b : ECell) : ECell :=
+  ⟨fun x => a.auth x + b.auth x, fun k => (a.sh k).add (b.sh k),
+    fun γ e k => (a.tsh γ e k).add (b.tsh γ e k), fun γ e k => (a.rc γ e k).add (b.rc γ e k)⟩
+
+theorem add_comm (a b : ECell) : a.add b = b.add a := by
+  ext <;> simp [add, Nat.add_comm, Frac.add_comm]
+
+theorem add_assoc (a b c : ECell) : (a.add b).add c = a.add (b.add c) := by
+  ext <;> simp [add, Nat.add_assoc, Frac.add_assoc]
+
+@[simp] theorem add_unit (a : ECell) : a.add unit = a := by ext <;> simp [add, unit]
+
+@[simp] theorem unit_add (a : ECell) : unit.add a = a := by ext <;> simp [add, unit]
+
+/-- The fraction held at the bounds below `n`. -/
+def total (c : ECell) : Nat → Rat
+  | 0 => 0
+  | n + 1 => c.total n + (c.sh n).val
+
+theorem total_nonneg (c : ECell) : ∀ n, 0 ≤ c.total n
+  | 0 => Rat.le_refl
+  | n + 1 => by have := total_nonneg c n; have := (c.sh n).nonneg; simp only [total]; grind
+
+theorem total_add (a b : ECell) : ∀ n, (a.add b).total n = a.total n + b.total n
+  | 0 => by simp only [total]; grind
+  | n + 1 => by have := total_add a b n; simp only [total, add, Frac.add] at *; grind
+
+theorem total_eq (c : ECell) : ∀ n, c.total n = ftot c.sh n
+  | 0 => rfl
+  | n + 1 => by simp only [total, ftot, total_eq c n]
+
+/-- At most one authority claim, held once, and at most the whole fraction. -/
+def Valid (c : ECell) : Prop :=
+  (∀ x, c.auth x ≤ 1) ∧ (∀ x y, 0 < c.auth x → 0 < c.auth y → x = y) ∧ ∀ n, c.total n ≤ 1
+
+theorem Valid.of_add {a b : ECell} (h : (a.add b).Valid) : a.Valid := by
+  obtain ⟨h1, h2, h3⟩ := h
+  refine ⟨fun x => ?_, fun x y hx hy => h2 x y ?_ ?_, fun n => ?_⟩
+  · have := h1 x; simp only [add] at this; omega
+  · simp only [add]; omega
+  · simp only [add]; omega
+  · have := h3 n; rw [total_add] at this; have := total_nonneg b n; grind
+
+theorem valid_unit : unit.Valid :=
+  ⟨fun _ => Nat.zero_le _, fun _ _ h => absurd h (Nat.lt_irrefl 0), fun n => by
+    have : ∀ n, unit.total n = 0 := fun n => by
+      induction n with
+      | zero => rfl
+      | succ n ih => simp only [total, ih]; show (0 : Rat) + 0 = 0; grind
+    rw [this]; decide⟩
+
+/-! ### Claims under a ledger status
+
+`ep γ e` says that ledger `γ`'s authority is at epoch `e` (`Ghost.ep`). A tagged share `(γ, e)`
+is a live claim while `ep γ e`; a receipt `(γ, e)` while `ep γ e` or `γ` is at a later epoch.
+Other tagged claims are dormant: they are neither counted nor required to be true. -/
+
+/-- A claim at bound `k` that is live under `ep`: an untagged share, a tagged share of the current
+epoch, or a receipt of the current or a past epoch. -/
+def Req (ep : Nat → Nat → Prop) (c : ECell) (k : Nat) : Prop :=
+  0 < (c.sh k).val ∨ ∃ γ e, (ep γ e ∧ 0 < (c.tsh γ e k).val) ∨
+    ((ep γ e ∨ ∃ e', e < e' ∧ ep γ e') ∧ 0 < (c.rc γ e k).val)
+
+/-- `c` holds a live claim under `ep` (an authority claim or a live share). -/
+def Claims (ep : Nat → Nat → Prop) (c : ECell) : Prop :=
+  (∃ S K, 0 < c.auth (S, K)) ∨ ∃ k, c.Req ep k
+
+/-- The fraction counted below bound `n`, with the tags `(γ, e)`, `γ < N`, `e < E`. -/
+noncomputable def wsum (ep : Nat → Nat → Prop) (c : ECell) (n N E : Nat) : Rat :=
+  c.total n + gsum (fun γ e => tagWt ep γ e (c.tsh γ e) (c.rc γ e) n) N E
+
+/-- No tagged claim of an epoch after the current one. -/
+def FutZ (ep : Nat → Nat → Prop) (c : ECell) : Prop :=
+  ∀ γ e e' k, ep γ e → e < e' → (c.tsh γ e' k).val = 0 ∧ (c.rc γ e' k).val = 0
+
+/-- The counted fraction is at most the whole, and no tag of a future epoch exists. -/
+def TagOk (ep : Nat → Nat → Prop) (c : ECell) : Prop :=
+  (∀ n N E, c.wsum ep n N E ≤ 1) ∧ c.FutZ ep
+
+/-- **The claims `c` on block `b` are true in `m` under `ep`**: an authority claim `(S, K)`
+names a live block of size `S` and kind `K`, a live claim at bound `k` a live block of at least
+`k` bytes; in both cases the block has a live byte (`mappedLo < size`). -/
+def TrueIn (ep : Nat → Nat → Prop) (m : Mem) (b : BlockId) (c : ECell) : Prop :=
+  (∀ (S : Nat) (K : BlockKind), 0 < c.auth (S, K) → ∃ blk : Block, m.blocks[b]? = some blk ∧
+      blk.live = true ∧ blk.bytes.size = S ∧ blk.kind = K ∧ K.mappedLo < S) ∧
+    (∀ k : Nat, c.Req ep k → ∃ blk : Block, m.blocks[b]? = some blk ∧ blk.live = true ∧
       k ≤ blk.bytes.size ∧ blk.kind.mappedLo < blk.bytes.size)
 
-/-- `m'` keeps every block that is live in `m`: live, with the same size and kind. -/
+/-- `a`'s claims are among `b`'s. -/
+def Le (a b : ECell) : Prop :=
+  (∀ x, a.auth x ≤ b.auth x) ∧ (∀ k, (a.sh k).val ≤ (b.sh k).val) ∧
+    (∀ γ e k, (a.tsh γ e k).val ≤ (b.tsh γ e k).val) ∧ ∀ γ e k, (a.rc γ e k).val ≤ (b.rc γ e k).val
+
+theorem le_add (a b : ECell) : a.Le (a.add b) := by
+  refine ⟨fun x => by simp only [add]; omega, fun k => ?_, fun γ e k => ?_, fun γ e k => ?_⟩ <;>
+    simp only [add, Frac.add] <;> grind [Frac.nonneg]
+
+theorem le_add' (a b : ECell) : b.Le (a.add b) := add_comm b a ▸ le_add b a
+
+theorem Le.refl (a : ECell) : a.Le a :=
+  ⟨fun _ => Nat.le_refl _, fun _ => Rat.le_refl, fun _ _ _ => Rat.le_refl, fun _ _ _ => Rat.le_refl⟩
+
+theorem Le.trans {a b c : ECell} (h₁ : a.Le b) (h₂ : b.Le c) : a.Le c :=
+  ⟨fun x => Nat.le_trans (h₁.1 x) (h₂.1 x), fun k => Rat.le_trans (h₁.2.1 k) (h₂.2.1 k),
+    fun γ e k => Rat.le_trans (h₁.2.2.1 γ e k) (h₂.2.2.1 γ e k),
+    fun γ e k => Rat.le_trans (h₁.2.2.2 γ e k) (h₂.2.2.2 γ e k)⟩
+
+theorem Req.mono {ep ep' : Nat → Nat → Prop} {a b : ECell} {k : Nat} (hep : ∀ γ e, ep γ e → ep' γ e)
+    (hle : a.Le b) (h : a.Req ep k) : b.Req ep' k := by
+  rcases h with h | ⟨γ, e, ⟨he, h⟩ | ⟨he, h⟩⟩
+  · exact .inl (by have := hle.2.1 k; grind)
+  · exact .inr ⟨γ, e, .inl ⟨hep _ _ he, by have := hle.2.2.1 γ e k; grind⟩⟩
+  · refine .inr ⟨γ, e, .inr ⟨?_, by have := hle.2.2.2 γ e k; grind⟩⟩
+    rcases he with he | ⟨e', h1, h2⟩
+    · exact .inl (hep _ _ he)
+    · exact .inr ⟨e', h1, hep _ _ h2⟩
+
+theorem Req_add {ep : Nat → Nat → Prop} {a b : ECell} {k : Nat} :
+    (a.add b).Req ep k ↔ a.Req ep k ∨ b.Req ep k := by
+  constructor
+  · intro h
+    have pos : ∀ x y : Frac, 0 < (x.add y).val → 0 < x.val ∨ 0 < y.val := fun x y h => by
+      simp only [Frac.add] at h; have := x.nonneg; have := y.nonneg; grind
+    rcases h with h | ⟨γ, e, ⟨he, h⟩ | ⟨he, h⟩⟩
+    · rcases pos _ _ h with h | h
+      · exact .inl (.inl h)
+      · exact .inr (.inl h)
+    · rcases pos _ _ h with h | h
+      · exact .inl (.inr ⟨γ, e, .inl ⟨he, h⟩⟩)
+      · exact .inr (.inr ⟨γ, e, .inl ⟨he, h⟩⟩)
+    · rcases pos _ _ h with h | h
+      · exact .inl (.inr ⟨γ, e, .inr ⟨he, h⟩⟩)
+      · exact .inr (.inr ⟨γ, e, .inr ⟨he, h⟩⟩)
+  · rintro (h | h)
+    · exact h.mono (fun _ _ h => h) (le_add a b)
+    · exact h.mono (fun _ _ h => h) (le_add' a b)
+
+theorem TrueIn.of_le {ep ep' : Nat → Nat → Prop} {m : Mem} {x : BlockId} {a b : ECell}
+    (hep : ∀ γ e, ep γ e → ep' γ e) (hle : a.Le b) (h : b.TrueIn ep' m x) : a.TrueIn ep m x :=
+  ⟨fun S K hp => h.1 S K (Nat.lt_of_lt_of_le hp (hle.1 _)), fun k hk => h.2 k (hk.mono hep hle)⟩
+
+theorem total_le {a b : ECell} (hle : a.Le b) (n : Nat) : a.total n ≤ b.total n := by
+  rw [total_eq, total_eq]; exact ftot_le hle.2.1 n
+
+theorem total_mono (c : ECell) {n N : Nat} (h : n ≤ N) : c.total n ≤ c.total N := by
+  rw [total_eq, total_eq]; exact ftot_mono _ h
+
+/-- Fewer epochs (each ledger has at most one) and fewer claims count less. -/
+theorem wsum_le {ep ep' : Nat → Nat → Prop} (hsub : ∀ γ e, ep γ e → ep' γ e)
+    (huniq : ∀ γ e e', ep' γ e → ep' γ e' → e = e') {a b : ECell} (hle : a.Le b) (n N E : Nat) :
+    a.wsum ep n N E ≤ b.wsum ep' n N E := by
+  have := total_le hle n
+  have := gsum_le (fun γ e => tagWt_le (ep := ep') (ep' := ep) hsub huniq (γ := γ) (e := e)
+    (hle.2.2.1 γ e) (hle.2.2.2 γ e) n) N E
+  simp only [wsum]; grind
+
+theorem wsum_mono (ep : Nat → Nat → Prop) (c : ECell) {n n' N N' E E' : Nat} (hn : n ≤ n')
+    (hN : N ≤ N') (hE : E ≤ E') : c.wsum ep n N E ≤ c.wsum ep n' N' E' := by
+  have := c.total_mono hn
+  have := gsum_le (fun γ e => tagWt_mono ep γ e (c.tsh γ e) (c.rc γ e) hn) N E
+  have := gsum_mono (fun γ e => tagWt_nonneg ep γ e (c.tsh γ e) (c.rc γ e) n') hN hE
+  simp only [wsum]; grind
+
+theorem TagOk.of_le {ep ep' : Nat → Nat → Prop} (hsub : ∀ γ e, ep γ e → ep' γ e)
+    (huniq : ∀ γ e e', ep' γ e → ep' γ e' → e = e') {a b : ECell} (hle : a.Le b)
+    (h : b.TagOk ep') : a.TagOk ep := by
+  refine ⟨fun n N E => Rat.le_trans (wsum_le hsub huniq hle n N E) (h.1 n N E),
+    fun γ e e' k he hlt => ?_⟩
+  have := h.2 γ e e' k (hsub _ _ he) hlt
+  have := hle.2.2.1 γ e' k; have := hle.2.2.2 γ e' k
+  have := (a.tsh γ e' k).nonneg; have := (a.rc γ e' k).nonneg
+  grind
+
+/-- A live claim counts. -/
+theorem Req.pos {ep : Nat → Nat → Prop} {c : ECell} {k : Nat} (h : c.Req ep k) :
+    ∃ N E, 0 < c.wsum ep (k + 1) N E := by
+  have hg : ∀ N E, 0 ≤ gsum (fun γ e => tagWt ep γ e (c.tsh γ e) (c.rc γ e) (k + 1)) N E :=
+    gsum_nonneg fun γ e => tagWt_nonneg _ _ _ _ _ _
+  have ht := c.total_nonneg (k + 1)
+  rcases h with h | ⟨γ, e, ⟨he, h⟩ | ⟨he, h⟩⟩
+  · refine ⟨0, 0, ?_⟩
+    have := le_ftot c.sh (k := k) (n := k + 1) (by omega)
+    rw [← total_eq] at this
+    have := hg 0 0; simp only [wsum]; grind
+  · refine ⟨γ + 1, e + 1, ?_⟩
+    have h1 := le_ftot (c.tsh γ e) (k := k) (n := k + 1) (by omega)
+    have h2 := tagWt_ge_T (T := c.tsh γ e) (R := c.rc γ e) (n := k + 1) he
+    have h3 := le_gsum (f := fun γ e => tagWt ep γ e (c.tsh γ e) (c.rc γ e) (k + 1))
+      (fun γ e => tagWt_nonneg _ _ _ _ _ _) (γ := γ) (e := e) (E := e + 1) (by omega) (N := γ + 1) (by omega)
+    simp only [wsum]; grind
+  · refine ⟨γ + 1, e + 1, ?_⟩
+    have h1 := le_ftot (c.rc γ e) (k := k) (n := k + 1) (by omega)
+    have h2 := tagWt_ge_R (T := c.tsh γ e) (R := c.rc γ e) (n := k + 1) he
+    have h3 := le_gsum (f := fun γ e => tagWt ep γ e (c.tsh γ e) (c.rc γ e) (k + 1))
+      (fun γ e => tagWt_nonneg _ _ _ _ _ _) (γ := γ) (e := e) (E := e + 1) (by omega) (N := γ + 1) (by omega)
+    simp only [wsum]; grind
+
+theorem Claims.mono {ep ep' : Nat → Nat → Prop} {a b : ECell} (hep : ∀ γ e, ep γ e → ep' γ e)
+    (hle : a.Le b) (h : a.Claims ep) : b.Claims ep' := by
+  rcases h with ⟨S, K, h⟩ | ⟨k, h⟩
+  · exact .inl ⟨S, K, Nat.lt_of_lt_of_le h (hle.1 _)⟩
+  · exact .inr ⟨k, h.mono hep hle⟩
+
+/-- **Dormant claims** under `ep`: no authority claim, no live share, and no tag of a future
+epoch. A resource holding `bext` leaves the frame only dormant claims on the block
+(`full_excl`). -/
+def Dormant (ep : Nat → Nat → Prop) (d : ECell) : Prop :=
+  (∀ x, d.auth x = 0) ∧ (∀ k, ¬ d.Req ep k) ∧ d.FutZ ep
+
+/-- The weight of a tag of dormant claims is zero. -/
+theorem Dormant.wt_zero {ep : Nat → Nat → Prop} {d : ECell} (hd : d.Dormant ep) {c : ECell}
+    (hc : ∀ γ e k, (c.tsh γ e k).val = 0 ∧ (c.rc γ e k).val = 0) (γ e n : Nat) :
+    tagWt ep γ e ((c.add d).tsh γ e) ((c.add d).rc γ e) n ≤ 0 := by
+  have nr := fun k => hd.2.1 k
+  unfold tagWt
+  split
+  · rename_i h
+    have hT : ∀ k, ((c.add d).tsh γ e k).val = 0 := fun k => by
+      have := (d.tsh γ e k).nonneg
+      have : ¬ 0 < (d.tsh γ e k).val := fun p => nr k (.inr ⟨γ, e, .inl ⟨h, p⟩⟩)
+      simp only [add, Frac.add, (hc γ e k).1]; grind
+    have hR : ∀ k, ((c.add d).rc γ e k).val = 0 := fun k => by
+      have := (d.rc γ e k).nonneg
+      have : ¬ 0 < (d.rc γ e k).val := fun p => nr k (.inr ⟨γ, e, .inr ⟨.inl h, p⟩⟩)
+      simp only [add, Frac.add, (hc γ e k).2]; grind
+    rw [ftot_zero hT, ftot_zero hR]; grind
+  · split
+    · rename_i _ h
+      have hR : ∀ k, ((c.add d).rc γ e k).val = 0 := fun k => by
+        have := (d.rc γ e k).nonneg
+        have : ¬ 0 < (d.rc γ e k).val := fun p => nr k (.inr ⟨γ, e, .inr ⟨.inr h, p⟩⟩)
+        simp only [add, Frac.add, (hc γ e k).2]; grind
+      rw [ftot_zero hR]; grind
+    · grind
+
+end ECell
+
+/-- Ghost state: ledgers by ghost name (`GName := Nat`) and extent claims by block. -/
+@[ext] structure Ghost where
+  led : Nat → GCell
+  extent : BlockId → ECell
+
+namespace Ghost
+
+def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit⟩
+
+def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b)⟩
+
+/-- Ledger `γ`'s authority is at epoch `e`. -/
+def ep (g : Ghost) (γ e : Nat) : Prop := ∃ M, 0 < (g.led γ).auth (e, M)
+
+/-- Every ledger is valid, and every block's claims are valid and count at most the whole
+fraction under the ledgers' epochs (`ECell.TagOk`). -/
+def Valid (g : Ghost) : Prop :=
+  (∀ γ, (g.led γ).Valid) ∧ ∀ b, (g.extent b).Valid ∧ (g.extent b).TagOk g.ep
+
+/-- Finitely many names in use, by ledgers and by tags (a fresh name exists). -/
+def Fin (g : Ghost) : Prop :=
+  ∃ N, ∀ γ, N ≤ γ → g.led γ = GCell.unit ∧
+    ∀ b e k, ((g.extent b).tsh γ e k).val = 0 ∧ ((g.extent b).rc γ e k).val = 0
+
+/-- `g₁` and `g₂` compose: their sum is valid and finite. -/
+def Ok (g₁ g₂ : Ghost) : Prop := Valid (add g₁ g₂) ∧ Fin (add g₁ g₂)
+
+theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
+  ext1
+  · funext γ; exact GCell.add_comm _ _
+  · funext b; exact ECell.add_comm _ _
+
+theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
+  ext1
+  · funext γ; exact GCell.add_assoc _ _ _
+  · funext b; exact ECell.add_assoc _ _ _
+
+@[simp] theorem add_unit (g : Ghost) : g.add unit = g := by ext1 <;> funext x <;> simp [add, unit]
+
+@[simp] theorem unit_add (g : Ghost) : unit.add g = g := by ext1 <;> funext x <;> simp [add, unit]
+
+theorem ep_add {a b : Ghost} {γ e : Nat} (h : a.ep γ e) : (a.add b).ep γ e := by
+  obtain ⟨M, h⟩ := h; exact ⟨M, by simp only [add, GCell.add]; omega⟩
+
+theorem ep_add' {a b : Ghost} {γ e : Nat} (h : b.ep γ e) : (a.add b).ep γ e := by
+  obtain ⟨M, h⟩ := h; exact ⟨M, by simp only [add, GCell.add]; omega⟩
+
+/-- A ledger cell has at most one epoch. -/
+theorem Valid.ep_uniq {g : Ghost} (h : g.Valid) {γ e e' : Nat} (h1 : g.ep γ e) (h2 : g.ep γ e') :
+    e = e' := by
+  obtain ⟨M, h1⟩ := h1; obtain ⟨M', h2⟩ := h2
+  exact (h.1 γ).ep_uniq h1 h2
+
+theorem Ok.assoc {a b c : Ghost} : Ok (a.add b) c ↔ Ok a (b.add c) := by
+  unfold Ok; rw [add_assoc]
+
+theorem Ok.comm {a b : Ghost} : Ok a b ↔ Ok b a := by
+  unfold Ok; rw [add_comm]
+
+/-- Ghost state can be dropped: validity and finiteness are closed under removing a part. -/
+theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
+  have hV := h.1
+  obtain ⟨⟨hv, hx⟩, N, hN⟩ := h
+  have eL : ∀ γ, ((a.add b).add c).led γ = ((a.led γ).add (c.led γ)).add (b.led γ) := fun γ => by
+    simp only [add]; rw [GCell.add_assoc, GCell.add_comm (b.led γ), ← GCell.add_assoc]
+  have eX : ∀ x, ((a.add b).add c).extent x = ((a.extent x).add (c.extent x)).add (b.extent x) :=
+    fun x => by
+      simp only [add]; rw [ECell.add_assoc, ECell.add_comm (b.extent x), ← ECell.add_assoc]
+  have hsub : ∀ γ e, (a.add c).ep γ e → ((a.add b).add c).ep γ e := fun γ e ⟨M, h⟩ =>
+    ⟨M, by rw [eL]; simp only [add, GCell.add] at h ⊢; omega⟩
+  have hle : ∀ x, ((a.add c).extent x).Le (((a.add b).add c).extent x) := fun x => by
+    rw [eX]; exact ECell.le_add _ _
+  refine ⟨⟨fun γ => ?_, fun x => ⟨?_, ECell.TagOk.of_le hsub (fun _ _ _ => hV.ep_uniq) (hle x)
+    (hx x).2⟩⟩, N, fun γ hγ => ⟨?_, fun x e k => ?_⟩⟩
+  · have := hv γ
+    rw [eL] at this
+    exact GCell.Valid.of_add this
+  · have := (hx x).1
+    rw [eX] at this
+    exact ECell.Valid.of_add this
+  · have := (hN γ hγ).1
+    simp only [add, GCell.add, GCell.unit, GCell.mk.injEq] at this ⊢
+    obtain ⟨h1, h2⟩ := this
+    exact ⟨funext fun x => by have := congrFun h1 x; omega,
+      funext fun x => by have := congrFun h2 x; omega⟩
+  · have := (hN γ hγ).2 x e k
+    have := (hle x).2.2.1 γ e k; have := (hle x).2.2.2 γ e k
+    have := (((a.add c).extent x).tsh γ e k).nonneg; have := (((a.add c).extent x).rc γ e k).nonneg
+    grind
+
+end Ghost
+
+/-- The extent claims of `g` are true in `m` under `g`'s ledgers (`ECell.TrueIn`). -/
+def ExtTrue (m : Mem) (g : Ghost) : Prop := ∀ b, (g.extent b).TrueIn g.ep m b
+
 def KeepsExt (m m' : Mem) : Prop :=
   ∀ (b : BlockId) (blk : Block), m.blocks[b]? = some blk → blk.live = true → ∃ blk', m'.blocks[b]? = some blk' ∧
     blk'.live = true ∧ blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind
@@ -734,8 +1031,8 @@ theorem KeepsExt.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push n
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hx).1
   exact ⟨x, by rw [h, Array.getElem?_push]; simp [Nat.ne_of_lt hlt, hx], hl, rfl, rfl⟩
 
-theorem ExtTrue.keep {m m' : Mem} {e : BlockId → ECell} (h : ExtTrue m e) (hk : KeepsExt m m') :
-    ExtTrue m' e := fun b => by
+theorem ExtTrue.keep {m m' : Mem} {g : Ghost} (h : ExtTrue m g) (hk : KeepsExt m m') :
+    ExtTrue m' g := fun b => by
   obtain ⟨ha, hs⟩ := h b
   refine ⟨fun S K hp => ?_, fun k hp => ?_⟩
   · obtain ⟨blk, hb, hl, hS, hK, hlo⟩ := ha S K hp
@@ -745,15 +1042,11 @@ theorem ExtTrue.keep {m m' : Mem} {e : BlockId → ECell} (h : ExtTrue m e) (hk 
     obtain ⟨blk', hb', hl', hs', hk'⟩ := hk b blk hb hl
     exact ⟨blk', hb', hl', by omega, by rw [hk', hs']; exact hlo⟩
 
-theorem ExtTrue.of_add {m : Mem} {a b : Ghost} (h : ExtTrue m (a.add b).extent) : ExtTrue m a.extent :=
-  fun x => by
-    obtain ⟨ha, hs⟩ := h x
-    refine ⟨fun S K hp => ha S K (by simp only [Ghost.add, ECell.add]; omega), fun k hp => hs k ?_⟩
-    simp only [Ghost.add, ECell.add, Frac.add]
-    have := ((b.extent x).sh k).nonneg; grind
+theorem ExtTrue.of_add {m : Mem} {a b : Ghost} (h : ExtTrue m (a.add b)) : ExtTrue m a :=
+  fun x => ECell.TrueIn.of_le (fun _ _ h => Ghost.ep_add h) (ECell.le_add _ _) (h x)
 
 /-- The ghost states of a resource and its frame compose, and their extent claims are true. -/
-def GOk (m : Mem) (g gF : Ghost) : Prop := Ghost.Ok g gF ∧ ExtTrue m (g.add gF).extent
+def GOk (m : Mem) (g gF : Ghost) : Prop := Ghost.Ok g gF ∧ ExtTrue m (g.add gF)
 
 theorem GOk.assoc {m : Mem} {a b c : Ghost} : GOk m (a.add b) c ↔ GOk m a (b.add c) := by
   unfold GOk; rw [Ghost.add_assoc, Ghost.Ok.assoc]
@@ -769,7 +1062,7 @@ theorem GOk.keep {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hk : KeepsExt m m
 
 /-- A ghost state without extent claims composes in every memory where it composes in one. -/
 theorem GOk.of_unit {m : Mem} {gF : Ghost} (h : GOk m Ghost.unit gF) (m' : Mem)
-    (hF : ExtTrue m' gF.extent) : GOk m' Ghost.unit gF := ⟨h.1, by simpa using hF⟩
+    (hF : ExtTrue m' gF) : GOk m' Ghost.unit gF := ⟨h.1, by simpa using hF⟩
 
 /-! ## Resources and assertions -/
 
@@ -1012,10 +1305,117 @@ namespace ECell
 
 /-- The authority over extent `(S, K)` holding the fraction `q` (at bound `0`). -/
 def auth1 (S : Nat) (K : BlockKind) (q : Frac) : ECell :=
-  ⟨fun x => if x = (S, K) then 1 else 0, fun k => if k = 0 then q else Frac.zero⟩
+  ⟨fun x => if x = (S, K) then 1 else 0, fun k => if k = 0 then q else Frac.zero,
+    fun _ _ _ => Frac.zero, fun _ _ _ => Frac.zero⟩
 
 /-- A share: the fraction `q` at the lower bound `k`. -/
-def share (q : Frac) (k : Nat) : ECell := ⟨fun _ => 0, fun k' => if k' = k then q else Frac.zero⟩
+def share (q : Frac) (k : Nat) : ECell :=
+  ⟨fun _ => 0, fun k' => if k' = k then q else Frac.zero, fun _ _ _ => Frac.zero, fun _ _ _ => Frac.zero⟩
+
+/-- A tagged share: the fraction `q` at the lower bound `k`, tagged `(γ, e)`. -/
+def tshare (γ e : Nat) (q : Frac) (k : Nat) : ECell :=
+  ⟨fun _ => 0, fun _ => Frac.zero, fun γ' e' k' => if γ' = γ ∧ e' = e ∧ k' = k then q else Frac.zero,
+    fun _ _ _ => Frac.zero⟩
+
+/-- A receipt: the fraction `q` lent at the lower bound `k` as a share tagged `(γ, e)`. -/
+def rcpt (γ e : Nat) (q : Frac) (k : Nat) : ECell :=
+  ⟨fun _ => 0, fun _ => Frac.zero, fun _ _ _ => Frac.zero,
+    fun γ' e' k' => if γ' = γ ∧ e' = e ∧ k' = k then q else Frac.zero⟩
+
+/-- A share with an optional tag. -/
+def shareT : Option (Nat × Nat) → Frac → Nat → ECell
+  | none, q, k => share q k
+  | some (γ, e), q, k => tshare γ e q k
+
+@[simp] theorem shareT_none (q : Frac) (k : Nat) : shareT none q k = share q k := rfl
+
+@[simp] theorem shareT_some (γ e : Nat) (q : Frac) (k : Nat) : shareT (some (γ, e)) q k = tshare γ e q k := rfl
+
+theorem auth1_total (S : Nat) (K : BlockKind) (n : Nat) :
+    (auth1 S K Frac.one).total (n + 1) = 1 := by
+  induction n with
+  | zero => simp only [total, auth1, if_pos, Frac.one]; grind
+  | succ n ih => rw [total, ih]; simp only [auth1, Frac.zero]; grind
+
+theorem auth1_valid (S : Nat) (K : BlockKind) : (auth1 S K Frac.one).Valid := by
+  refine ⟨fun x => by simp only [auth1]; split <;> omega,
+    fun x y hx hy => by simp only [auth1] at hx hy; split at hx <;> split at hy <;> simp_all,
+    fun n => ?_⟩
+  cases n with
+  | zero => simp only [total]; decide
+  | succ n => rw [auth1_total]; decide
+
+theorem auth1_add_tsh (S : Nat) (K : BlockKind) (q : Frac) (d : ECell) :
+    ((auth1 S K q).add d).tsh = d.tsh := by funext γ e k; simp [add, auth1]
+
+theorem auth1_add_rc (S : Nat) (K : BlockKind) (q : Frac) (d : ECell) :
+    ((auth1 S K q).add d).rc = d.rc := by funext γ e k; simp [add, auth1]
+
+theorem wsum_auth1_add (ep : Nat → Nat → Prop) (S : Nat) (K : BlockKind) (q : Frac) (d : ECell)
+    (n N E : Nat) : ((auth1 S K q).add d).wsum ep n N E = (auth1 S K q).total n + d.wsum ep n N E := by
+  simp only [wsum, total_add, auth1_add_tsh, auth1_add_rc]; grind
+
+theorem Dormant.sh_zero {ep : Nat → Nat → Prop} {d : ECell} (hd : d.Dormant ep) (k : Nat) :
+    (d.sh k).val = 0 := by
+  have := (d.sh k).nonneg; have : ¬ 0 < (d.sh k).val := fun h => hd.2.1 k (.inl h); grind
+
+theorem Dormant.wsum_le {ep : Nat → Nat → Prop} {d : ECell} (hd : d.Dormant ep) (n N E : Nat) :
+    d.wsum ep n N E ≤ 0 := by
+  have ht : d.total n = 0 := by rw [total_eq, ftot_zero hd.sh_zero]
+  have := gsum_zero (f := fun γ e => tagWt ep γ e (d.tsh γ e) (d.rc γ e) n) (fun γ e => by
+    have := hd.wt_zero (c := unit) (fun _ _ _ => ⟨rfl, rfl⟩) γ e n; simpa using this) N E
+  simp only [wsum]; grind
+
+/-- The full authority and dormant claims compose. -/
+theorem Dormant.auth1_ok {ep : Nat → Nat → Prop} {d : ECell} (hd : d.Dormant ep) {S : Nat}
+    {K : BlockKind} : ((auth1 S K Frac.one).add d).Valid ∧ ((auth1 S K Frac.one).add d).TagOk ep := by
+  have ea : ((auth1 S K Frac.one).add d).auth = (auth1 S K Frac.one).auth := by
+    funext x; simp [add, hd.1 x]
+  have hw : ∀ n N E, ((auth1 S K Frac.one).add d).wsum ep n N E ≤ 1 := fun n N E => by
+    rw [wsum_auth1_add]
+    have := hd.wsum_le n N E; have := (auth1_valid S K).2.2 n; grind
+  refine ⟨⟨fun x => by rw [ea]; exact (auth1_valid S K).1 x,
+    fun x y hx hy => (auth1_valid S K).2.1 x y (by rw [← ea]; exact hx) (by rw [← ea]; exact hy),
+    fun n => ?_⟩, hw, fun γ e e' k he hlt => ?_⟩
+  · have := hw n 0 0; simp only [wsum, gsum] at this; grind
+  · rw [auth1_add_tsh, auth1_add_rc]; exact hd.2.2 γ e e' k he hlt
+
+/-- A live claim of the full authority with dormant claims is the authority's share at `0`. -/
+theorem Dormant.req_auth1 {ep : Nat → Nat → Prop} {d : ECell} (hd : d.Dormant ep) {S : Nat}
+    {K : BlockKind} {q : Frac} {k : Nat} (h : ((auth1 S K q).add d).Req ep k) : k = 0 := by
+  rcases Req_add.mp h with h | h
+  · rcases h with h | ⟨γ, e, ⟨-, h⟩ | ⟨-, h⟩⟩
+    · simp only [auth1] at h; split at h
+      · assumption
+      · simp [Frac.zero] at h
+    · simp [auth1, Frac.zero] at h
+    · simp [auth1, Frac.zero] at h
+  · exact absurd h (hd.2.1 k)
+
+/-- Claims that are not live, with no tag of a future epoch, are dormant. -/
+theorem dormant_of_not_claims {ep : Nat → Nat → Prop} {c : ECell} (h : ¬ c.Claims ep) (hf : c.FutZ ep) :
+    c.Dormant ep :=
+  ⟨fun x => Nat.eq_zero_of_not_pos fun hp => h (.inl ⟨x.1, x.2, hp⟩), fun k hk => h (.inr ⟨k, hk⟩), hf⟩
+
+/-- **The full authority leaves only dormant claims**: what composes validly with `bext`'s
+claims holds no authority claim, no live share and no tag of a future epoch. -/
+theorem dormant_of_auth1 {ep : Nat → Nat → Prop} {d : ECell} {S : Nat} {K : BlockKind}
+    (hv : ((auth1 S K Frac.one).add d).Valid) (ht : ((auth1 S K Frac.one).add d).TagOk ep) :
+    d.Dormant ep := by
+  obtain ⟨h1, h2, -⟩ := hv
+  refine ⟨fun x => ?_, fun k hk => ?_, fun γ e e' k he hlt => ?_⟩
+  · have := h1 x
+    by_cases hx : x = (S, K)
+    · subst hx; simp [add, auth1] at this; omega
+    · rcases Nat.eq_zero_or_pos (d.auth x) with h | h
+      · exact h
+      · exact absurd (h2 (S, K) x (by simp [add, auth1]; omega) (by simp only [add]; omega)).symm hx
+  · obtain ⟨N, E, hp⟩ := hk.pos
+    have := ht.1 (k + 1) N E
+    rw [wsum_auth1_add, auth1_total] at this
+    grind
+  · have := ht.2 γ e e' k he hlt
+    rwa [auth1_add_tsh, auth1_add_rc] at this
 
 end ECell
 
@@ -1039,9 +1439,16 @@ block's size or start, or ends it (`docs/sep-full-state.md` §Block extents). -/
 def bext (b : BlockId) (S : Nat) (K : BlockKind) : FAssn := bauth b S K Frac.one
 
 /-- **A share of block `b`'s extent**: a positive fraction `q`; `b` is live with at least `k`
-bytes while the share is held. -/
-def bshare (b : BlockId) (q : Frac) (k : Nat) : FAssn := fun r =>
-  0 < q.val ∧ r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.atExt b (ECell.share q k)
+bytes while the share is held. With a tag `t = some (γ, e)` (`docs/sep-full-state.md`
+§Epoch-tagged shares) the share counts and is true only while ledger `γ` is at epoch `e`. -/
+def bshare (b : BlockId) (q : Frac) (k : Nat) (t : Option (Nat × Nat) := none) : FAssn := fun r =>
+  0 < q.val ∧ r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.atExt b (ECell.shareT t q k)
+
+/-- **A receipt** for the fraction `q` of block `b`'s extent lent at bound `k` as a share tagged
+`(γ, e)`: it cancels against that share (`EUpd.returnT`) or, once ledger `γ` is past epoch `e`,
+turns back into an untagged share (`EUpd.revoke`). -/
+def brcpt (b : BlockId) (q : Frac) (k γ e : Nat) : FAssn := fun r =>
+  0 < q.val ∧ r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.atExt b (ECell.rcpt γ e q k)
 
 /-- Extents of the blocks `E` (full), as one ghost state. -/
 def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
@@ -1052,6 +1459,18 @@ def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
 /-- A legacy assertion with the full extents `E` of its blocks (`FTriple.ofTriple`). -/
 def upE (P : Assn) (E : BlockId → Option (Nat × BlockKind)) : FAssn := fun r =>
   P r.heap.erase ∧ r.know = Know.none ∧ r.gh = Ghost.exts E
+
+theorem Ghost.ep_exts_add {E : BlockId → Option (Nat × BlockKind)} {g : Ghost} :
+    ((Ghost.exts E).add g).ep = g.ep := by
+  funext γ e; simp [Ghost.ep, Ghost.add, Ghost.exts]
+
+theorem Ghost.exts_add_tags (E : BlockId → Option (Nat × BlockKind)) (g : Ghost) (b : BlockId) :
+    ((Ghost.exts E).add g).extent b = ((Ghost.exts E).extent b).add (g.extent b) ∧
+    (∀ γ e k, ((((Ghost.exts E).add g).extent b).tsh γ e k).val = ((g.extent b).tsh γ e k).val ∧
+      ((((Ghost.exts E).add g).extent b).rc γ e k).val = ((g.extent b).rc γ e k).val) := by
+  refine ⟨rfl, fun γ e k => ?_⟩
+  simp only [Ghost.add, Ghost.exts, ECell.add]
+  split <;> simp [ECell.auth1, ECell.unit]
 
 @[simp] theorem Ghost.exts_none : Ghost.exts (fun _ => none) = Ghost.unit := by
   ext1 <;> funext x <;> rfl

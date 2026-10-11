@@ -642,8 +642,8 @@ theorem upE_fix {P : Assn} {E : BlockId → Option (Nat × BlockKind)} (hsf : Si
     simp [hb, ← he]
 
 /-- What the frame's claims on block `b` give: a live block with a live byte. -/
-theorem claim_byte {m : Mem} {e : BlockId → ECell} (ht : ExtTrue m e) {b : BlockId}
-    (hc : (∃ S K, 0 < (e b).auth (S, K)) ∨ ∃ k, 0 < ((e b).sh k).val) :
+theorem claim_byte {m : Mem} {g : Ghost} (ht : ExtTrue m g) {b : BlockId}
+    (hc : (g.extent b).Claims g.ep) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ m.heap (b, blk.kind.mappedLo) ≠ none := by
   rcases hc with ⟨S, K, h⟩ | ⟨k, h⟩
   · obtain ⟨blk, hb, hl, hS, hK, hlo⟩ := (ht b).1 S K h
@@ -653,49 +653,15 @@ theorem claim_byte {m : Mem} {e : BlockId → ECell} (ht : ExtTrue m e) {b : Blo
     refine ⟨blk, hb, hl, ?_⟩
     rw [Mem.heap_of hb, dif_pos ⟨hl, hlo, Nat.le_refl _⟩]; simp
 
-theorem ECell.auth1_total (S : Nat) (K : BlockKind) (n : Nat) :
-    (ECell.auth1 S K Frac.one).total (n + 1) = 1 := by
-  induction n with
-  | zero => simp only [ECell.total, ECell.auth1, if_pos, Frac.one]; grind
-  | succ n ih => rw [ECell.total, ih]; simp only [ECell.auth1, Frac.zero]; grind
-
-theorem ECell.auth1_valid (S : Nat) (K : BlockKind) : (ECell.auth1 S K Frac.one).Valid := by
-  refine ⟨fun x => by simp only [ECell.auth1]; split <;> omega,
-    fun x y hx hy => by simp only [ECell.auth1] at hx hy; split at hx <;> split at hy <;> simp_all,
-    fun n => ?_⟩
-  cases n with
-  | zero => simp only [ECell.total]; decide
-  | succ n => rw [ECell.auth1_total]; decide
-
-/-- A resource holding the full extent of `b` leaves the frame no claim on `b`. -/
+/-- **A resource holding the full extent of `b` leaves the frame only dormant claims on `b`**
+(no authority claim, no live share, no tag of a future epoch). -/
 theorem full_excl {g gF : Ghost} (hok : Ghost.Ok g gF) {b : BlockId} {S : Nat} {K : BlockKind}
-    (hg : g.extent b = ECell.auth1 S K Frac.one) : gF.extent b = ECell.unit := by
+    (hg : g.extent b = ECell.auth1 S K Frac.one) : (gF.extent b).Dormant (g.add gF).ep := by
   have hv := hok.1.2 b
-  simp only [Ghost.add, hg] at hv
-  obtain ⟨h1, h2, h3⟩ := hv
-  ext x
-  · have := h1 x
-    by_cases hx : x = (S, K)
-    · subst hx; simp [ECell.add, ECell.auth1] at this; simp [ECell.unit]; omega
-    · rcases Nat.eq_zero_or_pos ((gF.extent b).auth x) with h | h
-      · simp [ECell.unit, h]
-      · exact absurd (h2 (S, K) x (by simp [ECell.add, ECell.auth1]; omega) (by simp only [ECell.add]; omega)).symm hx
-  · -- the resource holds the whole fraction at bound 0
-    have hA := ECell.auth1_total S K
-    have key : ∀ n, (gF.extent b).total (n + 1) = 0 := by
-      intro n
-      have := h3 (n + 1)
-      rw [ECell.total_add, hA] at this
-      have := (gF.extent b).total_nonneg (n + 1)
-      grind
-    have hz : ∀ n, ((gF.extent b).sh n).val = 0 := by
-      intro n
-      have e1 := key n
-      have e2 : (gF.extent b).total n ≥ 0 := (gF.extent b).total_nonneg n
-      simp only [ECell.total] at e1
-      have := ((gF.extent b).sh n).nonneg
-      grind
-    exact Frac.eq (by simp [ECell.unit, Frac.zero, hz x])
+  have e : (g.add gF).extent b = (ECell.auth1 S K Frac.one).add (gF.extent b) := by
+    simp only [Ghost.add, hg]
+  rw [e] at hv
+  exact ECell.dormant_of_auth1 hv.1 hv.2
 
 open Classical in
 /-- **Lifting a legacy triple** (`docs/sep-full-state.md` §The bridge from the legacy layer):
@@ -762,7 +728,16 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
         simp only [Cell.mk.injEq] at he'
         exact ⟨blk', hb', by rw [hl', hl0], he'.2.2.1.symm, he'.2.2.2.symm⟩
       -- a block with a frame claim and no frame byte is kept
-      have hclaim : ∀ b, ((∃ S K, 0 < (rF.gh.extent b).auth (S, K)) ∨ ∃ k, 0 < ((rF.gh.extent b).sh k).val) →
+      have hep : (r.gh.add rF.gh).ep = rF.gh.ep := by rw [hrE]; exact Ghost.ep_exts_add
+      have hvF : ∀ b, (rF.gh.extent b).Valid ∧ (rF.gh.extent b).TagOk rF.gh.ep := fun b => by
+        have hv := hh.ghost.1.1.2 b
+        have hle : (rF.gh.extent b).Le ((r.gh.add rF.gh).extent b) := ECell.le_add' _ _
+        refine ⟨ECell.Valid.of_add (b := r.gh.extent b) ?_, ECell.TagOk.of_le (ep' := (r.gh.add rF.gh).ep)
+          (fun _ _ h => by rw [hep]; exact h) (fun _ _ _ => hh.ghost.1.1.ep_uniq) hle hv.2⟩
+        rw [ECell.add_comm]; exact hv.1
+      have hfrm : ∀ b, (rF.gh.extent b).Claims rF.gh.ep → ((r.gh.add rF.gh).extent b).Claims (r.gh.add rF.gh).ep :=
+        fun b h => h.mono (fun _ _ h => by rw [hep]; exact h) (ECell.le_add' _ _)
+      have hclaim : ∀ b, (rF.gh.extent b).Claims rF.gh.ep →
           ∀ blk, m.blocks[b]? = some blk → ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
             blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
         intro b hcl blk hb
@@ -773,15 +748,13 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
             obtain ⟨S, K⟩ := SK
             have hu := full_excl hh.ghost.1 (b := b) (S := S) (K := K)
               (by rw [hrE]; simp [Ghost.exts, hE])
-            rw [hu] at hcl
-            simp [ECell.unit, Frac.zero] at hcl
-        have ht : ExtTrue m (r.gh.add rF.gh).extent := hh.ghost.2
-        obtain ⟨blk0, hb0, hl0, hbyte⟩ := claim_byte ht (b := b) (by
-          rcases hcl with ⟨S, K, h⟩ | ⟨k, h⟩
-          · exact .inl ⟨S, K, by simp only [Ghost.add, ECell.add]; omega⟩
-          · right; refine ⟨k, ?_⟩
-            simp only [Ghost.add, ECell.add, Frac.add]
-            have := ((r.gh.extent b).sh k).nonneg; grind)
+            rw [hep] at hu
+            exfalso
+            rcases hcl with ⟨S', K', h⟩ | ⟨k, h⟩
+            · rw [hu.1] at h; exact Nat.lt_irrefl 0 h
+            · exact hu.2.1 k h
+        have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2
+        obtain ⟨blk0, hb0, hl0, hbyte⟩ := claim_byte ht (b := b) (hfrm b hcl)
         rw [hb] at hb0; cases hb0
         by_cases hF : ∃ o fc, rF.heap (b, o) = some fc
         · obtain ⟨o, fc, hfc⟩ := hF
@@ -805,7 +778,7 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
             (∃ o, hQ (b, o) ≠ none) ∧ (B b → (E b).isSome) then some (blk.bytes.size, blk.kind) else none
         | none => none
       -- no frame claim on a block of `E'`
-      have hE'F : ∀ b, (E' b).isSome → rF.gh.extent b = ECell.unit := by
+      have hE'F : ∀ b, (E' b).isSome → (rF.gh.extent b).Dormant rF.gh.ep := by
         intro b hb
         cases hbm : m'.blocks[b]? with
         | none => simp [E', hbm] at hb
@@ -816,27 +789,16 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
             obtain ⟨-, -, ⟨o, ho⟩, hBE⟩ := hcond
             by_cases hEb : (E b).isSome
             · obtain ⟨⟨S, K⟩, hE⟩ := Option.isSome_iff_exists.mp hEb
-              exact full_excl hh.ghost.1 (b := b) (S := S) (K := K) (by rw [hrE]; simp [Ghost.exts, hE])
+              have := full_excl hh.ghost.1 (b := b) (S := S) (K := K) (by rw [hrE]; simp [Ghost.exts, hE])
+              rwa [hep] at this
             · -- `P` had no byte of `b`; a frame claim would give the frame a byte there
               have hnB : ¬ B b := fun h => hEb (hBE h)
-              by_cases hcl : ¬ ((∃ S K, 0 < (rF.gh.extent b).auth (S, K)) ∨ ∃ k, 0 < ((rF.gh.extent b).sh k).val)
-              · ext x
-                · rcases Nat.eq_zero_or_pos ((rF.gh.extent b).auth x) with h | h
-                  · simp [ECell.unit, h]
-                  · exact absurd (Or.inl ⟨x.1, x.2, h⟩) hcl
-                · have := ((rF.gh.extent b).sh x).nonneg
-                  by_cases hp' : 0 < ((rF.gh.extent b).sh x).val
-                  · exact absurd (Or.inr ⟨x, hp'⟩) hcl
-                  · exact Frac.eq (by simp [ECell.unit, Frac.zero]; grind)
+              by_cases hcl : ¬ (rF.gh.extent b).Claims rF.gh.ep
+              · exact ECell.dormant_of_not_claims hcl (hvF b).2.2
               exfalso
               replace hcl := Classical.not_not.mp hcl
-              have ht : ExtTrue m (r.gh.add rF.gh).extent := hh.ghost.2
-              obtain ⟨blk, hb0, -, hbyte⟩ := claim_byte ht (b := b) (by
-                rcases hcl with ⟨S, K, h⟩ | ⟨k, h⟩
-                · exact .inl ⟨S, K, by simp only [Ghost.add, ECell.add]; omega⟩
-                · right; refine ⟨k, ?_⟩
-                  simp only [Ghost.add, ECell.add, Frac.add]
-                  have := ((r.gh.extent b).sh k).nonneg; grind)
+              have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2
+              obtain ⟨blk, hb0, -, hbyte⟩ := claim_byte ht (b := b) (hfrm b hcl)
               -- the frame owns byte `(b, lo)`, so `b` keeps its extent, and every post byte of `b` was live
               have hrn : ∀ o, r.heap (b, o) = none := fun o => by
                 cases e : r.heap (b, o) with
@@ -884,19 +846,23 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
         refine ⟨⟨fun γ => ?_, fun b => ?_⟩, ?_⟩
         · have := hok.1.1 γ
           simpa [Ghost.add, Ghost.exts, hrE] using this
-        · by_cases hb : (E' b).isSome
-          · rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b = (Ghost.exts E').extent b by
-              simp [Ghost.add, hE'F b hb]]
-            obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
-            simp only [Ghost.exts, hS]
-            exact ECell.auth1_valid S K
+        · rw [Ghost.ep_exts_add]
+          by_cases hb : (E' b).isSome
+          · obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
+            rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b =
+              (ECell.auth1 S K Frac.one).add (rF.gh.extent b) by simp [Ghost.add, Ghost.exts, hS]]
+            exact (hE'F b hb).auth1_ok
           · have hn : E' b = none := by simpa using hb
-            have := hok.1.2 b
-            simp only [Ghost.add, hrE] at this ⊢
-            simp only [Ghost.exts, hn, ECell.unit_add]
-            exact ECell.Valid.of_add (by rw [ECell.add_comm]; exact this)
+            rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b = rF.gh.extent b by
+              simp [Ghost.add, Ghost.exts, hn]]
+            exact hvF b
         · obtain ⟨N, hN⟩ := hok.2
-          exact ⟨N, fun γ hγ => by have := hN γ hγ; simpa [Ghost.add, Ghost.exts, hrE] using this⟩
+          refine ⟨N, fun γ hγ => ⟨by have := (hN γ hγ).1; simpa [Ghost.add, Ghost.exts, hrE] using this,
+            fun b e k => ?_⟩⟩
+          have h1 := (hN γ hγ).2 b e k
+          rw [hrE] at h1
+          rw [((Ghost.exts_add_tags E' rF.gh b).2 γ e k).1, ((Ghost.exts_add_tags E' rF.gh b).2 γ e k).2]
+          rwa [((Ghost.exts_add_tags E rF.gh b).2 γ e k).1, ((Ghost.exts_add_tags E rF.gh b).2 γ e k).2] at h1
       refine ⟨⟨hQ', Know.none, Ghost.exts E'⟩,
         ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, Know.sub_none _, hh.knowF.trans hkm,
           hgF, fun b => ?_⟩,
@@ -928,10 +894,15 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
           simp only [FHeap.union_apply, hQ', e, Option.map_none, Option.none_or] at hl
           rw [hsh]; exact hh.tagF hl
       · -- the extent claims hold in `m'`
-        have ht : ExtTrue m (r.gh.add rF.gh).extent := hh.ghost.2
+        have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2
+        show ECell.TrueIn _ _ _ _
+        rw [Ghost.ep_exts_add]
         by_cases hb : (E' b).isSome
         · have hu := hE'F b hb
           obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
+          have hX : (Ghost.add (Ghost.exts E') rF.gh).extent b = (ECell.auth1 S K Frac.one).add (rF.gh.extent b) := by
+            simp [Ghost.add, Ghost.exts, hS]
+          rw [hX]
           cases hbm : m'.blocks[b]? with
           | none => simp [E', hbm] at hS
           | some blk' =>
@@ -941,17 +912,12 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
               simp only [Option.some.injEq, Prod.mk.injEq] at hS
               obtain ⟨rfl, rfl⟩ := hS
               refine ⟨fun S' K' hp' => ?_, fun k hk' => ?_⟩
-              · simp only [Ghost.add, hu, ECell.add_unit, Ghost.exts, E', hbm, if_pos hcond,
-                  ECell.auth1] at hp'
+              · simp only [ECell.add, hu.1, Nat.add_zero, ECell.auth1] at hp'
                 split at hp'
                 · rename_i he; simp only [Prod.mk.injEq] at he; obtain ⟨rfl, rfl⟩ := he
-                  exact ⟨blk', rfl, hcond.1, rfl, rfl, hcond.2.1⟩
+                  exact ⟨blk', hbm, hcond.1, rfl, rfl, hcond.2.1⟩
                 · cases hp'
-              · simp only [Ghost.add, hu, ECell.add_unit, Ghost.exts, E', hbm, if_pos hcond,
-                  ECell.auth1] at hk'
-                split at hk'
-                · rename_i he; subst he; exact ⟨blk', rfl, hcond.1, Nat.zero_le _, hcond.2.1⟩
-                · simp [Frac.zero] at hk'
+              · rw [hu.req_auth1 hk']; exact ⟨blk', hbm, hcond.1, Nat.zero_le _, hcond.2.1⟩
             · cases hS
         · have hn : E' b = none := by simpa using hb
           have hfr : (Ghost.add (Ghost.exts E') rF.gh).extent b = rF.gh.extent b := by
@@ -961,9 +927,8 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
           · obtain ⟨blk, hb0, hl0, hS0, hK0, hlo⟩ := (ht b).1 S K (by simp only [Ghost.add, ECell.add]; omega)
             obtain ⟨blk', hb', hl', hs1, hk1⟩ := hclaim b (.inl ⟨S, K, hp'⟩) blk hb0
             exact ⟨blk', hb', by rw [hl', hl0], hs1.trans hS0, hk1.trans hK0, hlo⟩
-          · obtain ⟨blk, hb0, hl0, hk0, hlo⟩ := (ht b).2 k (by
-              simp only [Ghost.add, ECell.add, Frac.add]
-              have := ((r.gh.extent b).sh k).nonneg; grind)
+          · obtain ⟨blk, hb0, hl0, hk0, hlo⟩ := (ht b).2 k
+              (hk'.mono (fun _ _ h => by rw [hep]; exact h) (ECell.le_add' _ _))
             obtain ⟨blk', hb', hl', hs1, hk1⟩ := hclaim b (.inr ⟨k, hk'⟩) blk hb0
             exact ⟨blk', hb', by rw [hl', hl0], by omega, by rw [hk1, hs1]; exact hlo⟩
       · -- a post byte's block has its extent in `E'`
@@ -1057,13 +1022,23 @@ theorem SizeFree.pts {T : Type} [Enc T] (p : Ptr) (a : Nat) (v : T) :
     h h' ⟨A, S, K, ⟨hal, hK⟩, hb⟩ hn hE hco
   exact ⟨A', S', K', bs, hal', hsz, hdec, hb', hK'⟩
 
-theorem ExtTrue.unit (m : Mem) : ExtTrue m Ghost.unit.extent := fun _ =>
+theorem ExtTrue.unit (m : Mem) : ExtTrue m Ghost.unit := fun _ =>
   ⟨fun _ _ h => by simp [Ghost.unit, ECell.unit] at h, fun _ h => by
-    simp [Ghost.unit, ECell.unit, Frac.zero] at h⟩
+    rcases h with h | ⟨_, _, ⟨-, h⟩ | ⟨-, h⟩⟩ <;> simp [Ghost.unit, ECell.unit, Frac.zero] at h⟩
+
+theorem ECell.dormant_unit (ep : Nat → Nat → Prop) : ECell.unit.Dormant ep :=
+  ⟨fun _ => rfl, fun _ h => by
+    rcases h with h | ⟨_, _, ⟨-, h⟩ | ⟨-, h⟩⟩ <;> simp [ECell.unit, Frac.zero] at h,
+    fun _ _ _ _ _ _ => ⟨rfl, rfl⟩⟩
+
+theorem ECell.tagOk_unit (ep : Nat → Nat → Prop) : ECell.unit.TagOk ep :=
+  ⟨fun n N E => by have := (ECell.dormant_unit ep).wsum_le n N E; grind, (ECell.dormant_unit ep).2.2⟩
 
 theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
-  ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by simpa [Ghost.add, Ghost.unit] using ECell.valid_unit⟩,
-    0, fun _ _ => rfl⟩, by simpa using ExtTrue.unit m⟩
+  ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
+      simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _)⟩,
+    0, fun _ _ => ⟨rfl, fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind⟩⟩,
+    by simpa using ExtTrue.unit m⟩
 
 /-- The full extents of `E` with the one of `b` split off. -/
 theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockId} {S : Nat}
