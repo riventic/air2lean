@@ -127,7 +127,7 @@ records on every run.
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4609 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4591 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
@@ -144,16 +144,16 @@ container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain fr
 instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
 (`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
 checks the case count, examples, mismatches and exclusions; its counts are the container's
-(43584 cases; 4609 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+(43584 cases; 4591 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
 
 The aarch64-linux runs leave out `floatops` and `floatconv`
 ([reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)): the
 committed translation follows the x86_64-linux float rules, aarch64-macos has its own
 translation and pins, and the translator has no aarch64-linux profile, so 586 f80 and fused-multiply
-cases are typed mismatches there. The float `@divExact` exception is therefore recorded on
-aarch64-macos and x86_64-linux only. In an unchecked mode a call that the model rejects as
-`.illegal` (an out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot
-render; `scripts/diff-report.py` counts it as `ub_excluded`, like a model panic.
+cases are typed mismatches there. The float `@divExact` exception (which the model now answers with `.illegal`, so no mismatch) is therefore recorded on
+aarch64-macos only. In an unchecked mode a pinned model `.illegal` (an
+out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot render;
+`scripts/diff-report.py` counts it as `illegal_exclusion`.
 
 **Crashing inputs and the hosted runner.** In ReleaseFast and ReleaseSmall about 700 of the
 excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in

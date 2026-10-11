@@ -3,8 +3,8 @@
   "cases": 43584,
   "counts": {
     "error_return_match": 892,
-    "illegal_exclusion": 646,
-    "ub_excluded": 4609,
+    "illegal_exclusion": 664,
+    "ub_excluded": 4591,
     "unspecified_exclusion": 185,
     "value_match": 37252
   },
@@ -216,13 +216,13 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 9,
+      "cases": 27,
       "example": "slices",
       "function": "subZ",
       "status": "illegal_exclusion"
     },
     {
-      "cases": 200,
+      "cases": 182,
       "example": "slices",
       "function": "subZ",
       "status": "ub_excluded"
