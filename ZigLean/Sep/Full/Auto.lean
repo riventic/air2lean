@@ -212,24 +212,61 @@ def propHyps : MetaM (Array LocalDecl) := do
       if ← isProp d.type then out := out.push d
   return out
 
-/-- The facts of the arithmetic solver: proofs (over the goal's hypotheses) of propositions in
-normal form. `omega` and the discharger work from these, not from the raw context. -/
-initialize dischFacts : IO.Ref (Array Expr) ← IO.mkRef #[]
 
-/-- Probes of `extraFacts` (a mask or remainder fact for a term), per run of `fsym`: a proof
-(reused where its free variables are in scope), or the number of facts it failed with (retried
-only with more facts). -/
-initialize probeCache : IO.Ref (Std.HashMap Expr (Expr ⊕ Nat)) ← IO.mkRef {}
+
+/-- The caches of one run of `fsym` (theorems are elaborated in parallel: no global state).
+* `hyp`: the `fsym_arith` normal form of each hypothesis, by `FVarId` (a hypothesis' type only
+  changes up to definitional equality): `none` if unchanged, else the new proposition and its
+  proof (over the original hypotheses only).
+* `disch`: side conditions the discharger proved; a proof is reused where its free variables
+  are in scope.
+* `facts`: the facts of the current arithmetic problem (proofs over the goal's hypotheses of
+  propositions in normal form), which the discharger works from.
+* `probe`: probes (a mask, remainder, case or `if` fact for a term): a proof (reused where in
+  scope), or the number of facts it failed with (retried only with more facts).
+* `ctx`: the simp context of the arithmetic solver, built at the start of the run before any
+  backtracking (adding a theorem may create auxiliary lemmas, which a restored state would
+  lose). -/
+structure RunCaches where
+  hyp : IO.Ref (Std.HashMap FVarId (Option (Expr × Expr)))
+  disch : IO.Ref (Std.HashMap Expr (Option Expr))
+  facts : IO.Ref (Array Expr)
+  probe : IO.Ref (Std.HashMap Expr (Expr ⊕ Nat))
+  ctx : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
+
+def RunCaches.new : IO RunCaches :=
+  return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
+           probe := ← IO.mkRef {}, ctx := ← IO.mkRef none }
+
+/-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
+initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
+initialize fsymRunCounter : IO.Ref Nat ← IO.mkRef 0
+
+/-- The caches of the current run (a fresh set outside a run: `fsym_arith` on its own). -/
+def caches : CoreM RunCaches := do
+  let id := (← getOptions).get `fsym.run (0 : Nat)
+  if id != 0 then
+    if let some c := (← fsymRuns.get).get? id then return c
+  let c ← RunCaches.new
+  if id != 0 then fsymRuns.modify (·.insert id c)
+  return c
+
+/-- Run `x` with fresh caches. -/
+def withRunCaches {α : Type} (x : TacticM α) : TacticM α := do
+  let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
+  fsymRuns.modify (·.insert id (← RunCaches.new))
+  try withOptions (·.set `fsym.run id) x
+  finally fsymRuns.modify (·.erase id)
 
 /-- A cached probe for `key`: `run` with `n` facts. -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
-  match (← probeCache.get).get? key with
+  match (← (← caches).probe.get).get? key with
   | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
   | some (.inr m) => if n ≤ m then return none
   | none => pure ()
   let r ← run
-  probeCache.modify (·.insert key (match r with | some pf => .inl pf | none => .inr n))
+  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr n))
   return r
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
@@ -449,13 +486,15 @@ def modCongr (facts : Array Expr) (tgt : Expr) : MetaM (Option Expr) := do
     return some (← mkEqTrans e1 f)
   return none
 
-/-- The `fsym_arith` normal form of each hypothesis, per run of `fsym` (by `FVarId`; a
-hypothesis' type only changes up to definitional equality): `none` if unchanged, else the new
-proposition and its proof (over the original hypotheses only). -/
-initialize hypCache : IO.Ref (Std.HashMap FVarId (Option (Expr × Expr))) ← IO.mkRef {}
+
 
 /-- The simp context of the arithmetic solver: `fsym_arith` with its simprocs and Lean's. -/
 def arithSimpCtx : MetaM (Simp.Context × Simp.SimprocsArray) := do
+  if let some c ← (← caches).ctx.get then return c
+  let c ← arithSimpCtxCore
+  (← caches).ctx.set (some c)
+  return c
+where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
   let some ext ← getSimpExtension? `fsym_arith | throwError "fsym: no fsym_arith"
   let mut thms ← ext.getTheorems
   -- conditional rewrites (side conditions by `omegaDisch`): no wrap-around first
@@ -473,9 +512,6 @@ def arithSimpCtx : MetaM (Simp.Context × Simp.SimprocsArray) := do
   if let some pe ← Simp.getSimprocExtension? `fsym_arith then procs := procs.push (← pe.getSimprocs)
   return (ctx, procs)
 
-/-- Side conditions the discharger proved, per run of `fsym`; a proof is reused where its free
-variables are in scope. -/
-initialize dischCache : IO.Ref (Std.HashMap Expr (Option Expr)) ← IO.mkRef {}
 
 /-- The discharger of the arithmetic simp set (no wrap-around, `pow_mod_elim`, …): the bound of
 a word, else the side goal in normal form by `omega` from the current facts (`dischFacts`);
@@ -484,9 +520,9 @@ def omegaDisch : Simp.Discharge := fun e => do
   let r : MetaM (Option Expr) := do
     let e ← instantiateMVars e
     let lctx ← getLCtx
-    if let some (some pf) := (← dischCache.get).get? e then
+    if let some (some pf) := (← (← caches).disch.get).get? e then
       if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
-    let facts ← dischFacts.get
+    let facts ← (← caches).facts.get
     let out ← do
       -- `x.toNat < 2 ^ w`
       let wordBound : MetaM (Option Expr) := do
@@ -511,7 +547,7 @@ def omegaDisch : Simp.Discharge := fun e => do
           | some pf => match r.proof? with
             | some eq => pure (some (← mkEqMPR eq pf))
             | none => pure (some pf)
-    if let some pf := out then dischCache.modify (·.insert e (some pf))
+    if let some pf := out then (← caches).disch.modify (·.insert e (some pf))
     return out
   r
 
@@ -521,17 +557,17 @@ def normFacts : MetaM (Array Expr × Option Expr) := do
   let (ctx, procs) ← arithSimpCtx
   let mut facts : Array Expr := #[]
   for d in ← propHyps do
-    let r ← match (← hypCache.get).get? d.fvarId with
+    let r ← match (← (← caches).hyp.get).get? d.fvarId with
       | some r => pure r
       | none =>
         let ty ← instantiateMVars d.type
-        dischFacts.set facts
+        (← caches).facts.set facts
         let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
         let out ← if r.expr == ty then pure none else
           match r.proof? with
           | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
           | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
-        hypCache.modify (·.insert d.fvarId out)
+        (← caches).hyp.modify (·.insert d.fvarId out)
         pure out
     match r with
     | none => facts := facts.push d.toExpr
@@ -555,7 +591,7 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     trace[fsym.prof] "normFacts {((← IO.getNumHeartbeats) - h0) / 1000}"
     if let some f := ff then
       g.assign (← mkFalseElim tgt0 f); return true
-    dischFacts.set facts
+    (← caches).facts.set facts
     let (ctx, procs) ← arithSimpCtx
     let (r, _) ← simp tgt0 ctx procs (discharge? := some omegaDisch)
     let close (pf : Expr) : MetaM Unit := do
@@ -820,7 +856,7 @@ def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
   let (c, inst, x, y) := (args[1]!, args[2]!, args[3]!, args[4]!)
   let n := (← propHyps).size
   let key := mkApp (mkConst `fsym.ite) c
-  if let some (.inr m) := (← probeCache.get).get? key then
+  if let some (.inr m) := (← (← caches).probe.get).get? key then
     if n ≤ m then return none
   let hp ← mkFreshExprMVar c
   if ← arith hp.mvarId! quick then
@@ -828,7 +864,7 @@ def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
   let hn ← mkFreshExprMVar (mkNot c)
   if ← arith hn.mvarId! quick then
     return some (← mkAppOptM ``ite_neg_eq #[c, inst, ← instantiateMVars hn, x, y], y)
-  probeCache.modify (·.insert key (.inr n))
+  (← caches).probe.modify (·.insert key (.inr n))
   return none
 
 /-- Normalize the precondition: unfold, flatten, move facts and existentials into the context. -/
@@ -1670,13 +1706,11 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       if ty' != d.type then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
     pure g
-  hypCache.set {}
-  dischCache.set {}
-  dischFacts.set #[]
-  probeCache.set {}
-  let h0 ← IO.getNumHeartbeats
-  let gs ← walk g user extra 400
-  trace[fsym] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
-  replaceMainGoal gs
+  withRunCaches do
+    discard <| arithSimpCtx
+    let h0 ← IO.getNumHeartbeats
+    let gs ← walk g user extra 400
+    trace[fsym] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
+    replaceMainGoal gs
 
 end Zig.Full.Auto
