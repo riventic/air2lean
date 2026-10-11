@@ -24,8 +24,9 @@ pub fn mutexCounter(io: Io) !u32 {
 ```
 
 The translation is `Sync.mutexCounter` in [`Proofs/Sync/Gen.lean`](../../Proofs/Sync/Gen.lean),
-run by the interleaving scheduler `Sched.run dispatch fuel o`, where the oracle `o` picks the
-next thread at each sync operation. [`Proofs/Sync/Mutex.lean`](../../Proofs/Sync/Mutex.lean)
+run by the interleaving scheduler `Sched.run env dispatch fuel o`, where the oracle `o` picks the
+next thread at each sync operation and `env` is the stated environment (here any `env` whose
+thread assignment succeeds, `env.spawn = .available`). [`Proofs/Sync/Mutex.lean`](../../Proofs/Sync/Mutex.lean)
 proves, for every oracle and fuel, `mutexCounter_spec` (a finished run returns `.ok 4`) and
 `mutexCounter_safe` (no run ends in an error: no data race, no deadlock at the futex, no
 panic).
@@ -46,8 +47,9 @@ the value fixed by `mutexCounter_spec`.
 Prove that no schedule loses an increment, so no finished run returns 3:
 
 ```lean
-theorem never_three (σ : Placement) (io : Io) (fuel : Nat) (o : Nat → Nat) (m : Mem) :
-    (Sched.run dispatch fuel o (mutexCounter io) (mem0 σ)).run ≠ some (.ok (.ok 3, m))
+theorem never_three (env : Env) (henv : env.spawn = .available) (σ : Placement) (io : Io) (fuel : Nat)
+    (o : Nat → Nat) (m : Mem) :
+    (Sched.run env dispatch fuel o (mutexCounter io) (mem0 σ)).run ≠ some (.ok (.ok 3, m))
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).
@@ -70,11 +72,14 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
   of `Proofs/Sync/Gen.lean` (x86_64-linux-musl, Zig 0.16.0, ReleaseSafe).
 - [THR-01](../../docs/premises.md#thr-01): threads interleave only at sync operations, and the
   result is partial correctness: a run that runs out of `fuel` (`none`) is not covered.
-- [THR-02](../../docs/premises.md#thr-02): `Thread.spawn` always succeeds under the default
-  `available` policy.
+- [THR-02](../../docs/premises.md#thr-02): `Thread.spawn` always succeeds in an `available`
+  environment (`henv : env.spawn = .available`).
+- [THR-03](../../docs/premises.md#thr-03): the theorems take the run environment `env`; they
+  cover `available` environments only (a `fallible` one lets thread assignment fail).
+- [ALC-10](../../docs/premises.md#alc-10): the allocator is thread-safe in concurrent code.
 - [THR-05](../../docs/premises.md#thr-05): the futex under the mutex is a model.
 - [IOM-01](../../docs/premises.md#iom-01): the `std.Io` parameter is the model `Io`, not
-  whatever `Io` a caller passes (no cancellation, no inline `async`, no spurious wakeup).
+  whatever `Io` a caller passes.
 - [THR-08](../../docs/premises.md#thr-08): the protocol (rely-guarantee / CSL) proof rules.
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-03](../../docs/premises.md#ord-03), [ORD-04](../../docs/premises.md#ord-04): the RC11

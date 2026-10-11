@@ -220,6 +220,7 @@ inductive Thread_Mutex_FutexImpl_unlockExit where
   | br8
 
 def Thread_Mutex_FutexImpl_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  Zig.mutexOwnerCheck p0
   let e ← ((do
     let i1 ← pure p0
     match ← ((do

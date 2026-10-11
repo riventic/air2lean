@@ -24,6 +24,8 @@ structure CheckArgs where
   allowUnqualified : Bool := false
   allocatorModel : AllocatorModel := .std
   allocatorModelSeen : Bool := false
+  /-- `--assume-no-lb`: do not report the load-buffering shape (premise ORD-02). -/
+  assumeNoLb : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -57,7 +59,10 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     if out.deviceContract.isSome then throw "duplicate --device-contract"
     parseOptions rest { out with deviceContract := some path } spawnPolicySeen
   | ["--device-contract"] => throw "missing value for --device-contract"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy, --device-contract and --allocator-model; emission flags are incompatible"
+  | "--assume-no-lb" :: rest =>
+    if out.assumeNoLb then throw "duplicate --assume-no-lb"
+    parseOptions rest { out with assumeNoLb := true } spawnPolicySeen
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy, --assume-no-lb, --device-contract and --allocator-model; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -65,7 +70,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions (splitAllocatorModelFlag options) { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>] [--allocator-model std|translated]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]"
 
 structure FileResult where
   file : String
@@ -320,7 +325,8 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
     localPassed := profileValid && checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log)
-    (spawnPolicy : SpawnSemantics := .available) (mode : AllocatorModel := .std) : Log := Id.run do
+    (spawnPolicy : SpawnSemantics := .available) (assumeNoLb : Bool := false)
+    (mode : AllocatorModel := .std) : Log := Id.run do
   let mut log := initial
   -- Bind extern calls first (`docs/air-json.md` §Extern calls): a bound call is a direct call
   -- of its definition below; each unbound one is its own diagnostic.
@@ -434,6 +440,14 @@ def collectProgram (units : Array FileResult) (initial : Log)
           message := "not inspected: fallible spawn policy requires a valid selected program"
           prerequisites := #["validated_selected_program"]
           firstErrorInUnit := true }
+    -- The load-buffering shape, as in translation (unless `--assume-no-lb`).
+    if issues.isEmpty && !assumeNoLb then
+      log := log.record {
+        code := .modelFailure
+        phase := .program
+        category := .unsupportedSemantics
+        message := ""
+        prerequisites := #["validated_selected_program"] } (checkLoadBuffering funcs)
     -- The CLI's emission gate (`emitWithNamesChecked`), so that both modes agree. Like the
     -- CLI, it runs only once every check has passed. Diagnostics mode takes no emission flags,
     -- so this is the default emission (IEEE floats, no std models, no proof API); the namespace
@@ -555,7 +569,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
-  return (units, collectProgram units log a.spawnPolicy a.allocatorModel)
+  return (units, collectProgram units log a.spawnPolicy a.assumeNoLb a.allocatorModel)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

@@ -84,7 +84,7 @@ join yet. -/
 def ThrOk (G : ThreadId → Gh) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧ m.clocks.size = m.threads.size ∧
   ((m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none) ∨
-   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false) ∧
+   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false ∧ r.gated = false) ∧
     (G 0 = .run ∨ G 0 = .joins) ∧ (G 1 = .start ∨ G 1 = .wrote ∨ G 1 = .fin) ∧
     ∀ u, 2 ≤ u → G u = .none))
 
@@ -892,7 +892,7 @@ theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pr
   refine ⟨hs1, hnone, by rw [hcs, hs1], ⟨by
       rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
     by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
-      by simp [Array.getElem_push, hs1], hc, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
+      by simp [Array.getElem_push, hs1], hc, rfl, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
   rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
   exact hnone u (by unfold ThreadId at *; omega)
 
@@ -945,9 +945,9 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
 /-- `main`'s join of the writer is possible: thread 1, spawned by `main`, not joined. -/
 theorem join_ok {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
     ∃ m', ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')) := by
-  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj⟩, -⟩⟩ := hi.thr
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj, hgt⟩, -⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
-  · exact join_run (m := { m with current := 0 }) hr hs hj
+  · exact join_run (m := { m with current := 0 }) hr hs hj (.inl hgt)
 
 /-- After the join: `main` joined every thread; the blocks are the same. -/
 theorem join_final {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .joins)
@@ -1096,25 +1096,28 @@ theorem main_spec (σ : Placement) (d : Nat) :
   obtain ⟨hja, -, hjb⟩ := join_final hi₁₃ hg₄ hj
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  -- the frees
+  -- the frees: the child is joined, so the ends of the blocks race with no access
+  have hcl : m₁₄.ClocksLe := Mem.ClocksLe.join2 hj
+    (by rw [hi₁₃.thr.2.1]; exact (thr_of hi₁₃.thr (.inr (.inl hg₄))).1)
   obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi₁₃.b0
   obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi₁₃.b1
   obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi₁₃.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀
+    (hcl.freeRaces _ _) e he).elim)
     fun _ m₁₅ hf₁ => ?_)
   obtain ⟨b, blk, hb, -, rfl⟩ := free_ok hf₁
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₁) hl₁ e he).elim) fun _ m₁₆ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₆ hf₂ => ?_)
   obtain ⟨b, blk', hb, -, rfl⟩ := free_ok hf₂
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₂) hl₂ e he).elim) fun _ m₁₇ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₇ hf₃ => ?_)
   obtain ⟨b, blk'', hb, -, rfl⟩ := free_ok hf₃
   cases hb
   refine ⟨rfl, WP.pure' ⟨?_, hja⟩⟩
@@ -1126,17 +1129,17 @@ theorem main_spec (σ : Placement) (d : Nat) :
 
 /-- **`mpRelAcq` gives 0 or 42 under every schedule** (every oracle `o`, every `fuel`): after
 the acquire load reads the writer's release store, the read of `data` sees 42. -/
-theorem mpRelAcq_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelAcq (mem0 σ)).run = some (.ok (v, m))) :
+theorem mpRelAcq_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 42 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `mpRelAcq` gives an error**: the read of `data` does not race with the write,
 under every schedule. -/
-theorem mpRelAcq_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+theorem mpRelAcq_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Atomics.MP
