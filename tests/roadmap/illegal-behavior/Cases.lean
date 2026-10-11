@@ -74,6 +74,35 @@ def cases : IO Unit := do
     itemUnsafe sl (BitVec.ofNat 64 i)
   check "itemUnsafe past length, inside block" (memErr (item 3)) (some .illegal)
   check "itemUnsafe in range" (memErr (item 1)) none
+  -- Forming `&s[i]` / `&p[i]` past the length is illegal with no access through it; the
+  -- sentinel item at the length is an item (`[:0]T`, `*[n:0]T`).
+  let block (n : Nat) : MemM Ptr := do
+    let items ← alloc .heap (4 * n) 4
+    for k in [0:n] do store 4 (items.elem 4 (BitVec.ofNat 64 k)) (BitVec.ofNat 32 k)
+    pure items
+  let itemPtr (i : Nat) : MemM Ptr := do
+    itemPtrUnsafe ⟨← block 4, 2⟩ (BitVec.ofNat 64 i)
+  check "itemPtrUnsafe &s[len], inside block" (memErr (itemPtr 2)) (some .illegal)
+  check "itemPtrUnsafe &s[len + 1], inside block" (memErr (itemPtr 3)) (some .illegal)
+  check "itemPtrUnsafe in range" (memErr (itemPtr 1)) none
+  let sentinelPtr (i : Nat) : MemM Ptr := do
+    let s ← buffer 8
+    sentinelItemPtr ⟨s.ptr, 3⟩ (BitVec.ofNat 64 i)
+  check "sentinelItemPtr &s[len] (the sentinel)" (memErr (sentinelPtr 3)) none
+  check "sentinelItemPtr &s[len + 1], inside block" (memErr (sentinelPtr 4)) (some .illegal)
+  check "arrayItemPtr &a[4] of [4]u32, inside block"
+    (memErr (do let a ← block 8; arrayItemPtr a 4)) (some .illegal)
+  check "arrayItemPtr &a[3]" (memErr (do let a ← block 8; arrayItemPtr a 3)) none
+  check "arrayItem a[4] of [4]u32, inside block"
+    (memErr (do let a ← block 8; arrayItem a 4)) (some .illegal)
+  check "arrayItem a[3]" (memErr (do let a ← block 8; arrayItem a 3)) none
+  check "sentinelArrayItem a[3] of [3:0]u8 (the sentinel)"
+    (memErr (do let s ← buffer 8; sentinelArrayItem s.ptr 3)) none
+  check "sentinelArrayItem a[4], inside block"
+    (memErr (do let s ← buffer 8; sentinelArrayItem s.ptr 4)) (some .illegal)
+  -- A many-item pointer has no length: only the allocation bounds it (MM-3).
+  check "manyItemPtr &p[5], inside block" (memErr (do let a ← block 8; manyItemPtr a 5)) none
+  check "manyItemPtr &p[9], past block" (memErr (do let a ← block 8; manyItemPtr a 9)) (some .illegal)
   -- Slicing past the end; a start after the end overflows the length subtraction first.
   let words (n : Nat) : MemM Ptr := do
     let items ← alloc .heap (4 * n) 4

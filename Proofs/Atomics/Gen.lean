@@ -302,7 +302,7 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
     else (do
       throw .outOfBounds)) : Zig.CM Tgt pushLocals pushExit) with
   | .br20 => (do
-    let i25 ← Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
+    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i18) >>= fun _ => Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
     let i26 ← pure ((← get).h)
     Zig.store (α := BitVec 32) 4 i25 i26
     match ← ((do
@@ -544,7 +544,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             else (do
               throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
           | .br48 => (do
-            let i53 ← Zig.callMC (Zig.load (BitVec 32) 4 (i45.elem 4 i46))
+            let i53 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i46 >>= fun _ => Zig.load (BitVec 32) 4 (i45.elem 4 i46))
             let i54 ← Zig.mul false (10 : BitVec 32) i53
             let i55 ← Zig.add false i44 i54
             let i56 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
@@ -557,7 +557,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
               else (do
                 throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
             | .br60 => (do
-              let i65 ← Zig.callMC (Zig.load (BitVec 32) 4 (i57.elem 4 i58))
+              let i65 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i58 >>= fun _ => Zig.load (BitVec 32) 4 (i57.elem 4 i58))
               let i66 ← Zig.intCast false false 64 i65
               let i67 ← pure (Zig.lt false i66 (3 : BitVec 64))
               match ← ((do
@@ -566,7 +566,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
                 else (do
                   throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
               | .br68 => (do
-                let i73 ← Zig.callMC (Zig.load (BitVec 32) 4 (i56.elem 4 i66))
+                let i73 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i66 >>= fun _ => Zig.load (BitVec 32) 4 (i56.elem 4 i66))
                 let i74 ← Zig.add false i55 i73
                 let i75 ← pure ((.ok i74) : Except Zig.ErrName (BitVec 32))
                 pure (.ret i75))
