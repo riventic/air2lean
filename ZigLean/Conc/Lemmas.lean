@@ -67,6 +67,17 @@ theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
   obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
   exact ⟨rfl, h⟩
 
+/-- The item bounds check (`checkIndex`, `slice_elem_ptr`/`ptr_elem_ptr`) of an index below the
+length: no stop, no error, the memory does not change. -/
+theorem WP.callMC_checkIndex {w : Nat} {len i : BitVec w} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hlt : i.toNat < len.toNat) (h : Q ((), s) G m n) :
+    P.WP t ((Zig.callMC (checkIndex len i) : CM Tgt σ Unit).run s) Q G m n := by
+  rw [checkIndex_of_lt hlt]
+  refine WP.callMC (fun e he => by cases he) fun a m' hr => ?_
+  cases hr
+  exact ⟨rfl, h⟩
+
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)

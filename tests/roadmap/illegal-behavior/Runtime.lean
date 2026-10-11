@@ -89,8 +89,12 @@ def memCases : IO Unit := do
   let past : MemM (BitVec 8) := do
     let p ← alloc .heap 8 1
     memset (α := BitVec 8) 1 p 8 (some 7)
-    checkIndex ⟨p, 2⟩ 5 >>= fun _ => load (BitVec 8) 1 (p.elem 1 5)
+    checkIndex (2 : BitVec 64) 5 >>= fun _ => load (BitVec 8) 1 (p.elem 1 5)
   check "slice item past length" (memErr past == some .illegal)
+  check "item at length" (memErr (checkIndex (2 : BitVec 64) 2) == some .illegal)
+  check "sentinel item at length" (memErr (checkSentinelIndex (2 : BitVec 64) 2) == none)
+  check "sentinel item past length" (memErr (checkSentinelIndex (2 : BitVec 64) 3) == some .illegal)
+  check "32-bit item at length" (memErr (checkIndex (2 : BitVec 32) 2) == some .illegal)
   check "ptrFromInt 0" (memErr (checkAddr 4 true 0) == some .illegal)
   check "ptrFromInt misaligned" (memErr (checkAddr 4 true 6) == some .illegal)
   check "ptrFromInt 0 allowzero" (memErr (checkAddr 4 false 0) == none)

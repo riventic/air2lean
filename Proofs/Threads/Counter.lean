@@ -1666,6 +1666,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
       obtain ⟨-, hblk1, -, -, hn1, -⟩ := access_eq hacc1
       exact ptrProject_run _ rfl (inBounds_of rfl hblk1 (by decide) (by simp))
         (by simpa using inBounds_of_access hacc1 0 (Nat.zero_le _))
+    refine WP.bind (WP.callMC_checkIndex (by simpa using hlt') ?_)
     refine WP.bind (WP.callMC_ptrProject pr₁ ?_)
     dsimp only
     refine WP.bind (WP.liftM (fun e h => (store_noErr_pre hpa hacc1 hk1 e h).elim)
@@ -1884,7 +1885,9 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       obtain ⟨blk, hb, -, hsz, -⟩ := he.1
       exact ptrProject_run _ rfl (inBounds_of rfl hb (by decide) (by simp))
         (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add, hsz]; omega))
+    refine WP.bind (WP.callMC_checkIndex (by simpa using hlt') ?_)
     refine WP.bind (WP.callMC_ptrProject prH ?_)
+    refine WP.bind (WP.callMC_checkIndex (by simpa using hlt') ?_)
     refine WP.bind (WP.callMC_ptrProject prC ?_)
     dsimp only
     refine WP.bind (WP.spawnC fun k hk => ⟨.main s.local29.toNat [], ⟨hi, he⟩,
@@ -2008,6 +2011,8 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       (len := Enc.size ThreadId) (a := 8) B2 (by show _ + 8 ≤ 32; omega) (fun A h => by omega)
       (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local85) (by simp [Ptr.elem, Ptr.add])
     have hdec := hd bk hbk s.local85.toNat hlt'
+    -- `handles[i]` with `i < 4` passes its bounds check.
+    simp only [checkIndex_bind_of_lt (len := (4 : BitVec 64)) (i := s.local85) (by simpa using hlt')]
     refine WP.bind (WP.callMC (fun e h => (MemM.noErr_of_run
       (load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)) e h).elim)
       fun tid m₁ hl => ?_)
