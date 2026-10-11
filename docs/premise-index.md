@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3113 theorems in 183 files.
+3147 theorems in 186 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 819 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 842 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 661 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
@@ -35,36 +35,36 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1353 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1353 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 493 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 1384 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1384 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 524 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 531 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 189 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 125 | Opaque libm transcendentals |
+| [MTH-01](premises.md#mth-01) | 220 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
 | [ASM-01](premises.md#asm-01) | 17 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2978 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2525 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1317 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 3012 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2550 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1348 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
-| [SEM-06](premises.md#sem-06) | 95 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2525 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 108 | The native stack holds every call chain |
+| [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
+| [SEM-07](premises.md#sem-07) | 2550 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 131 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3113 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1555 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1555 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 142 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 3147 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1578 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1578 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 173 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -341,6 +341,16 @@ File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, S
 
 | Theorem | Premises |
 |---|---|
+| `Basic.AirCert.air_sum_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.sum_loop7_body` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7_comm` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7_exits` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_view` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.absDiff_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.absDiff_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.clampAdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
@@ -508,6 +518,25 @@ File premises: THR-01, THR-02, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, S
 | `Detach.Worker.main_spec` | THR-01, THR-02, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Detach.Worker.worker_safe` | THR-01, THR-02, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Detach.Worker.worker_result` | THR-01, THR-02, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+
+## `Proofs/Errors/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Errors.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Errors.AirCert.digitOrZero_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Errors/Proofs.lean`
 
@@ -883,6 +912,23 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, S
 | `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_spec` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Options/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Options.AirCert.air_find_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.find_loop6_body` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6_comm` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6_exits` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_view` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Options/Proofs.lean`
 
@@ -2500,6 +2546,15 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 | `AggregateCastsClients.optUnwrap_some` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.ptrWrap_some` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.wrap_unwrap` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/air-semantics/PlacementCounterexample.lean`
+
+File premises: SEM-01, SEM-02, SEM-07, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `withExtraBlock_lt` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `promoted_lt` | SEM-01, SEM-02, SEM-07, TRU-01 |
 
 ## `tests/roadmap/allocator-identity/Kernel.lean`
 
