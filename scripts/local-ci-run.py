@@ -166,6 +166,8 @@ EVERYTHING = ('.github/', 'zig-patch/', 'docker/', 'Dockerfile', 'scripts/local-
               'tests/diff/lake-manifest.json', '.gitattributes', 'scripts/build-guard.py', 'scripts/workflow-common.sh')
 # Translator, runtime library, proofs and the test corpus: every row that builds or translates.
 PIPELINE = ('Air2Lean/', 'ZigLean/', 'Proofs/', 'tools/', 'examples/', 'tests/golden/', 'tests/diff/')
+# A step that mentions one of these says nothing about a file below it.
+BROAD_DIRECTORIES = {'scripts/', 'tests/', 'tests/roadmap/', 'docs/', 'assurance/', 'tools/', 'coverage/'}
 NO_LEAN_JOBS = {'aarch64-linux', 'bitops-native-arm'}
 FILE_SUFFIXES = ('.py', '.sh', '.lean', '.zig', '.json', '.md', '.toml', '.txt', '.tsv', '.yml')
 
@@ -246,8 +248,10 @@ def affected_rows(root, rows, workflow, expression, paths):
         for item in closure:
             needles.add(item)
             parts = item.split('/')
-            for depth in range(2, len(parts)):
-                needles.add('/'.join(parts[:depth]) + '/')
+            for depth in range(1, len(parts)):
+                directory = '/'.join(parts[:depth]) + '/'
+                if directory not in BROAD_DIRECTORIES:
+                    needles.add(directory)
         hits = [row['id'] for row in rows if any(n in text[row['id']] for n in needles)]
         if hits:
             add(hits, path)
