@@ -430,7 +430,7 @@ class Job:
             return  # .lake directories persist in the volume/workspace: restored builds are incremental
         if path.startswith(runner_prefix) and path.endswith('zig-diff-cache'):
             # The harness builds of scripts/diff.sh; content addressed, so staleness only costs time.
-            target = self.tools / 'zig-diff-cache' / '%s-%s-%s' % (self.row['job'], self.row['zig'], self.row['part'])
+            target = self.tools / 'zig-diff-cache' / ('%s-%s-%s' % (self.row['job'], self.row['zig'], self.row['part']))
             target.mkdir(parents=True, exist_ok=True)
             link = Path(path)
             link.parent.mkdir(parents=True, exist_ok=True)
@@ -572,8 +572,8 @@ class Job:
                     if status == 0 and self.zig_air and 'build.sh' in code \
                             and (self.workspace / self.zig_air[0]).is_dir():
                         self.save_zig_air()
-        except (RuntimeError, OSError, ValueError) as error:
-            self.log.write(('error: %s\n' % error).encode())
+        except Exception as error:  # a runner bug or an unsupported construct fails the row, loudly
+            self.log.write(('error: %r\n' % error).encode())
             status = 1
         if status:
             outcome = 'failure'
@@ -697,8 +697,13 @@ def launch_row(args):
         mounts = []
         for target, volume in volumes(arch, root).items():
             mounts += ['--mount', 'type=volume,src=%s,dst=%s' % (volume, target)]
+        stale = subprocess.run(['docker', 'ps', '-aq', '--filter', 'name=^air2lean-local-ci-', '--filter', 'status=exited'],
+                               capture_output=True, text=True).stdout.split()
+        if stale:  # left by an interrupted run
+            subprocess.run(['docker', 'rm', '-f', *stale], capture_output=True)
         container = subprocess.run(
-            ['docker', 'create', '--platform', 'linux/' + arch, '--memory', MEMORY, '--memory-swap', MEMORY,
+            ['docker', 'create', '--name', 'air2lean-local-ci-%s-%d' % (re.sub(r'\W', '_', row['id']), os.getpid()),
+             '--platform', 'linux/' + arch, '--memory', MEMORY, '--memory-swap', MEMORY,
              '--cpus', CPUS, '--pids-limit', '1024', '--init',
              '--env', 'AIR2LEAN_LOCAL_LEAN_THREADS=' + LEAN_THREADS,
              '--env', 'AIR2LEAN_LOCAL_ROSETTA=%d' % (arch == 'amd64' and platform_is_arm_host()),
