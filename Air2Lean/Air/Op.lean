@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Air2Lean.Air.Identity
 
 /-!
 # Internal IR
@@ -202,6 +203,10 @@ structure Layout where
   slice, `usize` and allocator in `modelLayout`. Set by `normalize` from the profile, never by the
   exporter, as `packedLanes`. -/
   ptrBytes : Nat := 8
+  /-- Semantic attributes of the type entry that the translator does not model, with a value
+  other than the one it accepts (`Air2Lean/Air/Schema.lean` `unmodeledAttrs`): a non-generic
+  pointer address space, a comptime field. `Check.checkTy` rejects a used type with any. -/
+  unmodeled : Array String := #[]
   deriving Repr, Inhabited, BEq
 
 /-- The profile's pointer size in bytes, as `normalize` set it in every layout (8 when there is
@@ -333,6 +338,13 @@ def Val.constTy? (v : Val) : Option TyId :=
   | .sliceConst t .. => some t
   | _ => none
 
+/-- The member name of a default panic-handler callee, e.g. `exactDivisionRemainder` for
+`debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder`, without the `__anon_<n>`
+suffix of a generic member (`inactiveUnionField`). `none` for any other callee. -/
+def panicMember? (calleeName : String) : Option String :=
+  if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
+  (calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m
+
 /-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
 `debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`,
 without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
@@ -340,9 +352,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
   if calleeName == "debug.defaultPanic" then some ".panic" else
-  if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
-  -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
-  match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
+  match panicMember? calleeName with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
   | some "shlOverflow" | some "shrOverflow" | some "shiftRhsTooBig" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
@@ -585,8 +595,9 @@ inductive Op where
   | sliceFieldPtr (len : Bool) (p : Val)
   /-- `memset`, `memset_safe`: each item of the slice or array pointer `dst` becomes `v`. -/
   | memset (dst v : Val)
-  /-- `memcpy`, `memmove`: copy the items of `src` to the slice or array pointer `dst`. -/
-  | memcpy (dst src : Val)
+  /-- `memcpy` (`move = false`), `memmove` (`move = true`): copy the items of `src` to the slice
+  or array pointer `dst`. Only `memmove` allows the two ranges to overlap. -/
+  | memcpy (move : Bool) (dst src : Val)
   /-- `tag_name`: the name of the enum value `a`, a `[:0]const u8`. -/
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/
@@ -651,6 +662,34 @@ structure Global where
   init : Option Val
   deriving Repr, Inhabited
 
+/-- An extern function that a body calls: one entry of the function file's `externs` table
+(`docs/air-json.md` §Extern calls). `params`/`ret` are type IDs of the calling function. -/
+structure ExternDecl where
+  /-- The linker symbol. -/
+  name : String
+  library : Option String
+  /-- The calling convention's tag (`std.builtin.CallingConvention`), e.g. `x86_64_sysv`. -/
+  cc : String
+  params : Array TyId
+  ret : TyId
+  varargs : Bool
+  deriving Repr, Inhabited, BEq
+
+/-- The linker symbol an `export fn` defines, and its calling convention. -/
+structure ExportDecl where
+  name : String
+  cc : String
+  deriving Repr, Inhabited, BEq
+
+/-- The callee name of a call to the extern function `symbol`. No function's fully qualified
+name has this form (`Check.resolveExterns` rejects one that does), so an extern call can never
+be taken for a call to a translated function or a project model of the same bare name. -/
+def externCallee (symbol : String) : String := "extern:" ++ symbol
+
+/-- The linker symbol of an extern callee name (`externCallee`). -/
+def externSymbol? (callee : String) : Option String :=
+  if callee.startsWith "extern:" then some (callee.drop 7).toString else none
+
 structure Func where
   zigVersion : String
   name : String
@@ -674,5 +713,12 @@ structure Func where
   /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
   (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
   bigEndian : Bool := false
+  /-- The identities of the AIR file (`Identity.rewrite`), its own first; `checkProgram`
+  checks them across the program. Hand-built functions have none. -/
+  identities : Array Identity.Record := #[]
+  /-- The extern functions the body calls (`externCallee` callees). -/
+  externs : Array ExternDecl := #[]
+  /-- `some`: an `export fn`, the definition of this linker symbol. -/
+  exportDecl : Option ExportDecl := none
 
 end Air2Lean

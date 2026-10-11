@@ -76,8 +76,8 @@ instance : Zig.Enc P where
     let b : BitVec 32 ← Zig.Enc.decode bs
     Zig.Packed.ofBits? b
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure byteOfF64Locals where
   v : Zig.Ptr
@@ -221,15 +221,15 @@ def fieldFromBytes (p0 : BitVec 8) (p1 : BitVec 8) (p2 : BitVec 8) (p3 : BitVec 
     let i4 ← pure (← get).p
     Zig.store (α := P) 4 i4 (Zig.Packed.ofBits (0 : BitVec 32) : P)
     let i6 ← pure (i4)
-    let i7 ← pure (i6.elem 1 (0 : BitVec 64))
+    let i7 ← pure i6
     Zig.store (α := BitVec 8) 1 i7 p0
-    let i9 ← pure (i6.elem 1 (1 : BitVec 64))
+    let i9 ← Zig.callM (Zig.ptrProject i6 (·.elem 1 (1 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i9 p1
-    let i11 ← pure (i6.elem 1 (2 : BitVec 64))
+    let i11 ← Zig.callM (Zig.ptrProject i6 (·.elem 1 (2 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i11 p2
-    let i13 ← pure (i6.elem 1 (3 : BitVec 64))
+    let i13 ← Zig.callM (Zig.ptrProject i6 (·.elem 1 (3 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i13 p3
-    let i15 ← pure (i4.add 0)
+    let i15 ← pure i4
     let i16 ← pure (i15)
     let i17 ← Zig.loadBits (BitVec 12) 4 4 4 i16
     pure (.ret i17)) : Zig.MM fieldFromBytesLocals fieldFromBytesExit).run' { (default : fieldFromBytesLocals) with p := s4 }
@@ -294,7 +294,7 @@ def setFieldBytes (p0 : BitVec 32) (p1 : BitVec 12) : Zig.MemM (Vector (BitVec 8
     let i2 ← pure (← get).p
     let i3 ← Zig.Packed.ofBits? (α := P) p0
     Zig.store (α := P) 4 i2 i3
-    let i5 ← pure (i2.add 0)
+    let i5 ← pure i2
     Zig.storeBits (α := BitVec 12) 4 4 4 i5 p1
     let i7 ← pure (i2)
     let i8 ← Zig.load (Vector (BitVec 8) 4) 1 i7
@@ -311,12 +311,12 @@ inductive u16FromStoredBytesExit where
   | ret (v : BitVec 16)
 
 def u16FromStoredBytes (p0 : BitVec 8) (p1 : BitVec 8) : Zig.MemM (BitVec 16) := do
-  let s2 ← Zig.allocStack 2 1
+  let s2 ← Zig.allocStack 2 2
   let e ← ((do
     let i2 ← pure (← get).v
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i3 ← pure i2
     Zig.store (α := BitVec 8) 2 i3 p0
-    let i5 ← pure (i2.elem 1 (1 : BitVec 64))
+    let i5 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (1 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i5 p1
     let i7 ← pure (i2)
     let i8 ← Zig.load (BitVec 16) 2 i7
@@ -363,10 +363,10 @@ def unionByte (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 4 4
   let e ← ((do
     let i2 ← pure (← get).local2
-    let i3 ← pure (i2.add 0)
+    let i3 ← pure i2
     Zig.store (α := BitVec 32) 4 i3 p0
     let i5 ← pure (i2)
-    let i6 ← pure (i5.add 0)
+    let i6 ← pure i5
     let i7 ← pure (Zig.lt false p1 (4 : BitVec 64))
     match ← ((do
       if i7 then (do
@@ -393,67 +393,12 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
   let s1 ← Zig.allocStack 4 4
   let e ← ((do
     let i1 ← pure (← get).local1
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := BitVec 32) 4 i2 p0
     let i4 ← pure (i1)
-    let i5 ← pure (i4.add 0)
+    let i5 ← pure i4
     let i6 ← Zig.callM (Zig.load (BitVec 16) 2 (i5.elem 2 (0 : BitVec 64)))
     pure (.ret i6)) : Zig.MM unionHalfLocals unionHalfExit).run' { (default : unionHalfLocals) with local1 := s1 }
-  Zig.free s1
-  match e with
-  | .ret v => pure v
-
-structure vecByteLocals where
-  v : Zig.Ptr
-  deriving Inhabited
-
-inductive vecByteExit where
-  | ret (v : BitVec 8)
-  | br10
-
-def vecByte (p0 : BitVec 16) (p1 : BitVec 16) (p2 : BitVec 64) : Zig.MemM (BitVec 8) := do
-  let s3 ← Zig.allocStack 4 4
-  let e ← ((do
-    let i3 ← pure (← get).v
-    let i4 ← pure (i3.elem 2 (0 : BitVec 64))
-    Zig.store (α := BitVec 16) 2 i4 p0
-    let i6 ← pure (i3.elem 2 (1 : BitVec 64))
-    Zig.store (α := BitVec 16) 2 i6 p1
-    let i8 ← pure (i3)
-    let i9 ← pure (Zig.lt false p2 (4 : BitVec 64))
-    match ← ((do
-      if i9 then (do
-        pure .br10)
-      else (do
-        throw .outOfBounds)) : Zig.MM vecByteLocals vecByteExit) with
-    | .br10 => (do
-      let i15 ← Zig.callM (Zig.load (BitVec 8) 1 (i8.elem 1 p2))
-      pure (.ret i15))
-    | e => pure e) : Zig.MM vecByteLocals vecByteExit).run' { (default : vecByteLocals) with v := s3 }
-  Zig.free s3
-  match e with
-  | .ret v => pure v
-  | _ => throw .panic
-
-structure vecLane0FromBytesLocals where
-  v : Zig.Ptr
-  deriving Inhabited
-
-inductive vecLane0FromBytesExit where
-  | ret (v : BitVec 32)
-
-def vecLane0FromBytes (p0 : Vector (BitVec 8) 8) : Zig.MemM (BitVec 32) := do
-  let s1 ← Zig.allocStack 8 8
-  let e ← ((do
-    let i1 ← pure (← get).v
-    let i2 ← pure (i1.elem 4 (0 : BitVec 64))
-    Zig.store (α := BitVec 32) 4 i2 (0 : BitVec 32)
-    let i4 ← pure (i1.elem 4 (1 : BitVec 64))
-    Zig.store (α := BitVec 32) 4 i4 (0 : BitVec 32)
-    let i6 ← pure (i1)
-    Zig.store (α := Vector (BitVec 8) 8) 1 i6 p0
-    let i8 ← Zig.callM (Zig.load (BitVec 32) 4 (i1.elem 4 (0 : BitVec 64)))
-    pure (.ret i8)) : Zig.MM vecLane0FromBytesLocals vecLane0FromBytesExit).run' { (default : vecLane0FromBytesLocals) with v := s1 }
   Zig.free s1
   match e with
   | .ret v => pure v

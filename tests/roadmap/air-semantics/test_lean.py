@@ -34,6 +34,8 @@ def check_caller(binary, tmp):
     gen, cert = tmp / 'CallerGen.lean', tmp / 'CallerCert.lean'
     result = subprocess.run([str(binary), str(ROOT / 'tests/roadmap/air-semantics/fixtures/caller'),
                              '-o', str(gen), '--namespace', 'Caller', '--prefix', 'basic.',
+                             # The fixture AIR is schema 11: the reference ABI is accepted explicitly.
+                             '--profile', 'legacy-abi64-le',
                              '--air-certificate', str(cert), '--air-certificate-import', 'CallerGen'],
                             capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr

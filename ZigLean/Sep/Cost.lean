@@ -126,23 +126,8 @@ theorem store_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem
 /-- A load never allocates or frees. -/
 theorem load_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem}
     (h : (load α a p).run m = pure (v, m')) : m.SameAllocs m' := by
-  cases ha : m.access p (Enc.size α) a with
-  | none => simp [load, loadBytes, zig_unfold, ha] at h
-  | some r =>
-    cases r with
-    | error e => simp [load, loadBytes, zig_unfold, ha] at h; cases h
-    | ok r =>
-      obtain ⟨b, blk, o⟩ := r
-      by_cases hnr : NoRace m b o (Enc.size α) .read
-      · simp only [load, StateT.run_bind, loadBytes_run ha hnr] at h
-        cases hd : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) with
-        | none => simp [zig_unfold, hd] at h
-        | some r => cases r with
-          | error e => simp [zig_unfold, hd] at h; cases h
-          | ok w => simp [zig_unfold, hd] at h; cases h; exact ⟨rfl, rfl⟩
-      · unfold NoRace at hnr
-        obtain ⟨err, herr⟩ := Option.ne_none_iff_exists'.mp hnr
-        simp [load, loadBytes, recordAccess, zig_unfold, ha, herr] at h; cases h
+  obtain ⟨_, _, _, -, -, rfl⟩ := load_inv h
+  exact ⟨rfl, rfl⟩
 
 /-- The number of blocks a successful allocation result adds: one, or none for an error. -/
 def allocated {α : Type} : Except ErrName α → Nat
@@ -188,11 +173,14 @@ theorem destroy_cost {a : Allocator} {size : Nat} {p : Ptr} {m m' : Mem} {u : Un
       obtain ⟨hpb, hblk, hl, h0, -, -, rfl⟩ := access_eq ha
       by_cases hc : blk.kind = .heap ∧ p.off.toNat = 0 ∧ blk.bytes.size = size
       · have hp0 : p.off = 0 := by omega
-        simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, set, StateT.set,
-          MonadStateOf.set] at h
-        obtain ⟨-, rfl⟩ := h
-        exact ⟨rfl, Mem.liveHeap_kill m _ hblk (by simp [Block.retained, hl, hc.1])
-          (by simp [Block.retained])⟩
+        cases hfr : m.freeRaces b size
+        · simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, hfr, set, StateT.set,
+            MonadStateOf.set] at h
+          obtain ⟨-, rfl⟩ := h
+          exact ⟨rfl, Mem.liveHeap_kill m _ hblk (by simp [Block.retained, hl, hc.1])
+            (by simp [Block.retained])⟩
+        · simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, hfr, StateT.lift] at h
+          cases h
       · unfold rawFree at h
         simp only [zig_unfold, ha] at h
         rw [ite_eq_right_of_eq_false _ _ (eq_false hc)] at h

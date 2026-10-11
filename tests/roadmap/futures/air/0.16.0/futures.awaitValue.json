@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "futures.awaitValue",
+ "module": "root",
  "params": [
   0,
   1
@@ -131,8 +132,10 @@
    "callee": {
     "ty": 8,
     "func": "Io.async__anon_582",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "futures.square"
+    "comptime_fn": "futures.square",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -180,6 +183,7 @@
    "callee": {
     "ty": 9,
     "func": "Io.Future(u32).await",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -212,6 +216,7 @@
   {
    "k": "struct",
    "name": "Io",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -243,6 +248,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -261,6 +267,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -274,6 +281,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -293,6 +301,7 @@
   {
    "k": "struct",
    "name": "Io.Future(u32)",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -333,6 +342,7 @@
    "child": 15,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -352,6 +362,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -360,6 +371,7 @@
   {
    "k": "struct",
    "name": "Io.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },
@@ -370,6 +382,7 @@
    "child": 18,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

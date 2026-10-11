@@ -36,35 +36,49 @@ instance : Zig.Enc UTag where
 inductive U where
   | a (v : BitVec 32)
   | b (v : BitVec 32)
+  | undef_a (v : BitVec 32) (written : List String)
+  | undef_b (v : BitVec 32) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def U.tag : U → UTag
   | .a _ => .a
+  | .undef_a _ _ => .a
   | .b _ => .b
+  | .undef_b _ _ => .b
 
 def U.get_a : U → Zig.Result (BitVec 32)
   | .a v => pure v
+  | .undef_a _ _ => throw .unspecified
   | _ => throw .panic
 
 def U.modify_a (g : BitVec 32 → BitVec 32) : U → U
   | .a v => .a (g v)
-  | _ => .a (g default)
+  | .undef_a v w => .undef_a (g v) w
+  | _ => .undef_a (g default) []
 
 def U.setTag_a : U → U
   | .a v => .a v
-  | _ => .a default
+  | .undef_a v w => .undef_a v w
+  | _ => .undef_a default []
+
+def U.set_a (v : BitVec 32) (_ : U) : U := .a v
 
 def U.get_b : U → Zig.Result (BitVec 32)
   | .b v => pure v
+  | .undef_b _ _ => throw .unspecified
   | _ => throw .panic
 
 def U.modify_b (g : BitVec 32 → BitVec 32) : U → U
   | .b v => .b (g v)
-  | _ => .b (g default)
+  | .undef_b v w => .undef_b (g v) w
+  | _ => .undef_b (g default) []
 
 def U.setTag_b : U → U
   | .b v => .b v
-  | _ => .b default
+  | .undef_b v w => .undef_b v w
+  | _ => .undef_b default []
+
+def U.set_b (v : BitVec 32) (_ : U) : U := .b v
 
 instance : Zig.Enc U where
   size := 8
@@ -72,6 +86,8 @@ instance : Zig.Enc U where
   encode v := match v with
     | .a x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .b x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .undef_a _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_b _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : UTag ← Zig.Enc.decodeAt bs 4
     match t with
@@ -110,35 +126,49 @@ instance : Zig.Enc FTag where
 inductive F where
   | a (v : BitVec 32)
   | b (v : BitVec 32)
+  | undef_a (v : BitVec 32) (written : List String)
+  | undef_b (v : BitVec 32) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def F.tag : F → FTag
   | .a _ => .a
+  | .undef_a _ _ => .a
   | .b _ => .b
+  | .undef_b _ _ => .b
 
 def F.get_a : F → Zig.Result (BitVec 32)
   | .a v => pure v
+  | .undef_a _ _ => throw .unspecified
   | _ => throw .panic
 
 def F.modify_a (g : BitVec 32 → BitVec 32) : F → F
   | .a v => .a (g v)
-  | _ => .a (g default)
+  | .undef_a v w => .undef_a (g v) w
+  | _ => .undef_a (g default) []
 
 def F.setTag_a : F → F
   | .a v => .a v
-  | _ => .a default
+  | .undef_a v w => .undef_a v w
+  | _ => .undef_a default []
+
+def F.set_a (v : BitVec 32) (_ : F) : F := .a v
 
 def F.get_b : F → Zig.Result (BitVec 32)
   | .b v => pure v
+  | .undef_b _ _ => throw .unspecified
   | _ => throw .panic
 
 def F.modify_b (g : BitVec 32 → BitVec 32) : F → F
   | .b v => .b (g v)
-  | _ => .b (g default)
+  | .undef_b v w => .undef_b (g v) w
+  | _ => .undef_b (g default) []
 
 def F.setTag_b : F → F
   | .b v => .b v
-  | _ => .b default
+  | .undef_b v w => .undef_b v w
+  | _ => .undef_b default []
+
+def F.set_b (v : BitVec 32) (_ : F) : F := .b v
 
 instance : Zig.Enc F where
   size := 8
@@ -146,14 +176,16 @@ instance : Zig.Enc F where
   encode v := match v with
     | .a x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .b x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .undef_a _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_b _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : FTag ← Zig.Enc.decodeAt bs 4
     match t with
     | .a => pure (.a (← Zig.Enc.decodeAt bs 0))
     | .b => pure (.b (← Zig.Enc.decodeAt bs 0))
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: a constant
   (Zig.Enc.encode ((F.b (0 : BitVec 32)) : F), 4, .constGlobal),
   -- 1: a constant
@@ -290,7 +322,7 @@ def roundTrip (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
         else (do
           throw .panic)) : Zig.MM roundTripLocals roundTripExit) with
       | .br10 => (do
-        let i15 ← Zig.callM (Zig.ptrFromAddr (i1).toNat)
+        let i15 ← Zig.callM (Zig.checkAddr 4 true (i1).toNat >>= fun _ => Zig.ptrFromAddr (i1).toNat)
         let i16 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i15)))
         let i17 ← pure (Zig.addWrap i16 (1 : BitVec 64))
         pure (.ret i17))

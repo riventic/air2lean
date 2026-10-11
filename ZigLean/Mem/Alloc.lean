@@ -9,8 +9,9 @@ same name here (`Air2Lean/Memory.lean`'s `allocFn?`).
 
 The model is one allocator, with its state in `Mem`:
 
-* Each allocation gets a new heap block (a new block id; its address is fresh unless the
-  opt-in `Mem.allocPolicy.reuseAddr` reuses a freed block's address, `docs/address-reuse.md`). Allocation number `Mem.failAt` (from 0), every
+* Each allocation gets a new heap block (a new block id; its address is the placement's,
+  `Mem.place`, possibly a freed block's address, `docs/address-placement.md`). Allocation
+  number `Mem.failAt` (from 0), every
   index in `Mem.allocPolicy.failures`, requests above `Mem.allocPolicy.maxBytes`, requests the
   oracle `Mem.allocPolicy.fails` rejects and requests beyond `Mem.allocPolicy.budget` fail.
   The default has no failures and no fixed cap; the differential harness selects its 1 MiB
@@ -26,6 +27,11 @@ The model is one allocator, with its state in `Mem`:
   the length of the block, throws `.illegal` (a double free, a use after free).
 
 `tests/diff/common.zig`'s `TestAllocator` has the same rules.
+
+The allocator's state (`nextAddr`, `allocs`, the policy) has no race footprint: in concurrent
+code (`Zig.Sched.run`) the program's allocator is assumed thread-safe (premise ALC-10,
+`docs/premises.md`), so a non-thread-safe allocator shared by unordered threads is outside the
+model.
 -/
 
 namespace Zig
@@ -139,22 +145,22 @@ This copies undefined/pointer-fragment bytes without decoding them. -/
 def remapBytes (bs : Array Byte) (n : Nat) : Array Byte :=
   padTo n (bs.extract 0 n)
 
-/-- Every other allocated block, even a dead one, precedes this block's address.
-Check this explicitly rather than assuming arbitrary model states have allocation order. -/
-def Mem.byteRemapLast (m : Mem) (b : BlockId) (blk : Block) : Bool :=
-  b + 1 == m.blocks.size && Nat.allTR m.blocks.size (fun j _ =>
-    j == b || decide (m.blocks[j].addr + m.blocks[j].bytes.size < blk.addr))
+/-- Block `b` (`blk`) can grow in place to `n` bytes: the grown range `[blk.addr, blk.addr + n)`
+stays below 2^64 and is disjoint from every other live block (`docs/address-placement.md`). The
+only constraint is disjointness, as for a new block (`Mem.addrFree`): whether the space is free
+follows from the placement of the other blocks, not from an allocation order. -/
+def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
+  decide (blk.addr + n ≤ 2 ^ 64) &&
+    Nat.allTR m.blocks.size (fun j _ => j == b || m.blocks[j].clearOf blk.addr n)
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
-latest-block growth before applying it. Thread bookkeeping is retained verbatim. -/
+that the grown range is free (`Mem.growFree`) before applying it. Thread bookkeeping is retained verbatim. -/
 def Mem.afterByteRemap (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Mem :=
   { m with
-    blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n }
-    nextAddr := Nat.max m.nextAddr (blk.addr + n + 1) }
+    blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n } }
 
-/-- Selected successful remap of one whole live heap byte-buffer. Growth in place is
-restricted to the latest allocated block, including dead-block history, so addresses
-cannot overlap a later block. New allocations stay beyond the enlarged block.
+/-- Selected successful remap of one whole live heap byte-buffer. Growth in place needs the
+grown range to be free of every other live block (`Mem.growFree`).
 A failed request preserves bytes, logical length and lifetime. -/
 def remapByteBuffer (s : Slice) (n : Nat) : MemM (Option Slice) := do
   let m ← get
@@ -165,7 +171,7 @@ def remapByteBuffer (s : Slice) (n : Nat) : MemM (Option Slice) := do
   match m.allocPolicy.byteRemap with
   | .fail => return none
   | .inPlace =>
-    if blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true then return none
+    if blk.bytes.size < n ∧ m.growFree b blk n ≠ true then return none
     recordAccess b 0 blk.bytes.size .write
     let current ← get
     set (current.afterByteRemap b blk n)
@@ -247,11 +253,11 @@ def vtableAlloc (_ : Allocator) (len : BitVec 64) (align : Nat) : MemM (Option P
   rawAlloc len.toNat align
 
 /-- In-place growth or shrink of a validated block, under the `inPlace` policy and request cap.
-Growth also requires the latest block (`Mem.byteRemapLast`). -/
+Growth also needs the grown range to be free (`Mem.growFree`). -/
 def rawInPlace (b : BlockId) (blk : Block) (n : Nat) : MemM Bool := do
   let m ← get
   if m.allocPolicy.byteRemap ≠ .inPlace ∨ m.allocPolicy.maxBytes < n then return false
-  if blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true then return false
+  if blk.bytes.size < n ∧ m.growFree b blk n ≠ true then return false
   recordAccess b 0 blk.bytes.size .write
   let current ← get
   set (current.afterByteRemap b blk n)

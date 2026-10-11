@@ -1,4 +1,5 @@
 import Proofs.Vectors.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/vectors/vectors.zig`
@@ -345,5 +346,12 @@ theorem checkedAdd_ok_iff (a b : Zig.Vec (BitVec 32) 4) :
       Option (Except Zig.Error (Zig.Vec (BitVec 32) 4))) = some (.error .overflow) at overflow
     cases overflow
   · exact checkedAdd_ok a b
+
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness checkedAdd_ok := ⟨Zig.Vec.splat 1, Zig.Vec.splat 2, by decide, trivial⟩
+nonvacuity_witness Zig.Vec.map2M_pure :=
+  ⟨Unit, Unit, Unit, 1, fun _ _ => (), Zig.Vec.splat (), Zig.Vec.splat (), trivial⟩
 
 end Vectors

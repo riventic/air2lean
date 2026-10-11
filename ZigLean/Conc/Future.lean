@@ -12,8 +12,8 @@ does not extend to futures, and the two are qualified separately.
   (`task = some slot`): the task is a thread of the model, *running* until it ends and
   *completed* once it has written its result into the record. `await`/`cancel` *consume* the
   record: they join the thread, copy the result into `Future.result`, free the record and set
-  `any_future = null` (`task = none`). A future that `Io.async` ran in the caller (the
-  fallible policy's eager branch) is born consumed.
+  `any_future = null` (`task = none`). A future that `Io.async` ran in the caller (an
+  eager outcome of the environment, `asyncWithPolicyC`) is born consumed.
 - **Await** joins the task and returns its complete result, so an error union result
   (`E!T`) propagates its error to the awaiter unchanged.
 - **Cancel** first records a cancelation request for the task (`Mem.cancels`), then awaits it.
@@ -123,35 +123,42 @@ instance {α : Type} [Enc α] : Enc (Future α) := Future.instEnc
 
 variable {Tgt σ α : Type} [Enc α]
 
-/-- `Io.async(function, args)` when a unit of concurrency is assigned: a runtime record, then a
-spawn of the task `mk slot` (the generated target writes the worker's result with
-`Future.complete slot`). The spawner writes the task's id into the record. -/
-def asyncC (mk : Ptr → Tgt) : CM Tgt σ (Future α) := do
-  let slot ← callMC (Future.slotAlloc α)
-  let tid : ThreadId ← StateT.lift (ConcM.sync (.spawn (mk slot)))
-  callMC (store 8 slot tid)
-  pure { task := some slot, result := none }
-
 /-- The caller's eager execution (`start(context.ptr, result.ptr)` before `async` returns): the
 future is born consumed, with no record, thread or ownership transfer. -/
 def asyncEagerC (eager : ConcM Tgt α) : CM Tgt σ (Future α) := do
   let r ← callC eager
   pure { task := none, result := some r }
 
-/-- Choice zero assigns a unit of concurrency; any other runs the task in the caller. -/
-def asyncOutcomeC (choice : Nat) (mk : Ptr → Tgt) (eager : ConcM Tgt α) : CM Tgt σ (Future α) :=
-  if choice = 0 then asyncC mk else asyncEagerC eager
+/-- `Io.async(function, args)` when a unit of concurrency is assigned: a runtime record, then a
+spawn of the task `mk slot` (the generated target writes the worker's result with
+`Future.complete slot`). The spawner writes the task's id into the record. When the run's
+environment fails the assignment (`Env.spawn`), the record is freed and the caller runs the task
+(`Io.Threaded.async`). -/
+def asyncC (mk : Ptr → Tgt) (eager : ConcM Tgt α) : CM Tgt σ (Future α) := do
+  let slot ← callMC (Future.slotAlloc α)
+  match ← StateT.lift (ConcM.sync (.spawn (mk slot))) with
+  | .ok tid =>
+    callMC (store 8 slot tid)
+    pure { task := some slot, result := none }
+  | .error _ =>
+    callMC (free slot)
+    asyncEagerC eager
 
-/-- `available` assumes the runtime assigns every task; `fallible` also covers the audited
-`Io.Threaded.async` fallbacks (record allocation failure, the async limit, a failed worker
-spawn, single-threaded builds), each of which runs the task in the caller. -/
-def asyncWithPolicyC (policy : SpawnPolicy) (mk : Ptr → Tgt) (eager : ConcM Tgt α) :
+/-- Choice 1 runs the task in the caller; any other assigns a unit of concurrency. A deferred
+task (choice 2, `AsyncEnv.any`) becomes a thread: the scheduler may run it as late as the
+awaiter's join, so its interleavings include the deferred ones (as for `groupDeferC`, the model
+gives it the spawner's clock, which only adds outcomes). -/
+def asyncOutcomeC (choice : Nat) (mk : Ptr → Tgt) (eager : ConcM Tgt α) : CM Tgt σ (Future α) :=
+  if choice = 1 then asyncEagerC eager else asyncC mk eager
+
+/-- `Io.async`: as `Io.Group.async` (`groupAsyncWithPolicyC`), the run's environment picks the
+execution (`SyncOp.asyncChoice`, `asyncOptions`): `Io.Threaded` runs the task in the caller
+once `async_limit` tasks may be busy, and on a record allocation or worker spawn failure
+(`Env.spawn`). The translation's policy does not change it. -/
+def asyncWithPolicyC (_policy : SpawnPolicy) (mk : Ptr → Tgt) (eager : ConcM Tgt α) :
     CM Tgt σ (Future α) := do
-  match policy with
-  | .available => asyncC mk
-  | .fallible =>
-    let choice ← pickC (fun _ => 2)
-    asyncOutcomeC choice mk eager
+  let choice ← StateT.lift (ConcM.sync (Tgt := Tgt) .asyncChoice)
+  asyncOutcomeC choice mk eager
 
 /-- Consume the pending task of the future at `p`: join it, take its result, free the record
 and store the consumed future. -/
@@ -191,23 +198,42 @@ def checkCancelC (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
   callMC Future.takeCancel
 
 open Lean.Order in
+theorem monotone_asyncEagerC {γ : Type} [PartialOrder γ] (f : γ → ConcM Tgt α) (hmono : monotone f) :
+    monotone (fun x => (asyncEagerC (f x) : CM Tgt σ (Future α))) := by
+  unfold asyncEagerC
+  exact monotone_bind _ _ _ (monotone_callC f hmono) (monotone_const _)
+
+open Lean.Order in
+theorem monotone_asyncC {γ : Type} [PartialOrder γ] (mk : Ptr → Tgt) (f : γ → ConcM Tgt α)
+    (hmono : monotone f) : monotone (fun x => (asyncC mk (f x) : CM Tgt σ (Future α))) := by
+  unfold asyncC
+  apply monotone_bind _ _ _ (monotone_const _)
+  apply monotone_of_monotone_apply
+  intro slot
+  apply monotone_bind _ _ _ (monotone_const _)
+  apply monotone_of_monotone_apply
+  intro r
+  cases r with
+  | ok tid => exact monotone_const _
+  | error _ =>
+    apply monotone_bind _ _ _ (monotone_const _)
+    apply monotone_of_monotone_apply
+    intro _
+    exact monotone_asyncEagerC f hmono
+
+open Lean.Order in
 @[partial_fixpoint_monotone]
 theorem monotone_asyncWithPolicyC {γ : Type} [PartialOrder γ]
     (policy : SpawnPolicy) (mk : Ptr → Tgt)
     (f : γ → ConcM Tgt α) (hmono : monotone f) :
     monotone (fun x => (asyncWithPolicyC policy mk (f x) : CM Tgt σ (Future α))) := by
-  cases policy with
-  | available => exact monotone_const _
-  | fallible =>
-    unfold asyncWithPolicyC
-    apply monotone_bind _ _ _ (monotone_const _)
-    apply monotone_of_monotone_apply
+  have hout : ∀ choice : Nat, monotone (fun x =>
+      (asyncOutcomeC choice mk (f x) : CM Tgt σ (Future α))) := by
     intro choice
-    by_cases hc : choice = 0
-    · simpa only [asyncOutcomeC, if_pos hc] using
-        (monotone_const (asyncC mk : CM Tgt σ (Future α)) :
-          monotone (fun _ : γ => (asyncC mk : CM Tgt σ (Future α))))
-    · simp only [asyncOutcomeC, if_neg hc, asyncEagerC]
-      exact monotone_bind _ _ _ (monotone_callC f hmono) (monotone_const _)
+    by_cases hc : choice = 1
+    · simpa only [asyncOutcomeC, if_pos hc] using monotone_asyncEagerC (σ := σ) f hmono
+    · simpa only [asyncOutcomeC, if_neg hc] using monotone_asyncC (σ := σ) mk f hmono
+  apply monotone_bind _ _ _ (monotone_const _)
+  exact monotone_of_monotone_apply _ hout
 
 end Zig

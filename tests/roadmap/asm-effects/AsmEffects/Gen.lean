@@ -16,8 +16,8 @@ opaque airAsmFx_2229968081 (i0 : BitVec 64) : BitVec 64
 
 opaque airAsmFx_3102165980 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure addrLocals where
   local2 : BitVec 64

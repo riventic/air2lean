@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -36,9 +37,9 @@ FILES = {
         namespace Conc
         /-- **`main` gives 0 under every schedule**. -/
         theorem main_spec {fuel : Nat} {o : Nat → Nat} {v : Nat}
-            (h : (Sched.run dispatch fuel o main mem0).run = some v) : v = 0 := sorry
+            (h : (Sched.run env dispatch fuel o main mem0).run = some v) : v = 0 := sorry
         /-- One schedule. -/
-        theorem main_sc : okVal (Sched.run dispatch 100 (sched []) main mem0) = some 0 := by
+        theorem main_sc : okVal (Sched.run env dispatch 100 (sched []) main mem0) = some 0 := by
           decide +kernel
         end Conc
         ''',
@@ -229,6 +230,28 @@ class FixtureTests(unittest.TestCase):
         self.fx.save(inv)
         self.assertError('Conc.main_sc: scope all-schedules, but its statement does not quantify')
 
+    def test_completion_witness(self):
+        ti.check(self.fx.root, write=True)
+        table = (self.fx.root / ti.DOC).read_text()
+        self.assertIn('| all-schedules (no run shown to complete) |', table)
+        inv = self.fx.load()
+        inv['theorems'][1]['completes'] = 'Conc.main_sc'
+        self.fx.save(inv)
+        self.assertFalse(any('completion witness' in e for e in self.fx.errors()))
+        ti.check(self.fx.root, write=True)
+        self.assertNotIn('no run shown to complete', (self.fx.root / ti.DOC).read_text())
+        for witness, fragment in (('Demo.f_spec', 'is not a listed single- or bounded-schedule'),
+                                  ('Conc.missing', 'is not a listed single- or bounded-schedule')):
+            inv['theorems'][1]['completes'] = witness
+            self.fx.save(inv)
+            self.assertError(fragment)
+        # A witness about another program does not count.
+        inv['theorems'][1]['completes'] = 'Conc.main_sc'
+        self.fx.save(inv)
+        path = self.fx.root / 'Proofs/Conc/Proofs.lean'
+        path.write_text(path.read_text().replace('(sched []) main mem0', '(sched []) other mem0'))
+        self.assertError('does not show a completed `Sched.run` of the same program')
+
     def test_unknown_scope_and_missing_theorem(self):
         inv = self.fx.load()
         inv['theorems'][0]['scope'] = 'most-schedules'
@@ -273,7 +296,9 @@ class FixtureTests(unittest.TestCase):
                              '--guard-log', str(log)], code=1)
         self.assertEqual(self.fx.load()['runs'], {})
 
-    def test_swap_build_restores_the_committed_translation(self):
+    def test_swap_build_never_writes_the_committed_translation(self):
+        subprocess.run(['git', 'init', '-q', str(self.fx.root)], check=True)
+        subprocess.run(['git', '-C', str(self.fx.root), 'add', '.'], check=True)
         bin_dir = Path(self.temp.name) / 'bin'
         bin_dir.mkdir()
         lake = bin_dir / 'lake'
@@ -321,7 +346,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn('every selector', full['domain'])
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec_full']
         self.assertNotIn('≠', statement['statement'])
-        self.assertIn('opSpec128 op128Profile sel', statement['statement'])
+        self.assertIn('opSpec128 floatopsTarget op128Profile sel', statement['statement'])
 
     def test_f05_profile_follows_the_version(self):
         # `op128Profile` elaborates either profile, so pin which one each version's `op128` selects:

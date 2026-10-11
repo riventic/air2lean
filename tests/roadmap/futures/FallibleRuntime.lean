@@ -18,7 +18,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
   while !todo.isEmpty && out.size < cap do
     let pre := todo.head!
     todo := todo.tail!
-    let (r, opts) := Sched.runTrace dispatch fuel (fun i => pre.getD i 0) main m0
+    let (r, opts) := Sched.runTrace ⟨.any, .available⟩ dispatch fuel (fun i => pre.getD i 0) main m0
     out := out.push (r.map (·.map (·.1)))
     -- Branch on every later choice that this run took as 0.
     for i in [pre.size:opts.size] do
@@ -29,7 +29,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
 private def bv (n : Nat) : BitVec 32 := BitVec.ofNat 32 n
 
 private def outcomes {α : Type} (x : ConcM FuturesFallible.Tgt α) : Array (Option (Except Error α)) :=
-  allOutcomes FuturesFallible.dispatch 200 5000 x FuturesFallible.mem0
+  allOutcomes FuturesFallible.dispatch 200 5000 x (FuturesFallible.mem0 .fresh)
 
 private def onlyOk {α : Type} [BEq α] (rs : Array (Option (Except Error α))) (v : α) : Bool :=
   !rs.isEmpty && rs.all fun r => match r with
@@ -54,8 +54,8 @@ def main : IO Unit := do
   require (onlyOk (outcomes (FuturesFallible.awaitError ⟨⟩ 0)) (.error "Zero")) "fallible error not propagated"
   -- Both policy outcomes occur: one assigned run, one eager run of the same call.
   let traces := (List.range 2).map fun c =>
-    (Sched.runTrace FuturesFallible.dispatch 200 (fun _ => c) (FuturesFallible.awaitValue ⟨⟩ 3)
-      FuturesFallible.mem0).1 |>.bind fun r => match r with
+    (Sched.runTrace ⟨.any, .available⟩ FuturesFallible.dispatch 200 (fun _ => c) (FuturesFallible.awaitValue ⟨⟩ 3)
+      (FuturesFallible.mem0 .fresh)).1 |>.bind fun r => match r with
         | .ok (_, m) => some m.threads.size
         | .error _ => none
   require (traces == [some 2, some 1]) s!"assigned and eager branches not both taken: {traces}"

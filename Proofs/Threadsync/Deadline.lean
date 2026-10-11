@@ -1,4 +1,5 @@
 import Proofs.Threadsync.Lock
+import ZigLean.Witness
 
 /-!
 # `Thread.Futex.Deadline` with no timeout
@@ -94,5 +95,7 @@ theorem DLb.b0 {p : Ptr} {bs : Array Byte} {hD : Heap} (h : DLb p bs hD) :
 
 /-- The deadline block with no timeout. -/
 abbrev DL (p : Ptr) (hD : Heap) : Prop := DLb p bsD hD
+
+nonvacuity_witness none_of_isNone := ⟨pure none, rfl, trivial⟩
 
 end Threadsync

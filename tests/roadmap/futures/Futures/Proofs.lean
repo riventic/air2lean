@@ -86,6 +86,17 @@ theorem no_task {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → P
   · subst h0; rw [upd_self] at hu; cases hu
   · rw [upd_ne _ _ h0] at hu; cases hu
 
+/-- At the spawn stop after `Io.async`'s choice: `main` has no task, so no task exists. -/
+theorem no_task_of {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop}
+    {G : ThreadId → FGh} {m m' : Mem} (hg : G 0 = .none) (hi : (futureProto slotOf R).inv G m) :
+    (futureProto slotOf R).inv (upd G 0 FGh.none) m' := by
+  intro u sl d hu
+  by_cases h0 : u = 0
+  · subst h0; rw [upd_self] at hu; cases hu
+  · rw [upd_ne _ _ h0] at hu
+    have := (hi u sl d hu).1
+    rw [hg] at this; cases this
+
 /-- After the spawn, the only task is the new one. -/
 theorem only_child {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop}
     {G₁ : ThreadId → FGh} {m : Mem} {slot : Ptr} {child : ThreadId}
@@ -112,12 +123,12 @@ theorem reads_pending {α : Type} [Enc α] {p slot : Ptr} {m m' : Mem} {x : Unit
   intro f m'' hl
   rw [ha] at hl
   have := Future.load_after_store (pending_size slot) hs hl
-  rw [Future.decode_pending slot hsz] at this
+  rw [decodeLoad_of_decode (Future.decode_pending slot hsz)] at this
   cases this; rfl
 
-theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem awaitValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (squareProto x).WP 0 (Futures.awaitValue io x) (fun v _ _ _ => v = x * x)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   unfold Futures.awaitValue
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
   · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
@@ -125,9 +136,26 @@ theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncC (α := BitVec 32) rfl fun slot m₂ _ k _ => ⟨.none, ?_, fun G₁ m₃ hg hi₃ =>
-    ⟨.task slot false, ⟨slot, by simp [squareSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩)
-  · exact no_task
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
+    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  unfold asyncOutcomeC
+  split
+  · -- `Io.async` ran the task in the caller: a consumed future
+    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ _ => rfl) fun r m₂ hr => ?_)
+    obtain ⟨hsq, rfl⟩ := MemM.lift_ok hr
+    rw [square_run] at hsq
+    cases hsq
+    refine ⟨rfl, ?_⟩
+    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (FutureProto.await_consumed_wp rfl
+      (FutureProto.reads_consumed (LawfulEnc.size_encode _) (LawfulEnc.decode_encode _) hs)
+      fun _ _ => ?_)
+    refine WP.pure' ?_
+    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
+    exact WP.pure' rfl
+  refine FutureProto.wp_asyncC (α := BitVec 32) rfl fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀,
+    fun G₁ m₃ hg hi₃ => ⟨.task slot false, ⟨slot, by simp [squareSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
   refine WP.bind (FutureProto.await_wp (reads_pending (α := BitVec 32) (by decide) hs rfl) (only_child hg hi₃)
     fun r G' m' d hr => ?_)
@@ -138,11 +166,11 @@ theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
 
 /-- **Completion.** Under every schedule, every result of `awaitValue(io, x)` is `x *% x`: the
 task's result, written into its runtime record and returned by `await`. -/
-theorem awaitValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32}
-    {m : Mem} (h : (Sched.run Futures.dispatch fuel o (Futures.awaitValue io x) Futures.mem0).run =
+theorem awaitValue_result (env : Env) (henv : env.spawn = .available) {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32}
+    {m : Mem} (h : (Sched.run env Futures.dispatch fuel o (Futures.awaitValue io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = x * x := by
-  obtain ⟨_, _, hv⟩ := run_sound (P := squareProto x) Futures.dispatch (fun _ => .none)
-    (square_task x) (FutureProto.not_strict) rfl (awaitValue_wp io x) h
+  obtain ⟨_, _, hv⟩ := run_sound (P := squareProto x) env (Proto.of_available henv) Futures.dispatch (fun _ => .none)
+    (square_task x) (FutureProto.not_strict) rfl (awaitValue_wp σ io x) h
   exact hv
 
 /-! ## Error propagation: `awaitError` -/
@@ -237,9 +265,9 @@ theorem checked_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (checkedProto x
     · cases hs
   | _ => cases hs
 
-theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem awaitError_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (checkedProto x).WP 0 (Futures.awaitError io x) (fun v _ _ _ => v = checkedSpec x)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := zeroEnc
   unfold Futures.awaitError
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
@@ -248,10 +276,27 @@ theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
-    fun slot m₂ _ k _ => ⟨.none, ?_, fun G₁ m₃ hg hi₃ =>
-    ⟨.task slot false, ⟨slot, by simp [checkedSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩)
-  · exact no_task
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
+    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  unfold asyncOutcomeC
+  split
+  · -- `Io.async` ran the task in the caller: a consumed future
+    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ _ => rfl) fun r m₂ hr => ?_)
+    obtain ⟨hck, rfl⟩ := MemM.lift_ok hr
+    rw [checked_run] at hck
+    cases hck
+    refine ⟨rfl, ?_⟩
+    obtain ⟨hsz, hdec⟩ := checkedSpec_lawful x
+    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (FutureProto.await_consumed_wp rfl
+      (FutureProto.reads_consumed hsz hdec hs) fun _ _ => ?_)
+    refine WP.pure' ?_
+    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
+    exact WP.pure' rfl
+  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
+    fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀, fun G₁ m₃ hg hi₃ =>
+    ⟨.task slot false, ⟨slot, by simp [checkedSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
   refine WP.bind (FutureProto.await_wp
     (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
@@ -263,19 +308,19 @@ theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
 
 /-- **Error propagation.** Under every schedule, every result of `awaitError(io, x)` is the
 task's result: `error.Zero` for `x = 0`, else `x - 1`. -/
-theorem awaitError_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+theorem awaitError_result (env : Env) (henv : env.spawn = .available) {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io x) Futures.mem0).run =
+    (h : (Sched.run env Futures.dispatch fuel o (Futures.awaitError io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = checkedSpec x := by
-  obtain ⟨_, _, hv⟩ := run_sound (P := checkedProto x) Futures.dispatch (fun _ => .none)
-    (checked_task x) (fun h => by cases h) rfl (awaitError_wp io x) h
+  obtain ⟨_, _, hv⟩ := run_sound (P := checkedProto x) env (Proto.of_available henv) Futures.dispatch (fun _ => .none)
+    (checked_task x) (fun h => by cases h) rfl (awaitError_wp σ io x) h
   exact hv
 
-theorem awaitError_zero (io : Io) {fuel : Nat} {o : Nat → Nat}
+theorem awaitError_zero (env : Env) (henv : env.spawn = .available) {σ : Placement} (io : Io) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io 0) Futures.mem0).run =
+    (h : (Sched.run env Futures.dispatch fuel o (Futures.awaitError io 0) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = .error "Zero" :=
-  awaitError_result io 0 h
+  awaitError_result env henv io 0 h
 
 /-! ## Cancelation: `cancelValue` -/
 
@@ -310,17 +355,17 @@ theorem cancelSpec_lawful (x : BitVec 32) (r : Except ErrName (BitVec 32)) (hr :
 
 /-- The task body: its only stop is the cancelation point, which keeps the protocol; its result
 is `x + 1` or `error.Canceled`. -/
-theorem cancellable_body (x : BitVec 32) (io : Io) (u : ThreadId) (slot : Ptr)
-    (G : ThreadId → FGh) (m : Mem) (n : Nat) (hgu : G u = .task slot false)
+theorem cancellable_body (x : BitVec 32) (io : Io) (u : ThreadId) (g : FGh)
+    (G : ThreadId → FGh) (m : Mem) (n : Nat) (hgu : G u = g)
     (hi : (cancelProto x).inv G m) :
     (cancelProto x).WP u (Futures.cancellable io x) (fun r G' m' _ => CancelSpec x r ∧
-      G' u = .task slot false ∧ (cancelProto x).inv G' m') G m n := by
+      G' u = g ∧ (cancelProto x).inv G' m') G m n := by
   unfold Futures.cancellable
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind]
-  refine WP.bind (FutureProto.wp_checkCancelC rfl fun k _ => ⟨.task slot false, ?_,
+  refine WP.bind (FutureProto.wp_checkCancelC rfl fun k _ => ⟨g, ?_,
     fun G₁ m₁ hg hi₁ c m₂ ht => ?_⟩)
   · rw [← hgu, upd_same]; exact hi
   obtain ⟨hb, -, hc⟩ := Future.takeCancel_eq ht
@@ -348,13 +393,13 @@ theorem cancellable_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (cancelProt
       cases hs; subst hy
       rw [cancellable_dispatch]
       exact @FutureProto.task_wp Tgt _ canceledEnc _ _ _ _ _ _ _ _ hu (cancelSpec_lawful y)
-        (cancellable_body y io u slot G _ n hgu (@FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi rfl))
+        (cancellable_body y io u (.task slot false) G _ n hgu (@FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi rfl))
     · cases hs
   | _ => cases hs
 
-theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem cancelValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (cancelProto x).WP 0 (Futures.cancelValue io x) (fun v _ _ _ => CancelSpec x v)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := canceledEnc
   unfold Futures.cancelValue
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
@@ -363,10 +408,25 @@ theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
-    fun slot m₂ _ k _ => ⟨.none, ?_, fun G₁ m₃ hg hi₃ =>
-    ⟨.task slot false, ⟨slot, by simp [cancelSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩)
-  · exact no_task
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
+    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  unfold asyncOutcomeC
+  split
+  · -- `Io.async` ran the task in the caller (`main`): a consumed future
+    refine FutureProto.wp_asyncEagerC (WP.mono (fun r G' m' d (h : CancelSpec x r ∧ G' 0 = .none ∧
+        (cancelProto x).inv G' m') => ?_) (cancellable_body x io 0 .none G₀ _ _ hg₀ hi₀))
+    obtain ⟨hr, -, -⟩ := h
+    obtain ⟨hsz, hdec⟩ := cancelSpec_lawful x r hr
+    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (FutureProto.cancel_consumed_wp rfl
+      (FutureProto.reads_consumed hsz hdec hs) fun _ _ => ?_)
+    refine WP.pure' ?_
+    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
+    exact WP.pure' hr
+  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
+    fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀, fun G₁ m₃ hg hi₃ =>
+    ⟨.task slot false, ⟨slot, by simp [cancelSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
   refine WP.bind (FutureProto.cancel_wp
     (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
@@ -380,12 +440,12 @@ theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
 own result `x +% 1` or `error.Canceled` (when the task's `io.checkCancel()` observed the
 request): `cancel` never reports another value, and in particular never success with a value
 that the task did not compute. -/
-theorem cancelValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+theorem cancelValue_result (env : Env) (henv : env.spawn = .available) {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.cancelValue io x) Futures.mem0).run =
+    (h : (Sched.run env Futures.dispatch fuel o (Futures.cancelValue io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = .ok (x + 1) ∨ v = .error "Canceled" := by
-  obtain ⟨_, _, hv⟩ := run_sound (P := cancelProto x) Futures.dispatch (fun _ => .none)
-    (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp io x) h
+  obtain ⟨_, _, hv⟩ := run_sound (P := cancelProto x) env (Proto.of_available henv) Futures.dispatch (fun _ => .none)
+    (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp σ io x) h
   exact hv
 
 /-! ## Idempotence -/
@@ -423,25 +483,25 @@ def hDispatch : H → ConcM H Unit
 
 /-- `Io.async` without `await`/`cancel`. -/
 def leak : ConcM H Unit := (do
-  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   pure () : CM H Unit Unit).run' ()
 
 /-- A second thread awaits the main thread's future. -/
 def foreignAwait : ConcM H Unit := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   joinC helper
   let _ ← awaitC (α := BitVec 32) ⟨⟩ p
   pure () : CM H Unit Unit).run' ()
 
 /-- Two threads await one future concurrently. -/
 def doubleAwait : ConcM H (BitVec 32) := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   let r ← awaitC (α := BitVec 32) ⟨⟩ p
   joinC helper
   pure r : CM H Unit (BitVec 32)).run' ()
@@ -452,19 +512,19 @@ def outcome {α : Type} (r : Option (Except Error (α × Mem))) : Option (Except
 /-- **Leak.** A future that is never awaited or canceled is reported: its task is an unjoined
 thread of the spawner (`.illegal`). -/
 theorem leak_illegal :
-    outcome (Sched.run hDispatch 10 (fun _ => 0) leak {}).run = some (.error .illegal) := by
+    outcome (Sched.run ⟨.any, .available⟩ hDispatch 10 (fun _ => 0) leak {}).run = some (.error .illegal) := by
   decide +kernel
 
 /-- **Foreign consumer.** Only the spawner may consume a future (`.illegal`). -/
 theorem foreignAwait_illegal :
-    outcome (Sched.run hDispatch 20 (fun _ => 0) foreignAwait {}).run = some (.error .illegal) := by
+    outcome (Sched.run ⟨.any, .available⟩ hDispatch 20 (fun _ => 0) foreignAwait {}).run = some (.error .illegal) := by
   decide +kernel
 
 /-- **Concurrent double await.** `await` is not threadsafe: two consumers race on the future
 value or join a task that is not theirs (`.illegal`), on both orders of the two awaits. -/
 theorem doubleAwait_illegal :
-    outcome (Sched.run hDispatch 20 (fun _ => 0) doubleAwait {}).run = some (.error .illegal) ∧
-      outcome (Sched.run hDispatch 20 (fun _ => 1) doubleAwait {}).run = some (.error .illegal) := by
+    outcome (Sched.run ⟨.any, .available⟩ hDispatch 20 (fun _ => 0) doubleAwait {}).run = some (.error .illegal) ∧
+      outcome (Sched.run ⟨.any, .available⟩ hDispatch 20 (fun _ => 1) doubleAwait {}).run = some (.error .illegal) := by
   decide +kernel
 
 /-- The model rule behind both: a join by a thread other than the spawner throws. -/

@@ -50,8 +50,15 @@ model assumption, not recovered target/build information. Target triple, ABI,
 backend, CPU, build mode, float mode and export stage are reported as `unverified`;
 error tracing is reported as `null`. The model still assumes 64-bit pointers,
 little-endian bytes and 16-bit error codes. Explicit big-endian metadata is
-rejected even for legacy exports. No flag is required for existing translation
-scripts or old fixtures.
+rejected even for legacy exports. Because nothing checks the target, legacy AIR is
+denied by default: the translator (and `--diagnostics-json`) accepts it only with an
+explicit `--profile legacy-abi64-le`. Scripts that translate committed schema-11 goldens
+pass the flag; `scripts/project.py` passes it for a legacy manifest profile.
+
+Schema-12 profiles are admitted only for a qualified build mode and backend
+([build-modes.md](build-modes.md): `ReleaseSafe` with `stage2_llvm`). Other profiles need
+`--allow-unqualified-build-mode`, which the generated header records as
+`"admission": "unqualified-build-mode"`.
 
 One translation must use identical profiles, including schema, Zig version,
 CPU/features (including their array order), build mode and error tracing. Legacy
@@ -164,13 +171,14 @@ SHA-256 hash. Only that receipt permits the known schema-12/profile to schema-11
 comparison transition; older schemas, malformed metadata and observable nested
 AIR data remain checked.
 
-Generated comparisons omit only a valid first-line JSON profile marker. The real
-header stays in the generated file that the Lean proof gate builds. In CI, the
-script checks committed, staged and working-tree sources before replacement;
-only a header matching the checked profile may differ while the committed body
-stays identical. Untracked and unrelated proof changes fail. Version/OS generated
-goldens still require the exact generated body to match their selected snapshot.
-The proof build and optional differential gate keep their existing behavior.
+Generated comparisons omit only a valid first-line JSON profile marker: committed
+translations are canonical bodies, since the record names host kernel and libc
+versions. The real header stays in the retained `<example>.Gen.lean` below, and in
+the check tree that builds a translation differing from the committed module
+([generated-code.md](generated-code.md#check-trees)); the script never writes a
+tracked file. In CI, any staged, working-tree or untracked change under `Proofs/` or
+`tests/golden/` fails before the export. Version/OS generated goldens still require
+the exact generated body to match their selected snapshot.
 
 Each example records its profile, selected float semantics, input hashes, full
 generated-source hash and body hash in

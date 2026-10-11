@@ -89,13 +89,17 @@ theorem push_ok (a : Allocator) (q : Option Ptr) (v : BitVec 32) {m : Mem} (hs :
     (by rw [enc_val_size]; simp) (by simp [h0]; omega) hst₁ (by decide)
   have hw : (writeBytes (Array.replicate 16 Byte.undef) 8 (Enc.encode v)).size = 16 := by
     rw [writeBytes_size _ _ _ (by rw [enc_val_size]; simp)]; simp
-  obtain ⟨m₃, hs₂, hst₃, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p'.add 0) (k := 0) (a := 8)
+  obtain ⟨m₃, hs₂, hst₃, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p') (k := 0) (a := 8)
     (bs' := Enc.encode q) hb₂ hm₂ hd₂ (by simp) (by rw [enc_next_size]; decide)
     (by rw [enc_next_size, hw]; decide) (by simp [h0]; omega) hst₂ (by decide)
+  -- `&node.val` (`ptrProject`, MM-3): in bounds of the new node
+  have hpr := ptrProject_add_run (m := m') (off := 8)
+    (by simpa using bytesAt_inBounds hb hm₁ (k := 0) (by simp) (by simp))
+    (by simpa using bytesAt_inBounds hb hm₁ (k := 8) (by simp) (by simp))
   rw [nodeBytes_new] at hb₃
   refine ⟨p', m₃, h₃, ?_, hd₃, hm₃, ⟨h0, A, hA, hb₃⟩, hst₃⟩
-  simp only [StateT.run] at hs₁ hs₂ hok
-  simp [push, zig_unfold, hok, Zig.store, hs₁, hs₂]
+  simp only [StateT.run] at hs₁ hs₂ hok hpr
+  simp [push, zig_unfold, hok, Zig.store, hpr, hs₁, hs₂]
 
 /-- A node owns its 16 bytes. -/
 theorem node_cell {p : Ptr} {v : BitVec 32} {q : Option Ptr} {h : Heap} (hn : node p v q h) :
@@ -167,7 +171,9 @@ theorem useAfterFree_illegal (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.S
       ((Zig.loop sum.loop6 sum.again6).run s).run m₂ = throw .illegal := by
     intro s hsp
     apply loop_throw
-    simp [sum.loop6, zig_unfold, hsp, Zig.optPayload, Zig.load, loadBytes, hacc]
+    -- `&node.val` of the freed node: formed (in bounds of a dead block) or illegal
+    rcases ptrProject_cases p (·.add 8) m₂ with hpr | hpr <;> simp only [StateT.run] at hpr <;>
+      simp [sum.loop6, zig_unfold, hsp, Zig.optPayload, Zig.load, loadBytes, hacc, hpr]
   simp only [StateT.run] at hpush hfree hloop
   simp [useAfterFree, sum, zig_unfold, hpush, hfree, hloop]
 
@@ -183,21 +189,21 @@ theorem forgetFree_leaks (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) 
     have hn := (hd₁ (b, 0)).resolve_left (hcell 0 (by decide))
     simpa [Heap.union, hn] using hl
 
-/-- Address reuse (M05) does not hide either bug: with any reuse oracle and provenance mode,
-the stale pointer still throws `.illegal`. -/
+/-- Address reuse (M05) does not hide either bug: with any placement and provenance mode, the
+stale pointer still throws `.illegal`. -/
 theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    (doubleFree a v).run (m.withReuse pick pm) = throw .illegal :=
-  doubleFree_illegal a v (hs.withReuse pick pm) hc
+    (σ : Placement) (pm : ProvenanceMode) :
+    (doubleFree a v).run (m.withPlacement σ pm) = throw .illegal :=
+  doubleFree_illegal a v (hs.withPlacement σ pm) hc
 
 theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    (useAfterFree a v).run (m.withReuse pick pm) = throw .illegal :=
-  useAfterFree_illegal a v (hs.withReuse pick pm) hc
+    (σ : Placement) (pm : ProvenanceMode) :
+    (useAfterFree a v).run (m.withPlacement σ pm) = throw .illegal :=
+  useAfterFree_illegal a v (hs.withPlacement σ pm) hc
 
 /-- The default memory (`{}`: one thread, no allocation fails) has room for a node. -/
 theorem default_seq : ({} : Mem).Seq :=
-  ⟨⟨by decide, by simp⟩, fun l c h => by simp [Mem.heap] at h⟩
+  ⟨⟨by decide, by simp⟩⟩
 
 theorem default_room : Room {} := by unfold Room; decide
 

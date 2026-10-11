@@ -1,18 +1,18 @@
 {
  "0.15.2": {
   "air_sha256": {
-   "fs.File.close.json": "5d37e8ac109f0ecb0b29270d7b418c7c7780f8630c28ce86d987909336e1bae0",
-   "fs.File.read.json": "5e0c915b7d45b48718ee955a0404a2c5982d7774cb7459825d9248b7e0d1f20d",
-   "fs.File.readAll.json": "bc4469e370f54807e9e390a54bb92f8af5894a65acf4d76e2f4d2084ab581727",
-   "fs.File.write.json": "620e32a93d77701fccc6c06dbe0b065d45cc1453f27e10a603400924483ab7be",
-   "fs.File.writeAll.json": "3d52a8269df361419dd4de851be928ee10404097a77b9c68dbbf27723800deae",
-   "posix.close.json": "32200b80c7fe974c5fefca9f7dbcf021e054b3e7c15633ddac74b2824eefa125",
-   "posix.errno__anon_1522.json": "4f588cf522bec169ef82681f370f969418edbcd2429ff574c1322301c782d4f8",
+   "fs.File.close.json": "517d29821f2f2db85c95f1939d3a62f6c8a72e00a7d6bbce25df790144b50d32",
+   "fs.File.read.json": "28b67d8123aeaa44a42f89a63bcf222741d38568f39404ec279dd24bcffc7efd",
+   "fs.File.readAll.json": "e9fbba8e3843eb834c2867a63a603a8c1774bafdede06a0bbaa4a38e716affb0",
+   "fs.File.write.json": "88fdb85be68fd026b4ad3cf53403c299088ed7df4b71ceb4c64f5058a68f53f2",
+   "fs.File.writeAll.json": "287dd54f9b89e9cbe60423e1ddfb5384980c704784b2f6f49be162915d81ea7c",
+   "posix.close.json": "a8d75d99ea6ce3c2b3fe477931222b374cda02edfde116c08851e389bba6a70d",
+   "posix.errno__anon_1522.json": "2e0fd6d3351e4d9b13dee6b8c8cf5a6e41a06f5ea684435926f728617ac7c269",
    "posix.read.json": "403d0d0d8b4a12831042cc1a3cfe5de3f832c64e376b7e183f58486e192677c3",
    "posix.unexpectedErrno.json": "fe36c486d0b27049a2e2d27e7a507705ae5622d3df14bf27ed077e4c69648661",
-   "posix.write.json": "e6009bbeb148432c458b10ec63e9b12de3c49e67d28cd9abb07156d07f9043b9",
-   "std_io15.readAllClose.json": "a7906605807597499923212bb0b48cec35f4850697418b27a5779539ef7f08ad",
-   "std_io15.writeAllClose.json": "0bd69bf9c6b33c666a6c526a478e4740648a987e4755413f36245d3f47a5c878"
+   "posix.write.json": "2bda59b5878cafcf7cffe8d528cd6a772296eb9b17f296f7762590622e37f26d",
+   "std_io15.readAllClose.json": "a46db6ac2f71ff931d74851db20dc0b266303f00f224b9b6117aca3ed35570bf",
+   "std_io15.writeAllClose.json": "be4e08b739aafcf969b36f111259f5fb4ce9c944deb6010d614df13f3e414bba"
   },
   "export": "x86_64-linux -mcpu=baseline -OReleaseSafe -fno-error-tracing build-obj",
   "patched_compiler_sha256": "56c78bad94ac13634142e0ce089d68f8cf94e4f4b544069bc990152916a9e433",
@@ -21,12 +21,12 @@
  },
  "0.16.0": {
   "air_sha256": {
-   "Io.Threaded.closeFd.json": "394a57ed9b518da6c86b6a38b3d28ee6ba58f8493849e66ae6dee9e8e8aec097",
-   "Io.Threaded.recoverableOsBugDetected.json": "836f1f85cfbd68fc75f05d8c574e4356c228da187058faf8e7b34c16ff13e01c",
-   "os.linux.errno.json": "bac92b52e5e204bae6d7f159499ada716059344664343c6b700cdebda0c9d501",
+   "Io.Threaded.closeFd.json": "b31b87b8781e1e0a2ed57dc1ecb3783cc021e593417d628e4d7453b8de4ca67e",
+   "Io.Threaded.recoverableOsBugDetected.json": "c2755470e00d3dbbe444072006186b61dd95a95737734513e49bdf647a84b3a6",
+   "os.linux.errno.json": "d7f49da8807bb2b6d505fe1a18fdcd156917eb223d3e04666e995ed03a32f32d",
    "posix.read.json": "88ae9b87329dc00c719f32589ec38bd6874f9819ab1f6ce523168862d3d23fd7",
    "posix.unexpectedErrno.json": "30032248b142cc39a565870148e4ec40256854a243aa69b6a0ed8c33a33d2002",
-   "std_io16.readClose.json": "90a424137999276085fc43142def75280fca7ddc218a171cfe67ba284073088a"
+   "std_io16.readClose.json": "ede223ff34dc16bc21b202e52e4f8ae55580e68c97b674b712ab3b155824b772"
   },
   "export": "x86_64-linux -mcpu=baseline -OReleaseSafe -fno-error-tracing build-obj",
   "patched_compiler_sha256": "fe2ff13fca8b6825ae90e97993e229e00798a70ab86cdfc2c344f953f79f0790",

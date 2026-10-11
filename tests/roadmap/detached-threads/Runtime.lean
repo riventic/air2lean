@@ -42,7 +42,10 @@ def dispatch : Tgt → ConcM Tgt Unit
   | .joiner h => do let _ ← ConcM.sync (Tgt := Tgt) (.join h); pure ()
   | .holder => pure ()
 
-def spawn (t : Tgt) : ConcM Tgt ThreadId := ConcM.sync (.spawn t)
+def spawn (t : Tgt) : ConcM Tgt ThreadId := do
+  match ← ConcM.sync (.spawn t) with
+  | .ok c => pure c
+  | .error _ => throw .unspecified
 def join (h : ThreadId) : ConcM Tgt Unit := do let _ ← ConcM.sync (Tgt := Tgt) (.join h); pure ()
 def yield : ConcM Tgt Unit := ConcM.sync (Tgt := Tgt) .yield
 def mem {α : Type} (x : MemM α) : ConcM Tgt α := ConcM.liftMem x
@@ -59,7 +62,7 @@ def classify {α : Type} : Option (Except Error (α × Mem)) → Out
   | none => .none
 
 def run {α : Type} (o : Nat → Nat) (main : ConcM Tgt α) : Out :=
-  classify (Sched.run dispatch 64 o main {}).run
+  classify (Sched.run ⟨.any, .available⟩ dispatch 64 o main {}).run
 
 /-- The oracle that picks option `cs[i]` at choice `i` (modulo the number of options) and the
 first option afterwards. Choice 0 is `main`'s first turn, the only option. -/
@@ -82,8 +85,10 @@ def stackMain : ConcM Tgt Nat := do
   yield
   pure 0
 
-/-- The reader runs before the frame exit: it reads the live local. -/
-theorem stack_read_before_exit : run (pick [0, 1]) stackMain = .ok := by decide +kernel
+/-- The reader runs before the frame exit: it reads the live local, but the detach gives no
+happens-before edge (`ThreadRec.released`), so the frame exit (a write of the block, audit #3)
+races with that read. -/
+theorem stack_read_before_exit : run (pick [0, 1]) stackMain = .illegal := by decide +kernel
 
 /-- The reader runs after the frame exit: a use after free. -/
 theorem stack_read_after_exit : run (pick [0, 0, 1]) stackMain = .illegal := by decide +kernel

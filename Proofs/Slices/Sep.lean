@@ -1,6 +1,7 @@
 import Proofs.Slices.Gen
 import ZigLean.Sep
 import ZigLean.Sep.Step
+import ZigLean.Sep.Witness
 
 /-!
 # Separation-logic proofs about `examples/slices/slices.zig`
@@ -13,16 +14,19 @@ unchanged. `bump_spec` and `reverse_step` execute the generated code symbolicall
 
 open Slices Zig Assn
 
-/-- The global `counter` is block 0 of `mem0`. -/
+/-- The global `counter` is block 0 of `mem0 σ`. -/
 abbrev counter : Ptr := ⟨some 0, 0⟩
 
-/-- At program start, the memory owns the counter with the value 0. -/
-theorem counter_init : ∃ h hF, Heap.Disjoint h hF ∧ mem0.heap = h ∪ hF ∧ pts counter 4 (0 : BitVec 32) h := by
-  have hb : mem0.blocks[0]? = some ⟨Enc.encode (0 : BitVec 32), 4, .global, true, 4096⟩ := by
-    simp [mem0, Mem.ofGlobals, Mem.addGlobal, alignUp]
+/-- At program start, the memory owns the counter with the value 0, for every placement `σ`:
+the counter's address is only known to be 4-aligned. -/
+theorem counter_init (σ : Placement) :
+    ∃ h hF, Heap.Disjoint h hF ∧ (mem0 σ).heap = h ∪ hF ∧ pts counter 4 (0 : BitVec 32) h := by
+  obtain ⟨A, hb⟩ : ∃ A, (mem0 σ).blocks[0]? = some ⟨Enc.encode (0 : BitVec 32), 4, .global, true, A⟩ :=
+    ⟨_, by simp [mem0, Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   obtain ⟨h, hF, hd, hm, hbytes⟩ := Mem.heap_split hb rfl
-  refine ⟨h, hF, hd, hm, 4096, _, _, _, rfl, LawfulEnc.size_encode _, LawfulEnc.decode_encode _,
-    hbytes, by decide⟩
+  refine ⟨h, hF, hd, hm, A, _, _, _, by simpa using hA, LawfulEnc.size_encode _,
+    LawfulEnc.decode_encode _, hbytes, by simp⟩
 
 /-- `bump` adds 1 to the counter and returns the new value. -/
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :
@@ -44,6 +48,8 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp
     hm hdj (by decide) (by decide) (by decide) hd hs hst
   refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
+  have hpd := arr_ptrProject_run (i := d) hp hm (by omega)
+  have hps := arr_ptrProject_run (i := s) hp hm (by omega)
   have hl := sl.len.isLt
   have hdo : d.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
   have hso : s.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
@@ -51,11 +57,13 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
+  have hdc : d.toNat + n.toNat ≤ sl.len.toNat := by omega
+  have hsc : s.toNat + n.toNat ≤ sl.len.toNat := by omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
-  rw [e4] at hr
-  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
+  rw [e4] at hr hpd hps
+  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr hpd hps
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    hdo, hso, hdl, hsl, hr]
+    checkSliceEnd, hdc, hsc, hdo, hso, hdl, hsl, hr, hpd, hps]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :
@@ -93,13 +101,15 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
   by_cases hlt : s.i.toNat < s.j.toNat
   · have hio : Zig.add false s.i 1 = pure (s.i + 1) := by simp [Zig.add, BitVec.uaddOverflow]; omega
     have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
-    sep_unfold [reverse.loop15, hlt,
+    sep_unfold [reverse.loop15, hlt, Zig.checkIndex,
       show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
-    sep_steps [hio, hjo]
-    sep_ret
-    intro _ hw₂
     have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
+    sep_steps [hio, hjo] using TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws) (i := s.i) (by omega),
+      TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws.set s.i.toNat ws[s.j.toNat]) (i := s.j)
+        (by simp; omega)
+    sep_ret
+    intro _ hw₂
     have hi1 : (s.i + 1).toNat = s.i.toNat + 1 := by
       rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
     have hj1 : (s.j - 1).toNat = s.j.toNat - 1 := by
@@ -174,3 +184,35 @@ theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
       simp [BitVec.usubOverflow]; omega
     simp only [StateT.run] at hr
     simp [reverse, zig_unfold, hne, Zig.sub, hso, hr, s₀]
+
+/-! ## Non-vacuity and liveness witnesses: one item in one block -/
+
+nonvacuity_witness bump_spec := ⟨0, by decide, Witness.Admit.of_heap Witness.pts32 (Witness.mem1_seq _ _)⟩
+liveness_witness bump_spec :=
+  ⟨0, by decide,
+    Witness.Live.of_heap Witness.pts32 (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+theorem arr8_pre : arr Witness.p0 [(0 : BitVec 8)] (Witness.mem1 (Enc.encode (0 : BitVec 8))).heap :=
+  Witness.mem1_arr1 0 (by decide +kernel)
+
+nonvacuity_witness copyWithin_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide,
+    Witness.Admit.of_heap Witness.arr32 (Witness.mem1_seq _ _)⟩
+liveness_witness copyWithin_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide,
+    Witness.Live.of_heap Witness.arr32 (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness fill_sep :=
+  ⟨⟨Witness.p0, 1⟩, [0], 1, rfl, Witness.Admit.of_heap arr8_pre (Witness.mem1_seq _ _)⟩
+liveness_witness fill_sep :=
+  ⟨⟨Witness.p0, 1⟩, [0], 1, rfl,
+    Witness.Live.of_heap arr8_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness reverse_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], rfl, Witness.Admit.of_heap Witness.arr32 (Witness.mem1_seq _ _)⟩
+-- The loop is a `partial_fixpoint`, which the kernel does not evaluate: the run shown is the one
+-- on the empty slice, which returns before the loop.
+liveness_witness reverse_spec :=
+  ⟨⟨Witness.p0, 0⟩, [], rfl,
+    Witness.Live.of_heap (Witness.mem1_arr0 (T := BitVec 32) (by decide +kernel)) (Witness.mem1_seq _ _)
+      (Witness.ok_of_okb (by decide +kernel))⟩

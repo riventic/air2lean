@@ -9,8 +9,8 @@ structure Thread_SpawnConfig where
   allocator : Option (Zig.Allocator)
   deriving Repr, Inhabited, DecidableEq
 
-/-- The memory at program start: block `k` is global `k`. The main thread's instance of a `threadlocal` global is its block (its TLS key). -/
-def mem0 : Zig.Mem := (Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. The main thread's instance of a `threadlocal` global is its block (its TLS key). -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := (Zig.Mem.ofGlobals σ [
   -- 0: thread_locals.counter (threadlocal: the main thread's instance)
   (Zig.Enc.encode ((7 : BitVec 32) : BitVec 32), 4, .global)]).mainTls #[0]
 

@@ -1,6 +1,7 @@
 """Offline I03 project check regressions: stub translator, Lake and audit; real guard and claims."""
 import copy
 import fcntl
+import importlib.util
 import hashlib
 import json
 import os
@@ -12,7 +13,13 @@ import threading
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
+_AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', SCRIPT.parent / 'assumptions.py')
+_auditor = importlib.util.module_from_spec(_AUDIT_SPEC)
+_AUDIT_SPEC.loader.exec_module(_auditor)
+# claims.py binds the audit to this checkout's revision (H1); the stub audit records it.
+FRESH_REVISION = _auditor.git_revision()
 GENERATED = 'namespace Example\ndef root := 0\nend Example\n'
+HEADS = json.loads((Path(__file__).resolve().parents[3] / 'assurance/claim-heads.json').read_text())['heads']
 LAKE = '''import json, os, pathlib, sys
 with open(os.environ['STUB_LOG'], 'a') as log:
     log.write(json.dumps(['lake', *sys.argv[1:]]) + '\\n')
@@ -83,16 +90,28 @@ class CheckTests(unittest.TestCase):
         path.chmod(0o755)
 
     @staticmethod
-    def theorem(name, head='Zig.TotalTriple', **extra):
+    def theorem(name, head='Zig.TotalTriple', subject='Example.root', liveness='not_required', **extra):
+        """An audited theorem whose registered `head` is about `subject x` (premises trivially inhabited)."""
+        entry = HEADS[head]
+        computation = lambda fn: {'peeled': [], 'fn': fn, 'fn_module': None, 'params': ['default'] if fn else [],
+                                  'args': [{'bvar': 0}] if fn else [], 'extra': [], 'atom': {'closed': None}}
+        statement = {'binders': [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}],
+                     'head': {'name': head, 'module': entry['module'], 'kind': 'definition',
+                              'fingerprint': entry['fingerprint']},
+                     'args': [computation(None)] * entry['program'] + [computation(subject), computation(None)],
+                     'witnesses': {'nonvacuity': {'status': 'trivial', 'theorem': None},
+                                   'liveness': {'status': liveness, 'theorem': name + '.returns'}}}
         return dict({'name': name, 'module': 'Proofs.Example.Contract', 'axioms': ['propext'], 'opaque_dependencies': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
-                     'statement_dependencies': ['Example.root'], 'conclusion_dependencies': ['Example.root'],
-                     'conclusion': {'head': head, 'args': []}}, **extra)
+                     'statement_dependencies': [subject], 'conclusion_dependencies': [subject],
+                     'conclusion': {'head': head, 'args': []}, 'statement': statement}, **extra)
 
     def write_audit(self, status='pass'):
         self.fixture.write_text(json.dumps({'schema_version': 1, 'status': status, 'theorems': self.theorems,
                                             'nodes': self.nodes, 'theorem_count': len(self.theorems), 'violations': [],
-                                            'policy_sha256': '0' * 64, 'lean_toolchain': 'leanprover/lean4:v4.34.0'}))
+                                            'policy_sha256': '0' * 64, 'lean_toolchain': 'leanprover/lean4:v4.34.0',
+                                            'freshness': {'revision': FRESH_REVISION, 'artifacts': [],
+                                                          'lake_trace_check': {'modules': [], 'status': 'up-to-date'}}}))
 
     def run_check(self, name='a', *extra):
         result = subprocess.run([sys.executable, str(SCRIPT), 'check', str(self.path), '--translator', str(self.translator),
@@ -121,7 +140,7 @@ class CheckTests(unittest.TestCase):
         goal = record['reproducible']['roots'][0]['goals'][0]
         self.assertEqual((goal['status'], goal['standard_assumptions'], goal['project_assumptions']),
                          ('allowed', ['propext'], []))
-        self.assertTrue(goal['references_root'])
+        self.assertEqual((goal['claim_binding'], goal['subject'], goal['scope']), ('direct', 'Example.root', 'universal'))
         self.assertEqual(self.calls(), [['lake', 'build', 'Proofs.Example.Contract']])
         published = self.out / 'a'
         for name in ('record.json', 'build-guard.json', 'build.log', 'audit-guard.json', 'assumptions.json',
@@ -259,7 +278,8 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(goal['standard_assumptions'], ['IO.RealWorld', 'propext'])
 
     def test_declared_strength_above_type_is_rejected(self):
-        self.theorems[0]['conclusion'] = {'head': 'Zig.Triple', 'args': []}
+        self.theorems = [self.theorem('root_spec', head='Zig.Triple', liveness='verified'),
+                         self.theorem('root_spec.returns', head='Zig.Returns', subject=None)]
         self.write_audit()
         result, record = self.run_check()
         self.assertEqual(result.returncode, 1)
@@ -296,15 +316,21 @@ class CheckTests(unittest.TestCase):
 
     def test_goal_conclusion_must_reference_root(self):
         # A wrapper statement whose proof (but not conclusion) mentions the root does not bind.
-        self.theorems[0]['conclusion_dependencies'] = ['Example.wrapper']
+        self.theorems = [self.theorem('root_spec', subject='Example.wrapper')]
         self.write_audit()
         result, record = self.run_check('a')
         self.assertEqual(result.returncode, 1)
         goal = record['reproducible']['roots'][0]['goals'][0]
-        self.assertEqual((goal['status'], goal['references_root']), ('wrapper_or_unrelated', False))
-        # Audits from extractors without statement dependencies fail closed.
-        for key in ('statement_dependencies', 'conclusion_dependencies'):
-            self.theorems[0].pop(key, None)
+        self.assertEqual((goal['status'], goal['claim_binding']), ('wrapper_or_unrelated', 'unrelated'))
+        # A same-named claim head from another module does not count.
+        self.theorems = [self.theorem('root_spec')]
+        self.theorems[0]['statement']['head']['module'] = 'Proofs.Example.Contract'
+        self.write_audit()
+        result, record = self.run_check('c')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(record['reproducible']['roots'][0]['goals'][0]['status'], 'spoofed_head')
+        # Audits from extractors without statement structure fail closed.
+        self.theorems[0].pop('statement')
         self.write_audit()
         result, record = self.run_check('b')
         self.assertEqual(result.returncode, 1)

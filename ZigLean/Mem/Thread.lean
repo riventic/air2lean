@@ -61,8 +61,11 @@ overlaps an existing atomic location with another offset or size is rejected wit
 `.unspecified`, before any message is read or written (`locIdx`). Plain accesses of any size are
 unaffected; a plain write that overlaps the location becomes a message as above.
 
-**Trusted assumption** (`docs/std-models.md` §Thread model): the compiled code has no load
-buffering (RC11); LLVM does not promise that for relaxed atomics.
+**Trusted assumption** (`docs/std-models.md` §Thread model, premise ORD-02): the compiled code
+has no load buffering (RC11); LLVM does not promise that for relaxed atomics. The translator
+rejects the straight-line load-buffering shape (a relaxed read, then a relaxed write to another
+address) unless `--assume-no-lb` (`checkLoadBuffering`,
+`Air2Lean/Check.lean`).
 -/
 
 /-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. -/
@@ -209,7 +212,7 @@ def atomicStoreAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr
   let id := m.nextMsg
   let msg : Msg :=
     { id := id, bytes := padTo (intSize n) (intBytes v), clock := cl,
-      relClock := (if ord.isRel then cl else #[]) }
+      relClock := (if ord.isRel then cl else #[]), writer := some m.current }
   insertMsg li slot msg
   observe li id
 
@@ -246,7 +249,8 @@ def rmwWrite {n : Nat} (li pos : Nat) (ord : AtomicOrder) (rd : Msg) (new : BitV
   let id := m.nextMsg
   let msg : Msg :=
     { id := id, bytes := padTo (intSize n) (intBytes new), clock := cl,
-      relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id }
+      relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id,
+      writer := some m.current }
   insertMsg li (pos + 1) msg
   observe li id
 
@@ -412,23 +416,31 @@ def checkJoinedByChild (t : ThreadId) : MemM Unit := do
 
 /-- The bookkeeping of a spawn: a new thread, spawned by the current one, whose clock is the
 spawner's clock after a bump (the fork edge of the happens-before order). The current thread
-does not change. -/
-def fork : MemM ThreadId := do
+does not change. `gated`: the record of a deferred task (`forkGated`). -/
+def forkWith (gated : Bool) : MemM ThreadId := do
   let m ← get
   let parent := m.current
   let parentClock := VClock.bump (m.clocks[parent]!) parent
   let child := m.threads.size
   set { m with
     clocks := (m.clocks.set! parent parentClock).push parentClock
-    threads := m.threads.push { spawner := parent, joined := false } }
+    threads := m.threads.push { spawner := parent, joined := false, gated } }
   pure child
 
-/-- A join handle exists, is owned by the caller (`ThreadRec.spawner`: the spawner, until a
-`transferHandle`) and has not already been consumed (joined or detached). The scheduler uses the
-same validation to reject invalid handles before waiting. -/
+/-- `Thread.spawn`'s bookkeeping (`forkWith`). -/
+def fork : MemM ThreadId := forkWith false
+
+/-- A spawn whose thread does not start yet (`SyncOp.spawnGated`, a deferred `Io.Group.async`
+task): `fork`, with a gated record. Once its group records it, it waits until the group's
+`groupTake` (`Mem.isGated`). -/
+def forkGated : MemM ThreadId := forkWith true
+
+/-- A join handle exists, was spawned by the caller, has not already been joined and is not a
+deferred task that its group has not released (`Mem.isGated`). The scheduler uses the same
+validation to reject invalid handles before waiting. -/
 def joinValid (m : Mem) (caller tid : ThreadId) : Bool :=
   match m.threads[tid]? with
-  | some rec => rec.spawner == caller && !rec.joined
+  | some rec => rec.spawner == caller && !rec.joined && !m.isGated tid
   | none => false
 
 /-- `std.Thread.join`: the thread running this join must own the handle `tid` (its spawner, or
@@ -440,7 +452,7 @@ def join (tid : ThreadId) : MemM Unit := do
   let m ← get
   let some rec := m.threads[tid]?
     | throw .illegal
-  if rec.spawner != m.current || rec.joined then throw .illegal
+  if rec.spawner != m.current || rec.joined || m.isGated tid then throw .illegal
   let callerClock := VClock.bump (m.clocks[m.current]!) m.current
   let merged := VClock.merge callerClock (m.clocks[tid]!)
   set { m with
@@ -450,16 +462,18 @@ def join (tid : ThreadId) : MemM Unit := do
 /-- `std.Thread.detach` (C07): the owner of the handle `tid` releases its obligation to join
 it. The thread goes on running independently of its parent; the parent may end, and its stack
 frame die, while the thread runs (`ZigLean/Conc/Detach.lean`). The handle is consumed: the record
-is marked `joined` (so `checkJoinedByChild` no longer asks for a join), and a later `join` or
+is marked `joined` (so `checkJoinedByChild` no longer asks for a join) and `released` (no join
+edge, so `Mem.freeRaces` does not exempt the thread's accesses), and a later `join` or
 `detach` of it throws `.illegal`, as `std` makes it undefined behavior ("Once called, this
 consumes the Thread object"). No happens-before edge: the clocks do not change. A detach by a
-thread that does not own the handle, or of a consumed or unknown handle, throws `.illegal`. -/
+thread that does not own the handle, or of a consumed, unknown or gated (`Mem.isGated`) handle,
+throws `.illegal` (`joinValid`). -/
 def detach (tid : ThreadId) : MemM Unit := do
   let m ← get
   let some rec := m.threads[tid]?
     | throw .illegal
-  if rec.spawner != m.current || rec.joined then throw .illegal
-  set { m with threads := m.threads.set! tid { rec with joined := true } }
+  if rec.spawner != m.current || rec.joined || m.isGated tid then throw .illegal
+  set { m with threads := m.threads.set! tid { rec with joined := true, released := true } }
 
 /-- An explicit transfer of the join handle `tid` to the thread `owner` (C07): a model step that
 a proof or a hand-written client inserts where a handle is passed to another thread (a spawn
@@ -475,15 +489,60 @@ def transferHandle (tid owner : ThreadId) : MemM Unit := do
   let m ← get
   let some rec := m.threads[tid]?
     | throw .illegal
-  if rec.spawner != m.current || rec.joined || owner == tid || m.threads.size ≤ owner then
+  if rec.spawner != m.current || rec.joined || m.isGated tid || owner == tid ||
+      m.threads.size ≤ owner then
     throw .illegal
   set { m with threads := m.threads.set! tid { rec with spawner := owner } }
+
+/-- The 32-bit value of the bytes `bs` is `0` (`false` if they hold no value). -/
+def _root_.Zig.word0 (bs : Array Byte) : Bool :=
+  match (intOfBytes 32 bs).run with
+  | some (.ok v) => v == 0
+  | _ => false
+
+/-- The holder of a mutex word, from its writes newest first (bytes and `Msg.writer`): the writer
+of the oldest write of the newest run of writes that are not `0`, that is, of the most recent
+successful acquire (a write that is not `0` over a `0`). A write that is not `0` over a value
+that is not `0` (a waiter's `xchg` of the contended value, an `or 1` on a held lock) keeps the
+holder; a write of `0` (an unlock) clears it. A first write that is not `0` names its writer (a
+plain write: `none`). -/
+def _root_.Zig.holderRev : List (Array Byte × Option ThreadId) → Option ThreadId
+  | [] => none
+  | x :: rest =>
+    if word0 x.1 then none else
+    match rest with
+    | [] => x.2
+    | y :: _ => if word0 y.1 then x.2 else holderRev rest
+
+/-- The holder of the mutex word whose atomic location is `l` (`holderRev`). -/
+def _root_.Zig.ALoc.holder (l : ALoc) : Option ThreadId :=
+  holderRev (l.msgs.toList.reverse.map fun x => (x.bytes, x.writer))
+
+/-- The current thread holds the mutex word at `(b, o)` (`ALoc.holder`). -/
+def _root_.Zig.Mem.mutexHeld (m : Mem) (b o : Nat) : Bool :=
+  match m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
+  | none => false
+  | some i => (m.atomics[i]?.bind ALoc.holder) == some m.current
+
+/-- The owner check of a mutex unlock at the 4-byte word `p`: the current thread made the most
+recent successful acquire of the word (`Mem.mutexHeld`), else `.illegal`: an unlock by another
+thread, a double unlock, an unlock of a lock that was never locked. It changes nothing. It runs
+before `os_unfair_lock_unlock` (macOS terminates the process on a foreign unlock) and before
+the translated `Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2: a foreign unlock is undefined
+behavior). Not before `Io.Mutex.unlock`: it has no owner (`docs/std-models.md`).
+It keys on the acquire, not on the newest write: a waiter's write to the word does not make the
+holder's unlock fail. -/
+def mutexOwnerCheck (p : Ptr) : MemM Unit := do
+  let m ← get
+  let (b, _, o) ← m.access p 4 4
+  if m.mutexHeld b o then pure () else throw .illegal
 
 /-- `Io.Group`: the task `tid` belongs to the group at `g`. -/
 def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>
   { m with groups := m.groups.push (g, tid) }
 
-/-- `Io.Group`: the tasks of the group at `g`, in the order of their spawn; they leave the group. -/
+/-- `Io.Group`: the tasks of the group at `g`, in the order of their spawn; they leave the group,
+which releases its deferred tasks (`forkGated`, `Mem.isGated`): they can start now. -/
 def groupTake (g : Ptr) : MemM (Array ThreadId) := do
   let m ← get
   set { m with groups := m.groups.filter (·.1 != g) }
@@ -528,25 +587,93 @@ schedules (`ZigLean/Conc/Logic.lean`) can name it. -/
 
 /-- A futex wait of the current thread at `p` for the value `e`: `true` if the thread sleeps
 (it is added to `waiters`). A woken thread goes on. Else the kernel compares the `u32` at `p`,
-the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. -/
+the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. The
+kernel's compare is an atomic read of the word (`recordAccess … .atomicRead`): a plain write
+that races with it is `.illegal`. -/
 def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
   let m ← get
   if m.woken.contains m.current then
     set { m with woken := m.woken.erase m.current }
     pure false
   else
-    let (_, blk, o) ← m.access p 4 4
+    let (b, blk, o) ← m.access p 4 4
+    recordAccess b o 4 .atomicRead
+    let m ← get
     let v ← intOfBytes 32 (blk.bytes.extract o (o + 4))
     if v = e then
       set { m with waiters := m.waiters.push (m.current, p) }
       pure true
     else pure false
 
-/-- A futex wake at `p`: the first `n` waiters at `p` are woken. No happens-before edge (the std
+/-- `n` of the threads `ws` (the waiters at one futex, in queue order) that a wake wakes: each
+choice of `cs` picks one of those not picked yet (`c % count`; a missing choice picks the first).
+No order is promised by Linux or darwin, so the choices are the oracle's (`Sched`). -/
+def wakePick : Nat → List ThreadId → List Nat → List ThreadId
+  | 0, _, _ => []
+  | _, [], _ => []
+  | n + 1, w :: ws, cs =>
+    let i := cs.headD 0 % (ws.length + 1)
+    (w :: ws)[i]'(Nat.mod_lt _ (Nat.succ_pos _)) :: wakePick n ((w :: ws).eraseIdx i) cs.tail
+
+/-- The waiters that a wake of up to `n` waiters at `p` wakes, picked by the choices `cs`. -/
+def wakeSet (ws : Array (ThreadId × Ptr)) (p : Ptr) (n : Nat) (cs : List Nat) : Array ThreadId :=
+  (wakePick n ((ws.filter (·.2 == p)).toList.map (·.1)) cs).toArray
+
+/-- A futex wake at `p`: up to `n` of the waiters at `p` are woken, the ones that the choices
+`cs` pick (`wakeSet`; the scheduler takes them from the oracle). No happens-before edge (the std
 code reads the value again with an acquire). -/
-def futexWake (p : Ptr) (n : Nat) : MemM Unit := modify fun m =>
-  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)
+def futexWake (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
+  let woke := wakeSet m.waiters p n cs
   { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+
+/-- The number of waiters at `p`. -/
+def waitersAt (ws : Array (ThreadId × Ptr)) (p : Ptr) : Nat := (ws.filter (·.2 == p)).size
+
+theorem wakePick_mem : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat} {u : ThreadId},
+    u ∈ wakePick n l cs → u ∈ l
+  | 0, _, _, _, h => by simp [wakePick] at h
+  | _ + 1, [], _, _, h => by simp [wakePick] at h
+  | n + 1, w :: ws, cs, u, h => by
+    simp only [wakePick, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact List.getElem_mem _
+    · exact List.mem_of_mem_eraseIdx (wakePick_mem h)
+
+theorem wakePick_ne_nil {n : Nat} {l : List ThreadId} {cs : List Nat} (hn : 0 < n)
+    (hl : l ≠ []) : wakePick n l cs ≠ [] := by
+  obtain ⟨n, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (Nat.pos_iff_ne_zero.mp hn)
+  obtain ⟨w, ws, rfl⟩ := List.exists_cons_of_ne_nil hl
+  simp [wakePick]
+
+/-- A woken thread waited at `p`. -/
+theorem mem_wakeSet {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    {u : ThreadId} (h : u ∈ wakeSet ws p n cs) : ∃ w ∈ ws, w.2 = p ∧ w.1 = u := by
+  unfold wakeSet at h
+  have := wakePick_mem (List.mem_toArray.mp h)
+  simp only [List.mem_map, Array.mem_toList_iff, Array.mem_filter, beq_iff_eq] at this
+  obtain ⟨w, ⟨hw, hp⟩, rfl⟩ := this
+  exact ⟨w, hw, hp, rfl⟩
+
+/-- A wake of at least one waiter at `p`, where one waits, wakes one. -/
+theorem wakeSet_nonempty {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) : ∃ u, u ∈ wakeSet ws p n cs := by
+  have hl : (ws.filter (·.2 == p)).toList.map (·.1) ≠ [] := by
+    obtain ⟨w, hw, hp⟩ := hw
+    intro h
+    have : w.1 ∈ (ws.filter (·.2 == p)).toList.map (·.1) :=
+      List.mem_map.mpr ⟨w, by simp [hw, hp], rfl⟩
+    rw [h] at this; cases this
+  obtain ⟨u, us, he⟩ := List.exists_cons_of_ne_nil (wakePick_ne_nil (cs := cs) hn hl)
+  exact ⟨u, by unfold wakeSet; rw [he]; simp⟩
+
+/-- A wake of at least one waiter at `p`, where every waiter at `p` is thread `u` and one waits,
+wakes `u`. -/
+theorem mem_wakeSet_of_all {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    {u : ThreadId} (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) (hall : ∀ w ∈ ws, w.2 = p → w.1 = u) :
+    u ∈ wakeSet ws p n cs := by
+  obtain ⟨v, hv⟩ := wakeSet_nonempty (cs := cs) hn hw
+  obtain ⟨w, hw', hp, rfl⟩ := mem_wakeSet hv
+  rw [← hall w hw' hp]; exact hv
 
 end Thread
 end Zig

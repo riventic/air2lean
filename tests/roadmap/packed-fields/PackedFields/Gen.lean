@@ -93,8 +93,8 @@ instance : Zig.Enc Word where
   encode v := v.bytes.toArray
   decode bs := pure ⟨Zig.Raw.ofArray 4 bs⟩
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: packed_fields.reg
   (Array.replicate (Zig.Enc.size (Reg)) .undef, 4, .global),
   -- 1: packed_fields.word
@@ -108,7 +108,7 @@ inductive boolOnExit where
 
 def boolOn  : Zig.MemM (Bool) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := Bool) 3 4 21 i0 true
     let i2 ← Zig.loadBits (Bool) 3 4 21 i0
     pure (.ret i2)) : Zig.MM boolOnLocals boolOnExit).run' (default : boolOnLocals)
@@ -123,9 +123,9 @@ inductive hostAbiExit where
 
 def hostAbi  : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 4) 4 4 0 i0 (9 : BitVec 4)
-    let i2 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i2 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := Inner) 4 4 4 i2 (Zig.Packed.ofBits (33 : BitVec 12) : Inner)
     let i4 ← Zig.loadBits (BitVec 4) 4 4 0 i0
     pure (.ret i4)) : Zig.MM hostAbiLocals hostAbiExit).run' (default : hostAbiLocals)
@@ -140,10 +140,10 @@ inductive innerCExit where
 
 def innerC  : Zig.MemM (BitVec 8) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 4) 3 4 0 i0 (1 : BitVec 4)
-    let i2 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
-    let i3 ← pure (i2.add 1)
+    let i2 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 1))
     Zig.store (α := BitVec 8) 1 i3 (171 : BitVec 8)
     let i5 ← Zig.load (BitVec 8) 1 i3
     pure (.ret i5)) : Zig.MM innerCLocals innerCExit).run' (default : innerCLocals)
@@ -158,10 +158,10 @@ inductive innerCKeepsAExit where
 
 def innerCKeepsA  : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 4) 3 4 0 i0 (1 : BitVec 4)
-    let i2 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
-    let i3 ← pure (i2.add 1)
+    let i2 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 1))
     Zig.store (α := BitVec 8) 1 i3 (171 : BitVec 8)
     let i5 ← Zig.loadBits (BitVec 4) 3 4 0 i0
     pure (.ret i5)) : Zig.MM innerCKeepsALocals innerCKeepsAExit).run' (default : innerCKeepsALocals)
@@ -176,8 +176,8 @@ inductive innerPartialExit where
 
 def innerPartial  : Zig.MemM (Inner) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
-    let i1 ← pure (i0.add 1)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
+    let i1 ← Zig.callM (Zig.ptrProject i0 (·.add 1))
     Zig.store (α := BitVec 8) 1 i1 (90 : BitVec 8)
     let i3 ← Zig.loadBits (Inner) 3 4 4 i0
     pure (.ret i3)) : Zig.MM innerPartialLocals innerPartialExit).run' (default : innerPartialLocals)
@@ -195,10 +195,10 @@ def localUndef  : Zig.MemM (BitVec 4) := do
   let s0 ← Zig.allocStack 4 4
   let e ← ((do
     let i0 ← pure (← get).local0
-    let i1 ← pure (i0.add 0)
+    let i1 ← pure i0
     Zig.storeBits (α := BitVec 4) 3 4 0 i1 (6 : BitVec 4)
-    let i3 ← pure (i0.add 0)
-    let i4 ← pure (i3.add 0)
+    let i3 ← pure i0
+    let i4 ← pure i3
     Zig.storeUndefBits 4 3 4 4 i4
     let i6 ← Zig.loadBits (BitVec 4) 3 4 0 i1
     pure (.ret i6)) : Zig.MM localUndefLocals localUndefExit).run' { (default : localUndefLocals) with local0 := s0 }
@@ -214,7 +214,7 @@ inductive modeHighExit where
 
 def modeHigh  : Zig.MemM (Mode) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := Mode) 3 4 22 i0 Mode.high
     let i2 ← Zig.loadBits (Mode) 3 4 22 i0
     pure (.ret i2)) : Zig.MM modeHighLocals modeHighExit).run' (default : modeHighLocals)
@@ -229,7 +229,7 @@ inductive setAExit where
 
 def setA  : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 4) 3 4 0 i0 (5 : BitVec 4)
     let i2 ← Zig.loadBits (BitVec 4) 3 4 0 i0
     pure (.ret i2)) : Zig.MM setALocals setAExit).run' (default : setALocals)
@@ -244,7 +244,7 @@ inductive setInnerExit where
 
 def setInner  : Zig.MemM (Inner) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := Inner) 3 4 4 i0 (Zig.Packed.ofBits (1442 : BitVec 12) : Inner)
     let i2 ← Zig.loadBits (Inner) 3 4 4 i0
     pure (.ret i2)) : Zig.MM setInnerLocals setInnerExit).run' (default : setInnerLocals)
@@ -259,7 +259,7 @@ inductive signedSExit where
 
 def signedS  : Zig.MemM (BitVec 5) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 5) 3 4 16 i0 (-(3 : BitVec 5))
     let i2 ← Zig.loadBits (BitVec 5) 3 4 16 i0
     pure (.ret i2)) : Zig.MM signedSLocals signedSExit).run' (default : signedSLocals)
@@ -274,8 +274,8 @@ inductive undefFieldExit where
 
 def undefField  : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
-    let i1 ← pure (i0.add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
+    let i1 ← pure i0
     Zig.storeBits (α := BitVec 4) 3 4 4 i1 (7 : BitVec 4)
     Zig.storeUndefBits 4 3 4 4 i1
     let i4 ← Zig.loadBits (BitVec 4) 3 4 4 i1
@@ -291,10 +291,10 @@ inductive undefKeepsAExit where
 
 def undefKeepsA  : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     Zig.storeBits (α := BitVec 4) 3 4 0 i0 (3 : BitVec 4)
-    let i2 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
-    let i3 ← pure (i2.add 0)
+    let i2 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
+    let i3 ← pure i2
     Zig.storeUndefBits 4 3 4 4 i3
     let i5 ← Zig.loadBits (BitVec 4) 3 4 0 i0
     pure (.ret i5)) : Zig.MM undefKeepsALocals undefKeepsAExit).run' (default : undefKeepsALocals)
@@ -309,10 +309,10 @@ inductive unionBadModeExit where
 
 def unionBadMode  : Zig.MemM (Mode) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 1, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 1, 0⟩ : Zig.Ptr)
     Zig.store (α := BitVec 24) 4 i0 (12582912 : BitVec 24)
-    let i2 ← pure ((⟨some 1, 0⟩ : Zig.Ptr).add 0)
-    let i3 ← pure (i2.add 0)
+    let i2 ← pure (⟨some 1, 0⟩ : Zig.Ptr)
+    let i3 ← pure i2
     let i4 ← Zig.loadBits (Mode) 3 4 22 i3
     pure (.ret i4)) : Zig.MM unionBadModeLocals unionBadModeExit).run' (default : unionBadModeLocals)
   match e with
@@ -326,10 +326,10 @@ inductive unionRawExit where
 
 def unionRaw  : Zig.MemM (BitVec 24) := do
   let e ← ((do
-    let i0 ← pure ((⟨some 1, 0⟩ : Zig.Ptr).add 0)
+    let i0 ← pure (⟨some 1, 0⟩ : Zig.Ptr)
     Zig.store (α := BitVec 24) 4 i0 (1193046 : BitVec 24)
-    let i2 ← pure ((⟨some 1, 0⟩ : Zig.Ptr).add 0)
-    let i3 ← pure (i2.add 0)
+    let i2 ← pure (⟨some 1, 0⟩ : Zig.Ptr)
+    let i3 ← pure i2
     Zig.storeBits (α := BitVec 4) 3 4 0 i3 (15 : BitVec 4)
     let i5 ← Zig.load (BitVec 24) 4 i0
     pure (.ret i5)) : Zig.MM unionRawLocals unionRawExit).run' (default : unionRawLocals)

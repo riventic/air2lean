@@ -18,9 +18,9 @@
     "5b9b06952a93c95c5efeae4b903893880cafbfbd",
     "c0dcfb4dda3546f92480d435146738f8ce00038e"
   ],
-  "export_note": "full-mode progress-hint qualifications at these clean revisions exported byte-identical progress.idle AIR",
+  "export_note": "full-mode progress-hint qualifications at these clean revisions exported byte-identical progress.idle AIR; the strict-schema exporter (pointer address_space) re-exported it byte-identical to the committed file",
   "artifacts": {
-    "air/progress.idle.json": "6396951d9743b43d1ba1c2f49943b1c504fd74204edc83533ff57ee319b54d62"
+    "air/progress.idle.json": "83fcdd3032ce68a024d318e41fd6f8c5d2e89e4d2cdbebfb0c8d0df504b54bc3"
   },
   "translation": {
     "command": "air2lean tests/roadmap/idle-loops/air -o IdleLoop/Gen.lean --namespace IdleLoop --prefix progress.",

@@ -55,5 +55,7 @@ done
 .lake/build/bin/air2lean "$work/air" -o "$work/gen/DispatchTokenizer.lean" --namespace Tok --prefix source.
 cat "$work/checks.lean" >> "$work/gen/DispatchTokenizer.lean"
 lake env lean -R "$work/gen" -o "$work/gen/DispatchTokenizer.olean" "$work/gen/DispatchTokenizer.lean"
-LEAN_PATH="$work/gen:$(lake env printenv LEAN_PATH)" lake env lean "$here/TokenizerProof.lean"
+# Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
+python3 -B scripts/theorem_universe.py gate "$here/TokenizerProof.lean" \
+  --root "$here" --lean-path "$work/gen" --output-dir "$work/universe"
 echo "dispatch template regressions and generated tokenizer proof passed: Zig $version"

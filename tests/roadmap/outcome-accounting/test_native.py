@@ -56,11 +56,12 @@ def verify(root):
                           ('abort',REPORT.Kind.NATIVE_HARNESS_FAILURE),
                           ('renderer-fault',REPORT.Kind.NATIVE_HARNESS_FAILURE)]:
         legacy=rows(name+'.jsonl')
-        if legacy!=[{'fail':'unknown'}]:raise AssertionError(name+' legacy failure changed')
+        # A synchronous fault signal is reported by name (the fixture raises SIGFPE).
+        if legacy not in ([{'fail':'SIGFPE'}],[{'fail':'unknown'}]):raise AssertionError(name+' legacy failure changed')
         kind,_=REPORT.observation(json.dumps(rows(name+'.jsonl.outcomes')[0]),legacy[0],'native')
         if kind!=expected:raise AssertionError(name+' phase/signal classification changed')
         # Real harness and resource failures stay fatal even against model-illegal.
-        status=REPORT.classify(legacy[0],{'fail':'Zig.Error.illegal'},kind,REPORT.Kind.ILLEGAL,None)
+        status=REPORT.classify(legacy[0],{'fail':'Zig.Error.illegal'},kind,REPORT.Kind.ILLEGAL,None,pinned=True)
         target=REPORT.Status.ILLEGAL if name=='signal' else REPORT.Status.NATIVE_HARNESS_FAILURE
         if status!=target:raise AssertionError(name+' illegal exclusion masked a harness failure')
         status=REPORT.classify(legacy[0],{'ok':7},kind,REPORT.Kind.VALUE,None)

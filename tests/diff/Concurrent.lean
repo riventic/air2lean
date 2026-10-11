@@ -33,7 +33,7 @@ private def payload : Except Zig.ErrName (BitVec 32) → String
 def runWith {Tgt α : Type} [ReturnedError α] (fuel : Nat)
     (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
     (main : Zig.ConcM Tgt α) (render : α → String) : Runner := fun o =>
-  let (r, opts) := Zig.Sched.runTrace dispatch fuel o main m0
+  let (r, opts) := Zig.Sched.runTrace ⟨.any, .available⟩ dispatch fuel o main m0
   let out : Observation := match r with
     | none => DiffOutcome.noResult
     | some (.error e) => DiffOutcome.failure e
@@ -53,7 +53,7 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
       | "xchgRace" => pure (Threads.xchgRace (← arg32 a 0) (← arg32 a 1))
       | "claimOnce" => pure Threads.claimOnce
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
-    pure (runWith fuel Threads.dispatch Threads.mem0 main payload)
+    pure (runWith fuel Threads.dispatch (Threads.mem0 .fresh) main payload)
   | "atomics" =>
     let _ ← args input 0
     let main ← match name with
@@ -63,7 +63,7 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
       | "twoPlusTwoW" => pure Atomics.twoPlusTwoW
       | "stackPush" => pure Atomics.stackPush
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
-    pure (runWith fuel Atomics.dispatch Atomics.mem0 main payload)
+    pure (runWith fuel Atomics.dispatch (Atomics.mem0 .fresh) main payload)
   | "sync" =>
     let _ ← args input 0
     let main ← match name with
@@ -73,7 +73,7 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
       | "rwLockRead" => pure (Sync.rwLockRead {})
       | "rwLockSnapshotPair" => pure (Sync.rwLockSnapshotPair {})
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
-    pure (runWith fuel Sync.dispatch Sync.mem0 main payload)
+    pure (runWith fuel Sync.dispatch (Sync.mem0 .fresh) main payload)
   | "threadsync" =>
     let _ ← args input 0
     let main ← match name with
@@ -81,13 +81,13 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
       | "handoff" => pure Threadsync.handoff
       | "waitGroup" => pure Threadsync.waitGroup
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
-    pure (runWith fuel Threadsync.dispatch Threadsync.mem0 main payload)
+    pure (runWith fuel Threadsync.dispatch (Threadsync.mem0 .fresh) main payload)
   | "iogroup" =>
     let _ ← args input 0
     let main ← match name with
       | "groupCounter" => pure (Iogroup.groupCounter {})
       | "groupConcurrent" => pure (Iogroup.groupConcurrent {})
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
-    pure (runWith fuel Iogroup.dispatch Iogroup.mem0 main payload)
+    pure (runWith fuel Iogroup.dispatch (Iogroup.mem0 .fresh) main payload)
   | _ => throw (IO.userError s!"unknown concurrent example {ex}")
 end DiffConcurrent

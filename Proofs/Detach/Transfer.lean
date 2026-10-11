@@ -197,7 +197,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     · rw [hn 2 (by decide)] at hg₁; cases hg₁
     rw [hg₁] at gb; cases gb
     refine ⟨fun _ => ⟨by decide, by rw [hs]; decide, trivial, by
-      simp [Thread.joinValid, h1]⟩, fun hfin => ⟨fun _ => join_run h1 rfl rfl, fun m' hj => ?_⟩⟩
+      simp [Thread.joinValid, Mem.isGated, h1]⟩, fun hfin => ⟨fun _ => join_run h1 rfl rfl, fun m' hj => ?_⟩⟩
     -- `B` joined `A`, which ended.
     have hda : d = true := by
       rcases hfin with hf | hf <;> rw [ga] at hf <;> cases hf; rfl
@@ -289,7 +289,7 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   · rw [hg₃] at g0; cases g0
   · rw [hg₃] at g0; cases g0
   refine ⟨fun _ => ⟨by decide, by rw [hs₅]; decide, trivial, by
-    simp [Thread.joinValid, h2₅]⟩, fun hfin => ⟨fun _ => join_run h2₅ rfl rfl, fun m₆ hj => ?_⟩⟩
+    simp [Thread.joinValid, Mem.isGated, h2₅]⟩, fun hfin => ⟨fun _ => join_run h2₅ rfl rfl, fun m₆ hj => ?_⟩⟩
   -- `B` ended, so it joined `A`.
   have hjb : jb = true := by
     rcases hfin with hf | hf <;> rw [gb] at hf <;> cases hf; rfl
@@ -308,18 +308,18 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
 /-! ## Over all schedules -/
 
 /-- **No error.** Under every schedule and fuel, no run gives an error. -/
-theorem transfer_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run dispatch fuel o mainRun {}).run ≠ some (.error e) :=
-  run_safe (P := proto) dispatch G0 rfl
+theorem transfer_safe (env : Env) (henv : env.spawn = .available) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
+  run_safe (P := proto) env (Proto.of_available henv) dispatch G0 rfl
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ h => h.2.1) rfl (fun n => main_spec n)
 
 /-- **One authorized owner.** A run that ends returns `1`; `A`'s handle is owned by `B` and was
 consumed (joined by `B`, the only thread that could), and `main` owes no join. -/
-theorem transfer_result {fuel : Nat} {o : Nat → Nat} {v : BitVec 8} {m : Mem}
-    (h : (Sched.run dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
+theorem transfer_result (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 8} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
     v = 1 ∧ joinedAll 0 m ∧ m.threads[1]? = some { spawner := 2, joined := true } := by
-  obtain ⟨G, d, hv, hj, h1, -⟩ := run_sound (P := proto) dispatch G0
+  obtain ⟨G, d, hv, hj, h1, -⟩ := run_sound (P := proto) env (Proto.of_available henv) dispatch G0
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ _ h => h.2.1) rfl (fun n => main_spec n) h
   exact ⟨hv, hj, h1⟩

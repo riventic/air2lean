@@ -133,10 +133,16 @@ semantic support claims.
   only resolves `Compat.vNN` tests; an explicit arm still needs operand and
   nested helper review. A version label that is not `0.N.P` keeps every branch,
   and a tag stays forbidden unless they agree.
-* **Normalization:** explicit tag branches, the call-prefix branch, fast-math
-  and runtime-reason rejections, and unknown-tag rejection are recorded with
-  their returned constructors. The fast-math suffix, call prefix and the
-  unsupported-marker and unknown-tag gates are read from `normalizeOp`.
+* **Normalization:** explicit tag branches (each call tag is one), fast-math and
+  runtime-reason rejections, and unknown-tag rejection are recorded with their returned
+  constructors. They come from the translator's own op table
+  (`air2lean --print-op-table`, committed as `coverage/op-table/op-table.json`):
+  each named tag is decoded by `normalizeOp` itself, and the row records its `Op`
+  constructor, its effect class (`Op.effects`, `Air2Lean/Air/Effects.lean`) and its
+  emitter route (`Op.emitRoute`). The fast-math suffix and every rejection reason
+  are in the same table. `normalizeOp` has no tag prefix rule: an unlisted `call*` tag is
+  an unknown tag. `tests/roadmap/op-effects/test_op_table.py` checks that the
+  committed table is the translator's output and names every tag of `normalizeOp`.
 * **Parser and checker:** generic schema parsing and conditional type/layout
   checking are source references. They do not establish acceptance of all
   operands or all representations of a tag.
@@ -188,7 +194,7 @@ rules). It fails when:
 * a `rejected-*` row lacks a `rejection.reason` equal to the translator's current
   text: `runtimeTagReason?` (compiler state/effect), `exporterTagReason?`
   (exporter marker) or `optimizedFloatGuidance` (fast-math), all in
-  `Air2Lean/Air/Normalize.lean`. `rejected-unknown-tag` has no reviewed reason, so
+  `Air2Lean/Air/Normalize.lean` and read from the op table. `rejected-unknown-tag` has no reviewed reason, so
   any such row fails;
 * an AIR JSON directory under `tests/roadmap` is in neither `COMPILER_FIXTURE_ROOTS`
   nor `NON_COMPILER_AIR`.

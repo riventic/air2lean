@@ -1,6 +1,7 @@
 import ZigLean.Float.Allowed
 import ZigLean.Float.RoundTrip
 import Proofs.Floats.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/floats/floats.zig`
@@ -305,3 +306,13 @@ theorem lerp_t0_negzero (b : Zig.F64) (hsub_nan : (Zig.Float.sub b (Zig.Float.ze
     unfold Zig.Float.add
     rw [Zig.classify_zero, Zig.classify_zero]
     cases sd <;> simp [Rat.add_zero]
+
+/-! ## Non-vacuity witnesses: the IEEE values `+0` and `1` -/
+
+nonvacuity_witness clamp_id :=
+  ⟨Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0x3f800000, by decide +kernel,
+    by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel, trivial⟩
+nonvacuity_witness lerp_t0 :=
+  ⟨Zig.Float.ofBits 0x3ff0000000000000, Zig.Float.ofBits 0, by decide +kernel, by decide +kernel,
+    by decide +kernel, by decide +kernel, trivial⟩
+nonvacuity_witness lerp_t0_negzero := ⟨Zig.Float.ofBits 0, by decide +kernel, by decide +kernel, trivial⟩

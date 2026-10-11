@@ -199,7 +199,7 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
   rw [ho] at hdec
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
     have := hq; unfold curBytes at this; rw [hblk] at this; exact this
-  rw [hx, LawfulEnc.decode_encode] at hdec
+  rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   rw [ho]
   exact ⟨hdec.symm, rfl, hi.record ht hcs (by decide)⟩
@@ -395,7 +395,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       rw [StateT.run'_eq]
       refine WP.map ?_
       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-      rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
+      rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
       -- the pointer to `data`
       refine WP.bind (WP.liftM (fun _ _ => rfl) fun q m₁ hl => ?_)
       obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ (.inr rfl) hcs₀ hi₀.ctx.1 hl
@@ -405,7 +405,10 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       obtain ⟨hc₂, hth₂, hcs₂, hi₂⟩ := step_data hi₁ hgu rfl
         (by show 1 < (Array.set! _ _ _).size; simp only [Array.size_set!]; exact hcs₀) hs
       refine ⟨by rw [hth₂], ?_⟩
-      rw [show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+      -- `&ctx.flag` (`ptrProject`; partial correctness: an error satisfies every post)
+      refine WP.bind (WP.callMC_ptrProject_partial rfl ?_)
+      dsimp only
+      rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
       have hcs₂' : m₂.current < m₂.clocks.size := by
         rw [hc₂, hcs₂]; show 1 < (Array.set! _ _ _).size; simp only [Array.size_set!]; exact hcs₀
       -- the pointer to `flag`
@@ -414,7 +417,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       refine ⟨rfl, ?_⟩
       -- the relaxed store of 1
       simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc, atomicStoreC]
-      rw [show fPtr.add 0 = fPtr from rfl]
       refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.wrote, hi₃, fun G₁ m₄ hg₁ hi₄ c hcr => ?_⟩)
       have hi₄' : Inv G₁ { m₄ with current := 1 } := (hi₄ : Inv G₁ m₄).congr rfl rfl rfl rfl
         (fun e he => he) (fun e he _ => he) (fun e he => .inl he)
@@ -488,8 +490,12 @@ theorem read_race {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hc : m.current
     ¬ NoRace m 0 0 (Enc.size (BitVec 32)) .read := by
   obtain ⟨e, he, ht, hb, ho, hl, hk⟩ := hi.wrote (.inr hfin)
   obtain ⟨hw1, hw0⟩ := hi.wr e he ht
+  have hsolo : m.solo = false := by
+    rcases hi.thr with ⟨-, -, ⟨h1, -⟩ | ⟨-, ⟨r, hr, -, hj⟩, -⟩⟩
+    · omega
+    · exact solo_false_of hr hj.1
   refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) ?_ (err := .illegal)
-    (by rw [hk]; rfl)
+    (by rw [hk]; rfl) hsolo
   rw [hc]
   simp only [VClock.concurrent, Bool.and_eq_true, Bool.not_eq_true']
   refine ⟨VClock.le_eq_false (i := 1) ?_, VClock.le_eq_false (i := 0) ?_⟩
@@ -573,7 +579,8 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
   · rw [hcl u (by simp at hu; omega)]
     exact VClock.le_trans (hi.pw e he hh 0 (by rw [hs1]; decide)) (VClock.le_bump _ _)
 
-theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 mpRelaxed QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelaxed
   -- the blocks: `data`, `flag`, the `MpCtx`
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s0 m₁ ha₁ => ?_)
@@ -590,13 +597,13 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   have hv₃ : (m₃.clocks[0]!).get 1 = 0 := by rw [hm₃]; rfl
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
@@ -620,12 +627,16 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
   refine ⟨by rw [hp₅.thr, hp₄.thr], ?_⟩
   -- the `MpCtx`
   dsimp only
-  rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl, show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs₆ => ?_)
   obtain ⟨hp₆, h2₆, hk₆⟩ := pre_store hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₆
   have hv₆ := (pre_view hp₅ hs₆).trans hv₅
   refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
   dsimp only
+  -- `&ctx.flag` is formed (in bounds of the 16-byte `MpCtx`, block 2)
+  refine WP.bind (WP.callMC_ptrProject (hp₆.b2.ptrProject_run (o := 0) (k := 8) (by decide)) ?_)
+  dsimp only
+  rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₇ hs₇ => ?_)
   obtain ⟨hp₇, h3₇, hk₇⟩ := pre_store hp₆ hp₆.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₇
   have hv₇ := (pre_view hp₆ hs₇).trans hv₆
@@ -646,12 +657,12 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
     funext u; unfold upd G0; split <;> simp_all
   -- the spawn
   refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₇, fun G₁ m₈ hg₁ hi₈ =>
-    ⟨.start, by simp [proto], fun child m₉ hf => ?_⟩⟩)
+    ⟨.start, by simp [proto, cPtr], fun child m₉ hf => ?_⟩⟩)
   obtain ⟨rfl, hc₉, hi₉⟩ := inv_fork ((hi₈ : Inv G₁ m₈).congr rfl rfl rfl rfl (fun e he => he)
     (fun e he _ => he) (fun e he => .inl he) (m' := { m₈ with current := 0 })) hg₁ rfl hf
   dsimp only
   simp only [StateT.run_bind, pure_bind, bind_assoc, atomicLoadC]
-  rw [show (⟨some 1, ((0 : Nat) : Int)⟩ : Ptr).add 0 = fPtr from rfl]
+  rw [show (⟨some 1, ((0 : Nat) : Int)⟩ : Ptr) = fPtr from rfl]
   -- the relaxed load of the flag
   refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.run, hi₉, fun G₂ m₁₀ hg₂ hi₁₀ c hcr => ?_⟩)
   have hi₁₀' : Inv G₂ { m₁₀ with current := 0 } := (hi₁₀ : Inv G₂ m₁₀).congr rfl rfl rfl rfl
@@ -702,10 +713,10 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
 
 /-- **Every result of `mpRelaxed` is 0** (every oracle `o`, every `fuel`): a run where `main`
 reads 1 at the relaxed flag races at `data` and gives no result. -/
-theorem mpRelaxed_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelaxed mem0).run = some (.ok (v, m))) : v = .ok 0 := by
-  obtain ⟨_, _, hv⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun h => absurd h (by decide)) rfl main_spec h
+theorem mpRelaxed_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mpRelaxed (mem0 σ)).run = some (.ok (v, m))) : v = .ok 0 := by
+  obtain ⟨_, _, hv⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
+    (fun h => absurd h (by decide)) rfl (main_spec σ) h
   exact hv
 
 end Atomics.MPR

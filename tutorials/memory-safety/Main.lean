@@ -169,15 +169,15 @@ theorem buildThenFree_every_policy (a : Allocator) (xs : List (BitVec 32)) (m : 
     (hs : m.Seq) (k : Option Nat) (pol : AllocPolicy) :
     ∃ r m', (buildThenFree a xs).run { m with failAt := k, allocPolicy := pol } = pure (r, m') ∧
       Ended r ∧ m'.heap = m.heap :=
-  buildThenFree_memory_safe a xs { m with failAt := k, allocPolicy := pol } ⟨hs.single, hs.addr⟩
+  buildThenFree_memory_safe a xs { m with failAt := k, allocPolicy := pol } ⟨hs.single⟩
 
-/-- Address reuse (M05): the same holds for every address-reuse oracle and provenance mode, so
-the allocator may give a freed node's address to a later node. No-use-after-free, no-double-free
+/-- Address reuse (M05, MM-1): the same holds for every placement and provenance mode, so the
+allocator may give a freed node's address to a later node. No-use-after-free, no-double-free
 and no-leak do not rest on fresh addresses. -/
 theorem buildThenFree_address_reuse (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
-    (hs : m.Seq) (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    ∃ r m', (buildThenFree a xs).run (m.withReuse pick pm) = pure (r, m') ∧
+    (hs : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
+    ∃ r m', (buildThenFree a xs).run (m.withPlacement σ pm) = pure (r, m') ∧
       Ended r ∧ m'.heap = m.heap :=
-  buildThenFree_memory_safe a xs (m.withReuse pick pm) (hs.withReuse pick pm)
+  buildThenFree_memory_safe a xs (m.withPlacement σ pm) (hs.withPlacement σ pm)
 
 end MemorySafety

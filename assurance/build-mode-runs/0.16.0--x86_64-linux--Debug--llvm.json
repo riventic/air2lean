@@ -1,16 +1,17 @@
 {
   "backend": "llvm",
-  "cases": 87409,
+  "cases": 87413,
   "counts": {
     "error_return_match": 892,
-    "illegal_exclusion": 497,
-    "panic_match": 4975,
-    "unspecified_exclusion": 580,
-    "value_match": 80465
+    "illegal_exclusion": 794,
+    "panic_match": 4922,
+    "trap_match": 4,
+    "unspecified_exclusion": 605,
+    "value_match": 80196
   },
   "emulated": false,
   "examples": {
-    "asm": 1200,
+    "asm": 1204,
     "atomics": 100,
     "basic": 2400,
     "errors": 900,
@@ -41,34 +42,52 @@
       "cases": 3,
       "example": "floatconv",
       "function": "toByte",
-      "status": "unspecified_exclusion"
+      "status": "illegal_exclusion"
     },
     {
       "cases": 2,
       "example": "floatconv",
       "function": "toI32",
-      "status": "unspecified_exclusion"
+      "status": "illegal_exclusion"
     },
     {
       "cases": 2,
       "example": "floatconv",
       "function": "toU64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 123,
+      "example": "floatops",
+      "function": "divExact64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "floatops",
+      "function": "op128",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 12,
+      "cases": 5,
+      "example": "floatops",
+      "function": "op16",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 16,
       "example": "floatops",
       "function": "op32",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 12,
+      "cases": 16,
       "example": "floatops",
       "function": "op64",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 373,
+      "cases": 377,
       "example": "floatops",
       "function": "op80",
       "status": "unspecified_exclusion"
@@ -104,6 +123,12 @@
       "status": "unspecified_exclusion"
     },
     {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 30,
       "example": "layout",
       "function": "shapeArea",
@@ -116,19 +141,31 @@
       "status": "illegal_exclusion"
     },
     {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 300,
       "example": "threads",
       "function": "race",
       "status": "illegal_exclusion"
     },
     {
-      "cases": 5,
+      "cases": 10,
       "example": "vectors",
       "function": "fMax",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 4,
+      "cases": 10,
       "example": "vectors",
       "function": "fMin",
       "status": "unspecified_exclusion"
@@ -161,7 +198,7 @@
   "skipped_examples": {
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "7bebaca312a3e03284dbe15c8a966eb31eb5765e098b5800fb382b924bd9253e",
+  "sources_sha256": "88b8410e3a987646cc47629740458fa2117940245b68dc6ca1ee38fd72805fe9",
   "stock_zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "target": "x86_64-linux",
   "triage": [],

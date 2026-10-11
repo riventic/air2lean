@@ -79,7 +79,7 @@ def main : IO Unit := do
     expectError (checkIoTaskThreadlocals asTask) "uses `threadlocal` storage"
   -- The emitted program uses the future model and the generated targets.
   let text := emit funcs "Futures" "futures."
-  for part in ["Zig.asyncC", "Zig.awaitC", "Zig.cancelC", "Zig.checkCancelC",
+  for part in ["Zig.asyncWithPolicyC (α := BitVec 32) .available", "Zig.awaitC", "Zig.cancelC", "Zig.checkCancelC",
       "Zig.Future.complete futureSlot futureResult", "| square_future (futureSlot : Zig.Ptr)"] do
     require (decide ((text.splitOn part).length > 1)) s!"generated text lacks {part}"
   let fallible := emit funcs "Futures" "futures." (spawnSemantics := .fallible)

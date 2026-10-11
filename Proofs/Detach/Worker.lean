@@ -83,11 +83,15 @@ def Gh.heap : Gh → Heap
 
 abbrev R (s : ThreadId) (j : Bool) : ThreadRec := { spawner := s, joined := j }
 
+/-- The detached worker's record: consumed and released (no join edge). -/
+abbrev Rd : ThreadRec := { spawner := 0, joined := true, released := true }
+
 /-- The thread table: before the spawn, `main` alone; after it, the worker, detached. -/
 def Shape (G : ThreadId → Gh) (ts : Array ThreadRec) : Prop :=
   ts[0]? = some (R 0 true) ∧
   ((∃ h, G 0 = .pre h ∧ ts.size = 1 ∧ ∀ u, 1 ≤ u → G u = .none) ∨
-   (G 0 = .post ∧ ts.size = 2 ∧ ts[1]? = some (R 0 true) ∧ (∃ h p d, G 1 = .wk h p d) ∧
+   (G 0 = .post ∧ ts.size = 2 ∧ ts[1]? = some Rd ∧
+     (∃ h p d, G 1 = .wk h p d) ∧
      ∀ u, 2 ≤ u → G u = .none))
 
 /-- The invariant: the parts (`Owned`), the worker's buffer while it runs, and the threads. -/
@@ -105,7 +109,7 @@ def proto : Proto Tgt Gh where
 
 /-- `main`'s post: the result, and the worker's handle consumed by the detach. -/
 def QM (v : BitVec 32) (_ : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some (R 0 true)
+  v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some Rd
 
 /-! ## Facts of the invariant -/
 
@@ -259,17 +263,18 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
 
 /-- **No error.** Under every schedule and fuel, no run gives an error: the detached worker's
 accesses and its free do not race, and `main` may end without joining it. -/
-theorem worker_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run dispatch fuel o mainRun {}).run ≠ some (.error e) :=
-  run_safe (P := proto) dispatch G0 rfl
+theorem worker_safe (env : Env) (henv : env.spawn = .available) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
+  run_safe (P := proto) env (Proto.of_available henv) dispatch G0 rfl
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ h => h.2.1) rfl (fun n => main_spec n)
 
-/-- A run that ends returns `7`; the worker's handle was consumed by the detach. -/
-theorem worker_result {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
-    (h : (Sched.run dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
-    v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some { spawner := 0, joined := true } := by
-  obtain ⟨G, d, hv, hj, h1⟩ := run_sound (P := proto) dispatch G0
+/-- A run that ends returns `7`; the worker's handle was consumed by the detach (`released`: no
+join edge). -/
+theorem worker_result (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
+    v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some Rd := by
+  obtain ⟨G, d, hv, hj, h1⟩ := run_sound (P := proto) env (Proto.of_available henv) dispatch G0
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ _ h => h.2.1) rfl (fun n => main_spec n) h
   exact ⟨hv, hj, h1⟩

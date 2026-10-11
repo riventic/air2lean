@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "atomics.sbRelaxed",
+ "module": "root",
  "params": [],
  "ret": 0,
  "body": [
@@ -141,6 +142,7 @@
    "callee": {
     "ty": 4,
     "func": "atomic.Value(u32).init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -198,6 +200,7 @@
    "callee": {
     "ty": 4,
     "func": "atomic.Value(u32).init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -514,8 +517,10 @@
    "callee": {
     "ty": 12,
     "func": "Thread.spawn__func_744",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "atomics.sb"
+    "comptime_fn": "atomics.sb",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -662,8 +667,10 @@
    "callee": {
     "ty": 12,
     "func": "Thread.spawn__func_744",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "atomics.sb"
+    "comptime_fn": "atomics.sb",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -733,6 +740,7 @@
      "callee": {
       "ty": 22,
       "func": "Thread.join",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -847,6 +855,7 @@
    "callee": {
     "ty": 22,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -884,6 +893,7 @@
    "callee": {
     "ty": 22,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -999,6 +1009,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1007,6 +1018,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1037,6 +1049,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1050,6 +1063,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1063,6 +1077,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1076,6 +1091,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1106,6 +1122,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1138,6 +1155,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1184,6 +1202,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1197,6 +1216,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1216,6 +1236,7 @@
   {
    "k": "struct",
    "name": "atomics.SbCtx",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -1240,6 +1261,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1259,6 +1281,7 @@
   {
    "k": "struct",
    "name": "Thread.PosixThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1278,6 +1301,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1291,6 +1315,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1303,6 +1328,7 @@
    "child": 32,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1315,6 +1341,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1352,6 +1379,7 @@
    "child": 37,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1364,6 +1392,7 @@
    "child": 38,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1376,6 +1405,7 @@
    "child": 39,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1388,6 +1418,7 @@
    "child": 40,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

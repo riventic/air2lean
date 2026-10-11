@@ -8,6 +8,7 @@ import Air2Lean.ModuleSplit
 import Air2Lean.Revision
 import Air2Lean.Device
 import Air2Lean.Certificate
+import Air2Lean.OpTable
 
 /-!
 # CLI
@@ -44,8 +45,9 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>]\n" ++
+    "       air2lean --print-op-table"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -57,10 +59,14 @@ def help : String :=
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
   "  --spawn-policy <policy>      available (default) or fallible; see docs/spawn-failure.md.\n" ++
   "  --profile <name>             Require this input build profile; see docs/profiles.md.\n" ++
+  "                               AIR schemas 1-11 need --profile legacy-abi64-le.\n" ++
+  "  --allow-unqualified-build-mode  Also translate AIR of a build mode/backend that\n" ++
+  "                               docs/build-modes.md does not qualify (recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --device-contract <json>     Model volatile integer accesses as device events; see docs/volatile-effects.md.\n" ++
+  "  --assume-no-lb               Accept relaxed load-then-store code (premise ORD-02); see docs/std-models.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --unit-diagnostic-limit <n>  Diagnostics to report per input file in that mode (1..4096).\n" ++
@@ -70,6 +76,7 @@ def help : String :=
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
+  "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.17.0, 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -92,6 +99,11 @@ structure Args where
   modelRegistry : Option String
   registryTemplate : Bool := false
   proofApi : Bool := false
+  /-- `--allow-unqualified-build-mode`: admit a profile outside `BuildProfile.qualifiedBuilds`
+  (`docs/build-modes.md`); recorded in the generated header. -/
+  allowUnqualified : Bool := false
+  /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
+  assumeNoLb : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -134,6 +146,12 @@ private partial def parseArgsGo (args : List String)
   | "--proof-api" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with proofApi := true })
+  | "--allow-unqualified-build-mode" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with allowUnqualified := true })
+  | "--assume-no-lb" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLb := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -287,7 +305,6 @@ private def run (args : List String) : IO UInt32 := do
       -- uses hashes or project staging names. Cache before anonymous renumbering.
       let ((originalNames, rewrittenTexts), renumberNs) ← timed fun _ => Anon.renumberAllWithNames texts
       times := { times with renumber := renumberNs }
-      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
@@ -315,16 +332,21 @@ private def run (args : List String) : IO UInt32 := do
               | .ok () => funcs := funcs.push f
       let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
-        if !a.registryTemplate then
-          checkProgram funcs models profiles[0]?
-          if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
-        : Except String Unit)
+        -- A template lists the extern calls that bind to no definition as model symbols.
+        if a.registryTemplate then return (← resolveExternsCollect funcs models).1
+        let resolved ← resolveExterns funcs models
+        checkProgram resolved models profiles[0]?
+        if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
+        unless a.assumeNoLb do checkLoadBuffering resolved
+        return resolved
+        : Except String (Array Func))
       times := { times with check := times.check + programNs }
       let inputBytes := texts.foldl (fun n text => n + text.utf8ByteSize) 0
       match checked with
       | .error e => die e
-      | .ok () =>
-        match BuildProfile.checkProgram profiles a.profile with
+      | .ok resolved =>
+        funcs := resolved
+        match BuildProfile.checkProgram profiles a.profile a.allowUnqualified with
         | .error e => die e
         | .ok profile =>
           if a.registryTemplate then
@@ -337,12 +359,19 @@ private def run (args : List String) : IO UInt32 := do
               pure 0
           else
             -- Reads and every validation guard retain their original path order.
-            -- Only successful emission depends on identity rather than storage keys.
+            -- Only successful emission depends on identity rather than storage keys. With
+            -- content-addressed instances (docs/air-json.md §Instances), the renamed identity:
+            -- the compiler's instance numbers must not order the definitions.
+            let keyed := funcs.any (·.identities.any (·.instanceKey.isSome))
+            let emissionKeys := (if keyed then funcs.map (·.name) else originalNames).map (· ++ ".json")
             let emissionFuncs := ((emissionKeys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
-            let metadata := Lean.Json.mkObj [("profile", profile.toJson),
-              ("float_semantics", .str semantics), ("correspondence", .str "model")]
+            -- An admission opt-in is part of the claim scope: the header records it.
+            let admission := if a.allowUnqualified then
+              [("admission", Lean.Json.str "unqualified-build-mode")] else []
+            let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
+              ("float_semantics", .str semantics), ("correspondence", .str "model")] ++ admission)
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
@@ -355,6 +384,13 @@ private def run (args : List String) : IO UInt32 := do
               (header ++ parts.render a.ns, parts)
             let declNames := parts.declNames
             times := { times with emit := emitNs }
+            -- Fail closed (MM-6): an emitter placeholder means the checker let through input
+            -- that has no translation; nothing is written.
+            let kinds := placeholdersIn src
+            unless kinds.isEmpty do
+              return ← die s!"EMITTER_PLACEHOLDER: the input reached emitter arms that the checker \
+                should exclude ({"; ".intercalate (kinds.extract 0 8).toList}); nothing was written. \
+                This is a translator bug: please report the AIR input."
             -- Fail closed: a 32-bit translation uses only width-parameterized runtime names.
             if profile.pointerBits != 64 then
               if let some name := width64Leak src then
@@ -410,6 +446,9 @@ private def run (args : List String) : IO UInt32 := do
 def main (args : List String) : IO UInt32 := do
   if args.head? == some "--diagnostics-json" then
     Diagnostics.runCheck args
+  else if args == ["--print-op-table"] then
+    IO.println opTableJson.pretty
+    pure 0
   else if args == ["--help"] || args == ["-h"] then
     IO.println help
     pure 0

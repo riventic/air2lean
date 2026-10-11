@@ -1,6 +1,7 @@
 import Proofs.Pointers.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Simp
+import ZigLean.Mem.Witness
 
 /-!
 # Proofs about `examples/pointers/pointers.zig`
@@ -139,14 +140,35 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
       refine ⟨_, _, _, swap_run hx hy h₁ h₂, access_store_other x hq₃ hp₃ (Ne.symm hbc), hyw,
         access_store_same x hq₃ hq₃, decode_writeBytes32 blk'.bytes o' x (by omega)⟩
 
-/-- `&j.due`: the offset of `due` in `Job` is 4 (the compiler's layout). -/
-theorem dueOf_spec (j : Ptr) (m : Mem) : (dueOf j).run m = pure (j.add 4, m) := by
-  simp [dueOf, zig_unfold]
+/-- `&j.due`: the offset of `due` in `Job` is 4 (the compiler's layout). Forming the pointer
+needs `j` and `j + 4` in bounds of `j`'s block (`getelementptr inbounds`, `ptrProject`). -/
+theorem dueOf_spec (j : Ptr) (m : Mem) (hj : m.inBounds j = true)
+    (hj4 : m.inBounds (j.add 4) = true) : (dueOf j).run m = pure (j.add 4, m) := by
+  have hp := ptrProject_add_run hj hj4
+  simp only [StateT.run] at hp
+  simp [dueOf, zig_unfold, hp]
 
-/-- Pointer equality is equality of block and offset. -/
-theorem same_spec (p q : Ptr) (m : Mem) : (same p q).run m = pure (decide (p = q), m) := by
+/-- Out of bounds, `&j.due` is illegal behaviour (LLVM poison), not a pointer. -/
+theorem dueOf_oob (j : Ptr) (m : Mem) (h : m.inBounds (j.add 4) = false) :
+    (dueOf j).run m = throw .illegal := by
+  have hne : j.add 4 ≠ j := by intro he; have := congrArg Ptr.off he; simp [Ptr.add_off] at this; omega
+  have hp := ptrProject_illegal (m := m) (·.add 4) hne (by simp [h])
+  simp only [StateT.run] at hp
+  simp [dueOf, zig_unfold, hp]
+
+/-- Pointer equality is equality of addresses (`ptrEqAddr`, MM-4), as in the compiled code. -/
+theorem same_spec (p q : Ptr) (m : Mem) : (same p q).run m = (ptrEqAddr p q).run m := by
   simp [same, zig_unfold]
-  rfl
+  cases ptrEqAddr p q m with
+  | none => rfl
+  | some r => cases r <;> rfl
+
+/-- Two pointers with different provenance at the same address are equal: a pointer into block
+`b` and the provenance-free pointer to its address. -/
+theorem same_address (m : Mem) {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
+    (k : Int) : (same ⟨some b, k⟩ ⟨none, blk.addr + k⟩).run m = pure (true, m) := by
+  rw [same_spec]
+  simp [ptrEqAddr, ptrAddr, hb, zig_unfold]
 
 theorem maxPtr_none_left (b : Option Ptr) (m : Mem) : (maxPtr none b).run m = pure (b, m) := by
   simp [maxPtr, zig_unfold]
@@ -167,11 +189,11 @@ theorem maxPtr_spec {m₁ m₂ : Mem} (p q : Ptr) (m : Mem) (x y : BitVec 32)
 /-- `delay` adds `d` to the job's `duration` (at offset 0). `NoRace` for the read (`hnr1`) and the
 write (`hnr2`) is an explicit hypothesis, as in `swap_spec`. -/
 theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Block} {o : Nat}
-    (hj : m.access (j.add 0) 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
+    (hj : m.access j 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hxv : Enc.decode (blk.bytes.extract o (o + 4)) = pure x) (h : x.toNat + d.toNat < 2 ^ 32)
     (hnr1 : NoRace m b o 4 .read) (hnr2 : NoRace (m.recordAt b o 4 .read) b o 4 .write) :
     ∃ m' blk', (delay j d).run m = pure ((), m') ∧
-      m'.access (j.add 0) 4 4 = pure (b, blk', o) ∧
+      m'.access j 4 4 = pure (b, blk', o) ∧
       Enc.decode (blk'.bytes.extract o (o + 4)) = pure (x + d) := by
   have hj0 := (access_eq hj).2.2.2.1
   have hjn := (access_eq hj).2.2.2.2.1
@@ -179,7 +201,7 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
   have hx := load_run hj hxv hnr1
   have hsz : Enc.size (BitVec 32) = 4 := rfl
   rw [hsz] at hx
-  have hj₁ : (m.recordAt b o 4 .read).access (j.add 0) 4 4 = pure (b, blk, o) :=
+  have hj₁ : (m.recordAt b o 4 .read).access j 4 4 = pure (b, blk, o) :=
     access_recordAt.trans hj
   have hs := store_run (x + d) hj₁ hK hnr2
   refine ⟨_, _, ?_, access_store_same (x + d) hj₁ hj₁, decode_writeBytes32 blk.bytes o (x + d) ?_⟩
@@ -190,14 +212,15 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
 
 /-- A sum that does not fit in `u32` is the safety panic `integerOverflow`. -/
 theorem delay_overflow {m₁ : Mem} (j : Ptr) (m : Mem) (x d : BitVec 32)
-    (hx : (load (BitVec 32) 4 (j.add 0)).run m = pure (x, m₁)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
+    (hx : (load (BitVec 32) 4 j).run m = pure (x, m₁)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
     (delay j d).run m = throw .overflow := by
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx
   simp [delay, zig_unfold, hx, Zig.add, BitVec.uaddOverflow, h]
 
--- Concrete instantiations keep the load premises satisfiable as memory bookkeeping evolves.
-example :
-    let m := Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+-- Concrete instantiations keep the load premises satisfiable as memory bookkeeping evolves, for
+-- every placement: the blocks' addresses are only known to be 4-aligned.
+example (σ : Placement) :
+    let m := Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32), 4, .global),
       (Enc.encode (2 : BitVec 32), 4, .global)]
     (maxPtr (some ⟨some 0, 0⟩) (some ⟨some 1, 0⟩)).run m =
       pure (some ⟨some 1, 0⟩, (m.recordAt 0 0 4 .read).recordAt 1 0 4 .read) := by
@@ -205,23 +228,50 @@ example :
   have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
     exact Array.extract_size
-  apply maxPtr_spec (m₁ := (Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+  obtain ⟨A₀, hb₀⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 1#32, 4, .global),
+      (Enc.encode 2#32, 4, .global)]).blocks[0]? = some ⟨Enc.encode 1#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  obtain ⟨A₁, hb₁⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 1#32, 4, .global),
+      (Enc.encode 2#32, 4, .global)]).blocks[1]? = some ⟨Enc.encode 2#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  have hA₀ : A₀ % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb₀ (by simp)
+  have hA₁ : A₁ % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb₁ (by simp)
+  apply maxPtr_spec (m₁ := (Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32), 4, .global),
     (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
-  all_goals simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-    Mem.recordAt, alignUp, Enc.size, intSize, intAlign, LawfulEnc.size_encode,
-    hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+  all_goals simp [load, loadBytes, recordAccess, hb₀, hb₁, hA₀, hA₁, Mem.access,
+    Mem.recordAt, Enc.size, intSize, intAlign, alignUp, LawfulEnc.size_encode,
+    hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
 
-example :
-    let m := Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
+example (σ : Placement) :
+    let m := Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
     (delay ⟨some 0, 0⟩ 1).run m = throw .overflow := by
   dsimp only
   have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
     exact Array.extract_size
+  obtain ⟨A, hb⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 4294967295#32, 4, .global)]).blocks[0]? =
+      some ⟨Enc.encode 4294967295#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   apply delay_overflow
-    (m₁ := (Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
+    (m₁ := (Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
     _ _ 4294967295 1
-  · simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-      Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
-      hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+  · simp [load, loadBytes, recordAccess, hb, hA, Mem.access,
+      Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
+      hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide
+
+/-! ## Non-vacuity witnesses: the runs on two `u32` one after the other in one block -/
+
+nonvacuity_witness decode_writeBytes32 := ⟨Array.replicate 4 .undef, 0, 0, by decide, trivial⟩
+
+/-- `0` at `p0` and `1` at `p0 + 4`. -/
+abbrev memSwap : Mem := Witness.mem1 (Enc.encode (0 : BitVec 32) ++ Enc.encode (1 : BitVec 32))
+
+nonvacuity_witness swap_run :=
+  ⟨memSwap, _, _, _, _, Witness.p0, Witness.p0.add 4, 0, 1, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
+nonvacuity_witness maxPtr_spec :=
+  ⟨_, _, Witness.p0, Witness.p0.add 4, memSwap, 0, 1, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, trivial⟩

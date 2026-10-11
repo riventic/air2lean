@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "slices.localArr",
+ "module": "root",
  "params": [
   0
  ],
@@ -254,6 +255,7 @@
        "callee": {
         "ty": 7,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -455,6 +457,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -488,6 +491,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

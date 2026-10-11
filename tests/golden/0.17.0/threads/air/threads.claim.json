@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "threads.claim",
+ "module": "root",
  "params": [
   0
  ],
@@ -617,6 +618,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -635,6 +637,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -648,6 +651,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -661,6 +665,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -674,6 +679,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -688,6 +694,7 @@
   {
    "k": "enum",
    "name": "threads.Phase",
+   "module": "root",
    "tag": 15,
    "exhaustive": true,
    "fields": [
@@ -710,6 +717,7 @@
   {
    "k": "enum",
    "name": "lang.AtomicOrder",
+   "module": "std",
    "tag": 20,
    "exhaustive": true,
    "fields": [
@@ -749,6 +757,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -762,6 +771,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -783,6 +793,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -796,6 +807,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -816,6 +828,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -829,6 +842,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -837,6 +851,7 @@
   {
    "k": "struct",
    "name": "threads.ClaimCtx",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -856,6 +871,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(threads.Phase)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -877,6 +893,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {

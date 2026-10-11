@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "thread_tuples.zeroWorker",
+ "module": "root",
  "params": [],
  "ret": 0,
  "body": [

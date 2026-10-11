@@ -15,7 +15,7 @@ private def spinForever : ConcM Unit Unit := do
   pure ()
 
 private def observedBeforeJoin : ConcM Unit Nat := do
-  let tid ← ConcM.sync (.spawn ())
+  let .ok tid ← ConcM.sync (.spawn ()) | pure 0
   spinLoopHint
   spinLoopHint
   let observed ← ConcM.liftMem (do pure (← get).allocs)
@@ -38,6 +38,7 @@ private def hintProtocol : Conc.Proto Unit Unit where
   init := fun _ _ => False
   fin := fun _ => True
   strict := true
+  spawnFails := true
 
 private theorem hintProtocol_joined {G : ThreadId → Unit} {m : Mem}
     (h : hintProtocol.inv G m) : Conc.Proto.joinedAll 0 m := by
@@ -48,11 +49,11 @@ private theorem hintProtocol_joined {G : ThreadId → Unit} {m : Mem}
 
 /-- Kernel-checkable absence of model failures for a source spin hint, for every oracle and
 fuel. No result is allowed; this is not an eventual-completion theorem. -/
-theorem spin_all_schedules_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run (fun _ => pure ()) fuel o (spinLoopHint : ConcM Unit Unit) {}).run ≠
+theorem spin_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    (Sched.run env (fun _ => pure ()) fuel o (spinLoopHint : ConcM Unit Unit) {}).run ≠
       some (.error e) := by
   apply Conc.Proto.run_safe (P := hintProtocol) (QM := fun _ G m _ => hintProtocol.inv G m)
-    (fun _ => pure ()) (fun _ => ()) rfl
+    env (fun _ => rfl) (fun _ => pure ()) (fun _ => ()) rfl
   · intro tgt g h
     exact False.elim h
   · intro v G m d h
@@ -64,11 +65,11 @@ theorem spin_all_schedules_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
     exact ⟨(), rfl, fun G₁ m₁ hg hi => hi⟩
 
 /-- An ordinary source error returned by yield is allowed; no oracle produces a model panic. -/
-theorem yield_all_schedules_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run (fun _ => pure ()) fuel o (threadYield : ConcM Unit (Except ErrName Unit)) {}).run ≠
+theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    (Sched.run env (fun _ => pure ()) fuel o (threadYield : ConcM Unit (Except ErrName Unit)) {}).run ≠
       some (.error e) := by
   apply Conc.Proto.run_safe (P := hintProtocol) (QM := fun _ G m _ => hintProtocol.inv G m)
-    (fun _ => pure ()) (fun _ => ()) rfl
+    env (fun _ => rfl) (fun _ => pure ()) (fun _ => ()) rfl
   · intro tgt g h
     exact False.elim h
   · intro v G m d h
@@ -82,13 +83,13 @@ theorem yield_all_schedules_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
 -- Mutants that make hints pure, force success, or force handoff fail these assertions.
 def main : IO Unit := do
   let run := fun {α : Type} (fuel : Nat) (o : Nat → Nat) (x : ConcM Unit α) =>
-    value (Sched.runTrace (fun _ => pure ()) fuel o x {}).1
+    value (Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) fuel o x {}).1
   check "spin depth zero is no result" (run 0 (fun _ => 0) spinLoopHint) none
   check "yield depth zero is no result" (run 0 (fun _ => 0) threadYield) none
   check "yield source success" (run 10 (fun _ => 0) threadYield) (some (.ok (.ok ())))
   check "yield source failure is an ordinary value" (run 10 (fun _ => 1) threadYield)
     (some (.ok (.error "SystemCannotYield")))
-  let (_, trace) := Sched.runTrace (fun _ => pure ()) 10 (fun _ => 0)
+  let (_, trace) := Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 10 (fun _ => 0)
     (spinLoopHint : ConcM Unit Unit) {}
   check "spin has a scheduler opportunity" trace #[1]
   for fuel in [0, 1, 2, 10, 100] do
@@ -96,11 +97,11 @@ def main : IO Unit := do
   let dispatch : Unit → ConcM Unit Unit := fun _ =>
     ConcM.liftMem (modify fun m => { m with allocs := 42 })
   check "hints permit immediate same-thread continuation"
-    (value (Sched.runTrace dispatch 20 (fun _ => 0) observedBeforeJoin {}).1) (some (.ok 0))
+    (value (Sched.runTrace ⟨.any, .available⟩ dispatch 20 (fun _ => 0) observedBeforeJoin {}).1) (some (.ok 0))
   check "hints permit another ready thread to run"
-    (value (Sched.runTrace dispatch 20 (fun _ => 1) observedBeforeJoin {}).1) (some (.ok 42))
+    (value (Sched.runTrace ⟨.any, .available⟩ dispatch 20 (fun _ => 1) observedBeforeJoin {}).1) (some (.ok 42))
   let m : Mem := { allocs := 9 }
-  let after := (Sched.runTrace (fun _ => pure ()) 10 (fun _ => 0)
+  let after := (Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 10 (fun _ => 0)
     (spinLoopHint : ConcM Unit Unit) m).1
   check "spin adds no access or clock edge"
     (after.map fun r => r.map fun (_, m') => (m'.allocs, m'.footprint.size, m'.clocks))

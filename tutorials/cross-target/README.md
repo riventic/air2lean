@@ -75,9 +75,12 @@ Prove the same for `Thread.Mutex.unlock` by the holder:
 ```lean
 theorem unlock_keeps_current (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d
 ```
+
+The unlock starts with an owner check (`Thread.mutexOwnerCheck`): it holds for the thread that
+runs it, so the statement says that `t` is the current thread (`hcur`).
 
 A solution is in [`Solution.lean`](Solution.lean).
 
@@ -112,6 +115,8 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
+  (`docs/address-placement.md`); the result holds for every placement.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering for the
   target.

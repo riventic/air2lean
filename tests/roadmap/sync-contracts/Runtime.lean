@@ -27,12 +27,12 @@ private def completed {α : Type} (r : Result (Except ErrName α × Mem)) (ok : 
 
 private def cacheRuns : Bool :=
   oracles.all fun o =>
-    completed (Sched.run SnapshotCache.stdDispatch 512 o (SnapshotCache.stdMain {}) mem0)
+    completed (Sched.run ⟨.any, .available⟩ SnapshotCache.stdDispatch 512 o (SnapshotCache.stdMain {}) (mem0 .fresh))
       (· == 10)
 
 private def mailboxRuns : Bool :=
   oracles.all fun o =>
-    completed (Sched.run Mailbox.stdDispatch 1024 o (Mailbox.stdMain {}) mem0) (· == 34)
+    completed (Sched.run ⟨.any, .available⟩ Mailbox.stdDispatch 1024 o (Mailbox.stdMain {}) (mem0 .fresh)) (· == 34)
 
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)

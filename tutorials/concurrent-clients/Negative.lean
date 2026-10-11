@@ -8,14 +8,14 @@ namespace ConcurrentClients
 
 open Zig Zig.Conc Sync Sync.MutexCounter
 
-theorem finished_run_returns_three (io : Io) (fuel : Nat) (o : Nat → Nat)
+theorem finished_run_returns_three (env : Env) (henv : env.spawn = .available) (σ : Placement) (io : Io) (fuel : Nat) (o : Nat → Nat)
     (r : Except Error (Except ErrName (BitVec 32) × Mem))
-    (finished : (Sched.run dispatch fuel o (mutexCounter io) mem0).run = some r) :
+    (finished : (Sched.run env dispatch fuel o (mutexCounter io) (mem0 σ)).run = some r) :
     ∃ m, r = .ok (.ok 3, m) := by
   cases r with
-  | error e => exact absurd finished (mutexCounter_safe io)
+  | error e => exact absurd finished (mutexCounter_safe env henv io)
   | ok vm =>
     obtain ⟨v, m⟩ := vm
-    exact ⟨m, by rw [mutexCounter_spec io finished]⟩
+    exact ⟨m, by rw [mutexCounter_spec env henv io finished]⟩
 
 end ConcurrentClients

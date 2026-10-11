@@ -18,7 +18,7 @@ def main : IO Unit := do
   for seed in List.range 64 do
     for stride in [1, 3, 5, 7] do
       let oracle := fun turn => seed / (2 ^ (turn % 6)) + turn * stride
-      match (Sched.run ThreadTuplesFallible.dispatch 500 oracle
+      match (Sched.run ⟨.any, .available⟩ ThreadTuplesFallible.dispatch 500 oracle
           (ThreadTuplesFallible.groupMixed {} 10 2) {}).run with
       | some (.ok (result, m)) =>
         require m.groups.isEmpty s!"group entry outlived groupMixed: {seed}, {stride}"

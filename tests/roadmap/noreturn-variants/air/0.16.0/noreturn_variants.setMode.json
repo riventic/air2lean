@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.setMode",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 117
+ },
  "params": [
   0,
   1
@@ -85,7 +91,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 6
   },
   {
    "id": 6,
@@ -116,7 +123,8 @@
      "id": 9,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 18
     },
     {
      "id": 12,
@@ -206,6 +214,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -229,6 +238,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -242,6 +252,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -255,6 +266,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -263,6 +275,7 @@
   {
    "k": "union",
    "name": "Io.Terminal.Mode",
+   "module": "std",
    "layout": "auto",
    "tag": 8,
    "fields": [
@@ -288,6 +301,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(Io.Terminal.Mode).@\"union\".tag_type.?",
+   "module": "std",
    "tag": 10,
    "exhaustive": true,
    "fields": [
@@ -310,6 +324,7 @@
   {
    "k": "struct",
    "name": "noreturn_variants.Holder",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

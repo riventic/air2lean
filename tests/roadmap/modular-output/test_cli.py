@@ -45,8 +45,9 @@ def translate(binary, air, work, label, ex, *flags, split_modules=True):
     root = 'Base.Gen'
     out = work / label / 'Base/Gen.lean'
     out.parent.mkdir(parents=True, exist_ok=True)
+    # The goldens (and their edited copies) are schema-11 AIR: they need the legacy profile.
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(), '--prefix', ex + '.',
-               '--source-map-json', str(work / f'{label}.source-map.json'), *flags]
+               '--source-map-json', str(work / f'{label}.source-map.json'), '--profile', 'legacy-abi64-le', *flags]
     if split_modules:
         command += ['--split-modules', root]
     result = subprocess.run(command, capture_output=True, timeout=300)
@@ -127,7 +128,8 @@ def check_example(binary, ex, target, work):
 def check_rejections_and_stale(binary, work):
     golden = ROOT / 'tests/golden/recursion/air'
     out = work / 'reject/Proofs/Ex/Gen.lean'; out.parent.mkdir(parents=True)
-    base = [str(binary), str(golden), '-o', str(out), '--namespace', 'Recursion', '--prefix', 'recursion.']
+    base = [str(binary), str(golden), '-o', str(out), '--namespace', 'Recursion', '--prefix', 'recursion.',
+            '--profile', 'legacy-abi64-le']
     for flags, message in [(['--split-modules', 'Proofs.Other.Gen'], 'needs -o ending in Proofs/Other/Gen.lean'),
                            (['--split-modules', 'Proofs..Gen'], 'invalid --split-modules'),
                            (['--split-modules', 'en'], 'needs -o ending in en.lean'),

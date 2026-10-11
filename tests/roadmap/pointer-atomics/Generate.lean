@@ -75,7 +75,7 @@ and 2 are nodes; node 1's address plus 8 is node 2's address (4108 + 8 = 4116). 
 private def tests : String := "
 open Zig in
 private def run1 {α : Type} (x : ConcM PtrAtomics.Tgt α) : Result (α × Mem) :=
-  Sched.run PtrAtomics.dispatch 100 (fun _ => 0) x {}
+  Sched.run ⟨.any, .available⟩ PtrAtomics.dispatch 100 (fun _ => 0) x {}
 
 open Zig in
 /-- The slot holds node 2; `f` gets the slot and the two nodes. -/
@@ -129,7 +129,7 @@ example : ok? (run1 (withNull fun s a => do
     let r ← PtrAtomics.casWeakOpt s none (some a)
     let v ← PtrAtomics.loadOpt s
     pure (r, v))) = some (none, some ⟨some 1, 0⟩) := by native_decide
-example : ok? (Zig.Sched.run PtrAtomics.dispatch 100 (fun _ => 1)
+example : ok? (Zig.Sched.run ⟨.any, .available⟩ PtrAtomics.dispatch 100 (fun _ => 1)
     (withNull fun s a => PtrAtomics.casWeakOpt s none (some a)) {}) = some (some none) := by
   native_decide
 "

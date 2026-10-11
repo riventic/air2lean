@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.shapeArea",
+ "module": "root",
  "params": [
   0
  ],
@@ -438,6 +439,7 @@
        "callee": {
         "ty": 11,
         "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -477,6 +479,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -497,6 +500,7 @@
   {
    "k": "union",
    "name": "layout.Shape",
+   "module": "root",
    "layout": "auto",
    "tag": 4,
    "fields": [
@@ -519,6 +523,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(layout.Shape).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 12,
    "exhaustive": true,
    "fields": [
@@ -544,6 +549,7 @@
   {
    "k": "struct",
    "name": "layout.Rect",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -568,6 +574,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -581,6 +588,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -594,6 +602,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

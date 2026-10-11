@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_locals.live",
+ "module": "root",
  "params": [
   0
  ],
@@ -123,6 +124,7 @@
    "callee": {
     "ty": 6,
     "func": "const_locals.read",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -193,6 +195,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -213,6 +216,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -226,6 +230,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -241,6 +246,7 @@
   {
    "k": "union",
    "name": "const_locals.U",
+   "module": "root",
    "layout": "auto",
    "tag": 9,
    "fields": [
@@ -259,6 +265,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(const_locals.U).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 11,
    "exhaustive": true,
    "fields": [

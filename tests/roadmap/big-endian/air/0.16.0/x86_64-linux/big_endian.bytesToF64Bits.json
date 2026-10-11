@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "big_endian.bytesToF64Bits",
+ "module": "root",
  "params": [
   0
  ],

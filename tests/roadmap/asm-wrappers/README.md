@@ -65,8 +65,9 @@ These assumptions belong to this test only. They are not theorem premises; ASM-0
 - AH-05: The AIR in `tests/golden/asm/air/` (Zig 0.16.0) is the AIR the opaques were generated
   from. The hash binding fails otherwise.
 - AH-06: `divmod` inputs exclude zero operands. A zero divisor is a CPU fault in Zig too
-  (`examples/asm/asm.zig`), and the operand-swap mutant would otherwise fault rather than
-  return a wrong result.
+  (`examples/asm/asm.zig`; the model traps on it through `Zig.asmTrap`, and the differential
+  test covers it), and the operand-swap mutant would otherwise fault rather than return a
+  wrong result.
 
 ## Running
 

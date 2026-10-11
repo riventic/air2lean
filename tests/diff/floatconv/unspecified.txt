@@ -1,4 +1,10 @@
-bits32 2
-toByte 3
-toI32 2
-toU64 2
+# Per-input exclusion pins (F3, scripts/diff-report.py): <fn> <input_sha256> <count>|<min>-<max> <reason>.
+bits32 3c5d3a507ffad4145a7831cf005c9358581b40e96e157896cce5adc73b9aef3b 1 the bits of a NaN (@bitCast): Zig leaves them open
+bits32 e70a621bc5f1232930f9de41dd87dd747464034418f37a7e7a4393d34b280441 1 the bits of a NaN (@bitCast): Zig leaves them open
+toByte 3c5d3a507ffad4145a7831cf005c9358581b40e96e157896cce5adc73b9aef3b 1 @intFromFloat of a NaN or out-of-range value
+toByte e34403dabd149ec218e743b61245472d22b557b07886289f3fddfc26418c8021 1 @intFromFloat of a NaN or out-of-range value
+toByte e70a621bc5f1232930f9de41dd87dd747464034418f37a7e7a4393d34b280441 1 @intFromFloat of a NaN or out-of-range value
+toI32 0305fe9754032eb1e9a774bad7050177f1fd27ec30ba1b01ceb863e0d561359b 1 @intFromFloat of a NaN or out-of-range value
+toI32 72ddb760d99f53def4b69fe0c76c3a5d41f1425b998c53f68d6e9b9df727a83d 1 @intFromFloat of a NaN or out-of-range value
+toU64 3c5d3a507ffad4145a7831cf005c9358581b40e96e157896cce5adc73b9aef3b 1 @intFromFloat of a NaN or out-of-range value
+toU64 e70a621bc5f1232930f9de41dd87dd747464034418f37a7e7a4393d34b280441 1 @intFromFloat of a NaN or out-of-range value

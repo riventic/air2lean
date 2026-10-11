@@ -23,7 +23,7 @@ mkdir -p "$work/ConstBases"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The retained translation is the fresh one, byte for byte.
 "$translator" "$here/air/0.16.0" -o "$work/ConstBases/Gen.lean" \
-  --namespace ConstBases --prefix const_bases.
+  --namespace ConstBases --prefix const_bases. --allow-unqualified-build-mode
 cmp "$work/ConstBases/Gen.lean" "$here/ConstBases/Gen.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ConstBases/Gen.olean" "$work/ConstBases/Gen.lean"
 "${lean_cmd[@]}" -R "$here" "$here/ConstBases/Proofs.lean"

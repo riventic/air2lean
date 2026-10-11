@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "sync.mutexCounter",
+ "module": "root",
  "params": [
   0
  ],
@@ -257,8 +258,10 @@
    "callee": {
     "ty": 13,
     "func": "Thread.spawn__func_1",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "sync.work"
+    "comptime_fn": "sync.work",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -389,6 +392,7 @@
    "callee": {
     "ty": 23,
     "func": "sync.work",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -426,6 +430,7 @@
    "callee": {
     "ty": 24,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -491,6 +496,7 @@
   {
    "k": "struct",
    "name": "Io",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -527,6 +533,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -540,6 +547,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -553,6 +561,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -561,6 +570,7 @@
   {
    "k": "struct",
    "name": "Io.Mutex",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -575,6 +585,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(Io.Mutex.State)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -589,6 +600,7 @@
   {
    "k": "enum",
    "name": "Io.Mutex.State",
+   "module": "std",
    "tag": 10,
    "exhaustive": true,
    "fields": [
@@ -616,6 +628,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -653,6 +666,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -685,6 +699,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -731,6 +746,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -744,6 +760,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -770,6 +787,7 @@
    "child": 31,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -778,6 +796,7 @@
   {
    "k": "struct",
    "name": "sync.Counter",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -802,6 +821,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -821,6 +841,7 @@
   {
    "k": "struct",
    "name": "Thread.PosixThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -840,6 +861,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -848,6 +870,7 @@
   {
    "k": "struct",
    "name": "Io.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },
@@ -858,6 +881,7 @@
    "child": 35,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -870,6 +894,7 @@
    "child": 36,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -882,6 +907,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },

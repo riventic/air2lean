@@ -1,4 +1,5 @@
 import Proofs.Sync.Contracts
+import ZigLean.Conc.Witness
 
 /-!
 # A snapshot cache against the `Io.Mutex` contract (C14 client)
@@ -609,17 +610,17 @@ theorem R_main (X : ThreadId → Ph) (x : Ph) : R (upd X 0 x) = R X := by
   unfold R; rw [upd_ne _ _ (by decide)]
 
 include C in
-theorem main_spec (io : Io) (d : Nat) :
-    proto.WP 0 (cacheMain lk ul io) QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
+    proto.WP 0 (cacheMain lk ul io) QM G0 { mem0 σ with current := 0 } d := by
   unfold cacheMain
   -- the cache: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 12 4 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA4⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
   -- its three parts
   obtain ⟨hW, hR₁, dW, rfl, hW₁, hR₁'⟩ := bytesAt_split hb₁ (k := 4) (by simp)
   obtain ⟨ha, hb, dAB, rfl, ha₁, hb₁'⟩ := bytesAt_split hR₁' (k := 4) (by simp)
@@ -639,20 +640,20 @@ theorem main_spec (io : Io) (d : Nat) :
       (hW ∪ (ha ∪ hb)) := ⟨hW, ha ∪ hb, dW, rfl, hW₁, ha, hb, dAB, rfl, ha₁, hb₁'⟩
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr) (A := A) (S := 12) (K := .stack)
     (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsW]; decide)
-    (by simp [cPtr]; omega) (by decide)).frame) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (by simp [cPtr]; omega) (by decide)).frame) ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact F₁) fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr.add 4) (A := A) (S := 12) (K := .stack)
     (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsA]; decide)
     (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
-    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 4).add 4) (A := A) (S := 12)
     (K := .stack) (k := 0) (a := 4) (10 : BitVec 32) rfl (by decide) (by rw [hsB]; decide)
     (by simp [cPtr, Ptr.add]; omega) (by decide)).frameL.frameL) ho₃
     (hs₃.current.trans (hs₂.current.trans hc₁))
-    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₃)
     fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
   rw [upd_upd] at ho₄
   have hc₄ : m₄.current = 0 := hs₄.current.trans (hs₃.current.trans (hs₂.current.trans hc₁))
@@ -741,14 +742,15 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gJoin, hiJ, fun G₄ m₁₁ hg₄ hi₁₁ => ?_⟩)
   obtain ⟨h0₁₁, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₁₁.2.shape
   · exfalso; change (G₄ 0).2 = _ at h0; rw [hg₄] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun _ => ⟨fun _ => join_run (m := { m₁₁ with current := 0 }) hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the cache
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hsum], fun r hr hsp => ?_⟩⟩
@@ -778,18 +780,24 @@ abbrev stdDispatch := dispatch Io_Mutex_lockUncancelable Io_Mutex_unlock
 
 /-- **The reader sees a consistent snapshot under every schedule**: every completed run of the
 cache client returns `a + b = 10` (every oracle, every fuel). -/
-theorem cache_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run stdDispatch fuel o (stdMain io) mem0).run = some (.ok (v, m))) :
+theorem cache_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 10 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound stdDispatch G0 (dispatch_spec mutex)
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec mutex io) h
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) stdDispatch G0 (dispatch_spec mutex)
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec mutex σ io) h
   exact hv
+
+/-- One schedule completes: under the oracle that always picks option 0, the cache client
+returns 10 within fuel 1000. The kernel computes the run. -/
+theorem cache_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 10 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at
 the futex, no lifetime error at the free, under every schedule. -/
-theorem cache_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run stdDispatch fuel o (stdMain io) mem0).run ≠ some (.error e) :=
-  proto.run_safe stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
-    (main_spec mutex io)
+theorem cache_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
+    (main_spec mutex σ io)
 
 end Sync.SnapshotCache

@@ -1,6 +1,7 @@
 import Proofs.Threads.Gen
 import ZigLean.Conc.Csl
 import ZigLean.Simp
+import ZigLean.Conc.Witness
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -29,12 +30,16 @@ open Zig Zig.Conc Zig.Conc.Proto Threads Assn
 
 namespace Threads.Disjoint
 
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+attribute [local irreducible] Proto.WP
+
 /-! ## `writeFlag` -/
 
-theorem writeFlag_eq (c : Ptr) : writeFlag c = (Zig.load Ptr 8 (c.add 0) >>= fun xp =>
-    Zig.load (BitVec 32) 4 (c.add 8) >>= fun v => Zig.store (α := BitVec 32) 4 xp v) := by
+theorem writeFlag_eq (c : Ptr) : writeFlag c = (Zig.load Ptr 8 c >>= fun xp =>
+    ptrProject c (·.add 8) >>= fun q => Zig.load (BitVec 32) 4 q >>= fun v =>
+      Zig.store (α := BitVec 32) 4 xp v) := by
   unfold writeFlag
-  simp [StateT.run'_eq, StateT.run_bind, StateT.run_monadLift]
+  simp [StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
 
 /-- `writeFlag(c)` reads the flag `x` and the value `v` of its context `c` and writes `v` to the
 flag. -/
@@ -46,9 +51,12 @@ theorem writeFlag_spec {c x : Ptr} {Ac Ax : Nat} {cb xb : Array Byte} {v : BitVe
       (fun _ => bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack (Enc.encode v)) := by
   rw [writeFlag_eq]
   refine TTriple.bind_eq (v := x) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_
-    (TTriple.bind_eq (v := v) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_ ?_)
-  · exact (TTriple.loadAt (k := 0) (a := 8) rfl (by decide) (by rw [hcs]; decide)
+    (TTriple.bind_eq (v := c.add 8) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_
+    (TTriple.bind_eq (v := v) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_ ?_))
+  · exact (TTriple.loadAt (k := 0) (a := 8) (by simp) (by decide) (by rw [hcs]; decide)
       (by simp [hc0, hAc]) hcx).frame.conseq (fun _ h => h) fun _ _ h => sep_assoc h
+  · exact (TTriple.ptrProjectAt (k := 8) (by rw [hcs]; decide) (by rw [hcs]; decide)).frame.conseq
+      (fun _ h => h) fun _ _ h => sep_assoc h
   · exact (TTriple.loadAt (k := 8) (a := 4) rfl (by decide) (by rw [hcs]; decide)
       (by simp [hc0]; omega) hcv).frame.conseq (fun _ h => h) fun _ _ h => sep_assoc h
   · refine (TTriple.storeAt (k := 0) (a := 4) v (by simp [Ptr.add]) (by decide)
@@ -384,27 +392,27 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
   exact LawfulEnc.decode_encode v
 
 set_option maxHeartbeats 1000000 in
-theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
-    { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
+    { mem0 σ with current := 0 } d := by
   unfold disjoint
-  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 with current := 0 } := by
+  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 σ with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
     exact (Owned.start rfl rfl)
   -- The four blocks.
-  refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by decide) rfl
+  refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by simp [mem0, Mem.ofGlobals]) rfl
     fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, hA⟩ := hq₁
   obtain ⟨⟨hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁ (by rw [ht₁]; decide) hx
+  refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ h₂ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ⟨hy0, hAy⟩, hy⟩ := sep_ex_lift hq₂
   refine WP.bind (WP.liftMem_upd (alloc_next 16 8 (by decide)) ho₂ hc₂
-    (by rw [ht₂, ht₁]; decide) hy fun s6 m₃ h₃ ho₃ hq₃ hc₃ ht₃ => ?_)
+    (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy fun s6 m₃ h₃ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, ⟨h10, hA1⟩, hc1⟩ := sep_ex_lift hq₃
   refine WP.bind (WP.liftMem_upd (alloc_next 16 8 (by decide)) ho₃ hc₃
-    (by rw [ht₃, ht₂, ht₁]; decide) hc1 fun s11 m₄ h₄ ho₄ hq₄ hc₄ ht₄ => ?_)
+    (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1 fun s11 m₄ h₄ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, ⟨h20, hA2⟩, hc2⟩ := sep_ex_lift hq₄
-  have htt₄ : m₄.threads = mem0.threads := by rw [ht₄, ht₃, ht₂, ht₁]
+  have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, ht₂, ht₁] <;> rfl
   have F₄ := sep_assoc (sep_assoc hc2)
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -418,19 +426,37 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
     (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hy0, hAy]) (by decide)).frame.frameL)
     ho₅ hc₅ (by rw [ht₅, htt₄]; decide) F₅ fun _ m₆ h₆ ho₆ F₆ hc₆ ht₆ => ?_)
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 0) (a := 8) s2
-    rfl (by decide) (by simp; decide) (by simp [h10, hA1]) (by decide)).frame.frameL.frameL)
+    (by simp) (by decide) (by simp; decide) (by simp [h10, hA1]) (by decide)).frame.frameL.frameL)
     ho₆ hc₆ (by rw [ht₆, ht₅, htt₄]; decide) F₆ fun _ m₇ h₇ ho₇ F₇ hc₇ ht₇ => ?_)
+  have pr₇ : (ptrProject s6 (·.add 8)).run m₇ = pure (s6.add 8, m₇) := by
+    have hs₇ : h₇.Sub m₇.heap := by simpa [upd_self] using ho₇.sub 0
+    obtain ⟨_, F, hs⟩ := sep_sub_right F₇ hs₇
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    obtain ⟨_, F, hs⟩ := sep_sub_left F hs
+    exact bytesAt_ptrProject_sub F hs (k := 8) (by rw [ctxBytes_one]; decide)
+      (by rw [ctxBytes_one]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₇ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 8) (a := 4) a
     rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h10]; omega) (by decide)).frame.frameL.frameL)
     ho₇ hc₇ (by rw [ht₇, ht₆, ht₅, htt₄]; decide) F₇ fun _ m₈ h₈ ho₈ F₈ hc₈ ht₈ => ?_)
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 0) (a := 8) s4
-    rfl (by decide) (by simp; decide) (by simp [h20, hA2]) (by decide)).frameL.frameL.frameL)
+    (by simp) (by decide) (by simp; decide) (by simp [h20, hA2]) (by decide)).frameL.frameL.frameL)
     ho₈ hc₈ (by rw [ht₈, ht₇, ht₆, ht₅, htt₄]; decide) F₈ fun _ m₉ h₉ ho₉ F₉ hc₉ ht₉ => ?_)
+  have pr₉ : (ptrProject s11 (·.add 8)).run m₉ = pure (s11.add 8, m₉) := by
+    have hs₉ : h₉.Sub m₉.heap := by simpa [upd_self] using ho₉.sub 0
+    obtain ⟨_, F, hs⟩ := sep_sub_right F₉ hs₉
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    exact bytesAt_ptrProject_sub F hs (k := 8) (by rw [ctxBytes_one]; decide)
+      (by rw [ctxBytes_one]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₉ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 8) (a := 4) b
     rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h20]; omega) (by decide)).frameL.frameL.frameL)
     ho₉ hc₉ (by rw [ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]; decide) F₉
     fun _ m₁₀ h₁₀ ho₁₀ F₁₀ hc₁₀ ht₁₀ => ?_)
-  have htt₁₀ : m₁₀.threads = mem0.threads := by rw [ht₁₀, ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]
+  have htt₁₀ : m₁₀.threads = #[{ spawner := 0, joined := true }] := by rw [ht₁₀, ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]
   rw [enc_zero] at F₁₀
   dsimp only at F₁₀ ⊢
   -- The first spawn: kid 1 gets `c1` and `x`.
@@ -539,7 +565,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   refine ⟨fun _ => ⟨by show 0 < 1; decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
     have hr := r1₁₅
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₅ rfl rfl, fun m₁₆ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', x', ax', v', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₅
@@ -593,7 +619,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   refine ⟨fun _ => ⟨by show 0 < 2; decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
     have hr := r2₁₇
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₇ rfl rfl, fun m₁₈ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', x'', ax'', v'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₇
@@ -655,18 +681,55 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
 
 /-- **`disjoint a b` gives `a + b` (wrapping) under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem disjoint_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (disjoint a b) mem0).run = some (.ok (v, m))) :
+theorem disjoint_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok (a + b) := by
-  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound dispatch (fun _ => .none) dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
+
+/-- One schedule completes: under the oracle that always picks option 0, `disjoint 1 2` returns
+3 within fuel 1000. The kernel computes the run. -/
+theorem disjoint_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (disjoint 1 2) (mem0 σ)) = some 3 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
-theorem disjoint_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (disjoint a b) mem0).run ≠ some (.error e) :=
-  (proto a b).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
-    main_spec
+theorem disjoint_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
+  (proto a b).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+    (main_spec σ)
+
+/-! ## Non-vacuity and liveness witnesses -/
+
+/-- A context block `c` (block 0) whose `x` field points to block 1 and whose value is 0. -/
+abbrev ctxW : Array Byte :=
+  Enc.encode Witness.p1 ++ Enc.encode (0 : BitVec 32) ++ Array.replicate 4 .undef
+
+abbrev flagW : Mem := Witness.mem2 ctxW (Array.replicate 4 .undef) .stack .stack
+
+theorem flagW_pre : (bytesAt Witness.p0 4096 16 .stack ctxW ∗
+    bytesAt Witness.p1 8192 4 .stack (Array.replicate 4 .undef)) flagW.heap :=
+  Witness.mem2_bytesAt' (by decide +kernel) rfl
+
+nonvacuity_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, by decide, rfl,
+    by decide, by decide +kernel, rfl, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    Witness.TAdmit.of_heap flagW_pre Nat.zero_lt_one rfl⟩
+liveness_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, by decide, rfl,
+    by decide, by decide +kernel, rfl, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    Witness.TLive.of_heap flagW_pre Nat.zero_lt_one rfl (Witness.ok_of_okb (by decide +kernel))⟩
+
+theorem front_pre : (bytesAt Witness.p0 4096 1 .stack #[.undef] ∗ emp)
+    (Witness.mem1 #[.undef] .stack).heap :=
+  sep_emp.mpr (Witness.mem1_bytesAt _ _)
+
+nonvacuity_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], rfl, rfl, by decide, Witness.TAdmit.mem1 front_pre⟩
+liveness_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], rfl, rfl, by decide,
+    Witness.TLive.mem1 front_pre (Witness.ok_of_okb (by decide +kernel))⟩
 
 end Threads.Disjoint

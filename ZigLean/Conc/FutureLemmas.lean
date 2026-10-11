@@ -48,7 +48,7 @@ theorem load_eq {slot : Ptr} {r v : α} {m m' : Mem} (h : Holds slot r m)
     v = r := by
   obtain ⟨b, blk, o, ha, -, hd, -⟩ := Conc.Proto.load_ok hl
   have := h b blk o ha
-  rw [this] at hd
+  rw [decodeLoad_of_decode this] at hd
   simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hd
   exact hd.symm
 
@@ -85,12 +85,12 @@ theorem complete_holds {slot : Ptr} {r : α} {m m' : Mem}
   rw [← hs, hx, hd]
 
 /-- A successful load right after a successful store at the same pointer and alignment decodes
-the stored bytes. -/
+the stored bytes (`decodeLoad` over the memory's blocks, MM-11). -/
 theorem load_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v w : β} {m m' m'' : Mem}
     {x : Unit} (hs : (Enc.encode v).size = Enc.size β)
     (h : ((store a q v).run m).run = some (.ok (x, m')))
     (hl : ((load β a q).run m').run = some (.ok (w, m''))) :
-    (Enc.decode (Enc.encode v) : Result β).run = some (.ok w) := by
+    (decodeLoad m'.blocks (Enc.encode v) : Result β).run = some (.ok w) := by
   obtain ⟨b, blk, o, ha, -, rfl⟩ := Conc.Proto.store_ok h
   obtain ⟨b', blk', o', ha', -, hd, -⟩ := Conc.Proto.load_ok hl
   rw [hs] at ha ha'
@@ -231,6 +231,43 @@ theorem decode_consumed {r : α} (hs : (Enc.encode r).size = Enc.size α)
   simp [bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, Functor.map,
     ExceptT.map]
 
+
+/-- A consumed future reads back as itself, or (when all the result's bytes are undefined) as a
+consumed future without a result. -/
+theorem decode_consumed_or {r : α} (hs : (Enc.encode r).size = Enc.size α)
+    (hd : Enc.decode (Enc.encode r) = (pure r : Result α)) :
+    (Enc.decode (Enc.encode ({ task := none, result := some r } : Future α)) :
+      Result (Future α)) = pure { task := none, result := some r } ∨
+    (Enc.decode (Enc.encode ({ task := none, result := some r } : Future α)) :
+      Result (Future α)) = pure { task := none, result := none } := by
+  cases hdef : (Enc.encode r).all (· == .undef)
+  · exact .inl (decode_consumed hs hd hdef)
+  · have e : (Enc.decode (Enc.encode ({ task := none, result := some r } : Future α)) :
+        Result (Future α)) = (if Enc.size α ≠ 0 then pure { task := none, result := none }
+          else pure { task := none, result := some r }) := by
+      show (do
+        let task ← (Enc.decode ((bytes ({ task := none, result := some r } : Future α)).extract 0 8) :
+          Result (Option Ptr))
+        let result ← decodeResult ((bytes ({ task := none, result := some r } : Future α)).extract
+          (resultOff α) (resultOff α + Enc.size α))
+        pure ({ task, result } : Future α)) = _
+      obtain ⟨hsz, hx⟩ := task_bytes (α := α) none
+      have h8 := eight_le_resultOff (α := α)
+      have hle := resultOff_add_le_size (α := α)
+      have hn : (Enc.encode (none : Option Ptr)).size = 8 := LawfulEnc.size_encode _
+      have hw := extract_writeBytes (writeBytes (Array.replicate (size α) .undef) 0
+        (Enc.encode (none : Option Ptr))) (resultOff α) (Enc.encode r) (by rw [hsz, hs]; omega)
+      have ht := extract_writeBytes_disjoint (writeBytes (Array.replicate (size α) .undef) 0
+        (Enc.encode (none : Option Ptr))) (resultOff α) (Enc.encode r) 0 8 (by rw [hsz, hs]; omega)
+        (by rw [hsz]; omega) (by rw [hs]; omega)
+      rw [hs] at hw
+      simp only [Nat.zero_add] at ht
+      simp only [bytes, ht, hx, hw, LawfulEnc.decode_encode, decodeResult, hdef, hd]
+      by_cases hz : Enc.size α = 0 <;> simp [hz, bind, pure, ExceptT.bind, ExceptT.pure,
+        ExceptT.mk, ExceptT.bindCont, Functor.map, ExceptT.map]
+    rw [e]
+    by_cases hz : Enc.size α = 0 <;> simp [hz]
+
 variable {Tgt σ : Type}
 
 /-- **Idempotence.** `await` and `cancel` of a consumed future read it and return the stored
@@ -349,9 +386,11 @@ theorem store_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : 
   obtain ⟨_, _, _, -, -, rfl⟩ := Proto.store_ok h
   rfl
 
-/-- `Io.async` in the spawner `t`: a runtime record, a stop at the spawn (the task starts with a
-ghost value of `init`), then the spawner writes the task's id into the record. -/
-theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tgt} {s : σ}
+/-- `Io.async` in the spawner `t` when a thread is assigned, in a proof for `available`
+environments (`Proto.spawnFails = false`): a runtime record, a stop at the spawn (the task starts
+with a ghost value of `init`), then the spawner writes the task's id into the record. -/
+theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tgt}
+    {eager : ConcM Tgt α} {s : σ}
     {G : ThreadId → γ} {m : Mem} {n : Nat}
     {Q : Future α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
     (h : ∀ slot m₁, ((Future.slotAlloc α).run m).run = some (.ok (slot, m₁)) →
@@ -359,20 +398,127 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
         ∃ g₀, P.init (mk slot) g₀ ∧ ∀ child m₃,
           (Thread.fork.run { m₂ with current := t }).run = some (.ok (child, m₃)) →
           ∀ m₄, ((store 8 slot child).run m₃).run = some (.ok ((), m₄)) →
-            Q ({ task := some slot, result := none }, s) (upd G₁ child g₀) m₄ k) :
-    P.WP t ((asyncC mk : CM Tgt σ (Future α)).run s) Q G m n := by
+            Q ({ task := some slot, result := none }, s) (upd G₁ child g₀) m₄ k)
+    (hsf : P.spawnFails = false := by rfl) :
+    P.WP t ((asyncC mk eager : CM Tgt σ (Future α)).run s) Q G m n := by
   unfold asyncC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := Proto.alloc_ok' ha; rfl
+  · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
   refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₂ hg hi₂
-  refine ⟨g₀, hg₀, fun child m₃ hf => Proto.WP.pure' ?_⟩
+  refine ⟨(fun hp => by rw [hsf] at hp; cases hp), g₀, hg₀, fun child m₃ hf => Proto.WP.pure' ?_⟩
+  simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun x m₄ hs => ⟨?_, ?_⟩)
   · rw [store_threads hs]
   · exact Proto.WP.pure' (hk' child m₃ hf m₄ hs)
+
+/-- `Io.async`'s eager outcome: the caller runs the task (`eager`) and gets a consumed future
+holding its result. -/
+theorem wp_asyncEagerC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {eager : ConcM Tgt α} {s : σ}
+    {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : Future α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : P.WP t eager (fun r G' m' d => Q ({ task := none, result := some r }, s) G' m' d) G m n) :
+    P.WP t ((asyncEagerC eager : CM Tgt σ (Future α)).run s) Q G m n := by
+  unfold asyncEagerC
+  simp only [StateT.run_bind]
+  exact Proto.WP.bind (Proto.WP.callC (Proto.WP.mono (fun _ _ _ _ hq => Proto.WP.pure' hq) h))
+
+/-- The settled result of a consumed future (`Future.settled`): its stored result, or an error
+when it has none. -/
+private theorem settled_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {f : Future α} {r : α}
+    {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (hf : f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hQ : Q (r, s) G m n) :
+    P.WP t ((callRC f.settled : CM Tgt σ α).run s) Q G m n := by
+  rcases hf with rfl | rfl
+  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
+      simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
+        Except.ok.injEq] at ha
+      subst ha
+      exact hQ
+  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
+      simp [Future.settled, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at ha
+
+/-- `await` of a consumed future (`Io.async` ran the task in the caller): it reads the future and
+returns the stored result, with no stop. -/
+theorem await_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
+    {r : α} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hQ : ∀ m', m'.threads = m.threads → Q (r, s) G m' n) :
+    P.WP t ((awaitC io p : CM Tgt σ α).run s) Q G m n := by
+  unfold awaitC
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  have hf := hp f m₁ hl
+  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
+  dsimp only
+  rw [ht]
+  exact settled_wp hns hf (hQ m₁ (load_threads hl))
+
+/-- `cancel` of a consumed future: as `await_consumed_wp`. -/
+theorem cancel_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
+    {r : α} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hQ : ∀ m', m'.threads = m.threads → Q (r, s) G m' n) :
+    P.WP t ((cancelC io p : CM Tgt σ α).run s) Q G m n := by
+  unfold cancelC
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  have hf := hp f m₁ hl
+  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
+  dsimp only
+  rw [ht]
+  exact settled_wp hns hf (hQ m₁ (load_threads hl))
+
+/-- The bytes of a consumed future have the future's size. -/
+theorem consumed_size {r : α} (hs : (Enc.encode r).size = Enc.size α) :
+    (Enc.encode ({ task := none, result := some r } : Future α)).size = Enc.size (Future α) := by
+  show (writeBytes (writeBytes (Array.replicate (Future.size α) .undef) 0 (Enc.encode (none : Option Ptr)))
+    (Future.resultOff α) (Enc.encode r)).size = Future.size α
+  have ht := (Future.task_bytes (α := α) none).1
+  have hle : Future.resultOff α + (Enc.encode r).size ≤
+      (writeBytes (Array.replicate (Future.size α) .undef) 0 (Enc.encode (none : Option Ptr))).size := by
+    rw [ht, hs]; exact Future.resultOff_add_le_size
+  rw [writeBytes_size _ _ _ hle, ht]
+
+/-- A consumed future stored at `p` reads back as itself (or without its result, when all its
+bytes are undefined). -/
+theorem reads_consumed {p : Ptr} {r : α} {m m' : Mem} {x : Unit}
+    (hs : (Enc.encode r).size = Enc.size α) (hd : Enc.decode (Enc.encode r) = (pure r : Result α))
+    (hst : ((store (Future.align α) p ({ task := none, result := some r } : Future α)).run m).run =
+      some (.ok (x, m'))) :
+    ∀ f m'', ((load (Future α) (Future.align α) p).run m').run = some (.ok (f, m'')) →
+      f = { task := none, result := some r } ∨ f = { task := none, result := none } := by
+  intro f m'' hl
+  have := Future.load_after_store (consumed_size hs) hst hl
+  rcases Future.decode_consumed_or hs hd with e | e
+  · rw [decodeLoad_of_decode e] at this; cases this; exact .inl rfl
+  · rw [decodeLoad_of_decode e] at this; cases this; exact .inr rfl
+
+/-- `Io.async` under either policy: the environment picks the execution
+(`SyncOp.asyncChoice`), so the caller's eager run (`c = 1`) and the thread (`c ≠ 1`) must each
+keep the protocol. -/
+theorem wp_asyncWithPolicyC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {policy : SpawnPolicy}
+    {mk : Ptr → Tgt} {eager : ConcM Tgt α} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : Future α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → ∀ c, c < 3 →
+        P.WP t ((asyncOutcomeC c mk eager : CM Tgt σ (Future α)).run s)
+          Q G₁ { m₁ with current := t } k) :
+    P.WP t ((asyncWithPolicyC policy mk eager : CM Tgt σ (Future α)).run s) Q G m n := by
+  unfold asyncWithPolicyC
+  simp only [StateT.run_bind, StateT.run_lift]
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
+  obtain ⟨g, hi, hb⟩ := h k hk
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => Proto.WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 /-- `Io.checkCancel` in thread `t`: a stop, then the cancelation point. -/
 theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {s : σ}

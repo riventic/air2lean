@@ -15,6 +15,66 @@ namespace Zig
 
 attribute [zig_unfold] callM callR
 
+/-! ## Pointer bytes as integers (MM-11) -/
+
+/-- A load's decode is the plain decode whenever that succeeds. -/
+theorem decodeLoad_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : Enc.decode bs = pure v) : decodeLoad blocks bs = pure v := by
+  unfold decodeLoad; rw [h]; rfl
+
+/-- `decodeLoad_of_decode` in `ExceptT.run` form. -/
+theorem decodeLoad_run_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte}
+    {v : α} (h : (Enc.decode bs : Result α).run = some (.ok v)) :
+    (decodeLoad blocks bs : Result α).run = some (.ok v) :=
+  decodeLoad_of_decode h
+
+/-- A successful load decode: the plain decode, or (pointer bytes read as an integer) the decode
+of the bytes with the pointer bytes exposed as addresses. -/
+theorem decodeLoad_ok {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : (decodeLoad blocks bs).run = some (.ok v)) :
+    (Enc.decode bs : Result α).run = some (.ok v) ∨
+      ((Enc.decode bs : Result α).run = some (.error .unspecified) ∧
+        (Enc.decode (exposeBytes blocks bs) : Result α).run = some (.ok v)) := by
+  unfold decodeLoad at h
+  simp only [ExceptT.run_mk] at h
+  split at h
+  · rename_i heq
+    split at h
+    · exact .inr ⟨heq, h⟩
+    · cases h
+  · exact .inl h
+
+/-! ## Stack budget (MM-5) -/
+
+/-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
+and never overflows. A statement over such a memory carries premise STK-01. -/
+theorem enterFrame_run_none {m : Mem} (h : m.stackLimit = none) (bytes : Nat) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  simp [enterFrame, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+    set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont]
+
+/-- A frame that fits in the budget is charged. -/
+theorem enterFrame_run_fits {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hfit : m.stackUsed + (frameBase + bytes) ≤ limit) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  have : ¬ limit < m.stackUsed + (frameBase + bytes) := by omega
+  simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk,
+    ExceptT.bind, ExceptT.bindCont]
+
+/-- A frame that does not fit in the budget overflows the stack. -/
+theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hover : limit < m.stackUsed + (frameBase + bytes)) :
+    ((enterFrame bytes).run m).run = some (.error .stackOverflow) := by
+  simp [enterFrame, h, hover, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
+    pure, ExceptT.pure, StateT.lift, ExceptT.run]
+
+/-- Releasing a frame restores the bytes that `enterFrame` charged. -/
+theorem leaveFrame_run (m : Mem) (bytes : Nat) :
+    (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl
+
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/
 theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
@@ -41,6 +101,111 @@ theorem access_of {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
     (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0) :
     m.access p n a = pure (b, blk, p.off.toNat) := by
   simp [Mem.access, hb, hblk, hl, h0, hn, ha]
+
+/-! ### Pointer formation (`ptrProject`, MM-3) -/
+
+@[simp] theorem Ptr.add_zero (p : Ptr) : p.add 0 = p := by cases p; simp [Ptr.add]
+
+@[simp] theorem Ptr.add_block (p : Ptr) (n : Int) : (p.add n).block = p.block := rfl
+
+theorem Ptr.add_off (p : Ptr) (n : Int) : (p.add n).off = p.off + n := rfl
+
+@[simp] theorem Ptr.elem_block (p : Ptr) (size : Nat) (i : BitVec 64) :
+    (p.elem size i).block = p.block := rfl
+
+@[simp] theorem Ptr.elemSub_block (p : Ptr) (size : Nat) (i : BitVec 64) :
+    (p.elemSub size i).block = p.block := rfl
+
+theorem Ptr.add_add (p : Ptr) (x y : Int) : (p.add x).add y = p.add (x + y) := by
+  simp [Ptr.add, Int.add_assoc]
+
+theorem inBounds_iff {m : Mem} {p : Ptr} : m.inBounds p = true ↔
+    ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ 0 ≤ p.off ∧ p.off ≤ blk.bytes.size := by
+  unfold Mem.inBounds
+  split
+  · rename_i h; simp [h]
+  · rename_i b h
+    split
+    · rename_i hk; simp [h, hk]
+    · rename_i blk hk; simp [h, hk]
+
+theorem inBounds_of {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)
+    (hblk : m.blocks[b]? = some blk) (h0 : 0 ≤ p.off) (hn : p.off ≤ blk.bytes.size) :
+    m.inBounds p = true :=
+  inBounds_iff.mpr ⟨b, blk, hb, hblk, h0, hn⟩
+
+/-- A pointer that an access of `n` bytes succeeds at is in bounds (so is `n` bytes later). -/
+theorem inBounds_of_access {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) (k : Nat) (hk : k ≤ n) :
+    m.inBounds (p.add k) = true := by
+  obtain ⟨hb, hblk, -, h0, hn, -⟩ := access_eq h
+  exact inBounds_of (b := b) (blk := blk) hb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega)
+
+/-- A derived pointer equal to its base is the base, in every memory (no instruction natively). -/
+theorem ptrProject_same {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : project p = p) :
+    (ptrProject p project).run m = pure (p, m) := by
+  simp [ptrProject, StateT.run, h]
+
+/-- A derived pointer in bounds of its base's block (base included) is formed; memory is
+unchanged. -/
+theorem ptrProject_run {m : Mem} {p : Ptr} (project : Ptr → Ptr)
+    (hb : (project p).block = p.block) (hp : m.inBounds p = true)
+    (hq : m.inBounds (project p) = true) :
+    (ptrProject p project).run m = pure (project p, m) := by
+  simp [ptrProject, StateT.run, hb, hp, hq]
+
+/-- The identity projection (a zero offset after simplification) is the base. -/
+@[simp] theorem ptrProject_id (p : Ptr) (m : Mem) : ptrProject p (fun x => x) m = pure (p, m) := by
+  simp [ptrProject]
+
+/-- `ptrProject_run` for a byte offset. -/
+theorem ptrProject_add_run {m : Mem} {p : Ptr} {off : Int} (hp : m.inBounds p = true)
+    (hq : m.inBounds (p.add off) = true) :
+    (ptrProject p (·.add off)).run m = pure (p.add off, m) :=
+  ptrProject_run (·.add off) rfl hp hq
+
+/-- A byte offset of a pointer into block `b` that stays within its bytes is formed. -/
+theorem ptrProject_block_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
+    {p : Ptr} {k : Nat} (hp : p.block = some b) (h0 : 0 ≤ p.off) (hk : p.off + k ≤ blk.bytes.size) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) :=
+  ptrProject_add_run (inBounds_of hp hb h0 (by omega))
+    (inBounds_of hp hb (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
+/-- Any other derived pointer is illegal behaviour (`getelementptr inbounds` poison). -/
+theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : project p ≠ p)
+    (hout : ¬ ((project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true)) :
+    (ptrProject p project).run m = throw .illegal := by
+  simp only [ptrProject, StateT.run]
+  rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
+
+/-- Pointer formation never changes memory and keeps the base's block. -/
+theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
+    (h : (ptrProject p project).run m = pure (q, m')) : q.block = p.block ∧ m' = m := by
+  by_cases hs : project p = p
+  · rw [ptrProject_same project hs] at h
+    simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h; simp
+  · by_cases hc : (project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true
+    · rw [ptrProject_run project hc.1 hc.2.1 hc.2.2] at h
+      simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h
+      exact ⟨hc.1, rfl⟩
+    · rw [ptrProject_illegal project hs hc] at h; cases h
+
+/-- Pointer formation either succeeds without a change to memory or is illegal behaviour. -/
+theorem ptrProject_cases (p : Ptr) (project : Ptr → Ptr) (m : Mem) :
+    (ptrProject p project).run m = pure (project p, m) ∨
+      (ptrProject p project).run m = throw .illegal := by
+  simp only [ptrProject, StateT.run]
+  split
+  · exact .inl rfl
+  · exact .inr rfl
+
+/-- A pointer that formation returned is the projection; memory is unchanged. -/
+theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
+    (h : (ptrProject p project).run m = pure (q, m')) : q = project p ∧ m' = m := by
+  simp only [ptrProject, StateT.run] at h
+  split at h
+  · cases h; exact ⟨rfl, rfl⟩
+  · cases h
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
@@ -80,7 +245,13 @@ invariant on `Mem` (an arbitrary `Mem` value has no such invariant), so a caller
 accesses in one thread (no concurrent access to the same bytes, the common case for the example
 proofs) discharges it directly at each step. -/
 def NoRace (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind) : Prop :=
-  raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+  raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+
+/-- No footprint entry races with the access: `NoRace`, whether or not `m.solo` skips the scan. -/
+theorem noRace_of_raceAt {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
+    (h : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none) :
+    NoRace m block off len kind := by
+  unfold NoRace raceCheck; split <;> simp_all
 
 theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
     (hnr : NoRace m block off len kind) :
@@ -246,12 +417,88 @@ theorem singleThread_empty {m : Mem} (hf : m.footprint = #[]) (hc : m.current < 
 
 theorem noRace_of_singleThread {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : NoRace m block off len kind := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   have ⟨_, hle⟩ := h.2 e he
   have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
   simp [VClock.concurrent, hle']
+
+/-- MM-14: on a single-thread memory, `raceCheck`'s skip changes nothing — the scan it skips
+finds no race either. -/
+theorem raceCheck_eq_raceAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
+    (kind : AccessKind) :
+    raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind =
+      raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind := by
+  have hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind
+      = none := by
+    unfold raceAt
+    rw [Array.findSome?_eq_none_iff]
+    intro e he
+    have ⟨_, hle⟩ := h.2 e he
+    have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
+    simp [VClock.concurrent, hle']
+  unfold raceCheck; split <;> simp [hr]
+
+/-- The end of a block does not race if every thread's clock is below the current thread's
+(each thread joined into it, or no other thread). -/
+theorem freeRaces_of_le {m : Mem} {b n : Nat}
+    (h : ∀ u < m.clocks.size, VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at he
+  have hle : VClock.le (m.clocks[m.footprint[i].tid]!)
+      (VClock.bump (m.clocks[m.current]!) m.current) = true := by
+    by_cases hu : m.footprint[i].tid < m.clocks.size
+    · exact VClock.le_trans (h _ hu) (VClock.le_bump _ _)
+    · rw [getElem!_neg m.clocks _ hu]; exact VClock.le_default _
+  rw [he.1.2] at hle; cases hle
+
+/-- The end of a block does not race if each access to its bytes happened before the current
+thread. -/
+theorem freeRaces_of_clock {m : Mem} {b n : Nat}
+    (h : ∀ e ∈ m.footprint, e.block = b → e.off < n →
+      VClock.le e.clock (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at he
+  obtain ⟨⟨⟨⟨⟨⟨hb, -⟩, ho⟩, -⟩, hcl⟩, -⟩, -⟩ := he
+  have hle := VClock.le_trans (h _ (Array.getElem_mem hi) hb ho)
+    (VClock.le_bump (m.clocks[m.current]!) m.current)
+  rw [hcl] at hle; cases hle
+
+/-- The end of a block does not race if each other thread is a child of the current thread that
+it joined (and there are as many clocks as threads). -/
+theorem freeRaces_of_joined {m : Mem} {b n : Nat} (hcs : m.clocks.size = m.threads.size)
+    (h : ∀ u < m.threads.size, u = m.current ∨
+      ∃ r, m.threads[u]? = some r ∧ r.spawner = m.current ∧ r.joined = true ∧ r.released = false) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, hcl⟩, hj⟩ := he
+  by_cases hu : m.footprint[i].tid < m.threads.size
+  · rcases h _ hu with h' | ⟨r, hr, hs, hjr, hrel⟩
+    · exact htc h'
+    · rw [hr] at hj; simp [hs, hjr, hrel] at hj
+  · rw [getElem!_neg m.clocks m.footprint[i].tid (by rw [hcs]; exact hu)] at hcl
+    rw [VClock.le_default] at hcl; cases hcl
+
+/-- In a single thread, the end of a block does not race. -/
+theorem freeRaces_of_singleThread {m : Mem} (h : m.SingleThread) (b n : Nat) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, -⟩, -⟩ := he
+  exact htc (h.2 _ (Array.getElem_mem hi)).1
 
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
@@ -368,8 +615,9 @@ theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId
     (hnr : NoRace m b o (Enc.size α) .read) :
     (load α a p).run m = pure (v, m.recordAt b o (Enc.size α) .read) := by
   simp only [load, StateT.run_bind, loadBytes_run h hnr]
-  simp [hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
-    liftM, monadLift, MonadLift.monadLift, StateT.lift]
+  simp [decodeLoad_of_decode hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind,
+    ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, get, getThe,
+    MonadStateOf.get, StateT.get]
 
 theorem store_run {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId}
     {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
@@ -473,7 +721,7 @@ memory is the input with the read recorded (`Mem.recordAt`). -/
 theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     (h : (load α a p).run m = pure (v, m')) :
     ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
-      Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
+      decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
       m' = m.recordAt b o (Enc.size α) .read := by
   simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
@@ -486,14 +734,14 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
   | some (.ok (b, blk, o)), hacc, h =>
     simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o
       (Enc.size α) .read = r at h
     match r, hr, h with
     | some _, _, h =>
       cases h
     | none, hr, h =>
       simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk] at h
-      generalize hd2 : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
+      generalize hd2 : (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
       match d, hd2, h with
       | none, _, h => simp at h
       | some (.error _), _, h =>
@@ -502,6 +750,11 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         simp only [ExceptT.bindCont, Option.bind_some] at h
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
+
+/-- A load of the bytes of a value of a lawful encoding decodes the value. -/
+@[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
+    decodeLoad blocks (Enc.encode v) = pure v :=
+  decodeLoad_of_decode (LawfulEnc.decode_encode v)
 
 instance : LawfulEnc Bool where
   size_encode _ := rfl
@@ -683,8 +936,6 @@ theorem optionalFiniteError_encode_injective (d : ErrorDomain) :
   simp [errOfBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
     ExceptT.bindCont, throw, throwThe, MonadExceptOf.throw]
 
-/-! ## Error unions -/
-
 theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
   unfold alignUp
   split
@@ -693,6 +944,195 @@ theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
     have h2 := Nat.mod_lt (n + a - 1) (by omega : a > 0)
     rw [Nat.mul_comm] at h1
     omega
+
+/-! ## Block addresses (MM-1)
+
+What holds for every placement (`Mem.place`): the address of a new block is a multiple of its
+alignment (`Mem.newAddr_mod`), and the fallback `Mem.top` is past every block. The memory at
+program start (`Mem.ofGlobals σ gs`) holds global `k` as block `k`, with its bytes, alignment and
+kind, at an aligned address, and nothing else (`Mem.ofGlobals_block`, `Mem.ofGlobals_eq`). -/
+
+theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
+    0 < A ∧ A % align = 0 ∧ A + size ≤ 2 ^ 64 ∧ m.addrFree A size = true := by
+  unfold Mem.placed? at h
+  split at h
+  · split at h
+    · cases h; simpa [Mem.placeOk, and_assoc] using ‹m.placeOk _ size align = true›
+    · cases h
+  · cases h
+
+private theorem foldl_top (l : List Block) (t : Nat) :
+    t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
+      ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
+  induction l generalizing t with
+  | nil => simp
+  | cons x xs ih =>
+    obtain ⟨h1, h2⟩ := ih (Nat.max t (x.addr + x.bytes.size + 1))
+    simp only [List.foldl_cons, List.mem_cons]
+    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun blk hb => ?_⟩
+    rcases hb with rfl | hb
+    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_trans (Nat.le_max_right _ _) h1)
+    · exact h2 blk hb
+
+/-- Every block, dead or live, ends below `Mem.top`. -/
+theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk) :
+    blk.addr + blk.bytes.size < m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList]
+  exact (foldl_top m.blocks.toList 4096).2 blk
+    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
+    m.newAddr size align % align = 0 := by
+  unfold Mem.newAddr
+  split
+  · exact (Mem.placed?_ok ‹_›).2.1
+  · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+
+theorem Mem.addGlobal_blocks (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
+    (m.addGlobal bs a k).blocks =
+      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.newAddr bs.size a } :=
+  rfl
+
+private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m : Mem) :
+    let m' := gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) m
+    m' = { m with blocks := m'.blocks } ∧ m'.blocks.size = m.blocks.size + gs.length ∧
+      (∀ i < m.blocks.size, m'.blocks[i]? = m.blocks[i]?) ∧
+      ∀ j (hj : j < gs.length), ∃ A, (0 < gs[j].2.1 → A % gs[j].2.1 = 0) ∧
+        m'.blocks[m.blocks.size + j]? =
+          some { bytes := gs[j].1, align := gs[j].2.1, kind := gs[j].2.2, live := true, addr := A } := by
+  induction gs generalizing m with
+  | nil => simp
+  | cons g gs ih =>
+    obtain ⟨bs, a, k⟩ := g
+    obtain ⟨he, hs, hold, hnew⟩ := ih (m.addGlobal bs a k)
+    simp only [List.foldl_cons] at he hs hold hnew ⊢
+    have hsz : (m.addGlobal bs a k).blocks.size = m.blocks.size + 1 := by
+      simp [Mem.addGlobal_blocks]
+    refine ⟨?_, by rw [hs, hsz]; simp; omega, fun i hi => ?_, fun j hj => ?_⟩
+    · rw [he]; rfl
+    · rw [hold i (by omega)]; simp [Mem.addGlobal_blocks, Array.getElem?_push, Nat.ne_of_lt hi]
+    · cases j with
+      | zero =>
+        refine ⟨m.newAddr bs.size a, fun ha => m.newAddr_mod bs.size a ha, ?_⟩
+        rw [Nat.add_zero, hold m.blocks.size (by omega)]
+        simp [Mem.addGlobal_blocks]
+      | succ j =>
+        obtain ⟨A, hA, hb⟩ := hnew j (by simp at hj; omega)
+        refine ⟨A, hA, ?_⟩
+        rw [hsz, show m.blocks.size + 1 + j = m.blocks.size + (j + 1) by omega] at hb
+        simpa using hb
+
+/-- The memory at program start is its blocks under the placement `σ`, every other field the
+default. -/
+theorem Mem.ofGlobals_eq (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    Mem.ofGlobals σ gs = { blocks := (Mem.ofGlobals σ gs).blocks, place := σ } :=
+  (foldl_addGlobal gs { place := σ }).1
+
+/-! Every field of the memory at program start except `blocks` is the default. -/
+
+@[simp] theorem Mem.ofGlobals_place (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).place = σ := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocs (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocs = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_failAt (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).failAt = none := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocPolicy (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocPolicy = {} := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_current (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).current = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_clocks (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).clocks = #[#[]] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_threads (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).threads = #[{ spawner := 0, joined := true }] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_footprint (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).footprint = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_atomics (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).atomics = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_seen (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).seen = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_nextMsg (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).nextMsg = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_waiters (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).waiters = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_woken (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).woken = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_groups (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).groups = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocators (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocators = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).blocks.size = gs.length := by
+  have := (foldl_addGlobal gs { place := σ }).2.1
+  simpa [Mem.ofGlobals] using this
+
+/-- Block `j` at program start is global `j`: its bytes, alignment and kind, live, at an address
+that is a multiple of its alignment, under every placement. Nothing else is known about the
+address. -/
+theorem Mem.ofGlobals_block (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat)
+    (hj : j < gs.length) :
+    ∃ A, (0 < gs[j].2.1 → A % gs[j].2.1 = 0) ∧ (Mem.ofGlobals σ gs).blocks[j]? =
+      some { bytes := gs[j].1, align := gs[j].2.1, kind := gs[j].2.2, live := true, addr := A } := by
+  have := (foldl_addGlobal gs { place := σ }).2.2.2 j hj
+  simpa [Mem.ofGlobals] using this
+
+/-- The address of global `j` at program start under the placement `σ` (0 if there is no global
+`j`). A theorem that holds for every `σ` can use only `Mem.globalAddr_mod` about it. -/
+def Mem.globalAddr (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat) : Nat :=
+  ((Mem.ofGlobals σ gs).blocks[j]?.map (·.addr)).getD 0
+
+/-- Block `j` at program start, in a form for `simp`: global `j` at `Mem.globalAddr σ gs j`. -/
+theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (j : Nat) : (Mem.ofGlobals σ gs).blocks[j]? = gs[j]?.map fun g =>
+      { bytes := g.1, align := g.2.1, kind := g.2.2, live := true, addr := Mem.globalAddr σ gs j } := by
+  by_cases hj : j < gs.length
+  · obtain ⟨A, -, h⟩ := Mem.ofGlobals_block σ gs j hj
+    simp [Mem.globalAddr, h, List.getElem?_eq_getElem hj]
+  · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
+    simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
+
+/-- A block at program start is aligned: its address is a multiple of its alignment, under every
+placement. -/
+theorem Mem.ofGlobals_addr_mod {σ : Placement} {gs : List (Array Byte × Nat × BlockKind)} {j : Nat}
+    {blk : Block} (h : (Mem.ofGlobals σ gs).blocks[j]? = some blk) (ha : 0 < blk.align) :
+    blk.addr % blk.align = 0 := by
+  by_cases hj : j < gs.length
+  · obtain ⟨A, hA, h'⟩ := Mem.ofGlobals_block σ gs j hj
+    rw [h'] at h; cases h; exact hA ha
+  · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
+    rw [Array.getElem?_eq_none this] at h; cases h
+
+/-! ## Error unions -/
 
 /-- The error code and the payload of `E!T` do not overlap, and both are inside it. -/
 theorem errUnion_bounds (s a : Nat) :
@@ -903,5 +1343,19 @@ theorem racePair_atomic {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAt
 theorem size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
 
 theorem size_encode_ptr (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_encode p
+
+/-- `@memcpy` with equal counts between different blocks, or of no bytes, is `@memmove`: its
+illegal-behaviour checks pass. -/
+theorem memcpy_eq_memmove {size da sa : Nat} {dst src : Ptr} {n m : BitVec 64} (hm : n = m)
+    (h : dst.block ≠ src.block ∨ n.toNat * size = 0) :
+    memcpy size da sa dst src n m = memmove size da sa dst src n := by
+  subst hm
+  unfold memcpy Ptr.overlaps
+  rcases h with h | h <;> simp [h]
+
+/-- An index below the length passes `slice_elem_val`'s bounds check. -/
+theorem checkIndex_bind_of_lt {α : Type} {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat)
+    (x : MemM α) : (checkIndex s i >>= fun _ => x) = x := by
+  simp [checkIndex, h]
 
 end Zig

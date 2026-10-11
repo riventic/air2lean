@@ -34,7 +34,9 @@ TARGET = function("target", [VOID, integer(), NORETURN], [1], 1, [
 
 def invoke(binary, air, output, error=None, timeout=10):
     output.write_text("sentinel\n")
-    result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
+    # Every fixture here is schema-11 AIR: translating it needs the explicit legacy profile.
+    result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation",
+                             "--profile", "legacy-abi64-le"],
                             text=True, capture_output=True, check=False, timeout=timeout)
     if error is not None:
         assert result.returncode == 1, (error, result.returncode, result.stderr)
@@ -110,7 +112,8 @@ def diagnose(binary, document, marker):
         air = Path(directory) / "air"
         air.mkdir()
         (air / "0.json").write_text(json.dumps(document))
-        result = subprocess.run([str(binary), "--diagnostics-json", str(air)], text=True,
+        result = subprocess.run([str(binary), "--diagnostics-json", str(air),
+                                 "--profile", "legacy-abi64-le"], text=True,
                                 capture_output=True, check=False, timeout=10)
         assert result.returncode != 0, (marker, result.stdout)
         assert marker in result.stdout, (marker, result.stdout, result.stderr)
@@ -334,6 +337,8 @@ def main():
     timer = function("timerRead", [dict(pointer, child=2), integer(64), timer_type, NORETURN], [0], 1, [
         inst(0, "arg", 0, param=0), inst(1, "call", 1, [dict(inst=0)], callee=dict(func="time.Timer.read", noreturn=False)),
         inst(2, "ret", 3, [dict(inst=1)])])
+    # `std.time.Timer` exists (and its model row is reviewed) up to Zig 0.15.2 only.
+    timer["zig_version"] = "0.15.2"
     checks += run(binary, [timer])
     mutate = copy.deepcopy(timer)
     mutate["types"][2]["name"] = "OtherTimer"

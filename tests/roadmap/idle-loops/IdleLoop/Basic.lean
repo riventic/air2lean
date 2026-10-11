@@ -36,7 +36,7 @@ def syncPick {T : Type} (c : Mem → Nat) : ConcM T Nat := ConcM.sync (.pick c)
 def syncYield {T : Type} : ConcM T Unit := ConcM.sync .yield
 def syncChoose {T : Type} (k : Nat) : ConcM T Nat := ConcM.sync (.choose k)
 def syncJoin {T : Type} (tid : ThreadId) : ConcM T Unit := ConcM.sync (.join tid)
-def syncSpawn {T : Type} (t : T) : ConcM T ThreadId := ConcM.sync (.spawn t)
+def syncSpawn {T : Type} (t : T) : ConcM T (Except ErrName ThreadId) := ConcM.sync (.spawn t)
 
 theorem pickC_eq {T σ : Type} (c : Mem → Nat) :
     (pickC c : CM T σ Nat) = StateT.lift (syncPick c) := rfl
@@ -61,6 +61,9 @@ def treeMap {T T' α : Type} (f : T → T') : {n : Nat} → CoN T α n → CoN T
   | _, .sync (.choose c) m k => .sync (.choose c) m fun r m' => treeMap f (k r m')
   | _, .sync (.pick c) m k => .sync (.pick c) m fun r m' => treeMap f (k r m')
   | _, .sync (.spawn t) m k => .sync (.spawn (f t)) m fun r m' => treeMap f (k r m')
+  | _, .sync .asyncChoice m k => .sync .asyncChoice m fun r m' => treeMap f (k r m')
+  | _, .sync (.spawnGated t) m k => .sync (.spawnGated (f t)) m fun r m' => treeMap f (k r m')
+  | _, .sync .gate m k => .sync .gate m fun r m' => treeMap f (k r m')
   | _, .sync (.join tid) m k => .sync (.join tid) m fun r m' => treeMap f (k r m')
   | _, .sync (.wait p e) m k => .sync (.wait p e) m fun r m' => treeMap f (k r m')
   | _, .sync (.wake p c) m k => .sync (.wake p c) m fun r m' => treeMap f (k r m')
@@ -112,9 +115,9 @@ def dPtr : Ptr := ⟨some 0, 0⟩
 /-- `flag` (block 1). -/
 def fPtr : Ptr := ⟨some 1, 0⟩
 
-/-- The two zero-initialized `u32` globals. -/
-def mem0 : Mem :=
-  Mem.ofGlobals [(Enc.encode (0 : BitVec 32), 4, .global), (Enc.encode (0 : BitVec 32), 4, .global)]
+/-- The two zero-initialized `u32` globals, at the addresses that the placement `σ` gives them. -/
+def mem0 (σ : Placement) : Mem :=
+  Mem.ofGlobals σ [(Enc.encode (0 : BitVec 32), 4, .global), (Enc.encode (0 : BitVec 32), 4, .global)]
 
 /-- The translated idle loop does not spawn: its target type is empty. -/
 def noTgt : IdleLoop.Tgt → Tgt := fun t => nomatch t
@@ -147,8 +150,14 @@ def publish (h : ThreadId) : ConcM Tgt Unit :=
   ConcM.liftMem (store 4 dPtr (42 : BitVec 32)) >>= fun _ =>
     syncPick storeCnt >>= fun c => mainStore c h
 
+/-- `publish` after the spawn's result (an `available` environment: always a handle). -/
+def publishE (r : Except ErrName ThreadId) : ConcM Tgt Unit :=
+  match r with
+  | .ok h => publish h
+  | .error _ => throw .panic
+
 /-- `main`: spawn the worker, then publish. -/
-def main : ConcM Tgt Unit := syncSpawn .worker >>= publish
+def main : ConcM Tgt Unit := syncSpawn .worker >>= publishE
 
 /-! ## One iteration of the translated loop -/
 

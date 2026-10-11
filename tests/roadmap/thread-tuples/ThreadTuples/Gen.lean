@@ -39,8 +39,8 @@ instance : Zig.Enc Io_Group where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.token), (8, Zig.Enc.encode v.state)]
   decode bs := do pure { token := ← Zig.Enc.decodeAt bs 0, state := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program; fields are captured by value. -/
 inductive Tgt where
@@ -103,7 +103,7 @@ def atomicWorker (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) (p3 : BitVec 32)
     let i4 ← pure (Zig.addWrap p2 p3)
     Zig.store (α := BitVec 32) 4 p0 i4
     match ← ((do
-      let i7 ← pure (p1.add 0)
+      let i7 ← pure p1
       let i8 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 4 i7 p3
       pure (.br6 i8)) : Zig.CM Tgt atomicWorkerLocals atomicWorkerExit) with
     | .br6 _v6 => (do
@@ -161,7 +161,7 @@ def atomicShared (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
         let i28 ← pure (Zig.addWrap i26 i27)
         let i29 ← pure (i2)
         match ← ((do
-          let i31 ← pure (i29.add 0)
+          let i31 ← pure i29
           let i32 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i31
           pure (.br30 i32)) : Zig.CM Tgt atomicSharedLocals atomicSharedExit) with
         | .br30 v30 => (do
@@ -312,6 +312,7 @@ structure groupMixedLocals where
 inductive groupMixedExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s7 ← Zig.allocStack 16 8
   let s3 ← Zig.allocStack 4 4
@@ -323,9 +324,9 @@ def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (
     Zig.store (α := BitVec 32) 4 i5 (0 : BitVec 32)
     let i7 ← pure (← get).group
     Zig.store (α := Io_Group) 8 i7 ({ token := ({ raw := none } : atomic_Value___anyopaque), state := (0 : BitVec 64) } : Io_Group)
-    let _i9 ← Zig.groupAsyncC i7 p0 (Tgt.zeroWorker ())
+    let _i9 ← Zig.groupAsyncWithPolicyC .available i7 p0 (Tgt.zeroWorker ()) ((fun a => (do discard (Zig.ConcM.liftMem (StateT.lift (zeroWorker))) : Zig.ConcM Tgt Unit)) ())
     let i10 ← pure (p1, i3, p2, i5)
-    let _i11 ← Zig.groupAsyncC i7 p0 (Tgt.mixedWorker i10)
+    let _i11 ← Zig.groupAsyncWithPolicyC .available i7 p0 (Tgt.mixedWorker i10) ((fun a => (do let (capture0, capture1, capture2, capture3) := a; discard (Zig.ConcM.liftMem (mixedWorker capture0 capture1 capture2 capture3)) : Zig.ConcM Tgt Unit)) i10)
     let i12 ← Zig.groupConcurrentC i7 p0 (Tgt.zeroWorker ())
     match i12 with
     | .error _ => (do

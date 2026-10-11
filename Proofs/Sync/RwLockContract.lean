@@ -1,4 +1,5 @@
 import Proofs.Sync.RwLock
+import ZigLean.Conc.Witness
 
 /-!
 # Restricted shared-lock contract boundary
@@ -94,6 +95,18 @@ theorem load_pair_frame {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} {F : Assn
       (fun pair => ⌜pair = (v, v)⌝ ∗ (pts p a v ∗ F)) :=
   (load_pair_owned hn).frame_eq
 
+nonvacuity_witness load_pair_owned :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, by decide +kernel, Witness.TAdmit.mem1 Witness.pts32⟩
+liveness_witness load_pair_owned :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, by decide +kernel,
+    Witness.TLive.mem1 Witness.pts32 (Witness.ok_of_okb (by decide +kernel))⟩
+nonvacuity_witness load_pair_frame :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, emp, by decide +kernel,
+    Witness.TAdmit.mem1 (sep_emp.mpr Witness.pts32)⟩
+liveness_witness load_pair_frame :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, emp, by decide +kernel,
+    Witness.TLive.mem1 (sep_emp.mpr Witness.pts32) (Witness.ok_of_okb (by decide +kernel))⟩
+
 /-- A single optimized snapshot load remains owned at the shared-held phase.
 This is the bridge for an export that merges the source's two identical reads. -/
 theorem held_snapshot_wp (hE : E.Spec) {σ : Type} {s : σ} {j : Bool}
@@ -174,12 +187,24 @@ protocol is deliberately not asserted after reclamation: its `BlkOk` requires a 
 allocation. A generated client must establish this precondition through release/join. -/
 theorem reclaim_joined_wp {G : ThreadId → Gh S} {m : Mem} {d : Nat} {x : Ph}
     {h : Heap} {sx : S}
-    (hi : (proto E).inv (upd G 0 (gA x h sx)) m) (hjd : x.jd = true) :
+    (hi : (proto E).inv (upd G 0 (gA x h sx)) m) (hjd : x.jd = true) (hc : m.current = 0) :
     (proto E).WP 0 (ConcM.liftMem (free bPtr))
       (fun _ _ m' _ => m'.threads = m.threads ∧ joinedAll 0 m') G m d := by
   have hj := joined_of_phase hi hjd
   obtain ⟨blk, hb, hl, _⟩ := hi.2.1.blk
-  refine WP.liftMem (fun e he => (free_noErr hb hl e he).elim) ?_
+  -- each thread is `main` or a child that `main` joined: the end of the block races with nothing
+  have hnr : m.freeRaces 0 blk.bytes.size = false := by
+    obtain ⟨h0, ⟨hs1, -, -⟩ | ⟨hs2, hr, -, -, -⟩⟩ := hi.2.1.shape
+    · exact freeRaces_of_joined hi.1.own.csize fun u hu => .inl (by rw [hs1] at hu; rw [hc]; omega)
+    · refine freeRaces_of_joined hi.1.own.csize fun u hu => ?_
+      rw [hs2] at hu
+      rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+      · exact .inl hc.symm
+      · rcases hr with ⟨h1, -⟩ | ⟨h1, -⟩
+        · have := hj _ (Array.mem_of_getElem? h1) (by rfl)
+          exact .inr ⟨_, h1, hc.symm ▸ rfl, this, rfl⟩
+        · exact .inr ⟨_, h1, hc.symm ▸ rfl, rfl, rfl⟩
+  refine WP.liftMem (fun e he => (free_noErr hb hl hnr e he).elim) ?_
   intro _ m' hf
   obtain ⟨_, _, _, _, rfl⟩ := free_ok hf
   exact ⟨rfl, rfl, hj⟩

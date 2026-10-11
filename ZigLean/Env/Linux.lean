@@ -131,6 +131,15 @@ theorem raceAt_illegal' {fp : Array FootprintEntry} {c : VClock} {b o len : Nat}
     · cases he
   · cases he
 
+/-- `raceAt_illegal'` for the scan an access runs (`raceCheck`, which skips it while only the
+main thread can run, MM-14). -/
+theorem raceCheck_illegal' {m : Mem} {c : VClock} {b o len : Nat} {k : AccessKind}
+    {err : Error} (h : raceCheck m c b o len k = some err) : err = .illegal := by
+  unfold raceCheck at h
+  split at h
+  · cases h
+  · exact raceAt_illegal' h
+
 /-- A load either fails with `.illegal` (access or race) or performs the checked read. -/
 theorem loadBytes_cases (p : Ptr) (n a : Nat) (m : Mem) :
     ((loadBytes p n a).run m).run = some (.error .illegal) ∨
@@ -141,13 +150,13 @@ theorem loadBytes_cases (p : Ptr) (n a : Nat) (m : Mem) :
     simp [loadBytes, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw, throwThe,
       MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, pure, ExceptT.pure, ExceptT.run]
-  · cases hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o n .read with
+  · cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read with
     | none =>
       right
       exact ⟨b, blk, o, h, by rw [loadBytes_run h hr]; rfl⟩
     | some e =>
       left
-      have he := raceAt_illegal' hr
+      have he := raceCheck_illegal' hr
       subst he
       simp [loadBytes, recordAccess, h, hr, StateT.run, bind, StateT.bind, get, getThe,
         MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw,
@@ -172,11 +181,11 @@ theorem storeBytes_cases (p : Ptr) (a : Nat) (bs : Array Byte) (m : Mem) :
         MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw,
         throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, pure,
         ExceptT.pure, ExceptT.run]
-    · cases hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size .write with
+    · cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size .write with
       | none => exact .inr ⟨b, blk, o, h, by rw [storeBytes_run h hK hr]; rfl⟩
       | some e =>
         left
-        have he := raceAt_illegal' hr
+        have he := raceCheck_illegal' hr
         subst he
         simp [storeBytes, recordAccess, Mem.accessW, h, hK, hr, StateT.run, bind, StateT.bind, get,
           getThe, MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift,
@@ -405,6 +414,18 @@ theorem BytesAt.drop {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf
     BytesAt m (p.elem 1 (BitVec.ofNat 64 i)) (buf.drop i) := by
   have := h.sub i (buf.length - i) (by omega) hi64
   rwa [List.take_of_length_le (by simp)] at this
+
+/-- Forming the pointer to byte `i ≤ buf.length` of `buf` (`ptr_add`, `slice_elem_ptr`; one past
+the end included) succeeds and leaves memory as it is (`ptrProject`, MM-3). -/
+theorem BytesAt.ptrProject_run {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i : Nat)
+    (hi : i ≤ buf.length) (hi64 : i < 2 ^ 64) :
+    (ptrProject p (·.elem 1 (BitVec.ofNat 64 i))).run m = pure (p.elem 1 (BitVec.ofNat 64 i), m) := by
+  obtain ⟨b, blk, hb, hblk, -, h0, hn, -⟩ := h
+  have hi' : (BitVec.ofNat 64 i).toNat = i := by simp; omega
+  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by simp [Ptr.elem, Ptr.add, hi']
+  have hblock : (p.elem 1 (BitVec.ofNat 64 i)).block = p.block := rfl
+  exact Zig.ptrProject_run (·.elem 1 (BitVec.ofNat 64 i)) hblock (inBounds_of hb hblk h0 (by omega))
+    (inBounds_of (hblock.trans hb) hblk (by rw [hoff]; omega) (by rw [hoff]; omega))
 
 theorem BytesAt.access {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) :
     ∃ b blk, m.access p buf.length 1 = pure (b, blk, p.off.toNat) ∧

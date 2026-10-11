@@ -29,11 +29,11 @@ def require (ok : Bool) (msg : String) : IO Unit :=
 def spurious : IO Unit := do
   let mut onceValues : List (BitVec 32) := []
   for o in oracles 8 do
-    match (Sched.run Cancel.Spurious.dispatch 60 o Cancel.Spurious.waitOnce {}).run with
+    match (Sched.run ⟨.any, .available⟩ Cancel.Spurious.dispatch 60 o Cancel.Spurious.waitOnce {}).run with
     | some (.ok (v, _)) => onceValues := v :: onceValues
     | some (.error e) => throw (IO.userError s!"waitOnce error {repr e}")
     | none => pure ()
-    match (Sched.run Cancel.Spurious.dispatch 80 o (Cancel.Spurious.waitLoop 6) {}).run with
+    match (Sched.run ⟨.any, .available⟩ Cancel.Spurious.dispatch 80 o (Cancel.Spurious.waitLoop 6) {}).run with
     | some (.ok (v, _)) => require (v == 1) s!"waitLoop read {v}"
     | some (.error e) => throw (IO.userError s!"waitLoop error {repr e}")
     | none => pure ()
@@ -44,7 +44,7 @@ def spurious : IO Unit := do
 def cancel : IO Unit := do
   let mut seen : List (BitVec 32 × BitVec 32) := []
   for o in oracles 12 do
-    match (Sched.run Cancel.dispatch 80 o Cancel.cancelClient {}).run with
+    match (Sched.run ⟨.any, .available⟩ Cancel.dispatch 80 o Cancel.cancelClient {}).run with
     | some (.ok (v, m)) =>
       require (decide (Cancel.Outcome v)) s!"cancelClient result {v} outside Outcome"
       require (m.blocks.all (!·.live)) "cancelClient left a live block"
@@ -73,7 +73,7 @@ def awaitClient : ConcM Cancel.Tgt (BitVec 32 × BitVec 32) :=
     let done ← callMC (alloc .heap 4 4)
     callMC (store 4 done (0 : BitVec 32))
     let g ← callMC (alloc .stack 16 8)
-    groupAsyncC g ⟨⟩ (Cancel.Tgt.worker status done)
+    groupAsyncC g ⟨⟩ (Cancel.Tgt.worker status done) (Cancel.worker status done)
     spinLoopHintC
     discard (groupAwaitC g ⟨⟩)
     let s ← callMC (load (BitVec 32) 4 status)
@@ -99,7 +99,7 @@ def droppedDispatch : Cancel.Tgt → ConcM Cancel.Tgt Unit
 /-- The results of `client` under `d` over the sampled oracles. -/
 def results (d : Cancel.Tgt → ConcM Cancel.Tgt Unit) (client : ConcM Cancel.Tgt (BitVec 32 × BitVec 32)) :
     List (BitVec 32 × BitVec 32) :=
-  (oracles 12).filterMap fun o => match (Sched.run d 80 o client {}).run with
+  (oracles 12).filterMap fun o => match (Sched.run ⟨.any, .available⟩ d 80 o client {}).run with
     | some (.ok (v, _)) => some v
     | _ => none
 

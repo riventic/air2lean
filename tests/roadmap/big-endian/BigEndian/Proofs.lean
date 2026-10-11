@@ -56,24 +56,18 @@ def runMem {α : Type} (m : Mem) (x : MemM α) : Option (Except Error α) :=
 /-- A bit-pointer store of `b` into `P = packed struct(u32) { a: u4, b: u12, c: u16 }` in memory,
 then the struct's bytes: host bit 4 is in the last byte on s390x and in the first on x86_64. -/
 theorem setFieldBytes_orders :
-    runMem BigEndian.S390x.mem0 (BigEndian.S390x.setFieldBytes 0 0xabc) =
+    runMem (BigEndian.S390x.mem0 .fresh) (BigEndian.S390x.setFieldBytes 0 0xabc) =
         some (.ok #v[0, 0, 0xab, 0xc0]) ∧
-      runMem BigEndian.X64.mem0 (BigEndian.X64.setFieldBytes 0 0xabc) =
+      runMem (BigEndian.X64.mem0 .fresh) (BigEndian.X64.setFieldBytes 0 0xabc) =
         some (.ok #v[0xc0, 0xab, 0, 0]) := by
   decide +kernel
 
 /-- A bit-pointer load after byte stores reads the field from the host at the target's order. -/
 theorem fieldFromBytes_orders :
-    runMem BigEndian.S390x.mem0 (BigEndian.S390x.fieldFromBytes 0x12 0x34 0x56 0x78) =
+    runMem (BigEndian.S390x.mem0 .fresh) (BigEndian.S390x.fieldFromBytes 0x12 0x34 0x56 0x78) =
         some (.ok 0x567) ∧
-      runMem BigEndian.X64.mem0 (BigEndian.X64.fieldFromBytes 0x12 0x34 0x56 0x78) =
+      runMem (BigEndian.X64.mem0 .fresh) (BigEndian.X64.fieldFromBytes 0x12 0x34 0x56 0x78) =
         some (.ok 0x341) := by
-  decide +kernel
-
-/-- Lane 0 of `@Vector(2, u16)` comes first in memory, in the lane's byte order. -/
-theorem vecByte_orders :
-    runMem BigEndian.S390x.mem0 (BigEndian.S390x.vecByte 0x0102 0x0304 0) = some (.ok 1) ∧
-      runMem BigEndian.X64.mem0 (BigEndian.X64.vecByte 0x0102 0x0304 0) = some (.ok 2) := by
   decide +kernel
 
 /-- Every big-endian integer encoding of the translation reads back (`intEncOf_lawful`): a

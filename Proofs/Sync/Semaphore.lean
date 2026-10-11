@@ -1,4 +1,5 @@
 import Proofs.Sync.Lock
+import ZigLean.Witness
 import ZigLean.Conc.Word
 import ZigLean.Conc.WeakWord
 import ZigLean.VersionGate
@@ -197,12 +198,47 @@ structure Fits {Tgt : Type} (P : Proto Tgt (SGh X)) (U : (ThreadId → SGh X) �
 
 variable {S}
 
-theorem ptr_mutex : ((S.ptr.add 8).add 0).add 0 = S.L.ptr := by
+theorem ptr_mutex : S.ptr.add 8 = S.L.ptr := by
   simp only [Sem.ptr, Ptr.add, Lock.ptr, Lock.prod]; congr 1
-theorem ptr_state : (((S.ptr.add 12).add 0).add 0) = S.WS.ptr := by
+theorem ptr_state : S.ptr.add 12 = S.WS.ptr := by
   simp only [Sem.ptr, Ptr.add, Word.ptr, Sem.WS]; congr 1
-theorem ptr_epoch : (((S.ptr.add 12).add 4).add 0) = S.WE.ptr := by
+theorem ptr_epoch : (S.ptr.add 12).add 4 = S.WE.ptr := by
   simp only [Sem.ptr, Ptr.add, Word.ptr, Sem.WE]; congr 1
+
+/-- The semaphore's 20 bytes are in bounds of its block: a field pointer into them is formed
+(`ptrProject`, MM-3). -/
+theorem Inv.proj {G : ThreadId → SGh X} {m : Mem} (hs : S.Inv G m) {p : Ptr} {k : Nat}
+    (hb : p.block = some S.b) (h0 : (S.o : Int) ≤ p.off) (hk : p.off + k ≤ S.o + 20) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨blk, hblk, -, hsz, -⟩ := hs.we.blk
+  simp only [Sem.WE] at hsz
+  exact ptrProject_add_run (inBounds_of hb hblk (by omega) (by omega))
+    (inBounds_of hb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
+/-- `Inv.proj` from the protocol invariant. -/
+theorem Fits.proj (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.inv G m) {p : Ptr}
+    {k : Nat} (hb : p.block = some S.b) (h0 : (S.o : Int) ≤ p.off) (hk : p.off + k ≤ S.o + 20) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) :=
+  ((hP.inv G m).mp hi).2.1.proj hb h0 hk
+
+theorem ws_epoch : S.WS.ptr.add 4 = S.WE.ptr := by
+  simp only [Ptr.add, Word.ptr, Sem.WS, Sem.WE]; congr 1
+
+/-- The epoch's pointer is formed from the condition's (`&cond.epoch`). -/
+theorem Fits.projE (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.inv G m) :
+    (ptrProject S.WS.ptr (·.add 4)).run m = pure (S.WE.ptr, m) := by
+  rw [← ws_epoch]; exact hP.proj hi rfl (by simp [Word.ptr, Sem.WS]; omega) (by simp [Word.ptr, Sem.WS]; omega)
+
+/-- `projE` before `ptr_state` is rewritten: from the condition's pointer `S.ptr + 12`. -/
+theorem Fits.projCE (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.inv G m) :
+    (ptrProject (S.ptr.add 12) (·.add 4)).run m = pure ((S.ptr.add 12).add 4, m) :=
+  hP.proj hi rfl (by simp [Sem.ptr, Ptr.add]; omega) (by simp [Sem.ptr, Ptr.add]; omega)
+
+/-- A field pointer of the semaphore (`&sem.mutex`, `&sem.cond`) is formed. -/
+theorem Fits.projS (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.inv G m) {k : Nat}
+    (hk : k ≤ 20) : (ptrProject S.ptr (·.add k)).run m = pure (S.ptr.add k, m) :=
+  hP.proj hi rfl (by simp [Sem.ptr]) (by simp [Sem.ptr]; omega)
+
 theorem ptr_ne : S.WE.ptr ≠ S.L.ptr := by
   simp only [Word.ptr, Sem.WE, Lock.ptr, Lock.prod, ne_eq, Ptr.mk.injEq, true_and]; omega
 
@@ -1204,23 +1240,19 @@ theorem Inv.epoch {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {old : Bi
 
 /-- `signal`'s futex wake at the epoch: the waiter (if it sleeps) wakes, and no thread is left at
 the epoch's futex. -/
-theorem wakeE_none {G : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m) :
-    ∀ w ∈ m.waiters.filter (fun w => !(((m.waiters.filter (·.2 == S.WE.ptr)).extract 0 1).map
-      (·.1)).contains w.1), w.2 = S.WE.ptr → False := by
+theorem wakeE_none {cs : List Nat} {G : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m) :
+    ∀ w ∈ m.waiters.filter (fun w =>
+      !(Thread.wakeSet m.waiters S.WE.ptr (1 : BitVec 32).toNat cs).contains w.1),
+      w.2 = S.WE.ptr → False := by
   intro w hw he
   obtain ⟨hw, hnc⟩ := Array.mem_filter.mp hw
-  have hwf : w ∈ m.waiters.filter (·.2 == S.WE.ptr) := Array.mem_filter.mpr ⟨hw, by simp [he]⟩
-  have hpos : 0 < (m.waiters.filter (·.2 == S.WE.ptr)).size := by
-    obtain ⟨k, hk, -⟩ := Array.mem_iff_getElem.mp hwf; omega
-  have h0 := Array.getElem_mem hpos
-  obtain ⟨h0w, h0e⟩ := Array.mem_filter.mp h0
   obtain ⟨i, jr, ee, h1, -⟩ := hi.q w hw he
-  obtain ⟨i', jr', ee', h1', -⟩ := hi.q _ h0w (by simpa using h0e)
-  have e := hi.one _ _ _ _ _ _ _ _ _ _ h1' h1
-  have : (((m.waiters.filter (·.2 == S.WE.ptr)).extract 0 1).map (·.1)).contains w.1 = true := by
-    rw [Array.contains_iff_mem, Array.mem_map]
-    exact ⟨_, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, e⟩
-  rw [this] at hnc; cases hnc
+  -- every waiter at the epoch is the same thread, so the wake wakes it
+  have hin : w.1 ∈ Thread.wakeSet m.waiters S.WE.ptr (1 : BitVec 32).toNat cs :=
+    Thread.mem_wakeSet_of_all (by decide) ⟨w, hw, he⟩ fun v hv hvp => by
+      obtain ⟨i', jr', ee', h1', -⟩ := hi.q v hv hvp
+      exact hi.one _ _ _ _ _ _ _ _ _ _ h1' h1
+  rw [Array.contains_iff_mem.mpr hin] at hnc; cases hnc
 
 /-- A step of the holder `t` on its own part (`WP.liftMem_owned`): the words, the clocks of the
 others and the futex queue stay. -/
@@ -1386,9 +1418,9 @@ theorem Fits.requeue (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : T
     rwa [upd_upd] at this
 
 /-- `signal`'s futex wake at the epoch by `t` at `wk`: it goes on outside the condition. -/
-theorem Fits.wakeE (hP : S.Fits P U) {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {a : LG}
+theorem Fits.wakeE {cs : List Nat} (hP : S.Fits P U) {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {a : LG}
     {x : X} (hinS : S.inS x) (hi : P.inv (upd G t (a, .wk, x)) m)
-    (hw : ((Thread.futexWake S.WE.ptr (1 : BitVec 32).toNat).run { m with current := t }).run =
+    (hw : ((Thread.futexWake S.WE.ptr (1 : BitVec 32).toNat cs).run { m with current := t }).run =
       some (.ok ((), m'))) :
     m'.current = t ∧ P.inv (upd G t (a, .none, x)) m' := by
   have hl' := (hP.split hi).1.wakeOff ptr_ne hw
@@ -1510,15 +1542,16 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       rw [hg₁] at hi₂
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
       simp only [StateT.run_bind]
-      rw [ptr_epoch]
-      refine WP.bind (WP.bind (wp_rmw hP (.inr rfl) (g := (a, .inc, x)) (by rw [ha]; decide) hi₂
-        fun k₂ hk₂ G₂ m₂ m₃ old hg₂ hi₃ hv₃ hU₃ hh₃ hw₃ hop₃ hL₃ hu₃ => ?_))
+      refine WP.bind (WP.bind (WP.callMC_ptrProject (hP.projE hi₂) ?_))
+      refine WP.bind (wp_rmw hP (.inr rfl) (g := (a, .inc, x)) (by rw [ha]; decide) hi₂
+        fun k₂ hk₂ G₂ m₂ m₃ old hg₂ hi₃ hv₃ hU₃ hh₃ hw₃ hop₃ hL₃ hu₃ => ?_)
       obtain ⟨hl₂, hs₃, -⟩ := hP.split hi₃
       have hh₂ : (G₂ t).1.ph = .holds := by rw [hg₂]; exact ha
       have hs₄ := hs₃.epoch (by rw [hg₂]) hh₂ (crit_one hl₂ hs₃ hh₂) hop₃ hw₃ hv₃ hh₃
       have hi₄ := hP.retag hL₃ hu₃ hs₄ rfl rfl (fun h => by simp [SPh.waits] at h) (by rw [hg₂]; exact hinS)
       rw [hg₂] at hi₄
-      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ m₅ hw => ?_⟩)
+      refine WP.bind (WP.callMC_ptrProject (hP.projE hi₄) ?_)
+      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ cs m₅ hw => ?_⟩)
       rw [← upd_same G₃ t, hg₃] at hi₅
       obtain ⟨hc₅, hi₆⟩ := hP.wakeE hinS hi₅ hw
       simp only [StateT.run_pure]
@@ -1828,27 +1861,27 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     rwa [upd_self, upd_upd] at this
   have hph : (G₁ t).1.ph = .away := by rw [hg₁]
   obtain ⟨hl₁, hs₁, hu₁⟩ := hP.split hi₁
-  refine ⟨fun _ => live_reg hP hi₁ (by rw [hg₁]) hph, fun hq0 => ⟨fun _ => ?_, fun b m' hr => ?_⟩⟩
-  · by_cases hwk : ({ m₁ with current := t } : Mem).woken.contains
-      ({ m₁ with current := t } : Mem).current = true
-    · exact ⟨_, _, futexWait_run_woken hwk⟩
-    · obtain ⟨blk, hb, -, -, ha, -⟩ := hs₁.we.access
-      obtain ⟨v, hv⟩ := hs₁.we.val
-      rw [Word.holds_bytes hb] at hv
-      exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
-  have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph) ptr_ne hq0 hr
+  have ht : t < m₁.threads.size := alive hP hi₁ hg₁ (fun h => by cases h)
+  have hi₀ := hP.cur t t m₁.woken hi₁
+  obtain ⟨-, hs₀, -⟩ := hP.split hi₀
+  refine ⟨fun _ => live_reg hP hi₁ (by rw [hg₁]) hph, fun hq0 => ⟨fun _ => hs₀.we.futexWait_run ht,
+    fun b m' hr => ?_⟩⟩
+  have hoff := wd_off (.inr rfl) hl₁ hs₁
+  have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph) ptr_ne
+    (Word.offWord hs₁.we hoff.1 hoff.2 apE) hq0 hr
   have hout : ∀ m₂ : Mem, m₂.current = t → S.L.Inv (upd G₁ t (S.L.set (G₁ t) .out Heap.empty)) m₂ →
       S.Inv G₁ m₂ → U G₁ m₂ → Q ((), s) G₁ m₂ k := fun m₂ hc hl₂ hs₂ hu₂ => by
     have := hgo G₁ m₂ .away .out (by rw [hg₁]) (by simp) (by rw [hg₁]; exact hinS) hs₂ hu₂ (by rw [hg₁] at hl₂ ⊢; exact hl₂)
     rw [hg₁] at this
     exact h k hk G₁ m₂ hc this
-  rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  rcases hs₀.we.futexWait rfl ht (hcs hP hi₀) hr with
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hE, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t (m₁.woken.erase t)) rfl rfl (fun h => .inl h)
       (fun h => by rcases h with h | h <;> exact absurd rfl h)
     rw [upd_same] at this
     exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
-  · simp only [↓reduceIte] at hl ⊢
+  · -- it sleeps: the epoch is `e`, its write `i`; the kernel's read is an op `M`
     refine ⟨?_, ?_⟩
     rotate_left
     · have hl := hl₁.spuriousOff (t := t) (by change (G₁ t).1.ph = _; exact hph) hq0
@@ -1856,14 +1889,11 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
         (fun h => by rcases h with h | h <;> exact absurd rfl h)
       rw [upd_same] at this
       exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
-    obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hs₁.we.access
-    have : ({ m₁ with current := t } : Mem).access S.WE.ptr 4 4 = m₁.access S.WE.ptr 4 4 := rfl
-    rw [this, ha₀] at ha
-    cases ha
-    have hE : S.WE.Holds m₁ e := by
-      rw [Word.holds_bytes hb₀, ← show (Packed.toBits e).setWidth 32 = e from BitVec.setWidth_eq e,
-        ← hve]; exact hv
-    have hlast := (hs₁.we.holds_last).mp hE
+    have hsM : S.Inv G₁ M := hs₀.opKeep (.inr rfl) hop hok hh
+    have huM : U G₁ M := (hP.op (.inr rfl) hi₀ hop).2
+    have hE' : S.WE.Holds m₁ e := by
+      rw [show (Packed.toBits e).setWidth 32 = e from BitVec.setWidth_eq e] at hE; exact hE
+    have hlast := (hs₁.we.holds_last).mp hE'
     have he := hs₁.era t i jr false e (by rw [hg₁])
     have hsz : (S.WE.hist m₁).size = i + 1 := by
       rcases he.esz with h1 | ⟨h1, -, -⟩
@@ -1872,25 +1902,28 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
         have h2 := val_eq (he.eval.2 h1) hlast
         have := congrArg BitVec.toNat h2
         simp [BitVec.toNat_add] at this; omega
-    have hk : ∀ W : Word 32 4, W.Keep m₁ { m₁ with current := t, waiters := m₁.waiters.push (t, S.WE.ptr) } :=
-      fun _ => Word.keep_same m₁ t m₁.seen m₁.nextMsg _ m₁.woken m₁.groups
-    refine hP.pack hl (hs₁.mono (hs₁.ws.keep (hk _)) (hs₁.we.keep (hk _)) (Word.hist_congr rfl rfl)
+    have hszM : (S.WE.hist M).size = i + 1 := by rw [hh]; exact hsz
+    have hk : ∀ W : Word 32 4, W.Keep M { M with waiters := M.waiters.push (t, S.WE.ptr) } :=
+      fun _ => Word.keep_same M M.current M.seen M.nextMsg _ M.woken M.groups
+    refine hP.pack hl (hsM.mono (hsM.ws.keep (hk _)) (hsM.we.keep (hk _)) (Word.hist_congr rfl rfl)
       (Word.hist_congr rfl rfl) (fun _ => VClock.le_refl _) (fun _ h => h) (fun h => .inl h)
       (fun w hw _ => ?_) (fun _ h => h)) ?_
     · rcases Array.mem_push.mp hw with hw | rfl
       · exact .inl hw
-      · exact .inr ⟨i, jr, e, by rw [hg₁], hsz⟩
-    · have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.sleep (t := t) (m := m₁) (m₁.waiters.push (t, S.WE.ptr)) m₁.woken fun w hw => by
+      · exact .inr ⟨i, jr, e, by rw [hg₁], hszM⟩
+    · have := hP.stable G₁ M _ t (G₁ t) huM (Step.sleep (t := t) (m := M) (M.waiters.push (t, S.WE.ptr)) M.woken fun w hw => by
         rcases Array.mem_push.mp hw with hw | rfl
         · exact .inl hw
         · exact .inr rfl) rfl rfl (fun h => .inl h)
         (fun h => by rcases h with h | h <;> exact absurd rfl h)
-      rwa [upd_same] at this
+      rw [upd_same] at this
+      have hMc : ({ M with current := t, waiters := M.waiters.push (t, S.WE.ptr), woken := M.woken } :
+          Mem) = { M with waiters := M.waiters.push (t, S.WE.ptr) } := by
+        have hc : M.current = t := hop.current
+        rw [hc]
+      rwa [hMc] at this
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
-    have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t m₁.woken) rfl rfl (fun h => .inl h)
-      (fun h => by rcases h with h | h <;> exact absurd rfl h)
-    rw [upd_same] at this
-    exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
+    exact hout _ hl.1 hl.2 (hs₀.opKeep (.inr rfl) hop hok hh) (hP.op (.inr rfl) hi₀ hop).2
 
 
 /-! ## `Condition.wait` by a holder that saw no permit -/
@@ -2169,11 +2202,16 @@ theorem loop23_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   simp only [↓reduceIte]
   simp only [StateT.run_bind, StateT.run_get]
   simp only [pure_bind]
+  refine WP.bind (WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_))
+  dsimp only
   rw [ptr_epoch]
-  refine WP.bind (WP.bind (wp_ewait hP hinS hi fun k hk G₁ m₁ hc₁ hi₁ => ?_))
+  refine WP.bind (wp_ewait hP hinS hi fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   refine WP.pure' ?_
   dsimp only
   simp only [StateT.run_bind]
+  refine WP.bind (WP.callMC_ptrProject (hP.projCE hi₁) ?_)
+  dsimp only
+  rw [ptr_epoch]
   refine WP.bind (WP.bind (wp_load hP (.inr rfl) (g := gw pa x i jr e false) (fun h => by cases h) hi₁
     fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL hU => ?_))
   obtain ⟨-, hs₂, -⟩ := hP.split hi₂
@@ -2253,6 +2291,8 @@ theorem condWait_spec_v016 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
     refine WP.map ?_
     simp only [StateT.run_bind]
     simp only [StateT.run_pure, pure_bind]
+    refine WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_)
+    dsimp only
     rw [ptr_epoch]
     refine WP.bind (WP.bind (wp_ldE hP rfl hwx hinS hi fun k₁ hk₁ G₁ m₁ i ev hc₁ hi₁ => ?_))
     refine WP.pure' ?_
@@ -2431,9 +2471,17 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   subst ep
   unfold Io_Condition_waitUncancelable.loop22
   simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
-  rw [ptr_epoch]
+  first
+  | rw [ptr_epoch]
+  | refine WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [ptr_epoch]
   refine WP.bind (wp_ewait hP hinS hi fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   dsimp only
+  -- Zig 0.17.0 forms the epoch pointer again before the load.
+  try (refine WP.bind (WP.callMC_ptrProject (hP.projCE hi₁) ?_)
+       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+       rw [ptr_epoch])
   refine WP.bind (WP.bind (wp_load hP (.inr rfl) (g := gw pa x i jr e false) (fun h => by cases h) hi₁
     fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL hU => ?_))
   obtain ⟨-, hs₂, -⟩ := hP.split hi₂
@@ -2507,7 +2555,11 @@ theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
   refine WP.map ?_
   simp only [StateT.run_bind]
   simp only [StateT.run_pure, pure_bind]
-  rw [ptr_epoch]
+  first
+  | rw [ptr_epoch]
+  | refine WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [ptr_epoch]
   refine WP.bind (WP.bind (wp_ldE hP rfl hwx hinS hi fun k₁ hk₁ G₁ m₁ i ev hc₁ hi₁ => ?_))
   refine WP.pure' ?_
   dsimp only
@@ -2565,6 +2617,9 @@ theorem add1_run {a : BitVec 64} (h : a.toNat + 1 < 2 ^ 64) : (add false a 1).ru
   · rename_i ho; simp [BitVec.uaddOverflow] at ho; try omega
   · rfl
 
+nonvacuity_witness sub1_run := ⟨1, by decide, trivial⟩
+nonvacuity_witness add1_run := ⟨0, by decide, trivial⟩
+
 /-- The ghost values without the semaphore's part, after a change of `t`'s value. -/
 theorem xs_upd (G : ThreadId → SGh X) (t : ThreadId) (g g' : SGh X) :
     xs (fun u => (upd G t g' u).2) = upd (xs fun u => (upd G t g u).2) t g'.2.2 := by
@@ -2618,7 +2673,6 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
   obtain ⟨hD, hc, hL, hi⟩ := h
   unfold Io_Semaphore_waitUncancelable.loop5
   simp only [StateT.run_bind, pure_bind]
-  rw [ptr0 (S := S)]
   refine WP.bind (WP.bind (wp_cntLoad hP hi hc fun m' hL' hc' hi' => ?_))
   by_cases hz : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) = 0
   · rw [hz]
@@ -2633,6 +2687,8 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
           xs (fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) := by
         funext u; simp only [xs, upd]; split <;> rfl
       rw [e, hz] at hpp; exact hpp
+    refine WP.bind (WP.callMC_ptrProject (hP.projS hi' (k := 12) (by decide)) ?_)
+    refine WP.bind (WP.callMC_ptrProject (hP.projS hi' (k := 8) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (condWait_spec hP t pa hL' x io G m' d hi' hz' hone hwx hinS)))
     rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
     simp only [StateT.run_pure]
@@ -2677,7 +2733,9 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
+  refine WP.bind (WP.callMC_ptrProject (hP.projS hi (k := 8) (by decide)) ?_)
+  rw [ptr_mutex]
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf rfl rfl t
     (⟨.out, pa, Heap.empty⟩, .none, x) rfl ⟨rfl, hinS⟩ io G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv5 (P := P) t pa x d₁) (fun _ => 0)
@@ -2685,7 +2743,6 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
     ⟨by omega, hc₁, hL₁, hi₁⟩))
   rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, rfl, hc₂, hL₂, hi₂, hz₂⟩
   simp only [StateT.run_bind]
-  rw [ptr0 (S := S)]
   refine WP.bind (wp_cntLoad hP hi₂ hc₂ fun m₃ hL₃ hc₃ hi₃ => ?_)
   refine WP.bind (WP.callRC_ok (sub1_run hz₂) ?_)
   have hY := xs_self G₂ t (⟨.holds, pa, hL₃⟩, .none, x)
@@ -2710,7 +2767,8 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
   have hfin : ∀ G₆ m₆ d₆ hL₆, d₆ ≤ d₁ → m₆.current = t →
       P.inv (upd G₆ t (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x')) m₆ →
       P.WP t ((do
-        let _i33 ← callC (Io_Mutex_unlock (S.ptr.add 8) io)
+        let i32 ← callMC (ptrProject S.ptr (·.add 8))
+        let _i33 ← callC (Io_Mutex_unlock i32 io)
         pure Io_Semaphore_waitUncancelableExit.ret : CM Tgt Io_Semaphore_waitUncancelableLocals _).run
           s') (fun a G' m' d' => P.WP t (match a.1 with
             | .ret => pure ()
@@ -2719,17 +2777,22 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
         G₆ m₆ d₆ := by
     intro G₆ m₆ d₆ hL₆ hd₆ _ hi₆
     simp only [StateT.run_bind]
-    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf ptr_mutex rfl t
+    refine WP.bind (WP.callMC_ptrProject (hP.projS hi₆ (k := 8) (by decide)) ?_)
+    rw [ptr_mutex]
+    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf rfl rfl t
       (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x') rfl ⟨rfl, hinS'⟩ io G₆ m₆ d₆ hi₆)))
     rintro _ G₇ m₇ d₇ ⟨hd₇, hc₇, hi₇⟩
     exact WP.pure' (WP.pure' ⟨by omega, hc₇, h₃, hT, hi₇⟩)
+  dsimp only
   by_cases hgt : gt false (S.pv (xs fun u => (upd G₂ t (⟨.holds, pa ∪ h₃, hL₄⟩, .none, x') u).2))
     (0 : BitVec 64) = true
   · rw [hgt]
     simp only [↓reduceIte, StateT.run_bind]
     have hp₅ := hP.toPst hinS' hi₅ rfl
-    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (signal_spec hP t ⟨.holds, pa ∪ h₃, hL₅⟩ x' rfl hinS' io G₂ m₅ d₂
-      hp₅))))
+    refine WP.bind (WP.bind (WP.callMC_ptrProject (hP.projS hi₅ (k := 12) (by decide)) ?_))
+    dsimp only
+    refine WP.bind (WP.callC (WP.mono ?_ (signal_spec hP t ⟨.holds, pa ∪ h₃, hL₅⟩ x' rfl hinS' io G₂ m₅ d₂
+      hp₅)))
     rintro _ G₆ m₆ d₆ ⟨hd₆, hc₆, hi₆⟩
     simp only [StateT.run_pure]
     refine WP.pure' ?_
@@ -2762,11 +2825,12 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
+  refine WP.bind (WP.callMC_ptrProject (hP.projS hi (k := 8) (by decide)) ?_)
+  rw [ptr_mutex]
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf rfl rfl t
     (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x) rfl ⟨rfl, hinS⟩ io G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
   have hp₁ := hP.toPst hinS hi₁ rfl
-  rw [ptr0 (S := S)]
   refine WP.bind (wp_cntLoad hP hp₁ hc₁ fun m₂ hL₂ hc₂ hi₂ => ?_)
   obtain ⟨hpv, hlt, hres⟩ := hmv G₁ m₁ hL₁ hp₁
   refine WP.bind (WP.callRC_ok (add1_run hlt) ?_)
@@ -2783,9 +2847,12 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
     · rw [xs_upd G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)]; exact hres hr hrr hdr'
     · rw [xs_upd G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)]; exact hpv
   subst hpa
+  refine WP.bind (WP.callMC_ptrProject (hP.projS hi₃ (k := 12) (by decide)) ?_)
   refine WP.bind (WP.callC (WP.mono ?_ (signal_spec hP t ⟨.holds, pa', hL₃⟩ x' rfl hinS' io G₁ m₃ d₁ hi₃)))
   rintro _ G₄ m₄ d₄ ⟨hd₄, hc₄, hi₄⟩
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf ptr_mutex rfl t
+  refine WP.bind (WP.callMC_ptrProject (hP.projS hi₄ (k := 8) (by decide)) ?_)
+  rw [ptr_mutex]
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf rfl rfl t
     (⟨.holds, pa', hL₃⟩, .none, x') rfl ⟨rfl, hinS'⟩ io G₄ m₄ d₄ hi₄)))
   rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
   exact WP.pure' (WP.pure' ⟨by omega, hc₅, hi₅⟩)

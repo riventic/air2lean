@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import Proofs.Sync.Semaphore
 
 /-!
@@ -783,6 +784,13 @@ def workPost (t : ThreadId) (r : semWorkExit × semWorkLocals) (G : ThreadId →
     (_ : Nat) : Prop :=
   r.1 = .br3 ∧ m.current = t ∧ proto.inv (upd G t (gOut 2)) m
 
+/-- A field pointer of the 48-byte `SemCounter` (block 0, `BlkOk`) is formed (`ptrProject`,
+MM-3). -/
+theorem projC {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {k : Nat} (hk : k ≤ 48) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hi.2.2.blk
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
+
 theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : workInv t s G m d) :
     proto.WP t ((semWork.loop4 cPtr).run s) (fun r G' m' d' =>
@@ -800,13 +808,17 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
   · rename_i hlt
     have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
-    rw [show cPtr.add 0 = cPtr from rfl, show cPtr.add 16 = S.ptr from rfl]
+    refine WP.bind (WP.callMC_ptrProject (projC hi (k := 16) (by decide)) ?_)
+    dsimp only
+    rw [show cPtr.add 16 = S.ptr from rfl]
     -- the read of `io`, then `wait`
     refine WP.bind (wp_io hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (Sem.wait_spec fits t Heap.empty (.work s.local1.toNat false)
       (.work s.local1.toNat true) (fun h => ∃ v : BitVec 32, pts nPtr 4 v h) _
       (hone_w t _) ⟨_, rfl⟩ trivial trivial (hmv_w t _ ht2) (hU_w t _) G m₁ d hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h₃, -, hi₂⟩
+    refine WP.bind (WP.callMC_ptrProject (projC hi₂ (k := 40) (by decide)) ?_)
+    dsimp only
     rw [show cPtr.add 40 = nPtr from rfl]
     -- the load of `n`
     refine WP.bind (wp_n hi₂ hc₂ (TTriple.load (by decide)) rfl (by omega)
@@ -840,6 +852,9 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
       have hx₄ : XG (upd G₂ t (⟨.out, h₅, Heap.empty⟩, .none, .work (s.local1.toNat + 1) true)) t =
           .work (s.local1.toNat + 1) true := by show (upd G₂ t _ t).2.2 = _; rw [upd_self]
       obtain ⟨ht2', h2, -⟩ := shape_work hi₄.2.2.shape hx₄; rw [h2]; exact ht2'
+    refine WP.bind (WP.callMC_ptrProject (projC hi₄ (k := 16) (by decide)) ?_)
+    dsimp only
+    rw [show cPtr.add 16 = (Sync.SemCounter.S).ptr from rfl]
     refine WP.bind (wp_io hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (Sem.post_spec fits t Heap.empty h₅
       (.work (s.local1.toNat + 1) true) (.work (s.local1.toNat + 1) false) _ trivial trivial (hmv_p t _ h₅ ht2)
@@ -1134,17 +1149,17 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
     subst this; exact VClock.le_refl _
 
 
-theorem main_spec (io : Io) (d : Nat) :
-    proto.WP 0 (semaphoreCounter io) QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
+    proto.WP 0 (semaphoreCounter io) QM G0 { mem0 σ with current := 0 } d := by
   unfold semaphoreCounter
   -- the `SemCounter`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 48 8 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
   -- its four parts
   obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
   obtain ⟨hS, hR₂, dS, rfl, hS₁, hR₂'⟩ := bytesAt_split hR₁' (k := 24) (by simp)
@@ -1168,20 +1183,49 @@ theorem main_spec (io : Io) (d : Nat) :
       (hI ∪ (hS ∪ (hN ∪ hP))) := ⟨hI, _, dI, rfl, hI₁, hS, _, dS, rfl, hS₁, hN, hP, dN, rfl, hN₁, hP₁⟩
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr) (A := A) (S := 48) (K := .stack) (k := 0)
     (a := 8) io rfl (by decide) (by rw [hsI]; decide) (by simp [cPtr]; omega) (by decide)).frame)
-    ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
+    ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₁)
     fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
+  have hwI : (writeBytes ((Array.replicate 48 Byte.undef).extract 0 16) 0 (Enc.encode io)).size = 16 := by
+    rw [writeBytes_size _ _ _ (by simp [enc_io])]; exact hsI
+  have pr₂ : (ptrProject cPtr (·.add 16)).run m₂ = pure (cPtr.add 16, m₂) := by
+    have hs₂' : h₂.Sub m₂.heap := by simpa [upd_self] using ho₂.sub 0
+    obtain ⟨hx, hy, dxy, hxy, hbx, -⟩ := F₂
+    rw [hxy] at hs₂'
+    exact bytesAt_ptrProject_sub hbx (Heap.sub_union_left.trans hs₂') (k := 16)
+      (by rw [hwI]; exact Nat.le_refl _) (by rw [hwI]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr.add 16) (A := A) (S := 48) (K := .stack)
     (k := 0) (a := 8) sem0 (by rw [sem_size]; rfl) rfl (by decide)
     (by rw [hsS]; decide) (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
-    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  have pr₃ : (ptrProject cPtr (·.add 40)).run m₃ = pure ((cPtr.add 16).add 24, m₃) := by
+    have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+    obtain ⟨hx, hy, dxy, hxy, hbx, hyy⟩ := F₃
+    obtain ⟨hz, hw, dzw, hzw, -, hww⟩ := hyy
+    obtain ⟨hn, hp', dnp, hnw, hbn, -⟩ := hww
+    rw [hxy] at hs₃'
+    have hsy : hy.Sub m₃.heap := (Heap.sub_union_right dxy).trans hs₃'
+    rw [hzw] at hsy
+    have hsw : hw.Sub m₃.heap := (Heap.sub_union_right dzw).trans hsy
+    rw [hnw] at hsw
+    have i0 : m₃.inBounds cPtr = true := by
+      simpa using bytesAt_inBounds_sub hbx (Heap.sub_union_left.trans hs₃') (k := 0) (by simp)
+        (by rw [hwI]; decide)
+    have i40 : m₃.inBounds ((cPtr.add 16).add 24) = true := by
+      simpa using bytesAt_inBounds_sub hbn (Heap.sub_union_left.trans hsw) (k := 0) (by simp)
+        (by simp)
+    exact ptrProject_add_run i0 i40
+  refine WP.bind (WP.callMC_ptrProject pr₃ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 16).add 24) (A := A) (S := 48)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
     (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃
     (hs₃.current.trans (hs₂.current.trans hc₁))
-    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₃)
     fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
   rw [upd_upd] at ho₄
   have hc₄ : m₄.current = 0 := hs₄.current.trans (hs₃.current.trans (hs₂.current.trans hc₁))
@@ -1309,7 +1353,7 @@ theorem main_spec (io : Io) (d : Nat) :
   have hsh₈ := hi₈.2.2.shape
   obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
   · exfalso; change (G₃ 0).2.2 = _ at h0; rw [hg₃] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
   -- `main` takes the kid's part, then the semaphore's resource
   let gEnd : Gh := (⟨.out, S.L.part (G₃ 0) ∪ S.L.own G₃ m₈ 1, Heap.empty⟩, .none, .joins)
@@ -1333,8 +1377,8 @@ theorem main_spec (io : Io) (d : Nat) :
       obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
       have : u = 1 := by unfold ThreadId at *; omega
       subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree
-    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
+  have hall₉ : ∀ u < m₉.threads.size, VClock.le (m₉.clocks[u]!) (m₉.clocks[0]!) = true :=
+    fun u hu => by
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
@@ -1344,7 +1388,9 @@ theorem main_spec (io : Io) (d : Nat) :
     · subst h0; simp [VClock.le_refl]
     · have : u = 1 := by omega
       subst this
-      exact VClock.le_merge_right _ _)
+      exact VClock.le_merge_right _ _
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree
+    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall₉
   -- `n` holds 4
   have hR' : S.R (fun u => (G₃ u).2) hL := by
     have : S.L.R (upd G₃ 0 gEnd) hL := hR
@@ -1365,7 +1411,13 @@ theorem main_spec (io : Io) (d : Nat) :
     Heap.disjoint_union_right.mpr ⟨dpr.symm, Heap.disjoint_union_right.mpr ⟨dr0.symm, drW⟩⟩
   have heq : own₉ 0 ∪ ((hp ∪ hr) ∪ S.L.wordH m₉) = hr ∪ (hp ∪ (own₉ 0 ∪ S.L.wordH m₉)) := by
     rw [Heap.union_left_comm hd₀, Heap.union_comm dpr, Heap.union_assoc]
-  -- the load of `n`
+  -- the pointer to `n`, then its load
+  have pr₉ : (ptrProject cPtr (·.add 40)).run m₉ = pure (nPtr, m₉) := by
+    obtain ⟨blk₀, hblk₀, -, hsz₀, -⟩ := hi₈.2.2.blk
+    have hb₉ : m₉.blocks = m₈.blocks := by rw [hm₉]
+    exact ptrProject_block_run (by rw [hb₉]; exact hblk₀) rfl (by decide) (by simp [cPtr, hsz₀])
+  refine WP.bind (WP.callMC_ptrProject pr₉ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned (TTriple.load (p := nPtr) (a := 4) (v := BitVec.ofNat 32 4)
     (by decide)).frame ho hc₉ (by rw [hs₉]; decide)
     (by rw [upd_self, heq]; exact ⟨hr, _, hd', rfl, hn4, rfl⟩) fun a m₁₀ hQ hr' ho' hq hs₁₀ _ _ => ?_)
@@ -1377,7 +1429,9 @@ theorem main_spec (io : Io) (d : Nat) :
   -- the free of the `SemCounter`
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₈.2.2.blk
   have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
+        _ _ _ _).freeRaces _ _) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -1398,18 +1452,25 @@ theorem main_spec (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`semaphoreCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem semaphoreCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+theorem semaphoreCounter_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
     {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (semaphoreCounter io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 4 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io) h
   exact hv
 
 /-- **No run of `semaphoreCounter` gives an error**: no data race on `n`, no deadlock, no panic,
 under every schedule. -/
-theorem semaphoreCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+theorem semaphoreCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (semaphoreCounter io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
+
+/-- One schedule completes: under the oracle that always picks option 0, the semaphore counter returns 4 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem semaphoreCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 end Sync.SemCounter

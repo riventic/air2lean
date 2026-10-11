@@ -713,7 +713,7 @@ if ! want_mutation l; then
 elif ! has_example threads; then
   echo "mutation (l): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
-  sed -i.bak 's/match raceAt m.footprint clock block off len kind with/match (none : Option Error) with/' "$mem_lean"
+  sed -i.bak 's/match raceCheck m clock block off len kind with/match (none : Option Error) with/' "$mem_lean"
   rm -f "$mem_lean.bak"
   grep -q 'match (none : Option Error) with' "$mem_lean" || {
     echo "error: mutation (l): sed did not change recordAccess" >&2
@@ -1020,7 +1020,7 @@ if ! want_mutation ac; then
 elif ! has_example sync; then
   echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
-  sed -i.bak 's/^  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)$/  let woke : Array ThreadId := #[]/' "$thread_lean"
+  sed -i.bak 's/^  let woke := wakeSet m.waiters p n cs$/  let woke : Array ThreadId := #[]/' "$thread_lean"
   rm -f "$thread_lean.bak"
   grep -q '^  let woke : Array ThreadId := #\[\]$' "$thread_lean" || {
     echo "error: mutation (ac): sed did not change futexWake" >&2

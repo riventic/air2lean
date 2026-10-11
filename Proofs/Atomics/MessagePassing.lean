@@ -84,7 +84,7 @@ join yet. -/
 def ThrOk (G : ThreadId → Gh) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧ m.clocks.size = m.threads.size ∧
   ((m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none) ∨
-   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false) ∧
+   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false ∧ r.gated = false) ∧
     (G 0 = .run ∨ G 0 = .joins) ∧ (G 1 = .start ∨ G 1 = .wrote ∨ G 1 = .fin) ∧
     ∀ u, 2 ≤ u → G u = .none))
 
@@ -257,7 +257,7 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
   cases hacc
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
     have := hq; unfold curBytes at this; rw [hb₂] at this; exact this
-  rw [hx, LawfulEnc.decode_encode] at hdec
+  rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht (fun h => by cases h) (by decide) (.inr (.inr (.inr (.inr ⟨rfl, rfl⟩))))⟩
 
@@ -713,7 +713,7 @@ theorem step_read {G : ThreadId → Gh} {m m' : Mem} {v : BitVec 32} (hi : Inv G
   rw [hb₀] at h42
   have : (Enc.decode (blk.bytes.extract 0 (0 + Enc.size (BitVec 32))) : Result (BitVec 32)).run =
       some (.ok 42) := h42
-  rw [this] at hdec
+  rw [decodeLoad_run_of_decode this] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht (fun _ h => by cases h) (by decide) (.inr (.inr (.inl ⟨rfl, rfl, hfin⟩)))⟩
 
@@ -788,7 +788,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       rw [StateT.run'_eq]
       refine WP.map ?_
       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-      rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
+      rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
       have ht₀ : ({ m with current := 1 } : Mem).current < ({ m with current := 1 } : Mem).threads.size := by
         show 1 < _; rw [hs2]; decide
       -- the pointer to `data`
@@ -800,7 +800,9 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       refine WP.bind (WP.liftM (fun e he => (data_noErr hi₁ hgu rfl e he).elim) fun _ m₂ hs => ?_)
       obtain ⟨hc₂, hth₂, hi₂⟩ := step_data hi₁ hgu rfl hs
       refine ⟨by rw [hth₂], ?_⟩
-      rw [show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+      -- the pointer to `flag`'s field (`ptrProject`: in bounds of the 16-byte context)
+      refine WP.bind (WP.callMC_ptrProject (hi₂.b2.ptrProject_run (o := 0) (k := 8) (by decide)) ?_)
+      rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
       have ht₂ : m₂.current < m₂.threads.size := by rw [hc₂, hth₂]; exact ht₀
       -- the pointer to `flag`
       refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₂ ht₂ (by decide) (by decide) hi₂.ctx.2 e he).elim)
@@ -809,7 +811,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       refine ⟨rfl, ?_⟩
       -- the release store of 1
       simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc, atomicStoreC]
-      rw [show fPtr.add 0 = fPtr from rfl]
       refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.wrote, hi₃, fun G₁ m₄ hg₁ hi₄ c hcr => ?_⟩)
       have hi₄' : Inv G₁ { m₄ with current := 1 } := (hi₄ : Inv G₁ m₄).grow (grows_current _ _)
       have ht₄ : ({ m₄ with current := 1 } : Mem).current < ({ m₄ with current := 1 } : Mem).threads.size := by
@@ -891,7 +892,7 @@ theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pr
   refine ⟨hs1, hnone, by rw [hcs, hs1], ⟨by
       rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
     by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
-      by simp [Array.getElem_push, hs1], hc, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
+      by simp [Array.getElem_push, hs1], hc, rfl, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
   rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
   exact hnone u (by unfold ThreadId at *; omega)
 
@@ -944,9 +945,9 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
 /-- `main`'s join of the writer is possible: thread 1, spawned by `main`, not joined. -/
 theorem join_ok {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
     ∃ m', ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')) := by
-  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj⟩, -⟩⟩ := hi.thr
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj, hgt⟩, -⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
-  · exact join_run (m := { m with current := 0 }) hr hs hj
+  · exact join_run (m := { m with current := 0 }) hr hs hj (.inl hgt)
 
 /-- After the join: `main` joined every thread; the blocks are the same. -/
 theorem join_final {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .joins)
@@ -978,7 +979,8 @@ theorem enc_av4 : (Enc.encode ({ raw := 0 } : atomic_Value_u32)).size = 4 := by
 
 /-- `main`: three blocks, four stores, the spawn, the acquire load of the flag (a stop), the read
 of `data` if the flag is 1, the join (a stop), three frees. -/
-theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 mpRelAcq QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelAcq
   -- the blocks: `data`, `flag`, the `MpCtx`
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
@@ -995,13 +997,13 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -1024,11 +1026,14 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   refine ⟨by rw [hp₅.thr, hp₄.thr], ?_⟩
   -- the `MpCtx`
   dsimp only
-  rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl, show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₆ hs₆ => ?_)
   obtain ⟨hp₆, h2₆, hk₆⟩ := pre_store hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₆
   refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
+  dsimp only
+  refine WP.bind (WP.callMC_ptrProject (hp₆.b2.ptrProject_run (o := 0) (k := 8) (by decide)) ?_)
+  rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
   dsimp only
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₇ hs₇ => ?_)
@@ -1050,11 +1055,10 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
     funext u; unfold upd G0; split <;> simp_all
   -- the spawn
   refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₇, fun G₁ m₈ hg₁ hi₈ =>
-    ⟨.start, by simp [proto], fun child m₉ hf => ?_⟩⟩)
+    ⟨.start, by simp [proto, cPtr], fun child m₉ hf => ?_⟩⟩)
   obtain ⟨rfl, hc₉, hi₉⟩ := inv_fork ((hi₈ : Inv G₁ m₈).grow (grows_current m₈ 0)) hg₁ rfl hf
   dsimp only
   simp only [StateT.run_bind, pure_bind, bind_assoc, atomicLoadC]
-  rw [show (⟨some 1, ((0 : Nat) : Int)⟩ : Ptr).add 0 = fPtr from rfl]
   -- the acquire load of the flag
   refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.run, hi₉, fun G₂ m₁₀ hg₂ hi₁₀ c hcr => ?_⟩)
   have hi₁₀' : Inv G₂ { m₁₀ with current := 0 } := (hi₁₀ : Inv G₂ m₁₀).grow (grows_current _ _)
@@ -1092,25 +1096,28 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   obtain ⟨hja, -, hjb⟩ := join_final hi₁₃ hg₄ hj
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  -- the frees
+  -- the frees: the child is joined, so the ends of the blocks race with no access
+  have hcl : m₁₄.ClocksLe := Mem.ClocksLe.join2 hj
+    (by rw [hi₁₃.thr.2.1]; exact (thr_of hi₁₃.thr (.inr (.inl hg₄))).1)
   obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi₁₃.b0
   obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi₁₃.b1
   obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi₁₃.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀
+    (hcl.freeRaces _ _) e he).elim)
     fun _ m₁₅ hf₁ => ?_)
   obtain ⟨b, blk, hb, -, rfl⟩ := free_ok hf₁
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₁) hl₁ e he).elim) fun _ m₁₆ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₆ hf₂ => ?_)
   obtain ⟨b, blk', hb, -, rfl⟩ := free_ok hf₂
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₂) hl₂ e he).elim) fun _ m₁₇ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₇ hf₃ => ?_)
   obtain ⟨b, blk'', hb, -, rfl⟩ := free_ok hf₃
   cases hb
   refine ⟨rfl, WP.pure' ⟨?_, hja⟩⟩
@@ -1122,17 +1129,17 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
 
 /-- **`mpRelAcq` gives 0 or 42 under every schedule** (every oracle `o`, every `fuel`): after
 the acquire load reads the writer's release store, the read of `data` sees 42. -/
-theorem mpRelAcq_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelAcq mem0).run = some (.ok (v, m))) :
+theorem mpRelAcq_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 42 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `mpRelAcq` gives an error**: the read of `data` does not race with the write,
 under every schedule. -/
-theorem mpRelAcq_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o mpRelAcq mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem mpRelAcq_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Atomics.MP

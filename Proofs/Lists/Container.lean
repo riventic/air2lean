@@ -74,6 +74,10 @@ theorem linkedAdd_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32))
     exact ⟨p, hd, rfl, hp⟩
   | error e => exact Triple.ret (Q := Added LList hd xs v) (.error e)
 
+nonvacuity_witness linkedAdd_spec := ⟨⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness linkedAdd_spec :=
+  ⟨⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
+
 /-- The linked list as a `SeqImpl`. -/
 def linkedSeq : SeqImpl where
   H := Option Ptr
@@ -111,9 +115,10 @@ theorem ptrOk_of_buf {m : Mem} {h : Heap} {ptr : Ptr} {cap : Nat} {xs : List (Bi
     obtain ⟨blk, hblk, -⟩ := Mem.heap_some (hsub _ _ hl)
     exact (Array.getElem?_eq_some_iff.mp hblk).1
 
-theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
-    Triple (AList p xs) (arrayAdd a p v) (Added AList p xs v) := by
-  apply Triple.of_run
+/-- `append` returns: the add or `error.OutOfMemory` (`append_run`). -/
+theorem arrayAdd_total (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
+    TotalTriple (AList p xs) (arrayAdd a p v) (Added AList p xs v) := by
+  apply TotalTriple.of_run
   intro m hP hF hd hm ⟨ptr, cap, hz, hl⟩ hst
   have hok : ptrOk m ptr := by
     obtain ⟨-, -, hH, hB, dHB, rfl, -, hbf⟩ := hl
@@ -134,11 +139,35 @@ theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : Bit
     exact ⟨.error "OutOfMemory", m', hL', by simp [arrayAdd, hr], hd', hm',
       sep_lift.mpr ⟨rfl, ptr, cap, hz, hl'⟩, hst'⟩
 
+/-- An empty list: its header at `p0` names no buffer. -/
+theorem alist_empty :
+    AList Witness.p0 [] (Witness.mem1 (hdrBytes ⟨none, 0⟩ 0 0)).heap :=
+  ⟨⟨none, 0⟩, 0, fun _ => rfl, by decide, by decide, _, Heap.empty, Heap.disjoint_empty _,
+    (Heap.union_empty _).symm, ⟨4096, _, .heap, by decide, by decide, Witness.mem1_bytesAt _ _⟩,
+    by simp [buf]⟩
+
+theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
+    Triple (AList p xs) (arrayAdd a p v) (Added AList p xs v) :=
+  (arrayAdd_total a p xs v).toPartial
+
+theorem alist_empty_admit : Witness.Admit (AList Witness.p0 []) :=
+  Witness.Admit.of_heap alist_empty (Witness.mem1_seq _ _)
+
+nonvacuity_witness arrayAdd_total := ⟨⟨⟩, Witness.p0, [], 0, alist_empty_admit⟩
+nonvacuity_witness arrayAdd_spec := ⟨⟨⟩, Witness.p0, [], 0, alist_empty_admit⟩
+liveness_witness arrayAdd_spec :=
+  ⟨⟨⟩, Witness.p0, [], 0, Witness.Live.of_total (arrayAdd_total ⟨⟩ _ [] 0) alist_empty_admit⟩
+
 /-- `std.ArrayListUnmanaged(u32)` as a `SeqImpl`. -/
 def arraySeq : SeqImpl where
   H := Ptr
   Rep := AList
   add := arrayAdd
   add_spec := arrayAdd_spec
+
+nonvacuity_witness SeqImpl.add_spec :=
+  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness SeqImpl.add_spec :=
+  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
 
 end Lists

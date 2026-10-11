@@ -86,7 +86,8 @@ def main():
     assert text.count("Zig.tlsPtr 0") == 6
     checks += 2
 
-    # The old exporter's marker keeps the old rejection.
+    # The old exporter's marker keeps the old rejection; without it the strict schema-12 table
+    # requires `global`.
     def marker(d):
         for i in nav_insts(d):
             del i["global"]
@@ -96,7 +97,7 @@ def main():
     def no_global(d):
         for i in nav_insts(d):
             del i["global"]
-    checks += reject(binary, mutate(no_global), "identity and lifetime")
+    checks += reject(binary, mutate(no_global), "missing required key 'global'")
 
     def bad_index(d):
         nav_insts(d)[0]["global"] = 7
@@ -117,7 +118,7 @@ def main():
 
     def pointer_type(d):
         d["types"].append(dict(k="ptr", size="one", const=False, child=2, ptr_align=4,
-                               volatile=False, allowzero=False, sentinel=False, host_size=0,
+                               volatile=False, allowzero=False, address_space="generic", sentinel=False, host_size=0,
                                abi_size=8, abi_align=8))
         d["globals"][0]["ty"] = len(d["types"]) - 1
         d["globals"][0]["init"] = dict(ty=len(d["types"]) - 1, undef=True)

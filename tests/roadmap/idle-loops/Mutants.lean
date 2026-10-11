@@ -25,7 +25,8 @@ def skipDispatch : Tgt → ConcM Tgt Unit
 
 /-- `main`, publishing `flag` with a relaxed store. -/
 def relaxedMain : ConcM Tgt Unit :=
-  syncSpawn .worker >>= fun h =>
+  syncSpawn .worker >>= fun r =>
+    let h := match r with | .ok h => h | .error _ => 0
     ConcM.liftMem (store 4 dPtr (42 : BitVec 32)) >>= fun _ =>
       syncPick (storeCount 32 .relaxed 4 fPtr) >>= fun c =>
         ConcM.liftMem (atomicStoreAt c .relaxed 4 fPtr (1 : BitVec 32)) >>= fun _ => syncJoin h
@@ -36,7 +37,7 @@ def oracles : List (Nat → Nat) :=
    fun i => if i < 4 then 1 else 0, fun i => if i < 8 then 1 else 0, fun i => i / 2 % 2]
 
 def outcomes (d : Tgt → ConcM Tgt Unit) (m : ConcM Tgt Unit) : List (Option (Except Error Unit)) :=
-  oracles.map fun o => ((Sched.run d 200 o m mem0).run).map (·.map (·.1))
+  oracles.map fun o => ((Sched.run ⟨.any, .available⟩ d 200 o m (mem0 .fresh)).run).map (·.map (·.1))
 
 def isError : Option (Except Error Unit) → Bool
   | some (.error _) => true

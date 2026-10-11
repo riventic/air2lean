@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "vectors.vNarrow",
+ "module": "root",
  "params": [
   0
  ],

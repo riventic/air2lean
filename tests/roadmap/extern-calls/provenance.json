@@ -1,0 +1,32 @@
+{
+  "source_sha256": {
+    "extern_calls.zig": "a3b2623b6ec44732a94c42bd9adeec4b5b1c8710d5283232901318620342c5c0",
+    "libc_ref.zig": "fab8a2a56bb80a188a19429ae2eb15db8de252e1bc89c7daede0c66a96aef19f",
+    "trusted.zig": "80df9e4b16f1729a84b614975125437ee7ac4420f322cced37922b3bc1594c48"
+  },
+  "air": {
+    "exporter": "zig-patch/air-json/json.zig of this branch (scratch compilers built by zig-patch/build.sh)",
+    "target": "x86_64-linux",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false,
+    "filters": {
+      "air/<version>": "extern_calls.,libc_ref.",
+      "air/0.16.0-trusted": "trusted. (-lc)"
+    }
+  },
+  "air_sha256": {
+    "0.14.1/extern_calls.fillSum.json": "bf8c97466015b9ea09de5f1e03c0ecabb26de538ad3239a697f42079b040c7f5",
+    "0.14.1/extern_calls.greetLen.json": "c97334b2bd9a8162f565b07636f52d27fce2746345f8b3072b598e0b519ade70",
+    "0.14.1/libc_ref.memset.json": "8b5f12a7b7f5ef07c64676f49d8be9cc252302511fc03f17faddeeb909ec0b47",
+    "0.14.1/libc_ref.strlen.json": "68fa9e6879e2f36eda059e6048f058aec76f2063894cbef3056ce2753819ccda",
+    "0.15.2/extern_calls.fillSum.json": "5a3f27cddd3a4357ea13c96d2dc7a4c85c62ca0114e38e4a234fd61966c0fea4",
+    "0.15.2/extern_calls.greetLen.json": "935e79a90b4f5cec9c2818515c5275a09d28beac17dbccbf4e25ffabc605e61d",
+    "0.15.2/libc_ref.memset.json": "0dccef427374c98548d1b163884e4521c64e9f46c9d982f315e4289d68b99e28",
+    "0.15.2/libc_ref.strlen.json": "2571dd64d53db8368700cc64891926c614e6e8429f811cddd901cbc5e7f7dcfd",
+    "0.16.0/extern_calls.fillSum.json": "84f84be427b8deb790be116099095537a1e46a95f46f3d63f931604660ba2d35",
+    "0.16.0/extern_calls.greetLen.json": "49545a6763e9f881d503b65a37bb27dcb25d2c85ee8d21702320cc7f3e051718",
+    "0.16.0/libc_ref.memset.json": "f71c112df5c74e63eaa385400c0547b6003d3579fab22a4eea5c149a1e505da2",
+    "0.16.0/libc_ref.strlen.json": "4308dc1fb4ab6ac8d44353e45c0526c95468e43dd9bca85fac9b1e854402c035",
+    "0.16.0-trusted/trusted.absSum.json": "f056f2f1d8cb65695a2eb5ad5a723a7526555b1e4ab69fa8f8af687b4cd7cfd7"
+  }
+}

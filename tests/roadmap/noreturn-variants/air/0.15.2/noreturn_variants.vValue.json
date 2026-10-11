@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.vValue",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 67
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 20
   },
   {
    "id": 2,
@@ -166,7 +173,8 @@
        "id": 9,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 20
       },
       {
        "id": 10,
@@ -175,6 +183,7 @@
        "callee": {
         "ty": 5,
         "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -192,7 +201,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 14,
@@ -209,6 +219,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.V",
+   "module": "root",
    "layout": "auto",
    "tag": 3,
    "fields": [
@@ -243,6 +254,7 @@
   {
    "k": "enum",
    "name": "noreturn_variants.Kind",
+   "module": "root",
    "tag": 6,
    "exhaustive": true,
    "fields": [

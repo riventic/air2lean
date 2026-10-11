@@ -6,7 +6,7 @@ cd "$repo_root"
 
 # This suite spans the review PR stack. A missing dependency is a failure, not a skipped test.
 for required in scripts/review-checks.sh tests/review/AllProofs.lean \
-    tests/review/Concurrency.lean tests/review/Emitter.lean tests/review/Floats.lean tests/review/Memory.lean \
+    tests/review/Concurrency.lean tests/review/MutexOwner.lean tests/review/Emitter.lean tests/review/Floats.lean tests/review/Memory.lean \
     tests/review/Parser.lean tests/review/ErrorUnionAlignment.lean tests/review/ErrorUnionLayoutCheck.lean tests/review/inputs.py tests/review/emitter.sh \
     tests/review/exporter-checks.sh tests/review/exporter.zig; do
   if [ ! -f "$required" ]; then
@@ -21,7 +21,7 @@ for source in tests/review/AllProofs.lean tests/review/Floats.lean tests/review/
   echo "== $source ==" >&2
   lake env lean "$source"
 done
-for source in tests/review/Concurrency.lean tests/review/Memory.lean tests/review/ErrorUnionLayoutCheck.lean; do
+for source in tests/review/Concurrency.lean tests/review/MutexOwner.lean tests/review/Memory.lean tests/review/ErrorUnionLayoutCheck.lean; do
   echo "== $source ==" >&2
   lake env lean --run "$source"
 done

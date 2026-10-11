@@ -193,8 +193,9 @@ class Evidence(Scratch):
         self.check_fails('must bind AIR2LEAN_ZIG_VERSION')
 
     def test_step_commands_must_perform_the_kind(self):
-        self.edit_text(TM['WORKFLOW'], '        run: lake build Proofs\n\n      - name: Restore',
-                       '        run: lake build ZigLean\n\n      - name: Restore')
+        self.edit_text(TM['WORKFLOW'],
+                       '          lake build Proofs\n\n      - name: macOS golden AIR, translate, differential test (0.17.0)',
+                       '          lake build ZigLean\n\n      - name: macOS golden AIR, translate, differential test (0.17.0)')
         self.check_fails("'macOS proofs (0.16.0)': its commands do not perform proof_check")
 
     def test_missing_or_renamed_step_fails(self):

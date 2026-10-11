@@ -4,8 +4,8 @@ import ZigLean
 
 namespace Futures
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program; fields are captured by value. -/
 inductive Tgt where
@@ -59,12 +59,13 @@ structure awaitErrorLocals where
 inductive awaitErrorExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitError (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
     let i2 ← pure (← get).f
     let i3 ← pure (p1)
-    let i4 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Zero"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.asyncC (α := Except Zig.ErrName (BitVec 32)) (fun futureSlot => Tgt.checked_future futureSlot i3))
+    let i4 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Zero"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.asyncWithPolicyC (α := Except Zig.ErrName (BitVec 32)) .available (fun futureSlot => Tgt.checked_future futureSlot i3) ((fun a => (do Zig.ConcM.liftMem (StateT.lift (checked a)))) i3))
     (letI : Zig.Enc (Zig.Future (Except Zig.ErrName (BitVec 32))) := @Zig.Future.instEnc (Except Zig.ErrName (BitVec 32)) (Zig.errorUnionEnc (⟨#["Zero"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32)))); Zig.store (α := Zig.Future (Except Zig.ErrName (BitVec 32))) 8 i2 i4)
     let i6 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Zero"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.awaitC (α := Except Zig.ErrName (BitVec 32)) p0 i2)
     pure (.ret i6)) : Zig.CM Tgt awaitErrorLocals awaitErrorExit).run' { (default : awaitErrorLocals) with f := s2 }
@@ -93,6 +94,7 @@ structure awaitOwnedLocals where
 inductive awaitOwnedExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitOwned (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 4 4
   let s4 ← Zig.allocStack 8 8
@@ -101,7 +103,7 @@ def awaitOwned (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
     Zig.store (α := BitVec 32) 4 i2 (0 : BitVec 32)
     let i4 ← pure (← get).f
     let i5 ← pure (i2, p1)
-    let i6 ← Zig.asyncC (α := Unit) (fun futureSlot => Tgt.fill_future futureSlot i5)
+    let i6 ← Zig.asyncWithPolicyC (α := Unit) .available (fun futureSlot => Tgt.fill_future futureSlot i5) ((fun a => (do let (capture0, capture1) := a; Zig.ConcM.liftMem (fill capture0 capture1))) i5)
     Zig.store (α := Zig.Future (Unit)) 8 i4 i6
     let _i8 ← Zig.awaitC (α := Unit) p0 i4
     let i9 ← Zig.load (BitVec 32) 4 i2
@@ -131,12 +133,13 @@ structure awaitTwiceLocals where
 inductive awaitTwiceExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitTwice (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
     let i2 ← pure (← get).f
     let i3 ← pure (p1)
-    let i4 ← Zig.asyncC (α := BitVec 32) (fun futureSlot => Tgt.square_future futureSlot i3)
+    let i4 ← Zig.asyncWithPolicyC (α := BitVec 32) .available (fun futureSlot => Tgt.square_future futureSlot i3) ((fun a => (do Zig.ConcM.liftMem (StateT.lift (square a)))) i3)
     Zig.store (α := Zig.Future (BitVec 32)) 8 i2 i4
     let i6 ← Zig.awaitC (α := BitVec 32) p0 i2
     let i7 ← Zig.awaitC (α := BitVec 32) p0 i2
@@ -153,12 +156,13 @@ structure awaitValueLocals where
 inductive awaitValueExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
     let i2 ← pure (← get).f
     let i3 ← pure (p1)
-    let i4 ← Zig.asyncC (α := BitVec 32) (fun futureSlot => Tgt.square_future futureSlot i3)
+    let i4 ← Zig.asyncWithPolicyC (α := BitVec 32) .available (fun futureSlot => Tgt.square_future futureSlot i3) ((fun a => (do Zig.ConcM.liftMem (StateT.lift (square a)))) i3)
     Zig.store (α := Zig.Future (BitVec 32)) 8 i2 i4
     let i6 ← Zig.awaitC (α := BitVec 32) p0 i2
     pure (.ret i6)) : Zig.CM Tgt awaitValueLocals awaitValueExit).run' { (default : awaitValueLocals) with f := s2 }
@@ -172,6 +176,7 @@ structure cancellableLocals where
 inductive cancellableExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def cancellable (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let e ← ((do
     let i2 ← Zig.checkCancelC p0
@@ -194,12 +199,13 @@ structure cancelValueLocals where
 inductive cancelValueExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def cancelValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
     let i2 ← pure (← get).f
     let i3 ← pure (p0, p1)
-    let i4 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.asyncC (α := Except Zig.ErrName (BitVec 32)) (fun futureSlot => Tgt.cancellable_future futureSlot i3))
+    let i4 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.asyncWithPolicyC (α := Except Zig.ErrName (BitVec 32)) .available (fun futureSlot => Tgt.cancellable_future futureSlot i3) ((fun a => (do let (capture0, capture1) := a; cancellable capture0 capture1)) i3))
     (letI : Zig.Enc (Zig.Future (Except Zig.ErrName (BitVec 32))) := @Zig.Future.instEnc (Except Zig.ErrName (BitVec 32)) (Zig.errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32)))); Zig.store (α := Zig.Future (Except Zig.ErrName (BitVec 32))) 8 i2 i4)
     let i6 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.cancelC (α := Except Zig.ErrName (BitVec 32)) p0 i2)
     pure (.ret i6)) : Zig.CM Tgt cancelValueLocals cancelValueExit).run' { (default : cancelValueLocals) with f := s2 }

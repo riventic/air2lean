@@ -17,7 +17,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
   while !todo.isEmpty && out.size < cap do
     let pre := todo.head!
     todo := todo.tail!
-    let (r, opts) := Sched.runTrace dispatch fuel (fun i => pre.getD i 0) main m0
+    let (r, opts) := Sched.runTrace ⟨.any, .available⟩ dispatch fuel (fun i => pre.getD i 0) main m0
     out := out.push (r.map (·.map (·.1)))
     -- Branch on every later choice that this run took as 0.
     for i in [pre.size:opts.size] do
@@ -28,7 +28,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
 private def bv (n : Nat) : BitVec 32 := BitVec.ofNat 32 n
 
 private def outcomes {α : Type} (x : ConcM Futures.Tgt α) : Array (Option (Except Error α)) :=
-  allOutcomes Futures.dispatch 200 5000 x Futures.mem0
+  allOutcomes Futures.dispatch 200 5000 x (Futures.mem0 .fresh)
 
 private def onlyOk {α : Type} [BEq α] (rs : Array (Option (Except Error α))) (v : α) : Bool :=
   !rs.isEmpty && rs.all fun r => match r with
@@ -51,27 +51,27 @@ def hDispatch : H → ConcM H Unit
 
 /-- The main thread creates a future; a second thread awaits it (only the spawner may). -/
 def foreignAwait : ConcM H Unit := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   joinC helper
   let _ ← awaitC (α := BitVec 32) ⟨⟩ p
   pure () : CM H Unit Unit).run' ()
 
 /-- Two threads consume one future concurrently (`await` is not threadsafe). -/
 def doubleAwait : ConcM H (BitVec 32) := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   let r ← awaitC (α := BitVec 32) ⟨⟩ p
   joinC helper
   pure r : CM H Unit (BitVec 32)).run' ()
 
 /-- `Io.async` without `await`/`cancel`: the task is never consumed. -/
 def leak : ConcM H Unit := (do
-  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   pure () : CM H Unit Unit).run' ()
 
 def main : IO Unit := do
