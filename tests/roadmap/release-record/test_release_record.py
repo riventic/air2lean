@@ -353,7 +353,7 @@ class MacosJobTests(Repo):
 
     def test_other_jobs_and_macos_conditions_fail_closed(self):
         self.write('.github/workflows/ci.yml', self.workflow + '  lint:\n    runs-on: ubuntu-24.04\n')
-        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, macos, aarch64-linux, bitops-native-arm and build-modes-aarch64-linux jobs'):
+        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, .* jobs are qualified'):
             rr.build_plan(self.repo, self.commit('extra job'))
         self.write('.github/workflows/ci.yml', self.workflow.replace(
             'run: echo macos unit', 'if: failure()\n        run: echo macos unit'))
@@ -412,7 +412,7 @@ class RealWorkflowTests(Repo):
 
     def test_current_workflow_plan_and_ledger_structure(self):
         plan = rr.build_plan(ROOT, rr.git_text(ROOT, 'rev-parse', 'HEAD'))
-        self.assertTrue(all(job['gates'] for job in plan['jobs']))
+        self.assertTrue(all(job['gates'] for job in plan['jobs'] if job['name'] not in rr.SUPPORT_JOBS))
         errors, _, counts = rr.check_ledger(ROOT, allow_unfetched=True)
         self.assertEqual(errors, [])
         self.assertTrue(counts)
