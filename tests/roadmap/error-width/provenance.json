@@ -144,7 +144,7 @@
     "0.16.0/bits8/error_width.unionTry8.json": "eb06d0783a40b714ce64af94414b11662f738adc5eb6952af33cafb497dd983c"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
+  "exporter_sha256": "eb698912de78be2afd6412fbb0e5d5c58a95987f6d31a295bc148f7f0129d4e4",
   "native": {
     "command": "<stock zig> build-exe -lc -OReleaseSafe -fno-error-tracing [--error-limit <limit>] probe.zig, one build per configuration (native.py)",
     "driver_sha256": "4fa27981b9e409ce451785ae0d97cf8e2dd820100d5e3f1d5e0ce1a7bba79bf4",
