@@ -231,11 +231,13 @@ class RegenTests(unittest.TestCase):
             self.assertIn(scope, ('pr', 'tree'), name)
             self.assertTrue(function is not None or name == 'provenance', name)
 
-    def test_whole_tree_files_are_tree_scoped(self):
+    def test_tree_steps_are_exactly_the_generated_registry(self):
+        # One source of truth: assurance/generated.json (docs/ci.md#whole-tree-generated-files).
         scopes = {s[0]: s[1] for s in regen.STEPS}
-        for name in ('coverage', 'premises', 'inventory', 'support-matrix', 'claims', 'provenance'):
-            self.assertEqual(scopes[name], 'tree', name)
-        for name in ('gen', 'ci-matrix', 'trust-report'):
+        self.assertEqual({n for n, scope in scopes.items() if scope == 'tree'}, set(regen.TREE_GROUPS))
+        self.assertEqual(sorted(g for groups in regen.TREE_GROUPS.values() for g in groups),
+                         sorted(g['name'] for g in regen.GENERATED.load(ROOT)['groups']))
+        for name in ('gen', 'ci-matrix', 'trust-report', 'inventory', 'support-matrix', 'claims'):
             self.assertEqual(scopes[name], 'pr', name)
 
     def test_list_json(self):

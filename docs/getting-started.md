@@ -157,7 +157,7 @@ If translation reports no AIR files, check that the function is exported or refe
 Each directory under `tutorials/` has a README with the steps, an exercise (solved in
 `Solution.lean`), a negative control Lean must reject (`Negative.lean`) and an **Assumptions and
 remaining obligations** section listing the [premise IDs](premises.md) that
-[`docs/premise-index.md`](premise-index.md) derives for its `Main.lean`.
+[`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives for its `Main.lean`.
 
 | Tutorial | Proves | Builds |
 |---|---|---|
