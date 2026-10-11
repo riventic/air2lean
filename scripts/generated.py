@@ -196,6 +196,25 @@ def comparable(data: dict, rel: str, path: Path) -> bytes:
     return json.dumps(value, sort_keys=True).encode()
 
 
+def differences(a: Path, b: Path) -> list[str]:
+    """The dotted JSON paths (or `bytes`) at which two regenerations of a file differ."""
+    def flat(value, prefix=''):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                yield from flat(item, prefix + '.' + key)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from flat(item, '%s[%d]' % (prefix, index))
+        else:
+            yield prefix, value
+    try:
+        left, right = dict(flat(json.loads(a.read_text()))), dict(flat(json.loads(b.read_text())))
+    except ValueError:
+        return ['bytes']
+    return ['%s: %.60r | %.60r' % (k, left.get(k), right.get(k)) for k in sorted(set(left) | set(right))
+            if left.get(k) != right.get(k)]
+
+
 def head_identity(root: Path = ROOT) -> dict:
     return {'commit': git('rev-parse', 'HEAD^{commit}', cwd=root), 'tree': git('rev-parse', 'HEAD^{tree}', cwd=root)}
 
@@ -215,6 +234,9 @@ def produce(data: dict, names, out: Path, root: Path = ROOT):
     differ = [rel for rel in paths
               if comparable(data, rel, passes[0] / rel) != comparable(data, rel, passes[1] / rel)]
     if differ:
+        for rel in differ:
+            print('%s differs:\n  %s' % (rel, '\n  '.join(differences(passes[0] / rel, passes[1] / rel)[:20])),
+                  file=sys.stderr)
         raise Error('not deterministic: two regenerations on the same tree differ in %s' % ', '.join(differ))
     shutil.rmtree(out, ignore_errors=True)
     shutil.copytree(passes[0], out)
