@@ -110,7 +110,7 @@ even if the compiler command returned zero. There is no continuous watcher: a tr
 edit restored between checks may go undetected and is not attested by the receipt.
 
 The entry point uses the guard's existing 900-second workload timeout and reactive
-sampled 8192 MiB RSS threshold, single-thread Lean setting, and process-group cleanup.
+sampled 12288 MiB RSS threshold (the all-shipped audit peaked at 8.5 GB once the batch-10 proof modules were added), single-thread Lean setting, and process-group cleanup.
 Their limitations remain exactly those documented in build-budgets.md. Receipt hashing
 and verification use streaming reads and explicit per-file/inventory limits; they are
 not another compiler process controller or incremental build cache. JSON is capped at

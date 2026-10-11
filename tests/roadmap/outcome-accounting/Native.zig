@@ -26,6 +26,21 @@ fn sourceAbort() u32 {
     return 7;
 }
 
+fn sourceHang() u32 {
+    // Never returns; only the parent's per-case deadline ends it.
+    while (true) std.atomic.spinLoopHint();
+}
+
+/// 1 when the child runs with core dumps off: RLIMIT_CORE 0 and, on Linux, not dumpable (a
+/// piped `core_pattern` handler such as systemd-coredump/apport otherwise runs per crash even
+/// with RLIMIT_CORE 0, and a ReleaseFast run with hundreds of crashing inputs stalls a runner).
+fn sourceContained() u32 {
+    const lim = std.posix.getrlimit(.CORE) catch return 0;
+    if (lim.cur != 0) return 0;
+    if (@import("builtin").os.tag == .linux and std.os.linux.prctl(@intFromEnum(std.os.linux.PR.GET_DUMPABLE), 0, 0, 0, 0) != 0) return 0;
+    return 1;
+}
+
 fn rendererSignal() *const u8 {
     // The tested call returns; reading this payload belongs to the renderer phase.
     return @ptrFromInt(1);
@@ -41,6 +56,20 @@ fn interrupt(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
 
 fn abortSignal(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
     try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceAbort)), .{}, sourceAbort, false));
+}
+
+fn hang(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    const outcome = try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceHang)), .{}, sourceHang, false);
+    switch (outcome) {
+        .fail => |failure| if (failure.kind != .native_harness_failure)
+            return error.HangMisclassified,
+        .ok => return error.HangMissing,
+    }
+    try common.writeResult(writer, outcome);
+}
+
+fn contained(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceContained)), .{}, sourceContained, false));
 }
 
 fn rendererFault(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
@@ -91,4 +120,7 @@ pub fn main() !void {
     try common.forEachLine(allocator, "outcome-accounting", "interrupt", interrupt);
     try common.forEachLine(allocator, "outcome-accounting", "abort", abortSignal);
     try common.forEachLine(allocator, "outcome-accounting", "renderer-fault", rendererFault);
+    try common.forEachLine(allocator, "outcome-accounting", "contained", contained);
+    common.case_timeout_ns = 300 * std.time.ns_per_ms;
+    try common.forEachLine(allocator, "outcome-accounting", "hang", hang);
 }

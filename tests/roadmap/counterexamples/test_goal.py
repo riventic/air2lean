@@ -8,10 +8,12 @@ and needs no Zig; it is skipped when `.lake/build/bin/air2lean` is absent.
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 sys.dont_write_bytecode = True
@@ -75,6 +77,19 @@ class Mocked(unittest.TestCase):
                 self.assertEqual((data['classification'], data['reason']), expected)
                 self.assertFalse(data['is_program_bug_evidence'])
 
+    def test_timeout_kills_the_whole_process_group(self):
+        pidfile = self.root/'child.pid'
+        runner = ('sh', '-c', f'sleep 60 & echo $! > {pidfile}; wait')   # like `lake` forking `lean`
+        out = EVAL.run(self.root, self.gen, '', timeout=2, runner=runner)
+        self.assertEqual(out['status'], 'timeout')
+        pid = int(pidfile.read_text())
+        for _ in range(50):
+            try: os.kill(pid, 0)
+            except ProcessLookupError: break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, 9); self.fail('the evaluator child survived the timeout')
+
     def test_unreplayed_violation_is_only_a_candidate(self):
         data = self.goal(fake_runner('V\t1\t{"ok":1}', 'S\t2\t0\t0\t1'))
         self.assertEqual((data['classification'], data['reason']), ('candidate', 'failure_not_replayed'))
@@ -98,6 +113,101 @@ class Mocked(unittest.TestCase):
         self.assertEqual(EVAL.to_signed(255, ('bv', 8), True), -1)
 
 
+FAKE_ZIG = '''#!{python}
+import pathlib, sys
+args = sys.argv[1:]
+if args[0] == 'version': print('0.16.0'); sys.exit(0)
+if {build_fails}: print('error: boom', file=sys.stderr); sys.exit(1)
+out = pathlib.Path(next(a for a in args if a.startswith('-femit-bin='))[len('-femit-bin='):])
+out.write_text(pathlib.Path(__file__).with_name('fake-harness.py').read_text()); out.chmod(0o755)
+'''
+FAKE_HARNESS = '''#!{python}
+import pathlib
+line = pathlib.Path({line_file!r}).read_text()
+target = pathlib.Path('tests/diff/out/zig/target'); target.mkdir(parents=True, exist_ok=True)
+(target/'flip.jsonl').write_text(line + '\\n')
+'''
+NATIVE_SRC = 'export fn flip(a: bool) bool {\n    return !a;\n}\n'
+
+
+class NativeReplay(unittest.TestCase):
+    """The Zig-side replay with a fake `zig`: request shapes, comparison rules and failure mapping."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root/'tests/diff').mkdir(parents=True); (self.root/'tests/diff/common.zig').write_text('')
+        self.gen = self.root/'Gen.lean'; self.gen.write_text(FAKE_GEN)
+        self.src = self.root/'flip.zig'; self.src.write_text(NATIVE_SRC)
+
+    def zig(self, line='{"ok":0}', build_fails=False):
+        """A fake stock zig whose harness prints `line`; it replaces the previous fake."""
+        path = self.root/'fake-zig'
+        path.write_text(FAKE_ZIG.format(python=sys.executable, build_fails=build_fails)); path.chmod(0o755)
+        (self.root/'fake-line').write_text(line)
+        (self.root/'fake-harness.py').write_text(FAKE_HARNESS.format(python=sys.executable, line_file=str(self.root/'fake-line')))
+        return str(path)
+
+    def request(self, **kw):
+        params, ret = EVAL.signature(FAKE_GEN, 'flip')
+        return CX.native_request(self.root, kw.pop('source', self.src), 'flip', [True], params, ret, None)
+
+    def test_request_shapes(self):
+        request = self.request()
+        self.assertEqual((request['decl'], request['params'], request['ret'], request['args']), ('export', ['bool'], 'bool', [True]))
+        text = CX.harness_text(request)
+        self.assertIn('extern fn flip(p0: bool) bool;', text); self.assertIn('items[0].bool', text)
+        self.assertIn('common.forkCall(std.meta.ArgsTuple(@TypeOf(flip)), .{ a0 }, flip, false)', text)
+        pub = self.root/'pub.zig'; pub.write_text('pub fn flip(a: bool) bool { return !a; }\n')
+        self.assertNotIn('extern fn', CX.harness_text(self.request(source=pub)))
+        for text in ('fn flip(a: bool) bool { return !a; }\n', 'pub fn flip(a: bool) bool {}\nexport fn flip(a: bool) bool {}\n'):
+            (self.root/'bad.zig').write_text(text)
+            self.assertIsNone(self.request(source=self.root/'bad.zig'))   # private or ambiguous
+        params, ret = EVAL.signature(FAKE_GEN, 'flip')
+        self.assertIsNone(CX.native_request(self.root, self.src, 'flip', [3], params, ret, None))   # wrong value type
+        self.assertIsNone(CX.native_request(self.root, self.src, 'flip', [], params, ret, None))    # wrong arity
+
+    def test_comparison_follows_the_differential_rules(self):
+        for native, model, same in [('{"ok":3}', '{"ok":3}', True), ('{"ok":"3"}', '{"ok":3}', True), ('{"ok":3}', '{"ok":4}', False),
+                                    ('{"fail":"integerOverflow"}', '{"fail":"Zig.Error.overflow"}', True),
+                                    ('{"fail":"integerOverflow"}', '{"fail":"Zig.Error.outOfBounds"}', False),
+                                    ('{"fail":"unknown"}', '{"fail":"Zig.Error.overflow"}', False), ('{"ok":3}', 'not json', False)]:
+            self.assertEqual(CX.native_matches(native, model), same, (native, model))
+
+    def test_native_outcome_decides_the_replay(self):
+        request = CX.lean_request(self.root, 'fake', 'flip', [True], '{"ok":0}', gen=self.gen, spec=SPEC_TEXT)
+        info = CX.with_native(self.root, CX.lean_block(request), self.src, 'fake', 'flip', [True], gen=self.gen)
+        lean = fake_runner('O\t0\t{"ok":0}', 'V\t0\t{"ok":0}')
+        for zig, status, native in [(dict(line='{"ok":0}'), 'verified', 'verified'),
+                                    (dict(line='{"ok":1}'), 'not_reproduced', 'not_reproduced'),   # native disagrees: not a program bug
+                                    (dict(build_fails=True), 'error', 'error'),
+                                    (None, 'error', 'unavailable')]:
+            with self.subTest(native=native):
+                outcome = CX.confirm(self.root, info, 30, self.zig(**zig) if zig else '/nonexistent/zig', lean)
+                self.assertEqual((outcome['status'], outcome['zig_native']['status']), (status, native))
+        # A Lean replay that does not reproduce never reaches the native program.
+        outcome = CX.confirm(self.root, info, 30, self.zig(), fake_runner('O\t0\t{"ok":1}'))
+        self.assertEqual((outcome['status'], outcome['zig_native']['status']), ('not_reproduced', 'not_run'))
+        self.src.write_text(NATIVE_SRC + '// edited\n')
+        self.assertEqual(CX.confirm(self.root, info, 30, self.zig(), lean)['zig_native']['status'], 'error')   # stale Zig source
+
+    def test_disagreeing_native_run_leaves_the_violation_unsolved(self):
+        for line, expected in [('{"ok":0}', ('counterexample', 'replayed_failure')), ('{"ok":1}', ('unsolved', 'replay_not_reproduced')),
+                               ('', ('setup_failure', 'replay_error'))]:
+            with self.subTest(line=line):
+                request = CX.lean_request(self.root, 'fake', 'flip', [True], '{"ok":0}', gen=self.gen, spec=SPEC_TEXT)
+                info = CX.with_native(self.root, CX.lean_block(request), self.src, 'fake', 'flip', [True], gen=self.gen)
+                info.update(CX.confirm(self.root, info, 30, self.zig(line, build_fails=line == ''),
+                                       fake_runner('O\t0\t{"ok":0}', 'V\t0\t{"ok":0}')))
+                judgement = CX.verdict(goal='violated', replay=info['status'])
+                self.assertEqual(judgement[:2], expected)
+
+    def test_unsupported_zig_source_is_an_input_error(self):
+        request = CX.lean_request(self.root, 'fake', 'flip', [True], '{"ok":0}', gen=self.gen, spec=SPEC_TEXT)
+        with self.assertRaises(CX.Invalid):
+            CX.with_native(self.root, CX.lean_block(request), self.root/'missing.zig', 'fake', 'flip', [True], gen=self.gen)
+
+
 @unittest.skipUnless(AIR2LEAN.is_file(), 'needs `lake build air2lean ZigLean`')
 class SeededLoop(unittest.TestCase):
     SPEC = 'r = .ok (BitVec.ofNat 32 (p0.toNat * (p0.toNat - 1) / 2))'
@@ -107,7 +217,7 @@ class SeededLoop(unittest.TestCase):
     def translate(cls, buggy):
         directory = Path(cls.temp.name)/('bad' if buggy else 'good')
         air = loopsum.write(directory/'air', buggy)
-        result = subprocess.run([str(AIR2LEAN), str(air), '-o', str(directory/'Gen.lean'), '--namespace', 'Loops', '--prefix', 'loops.'],
+        result = subprocess.run([str(AIR2LEAN), str(air), '-o', str(directory/'Gen.lean'), '--namespace', 'Loops', '--prefix', 'loops.', '--profile', 'legacy-abi64-le'],
                                 capture_output=True, text=True, cwd=ROOT)
         assert result.returncode == 0, result.stderr
         return directory

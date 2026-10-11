@@ -68,14 +68,24 @@ def verify(root):
         target=REPORT.Status.MISMATCH if name=='signal' else REPORT.Status.NATIVE_HARNESS_FAILURE
         if status!=target:raise AssertionError(name+' valid model comparison changed')
 
+def verify_containment(root):
+    directory=root/'tests/diff/out/zig/outcome-accounting'
+    def rows(name):return [REPORT.decode(line) for line in REPORT.lines(directory/name)]
+    if rows('contained.jsonl')!=[{'ok':1}]:raise AssertionError('a tested call must run with core dumps off')
+    hang=rows('hang.jsonl')
+    if hang!=[{'fail':'unknown'}]:raise AssertionError('a call that never returns must become one failure')
+    kind,_=REPORT.observation(json.dumps(rows('hang.jsonl.outcomes')[0]),hang[0],'native')
+    if kind!=REPORT.Kind.NATIVE_HARNESS_FAILURE:raise AssertionError('a timeout is a fatal harness failure')
+
 def main():
     binary=Path(sys.argv[1]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix='air2lean-outcome-native-') as name:
         root=Path(name);inputs=root/'tests/diff/outcome-accounting/inputs';inputs.mkdir(parents=True)
-        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n','signal':'[]\n','interrupt':'[]\n','abort':'[]\n','renderer-fault':'[]\n'}.items():
+        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n','signal':'[]\n','interrupt':'[]\n','abort':'[]\n','renderer-fault':'[]\n','contained':'[]\n','hang':'[]\n'}.items():
             (inputs/(fixture+'.jsonl')).write_text(text)
-        subprocess.run([str(binary)],cwd=root,check=True,timeout=5)
+        subprocess.run([str(binary)],cwd=root,check=True,timeout=10)
         verify(root)
+        verify_containment(root)
     print('native producer phase, signal, resource interruption, renderer and source panic checks passed')
 
 if __name__=='__main__':main()
