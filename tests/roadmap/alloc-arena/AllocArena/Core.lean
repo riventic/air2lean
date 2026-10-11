@@ -262,7 +262,7 @@ theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat
 /-- The facts of the first node: none means no grant. -/
 def OV.FirstFacts (w : OV) : Prop :=
   match w.first with
-    | none => w.M = GMap.empty
+    | none => w.M = GMap.empty ∧ w.rest = [] ∧ w.nxt = none
     | some N => NodeFacts N w.A w.sz ∧ 24 + w.ei ≤ w.sz ∧ w.tail.size = w.sz - 24 - w.ei
 
 /-! ### Fraction accounting per block
@@ -294,7 +294,8 @@ def grantsOn (b : BlockId) (M : GMap) (N : Nat) : Rat := esum (fun i => grantOn 
 def OV.Facts (w : OV) : Prop :=
   w.cbs.size = 16 ∧ (∀ i, w.mN ≤ i → w.M i = none) ∧ w.FirstFacts ∧
     (∀ i g, w.M i = some g → GrantOk w.nodes g) ∧
-    ∀ b, ndLent b w.nodes = poolOn b w.pn w.pf + grantsOn b w.M w.mN
+    (∀ b, ndLent b w.nodes = poolOn b w.pn w.pf + grantsOn b w.M w.mN) ∧
+    ∀ nd ∈ w.nodes, nd.qh.val ≤ nd.qn.val
 
 /-- The grant facts after one grant changes. -/
 theorem grants_set {ns : List NodeV} {M : GMap} (h : ∀ i g, M i = some g → GrantOk ns g) (i : Nat)
@@ -495,7 +496,7 @@ theorem pre_of {k A S : Nat} {K : BlockKind} {q q' : Frac} {m : Mem} {r rF : Res
   | none =>
     exfalso
     have hn : w.M = GMap.empty := by
-      have := hwf.2.2.1; unfold OV.FirstFacts at this; rw [hfirst] at this; exact this
+      have := hwf.2.2.1; unfold OV.FirstFacts at this; rw [hfirst] at this; exact this.1
     rw [hn] at hM; cases hM
   | some N =>
     -- the shape with dummy block ids, to read the blocks off the regions
@@ -588,7 +589,7 @@ node's labels (`GrantOk`); two nodes of one block own cells of the one block, so
 agree (`chain_owns`, `Owns.block`). -/
 theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : v.L CI γ e ctx s G r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
-  obtain ⟨⟨-, -, -, hgr, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
+  obtain ⟨⟨-, -, -, hgr, -, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
   obtain ⟨-, nd, hnd, hblk, hA, hK⟩ := hgr _ _ hMi
   simp only [OV.nodes, hfirst] at hnd
   rcases List.mem_cons.mp hnd with rfl | hm
@@ -943,10 +944,10 @@ theorem facts_free {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n : Nat} {q : Fr
     OV.Facts
       { w with M := w.M.set i none, ei := ei, tail := tail, pn := w.pn + 1,
                pf := poolPush w.pn w.pf (b, q, k) } := by
-  obtain ⟨hc16, hfin, -, hgr, hacct⟩ := hw
+  obtain ⟨hc16, hfin, -, hgr, hacct, hqq⟩ := hw
   have hi := lt_bound hfin hMi
   exact ⟨hc16, bound_set hfin hi _, hff, grants_set hgr _ (fun g hg => by cases hg),
-    acct_free hacct hMi hi hb⟩
+    acct_free hacct hMi hi hb, hqq⟩
 
 /-- The facts after a grant is re-pointed (same pointer and fraction, labels `A'`, `K'` of a node
 of its block), the first node's `end_index` and tail as given (`hff`). -/
@@ -955,9 +956,9 @@ theorem facts_repoint {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n n' : Nat} {
     (hg : GrantOk w.nodes (p, n', q, A', K'))
     (hff : OV.FirstFacts { w with M := w.M.set i (some (p, n', q, A', K')), ei := ei, tail := tail }) :
     OV.Facts { w with M := w.M.set i (some (p, n', q, A', K')), ei := ei, tail := tail } := by
-  obtain ⟨hc16, hfin, -, hgr, hacct⟩ := hw
+  obtain ⟨hc16, hfin, -, hgr, hacct, hqq⟩ := hw
   exact ⟨hc16, bound_set hfin (lt_bound hfin hMi) _, hff, grants_set hgr _ fun g hg' => by cases hg'; exact hg,
-    fun b => by show ndLent b w.nodes = _; rw [acct_repoint hMi, hacct b]⟩
+    fun b => by show ndLent b w.nodes = _; rw [acct_repoint hMi, hacct b], hqq⟩
 
 /-- Push the share that `free_ghost` gave back into the pool. -/
 theorem pool_of_free {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {q : Frac} {pn : Nat}
@@ -1271,6 +1272,315 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
 
 end Ends
 
+/-! ## The ends of `alloc`
+
+A successful `alloc` carves the grant out of the first node's tail (the padding before it leaks to
+junk), lends half of the node's kept share at the grant's end against a receipt (`EUpd.lendT`),
+and issues the grant under the fresh id `mN` (`Upd.issue`); the accounting moves half of `qh` to
+the grants on the node's block. A new node (from the child or the free list) becomes the first
+node first (`push_node`). -/
+
+/-- The arena's resources on a first node `N`, without the node's `end_index` word. -/
+def OV.bodyE (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
+  up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
+    gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
+    apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    (CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
+    up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
+
+theorem OV.body_split {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
+    (hfirst : w.first = some N) :
+    w.body CI γ e ctx = (apts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆ w.bodyE CI γ e ctx N) := by
+  simp only [OV.body, OV.bodyE, FirstPart, hfirst, Header]; ac_rfl
+
+/-- `GrantOk` reads only the nodes' pointers and labels. -/
+theorem GrantOk.mono {ns ns' : List NodeV}
+    (h : ∀ nd ∈ ns, ∃ nd' ∈ ns', nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K = nd.K) {g : GRegion}
+    (hg : GrantOk ns g) : GrantOk ns' g := by
+  obtain ⟨p, n, q, A, K⟩ := g
+  obtain ⟨h0, nd, hnd, hb, hA, hK⟩ := hg
+  obtain ⟨nd', hnd', e1, e2, e3⟩ := h nd hnd
+  exact ⟨h0, nd', hnd', by rw [e1]; exact hb, by rw [e2]; exact hA, by rw [e3]; exact hK⟩
+
+/-- **A grant's ghost part**: half of the node's kept share `qh` (at the node's end `kN`) is lent at
+the grant's end against a receipt, and the grant is issued under the unused id `i`. -/
+theorem carve_ghost {γ e i : Nat} {M : GMap} {t : STag} {N : Ptr} {bN : BlockId} {qh : Frac}
+    {kN : Nat} {p : Ptr} {n A : Nat} {K : BlockKind} (hi : M i = none) (hN : N.block = some bN)
+    (hp : p.block = some bN) (hk : p.off.toNat + n ≤ kN) :
+    EUpd (gauthP γ e M t ⋆ (pshare N qh kN t ⋆ Rcpts γ e M))
+      (gauthP γ e (M.set i (some (p, n, qh.half, A, K))) t ⋆ (gfrag γ e i (p, n, qh.half, A, K) ⋆
+        (pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+          (pshare N qh.half kN t ⋆ Rcpts γ e (M.set i (some (p, n, qh.half, A, K))))))) := by
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ (bshare bN qh kN t ⋆ Rcpts γ e M))
+    fun _ h => sep_mono_right (fun _ x => sep_mono_left (Q := bshare bN qh kN t)
+      (fun _ y => (pshare_iff hN).mp y) x) h) ?_
+  refine EUpd.withFact (φ := 0 < qh.val) (fun _ r _ _ h _ => ?_) fun hq => ?_
+  · obtain ⟨_, _, -, -, -, _, _, -, -, h1, -⟩ := h
+    exact h1.1
+  have hh := Frac.half_pos hq
+  refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ bshare bN qh.half kN t) ⋆
+      (bshare bN qh.half kN t ⋆ Rcpts γ e M)) fun r h => ?_) ?_
+  · rw [← Frac.half_add_half qh] at h
+    have h := sep_mono_right (R := (bshare bN qh.half kN t ⋆ bshare bN qh.half kN t) ⋆ Rcpts γ e M)
+      (fun _ x => sep_mono_left (Q := bshare bN qh.half kN t ⋆ bshare bN qh.half kN t)
+      (fun _ y => (bshare_split hh hh).mp y) x) h
+    exact of_eq (by ac_rfl) h
+  refine EUpd.trans (EUpd.frame (EUpd.lendT hk)) ?_
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ ((bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+      brcpt bN qh.half kN γ e) ⋆ (bshare bN qh.half kN t ⋆ Rcpts γ e M))) fun _ h => sep_assoc h) ?_
+  refine EUpd.trans (EUpd.frame (EUpd.of_upd (Upd.issue (p, n, qh.half, A, K) hi))) ?_
+  refine EUpd.of_imp fun r h => ?_
+  have h := of_eq (Q := brcpt bN qh.half kN γ e ⋆ (Rcpts γ e M ⋆
+      ((gauthP γ e (M.set i (some (p, n, qh.half, A, K))) t ⋆ gfrag γ e i (p, n, qh.half, A, K)) ⋆
+        (bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆ bshare bN qh.half kN t)))) (by ac_rfl) h
+  have h := sep_mono_left (Q := rcptOf γ e (some (p, n, qh.half, A, K)))
+    (fun _ z => ⟨bN, kN, sep_lift.mpr ⟨hp, z⟩⟩) h
+  have h := sep_mono_left (Q := Rcpts γ e (M.set i (some (p, n, qh.half, A, K))))
+    (fun _ z => rcpts_put hi z) (sep_assoc' h)
+  have h := sep_mono_right (R := (gauthP γ e (M.set i (some (p, n, qh.half, A, K))) t ⋆
+      gfrag γ e i (p, n, qh.half, A, K)) ⋆ (pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+        pshare N qh.half kN t))
+    (fun _ x => sep_mono_right (R := pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+      pshare N qh.half kN t) (fun _ y => sep_mono (P' := pshare p qh.half (p.off.toNat + n) (some (γ, e)))
+      (Q' := pshare N qh.half kN t) (fun _ z => (pshare_iff hp).mpr z) (fun _ z => (pshare_iff hN).mpr z) y) x) h
+  exact of_eq (by ac_rfl) h
+
+/-- A region with another alignment its address satisfies. -/
+theorem up_realign {p : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs : Array Byte} {r : Res}
+    (ha : (A + p.off.toNat) % a' = 0) (h : up (regionIn p A S K a bs) r) : up (regionIn p A S K a' bs) r :=
+  let ⟨⟨_, hK, hb⟩, hk, hg⟩ := h; ⟨⟨ha, hK, hb⟩, hk, hg⟩
+
+/-- The arena's variables after a grant of `n` bytes at index `ai` of the first node `N` (the
+tail after it: `t2`): `carve_ghost`'s ledger and share, `end_index` at `ai + n`. -/
+def OV.carve (w : OV) (N : Ptr) (n ai : Nat) (t2 : Array Byte) : OV :=
+  { w with M := w.M.set w.mN (some (N.add (24 + ai), n, w.qh.half, w.A, w.K)), mN := w.mN + 1,
+           ei := ai + n, tail := t2, qh := w.qh.half }
+
+/-- `ndLent` after the first node's kept share changes from `qh` to `q'`. -/
+theorem ndLent_qh {w : OV} {N : Ptr} (hfirst : w.first = some N) (q' : Frac) (b : BlockId) :
+    ndLent b ({ w with qh := q' } : OV).nodes =
+      ndLent b w.nodes + (if N.block = some b then w.qh.val - q'.val else 0) := by
+  simp only [OV.nodes, hfirst, ndLent, OV.node]
+  split <;> grind
+
+/-- **`alloc` from the first node's tail**: the grant of `n` bytes at index `ai` (from `end_index`
+on, alignment `2 ^ k`) with `end_index` moved to `ai + n` (the code's `cmpxchg`). The padding
+leaks to junk, half the node's kept share is lent to the grant (`carve_ghost`), the grant gets
+the fresh id `mN`. -/
+theorem alloc_carve_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr} {bN : BlockId}
+    (hw : w.Facts) (hfirst : w.first = some N) (hbN : N.block = some bN) {n k ai : Nat}
+    (hn : 0 < n) (hlo : w.ei ≤ ai) (hhi : 24 + ai + n ≤ w.sz)
+    (hal : (w.A + N.off.toNat + 24 + ai) % 2 ^ k = 0) :
+    EUpd (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N)
+      ((inv CI γ e ctx).allocPost n k (some (N.add (24 + ai)))) := by
+  obtain ⟨hc16, hfin, hff, hgr, hacct, hqq⟩ := hw
+  have hff' := hff
+  simp only [OV.FirstFacts, hfirst] at hff'
+  obtain ⟨hnf, hei, htail⟩ := hff'
+  have h0 := hnf.off0
+  have hp0 : (N.add (24 + ai)).off.toNat = N.off.toNat + 24 + ai := by simp only [Ptr.add]; omega
+  have hpb : (N.add (24 + ai)).block = some bN := by simpa [Ptr.add] using hbN
+  -- the tail: padding, the grant's bytes, the rest
+  let t1 := w.tail.extract (ai - w.ei) w.tail.size
+  let bs := t1.extract 0 n
+  let t2 := t1.extract n t1.size
+  have ht1 : t1.size = w.sz - 24 - ai := by simp only [t1, Array.size_extract]; omega
+  have hbs : bs.size = n := by simp only [bs, Array.size_extract]; omega
+  have ht2 : t2.size = w.sz - 24 - (ai + n) := by simp only [t2, Array.size_extract]; omega
+  have hpe1 : (N.add (24 + w.ei)).add ((ai - w.ei : Nat) : Int) = N.add (24 + ai) := by
+    simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+  have hpe2 : (N.add (24 + ai)).add (n : Int) = N.add (24 + ((ai + n : Nat) : Int)) := by
+    simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+  have htsplit : ∀ r, up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) r →
+      (up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 (w.tail.extract 0 (ai - w.ei))) ⋆
+        (up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆
+          up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2))) r := fun r hr => by
+    have h1 := up_region_split (n := ai - w.ei) (by omega) hr
+    rw [hpe1] at h1
+    have h1 := sep_mono_right (R := up (regionIn (N.add (24 + ai)) w.A w.S w.K 1 (t1.extract 0 n)) ⋆
+      up (regionIn ((N.add (24 + ai)).add (n : Int)) w.A w.S w.K 1 (t1.extract n t1.size)))
+      (fun _ x => up_region_split (n := n) (by omega) x) h1
+    rw [hpe2] at h1
+    have hal' : (w.A + (N.add (24 + ai)).off.toNat) % 2 ^ k = 0 := by
+      rw [hp0, ← Nat.add_assoc, ← Nat.add_assoc]; exact hal
+    exact sep_mono_right (fun _ x => sep_mono_left (fun _ y => up_realign hal' y) x) h1
+  let R : FAssn := apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆
+    aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆ CI.own ⋆ Junk ⋆ Pool CI.tag w.pn w.pf ⋆
+    apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2) ⋆
+    UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
+  refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e w.M CI.tag ⋆
+      (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ Rcpts γ e w.M)) ⋆
+      (up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆ R)) fun r h => ?_) ?_
+  · simp only [OV.bodyE] at h
+    have h := of_eq (Q := up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆
+      (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ (Junk ⋆ (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
+      up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
+      gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
+      apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl)))) (by ac_rfl) h
+    have h := sep_mono_left (fun r x => htsplit r x) h
+    have h := of_eq (Q := (up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 (w.tail.extract 0 (ai - w.ei))) ⋆
+      Junk) ⋆ (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ (up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆
+      up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2) ⋆ (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
+      up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
+      gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
+      apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl)))) (by ac_rfl) h
+    have h := sep_mono_left (Q := Junk) (fun _ x => junk_absorb x) h
+    exact of_eq (by simp only [R]; ac_rfl) h
+  refine EUpd.trans (EUpd.frame (carve_ghost (i := w.mN) (A := w.A) (K := w.K) (qh := w.qh)
+    (kN := N.off.toNat + w.sz) (n := n) (t := CI.tag) (hfin _ (Nat.le_refl _)) hbN hpb
+    (by have := hp0; omega))) ?_
+  refine EUpd.of_imp fun r h => ?_
+  -- the new state
+  have hwf : OV.Facts (OV.carve w N n ai t2) := by
+    have hmem : ∀ nd ∈ w.nodes, ∃ nd' ∈ ({ w with qh := w.qh.half } : OV).nodes,
+        nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K = nd.K := fun nd hnd => by
+      simp only [OV.nodes, hfirst, List.mem_cons] at hnd ⊢
+      rcases hnd with rfl | hnd
+      · exact ⟨_, Or.inl rfl, rfl, rfl, rfl⟩
+      · exact ⟨nd, Or.inr hnd, rfl, rfl, rfl⟩
+    unfold OV.carve
+    refine ⟨hc16, fun i hi => ?_, ?_, fun j g hj => ?_, fun b => ?_, fun nd hnd => ?_⟩
+    · dsimp only at hi ⊢
+      rw [GMap.set_ne _ _ (by omega)]; exact hfin i (by omega)
+    · simp only [OV.FirstFacts, hfirst]; exact ⟨hnf, by omega, ht2⟩
+    · dsimp only at hj
+      by_cases hj' : j = w.mN
+      · subst hj'
+        simp only [GMap.set_same, Option.some.injEq] at hj; subst hj
+        exact ⟨by simp only [Ptr.add]; omega, ({ w with qh := w.qh.half } : OV).node N,
+          by simp [OV.nodes, hfirst, OV.node], rfl, rfl, rfl⟩
+      · exact GrantOk.mono hmem (hgr j g (by simpa [GMap.set_ne _ _ hj'] using hj))
+    · show ndLent b ({ w with qh := w.qh.half } : OV).nodes = poolOn b w.pn w.pf +
+        esum (fun i => grantOn b (w.M.set w.mN (some (N.add (24 + ai), n, w.qh.half, w.A, w.K)) i)) (w.mN + 1)
+      rw [ndLent_qh hfirst, hacct b]
+      rw [esum]
+      rw [esum_congr (g := fun i => grantOn b (w.M i)) fun j hj => by
+        rw [GMap.set_ne _ _ (Nat.ne_of_lt hj)], GMap.set_same]
+      simp only [grantsOn, grantOn, hpb, hbN]
+      split <;> (try simp only [Frac.half]) <;> grind
+    · simp [OV.nodes, hfirst] at hnd
+      rcases hnd with rfl | hnd
+      · have := hqq (w.node N) (by simp [OV.nodes, hfirst])
+        simp only [OV.node, Frac.half] at this ⊢; have := w.qh.nonneg; grind
+      · exact hqq nd (by simp [OV.nodes, hfirst, hnd])
+  show ((inv CI γ e ctx).own ⋆ FAssn.ex fun bs => ⟪bs.size = n⟫ ⋆
+    (inv CI γ e ctx).granted (N.add (24 + ai)) k bs) r
+  refine own_of hwf (sep_mono_right (fun r hr => ⟨bs, sep_lift.mpr ⟨hbs, ⟨w.A, w.S, w.K, w.qh.half, by
+    simp only [inv, hbs]; exact sep_mono_right (fun _ x => sep_mono_left (fun _ y => ⟨w.mN, y⟩) x) hr⟩⟩⟩)
+    (Q := up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆
+      (gfrag γ e w.mN (N.add (24 + ai), n, w.qh.half, w.A, w.K) ⋆
+        pshare (N.add (24 + ai)) w.qh.half ((N.add (24 + ai)).off.toNat + n) (some (γ, e)))) ?_)
+  rw [OV.body_split (w := OV.carve w N n ai t2) hfirst]
+  simp only [OV.bodyE, OV.carve, R] at h ⊢
+  exact of_eq (by ac_rfl) h
+
+
+/-- An empty region right after a region (e.g. a used node's empty buffer after its header). -/
+theorem up_region_nil {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {r : Res}
+    (h : up (regionIn p A S K a bs) r) :
+    (up (regionIn p A S K a bs) ⋆ up (regionIn (p.add bs.size) A S K 1 #[])) r := by
+  have := up_region_split (n := bs.size) (Nat.le_refl _) h
+  simpa using this
+
+/-- The arena's resources without the `used_list` word. -/
+def OV.bodyU (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (w : OV) : FAssn :=
+  up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 24) w.fl ⋆
+    gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Junk ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆
+    UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
+
+theorem OV.body_used {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} (w : OV) :
+    w.body CI γ e ctx = (aptsE (ctx.add 16) w.first ⋆ w.bodyU CI γ e ctx) := by
+  simp only [OV.body, OV.bodyU]; ac_rfl
+
+/-- The arena's variables after the node `nd` (from the child or the free list; the arena keeps
+its whole share) becomes the first node, with `end_index` `0` and its whole buffer `buf` as the
+tail; the old first node joins the used nodes after it (its tail leaks to junk). -/
+def OV.push (w : OV) (nd : NodeV) (buf : Array Byte) : OV :=
+  { w with first := some nd.N, nxt := w.first, A := nd.A, S := nd.S, K := nd.K, sz := nd.sz, ei := 0,
+           tail := buf, qn := nd.qn, qh := nd.qh, rest := w.nodes }
+
+theorem facts_push {w : OV} (hw : w.Facts) {nd : NodeV} (hnf : NodeFacts nd.N nd.A nd.sz)
+    (hq : nd.qh = nd.qn) {buf : Array Byte} (hbuf : buf.size = nd.sz - 24) : (w.push nd buf).Facts := by
+  obtain ⟨hc16, hfin, -, hgr, hacct, hqq⟩ := hw
+  have hnodes : (w.push nd buf).nodes = nd :: w.nodes := rfl
+  refine ⟨hc16, hfin, ⟨hnf, by simp only [OV.push]; have := hnf.hdr; omega, by simp only [OV.push]; omega⟩,
+    fun i g hi => GrantOk.mono (fun x hx => ⟨x, by rw [hnodes]; exact List.mem_cons_of_mem _ hx,
+      rfl, rfl, rfl⟩) (hgr i g hi), fun b => ?_, fun x hx => ?_⟩
+  · rw [hnodes]; simp only [ndLent, hq]; rw [hacct b]; simp only [OV.push]; split <;> grind
+  · rw [hnodes] at hx
+    rcases List.mem_cons.mp hx with rfl | hx
+    · rw [hq]; exact Rat.le_refl
+    · exact hqq x hx
+
+/-- **A new first node** (`tryPushNode`): the node's header (`size`, `end_index` word `ew`, `next`
+= the old first node), its buffer, the child's token and share; the `used_list` word points at
+it. The old first node and its tail join the used nodes after it. -/
+theorem push_node_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {nd : NodeV}
+    (hnf : NodeFacts nd.N nd.A nd.sz) {buf : Array Byte} {ew : BitVec 64} :
+    EUpd ((aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+        up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
+        up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
+        (CI.tok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))) ⋆
+        w.bodyU CI γ e ctx)
+      (apts (nd.N.add 8) ew ⋆ (w.push nd buf).bodyE CI γ e ctx nd.N) := by
+  have hff := hw.2.2.1
+  refine EUpd.of_imp fun r h => ?_
+  -- the old first node (if any) joins the used nodes; its tail leaks to junk
+  have hc : ∀ r, (FirstPart CI w ⋆ (UsedRest CI w.rest w.nxt ⋆ Junk)) r →
+      (UsedRest CI w.nodes w.first ⋆ Junk) r := fun r h => by
+    cases hf : w.first with
+    | none =>
+      simp only [OV.FirstFacts, hf] at hff
+      obtain ⟨-, hr, hn⟩ := hff
+      simp only [FirstPart, hf, OV.nodes, UsedRest, hr, hn, Chain] at h ⊢
+      exact of_eq (emp_sep_eq _) h
+    | some N =>
+      simp only [OV.FirstFacts, hf] at hff
+      obtain ⟨hnfN, -, -⟩ := hff
+      simp only [FirstPart, hf, OV.nodes, UsedRest, Chain, Header] at h ⊢
+      have hN24 : (N.add 16).add ((Enc.encode w.nxt).size : Int) = N.add 24 := by
+        rw [encode_nxt_size]; simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+      have h := of_eq (Q := up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+        ((up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ Junk) ⋆
+          (apts N (BitVec.ofNat 64 w.sz) ⋆ apts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆
+            (CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
+            Chain CI false w.rest w.nxt))) (by ac_rfl) h
+      have h := sep_mono_left (Q := up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+        up (regionIn ((N.add 16).add ((Enc.encode w.nxt).size : Int)) w.A w.S w.K 1 #[]))
+        (fun _ x => up_region_nil x) h
+      rw [hN24] at h
+      have h := sep_mono_right (R := Junk ⋆ (apts N (BitVec.ofNat 64 w.sz) ⋆
+          apts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆
+          (CI.tok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
+          Chain CI false w.rest w.nxt))
+        (fun _ x => sep_mono_left (Q := Junk) (fun _ y => junk_absorb y) x) h
+      refine sep_mono_left (Q := FAssn.ex fun ei : BitVec 64 => FAssn.ex fun nxt : Option Ptr =>
+        FAssn.ex fun buf : Array Byte => ⟪(w.node N).N = N ∧ NodeFacts (w.node N).N (w.node N).A
+          (w.node N).sz ∧ buf.size = (if false = true then (w.node N).sz - 24 else 0)⟫ ⋆
+          (Header CI (w.node N).N (w.node N).A (w.node N).S (w.node N).K (w.node N).sz ei nxt
+            (w.node N).qn (w.node N).qh ⋆ up (regionIn ((w.node N).N.add 24) (w.node N).A (w.node N).S
+              (w.node N).K 1 buf) ⋆ Chain CI false w.rest nxt))
+        (fun _ x => ⟨BitVec.ofNat 64 w.ei, w.nxt, #[], sep_lift.mpr ⟨⟨rfl, hnfN, rfl⟩, by
+          simp only [OV.node, Header]; exact of_eq (by ac_rfl) x⟩⟩) ?_
+      exact of_eq (by ac_rfl) h
+  simp only [OV.bodyU] at h
+  have h := of_eq (Q := (FirstPart CI w ⋆ (UsedRest CI w.rest w.nxt ⋆ Junk)) ⋆
+      (aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+        up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
+        up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
+        (CI.tok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
+      up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 24) w.fl ⋆
+      gauthP γ e w.M CI.tag ⋆ CI.own ⋆ Rcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆ FreeList CI w.fl))
+    (by ac_rfl) h
+  have h := sep_mono_left (Q := UsedRest CI w.nodes w.first ⋆ Junk) (fun _ x => hc _ x) h
+  simp only [OV.bodyE, OV.push]
+  have e0 : nd.N.add (24 + ((0 : Nat) : Int)) = nd.N.add 24 := by simp
+  rw [e0]
+  exact of_eq (by simp only [UsedRest]; ac_rfl) h
+
 /-! ## Proof tactics of the entries
 
 Each is elaborated against the code of the module where it is used. The names it refers to are
@@ -1323,7 +1633,7 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   refine CTriple.ex fun v => CTriple.lift fun hv0 => ?_
   obtain ⟨hv, hx⟩ := hv0
   have hv' := hv
-  obtain ⟨⟨hc16, hfin, hwf, hgr, hacct⟩, hfirst, hbc, hbN, hbp, hac, hpos', hc0, hp0, hMi⟩ := hv'
+  obtain ⟨⟨hc16, hfin, hwf, hgr, hacct, hqq⟩, hfirst, hbc, hbN, hbp, hac, hpos', hc0, hp0, hMi⟩ := hv'
   unfold OV.FirstFacts at hwf
   rw [hfirst] at hwf
   obtain ⟨hnf, hei, htail⟩ := hwf
