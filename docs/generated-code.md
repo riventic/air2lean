@@ -314,9 +314,14 @@ def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [
   (`Zig.Conc.Capture.grant`, `ZigLean/Conc/Transfer.lean`).
 
 The checker accepts a named, non-`extern` `threadlocal var` with an initial value (wholly
-defined or wholly `undefined`) of a pointer-free, error-free type that the model encodes, and a
+defined or wholly `undefined`) of an error-free type that the model encodes, and a
 `runtime_nav_ptr` that is a plain single-item pointer to such a global's type with at most its
-alignment. It rejects with `GLOBAL_FAILURE` an `extern threadlocal`, a `threadlocal` global of
+alignment. The type may hold pointers (`std.Io.Threaded`'s `threadlocal var current: ?*Thread =
+null`, L12): every thread's instance starts with the same initial bytes, so a pointer in the
+initial value names storage that is one object in every thread, an ordinary global, a constant or
+a function, and passes the checks of any global initializer. A pointer a thread stores into its
+instance is an ordinary pointer to the thread's storage (a stack object, a heap block); it dies
+with that storage, and the instance itself dies with the thread. It rejects with `GLOBAL_FAILURE` an `extern threadlocal`, a `threadlocal` global of
 any other type, a constant pointer into a `threadlocal` global (0.14.1 writes the address of a
 thread-local as a constant; a constant has one address in every thread), and a
 `runtime_nav_ptr` of a global that is not `threadlocal` (an `extern` the compiler reaches at run
