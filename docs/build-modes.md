@@ -57,9 +57,8 @@ throw" does not imply "no illegal behaviour", so the transfer claim does not app
 The reproducer is
 [`float-divexact-inexact.zig`](../tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig).
 The records state this as an exception of the premise. The model now returns `.illegal` for
-an inexact float `@divExact` quotient, so the x86_64-linux and aarch64-linux runs (the latter
-without the float examples) record no mismatch; the aarch64-macos records predate that change
-and still triage the 85 cases.
+an inexact float `@divExact` quotient, so no run records a mismatch for it (the 85 cases are
+`illegal_exclusion`).
 
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
@@ -72,8 +71,8 @@ behaviour without a model throw, so "the ReleaseSafe model does not throw" does 
 
 - **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
   quotient; the model makes every other inexact quotient `.illegal`
-  ([illegal-behavior.md](illegal-behavior.md)). The re-recorded x86_64-linux runs have no
-  such mismatch; the aarch64-macos records still list this exception until they are re-recorded.
+  ([illegal-behavior.md](illegal-behavior.md)). The runs of all three targets have no such
+  mismatch.
 
 The premise holds only for programs that do not. The item is lifted when its records are.
 
@@ -114,7 +113,8 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 43584 per aarch64-linux run (floatops and floatconv left out, see below) and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 86209 cases per aarch64-macos and aarch64-linux run (each host's own
+translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
 cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
@@ -125,17 +125,17 @@ records on every run.
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
-| aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4591 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
 | x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
 
-The aarch64-macos runs count 760 float results as `host_difference` (the float model
-follows x86_64-linux, `host.txt`) and the aarch64-linux runs 755; the x86_64-linux runs have none.
+No run counts a `host_difference`: each host tests its own translation, whose float rules are
+that target's (`docs/floats.md` §Targets).
 `examples/asm` is `host_excluded` on both aarch64 hosts.
 
 **aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
@@ -144,14 +144,12 @@ container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain fr
 instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
 (`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
 checks the case count, examples, mismatches and exclusions; its counts are the container's
-(43584 cases; 4591 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+(86209 cases; 4922 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
 
-The aarch64-linux runs leave out `floatops` and `floatconv`
-([reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)): the
-committed translation follows the x86_64-linux float rules, aarch64-macos has its own
-translation and pins, and the translator has no aarch64-linux profile, so 586 f80 and fused-multiply
-cases are typed mismatches there. The float `@divExact` exception (which the model now answers with `.illegal`, so no mismatch) is therefore recorded on
-aarch64-macos only. In an unchecked mode a pinned model `.illegal` (an
+The aarch64-linux runs include `floatops` and `floatconv`: they test the committed
+aarch64-linux translations (`tests/golden/0.16.0/<ex>/Gen-linux-aarch64.lean`, whose float rules
+the [reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)
+measures natively), with that host's pins (`unspecified.Linux-aarch64.txt`). In an unchecked mode a pinned model `.illegal` (an
 out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot render;
 `scripts/diff-report.py` counts it as `illegal_exclusion`.
 
