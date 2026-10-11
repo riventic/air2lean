@@ -32,6 +32,7 @@ INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/a
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
           'scripts/premise_markers.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
+REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
 
 def demand(ok, message):
@@ -446,6 +447,9 @@ def worker(attempt):
     if plan['scope'] == 'explicit-modules':
         for module in plan['modules']:
             argv += ['--module', module]
+    # The guard caps the whole process tree at 8 GiB (check.sh); four concurrent leanchecker
+    # replays (the assumptions.py default on a 4-CPU runner) exceed it, two fit.
+    os.environ['AIR2LEAN_REPLAY_JOBS'] = str(REPLAY_JOBS)
     result = run_child(argv, ROOT)  # The outer guard owns the timeout; cancellation stops the group.
     if result.returncode:
         return result.returncode if result.returncode > 0 else 128 - result.returncode
