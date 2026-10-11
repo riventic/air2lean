@@ -3,7 +3,7 @@
 Zig 0.17.0 changed what `@bitCast` means. 0.16.0 reinterpreted the **in-memory**
 representation. 0.17.0 reinterprets the **logical bit representation**, which is the same on
 every target. The translator selects the rules from the function's `zig_version`
-(`Air2Lean/BitCast.lean`, `logicalBitCastVersion`). ≤0.16 inputs keep the existing rules
+(`ZigVersion.bitCast` in `Air2Lean/Air/Dialect.lean`, `Air2Lean/BitCast.lean`). ≤0.16 inputs keep the existing rules
 unchanged, including the memory representation casts of arrays and `extern` aggregates
 (`Zig.reprCast`, [aggregate-casts.md](aggregate-casts.md)). Sources: the 0.16.0 and 0.17.0 release tarballs (sha256 pins in
 `zig-patch/versions.toml`; 0.17.0 `b6c7f172…8abd`) and the 0.17.0 release notes
