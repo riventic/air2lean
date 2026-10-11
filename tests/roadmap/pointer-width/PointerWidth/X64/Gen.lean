@@ -130,7 +130,7 @@ def offsetOf (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (BitVec 64) := do
       else (do
         throw .outOfBounds)) : Zig.MM offsetOfLocals offsetOfExit) with
     | .br8 => (do
-      let i13 ← Zig.callM (Zig.ptrProject i5.ptr (·.elem 4 p1))
+      let i13 ← Zig.callM (Zig.checkIndex i5.len p1) >>= fun _ => Zig.callM (Zig.ptrProject i5.ptr (·.elem 4 p1))
       let i14 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i13)))
       let i16 ← pure (((← get).local2).ptr)
       let i17 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i16)))

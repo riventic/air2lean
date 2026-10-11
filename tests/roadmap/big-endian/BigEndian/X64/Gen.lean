@@ -100,7 +100,7 @@ def byteOfF64 (p0 : Zig.F64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM byteOfF64Locals byteOfF64Exit) with
     | .br6 => (do
-      let i11 ← Zig.callM (Zig.load (BitVec 8) 1 (i4.elem 1 p1))
+      let i11 ← Zig.callM (Zig.checkIndex (8 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i4.elem 1 p1))
       pure (.ret i11))
     | e => pure e) : Zig.MM byteOfF64Locals byteOfF64Exit).run' { (default : byteOfF64Locals) with v := s2 }
   Zig.free s2
@@ -129,7 +129,7 @@ def byteOfU32 (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM byteOfU32Locals byteOfU32Exit) with
     | .br6 => (do
-      let i11 ← Zig.callM (Zig.load (BitVec 8) 1 (i4.elem 1 p1))
+      let i11 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i4.elem 1 p1))
       pure (.ret i11))
     | e => pure e) : Zig.MM byteOfU32Locals byteOfU32Exit).run' { (default : byteOfU32Locals) with v := s2 }
   Zig.free s2
@@ -374,7 +374,7 @@ def unionByte (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM unionByteLocals unionByteExit) with
     | .br8 => (do
-      let i13 ← Zig.callM (Zig.load (BitVec 8) 1 (i6.elem 1 p1))
+      let i13 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i6.elem 1 p1))
       pure (.ret i13))
     | e => pure e) : Zig.MM unionByteLocals unionByteExit).run' { (default : unionByteLocals) with local2 := s2 }
   Zig.free s2
