@@ -1129,7 +1129,7 @@ def offNat (p : Expr) : MetaM Expr := do mkAppM ``Int.toNat #[← mkAppM ``Zig.P
 
 /-- Carve the region atom `q` of the postcondition (bytes possibly unknown; `n?` its size from a
 fact) out of a region of the state: split at its start (with its alignment) and at its end. -/
-def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option St) := do
+def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option (St × Expr)) := do
   let (qp, qA, qS, qK, qa, qbs) := (q[0]!, q[1]!, q[2]!, q[3]!, q[4]!, q[5]!)
   let some (qb, _) ← blockOf qp | return none
   for i in [0:st.ats.size] do
@@ -1198,18 +1198,20 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option St) :=
       let qbs ← instantiateMVars qbs
       if qbs.hasExprMVar then
         unless ← isDefEq qbs cur[5]! do throwError "bytes"
-      return some st
+      return some (st, st.ats[j]!)
     catch ex =>
       trace[fsym] "carve: {ex.toMessageData}"
       s0.restore
   return none
 
-/-- Join two adjacent regions of the state (the second at the end of the first). -/
-def joinOnce (st : St) : TacticM (Option St) := do
+/-- Join two adjacent regions of the state (the second at the end of the first), except those a
+postcondition region has claimed. -/
+def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
   for i in [0:st.ats.size] do
+    if claimed.contains st.ats[i]! then continue
     let some r1 := regionArgs? st.ats[i]! | continue
     for j in [0:st.ats.size] do
-      if i == j then continue
+      if i == j || claimed.contains st.ats[j]! then continue
       let some r2 := regionArgs? st.ats[j]! | continue
       let s0 ← saveState
       try
@@ -1419,6 +1421,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     -- regions: exact matches first; then carve (joining adjacent regions for a region of
     -- unknown size, which extends as far as the state's bytes go, or when no region holds it)
     let mut exact : Array Nat := #[]
+    let mut claimed : Array Expr := #[]
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
       -- a region with a size fact is carved (its bytes may change)
@@ -1433,7 +1436,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState
-        if ← withReducibleAndInstances (isDefEq a st.ats[i]!) then exact := exact.push i; break
+        if ← withReducibleAndInstances (isDefEq a st.ats[i]!) then
+          exact := exact.push i; claimed := claimed.push st.ats[i]!; break
         s'.restore
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
@@ -1449,13 +1453,13 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
-          let some st' ← joinOnce st | break
+          let some st' ← joinOnce st claimed | break
           st := st'
-      if let some st' ← carve st q n? then st := st'; done := true
+      if let some (st', x) ← carve st q n? then st := st'; claimed := claimed.push x; done := true
       while !done do
-        let some st' ← joinOnce st | break
+        let some st' ← joinOnce st claimed | break
         st := st'
-        if let some st' ← carve st q n? then st := st'; done := true
+        if let some (st', x) ← carve st q n? then st := st'; claimed := claimed.push x; done := true
       unless done do throwError "fsym: no region of the state holds{indentExpr a}"
     -- shares
     let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
