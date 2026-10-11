@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3428 theorems in 196 files.
+3448 theorems in 197 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -25,22 +25,22 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-09](premises.md#alc-09) | 55 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 184 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 364 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 1709 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1720 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 227 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 158 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 22 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 871 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 85 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1265 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1269 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 25 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1422 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1422 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1433 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1433 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 438 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 532 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 51 | Pointer atomics keep provenance and compare identities |
+| [ORD-05](premises.md#ord-05) | 55 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 134 | Executable IEEE-754 float model |
@@ -51,18 +51,18 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 3280 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2809 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1489 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 346 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 3300 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2829 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1502 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 355 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2809 | Block addresses are the environment's placement |
+| [SEM-07](premises.md#sem-07) | 2829 | Block addresses are the environment's placement |
 | [STK-01](premises.md#stk-01) | 57 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3428 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3448 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1574 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1574 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
@@ -75,7 +75,7 @@ premise was derived. This index covers the committed generated modules.
 | [OSG-01](premises.md#osg-01) | 0 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 0 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 0 | Sleep |
-| [OSM-01](premises.md#osm-01) | 57 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 59 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 0 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 0 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 0 | Thread exit, join and detach |
@@ -2462,34 +2462,39 @@ File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, S
 | `AllocArena.Core.Owns.region` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.Owns.block` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `AllocArena.Core.region_apart` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.encode_nxt_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_owns` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.rcpts_pick` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.rcpts_put` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.pool_add` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.grants_set` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `AllocArena.Core.region_facts` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.pre_of` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.free_pre` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.free_mem` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.last_dec` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocArena.Core.last_labels` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.lo_of` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.ptrAddr_run'` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `AllocArena.Core.ptrEqAddr_run` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `AllocArena.Core.ptrProject_add_run'` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `AllocArena.Core.ptrProject_elem_run` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `AllocArena.Core.encode_nxt_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `AllocArena.Core.free_mem` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.last_facts` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.bits_even` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `AllocArena.Core.own_of` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.granted_of` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.up_region_split` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.keepsPrefix_extract` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.keepsPrefix_append` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.FV.L_eq` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.rcptOf_shrink` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `AllocArena.Core.rcpts_shrink` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.cut_facts` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.rcpts_repoint` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.open_rcpt` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.grant_fact` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `AllocArena.Core.free_ghost` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.shrink_ghost` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.grow_core` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.rcpt_regrow` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.grow_ghost` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.granted_of_sz` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.resizePost_of` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.rpost_true` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.rpost_true0` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.relB_junk` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.resize_false_of` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.free_other_upd` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.free_last_upd` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
@@ -2502,6 +2507,7 @@ File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, S
 | `AllocArena.Core.free_ct` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.free_spec` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.resize_ct` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.resize_granted_ct` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.remap_ct` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.resize_spec` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.remap_spec` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
@@ -4192,6 +4198,27 @@ File premises: THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, T
 | `Zig.Full.NestedCX.ex_sep` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `Zig.Full.NestedCX.nested_reset` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `Zig.Full.NestedCX.inner_dead` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+
+## `tests/roadmap/sep-full/ShrinkCX.lean`
+
+File premises: THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `Zig.Full.ShrinkCX.bs2_get` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.bs2_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.m2_heap` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.seq2` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.tl_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.tl_get` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.own_bytesAt` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.gE_ok` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.fmatch2` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.hf_pos` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.split_state` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.munmap_run2` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, OSM-01 |
+| `Zig.Full.ShrinkCX.frame_breaks` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `Zig.Full.ShrinkCX.no_partial_shrink` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 
 ## `tests/roadmap/shared-reclamation/Runtime.lean`
 
