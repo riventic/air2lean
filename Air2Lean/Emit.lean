@@ -2295,6 +2295,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
+    if let some fromArray := (fc.valTyId? a).bind (vectorLaneCast? fc.types · inst.ty) then
+      -- Zig ≤0.16 `[n]T` ↔ `@Vector(n, T)`: lane `i` is item `i` (`Check.lean`, L09).
+      let expr := if fromArray then s!"pure (⟨{rv a}⟩ : {fc.emitTyOf inst.ty})"
+        else s!"pure ({rv a} : {fc.emitValTy a}).lanes"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     if (fc.valTyId? a).any (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
       -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
       -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`).

@@ -19,6 +19,7 @@ PROVENANCE = HERE / "provenance.json"
 # Each fixture source and the register row whose evidence it is.
 SOURCES = {
     "error_params": "L10",
+    "vector_casts": "L09",
 }
 COMMAND = ("ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<stem>. <patched zig> build-obj "
            "-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig "
@@ -36,7 +37,8 @@ def air_files(stem, version):
 def current():
     return {
         "sources": {stem: {"row": row, "source": f"tests/roadmap/lang-long-tail/{stem}.zig",
-                           "source_sha256": sha(HERE / f"{stem}.zig")}
+                           "source_sha256": sha(HERE / f"{stem}.zig"),
+                           "filter_sha256": sha(HERE / f"{stem}.filter") if (HERE / f"{stem}.filter").exists() else None}
                     for stem, row in SOURCES.items()},
         "exporter": "zig-patch/air-json/json.zig",
         "exporter_sha256": sha(ROOT / "zig-patch/air-json/json.zig"),
@@ -88,6 +90,11 @@ class Provenance(unittest.TestCase):
             for version in VERSIONS:
                 for path in air_files(stem, version):
                     name = json.loads(path.read_text())["name"]
+                    if not name.startswith(f"{stem}."):
+                        # A std function the fixture calls (`<stem>.filter`).
+                        filters = (HERE / f"{stem}.filter").read_text().split()
+                        self.assertTrue(any(name.startswith(p) for p in filters), path.name)
+                        continue
                     base = re.sub(r"__(anon|func)_\w+$", "", name.split(".", 1)[1])
                     self.assertRegex(text, rf"fn {re.escape(base)}\b", path.name)
 

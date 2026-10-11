@@ -40,9 +40,33 @@ for version in "${versions[@]}"; do
   for stem in "${stems[@]}"; do
     out="$work/$stem/$version"
     mkdir -p "$out"
-    ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER="$stem." \
+    # <stem>.filter, if present: more AIR name prefixes (the std functions the fixture calls).
+    filter="$stem."
+    [ -f "$here/$stem.filter" ] && filter="$filter,$(paste -sd, "$here/$stem.filter")"
+    ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER="$filter" \
       "$root/zig-air-$version/bin/zig" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
       -target x86_64-linux -mcpu=baseline "$here/$stem.zig"
+    # Keep the call/function-value closure of the fixture's own functions: the filter also
+    # matches std instances that only the compiler's panic and debug code reaches, and how many
+    # depends on the version.
+    python3 - "$out" "$stem." <<'PY'
+import json, pathlib, re, sys
+out, prefix = pathlib.Path(sys.argv[1]), sys.argv[2]
+docs = {p: p.read_text() for p in out.glob("*.json")}
+names = {p: json.loads(t)["name"] for p, t in docs.items()}
+work = [p for p, n in names.items() if n.startswith(prefix)]
+keep = set()
+while work:
+    p = work.pop()
+    if p in keep:
+        continue
+    keep.add(p)
+    refs = set(re.findall(r'"func":\s*"([^"]+)"', docs[p]))
+    work.extend(q for q, n in names.items() if n in refs)
+for p in docs:
+    if p not in keep:
+        p.unlink()
+PY
     if [ "$mode" = --check ]; then
       diff -r "$out" "$here/air/$stem/$version"
     else

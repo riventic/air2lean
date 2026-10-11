@@ -102,9 +102,38 @@ def error_params(binary):
             reject(binary, edited, EP, "AIR args do not match non-OPV runtime parameters (1 args, 2 slots)")
 
 
+# --- L09: Zig ≤0.16 `@bitCast` with a vector side -------------------------------------------
+
+VC = ["--namespace", "VectorCasts", "--prefix", "vector_casts."]
+
+
+def one(stem, name):
+    return {name: fixtures(stem)[name]}
+
+
+def vector_casts(binary):
+    # Array items that do not fill whole bytes cast to a vector of another item type: 0.16.0
+    # copies item by item into lanes of another type, no representation cast.
+    docs = one("vector_casts", "vector_casts.bytesToHalves.json")
+    doc = docs["vector_casts.bytesToHalves.json"]
+    doc["types"][4] = {"k": "int", "signed": False, "bits": 4, "abi_size": 1, "abi_align": 1}
+    doc["types"][0] = dict(doc["types"][0], len=8, abi_size=8)
+    reject(binary, docs, VC, "source items do not fill whole bytes")
+    # Equal bit sizes are required (`@bitSizeOf`): `[4]u8` (32 bits) to `@Vector(4, u16)`.
+    docs = one("vector_casts", "vector_casts.bytesToHalves.json")
+    doc = docs["vector_casts.bytesToHalves.json"]
+    doc["types"][1] = dict(doc["types"][1], len=4, abi_size=8, abi_align=8)
+    reject(binary, docs, VC, "between types of 32 and 64 bits")
+    # Non-byte lanes in memory are the LLVM backend's image only: another backend is rejected.
+    docs = one("vector_casts", "vector_casts.packedLanesToInt.json")
+    docs["vector_casts.packedLanesToInt.json"]["profile"]["backend"] = "stage2_x86_64"
+    reject(binary, docs, VC + ["--allow-unqualified-build-mode"], "LLVM backend")
+
+
 def main():
     binary = Path(sys.argv[1]).resolve()
     error_params(binary)
+    vector_casts(binary)
     print("lang-long-tail test_cli: ok")
 
 

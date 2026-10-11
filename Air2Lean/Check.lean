@@ -460,7 +460,9 @@ an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@
 for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
 storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out, and
 for a pointer or optional pointer at any depth: the model's pointer bytes carry provenance and
-are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). -/
+are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). A
+vector of integer, float or `bool` lanes has `len·@bitSizeOf(lane)` bits: the LLVM backend's
+memory image packs the lanes without padding (`Zig.Vec.packedEnc`, L09). -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
   let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
   match ← types[id]? with
@@ -475,16 +477,37 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let eb ← reprBitSize types layouts child
     let es ← layouts[child]?.bind (·.size)
     pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
+  | .vector len child =>
+    match ← types[child]? with
+    | .int _ bits | .float bits => pure (len * bits)
+    | .bool => pure len
+    | _ => none
   | _ => none
+
+def isVectorTy (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with | some (.vector ..) => true | _ => false
+
+/-- `[n]T` ↔ `@Vector(n, T)` (same item type, no sentinel): `some true` from the array,
+`some false` to it. Up to 0.16.0 this `@bitCast` is lane `i` = item `i` for every item type
+(Zig 0.16.0's LLVM `bitCast`: a vector store/load for whole-byte items, otherwise one
+`extractelement`/`insertelement` per item), so it is translated lane-wise, not through the
+memory images (an item `u24` has a padding byte in the array, none in the vector). -/
+def vectorLaneCast? (types : Array Ty) (src dst : TyId) : Option Bool :=
+  match types[src]?, types[dst]? with
+  | some (.array n a false), some (.vector m b) => if n == m && a == b then some true else none
+  | some (.vector m b), some (.array n a false) => if n == m && a == b then some false else none
+  | _, _ => none
 
 /-- A ≤0.16 `@bitCast` (`ZigVersion.BitCast.memory`: up to 0.16.0 `@bitCast` reinterprets the
 in-memory representation; 0.17.0 changed it to the logical bit order) from `src` to `dst` that the
 representation cast (`Zig.reprCast`) translates: different types, an array, `extern` struct or
-`extern` union on at least one side. The checker then requires both sides to have a
+`extern` union on at least one side, or a vector on at least one side except the lane-wise
+`[n]T` ↔ `@Vector(n, T)` (`vectorLaneCast?`). The checker then requires both sides to have a
 `reprBitSize` and equal ones. -/
 def reprCastApplies (bitCast : ZigVersion.BitCast) (types : Array Ty) (src dst : TyId) : Bool :=
   bitCast == .memory && src != dst &&
-    (reprAggregate types src || reprAggregate types dst)
+    (reprAggregate types src || reprAggregate types dst ||
+      ((isVectorTy types src || isVectorTy types dst) && (vectorLaneCast? types src dst).isNone))
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -1245,8 +1268,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | .error e => cx.fail line e
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
+    -- Up to 0.16.0 a vector `@bitCast` is the lane-wise `[n]T` ↔ `@Vector(n, T)`
+    -- (`vectorLaneCast?`) or a representation cast of the vector's memory image below (L09).
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
-      cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+      unless cx.bitCast == some .memory do
+        cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+      if let some aty := sourceTy then
+        if (vectorLaneCast? cx.types aty ty).isSome then return line
     -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
     -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
     -- its bytes as an array (`docs/illegal-behavior.md`).
@@ -1295,17 +1323,29 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- encode, then decode the other type from the same bytes, padding bytes undefined.
       if cx.bitCast.any (reprCastApplies · cx.types aty ty) then
         let side (t : TyId) : Bool := match cx.types[t]? with
-          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _) => true
+          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _)
+          | some (.vector ..) => true
           | _ => reprAggregate cx.types t
         unless side aty && side ty do
-          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct \
-            or `extern` union and a type other than an integer, float, `bool`, packed struct, \
-            array, `extern` struct or `extern` union is outside the subset"
+          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct, \
+            `extern` union or vector and a type other than an integer, float, `bool`, packed \
+            struct, array, `extern` struct, `extern` union or vector is outside the subset"
+        -- An array and a vector of other items: 0.16.0's LLVM `bitCast` reinterprets memory
+        -- only when the source's items fill whole bytes; otherwise it copies item by item into
+        -- lanes of another type, which is no representation cast.
+        let item (t : TyId) : Option TyId := match cx.types[t]? with
+          | some (.array _ c _) | some (.vector _ c) => some c
+          | _ => none
+        if (isVector (some aty) && (cx.types[ty]?.any fun | .array .. => true | _ => false)) ||
+            (isVector (some ty) && (cx.types[aty]?.any fun | .array .. => true | _ => false)) then
+          unless (item aty).any (byteStridedLane cx.types) do
+            cx.fail line "a Zig ≤0.16 `@bitCast` between an array and a vector of another item \
+              type whose source items do not fill whole bytes is outside the subset"
         let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
             reprBitSize cx.types cx.layouts ty)
           | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
               pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
-              tagged union, packed union, slice, vector, sentinel array or error storage, at any \
+              tagged union, packed union, slice, sentinel array or error storage, at any \
               depth) is outside the subset"
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
