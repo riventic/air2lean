@@ -747,6 +747,16 @@ def launch_row(args):
         mounts = []
         for target, volume in volumes(arch, root).items():
             mounts += ['--mount', 'type=volume,src=%s,dst=%s' % (volume, target)]
+        # Hook for a shared content-addressed cache (or anything else a row should see): names in
+        # AIR2LEAN_LOCAL_PASSTHROUGH are forwarded with their values, SRC:DST pairs in
+        # AIR2LEAN_LOCAL_EXTRA_MOUNTS are bind-mounted. Host rows inherit the environment as is.
+        hooks = []
+        for name in os.environ.get('AIR2LEAN_LOCAL_PASSTHROUGH', '').split():
+            if name in os.environ:
+                hooks += ['--env', '%s=%s' % (name, os.environ[name])]
+        for pair in os.environ.get('AIR2LEAN_LOCAL_EXTRA_MOUNTS', '').split():
+            src, _, dst = pair.partition(':')
+            hooks += ['--mount', 'type=bind,src=%s,dst=%s' % (src, dst)]
         stale = subprocess.run(['docker', 'ps', '-aq', '--filter', 'name=^air2lean-local-ci-', '--filter', 'status=exited'],
                                capture_output=True, text=True).stdout.split()
         if stale:  # left by an interrupted run
@@ -754,7 +764,7 @@ def launch_row(args):
         container = subprocess.run(
             ['docker', 'create', '--name', 'air2lean-local-ci-%s-%d' % (re.sub(r'\W', '_', row['id']), os.getpid()),
              '--platform', 'linux/' + arch, '--memory', MEMORY, '--memory-swap', MEMORY,
-             '--cpus', CPUS, '--pids-limit', '1024', '--init',
+             '--cpus', CPUS, '--pids-limit', '1024', '--init', *hooks,
              '--env', 'AIR2LEAN_LOCAL_LEAN_THREADS=' + LEAN_THREADS,
              '--env', 'AIR2LEAN_LOCAL_ROSETTA=%d' % (arch == 'amd64' and platform_is_arm_host()),
              '--mount', 'type=bind,src=%s,dst=/src,readonly' % root,

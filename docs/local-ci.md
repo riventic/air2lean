@@ -63,6 +63,9 @@ bound (the job's `timeout-minutes` times `--timeout-scale`, default 2) and a rep
   the Mac. The Docker Desktop VM has 16 CPUs and about 15 GiB; the container is capped at
   `--memory 9g --memory-swap 9g --cpus 6 --pids-limit 1024` (`AIR2LEAN_LOCAL_MEMORY`,
   `AIR2LEAN_LOCAL_CPUS`), `LEAN_NUM_THREADS=2`. The patched-compiler build peaks at about 8 GB.
+* Hooks for a shared cache: `AIR2LEAN_LOCAL_PASSTHROUGH="NAME ..."` forwards those environment variables
+  into the container and `AIR2LEAN_LOCAL_EXTRA_MOUNTS="SRC:DST ..."` bind-mounts host paths; host rows
+  inherit the environment. The runner has no content-addressed cache of its own beyond the volumes above.
 * `AIR2LEAN_LOCAL_LOCK_DIR` moves the lock files; `AIR2LEAN_LOCAL_CI_HOME` moves the host directories.
 * The host needs Docker and Python 3 (a private venv with PyYAML is created on first use).
 
