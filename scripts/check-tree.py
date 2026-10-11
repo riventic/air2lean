@@ -58,7 +58,7 @@ def host_goldens(version, root=ROOT, system=None, machine=None):
         for name in (f'Gen-{host_os}-{arch}.lean', f'Gen-{host_os}.lean', 'Gen.lean'):
             if (golden / name).is_file():
                 module = f'Proofs/{ex[0].upper()}{ex[1:]}/Gen.lean'
-                specs.append(f'{module}={(golden / name).relative_to(root)}')
+                specs.append(f'{module}={golden / name}')
                 break
     return specs
 

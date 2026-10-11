@@ -63,18 +63,12 @@ an inexact float `@divExact` quotient, so no run records a mismatch for it (the 
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
 
-**Known exceptions (open).** The premise needs the model to throw on every illegal behaviour
-that ReleaseSafe does not check. The memory-model audit
-([architecture-audit/memory-model.md](architecture-audit/memory-model.md), MM-7) found illegal
-behaviour without a model throw, so "the ReleaseSafe model does not throw" does not yet imply
-"no illegal behaviour" for programs that do the following:
-
-- **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
-  quotient; the model makes every other inexact quotient `.illegal`
-  ([illegal-behavior.md](illegal-behavior.md)). The runs of all three targets have no such
-  mismatch.
-
-The premise holds only for programs that do not. The item is lifted when its records are.
+**Known exceptions.** The premise needs the model to throw on every illegal behaviour that
+ReleaseSafe does not check. The memory-model audit
+([architecture-audit/memory-model.md](architecture-audit/memory-model.md), MM-7) found one such
+gap, now closed: an inexact float `@divExact` quotient, which the ReleaseSafe check catches only
+when it is NaN, is `.illegal` in the model ([illegal-behavior.md](illegal-behavior.md)), and the
+re-recorded runs of all three targets record it as `illegal_exclusion`, with no mismatch.
 
 **Fixed.** Address observation (MM-1, MM-2): every block's address is the environment's
 placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a

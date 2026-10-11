@@ -28,6 +28,8 @@ CLAIMED = {  # README's default selections (x86_64); the committed-tree test pin
     '0.16.0': [e for e in EXAMPLES if e != 'threadsync'],
     '0.15.2': [e for e in EXAMPLES if e not in ('iogroup', 'sync')],
 }
+# The 0.14.1 row's CI examples (restricted job, diff test on these only).
+RESTRICTED = ['basic', 'errors', 'floatops', 'floats', 'layout', 'options', 'pointers', 'recursion', 'variants']
 
 
 def summary(version='0.16.0', host='Linux-x86_64', counts=None, examples=None, **extra):
@@ -258,6 +260,7 @@ class Claims(Temp):
 
     def test_full_matrix_summaries_hold(self):
         code, output = self.claims(summary('0.17.0'), summary('0.16.0'), summary('0.15.2'),
+                                   summary('0.14.1', examples=RESTRICTED),
                                    summary('0.16.0', 'Darwin-arm64',
                                            examples=[e for e in CLAIMED['0.16.0'] if e != 'asm']),
                                    require=True)
@@ -268,7 +271,12 @@ class Claims(Temp):
                          summary('0.16.0'), require=True)
 
     def test_restricted_version_summary_contradicts_claim(self):
-        self.assertClaim('README claims no diff harness', summary('0.14.1', examples=['basic']))
+        # The 0.14.1 row runs the diff test on its listed examples: a summary of those is evidence.
+        self.assertEqual(self.claims(summary('0.14.1', examples=RESTRICTED))[0], 0)
+        self.assertClaim('ran examples', summary('0.14.1', examples=['basic']))
+        self.edit('README.md', '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) |',
+                  '| 0.14.1 | restricted job (translation and proofs; no diff harness) |')
+        self.assertClaim('README claims no diff harness', summary('0.14.1', examples=RESTRICTED))
 
     def test_focused_selection_does_not_evidence_claim(self):
         self.assertClaim('ran examples', summary('0.15.2', examples=['atomics', 'threads']))
@@ -277,8 +285,8 @@ class Claims(Temp):
         self.assertClaim('not a README-supported version', summary('0.13.0'))
 
     def test_restricted_example_list_mismatch(self):
-        self.edit('README.md', '| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`,',
-                  '| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`, `slices`,')
+        self.edit('README.md', '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`,',
+                  '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`, `slices`,')
         self.assertClaim('restricted examples')
 
     def test_full_claim_without_ci_job(self):
@@ -291,7 +299,8 @@ class Claims(Temp):
         self.assertClaim('CI matrix runs')
 
     def test_restricted_prose_contradicting_row(self):
-        self.edit('README.md', "The 0.14.1 row uses CI's restricted examples", "The 0.15.2 row uses CI's restricted examples")
+        self.edit('README.md', "The 0.14.1 row uses CI's restricted examples;",
+                  "The 0.15.2 row uses CI's restricted examples and skips the differential harness;")
         self.assertClaim('skips the differential harness; its version row disagrees')
 
     def test_readme_headline_including_exclusions_fails(self):

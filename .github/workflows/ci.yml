@@ -1323,7 +1323,7 @@ jobs:
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
-          AIR2LEAN_DIFF: ${{ (matrix.full || matrix.zig == '0.14.1') && '1' || '0' }}
+          AIR2LEAN_DIFF: ${{ matrix.full && '1' || matrix.zig == '0.14.1' && '1' || '0' }}
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
         run: scripts/check.sh
 

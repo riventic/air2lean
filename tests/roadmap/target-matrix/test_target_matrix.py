@@ -162,7 +162,7 @@ class Evidence(Scratch):
 
     def test_restricted_job_without_diff_is_not_native_execution(self):
         # The 0.14.1 row is not `full`: without its own AIR2LEAN_DIFF clause check.sh skips the diff.
-        self.edit_text('.github/workflows/ci.yml', "(matrix.full || matrix.zig == '0.14.1') && '1' || '0'",
+        self.edit_text('.github/workflows/ci.yml', "matrix.full && '1' || matrix.zig == '0.14.1' && '1' || '0'",
                        "matrix.full && '1' || '0'")
         def change(data):
             entry = self.entry(data, '0.14.1', 'x86_64-linux')
