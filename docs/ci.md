@@ -332,13 +332,24 @@ and the native wide bit-operation differential. What changes:
 
 ### Current declarations
 
-Every traced part starts declared with `"inputs": ["**"], "tree_names": true` (the whole tree):
-sound, and reused only when a push leaves the whole tree unchanged. Each execution uploads its
-trace observations (`ci-trace-<key>`, 7 days); `scripts/ci-reuse.py suggest` turns them into
-narrower patterns, and the coverage check of the next execution verifies the narrowed
-declaration. The macOS rows are `commit_bound`. A first traced run of the offline inventory
-regressions observed 3,902 workspace paths (most of the tree), so the gain of narrowing is per
-part and has to be measured, not assumed.
+- Traced and reusable by content, declared `"inputs": ["**"], "tree_names": true` (the whole
+  tree): golden and lean rows of 0.14.1, 0.15.2 and 0.17.0, the three build-mode rows and the five
+  mutation shards. Most of them build the Lake package or a check tree, which read nearly every
+  file, so narrowing gains little there.
+- Narrowed from their traces (`scripts/ci-reuse.py suggest` over the uploaded `ci-trace-<key>`
+  artifacts, verified by the next execution's coverage check): `aarch64-linux`,
+  `bitops-native-arm`, `build-modes-aarch64-linux`.
+- `commit_bound` (untraced, reused only for the same commit): the macOS rows (no strace), and
+  the 0.16.0 `golden`, `lean`, `inputs`, `native` and `receipt` parts, whose gates read commit
+  identity (receipts and assumption reports bind `HEAD`; release-record, manifest and
+  generated-branch regressions run git on `HEAD`).
+- `"reuse": false` (always runs, untraced): `audit` (under strace it exceeded the 90-minute job
+  limit; untraced it takes 10-17 min), `generated` and `provenance` (their artifacts are inputs of
+  other jobs and of the `generated` branch).
+
+Tracing costs time: in the first runs a traced row took 1.2-2x its untraced time (build modes on
+arm64 16-17 min instead of 8.4, golden 0.17.0 19 instead of 11, mutation shards 11-18 instead of
+8-12). It is paid only by parts that execute; a reused part costs about a minute.
 
 ## Rollout order
 
