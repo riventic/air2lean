@@ -76,8 +76,11 @@ second and the third fix and, since the same proof obligation needs it, makes `a
   the pointer out of bounds, and the comparison is one of in-bounds addresses: a slice of
   another block cannot end inside the node past its header (live blocks are disjoint), so the
   test also stays sound if it is written on integers;
-* the fast path does not reserve at all when `n + alignment - 1` exceeds the buffer (such a
-  reservation never fits, and adding it to `end_index` could wrap around);
+* the fast path does not reserve at all when `n + alignment - 1` exceeds the buffer (adding it
+  to `end_index` could wrap around). The aligned request may still fit: the resize path then
+  finds that the node need not grow, and instead of retrying (which would come back to the same
+  place forever) it takes the place by a `cmpxchg` of `end_index`, or retries if `end_index`
+  moved;
 * the fast path checks the fit *before* the overshoot `cmpxchg`; when the request does not fit
   it gives the reservation back (`@cmpxchgStrong(&node.end_index, end_index +% alignable,
   end_index, …)`) and goes on to the resize, free-list and new-node paths, so a failure of the
@@ -90,7 +93,10 @@ Consequences visible in the fixture: `arena_oom_free` (an allocation the child c
 after one it could, then the `free` of the first) frees the first slice; the in-place growth of
 the first node no longer includes the failed reservation, so it asks the child for less
 (`arena_reset 500 true` gives 5001 instead of 7001, `arena_reset 1500 true` succeeds where the
-stock arena's second allocation fails: `expected-fixed.txt`). The stock standard library's
+stock arena's second allocation fails: `expected-fixed.txt`). `arena_fit` (an empty node, and a
+request whose reservation exceeds its buffer but whose aligned bytes fit) is served from the node
+by both; without the resize-path `cmpxchg` the patched arena loops there forever (checked
+natively). The stock standard library's
 `ArenaAllocator` tests pass with the patch, in Debug and ReleaseSafe, the multi-threaded fuzz test
 included (`zig test [-OReleaseSafe] --zig-lib-dir <patched lib> lib/std/std.zig --test-filter
 ArenaAllocator`). In one thread the patched `alloc` keeps `end_index <= buf.len`; with other

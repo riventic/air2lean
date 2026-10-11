@@ -363,7 +363,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_241",
+      "func": "mem.Allocator.alloc__anon_7547",
       "module": "std",
       "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
@@ -573,7 +573,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_241",
+      "func": "mem.Allocator.alloc__anon_7547",
       "module": "std",
       "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
@@ -783,7 +783,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_241",
+      "func": "mem.Allocator.alloc__anon_7547",
       "module": "std",
       "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false

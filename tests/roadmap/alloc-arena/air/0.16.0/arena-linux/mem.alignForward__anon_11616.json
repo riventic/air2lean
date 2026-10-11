@@ -1,0 +1,230 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "mem.alignForward__anon_11616",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4772
+ },
+ "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 31
+  },
+  {
+   "id": 4,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 3,
+    "func": "mem.isValidAlignGeneric__anon_7392",
+    "module": "std",
+    "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 11
+  },
+  {
+   "id": 6,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 4,
+    "func": "debug.assert",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 47
+  },
+  {
+   "id": 8,
+   "tag": "sub_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 34
+  },
+  {
+   "id": 10,
+   "tag": "add_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 25
+  },
+  {
+   "id": 14,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 5,
+    "func": "mem.alignBackward__anon_7331",
+    "module": "std",
+    "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 10
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 16,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 14
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (bool) void"
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) usize"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

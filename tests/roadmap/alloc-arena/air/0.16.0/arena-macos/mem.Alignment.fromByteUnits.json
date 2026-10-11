@@ -116,7 +116,7 @@
    "ty": 3,
    "callee": {
     "ty": 4,
-    "func": "math.isPowerOfTwo__anon_708",
+    "func": "math.isPowerOfTwo__anon_6135",
     "module": "std",
     "instance_key": "38853e1fe316d8affb63cf7a02e444f9d4bd5c6e6e394d850575cb8d963e47c5",
     "noreturn": false

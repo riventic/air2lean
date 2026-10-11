@@ -104,3 +104,18 @@ pub export fn arena_oom_free(n: usize) bool {
     a.free(s);
     return true;
 }
+
+/// A request whose reservation `n + alignment - 1` exceeds the first node's buffer although the
+/// aligned request fits it (the node is empty again: its only allocation was freed). The stock
+/// arena reserves past the buffer and serves the request from the node; the patched arena does
+/// not reserve and takes the place in its resize path (a retry there would never end). The node
+/// is not grown: its capacity stays 60.
+pub export fn arena_fit(n: usize) usize {
+    var fba = std.heap.FixedBufferAllocator.init(&small);
+    var arena = std.heap.ArenaAllocator.init(fba.allocator());
+    const a = arena.allocator();
+    const s = a.alignedAlloc(u8, .@"8", 8) catch return 0;
+    a.free(s);
+    const t = a.alignedAlloc(u8, .@"8", n) catch return 1;
+    return t.len + 1000 * arena.queryCapacity();
+}

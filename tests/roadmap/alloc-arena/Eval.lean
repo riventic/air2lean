@@ -50,6 +50,8 @@ open AllocArena.ArenaLinux
 #guard first (arena_reset 10 true) dispatch { (mem0 .fresh) with arbitrary := #[7, 9, 11] } = "ok 229"
 -- O-E from real runs: natively `true` (undefined behaviour without a visible effect).
 #guard first (arena_oom_free 8) dispatch (mem0 .fresh) = "fail Zig.Error.illegal"
+#guard [first (arena_fit 55) dispatch (mem0 .fresh), first (arena_fit 60) dispatch (mem0 .fresh)] =
+  ["ok 60055", "ok 60060"]
 end Linux
 
 section Fixed
@@ -69,13 +71,18 @@ open AllocArena.ArenaFixedLinux
 #guard [first (arena_three 1) dispatch (mem0 .fresh), first (arena_three 100) dispatch (mem0 .fresh)] =
   ["ok 321", "ok 321"]
 #guard first (arena_oom_free 8) dispatch (mem0 .fresh) = "ok 1"
+-- A request that fits the node although its reservation would not: taken in the resize path (a
+-- retry there would never end).
+#guard [first (arena_fit 55) dispatch (mem0 .fresh), first (arena_fit 60) dispatch (mem0 .fresh)] =
+  ["ok 60055", "ok 60060"]
 end Fixed
 
 section Macos
 open AllocArena.ArenaMacos
 #guard [first (arena_sum 10) dispatch (mem0 .fresh), first (arena_resize 10 20) dispatch (mem0 .fresh),
-  first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh)] =
-  ["ok 10", "ok 1", "ok 7001", "ok 20002"]
+  first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh),
+  first (arena_fit 55) dispatch (mem0 .fresh)] =
+  ["ok 10", "ok 1", "ok 7001", "ok 20002", "ok 60055"]
 end Macos
 
 end AllocArena.Eval

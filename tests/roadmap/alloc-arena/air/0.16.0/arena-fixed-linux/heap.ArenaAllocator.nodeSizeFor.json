@@ -84,7 +84,7 @@
      "ty": 3,
      "callee": {
       "ty": 4,
-      "func": "math.add__anon_18163",
+      "func": "math.add__anon_18122",
       "module": "std",
       "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
       "noreturn": false
@@ -209,7 +209,7 @@
      "ty": 3,
      "callee": {
       "ty": 4,
-      "func": "math.add__anon_18163",
+      "func": "math.add__anon_18122",
       "module": "std",
       "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
       "noreturn": false
@@ -312,7 +312,7 @@
    "ty": 0,
    "callee": {
     "ty": 8,
-    "func": "mem.alignBackward__anon_7294",
+    "func": "mem.alignBackward__anon_7331",
     "module": "std",
     "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
     "noreturn": false

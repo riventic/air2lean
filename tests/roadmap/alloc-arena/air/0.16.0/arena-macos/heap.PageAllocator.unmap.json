@@ -228,7 +228,7 @@
      "ty": 5,
      "callee": {
       "ty": 7,
-      "func": "mem.alignForward__anon_20495",
+      "func": "mem.alignForward__anon_20496",
       "module": "std",
       "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
       "noreturn": false

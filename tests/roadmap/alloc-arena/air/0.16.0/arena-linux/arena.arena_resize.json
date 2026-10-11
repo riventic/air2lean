@@ -319,7 +319,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_241",
+      "func": "mem.Allocator.alloc__anon_8935",
       "module": "std",
       "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
@@ -489,7 +489,7 @@
    "ty": 1,
    "callee": {
     "ty": 21,
-    "func": "mem.Allocator.resize__anon_27995",
+    "func": "mem.Allocator.resize__anon_27997",
     "module": "std",
     "instance_key": "ec6bca265858c0d92c8adc9b771d4dbd6b6c75eedea6376de74e48a0d5adca0b",
     "noreturn": false

@@ -116,7 +116,7 @@
    "ty": 1,
    "callee": {
     "ty": 3,
-    "func": "mem.isValidAlignGeneric__anon_6178",
+    "func": "mem.isValidAlignGeneric__anon_6142",
     "module": "std",
     "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
     "noreturn": false

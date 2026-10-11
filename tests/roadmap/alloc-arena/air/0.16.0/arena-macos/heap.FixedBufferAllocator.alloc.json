@@ -483,7 +483,7 @@
      "ty": 18,
      "callee": {
       "ty": 19,
-      "func": "mem.alignPointerOffset__anon_12850",
+      "func": "mem.alignPointerOffset__anon_12844",
       "module": "std",
       "instance_key": "1fdb4fd23aee9308e7cb1ad2763d14019b6c1b3924b8523e8dfca891858cacaa",
       "noreturn": false

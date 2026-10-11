@@ -297,7 +297,7 @@
    "ty": 0,
    "callee": {
     "ty": 10,
-    "func": "mem.alignForward__anon_11552",
+    "func": "mem.alignForward__anon_11616",
     "module": "std",
     "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
     "noreturn": false
@@ -1045,7 +1045,7 @@
    "ty": 12,
    "callee": {
     "ty": 26,
-    "func": "mem.alignPointer__anon_26447",
+    "func": "mem.alignPointer__anon_26515",
     "module": "std",
     "instance_key": "53311c568cf7c2615bacecb22e81a9283268afb4e48b76b36079934a65f61b40",
     "noreturn": false
@@ -2267,11 +2267,11 @@
   },
   {
    "k": "other",
-   "name": "fn (?[*]align(4096) u8, usize, os.linux.PROT__struct_12010, os.linux.MAP__struct_12013, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(4096) u8"
+   "name": "fn (?[*]align(4096) u8, usize, os.linux.PROT__struct_12074, os.linux.MAP__struct_12077, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(4096) u8"
   },
   {
    "k": "struct",
-   "name": "os.linux.PROT__struct_12010",
+   "name": "os.linux.PROT__struct_12074",
    "module": "std",
    "layout": "packed",
    "fields": [
@@ -2313,7 +2313,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.MAP__struct_12013",
+   "name": "os.linux.MAP__struct_12077",
    "module": "std",
    "layout": "packed",
    "fields": [

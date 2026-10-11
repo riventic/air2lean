@@ -55,7 +55,7 @@
              return buf[aligned_index..][0..n].ptr;
          };
  
-@@ -386,7 +404,7 @@
+@@ -386,11 +404,24 @@
              const buf = allocated_slice[@sizeOf(Node)..];
              const end_index = @atomicLoad(usize, &node.end_index, .monotonic);
              const aligned_index = alignedIndex(buf.ptr, end_index, alignment);
@@ -63,8 +63,27 @@
 +            const new_size = nodeSizeFor(@sizeOf(Node) + aligned_index, n) orelse break :resize;
  
              if (new_size <= allocated_slice.len) {
-                 // A `resize` or `free` call managed to sneak in and we need to
-@@ -442,7 +460,7 @@
+-                // A `resize` or `free` call managed to sneak in and we need to
+-                // guarantee that `size` is only ever increased; retry!
++                // The request fits the node as it is: a `resize` or `free` call
++                // managed to sneak in, or the fast path did not reserve because
++                // `n + alignment - 1` exceeds the buffer. `size` is only ever
++                // increased, so take the place if `end_index` did not move; retry
++                // otherwise.
++                if (null == @cmpxchgStrong(
++                    usize,
++                    &node.end_index,
++                    end_index,
++                    aligned_index + n,
++                    .acquire, // acquire any memory that may have been freed
++                    .monotonic,
++                )) {
++                    return buf[aligned_index..][0..n].ptr;
++                }
+                 continue :retry;
+             }
+ 
+@@ -442,7 +473,7 @@
                      const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
                      const aligned_index = alignedIndex(buf.ptr, 0, alignment);
  
@@ -73,7 +92,7 @@
                      if (diff < best_fit_diff) {
                          best_fit_prev = it_prev;
                          best_fit = node;
-@@ -456,16 +474,16 @@
+@@ -456,16 +487,16 @@
              const aligned_index, const need_resize = aligned_index: {
                  const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
                  const aligned_index = alignedIndex(buf.ptr, 0, alignment);
@@ -94,7 +113,7 @@
                  } else {
                      arena.pushFreeList(first_free, last_free);
                      break :from_free_list; // we couldn't find a fitting free node
-@@ -512,9 +530,9 @@
+@@ -512,9 +543,9 @@
              }
  
              const size: Node.Size = size: {
@@ -107,7 +126,7 @@
                  break :size .fromInt(size);
              };
              const ptr = arena.child_allocator.rawAlloc(size.toInt(), .of(Node), @returnAddress()) orelse
-@@ -561,6 +579,10 @@
+@@ -561,6 +592,10 @@
  
      const cur_end_index = @atomicLoad(usize, &node.end_index, .monotonic);
  
@@ -118,7 +137,7 @@
      if (buf_ptr + cur_end_index != memory.ptr + memory.len) {
          // It's not the most recent allocation, so it cannot be expanded,
          // but it's fine if they want to make it smaller.
-@@ -616,6 +638,10 @@
+@@ -616,6 +651,10 @@
      const buf_ptr = @as([*]u8, @ptrCast(node)) + @sizeOf(Node);
  
      const cur_end_index = @atomicLoad(usize, &node.end_index, .monotonic);

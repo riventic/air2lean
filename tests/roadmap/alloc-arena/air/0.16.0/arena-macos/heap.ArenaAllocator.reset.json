@@ -2119,7 +2119,7 @@
            "ty": 9,
            "callee": {
             "ty": 40,
-            "func": "mem.alignBackward__anon_6135",
+            "func": "mem.alignBackward__anon_6080",
             "module": "std",
             "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
             "noreturn": false
