@@ -294,7 +294,7 @@ jobs:
       # (Air2Lean/Air/Dialect.lean) spells a Zig version in translator code; it lists exactly
       # compatibility.json's versions.
       - name: No Zig version literals outside the dialect registry
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
