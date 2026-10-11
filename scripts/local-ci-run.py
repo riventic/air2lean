@@ -620,6 +620,7 @@ class Job:
             if not link.exists():
                 link.symlink_to(entry)
             mapping[str(entry)] = str(link)
+        (home / 'github_env').touch()
         for line in (home / 'github_env').read_text().splitlines():  # e.g. AIR2LEAN_HOST_PIN
             key, _, value = line.partition('=')
             if key:
