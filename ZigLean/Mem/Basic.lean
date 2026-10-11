@@ -157,11 +157,18 @@ def racePair (a b : AccessKind) : Option Error :=
 by `Thread.detach` (a detached thread may still run). Index 0 (main) is unused: nothing ever
 joins it. `tls`: the thread's own instance of each `threadlocal` global, as
 `(key, instance block)` (`ZigLean/Mem/Tls.lean`); empty for a program without `threadlocal`
-globals and for a thread that has not started. -/
+globals and for a thread that has not started. `gated`: a deferred `Io.Group` task
+(`Thread.forkGated`); it does not start while its group still records it (`Mem.isGated`,
+`ZigLean/Conc/Sched.lean`). -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool
   tls : Array (BlockId × BlockId) := #[]
+  gated : Bool := false
+  /-- The join obligation ended without a happens-before edge to the owner: `pthread_detach`, or
+  a Linux `clone` thread's exit (`Os.markExited`). `Mem.freeRaces` then does not exempt the
+  thread's accesses. -/
+  released : Bool := false
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/
@@ -200,6 +207,9 @@ structure Msg where
   relClock : VClock
   /-- For an RMW: the id of the message it read. It stays right after that message. -/
   rmwOf : Option Nat := none
+  /-- The thread of an atomic store or RMW (`none` for a plain write). Ghost: it only decides
+  the owner check of a mutex unlock (`Thread.mutexOwnerCheck`, `ALoc.holder`). -/
+  writer : Option ThreadId := none
   deriving Repr, Inhabited
 
 /-- An atomic location: its writes in modification order. -/
@@ -342,6 +352,20 @@ instance : Inhabited Placement := ⟨.fresh⟩
 /-- The oracle is a function, so it is shown opaquely. -/
 instance : Repr Placement := ⟨fun _ _ => "<placement>"⟩
 
+/-- The kernel's and libc's per-process state that the trusted OS thread primitives keep
+(`ZigLean/Os/`, `docs/os-threads.md`). Only those models read or write it. -/
+structure OsState where
+  /-- The threads with a pending interrupt (`tgkill`/`pthread_kill` of `SIG.IO`, premise OSG-01). -/
+  interrupts : Array ThreadId := #[]
+  /-- The number of clock reads so far: the index of the next one into the clock oracle
+  (premise OSK-01). -/
+  clockReads : Nat := 0
+  /-- Each thread's libc `errno` cell (macOS `__error()`), made at its first use. -/
+  errno : Array (ThreadId × BlockId) := #[]
+  /-- The threads that `pthread_detach` released: they stay signalable while they run. -/
+  detached : Array ThreadId := #[]
+  deriving Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The address of every new block (`Mem.newAddr`). -/
@@ -367,7 +391,8 @@ structure Mem where
   /-- The id of the next message. -/
   nextMsg : Nat := 0
   /-- The futex queue (the kernel's state, `ZigLean/Mem/Thread.lean`): the threads that wait at
-  a futex, and the address, in the order they began to wait. -/
+  a futex, and the address. A wake picks among them (`Thread.wakeSet`): the order is not a
+  wake order. -/
   waiters : Array (ThreadId × Ptr) := #[]
   /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
   woken : Array ThreadId := #[]
@@ -396,7 +421,14 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The state of the trusted OS thread primitives (`ZigLean/Os/`). -/
+  os : OsState := {}
   deriving Repr, Inhabited
+
+/-- Thread `t` is a deferred task (`ThreadRec.gated`) that its group still records: no `await` or
+`cancel` of the group has taken it (`Thread.groupTake`), so it has not started. -/
+def Mem.isGated (m : Mem) (t : ThreadId) : Bool :=
+  (m.threads[t]?.map (·.gated)).getD false && m.groups.any (·.2 == t)
 
 /-- The state of a function that uses memory. -/
 abbrev MemM (α : Type) := StateT Mem Result α
@@ -538,8 +570,21 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   set (m.afterAlloc kind size align)
   pure ⟨some m.blocks.size, 0⟩
 
+/-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
+`e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
+`e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
+of the current thread that it joined (the join is after each access of the child; a detached or
+exited child, `ThreadRec.released`, gives no such edge). The end of a
+block is a write of all its bytes for the race check (C11: the bytes are reused). -/
+def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
+  let c := VClock.bump (m.clocks[m.current]!) m.current
+  m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
+    !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
+    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
+
 /-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
-`.illegal`. -/
+`.illegal`; so does an end of the block that races with an access by another thread
+(`Mem.freeRaces`). It records nothing: a later access to the dead block is `.illegal`. -/
 def free (p : Ptr) : MemM Unit := do
   let m ← get
   match p.block with
@@ -547,7 +592,9 @@ def free (p : Ptr) : MemM Unit := do
   | some b =>
     match m.blocks[b]? with
     | some blk =>
-      if blk.live ∧ p.off = 0 then set { m with blocks := m.blocks.set! b { blk with live := false } }
+      if blk.live ∧ p.off = 0 then
+        if m.freeRaces b blk.bytes.size then throw .illegal
+        else set { m with blocks := m.blocks.set! b { blk with live := false } }
       else throw .illegal
     | none => throw .illegal
 

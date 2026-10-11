@@ -57,7 +57,7 @@ theorem wstep (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sch
     (hA : At (f + 1) mp wp s) (hw : wp ≠ .done) (hne : s.ready.isEmpty = false)
     (hsel : s.ready[(s.choose o s.ready.size).1]! = 1) :
     ∃ wp' s', At f mp wp' s' ∧ s.step < s'.step ∧
-      (Sched.go dispatch o (f + 1) s).1 = (Sched.go dispatch o f s').1 ∧ WNext o s.step mp wp wp' := by
+      (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = (Sched.go ⟨.any, .available⟩ dispatch o f s').1 ∧ WNext o s.step mp wp wp' := by
   obtain ⟨d, dw, hm, hk, hi, hd, hdw, -⟩ := hA
   obtain ⟨dw', rfl⟩ : ∃ dw', dw = dw' + 1 := ⟨dw - 1, by omega⟩
   have hk0 : ∀ p, workerTS wp (dw' + 1) = .paused p → s.kids[0]? = some (.paused p) := by
@@ -116,9 +116,9 @@ theorem wstep (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sch
 theorem mstore (o : Nat → Nat) {f : Nat} {wp : WorkerAt} {s : Sched.State Tgt Unit}
     (hA : At (f + 1) .store wp s) (hne : s.ready.isEmpty = false)
     (hsel : s.ready[(s.choose o s.ready.size).1]! = 0) :
-    (f = 0 ∧ (Sched.go dispatch o (f + 1) s).1 = none) ∨
+    (f = 0 ∧ (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = none) ∨
       ∃ s', At f .join wp s' ∧ s.step < s'.step ∧
-        (Sched.go dispatch o (f + 1) s).1 = (Sched.go dispatch o f s').1 := by
+        (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = (Sched.go ⟨.any, .available⟩ dispatch o f s').1 := by
   obtain ⟨d, dw, hm, hk, hi, hd, hdw, hdone⟩ := hA
   rw [go_main o hne hsel hm, choose_snd]
   cases d with
@@ -142,7 +142,7 @@ theorem mstore (o : Nat → Nat) {f : Nat} {wp : WorkerAt} {s : Sched.State Tgt 
 theorem mjoin (o : Nat → Nat) {f : Nat} {s : Sched.State Tgt Unit}
     (hA : At (f + 1) .join .done s) (hne : s.ready.isEmpty = false)
     (hsel : s.ready[(s.choose o s.ready.size).1]! = 0) :
-    ∃ M, (Sched.go dispatch o (f + 1) s).1 = some (.ok ((), M)) := by
+    ∃ M, (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = some (.ok ((), M)) := by
   obtain ⟨d, dw, hm, hk, hi, -, -, -⟩ := hA
   rw [go_main o hne hsel hm]
   obtain ⟨M, htt⟩ := tt_join o f d ((s.choose o s.ready.size).2) hi
@@ -152,10 +152,10 @@ theorem mjoin (o : Nat → Nat) {f : Nat} {s : Sched.State Tgt Unit}
 /-- **One turn**, for every oracle. -/
 theorem turn (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sched.State Tgt Unit}
     (hA : At (f + 1) mp wp s) :
-    (f = 0 ∧ (Sched.go dispatch o (f + 1) s).1 = none) ∨
-      (∃ M, (Sched.go dispatch o (f + 1) s).1 = some (.ok ((), M))) ∨
+    (f = 0 ∧ (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = none) ∨
+      (∃ M, (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = some (.ok ((), M))) ∨
       ∃ mp' wp' s', At f mp' wp' s' ∧ s.step < s'.step ∧
-        (Sched.go dispatch o (f + 1) s).1 = (Sched.go dispatch o f s').1 := by
+        (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 = (Sched.go ⟨.any, .available⟩ dispatch o f s').1 := by
   rcases ready_ne hA with ⟨rfl, hr⟩ | ⟨rfl, hw, hr⟩ | ⟨rfl, rfl, hr⟩
   · have hne : s.ready.isEmpty = false := by rw [hr]; rfl
     rcases pick_two o s hr with ⟨hsel, -⟩ | ⟨hsel, -⟩

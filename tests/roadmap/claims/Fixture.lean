@@ -105,10 +105,10 @@ theorem ret_thread (P : Assn) (v : Nat) : TTriple P (ret v) (fun _ => P) :=
 
 /-- Concurrent total correctness (registered head `Zig.Conc.Total.EventuallyReturns`); its
 initial memory is fixed, so the claim is scoped to that memory. -/
-theorem countdown_total (n : Nat) :
-    Conc.Total.EventuallyReturns (fun _ => pure ()) (Conc.Total.countdown n) {}
+theorem countdown_total (env : Env) (n : Nat) :
+    Conc.Total.EventuallyReturns env (fun _ => pure ()) (Conc.Total.countdown n) {}
       (fun _ m => m = {}) :=
-  Conc.Total.countdown_total n
+  Conc.Total.countdown_total env n
 
 /-! Bounded and concurrent return interfaces. -/
 
@@ -156,36 +156,36 @@ theorem spin_not_within (B : Nat) (P : Assn) (Q : Bool → Unit → Assn) (m : M
 
 open Zig.Conc.Total in
 /-- Unconditional concurrent return: every oracle, every large enough budget. -/
-theorem countdown_eventually :
-    EventuallyReturns (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  Zig.Conc.Total.countdown_total 2
+theorem countdown_eventually (env : Env) :
+    EventuallyReturns env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
+  Zig.Conc.Total.countdown_total env 2
 
 open Zig.Conc.Total in
 /-- Bounded concurrent return: two scheduler turns under every oracle. -/
-theorem countdown_bounded :
-    ReturnsWithin 2 (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  countdown_within 2
+theorem countdown_bounded (env : Env) :
+    ReturnsWithin 2 env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
+  countdown_within env 2
 
 -- The budget premise `2 ≤ fuel` is met.
-nonvacuity_witness countdown_bounded := ⟨fun _ => 0, 2, Nat.le_refl 2, trivial⟩
+nonvacuity_witness countdown_bounded := ⟨⟨.any, .available⟩, fun _ => 0, 2, Nat.le_refl 2, trivial⟩
 
 open Zig.Conc.Total in
 /-- A premise-dependent return. Its premise is unsatisfiable, so it holds even for a program
 that never returns: the conditional form must not satisfy an unconditional goal. -/
-theorem stuck_under_false :
-    EventuallyReturnsUnder (fun _ => False) (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit)
+theorem stuck_under_false (env : Env) :
+    EventuallyReturnsUnder (fun _ => False) env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit)
       {} (fun _ _ => False) :=
   under_false
 
 open Zig.Conc.Total in
 /-- A true program stated conditionally is still only a conditional claim. -/
-theorem countdown_under (Fair : (Nat → Nat) → Prop) :
-    EventuallyReturnsUnder Fair (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  (Zig.Conc.Total.countdown_total 2).under Fair
+theorem countdown_under (env : Env) (Fair : (Nat → Nat) → Prop) :
+    EventuallyReturnsUnder Fair env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
+  (Zig.Conc.Total.countdown_total env 2).under Fair
 
 open Zig.Conc.Total in
-theorem stuck_not_total :
-    ¬ EventuallyReturns (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {} (fun _ _ => True) :=
-  stuck_not_eventuallyReturns _ _ _
+theorem stuck_not_total (env : Env) :
+    ¬ EventuallyReturns env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {} (fun _ _ => True) :=
+  stuck_not_eventuallyReturns env _ _ _
 
 end ClaimFixture

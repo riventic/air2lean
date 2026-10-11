@@ -483,7 +483,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₉]; decide, ⟨_, B, .inl rfl⟩, by
       have hr := r1₉
       unfold KidRec at hr
-      simp [Thread.joinValid, hr]⟩,
+      simp [Thread.joinValid, Mem.isGated, hr]⟩,
       fun hfin => ⟨fun _ => join_run r1₉ rfl rfl, fun m₁₀ hj => ?_⟩⟩
     obtain ⟨hk1, x', ax', w', hf1⟩ := hfin
     obtain ⟨h', d', -, hk1'⟩ := k1₉
@@ -572,7 +572,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁₁]; decide, ⟨_, B, .inr (.inl rfl)⟩, by
     have hr := r1₁₁
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₁ rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨hk1, x', ax', w', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₁
@@ -628,7 +628,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁₃]; decide, ⟨_, B, .inr (.inr rfl)⟩, by
     have hr := r2₁₃
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₃ rfl rfl, fun m₁₄ hj₂ => ?_⟩⟩
   obtain ⟨hk2, x'', ax'', w'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₃
@@ -686,21 +686,21 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
 /-- **`threadPair v` meets its declared contract under every schedule, every resource outcome
 and every initial budget**: it returns `v +% (v +% 1)` or a declared spawn error, and every
 child is joined. -/
-theorem threadPair_spec {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem threadPair_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run =
+    (h : (Sched.run env dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     (r = .ok (addWrap v (addWrap v 1)) ∨ ∃ e ∈ spawnErrors, r = .error e) ∧ joinedAll 0 m := by
-  obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hq⟩ := (proto v).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ lim) h
   exact hq
 
 /-- **No run of `threadPair v` gives an error**: a refused capture is freed by `main` with no
 race, the errdefer join is valid, and no child outlives the stack it captured. -/
-theorem threadPair_safe {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run ≠
+theorem threadPair_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
-  (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+  (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ lim)
 
 end SpawnFailure.Pair
