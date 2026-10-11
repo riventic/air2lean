@@ -15914,7 +15914,7 @@
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "5574bc23de8a5415d8aea6849cff279f91b64698b8eacc1d95af6a93342520ce",
-      "Air2Lean/Air/Canon.lean": "0b1adfe92d1df81675f6d952f57ea1902c8d4a263cdd9445be82ff9bb9a04212",
+      "Air2Lean/Air/Canon.lean": "52414c7c73d17018ac942d85b7b1f83539dcb8384d8809e0817de462616611a6",
       "Air2Lean/Air/Compat.lean": "7acd50392627d71dc54fe91ffcca6eaca524ee6b39147d801b51c3877017325c",
       "Air2Lean/Air/Dialect.lean": "93385b7d5d5dfd6f229f3a6a7da82f68b87d530b97b944612b5a43543b959855",
       "Air2Lean/Air/Effects.lean": "209dba4d66dcb5479cd94f74e531814c6f9e84bdeb8d63ec8f3a373798558d69",
@@ -15929,7 +15929,7 @@
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
       "Air2Lean/BitCast.lean": "629389d5b655e6c895eb2c9063059c3d72562c8c5272c6b93ed25288a2681128",
       "Air2Lean/Certificate.lean": "baa821f5c366ae026ca6648610e4eac0d75150826a9f8f0d77ff0f602e8e1fc6",
-      "Air2Lean/Check.lean": "82e36fb06f817152af49621bd8813a4543ebe81f2e61c246dbf84fb3b08b9a4f",
+      "Air2Lean/Check.lean": "d6cff96d6208148b22c55d2474d931af59193df1e3490bdf515368310b2b344d",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "c95c6b33b1955b7b7d8e62abb1c9925ff6ebd1f276b96833e1062ee338952411",
       "Air2Lean/Diagnostic.lean": "b4eb8936309c08e347eb46efda85024aff252bca7814fbc06c1bad1a95d974c1",
