@@ -34,10 +34,8 @@
       "tree_names": true
     },
     "test/0.16.0/native": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "reads commit identity (git rev-parse HEAD in two of its gates, run 38175631570); untraced"
     },
     "test/0.16.0/audit": {
       "reuse": false,
