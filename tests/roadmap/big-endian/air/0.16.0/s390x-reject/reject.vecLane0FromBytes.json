@@ -6,7 +6,7 @@
   "for_len"
  ],
  "profile": {
-  "name": "abi64-le-v1",
+  "name": "abi64-be-v1",
   "target_triple": "s390x-linux.5.10...6.19-musl",
   "pointer_bits": 64,
   "endian": "big",

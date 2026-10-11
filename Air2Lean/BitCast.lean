@@ -8,7 +8,8 @@ Zig ≤0.16 defines `@bitCast` on the in-memory representation; Zig 0.17.0 defin
 bits concatenated, element 0 in the lowest bits, with no padding, and an enum with an explicit
 tag type is its tag integer. `Check.lean` and `Emit.lean` share the classification here.
 
-For a 0.17 input, a `bitcast` whose operand and result types differ and where either side is an
+The function's `Dialect.bitCast` selects the semantics (`ZigVersion.bitCast`). For a 0.17 input,
+a `bitcast` whose operand and result types differ and where either side is an
 array, a vector, an enum or `void` goes through `bitShape?`: the source becomes its logical bits, then
 the bits become the destination (`ZigLean/BitCast.lean`). A type that has no shape here is
 rejected for 0.17 with a stable diagnostic (`logicalBitCastFailure`) instead of being translated
@@ -16,12 +17,6 @@ with the ≤0.16 rules. ≤0.16 inputs keep the existing `bitcast` rules unchang
 -/
 
 namespace Air2Lean
-
-/-- Zig 0.17.0 and later: `@bitCast` is defined on the logical bit order. -/
-def logicalBitCastVersion (zigVersion : String) : Bool :=
-  match zigVersion.splitOn "." with
-  | "0" :: minor :: _ => (minor.toNat?.getD 0) ≥ 17
-  | _ => false
 
 /-- How a type in a 0.17 `@bitCast` becomes, and is made from, its logical bits. -/
 inductive BitShape where
@@ -52,9 +47,9 @@ def logicalBitCastTy (types : Array Ty) (id : TyId) : Bool :=
   | some (.array ..) | some (.vector ..) | some (.enum ..) | some .void => true
   | _ => false
 
-/-- A `bitcast` from `src` to `dst` in a `zigVersion` function takes the logical-order path. -/
-def logicalBitCastApplies (zigVersion : String) (types : Array Ty) (src dst : TyId) : Bool :=
-  logicalBitCastVersion zigVersion && src != dst &&
+/-- A `bitcast` from `src` to `dst` under the `bitCast` semantics takes the logical-order path. -/
+def logicalBitCastApplies (bitCast : ZigVersion.BitCast) (types : Array Ty) (src dst : TyId) : Bool :=
+  bitCast == .logical && src != dst &&
     (logicalBitCastTy types src || logicalBitCastTy types dst)
 
 /-- The stable diagnostic of a 0.17 `@bitCast` the model does not translate. -/

@@ -255,7 +255,7 @@ The std code differs between Zig versions: 0.15.2's `growCapacity` has a loop, 0
 
 ### Zig 0.17.0 audit
 
-A row without explicit versions in `stdModels` covers 0.14.1, 0.15.2 and 0.16.0 (`baseZigVersions`). A later Zig is fail-closed: a row covers it only if it lists it. For 0.17.0, each modelled function's `lib/std` source was compared with 0.16.0's (stock release tarballs):
+A row covers exactly the Zig versions of its reviewed std hashes (`StdModel.qualifies`; the `allocatorZig`, `threadZig`, `ioZig`, … helpers in `Air2Lean/StdModels.lean`, restricted per row by `only` or an explicit `ZigVersion` list). A later Zig is fail-closed: a row covers it only once a hash of its source is reviewed. For 0.17.0, each modelled function's `lib/std` source was compared with 0.16.0's (stock release tarballs):
 
 | Row | 0.17.0 | Reason |
 |---|---|---|
