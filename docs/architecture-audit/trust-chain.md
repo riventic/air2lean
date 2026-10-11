@@ -32,7 +32,7 @@ comments. All seven cases were `vulnerable` with the translator built from `af9d
 |---|---|---|
 | 1, 9 | fixed | module identity (B1): the exporter writes the module of every function, type and global; std models and special std types match only the `std` module (`std-name-spoof`, `std-type-spoof`) |
 | 2 | fixed | the exporter writes `address_space`; a used non-generic pointer is rejected (`addrspace`) |
-| 3 | fixed, one gap | every op checks its own illegal-behaviour precondition (`.illegal`): `memcpy` counts and overlap, slice ends and sentinels, float/int `@divExact`, `@ptrFromInt`, `@alignCast`, bare `unreach`, `for` lengths, memory `@fieldParentPtr` (`unchecked-memcpy`, `docs/illegal-behavior.md`). Remaining: a `for` loop with safety off whose second operand is a range or array has no length in AIR |
+| 3 | fixed, one gap | every op checks its own illegal-behaviour precondition (`.illegal`): `memcpy` counts and overlap, slice ends and sentinels, item reads and item pointers (`&s[i]`, `&a[i]`) of slices, arrays and vectors, float/int `@divExact`, `@ptrFromInt`, `@alignCast`, bare `unreach`, `for` lengths, memory `@fieldParentPtr` (`unchecked-memcpy`, `docs/illegal-behavior.md`). Remaining: a `for` loop with safety off whose second operand is a range or array has no length in AIR |
 | 4 | fixed | reviewed asm allowlist; other asm is a declared device event or rejected (`volatile-asm`) |
 | 5 | fixed | comptime fields are exported (`comptime: true`) and rejected when used (`comptime-field`) |
 | 6 | fixed | emitter placeholders (MM-6): every formerly reachable arm is a checker rule, and output with a placeholder is rejected (`EMITTER_PLACEHOLDER`; `reduce-bool-handedit`) |

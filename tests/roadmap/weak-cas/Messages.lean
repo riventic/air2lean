@@ -269,6 +269,8 @@ def main : IO Unit := do
     some (.ok 1)) "an ordered narrower atomic access retires the location"
   assertC11 (value (mixedRace fun p => do let _ ← atomicLoadAt (n := 8) 0 .relaxed 1 p) ==
     some (.error .unspecified)) "a racing narrower atomic access is rejected"
+  assertC11 (value (mixedRace fun p => do let _ ← atomicLoadAt (n := 64) 0 .relaxed 8 p) ==
+    some (.error .unspecified)) "a racing wider atomic access is rejected"
   assertC11 (value smallFirst == some (.ok ())) "an ordered wider atomic access retires the location"
   assertC11 (value retiredValue == some (.ok 7#64)) "a new location starts with the retired value"
   assertC11 (value (mixed fun p => atomicStoreAt 0 .relaxed 4 (at' p 4) (1#32)) == some (.ok 2))

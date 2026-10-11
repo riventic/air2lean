@@ -37,7 +37,7 @@ open Zig AllocArena.ArenaLinux
 
 /-- The one-thread schedule of a whole program (oracle `0`). -/
 def solo {α : Type} (main : ConcM Tgt α) : Option (Except Error α) :=
-  ((Sched.run dispatch 100000 (fun _ => 0) main (mem0 .fresh)).run).map fun r => r.map (·.1)
+  ((Sched.run Sched.soloEnv dispatch 100000 (fun _ => 0) main (mem0 .fresh)).run).map fun r => r.map (·.1)
 
 /-- **O-A.** Freeing a foreign slice through a fresh arena panics. -/
 theorem foreign_free_panics : solo arena_foreign_free = some (.error .panic) := by

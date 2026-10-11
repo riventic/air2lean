@@ -13,7 +13,7 @@ private def outcomes (main : Zig.ConcM AuditIo.Tgt (BitVec 32)) : Array String :
     (List.range 1024).map (fun k i => (k >>> (i % 10)) % 2) ++
     [fun _ => 0, fun _ => 1, fun _ => 2, fun i => i]
   for o in oracles do
-    let r := render (Zig.Sched.run AuditIo.dispatch 400 o main AuditIo.mem0).run
+    let r := render (Zig.Sched.run ⟨.any, .available⟩ AuditIo.dispatch 400 o main AuditIo.mem0).run
     unless seen.contains r do seen := seen.push r
   return seen
 

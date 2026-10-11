@@ -40,25 +40,25 @@
     },
     "Zig.Conc.Total.EventuallyReturns": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
+      "fingerprint": "55c181f83e30841d8195822e2c82d707",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 3,
-      "state": [4]
+      "program": 4,
+      "state": [5]
     },
     "Zig.Conc.Total.ReturnsWithin": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "a2a2bee6dab1482cecec85635a6c8193",
+      "fingerprint": "3c682a6f6f68eb8e6416f65b9d4d1f2b",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 4,
-      "state": [5],
+      "program": 5,
+      "state": [6],
       "bound": "scheduler_turns"
     },
     "Zig.Conc.Total.EventuallyReturnsUnder": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
+      "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
       "claims": ["guaranteed-return-under-premise"],
-      "program": 4,
-      "state": [5]
+      "program": 5,
+      "state": [6]
     }
   }
 }

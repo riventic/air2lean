@@ -136,7 +136,12 @@
           "category": "other"
         },
         {
-          "name": "slice-index-unchecked",
+          "name": "item-read-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "item-pointer-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         },
@@ -928,11 +933,11 @@
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
-          "anchor": "\"a narrower atomic access is rejected\""
+          "anchor": "\"a racing narrower atomic access is rejected\""
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
-          "anchor": "\"a wider atomic access is rejected\""
+          "anchor": "\"a racing wider atomic access is rejected\""
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
@@ -2188,7 +2193,12 @@
           "category": "other"
         },
         {
-          "name": "slice-index-unchecked",
+          "name": "item-read-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "item-pointer-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         },

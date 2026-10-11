@@ -282,8 +282,9 @@ class Claims(Temp):
         self.assertClaim('restricted examples')
 
     def test_full_claim_without_ci_job(self):
-        self.edit('.github/workflows/ci.yml', '- zig: "0.15.2"\n            examples: ""\n            full: true',
-                  '- zig: "0.15.2"\n            examples: ""\n            full: false')
+        for part in ('golden', 'lean'):
+            self.edit('.github/workflows/ci.yml', f'- zig: "0.15.2"\n            part: "{part}"\n            examples: ""\n            full: true',
+                      f'- zig: "0.15.2"\n            part: "{part}"\n            examples: ""\n            full: false')
         self.assertClaim('README claims a full Zig 0.15.2 job')
 
     def test_supported_version_absent_from_ci(self):

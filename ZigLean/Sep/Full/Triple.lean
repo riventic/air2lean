@@ -484,10 +484,12 @@ theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
   · split at h₁
     · rename_i b _ blk hblk
       split at h₁
-      · have := Conc.Proto.MemM.set_ok h₁
-        subst this
-        exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl,
-          LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl⟩
+      · split at h₁
+        · exact (Conc.Proto.MemM.throw_ok h₁).elim
+        · have := Conc.Proto.MemM.set_ok h₁
+          subst this
+          exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl,
+            LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl⟩
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
@@ -594,7 +596,9 @@ theorem free (p : Ptr) : Keeps (fun b => p.block = some b) (Zig.free p) := by
     split at h₁
     · rename_i blk hblk
       split at h₁
-      · have := Conc.Proto.MemM.set_ok h₁
+      · split at h₁
+        · exact (Conc.Proto.MemM.throw_ok h₁).elim
+        have := Conc.Proto.MemM.set_ok h₁
         subst this
         have hne : b ≠ b' := fun e => hD (by rw [hpb, e])
         exact ⟨x, by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, hne, hx], hl, rfl, rfl⟩

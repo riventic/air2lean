@@ -22,7 +22,7 @@ namespace AllocArena.Eval
 /-- The first schedule's result of a concurrent client. -/
 def first {Tgt α : Type} [ToString α] (main : Zig.ConcM Tgt α) (dispatch : Tgt → Zig.ConcM Tgt Unit)
     (m : Zig.Mem) : String :=
-  match (Zig.Sched.run dispatch 100000 (fun _ => 0) main m).run with
+  match (Zig.Sched.run ⟨.any, .available⟩ dispatch 100000 (fun _ => 0) main m).run with
   | some (.ok (v, _)) => s!"ok {v}"
   | some (.error e) => s!"fail {repr e}"
   | none => "diverge"

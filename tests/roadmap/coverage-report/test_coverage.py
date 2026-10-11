@@ -232,8 +232,9 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
 
     def test_trivial_conclusion_cannot_reach_functional_levels(self):
-        # `Example.root x = Example.root x`: binds by statement (the conclusion names the root)
-        # but claims.py leaves the reflexive equation unclassified.
+        # `Example.root x = Example.root x`: the conclusion names the root, so statement binding passes,
+        # but its right-hand side is the root itself: it fixes no result. It is a trivial_conclusion,
+        # not a direct goal, whatever strength the manifest declares.
         self.conclusions['Example.root_spec'] = {'head': 'Eq', 'args': [{'head': 'Example.root'}]}
         self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Eq', nonvacuity='trivial')
         self.write_receipt()
@@ -245,13 +246,40 @@ class CoverageTests(unittest.TestCase):
                 root = self.run_coverage()
                 goal = root['goals'][0]
                 self.assertEqual((goal['binding'], goal['derived_strength'], goal['claim_class']),
-                                 ('direct', None, 'unclassified'))
-                self.assertEqual(root['level'], 'proved_scoped')
+                                 ('trivial_conclusion', None, 'unclassified'))
+                self.assertIn('only relates the generated root Example.root to itself', goal['reason'])
+                self.assertEqual(root['stages']['proved']['status'], 'failed')
+                self.assertEqual(root['level'], 'tested_sampled')
                 self.assertNotFunctional(root)
-                self.assertTrue(any('exceeds type-derived no claim' in b for b in root['blockers']), root['blockers'])
+                self.assertTrue(any('trivial_conclusion' in b for b in root['blockers']), root['blockers'])
+                self.assertEqual(root['theorem_strength']['direct'], [])
                 self.assertEqual(root['theorem_strength']['derived'], [])
                 self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
                                  {'no-panic': 'not_proved', 'guaranteed-return': 'not_proved'})
+        # Without sampled tests it stays merely compiled, never proved_scoped.
+        self.assertEqual(self.run_coverage(diff=False)['level'], 'compiled')
+        # Beside a real theorem the trivial one still blocks the root and is not counted.
+        self.nodes.append({'name': 'Example.second_spec', 'module': 'contract', 'kind': 'theorem',
+                           'dependencies': ['Example.root', 'propext']})
+        self.write_receipt()
+        self.manifest['roots'][0]['goals'] = [
+            {'theorem': 'root_spec', 'strength': 'total_correctness', 'domain': 'all'},
+            {'theorem': 'second_spec', 'strength': 'total_correctness', 'domain': 'all'}]
+        self.save()
+        self.rebuild_artifact()
+        root = self.run_coverage()
+        self.assertEqual([g['binding'] for g in root['goals']], ['trivial_conclusion', 'direct'])
+        self.assertEqual(root['stages']['proved']['status'], 'partial')
+        self.assertEqual(root['level'], 'proved_scoped')
+        self.assertNotFunctional(root)
+        self.manifest['roots'][0]['goals'] = self.manifest['roots'][0]['goals'][:1]
+        self.save()
+        self.rebuild_artifact()
+        # `root x = x + 1` has the same unclassified strength but is not called trivial.
+        self.conclusions['Example.root_spec'] = {'head': 'Eq', 'args': [{'head': 'HAdd.hAdd'}]}
+        self.write_receipt()
+        root = self.run_coverage()
+        self.assertEqual((root['goals'][0]['binding'], root['level']), ('direct', 'proved_scoped'))
         # A partial triple cannot be credited as total correctness; it still counts as partial.
         self.conclusions['Example.root_spec'] = {'head': 'Zig.Triple', 'args': []}
         self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Zig.Triple',

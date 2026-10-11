@@ -1,0 +1,232 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "runtime_tags.setPayload",
+ "module": "root",
+ "src": {
+  "file": "runtime_tags.zig",
+  "module": "runtime_tags",
+  "decl_line": 179
+ },
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "errunion_payload_ptr_set",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "ty": 2,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_union",
+   "error": 8,
+   "payload": 7,
+   "abi_size": 12,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "runtime_tags.Pair",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 1,
+     "offset": 0
+    },
+    {
+     "name": "b",
+     "ty": 1,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Bad",
+    "Other"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}

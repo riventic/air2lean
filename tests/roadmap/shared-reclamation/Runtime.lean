@@ -15,7 +15,9 @@ model rejects freeing while a read share is outstanding.
 2. **Runtime, the translated client.** `Zig.loop` is a `partial_fixpoint`, so the kernel does
    not reduce it. These finite assertions run the compiled model of the generated `groupCounter`
    body. Its spawn loop, tasks and `Group.await` are unchanged. Only the reclamation of the
-   `Counter` block is mutated:
+   `Counter` block is mutated. The environment is `Io.Threaded` on 8 CPUs, so each of the three
+   `Group.async` tasks gets a thread (`asyncOptions`); with eager tasks no read share would be
+   outstanding:
    - heap block, free after `Group.await`: every sampled schedule completes with 3;
    - heap block, free before `Group.await`: every sampled schedule is rejected with `.illegal`
      (a race with an outstanding read, or a use after free);
@@ -136,7 +138,7 @@ private def fuel : Nat := 4096
 
 private def runs (main : ConcM Tgt (Except ErrName (BitVec 32))) :
     List (Option (Except Error (Except ErrName (BitVec 32) × Mem))) :=
-  oracles.map fun o => (Sched.run dispatch fuel o main (mem0 .fresh)).run
+  oracles.map fun o => (Sched.run ⟨.threaded 8, .available⟩ dispatch fuel o main (mem0 .fresh)).run
 
 /-- Completed with 3, every task joined and the `Counter` block dead. -/
 private def reclaimedOk : Option (Except Error (Except ErrName (BitVec 32) × Mem)) → Bool
