@@ -10,7 +10,8 @@ job, its exact `include` row) whose steps provide, on that host:
 
   native_execution  a differential or native-only run of translated programs (check.sh with
                     the diff test, diff.sh, or a roadmap gate's `check.sh --native[-only]`);
-  target_probe      scripts/floatprobe.sh or scripts/abi-probe.py observe;
+  target_probe      scripts/floatprobe.sh, scripts/abi-probe.py observe or (T04)
+                    scripts/aarch64-abi.py check;
   proof_check       `lake build ... Proofs`.
 
 A step counts only when its job's runner is that host, its `if` holds for that row, it is
@@ -20,8 +21,7 @@ be recorded as an explicit gap (never `proof_check`); `--strict` fails on any ga
 without a native target (`unverified`) must be listed as input-only; targets that are not
 declared (WASM until T02/T05) must stay undeclared.
 
-`abi_profiles` (T04) lists ABI-qualified profiles, which need not be declared translation paths
-(aarch64-linux): each names its versioned expected file, a `probe` step on the profile's own
+`abi_profiles` (T04) lists ABI-qualified profiles, which need not be declared translation paths: each names its versioned expected file, a `probe` step on the profile's own
 host running `scripts/aarch64-abi.py check --target TRIPLE`, and a `proof` step (any host: the
 check is kernel/Lean only) running `tests/roadmap/aarch64-abi/Model.lean` on that file. Offline:
 no Zig, Lake or Lean process.
@@ -312,7 +312,8 @@ def recognized(kind, run, env):
             return True
         return bool(re.search(r'(?<![\w/.-])scripts/diff\.sh\b|/check\.sh --native(-only)?\b', run))
     if kind == 'target_probe':
-        return bool(re.search(r'(?<![\w/.-])scripts/(floatprobe\.sh|abi-probe\.py observe)\b', run))
+        return bool(re.search(r'(?<![\w/.-])scripts/(floatprobe\.sh|abi-probe\.py observe|'
+                              r'aarch64-abi\.py check)\b', run))
     if kind == 'proof_check':
         return bool(re.search(r'\blake build\b[^\n]*(?<![\w.])Proofs(?![\w.])', run))
     raise ValueError(kind)

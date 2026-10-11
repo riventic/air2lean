@@ -46,6 +46,10 @@
     "abi64-be-v1": "PRF-05",
     "gate-time": "PRF-03"
   },
+  "admissions": {
+    "unqualified-build-mode": [],
+    "no-libc": ["MTH-05"]
+  },
   "float_semantics": {
     "ieee": [],
     "compiler-rt": ["MTH-03"]

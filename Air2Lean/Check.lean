@@ -186,7 +186,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
         profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
-        ({Target.llvmBackend}) on {" or ".intercalate Dialect.lanePtrArchs}"
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -681,8 +681,8 @@ def atomicPtrPointee (types : Array Ty) (layouts : Array Layout) (c : TyId) : Bo
     | _ => false
 
 /-- An atomic op's pointee must be an integer, an enum, a `bool`, a packed struct, or a pointer
-(`atomicPtrPointee`; `docs/std-models.md` §Thread model). An RMW on a pointer must be `.Xchg`.
-A float atomic is rejected with its own reason. -/
+(`atomicPtrPointee`; `docs/std-models.md` §Thread model), at most `Target.atomicBits` wide. An
+RMW on a pointer must be `.Xchg`. A float atomic is rejected with its own reason. -/
 def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option RmwOp := none) :
     Except String Unit := do
   let some pty := cx.valTy? ptr
@@ -697,6 +697,11 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
         cx.fail line "an atomic RMW on a pointer other than `.Xchg` is outside the subset"
     | none => pure ()
     return
+  -- Wider than the target's `max_atomic_bits` (`Target.atomicBits`): native code has no such op.
+  if let (some t, some bits) := (cx.dialect.bind (·.target?), packedBits cx.types c) then
+    if bits > t.atomicBits then
+      cx.fail line s!"an atomic op on a {bits}-bit integer representation is outside the \
+        {t.arch}-{t.os} model ({t.atomicBits}-bit atomics at the baseline CPU)"
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
@@ -734,6 +739,34 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
       (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
       ABI cell, padding included, which the model leaves undefined; use an integer whose width \
       is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+
+/-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
+(`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
+`@floor`/`@ceil`/`@trunc`/`@round` (`floorl`, …), `@min`/`@max` (`fminl`/`fmaxl`) and the
+division family other than `/` (`truncl`, `floorl`, `fmodl`, …). Linked with libc, these are
+libc's routines, not the compiler_rt ones that the model ports (before 0.16.0 their `@sqrt`
+differs). The profile records no `link_libc` fact, so only `--assume-no-libc` admits them. The
+opaque transcendentals (`sinl`, …) state nothing about either routine and stay admitted. -/
+def CheckCtx.checkLongDoubleCall (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let some d := cx.dialect | return
+  let some t := d.target? | return
+  if t.longDoubleBits != 128 || d.noLibc then return
+  let (what, a) ← match op with
+    | .sqrt a => pure ("@sqrt", a)
+    | .mulAdd a _ _ => pure ("@mulAdd", a)
+    | .floatRound _ a => pure ("@floor/@ceil/@trunc/@round", a)
+    | .minMax _ a _ => pure ("@min/@max", a)
+    | .div _ a _ => pure ("@divTrunc/@divFloor/@divExact/@rem/@mod", a)
+    | _ => return
+  let some aty := cx.valTy? a | return
+  let elem := match cx.types[aty]? with
+    | some (.vector _ c) => cx.types[c]?
+    | other => other
+  if elem == some (.float 128) then
+    cx.fail line s!"{what} on f128 is outside the {t.arch}-{t.os} model: f128 is this target's \
+      c_longdouble, so the op calls a long double libm routine (sqrtl, fmal, floorl, …), which is \
+      compiler_rt's only in a program without libc, and the AIR profile records no link_libc \
+      fact; pass --assume-no-libc for a program linked without libc (docs/floats.md §Targets)"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -1100,6 +1133,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>

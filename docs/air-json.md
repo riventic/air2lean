@@ -131,7 +131,9 @@ exports: `scripts/normalize-air.py` treats `"address_space": "generic"` like an 
 [build-modes.md](build-modes.md) qualifies (`ReleaseSafe` with `stage2_llvm`) are translated
 by default. Any other profile needs `--allow-unqualified-build-mode`; the generated header's
 `-- air2lean-profile:` record then carries `"admission": "unqualified-build-mode"`, which the
-check reports and proof receipts copy with the rest of the header.
+check reports and proof receipts copy with the rest of the header. `--assume-no-libc`
+([floats.md](floats.md#targets)) is recorded the same way (`"no-libc"`; both opt-ins:
+`"unqualified-build-mode,no-libc"`).
 
 ## Type
 
