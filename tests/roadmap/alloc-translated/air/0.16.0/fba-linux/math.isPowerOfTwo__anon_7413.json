@@ -1,0 +1,219 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "math.isPowerOfTwo__anon_7413",
+ "module": "std",
+ "src": {
+  "file": "math.zig",
+  "module": "std",
+  "decl_line": 1122
+ },
+ "instance_key": "38853e1fe316d8affb63cf7a02e444f9d4bd5c6e6e394d850575cb8d963e47c5",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 11
+  },
+  {
+   "id": 2,
+   "tag": "bitcast",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "cmp_gt",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 3,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 11
+  },
+  {
+   "id": 5,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 4,
+    "func": "debug.assert",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 24
+  },
+  {
+   "id": 7,
+   "tag": "sub_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "bit_and",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "bitcast",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "cmp_eq",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "ty": 3,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 12,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 10
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (bool) void"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

@@ -89,6 +89,10 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 
 ## Allocator model
 
+This section is the default `--allocator-model std`. Under `--allocator-model translated`
+the allocator rows below are inactive: `mem.Allocator` and the allocators are translated from
+their AIR down to `posix.mmap`/`munmap`/`mremap` ([allocator-model.md](allocator-model.md)).
+
 `std.mem.Allocator` is `Zig.Allocator` (a structure without fields; 16 bytes in memory). The model is one allocator, with its state in `Zig.Mem`. Its state has no race footprint: in concurrent code the allocator is assumed thread-safe (premise [ALC-10](premises.md#alc-10), carried by every concurrent theorem); a non-thread-safe allocator shared by unordered threads is outside the model.
 
 | Rule | |

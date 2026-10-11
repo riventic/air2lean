@@ -146,8 +146,7 @@ theorem Step.heap {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {l : Zig.Loc}
   · obtain ⟨b, x⟩ := l; simp only [Mem.heap, e]
   · have : m'.heap l = (m.write L.b blk L.o bs).heap l := by
       obtain ⟨b, x⟩ := l; simp only [Mem.heap, h5]
-    rw [this, Mem.heap_write h1 h2 (by omega)]
-    rw [h3]; simp only [hl, ↓reduceIte]
+    rw [this, Mem.heap_write_out h1 (by omega) l (by rw [h3]; exact hl)]
 
 /-- A step in the lock's code keeps the threads' parts, which have no byte of the word, if each
 new access is atomic, at the word. -/

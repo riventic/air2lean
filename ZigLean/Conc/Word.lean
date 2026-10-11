@@ -110,7 +110,8 @@ def Holds (m : Mem) (v : BitVec n) : Prop :=
 /-- The word is shared and atomic only (module doc). -/
 structure Ok (m : Mem) : Prop where
   blk : ∃ blk, m.blocks[W.b]? = some blk ∧ blk.live = true ∧ W.o + nb ≤ blk.bytes.size ∧
-    (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal
+    (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal ∧
+    blk.kind.mappedLo = 0
   only : ∀ l ∈ m.atomics, l.block = W.b → l.off < W.o + nb → W.o < l.off + l.len → l.off = W.o
   loc : ∀ i l, W.Loc m i l → l.len = nb ∧ 0 < l.msgs.size ∧ l.Chain ∧
     ALoc.lastBytes l = curBytes m W.b W.o nb ∧
@@ -140,15 +141,15 @@ variable {W}
 theorem congr {m m' : Mem}
     (hw : ∀ x, W.o ≤ x → x < W.o + nb → m'.heap (W.b, x) = m.heap (W.b, x))
     (hb : ∃ blk, m.blocks[W.b]? = some blk ∧ blk.live = true ∧ W.o + nb ≤ blk.bytes.size ∧
-      (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal) :
+      (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0) :
     (∃ blk, m'.blocks[W.b]? = some blk ∧ blk.live = true ∧ W.o + nb ≤ blk.bytes.size ∧
-      (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal) ∧
+      (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0) ∧
       curBytes m' W.b W.o nb = curBytes m W.b W.o nb := by
   have hsz0 := W.sz_pos
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (W.b, W.o) =
       some ⟨blk.bytes[W.o]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   have hc' := hw W.o (Nat.le_refl _) (by omega)
   rw [hc] at hc'
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some hc'
@@ -163,8 +164,8 @@ theorem congr {m m' : Mem}
   rw [Array.getElem_extract, Array.getElem_extract]
   have := hw (W.o + i) (by omega) (by omega)
   simp only [Mem.heap, hblk, hblk'] at this
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl', by omega⟩),
-    dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)] at this
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl', by omega, by rw [← hK, hk.2]; omega⟩),
+    dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by rw [hk.2]; omega⟩)] at this
   simp only [Option.some.injEq, Cell.mk.injEq] at this
   exact this.1
 
@@ -238,9 +239,9 @@ theorem touches_of {e : FootprintEntry} {h : Heap} (he : W.Hits e)
 /-- Each byte of the word is in the heap. -/
 theorem Ok.cell {m : Mem} (hw : W.Ok m) {x : Nat} (h1 : W.o ≤ x) (h2 : x < W.o + nb) :
     m.heap (W.b, x) ≠ none := by
-  obtain ⟨blk, hb, hl, hs, -⟩ := hw.blk
+  obtain ⟨blk, hb, hl, hs, hrest_lo⟩ := hw.blk
   simp only [Mem.heap, hb]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 /-- The word as the block's bytes. -/
@@ -787,8 +788,7 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
   · rw [hMe]; simp [observeM, hk₂]
   · rw [hMe]; simp [observeM, hg₂]
   · rw [hMc, hcs₂]
-  · rw [hhc, Mem.heap_write hb hlv (by omega)]
-    rw [hbs]; simp only [hx, ↓reduceIte]
+  · rw [hhc, Mem.heap_write_out hb (by omega) _ (by rw [hbs]; exact hx)]
   · exact LocsKeep.set hl.2 hlb hlo (by exact hlb) (by exact hlo) (by exact hlen) hMa
   · rw [hist_loc hl', hist_loc hl, Array.mapIdx_push]
     congr 1

@@ -1,0 +1,878 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-macos.13.0...15.6-none",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "none",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "apple_m1",
+  "features": [
+   "aes",
+   "aggressive_fma",
+   "alternate_sextload_cvt_f32_pattern",
+   "altnzcv",
+   "am",
+   "arith_bcc_fusion",
+   "arith_cbz_fusion",
+   "ccdp",
+   "ccidx",
+   "ccpp",
+   "complxnum",
+   "contextidr_el2",
+   "crc",
+   "disable_latency_sched_heuristic",
+   "dit",
+   "dotprod",
+   "el2vmsa",
+   "el3",
+   "flagm",
+   "fp16fml",
+   "fp_armv8",
+   "fptoint",
+   "fullfp16",
+   "fuse_address",
+   "fuse_aes",
+   "fuse_arith_logic",
+   "fuse_crypto_eor",
+   "fuse_csel",
+   "fuse_literals",
+   "jsconv",
+   "lor",
+   "lse",
+   "lse2",
+   "mpam",
+   "neon",
+   "nv",
+   "pan",
+   "pan_rwv",
+   "pauth",
+   "perfmon",
+   "predres",
+   "ras",
+   "rcpc",
+   "rcpc_immo",
+   "rdm",
+   "sb",
+   "sel2",
+   "sha2",
+   "sha3",
+   "specrestrict",
+   "ssbs",
+   "store_pair_suppress",
+   "tlb_rmi",
+   "tracev8_4",
+   "uaops",
+   "v8_1a",
+   "v8_2a",
+   "v8_3a",
+   "v8_4a",
+   "v8a",
+   "vh",
+   "zcm_fpr64",
+   "zcm_gpr64",
+   "zcz",
+   "zcz_gp"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "mem.alignPointerOffset__anon_20578",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4271
+ },
+ "instance_key": "db50554bf50f48649b56b8b77975d709cad8ce75da449f38f28b955c71a55a66",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 24
+  },
+  {
+   "id": 3,
+   "tag": "call",
+   "ty": 4,
+   "callee": {
+    "ty": 5,
+    "func": "mem.isValidAlign",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 11
+  },
+  {
+   "id": 5,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 6,
+    "func": "debug.assert",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 6,
+   "column": 9
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 10,
+   "column": 9
+  },
+  {
+   "id": 10,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 12,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 10,
+     "column": 33
+    },
+    {
+     "id": 14,
+     "tag": "bitcast",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "tag": "cmp_lte",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 14
+      },
+      {
+       "ty": 7,
+       "val": "16384"
+      }
+     ]
+    },
+    {
+     "id": 19,
+     "tag": "cond_br",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 15
+      }
+     ],
+     "then": [
+      {
+       "id": 16,
+       "tag": "dbg_stmt",
+       "ty": 3,
+       "line": 11,
+       "column": 9
+      },
+      {
+       "id": 17,
+       "tag": "ret_safe",
+       "ty": 8,
+       "args": [
+        {
+         "ty": 2,
+         "some": {
+          "ty": 1,
+          "val": "0"
+         }
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 18,
+       "tag": "br",
+       "ty": 8,
+       "target": 10,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 14,
+   "column": 18
+  },
+  {
+   "id": 21,
+   "tag": "bitcast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "tag": "dbg_var_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 21
+    }
+   ],
+   "name": "addr"
+  },
+  {
+   "id": 23,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 15,
+   "column": 5
+  },
+  {
+   "id": 24,
+   "tag": "alloc",
+   "ty": 9
+  },
+  {
+   "id": 25,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 15,
+   "column": 46
+  },
+  {
+   "id": 26,
+   "tag": "sub_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 1,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "tag": "add_with_overflow",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 21
+    },
+    {
+     "inst": 26
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "tag": "store",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 24
+    },
+    {
+     "inst": 27
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 24
+    }
+   ],
+   "name": "ov"
+  },
+  {
+   "id": 31,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 16,
+   "column": 9
+  },
+  {
+   "id": 32,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 33,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 16,
+     "column": 11
+    },
+    {
+     "id": 34,
+     "tag": "struct_field_ptr_index_1",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 24
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "tag": "load",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 34
+      }
+     ]
+    },
+    {
+     "id": 36,
+     "tag": "cmp_neq",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 35
+      },
+      {
+       "ty": 12,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 40,
+     "tag": "cond_br",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 36
+      }
+     ],
+     "then": [
+      {
+       "id": 37,
+       "tag": "dbg_stmt",
+       "ty": 3,
+       "line": 16,
+       "column": 21
+      },
+      {
+       "id": 38,
+       "tag": "ret_safe",
+       "ty": 8,
+       "args": [
+        {
+         "ty": 2,
+         "null": true
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 39,
+       "tag": "br",
+       "ty": 8,
+       "target": 32,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 17,
+   "column": 7
+  },
+  {
+   "id": 42,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 13,
+   "args": [
+    {
+     "inst": 24
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 42
+    }
+   ]
+  },
+  {
+   "id": 44,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 17,
+   "column": 35
+  },
+  {
+   "id": 45,
+   "tag": "sub_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 1,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 46,
+   "tag": "not",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 45
+    }
+   ]
+  },
+  {
+   "id": 47,
+   "tag": "bit_and",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 43
+    },
+    {
+     "inst": 46
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 42
+    },
+    {
+     "inst": 47
+    }
+   ]
+  },
+  {
+   "id": 49,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 21,
+   "column": 21
+  },
+  {
+   "id": 50,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 13,
+   "args": [
+    {
+     "inst": 24
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 50
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 21,
+   "column": 25
+  },
+  {
+   "id": 53,
+   "tag": "sub_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 51
+    },
+    {
+     "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 54,
+   "tag": "dbg_var_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 53
+    }
+   ],
+   "name": "delta"
+  },
+  {
+   "id": 55,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 23,
+   "column": 9
+  },
+  {
+   "id": 56,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 57,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 23,
+     "column": 15
+    },
+    {
+     "id": 58,
+     "tag": "rem",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 53
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      }
+     ]
+    },
+    {
+     "id": 59,
+     "tag": "bitcast",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 58
+      }
+     ]
+    },
+    {
+     "id": 60,
+     "tag": "cmp_neq",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 59
+      },
+      {
+       "ty": 7,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 64,
+     "tag": "cond_br",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 60
+      }
+     ],
+     "then": [
+      {
+       "id": 61,
+       "tag": "dbg_stmt",
+       "ty": 3,
+       "line": 23,
+       "column": 36
+      },
+      {
+       "id": 62,
+       "tag": "ret_safe",
+       "ty": 8,
+       "args": [
+        {
+         "ty": 2,
+         "null": true
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 63,
+       "tag": "br",
+       "ty": 8,
+       "target": 56,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 24,
+   "column": 18
+  },
+  {
+   "id": 66,
+   "tag": "div_trunc",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 53
+    },
+    {
+     "ty": 1,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 67,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 24,
+   "column": 5
+  },
+  {
+   "id": 68,
+   "tag": "wrap_optional",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 66
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "tag": "ret_safe",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 68
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 14,
+   "ptr_align": 16384,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 1,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (bool) void"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 1,
+     "offset": 0
+    },
+    {
+     "ty": 12,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}
