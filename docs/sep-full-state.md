@@ -406,6 +406,40 @@ semantics. `FTriple.ofTriple` and `FTotalTriple.ofTotal` change their side condi
 * If a legacy triple fits neither form, the lift is not available. Report it then; do not
   rewrite the legacy layer for it.
 
+### Epoch-tagged shares (step 3b, coordinator decision 2026-10-11)
+
+An arena's `reset` bumps its ledger's epoch (§Ghost state) and takes its nodes back; with
+`.free_all` it frees them to its child, which needs the node's whole share back. But the clients
+of the old epoch still hold shares lent off the node's share, and a stale share cannot come back.
+So a share can carry an epoch tag, `bshare b q k (tag : Option (LedgerId × Epoch))`:
+
+* **Untagged shares** behave exactly as before. `FAllocInv.tag` (default `none`) is the tag of
+  the shares in `granted`; the FixedBufferAllocator and the page allocator keep `none`, so their
+  statements and their clients are unchanged. An arena's invariant family `I e` uses
+  `some (γ, e)`.
+* **A tagged share `(γ, e)` counts and is true only while ledger `γ` is at epoch `e`** (its
+  authority `gauth γ e _` exists): validity and truth read the ledger. Its fraction is booked
+  twice: the client's tagged share and the lender's **receipt** (`EUpd.lendT`: an untagged share
+  becomes a tagged share and a receipt of the same fraction). Per tag, validity counts
+  `max(tagged, receipts)` while the epoch is current, the receipts once it is stale, and nothing
+  while the ledger has no authority. A tagged share given back during its epoch cancels its
+  receipt (`EUpd.returnT`). After `Upd.bump`, the receipts of the old epoch turn back into
+  untagged shares (`EUpd.revoke`): the ledger authority revokes every share of a past epoch at
+  once, whatever the clients kept (the cancellable-invariant pattern). Every rule is general (the
+  ghost library), none is arena-specific.
+* `bext` (the whole fraction) still leaves the frame no counted claim, so shrinking and freeing
+  keep every frame true; claims of a tag whose ledger has no authority, or of a future epoch, are
+  dormant.
+* `Ghost.Fin` also bounds the tags' ledger names, so `Upd.alloc` picks a name no tag uses.
+
+**Required later step: nested tags for arena-over-arena** (coordinator, 2026-10-11; not
+optional). An arena whose child is an arena gets node shares that are already tagged by the outer
+ledger; its own sub-shares must die with either epoch. The extension keeps the share statements:
+a ledger records a parent tag when it is created, and a tag is active iff its ledger is at that
+epoch **and** the ledger's parent tag is active (acyclic: a parent is older than its child). It
+must exist at the latest when the arena's `alloc` theorem for every child lands, and the inner
+arena over an arena child must instantiate that theorem.
+
 ### Phases (one commit and one agent phase each, estimated)
 
 | | phase | content | estimate |
