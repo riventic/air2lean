@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "slices.colorName",
+ "module": "root",
  "params": [
   0
  ],
@@ -177,6 +178,7 @@
        "callee": {
         "ty": 5,
         "func": "debug.FullPanic((function 'defaultPanic')).invalidEnumValue",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -231,6 +233,7 @@
   {
    "k": "enum",
    "name": "slices.Color",
+   "module": "root",
    "tag": 7,
    "exhaustive": true,
    "fields": [
@@ -258,6 +261,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -288,6 +292,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "sentinel_byte": "0",
    "host_size": 0,

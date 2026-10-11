@@ -173,28 +173,14 @@ theorem writeBytes_getElem! (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o 
   · simp only [getElem!_def, writeBytes_getElem? a o bs h i, hc, and_self, ↓reduceIte]
   · simp only [getElem!_def, writeBytes_getElem? a o bs h i, hc, ↓reduceIte]
 
-/-- Every live byte is in a block that ends below `nextAddr`, so the next block (`alloc`, at
-`alignUp nextAddr`) lies above every live block. -/
-def Mem.AddrBelow (m : Mem) : Prop :=
-  ∀ l c, m.heap l = some c → c.addr + c.size < m.nextAddr
-
-/-- The memory invariant of `Triple`: one thread, and the blocks below `nextAddr`. -/
+/-- The memory invariant of `Triple`: one thread. It says nothing about addresses: the rules
+hold for every placement (`Mem.place`), and the only address facts they give are the ones Zig
+guarantees (`alloc_run`: aligned, clear of every live block). -/
 structure Mem.Seq (m : Mem) : Prop where
   single : m.SingleThread
-  addr : m.AddrBelow
-
-/-- `m'` keeps `nextAddr`, and each cell of `m'` has the address and size of a cell of `m`. -/
-theorem Mem.AddrBelow.of_heap {m m' : Mem} (hA : m.AddrBelow) (hn : m'.nextAddr = m.nextAddr)
-    (hh : ∀ l c, m'.heap l = some c → ∃ l' c', m.heap l' = some c' ∧ c'.addr = c.addr ∧
-      c'.size = c.size) : m'.AddrBelow := by
-  intro l c hc
-  obtain ⟨l', c', hc', ha, hs⟩ := hh l c hc
-  have := hA l' c' hc'
-  omega
 
 theorem Mem.Seq.recordAt {m : Mem} (h : m.Seq) (block off len : Nat) (kind : AccessKind) :
     (m.recordAt block off len kind).Seq :=
-  ⟨singleThread_recordAt h.single block off len kind, fun l c hc => by
-    rw [Mem.heap_recordAt] at hc; exact h.addr l c hc⟩
+  ⟨singleThread_recordAt h.single block off len kind⟩
 
 end Zig

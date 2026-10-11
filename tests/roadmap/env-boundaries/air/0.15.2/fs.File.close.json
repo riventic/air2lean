@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "fs.File.close",
+ "module": "std",
  "params": [
   0
  ],
@@ -82,6 +83,7 @@
    "callee": {
     "ty": 3,
     "func": "posix.close",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -106,6 +108,7 @@
   {
    "k": "struct",
    "name": "fs.File",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

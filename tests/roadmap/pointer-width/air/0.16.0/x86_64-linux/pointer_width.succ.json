@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "pointer_width.succ",
+ "module": "root",
  "params": [
   0
  ],

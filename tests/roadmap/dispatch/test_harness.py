@@ -238,7 +238,9 @@ printf '// mocked translation\n' > "$2"
                 self.assertEqual(any("Emitter.lean" in line for line in lines), synthetic)
                 self.assertEqual(any("mutations.py" in line for line in lines), synthetic)
                 self.assertEqual(sum("/generated/" in line and line.startswith("lake env lean -R") for line in lines), 13 if synthetic else 0)
-                self.assertEqual(any(line == "lake env lean tests/roadmap/dispatch/CountdownProof.lean" for line in lines), synthetic)
+                # Compiled and audited through the theorem universe gate (F2), not only elaborated.
+                self.assertEqual(any(line.startswith("python3 -B scripts/theorem_universe.py gate tests/roadmap/dispatch/CountdownProof.lean")
+                                     for line in lines), synthetic)
                 self.assertEqual(sum(line == "zig version" for line in lines), 2 if native_run else 0)
                 for marker in ("zig test", "zig build-obj", "python3 tests/roadmap/dispatch/native_checks.py", "translator "):
                     self.assertEqual(any(line.startswith(marker) for line in lines), native_run)

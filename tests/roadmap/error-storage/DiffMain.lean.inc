@@ -49,7 +49,7 @@ private def observe (name : ErrName) : MemM (Array Bool) :=
           (match unionSuccess, unionSuccessStored with | .ok a, .ok b => a.code == name && b.code == name | _, _ => false),
           unionError == .error name && unionErrorStored == .error name]
 private def storageSucceeded (name : ErrName) : Bool :=
-  match (observe name).run ErrorStorage.mem0 |>.run with
+  match (observe name).run (ErrorStorage.mem0 .fresh) |>.run with
   | some (.ok (bits, _)) => bits.size == 9 && bits.all id
   | _ => false
 -- Concrete proofs over the fresh generated definitions and their actual global layout.
@@ -59,6 +59,6 @@ example : storageSucceeded "Gamma" = true := by native_decide
 private def digit (b : Bool) := if b then "1" else "0"
 def main : IO Unit := do
   for name in #["Alpha", "Beta", "Gamma"] do
-    match (observe name).run ErrorStorage.mem0 |>.run with
+    match (observe name).run (ErrorStorage.mem0 .fresh) |>.run with
     | some (.ok (bits, _)) => IO.println (name ++ " " ++ String.intercalate " " (bits.toList.map digit))
     | _ => throw (IO.userError s!"storage observation failed: {name}")

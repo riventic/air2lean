@@ -1,5 +1,6 @@
 import Proofs.Pointers.Gen
 import ZigLean.Sep
+import ZigLean.Sep.Witness
 
 /-!
 # Separation-logic proofs about `examples/pointers/pointers.zig`
@@ -51,3 +52,22 @@ theorem swap_self_sep (p : Ptr) (x : BitVec 32) :
   refine ⟨(), mD, h₂, ?_, hd₂, hmD, hp₂, hstD⟩
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at lx1 lx2 s₁ s₂
   simp [swap, zig_unfold, lx1, lx2, s₁, s₂]
+
+/-! ## Non-vacuity and liveness witnesses: two `u32` one after the other in one block -/
+
+/-- `0` at `p0` and `1` at `p0 + 4`. -/
+theorem swap_pre : (pts Witness.p0 4 (0 : BitVec 32) ∗ pts (Witness.p0.add 4) 4 (1 : BitVec 32))
+    (Witness.mem1 (Enc.encode (0 : BitVec 32) ++ Enc.encode (1 : BitVec 32))).heap :=
+  Witness.mem1_pts₂ 0 1 (by decide) (by decide +kernel)
+
+nonvacuity_witness swap_sep :=
+  ⟨Witness.p0, Witness.p0.add 4, 0, 1, Witness.Admit.of_heap swap_pre (Witness.mem1_seq _ _)⟩
+liveness_witness swap_sep :=
+  ⟨Witness.p0, Witness.p0.add 4, 0, 1,
+    Witness.Live.of_heap swap_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness swap_self_sep :=
+  ⟨Witness.p0, 0, Witness.Admit.of_heap Witness.pts32 (Witness.mem1_seq _ _)⟩
+liveness_witness swap_self_sep :=
+  ⟨Witness.p0, 0,
+    Witness.Live.of_heap Witness.pts32 (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩

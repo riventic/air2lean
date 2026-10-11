@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.holderRoundTrip",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 122
+ },
  "params": [
   0,
   1
@@ -57,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -133,7 +140,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 12
   },
   {
    "id": 10,
@@ -142,6 +150,7 @@
    "callee": {
     "ty": 8,
     "func": "noreturn_variants.setMode",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -157,7 +166,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 16
   },
   {
    "id": 12,
@@ -168,7 +178,8 @@
      "id": 13,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 27
     },
     {
      "id": 14,
@@ -184,7 +195,8 @@
      "id": 15,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 27
     },
     {
      "id": 16,
@@ -193,6 +205,7 @@
      "callee": {
       "ty": 10,
       "func": "noreturn_variants.holderColor",
+      "module": "root",
       "noreturn": false
      },
      "args": [
@@ -225,7 +238,8 @@
        "id": 18,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 34
       },
       {
        "id": 19,
@@ -242,7 +256,8 @@
        "id": 20,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 37
       },
       {
        "id": 21,
@@ -285,7 +300,8 @@
        "id": 24,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 47
       },
       {
        "id": 25,
@@ -317,7 +333,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 29,
@@ -356,6 +373,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -369,6 +387,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -377,6 +396,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.Mode__union_280",
+   "module": "root",
    "layout": "auto",
    "tag": 6,
    "fields": [
@@ -399,6 +419,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(noreturn_variants.Mode__union_280).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 13,
    "exhaustive": true,
    "fields": [
@@ -426,6 +447,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -443,6 +465,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -458,6 +481,7 @@
   {
    "k": "struct",
    "name": "noreturn_variants.Holder",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "big_endian.packedToBytes",
+ "module": "root",
  "params": [
   0
  ],
@@ -130,6 +131,7 @@
   {
    "k": "struct",
    "name": "big_endian.P",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {

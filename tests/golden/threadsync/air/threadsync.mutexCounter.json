@@ -94,6 +94,7 @@
    "callee": {
     "ty": 10,
     "func": "Thread.spawn__anon_800",
+    "instance_key": "42028ac1f054b40a55a99ed7068d181206ebebdb474e8f2b5e8ad3029fd57541",
     "noreturn": false,
     "comptime_fn": "threadsync.work"
    },

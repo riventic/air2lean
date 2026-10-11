@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "fs.File.read",
+ "module": "std",
  "params": [
   0,
   1
@@ -83,6 +84,7 @@
    "callee": {
     "ty": 5,
     "func": "posix.read",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -115,6 +117,7 @@
   {
    "k": "struct",
    "name": "fs.File",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -134,6 +137,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,

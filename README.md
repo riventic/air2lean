@@ -154,7 +154,7 @@ scripts/mutate.sh      # a changed function must fail a test
 
 `scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15`, `AIR2LEAN_REVIEW_ZIG16` or `AIR2LEAN_REVIEW_ZIG17` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; the CI workflow runs the integration checks for its selected Zig version.
 
-The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts the float results that differ by target as `host=N`, not as mismatches: `tests/diff/<ex>/host.txt` lists those functions. CI (x86_64-linux) checks them.
+The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts a float result that differs by target as `host=N`, not as a mismatch, only if the difference has a kind that `tests/diff/<ex>/host.txt` lists for the function (NaN payload, sign of zero, f80 precision, libm ulp), checked on the actual bits; any other difference fails the run. CI (x86_64-linux) checks them.
 
 ## Scope
 
@@ -180,7 +180,7 @@ Unsupported features include `threadlocal` globals outside pointer-free, error-f
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm as opaque functions (x86_64 only): register operands, and read-write (`+r`, `+m`) and memory (`=m`) lvalue outputs under an explicit effect contract ([A01](docs/generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01)) | `m`/immediate inputs, a `"memory"` clobber outside the reviewed registry, clobbers of a pinned operand's register |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs; the premise and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs, except for the known gap of an inexact float `@divExact` until its build-mode records are re-recorded, and with the native stack holding every call chain unless a stack budget is set (premise STK-01); the premise, that exception and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 

@@ -91,7 +91,7 @@ private def functionDef (fc : FCtx) (f : Func) : String :=
     s!"  Zig.TimedSched.Program.liftMem (Zig.free s{id})"
   let ret := if fc.tyOfId f.ret == .void then "  | .ret => pure ()" else "  | .ret value => pure value"
   String.intercalate "\n"
-    ([s!"def {fc.fnName} {params} : Zig.TimedSched.Program ({fc.emitTyOf f.ret}) := do"] ++
+    ([interfacePremiseMarker f ++ s!"def {fc.fnName} {params} : Zig.TimedSched.Program ({fc.emitTyOf f.ret}) := do"] ++
       allocs ++ [s!"  let exit ← {indentTail 2 action}.run' {initial}"] ++ frees ++ ["  match exit with", ret])
 
 private def emitChecked (funcs : Array Func) (ns prefix_ : String) : String := Id.run do

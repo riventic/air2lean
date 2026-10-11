@@ -28,14 +28,12 @@ structure Impl where
   byteOfU32 : BitVec 32 → BitVec 64 → MemM (BitVec 8)
   u16FromStoredBytes : BitVec 8 → BitVec 8 → MemM (BitVec 16)
   byteOfF64 : F64 → BitVec 64 → MemM (BitVec 8)
-  vecByte : BitVec 16 → BitVec 16 → BitVec 64 → MemM (BitVec 8)
-  vecLane0FromBytes : Vector (BitVec 8) 8 → MemM (BitVec 32)
   externToBytes : BitVec 16 → BitVec 16 → BitVec 32 → Result (Vector (BitVec 8) 8)
   unionHalf : BitVec 32 → MemM (BitVec 16)
   unionByte : BitVec 32 → BitVec 64 → MemM (BitVec 8)
 
 def s390x : Impl where
-  mem0 := BigEndian.S390x.mem0
+  mem0 := BigEndian.S390x.mem0 .fresh
   u32ToBytes := BigEndian.S390x.u32ToBytes
   bytesToU32 := BigEndian.S390x.bytesToU32
   i16ToBytes := BigEndian.S390x.i16ToBytes
@@ -50,14 +48,12 @@ def s390x : Impl where
   byteOfU32 := BigEndian.S390x.byteOfU32
   u16FromStoredBytes := BigEndian.S390x.u16FromStoredBytes
   byteOfF64 := BigEndian.S390x.byteOfF64
-  vecByte := BigEndian.S390x.vecByte
-  vecLane0FromBytes := BigEndian.S390x.vecLane0FromBytes
   externToBytes := BigEndian.S390x.externToBytes
   unionHalf := BigEndian.S390x.unionHalf
   unionByte := BigEndian.S390x.unionByte
 
 def x86_64 : Impl where
-  mem0 := BigEndian.X64.mem0
+  mem0 := BigEndian.X64.mem0 .fresh
   u32ToBytes := BigEndian.X64.u32ToBytes
   bytesToU32 := BigEndian.X64.bytesToU32
   i16ToBytes := BigEndian.X64.i16ToBytes
@@ -72,8 +68,6 @@ def x86_64 : Impl where
   byteOfU32 := BigEndian.X64.byteOfU32
   u16FromStoredBytes := BigEndian.X64.u16FromStoredBytes
   byteOfF64 := BigEndian.X64.byteOfF64
-  vecByte := BigEndian.X64.vecByte
-  vecLane0FromBytes := BigEndian.X64.vecLane0FromBytes
   externToBytes := BigEndian.X64.externToBytes
   unionHalf := BigEndian.X64.unionHalf
   unionByte := BigEndian.X64.unionByte
@@ -132,15 +126,11 @@ def lines (f : Impl) : List String := Id.run do
   for b in [[0x3f, 0xf0, 0, 0, 0, 0, 0, 0], [1, 2, 3, 4, 5, 6, 7, 8]] do
     let v : Vector (BitVec 8) 8 := Vector.ofFn fun i => BitVec.ofNat 8 (b.getD i 0)
     out := out.push (line "bytesToF64Bits" (b.map toString) (f.bytesToF64Bits v))
-    out := out.push (line "vecLane0FromBytes" (b.map toString) (run (f.vecLane0FromBytes v)))
   for bits in [0x3ff0000000000000, 0x400921fb54442d18] do
     for i in [0, 1, 2, 3, 4, 5, 6, 7] do
       out := out.push (line "byteOfF64" [toString bits, toString i]
         (run (f.byteOfF64 ⟨BitVec.ofNat 64 bits⟩ (BitVec.ofNat 64 i))))
   for (a, b) in [(0x0102, 0x0304), (0xffff, 0)] do
-    for i in [0, 1, 2, 3] do
-      out := out.push (line "vecByte" [toString a, toString b, toString i]
-        (run (f.vecByte (BitVec.ofNat 16 a) (BitVec.ofNat 16 b) (BitVec.ofNat 64 i))))
     out := out.push (line "externToBytes" [toString a, toString b, toString 0xa1b2c3d4]
       (f.externToBytes (BitVec.ofNat 16 a) (BitVec.ofNat 16 b) 0xa1b2c3d4))
   for (lo, hi) in [(0xabc, 0xd), (0, 0xf), (0xfff, 0)] do

@@ -176,10 +176,29 @@ def golden_set(example):
             files[path.name] = json.loads(path.read_text())
     if len({"profile" in doc for doc in files.values()}) > 1:
         # A golden set that mixes schema-12 and legacy files: compare it on the legacy profile.
-        for doc in files.values():
+        for name, doc in files.items():
             doc.pop("profile", None)
             doc["schema"] = min(doc["schema"], 11)
+            # A legacy (schema-11) program names no modules (docs/air-json.md §Identity).
+            files[name] = strip_identities(doc)
     return files
+
+
+def strip_identities(value, root=True):
+    """`value` without the module identity keys (as scripts/gen-integrity.py's compose)."""
+    if isinstance(value, list):
+        return [strip_identities(v, False) for v in value]
+    if not isinstance(value, dict):
+        return value
+    named = root or "func" in value or "name" in value
+    return {k: strip_identities(v, False) for k, v in value.items()
+            if k not in ("comptime_fn_module", "instance_key", "comptime_fn_instance_key")
+            and not (k == "module" and named)}
+
+
+def legacy_args(files):
+    """A legacy (schema 1-11) set needs the named reference profile explicitly."""
+    return ["--profile", "legacy-abi64-le"] if any(d["schema"] < 12 for d in files.values()) else []
 
 
 def as_version(doc, version):
@@ -214,13 +233,17 @@ def upgrades(binary):
                 air.mkdir()
                 for name, doc in files.items():
                     (air / name).write_text(json.dumps(rewrite(doc)))
-                result = translate(binary, air, directory / f"{version}.lean", namespace, f"{example}.", extra)
+                result = translate(binary, air, directory / f"{version}.lean", namespace, f"{example}.",
+                                   extra + legacy_args(files))
                 outputs[version] = (result.returncode, result.stderr,
                                     (directory / f"{version}.lean").read_text() if result.returncode == 0 else "")
             (old_rc, old_err, old), (new_rc, new_err, new) = outputs["0.16.0"], outputs["0.17.0"]
             if old_rc != 0:
                 # The relabelled set is outside the translator's 0.16.0 scope; 0.17.0 must agree.
                 assert new_rc == old_rc, (example, old_err, new_err)
+                # A std model reviewed only for older versions (threadsync: 0.15.2's
+                # Thread.Futex) is not qualified for the relabelled version, as intended.
+                skipped += "qualified Zig" in old_err
                 continue
             if new_rc != 0 and not selectable(example, "0.17.0") and "qualified Zig" in new_err:
                 # A 0.17.0-unselected example whose std models are not qualified for 0.17.0

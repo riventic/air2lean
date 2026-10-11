@@ -32,7 +32,7 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-aliases.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/TryPointers" "$work/TryAliases"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-"$translator" "$case_dir/air/0.16.0" -o "$work/TryAliases/Gen.lean" \
+"$translator" "$case_dir/air/0.16.0" --profile legacy-abi64-le -o "$work/TryAliases/Gen.lean" \
   --namespace TryAliases --prefix try_aliases.
 cmp "$work/TryAliases/Gen.lean" "$case_dir/TryAliases/Gen.lean"
 # The retained compiler-exported pointer-try module supplies writeAlias/cleanup/coldPayload.

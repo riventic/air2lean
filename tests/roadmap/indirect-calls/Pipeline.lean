@@ -202,30 +202,30 @@ deriving instance DecidableEq for Except
 def observe (r : Zig.Result (BitVec 32 × Zig.Mem)) : Option (Except Zig.Error Nat) :=
   r.run.map fun e => e.map (·.1.toNat)
 -- Every declared target of the table is reachable, through each origin of the pointer.
-example : observe ((table 0 5).run mem0) = some (.ok 10) := by decide +kernel
-example : observe ((table 1 5).run mem0) = some (.ok 6) := by decide +kernel
-example : observe ((table 2 5).run mem0) = some (.ok 25) := by decide +kernel
-example : observe ((«constant» 5).run mem0) = some (.ok 6) := by decide +kernel
-example : observe ((callOnce ⟨some 2, 0⟩ 5).run mem0) = some (.ok 25) := by decide +kernel
-example : observe ((viaDouble 5).run mem0) = some (.ok 20) := by decide +kernel
-example : observe ((viaSquare 5).run mem0) = some (.ok 625) := by decide +kernel
-example : observe ((globalSlot false 5).run mem0) = some (.ok 6) := by decide +kernel
-example : observe ((globalSlot true 5).run mem0) = some (.ok 25) := by decide +kernel
-example : observe ((fieldCaller 5).run mem0) = some (.ok 25) := by decide +kernel
-example : observe ((fieldGlobal 5).run mem0) = some (.ok 6) := by decide +kernel
-example : observe ((memoryCaller 5).run mem0) = some (.ok 10) := by decide +kernel
+example : observe ((table 0 5).run (mem0 .fresh)) = some (.ok 10) := by decide +kernel
+example : observe ((table 1 5).run (mem0 .fresh)) = some (.ok 6) := by decide +kernel
+example : observe ((table 2 5).run (mem0 .fresh)) = some (.ok 25) := by decide +kernel
+example : observe ((«constant» 5).run (mem0 .fresh)) = some (.ok 6) := by decide +kernel
+example : observe ((callOnce ⟨some 2, 0⟩ 5).run (mem0 .fresh)) = some (.ok 25) := by decide +kernel
+example : observe ((viaDouble 5).run (mem0 .fresh)) = some (.ok 20) := by decide +kernel
+example : observe ((viaSquare 5).run (mem0 .fresh)) = some (.ok 625) := by decide +kernel
+example : observe ((globalSlot false 5).run (mem0 .fresh)) = some (.ok 6) := by decide +kernel
+example : observe ((globalSlot true 5).run (mem0 .fresh)) = some (.ok 25) := by decide +kernel
+example : observe ((fieldCaller 5).run (mem0 .fresh)) = some (.ok 25) := by decide +kernel
+example : observe ((fieldGlobal 5).run (mem0 .fresh)) = some (.ok 6) := by decide +kernel
+example : observe ((memoryCaller 5).run (mem0 .fresh)) = some (.ok 10) := by decide +kernel
 -- An integer that is the address of a function block is that function.
-example : observe ((do viaInt (BitVec.ofInt 64 (← Zig.ptrAddr ⟨some 2, 0⟩)) 5).run mem0) =
+example : observe ((do viaInt (BitVec.ofInt 64 (← Zig.ptrAddr ⟨some 2, 0⟩)) 5).run (mem0 .fresh)) =
     some (.ok 625) := by decide +kernel
 -- A target of another signature, a data address and any other address are rejected.
-example : observe ((viaMismatch 5).run mem0) = some (.error .illegal) := by decide +kernel
-example : observe ((viaData 5).run mem0) = some (.error .illegal) := by decide +kernel
-example : observe ((viaInt 0 5).run mem0) = some (.error .illegal) := by decide +kernel
-example : observe ((do viaInt (BitVec.ofInt 64 ((← Zig.ptrAddr ⟨some 2, 0⟩) + 1)) 5).run mem0) =
+example : observe ((viaMismatch 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
+example : observe ((viaData 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
+example : observe ((viaInt 0 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
+example : observe ((do viaInt (BitVec.ofInt 64 ((← Zig.ptrAddr ⟨some 2, 0⟩) + 1)) 5).run (mem0 .fresh)) =
     some (.error .illegal) := by decide +kernel
-example : observe ((callOnce ⟨some 3, 0⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
-example : observe ((callOnce ⟨some 0, 1⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
-example : observe ((callOnce ⟨none, 0⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨some 3, 0⟩ 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨some 0, 1⟩ 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨none, 0⟩ 5).run (mem0 .fresh)) = some (.error .illegal) := by decide +kernel
 "
 
 def main (args : List String) : IO Unit := do

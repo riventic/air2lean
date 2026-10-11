@@ -19,7 +19,9 @@ AIR = HERE / "air" / "0.16.0"
 FRESH = HERE / "air-fresh" / "0.16.0"
 CONSTANTS = ["resElemPtr", "maybeElemPtr", "maybeBytePtr", "maybeSlice", "resCodePtr"]
 GEN = HERE / "ConstBases" / "Gen.lean"
-ARGS = ["--namespace", "ConstBases", "--prefix", "const_bases."]
+# The fixtures are `stage2_x86_64` exports (L06's backend-specific lowering): not the qualified
+# build, so every translation and diagnosis records the explicit opt-in (docs/build-modes.md).
+ARGS = ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"]
 UNBACKED = "a pointer constant without a global ({}) is outside the subset"
 LLVM = "such constants are outside the stage2_llvm profile"
 
@@ -74,7 +76,8 @@ def reject(binary, documents, marker, code="CONSTANT_FAILURE", cli=True):
         assert result.returncode == 1, (marker, result.returncode, result.stderr)
         assert not cli or marker in result.stderr, (marker, result.stderr)
         assert out.read_text() == "sentinel\n", "a rejected input replaced the output"
-        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air")],
+        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air"),
+                                      "--allow-unqualified-build-mode"],
                                      text=True, capture_output=True, check=False, timeout=60)
         assert diagnostics.returncode == 1, diagnostics.stderr
         report = json.loads(diagnostics.stdout)
@@ -116,7 +119,7 @@ def main():
                             ("resCodePtr", "(⟨some 0, 20⟩ : Zig.Ptr)")]:
         assert f"def {function}  : Zig.MemM" in text and f"pure (.ret {value})" in text, function
     assert "Zig.load (BitVec 8) 1 (⟨some 0, 24⟩ : Zig.Ptr)" in text
-    assert text.count("Zig.Mem.ofGlobals [") == 1 and "-- 1:" not in text, "a block was invented"
+    assert text.count("Zig.Mem.ofGlobals σ [") == 1 and "-- 1:" not in text, "a block was invented"
     checks += 1
 
     # Unbacked: `@ptrFromInt(0x1000)` as a direct pointer, nested in a constant slice, and as
@@ -132,7 +135,7 @@ def main():
     def fixed_global(d):
         holder = len(d["types"])
         d["types"].append(dict(d["types"][11], child=11))
-        d["globals"].append({"name": "const_bases.fixed", "ty": 11, "const": True,
+        d["globals"].append({"name": "const_bases.fixed", "module": "root", "ty": 11, "const": True,
                              "threadlocal": False, "extern": False,
                              "init": {"ty": 11, "ptr": {"unsupported": "int", "off": 4096}}})
         d["ret"] = holder

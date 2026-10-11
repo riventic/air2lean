@@ -36,7 +36,7 @@ def valueLine (name : String) (r : Result String) : String :=
   | _ => s!"{name} error"
 
 def runMem {α : Type} (x : MemM α) : Result α := do
-  let (v, _) ← x.run mem0
+  let (v, _) ← x.run (mem0 .fresh)
   pure v
 
 def x : Ptr := ⟨none, 0x1000⟩

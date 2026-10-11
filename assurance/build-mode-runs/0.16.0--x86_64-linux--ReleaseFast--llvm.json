@@ -1,17 +1,17 @@
 {
   "backend": "llvm",
-  "cases": 87409,
+  "cases": 87413,
   "counts": {
     "error_return_match": 892,
-    "illegal_exclusion": 497,
-    "mismatch": 85,
-    "ub_excluded": 4975,
-    "unspecified_exclusion": 580,
-    "value_match": 80380
+    "illegal_exclusion": 794,
+    "trap_match": 4,
+    "ub_excluded": 4922,
+    "unspecified_exclusion": 605,
+    "value_match": 80196
   },
   "emulated": false,
   "examples": {
-    "asm": 1200,
+    "asm": 1204,
     "atomics": 100,
     "basic": 2400,
     "errors": 900,
@@ -63,16 +63,22 @@
       "status": "unspecified_exclusion"
     },
     {
+      "cases": 3,
+      "example": "floatconv",
+      "function": "toByte",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 131,
       "example": "floatconv",
       "function": "toByte",
       "status": "ub_excluded"
     },
     {
-      "cases": 3,
+      "cases": 2,
       "example": "floatconv",
-      "function": "toByte",
-      "status": "unspecified_exclusion"
+      "function": "toI32",
+      "status": "illegal_exclusion"
     },
     {
       "cases": 73,
@@ -83,8 +89,8 @@
     {
       "cases": 2,
       "example": "floatconv",
-      "function": "toI32",
-      "status": "unspecified_exclusion"
+      "function": "toU64",
+      "status": "illegal_exclusion"
     },
     {
       "cases": 104,
@@ -93,10 +99,10 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 2,
-      "example": "floatconv",
-      "function": "toU64",
-      "status": "unspecified_exclusion"
+      "cases": 123,
+      "example": "floatops",
+      "function": "divExact64",
+      "status": "illegal_exclusion"
     },
     {
       "cases": 23,
@@ -105,19 +111,31 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 12,
+      "cases": 4,
+      "example": "floatops",
+      "function": "op128",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 5,
+      "example": "floatops",
+      "function": "op16",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 16,
       "example": "floatops",
       "function": "op32",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 12,
+      "cases": 16,
       "example": "floatops",
       "function": "op64",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 373,
+      "cases": 377,
       "example": "floatops",
       "function": "op80",
       "status": "unspecified_exclusion"
@@ -175,6 +193,12 @@
       "example": "layout",
       "function": "numRoundTrip",
       "status": "ub_excluded"
+    },
+    {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
     },
     {
       "cases": 300,
@@ -243,7 +267,13 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 73,
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 47,
       "example": "slices",
       "function": "copyWithin",
       "status": "ub_excluded"
@@ -261,7 +291,13 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 209,
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 182,
       "example": "slices",
       "function": "subZ",
       "status": "ub_excluded"
@@ -321,13 +357,13 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 5,
+      "cases": 10,
       "example": "vectors",
       "function": "fMax",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 4,
+      "cases": 10,
       "example": "vectors",
       "function": "fMin",
       "status": "unspecified_exclusion"
@@ -396,18 +432,9 @@
   "skipped_examples": {
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "7bebaca312a3e03284dbe15c8a966eb31eb5765e098b5800fb382b924bd9253e",
+  "sources_sha256": "88b8410e3a987646cc47629740458fa2117940245b68dc6ca1ee38fd72805fe9",
   "stock_zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "target": "x86_64-linux",
-  "triage": [
-    {
-      "cases": 85,
-      "classification": "illegal-behaviour-not-detected-by-releasesafe",
-      "example": "floatops",
-      "function": "divExact64",
-      "note": "Each input has a non-integral quotient, which @divExact makes illegal. ReleaseSafe does not check float @divExact and returns the truncated quotient, which the model reproduces without throwing; ReleaseFast and ReleaseSmall return the plain quotient. The ReleaseFast no-illegal-behaviour-transfer premise (a model that does not throw implies legal execution) therefore does not hold for float @divExact.",
-      "reproducer": "tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig"
-    }
-  ],
+  "triage": [],
   "zig_version": "0.16.0"
 }

@@ -62,7 +62,7 @@ def main():
         if wasm:
             assert "open scoped Zig.Wasm32" in text
             for term in ("Zig.Slice32", "Zig.Allocator.allocOf .w32", "Zig.Allocator.freeOf",
-                         "Zig.ptrAddrOf .w32", "Zig.memsetOf", "Zig.memmoveOf", ".elemOf",
+                         "Zig.ptrAddrOf .w32", "Zig.memsetOf", "Zig.memcpyOf", ".elemOf",
                          "Zig.indexOf", "(4 : BitVec 32)"):
                 assert term in text, (target, term)
             for term in ("Zig.Slice ", "Zig.Slice)", "BitVec 64", "Zig.Allocator.alloc ", ".elem "):

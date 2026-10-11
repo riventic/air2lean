@@ -17,9 +17,9 @@ open Zig Zig.Conc Sync Sync.MutexCounter
 
 /-- Every finished run (any oracle `o`, any `fuel`) succeeds and returns 4: `mutexCounter_safe`
 rules out an error, `mutexCounter_spec` fixes the value. -/
-theorem finished_run_returns_four (io : Io) (fuel : Nat) (o : Nat → Nat)
+theorem finished_run_returns_four (σ : Placement) (io : Io) (fuel : Nat) (o : Nat → Nat)
     (r : Except Error (Except ErrName (BitVec 32) × Mem))
-    (finished : (Sched.run dispatch fuel o (mutexCounter io) mem0).run = some r) :
+    (finished : (Sched.run dispatch fuel o (mutexCounter io) (mem0 σ)).run = some r) :
     ∃ m, r = .ok (.ok 4, m) := by
   cases r with
   | error e => exact absurd finished (mutexCounter_safe io)

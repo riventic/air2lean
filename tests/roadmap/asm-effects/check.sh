@@ -14,7 +14,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/AsmEffects"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The retained translation is the fresh one, byte for byte.
-"$translator" tests/roadmap/asm-effects/air/0.16.0 -o "$work/AsmEffects/Gen.lean" \
+"$translator" tests/roadmap/asm-effects/air/0.16.0 --profile legacy-abi64-le -o "$work/AsmEffects/Gen.lean" \
   --namespace AsmEffects --prefix asm_effects.
 cmp "$work/AsmEffects/Gen.lean" tests/roadmap/asm-effects/AsmEffects/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/AsmEffects/Gen.olean" "$work/AsmEffects/Gen.lean"

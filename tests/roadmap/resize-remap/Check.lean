@@ -9,7 +9,6 @@ private def initial (mode : ByteRemapMode) : Mem := {
   blocks := #[
     { bytes := #[.int 41], align := 1, kind := .heap, live := true, addr := 4096 },
     { bytes := #[.int 3, .int 5, .int 7, .int 11], align := 1, kind := .heap, live := true, addr := 4098 }]
-  nextAddr := 4103
   allocPolicy := { maxBytes := 16, byteRemap := mode }
 }
 private def old : Slice := ⟨⟨some 1, 0⟩, 4⟩
@@ -26,12 +25,12 @@ private def checkMode (mode : ByteRemapMode) : IO Unit := do
     match mode, result with
     | .fail, none =>
       require ((block final 1).bytes == (block m 1).bytes && (block final 1).live &&
-        final.nextAddr == m.nextAddr && final.blocks.size == m.blocks.size)
+        final.top == m.top && final.blocks.size == m.blocks.size)
         "failed remap changed bytes, capacity or lifetime"
     | .inPlace, some s =>
       require (s.ptr == old.ptr && s.len == 8 && (block final 1).live &&
         (block final 1).bytes == #[.int 3, .int 5, .int 7, .int 11, .undef, .undef, .undef, .undef] &&
-        final.nextAddr > 4098 + 8 && final.blocks.size == 2)
+        final.top > 4098 + 8 && final.blocks.size == 2)
         "in-place remap lost prefix, new undefinedness, size or address boundary"
     | .move, some s =>
       require (s.ptr.block == some 2 && s.ptr.off == 0 && s.len == 8 &&
@@ -51,18 +50,24 @@ private def checkRefusal : IO Unit := do
   match ((Allocator.remap {} 1 old 8).run withLater).run with
   | some (.ok (none, final)) =>
     require ((block final 1).bytes == (block m 1).bytes && (block final 2).live &&
-      final.nextAddr == withLater.nextAddr) "latest-block refusal changed the frame"
+      final.top == withLater.top) "live-block refusal changed the frame"
   | _ => throw (IO.userError "in-place growth overlapped a later allocation")
-  -- Latest array index alone is insufficient for arbitrary memories: even a dead
-  -- earlier block may occupy addresses into which this allocation would grow.
+  -- Growth needs only that the grown range is clear of every other live block
+  -- (`Mem.growFree`): a dead block's address range may be reused, as natively.
   let dead : Block := { bytes := Array.replicate 16 .undef, align := 1, kind := .heap, live := false, addr := 4100 }
   let history := { m with blocks := m.blocks.set! 0 dead }
   match ((Allocator.remap {} 1 old 8).run history).run with
-  | some (.ok (none, final)) =>
-    require ((block final 1).bytes == (block history 1).bytes &&
-      final.nextAddr == history.nextAddr && !(block final 0).live)
-      "dead-block address refusal changed memory"
-  | _ => throw (IO.userError "in-place growth ignored dead-block address history")
+  | some (.ok (some s, final)) =>
+    require (s.len == 8 && (block final 1).live && !(block final 0).live)
+      "growth over a dead block's range changed lifetimes"
+  | _ => throw (IO.userError "in-place growth refused a dead block's address range")
+  -- A live block below the growing block does not stop growth (no allocation order).
+  let below : Block := { bytes := #[.int 1], align := 1, kind := .heap, live := true, addr := 64 }
+  let lower := { m with blocks := m.blocks.push below }
+  match ((Allocator.remap {} 1 old 8).run lower).run with
+  | some (.ok (some _, final)) =>
+    require ((block final 2).live && (block final 2).bytes == #[.int 1]) "growth changed a lower block"
+  | _ => throw (IO.userError "in-place growth refused because a later block id lies below")
   let capped := { m with allocPolicy := { maxBytes := 7, byteRemap := .inPlace } }
   match ((Allocator.remap {} 1 old 8).run capped).run with
   | some (.ok (none, final)) =>

@@ -2,6 +2,7 @@ import Proofs.Threads.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Mem.Thread
 import ZigLean.Simp
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/threads/threads.zig`
@@ -35,7 +36,8 @@ atomic. -/
 theorem noRace_of_atomic {m : Mem} {b : BlockId} {o n : Nat} {k : AccessKind}
     (hk : k.isAtomic = true) (hall : ∀ e ∈ m.footprint, e.block = b → e.kind.isAtomic = true) :
     NoRace m b o n k := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   by_cases hbeq : e.block = b
@@ -73,5 +75,7 @@ theorem decode_writeBytes32' (a : Array Byte) (o : Nat) (v : BitVec 32) (h : o +
   rw [LawfulEnc.size_encode v, hsz] at hx
   show Enc.decode ((writeBytes a o (Enc.encode v)).extract o (o + 4)) = pure v
   rw [hx]; exact LawfulEnc.decode_encode v
+
+nonvacuity_witness decode_writeBytes32' := ⟨Array.replicate 4 .undef, 0, 0, by decide, trivial⟩
 
 end Zig

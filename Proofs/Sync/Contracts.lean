@@ -72,9 +72,9 @@ theorem ptr_add0 (p : Ptr) : (p.add 0).add 0 = p := by
 (`Proofs/Sync/Lock.lean`). -/
 theorem mutex : MutexContract Io_Mutex_lockUncancelable Io_Mutex_unlock where
   lock hP hc t g hg hok io G m d hi :=
-    MutexOps.lock_specOn hP (ptr_add0 _) (by rw [hc]; rfl) t g hg hok io G m d hi
+    MutexOps.lock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi
   unlock hP hc t g hg hok io G m d hi :=
-    MutexOps.unlock_specOn hP (ptr_add0 _) (by rw [hc]; rfl) t g hg hok io G m d hi
+    MutexOps.unlock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi
 
 /-- The lock invariant, as a client sees it: the holder's resource satisfies `L.R`. -/
 theorem MutexContract.held_res {γ : Type} {L : Lock γ} {G : ThreadId → γ} {m : Mem}

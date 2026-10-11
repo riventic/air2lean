@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import ZigLean.Conc.WeakWord
 import Proofs.Threadsync.Deadline
 import ZigLean.Conc.Word
@@ -353,7 +354,13 @@ theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
 
 /-- The mutex word: `L.ptr`. -/
-theorem mptr : bPtr.add 0 = L.ptr := rfl
+theorem mptr : bPtr = L.ptr := rfl
+
+/-- A field pointer into the 24-byte `Box` (block 0) is formed (`ptrProject`, MM-3). -/
+theorem projB {m : Mem} (hb : BlkOk m) {p : Ptr} (hp : p.block = some 0) (h0 : 0 ≤ p.off) {k : Nat}
+    (hk : p.off + k ≤ 24) : (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hb hp h0 (by rw [hsz]; exact hk)
 
 /-! ## The heap -/
 
@@ -1252,7 +1259,7 @@ theorem dwait_spec {G : ThreadId → Gh} {m : Mem} {d : Nat} {p : Ptr} {hD : Hea
   refine WP.bind ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   refine WP.bind (wp_mownM (TTriple.loadAt (k := 0) (a := 8) (v := (none : Option (BitVec 64)))
-    rfl (by decide) (by rw [bsD_size]; decide)
+    (by simp) (by decide) (by rw [bsD_size]; decide)
     (by rw [hdl.off]; simpa using hA) dl_none) (.inl rfl) (fun _ => rfl) hi hc hb
     (fun a hQ hq => by
       obtain ⟨-, hq'⟩ := sep_lift.mp hq
@@ -1575,7 +1582,7 @@ def post107 (D : Nat) (q : Ptr) (r : Thread_Condition_FutexImpl_waitExit × Thre
 
 theorem loop107_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLocals)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : inv107 D q s G m d) :
-    proto.WP 0 ((Thread_Condition_FutexImpl_wait.loop107 ((bPtr.add 4).add 0) (bPtr.add 0)).run s)
+    proto.WP 0 ((Thread_Condition_FutexImpl_wait.loop107 (bPtr.add 4) bPtr).run s)
       (fun r G' m' d' =>
         if Thread_Condition_FutexImpl_wait.again107 r.1 then inv107 D q r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Condition_FutexImpl_waitLocals) => 0) s)
@@ -1605,7 +1612,7 @@ theorem loop107_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoc
     refine WP.bind (WP.bind (WP.callRC_ok sub1 ?_))
     refine WP.bind (WP.callRC_ok sub2 ?_)
     dsimp only
-    rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
+    rw [show bPtr.add 4 = WS.ptr from rfl]
     refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gM hD x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
         ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
@@ -1671,7 +1678,7 @@ def post29 (D : Nat) (q : Ptr) (r : Thread_Condition_FutexImpl_waitExit × Threa
 
 theorem loop29_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLocals)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : inv29 D q s G m d) :
-    proto.WP 0 ((Thread_Condition_FutexImpl_wait.loop29 ((bPtr.add 4).add 0) (bPtr.add 0) q).run s)
+    proto.WP 0 ((Thread_Condition_FutexImpl_wait.loop29 (bPtr.add 4) bPtr q).run s)
       (fun r G' m' d' =>
         if Thread_Condition_FutexImpl_wait.again29 r.1 then inv29 D q r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Condition_FutexImpl_waitLocals) => 0) s)
@@ -1682,7 +1689,9 @@ theorem loop29_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoca
   subst he
   unfold Thread_Condition_FutexImpl_wait.loop29
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  rw [show ((bPtr.add 4).add 0).add 4 = WE.ptr from rfl]
+  refine WP.bind (WP.callMC_ptrProject (projB hi.2.blk (p := bPtr.add 4) rfl (by decide) (k := 4) (by decide)) ?_)
+  dsimp only
+  rw [show (bPtr.add 4).add 4 = WE.ptr from rfl]
   refine WP.bind (WP.callC (WP.mono ?post (dwait_spec (.inr (.inl rfl)) (by decide) hdl hi hc
     (fun h G₁ m₁ hg₁ hi₁ hU => ?hq))))
   case hq =>
@@ -1693,14 +1702,16 @@ theorem loop29_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoca
   case post =>
   rintro r G₁ m₁ d₁ ⟨rfl, hd₁, hc₁, hD₁, hdl₁, hi₁⟩
   simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show WE.ptr.add 0 = WE.ptr from rfl]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₁.2.blk (p := bPtr.add 4) rfl (by decide) (k := 4) (by decide)) ?_)
+  dsimp only
+  rw [show (bPtr.add 4).add 4 = WE.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gM hD₁ { ph := .wt, cw := true }) hi₁
     (fun _ _ _ h => main_alive h) fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
   have hcase := inv_seen (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hw' hop (by rw [upd_g hg₂]; exact hL)
     hh hj hv (hacq rfl)
   refine WP.pure' ?_
   simp only [StateT.run_bind, StateT.run_modify, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
+  rw [show bPtr.add 4 = WS.ptr from rfl]
   -- the state's load, then the inner loop
   obtain ⟨x, hx, hcwx, hvwx, hpx, hi₃⟩ : ∃ x : X, (x.ph = .wt ∧ v = 0 ∨ x.ph = .seen ∧ v = 1) ∧
       x.cw = true ∧ x.vw = false ∧ x.ph.post = false ∧ proto.inv (upd G₂ 0 (gM hD₁ x)) m₃ := by
@@ -1754,7 +1765,7 @@ block lives in `main`'s part; at the end `main` holds the mutex again at `cons`.
 theorem fwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
-    proto.WP 0 (Thread_Condition_FutexImpl_wait ((bPtr.add 4).add 0) (bPtr.add 0) none)
+    proto.WP 0 (Thread_Condition_FutexImpl_wait (bPtr.add 4) bPtr none)
       (fun r G' m' d' => d' < d ∧ r = .ok () ∧ m'.current = 0 ∧
         ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m') G m d := by
   unfold Thread_Condition_FutexImpl_wait
@@ -1779,7 +1790,9 @@ theorem fwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (hL : Heap)
     exact WP.pure' ⟨hd₂, rfl, hc₃, hL₂, hi₃⟩
   -- the body
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 4).add 0).add 4).add 0 = WE.ptr from rfl]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₁.2.blk (p := bPtr.add 4) rfl (by decide) (k := 4) (by decide)) ?_)
+  dsimp only
+  rw [show (bPtr.add 4).add 4 = WE.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gK hQ hL { ph := .run }) hi₁
     (fun _ _ _ h => main_alive h) fun k₁ hk₁ G₁ m₂ m₃ v j hg₁ hi₂ hj hv _ _ hh hw' hop hL₁ => ?_))
   have hrd := rdy_now hi₂ hg₁ hR hY
@@ -1787,7 +1800,7 @@ theorem fwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (hL : Heap)
     (by rw [upd_g hg₁]; exact hL₁) hh hj hv
   refine WP.pure' ?_
   simp only [StateT.run_bind, StateT.run_modify, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
+  rw [show bPtr.add 4 = WS.ptr from rfl]
   refine WP.bind (WP.bind (wp_rmw (.inl rfl) (g := gK hQ hL { ph := .ep }) hi₃
     (fun _ _ _ h => main_alive h) fun k₂ hk₂ G₂ m₄ m₅ old hg₂ hi₄ hv₂ _ hh₂ _ hw₂ hop₂ hL₂ => ?_))
   have hrd₂ := rdy_now hi₄ hg₂ hR hY
@@ -1831,7 +1844,7 @@ the mutex again at `cons`. -/
 theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
-    proto.WP 0 (Thread_Condition_wait (bPtr.add 4) (bPtr.add 0)) (fun _ G' m' d' =>
+    proto.WP 0 (Thread_Condition_wait (bPtr.add 4) bPtr) (fun _ G' m' d' =>
       d' < d ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
       G m d := by
   unfold Thread_Condition_wait
@@ -2023,7 +2036,7 @@ def post37 (c : Bool) (q : Ptr)
 
 theorem loop37_body (c : Bool) (q : Ptr) (s : Thread_ResetEvent_FutexImpl_waitUntilSetLocals)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : inv37 c q s G m d) :
-    proto.WP 0 ((Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 ((bPtr.add 12).add 0) q).run s)
+    proto.WP 0 ((Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 (bPtr.add 12) q).run s)
       (fun r G' m' d' =>
         if Thread_ResetEvent_FutexImpl_waitUntilSet.again37 r.1 then inv37 c q r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
@@ -2033,7 +2046,7 @@ theorem loop37_body (c : Bool) (q : Ptr) (s : Thread_ResetEvent_FutexImpl_waitUn
   unfold Thread_ResetEvent_FutexImpl_waitUntilSet.loop37
   simp only [StateT.run_bind]
   simp only [StateT.run_pure, pure_bind]
-  rw [show ((bPtr.add 12).add 0).add 0 = WV.ptr from rfl, show WV.ptr.add 0 = WV.ptr from rfl]
+  rw [show bPtr.add 12 = WV.ptr from rfl]
   refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (dwait_spec (.inr (.inr rfl)) (by decide) hdl hi hc
     fun h G₁ m₁ hg₁ hi₁ hU w hw => ?_))))
   · rintro r G₁ m₁ d₁ ⟨rfl, hd₁, hc₁, hD₁, hdl₁, hi₁⟩
@@ -2074,7 +2087,7 @@ def postW (c : Bool) (q : Ptr)
 
 theorem wus_spec (c : Bool) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 0 (gP { ph := .ev0, cw := c })) m) (hc : m.current = 0) :
-    proto.WP 0 (Thread_ResetEvent_FutexImpl_waitUntilSet ((bPtr.add 12).add 0) none)
+    proto.WP 0 (Thread_ResetEvent_FutexImpl_waitUntilSet (bPtr.add 12) none)
       (fun r G' m' _ => r = .ok () ∧ m'.current = 0 ∧
         ∃ w, proto.inv (upd G' 0 (gP { ph := .evd, cw := c, vw := w })) m') G m d := by
   unfold Thread_ResetEvent_FutexImpl_waitUntilSet
@@ -2100,7 +2113,7 @@ theorem wus_spec (c : Bool) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     exact WP.pure' ⟨rfl, hc₃, w, hi₃⟩
   -- the body
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 12).add 0).add 0).add 0 = WV.ptr from rfl]
+  rw [show bPtr.add 12 = WV.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inr (.inr rfl)) hi₁ (fun _ _ _ h => main_alive h)
     fun k hk G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
   have hi₃ := inv_load (.inr (.inr rfl)) hi₂ hw' hop hL hh
@@ -2183,7 +2196,7 @@ theorem evwait_spec (c : Bool) (G : ThreadId → Gh) (m : Mem) (d : Nat)
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 12).add 0).add 0).add 0 = WV.ptr from rfl]
+  rw [show bPtr.add 12 = WV.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inr (.inr rfl)) hi (fun _ _ _ h => main_alive h)
     fun k hk G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
   have hi₃ := inv_load (.inr (.inr rfl)) hi₂ hw' hop hL hh
@@ -2265,7 +2278,10 @@ theorem loop12_body (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat
   unfold handoff.loop12
   simp only [StateT.run_bind]
   simp only [StateT.run_pure, pure_bind]
-  refine WP.bind (WP.bind (wp_mres (Qa := fun r => ⌜r = rdyOf ((upd G 0 (gH x hL)) 1).2⌝ ∗ R
+  refine WP.bind (WP.bind (WP.callMC_ptrProject (projB hi.2.blk (p := bPtr) rfl (by decide) (k := 20)
+    (by decide)) ?_))
+  dsimp only
+  refine WP.bind (wp_mres (Qa := fun r => ⌜r = rdyOf ((upd G 0 (gH x hL)) 1).2⌝ ∗ R
       (fun u => (upd G 0 (gH x hL) u).2))
     (((TTriple.load (p := bPtr.add 20) (a := 1) (v := rdyOf ((upd G 0 (gH x hL)) 1).2)
       (by decide)).frameL_eq (R := pts (bPtr.add 16) 4
@@ -2273,7 +2289,7 @@ theorem loop12_body (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat
     hi hc (fun h => h) (fun a hQ h => by
       obtain ⟨-, hR⟩ := sep_lift.mp h
       exact (R_congr (by simp only [upd0_1]) (by simp only [upd0_1]) hQ).mpr hR)
-    fun a m' hQ hc' ht' hq hi' => ?_))
+    fun a m' hQ hc' ht' hq hi' => ?_)
   obtain ⟨rfl, hR⟩ := sep_lift.mp hq
   cases hr : rdyOf (upd G 0 (gH x hL) 1).2
   · -- `ready = false`: `main` is at `run`; the condition wait
@@ -2292,6 +2308,8 @@ theorem loop12_body (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat
         · simp only [upd0_1] at hp; unfold rdyOf at hr; rw [hp] at hr; simp at hr; omega
     subst hxr
     simp only [Bool.not_false, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind]
+    refine WP.bind (WP.callMC_ptrProject (projB hi'.2.blk (p := bPtr) rfl (by decide) (k := 4) (by decide)) ?_)
+    dsimp only
     refine WP.bind (WP.callC (WP.mono ?_ (condWait_spec G m' d hQ hR hr hi' hc')))
     rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
     repeat (first
@@ -2718,13 +2736,13 @@ theorem sg1_noFail {G : ThreadId → Gh} {m : Mem} {j : Nat} {b : BitVec 32}
 
 /-- `signal`'s loop invariant: the producer read `1` (at `sg1`) or `0` (it does not signal: at
 `set`). -/
-def sInv (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : ThreadId → Gh) (m : Mem)
+def sInv (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → Gh) (m : Mem)
     (_ : Nat) : Prop :=
   m.current = 1 ∧ ((s.state = sv 1 ∧ proto.inv (upd G 1 (gP { ph := .sg1 })) m) ∨
     (s.state = sv 0 ∧ proto.inv (upd G 1 (gP { ph := .set })) m))
 
 /-- `signal`'s loop ends with the producer at `set`. -/
-def sPost (r : Thread_Condition_FutexImpl_wake__anon_1Exit × Thread_Condition_FutexImpl_wake__anon_1Locals)
+def sPost (r : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit × Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals)
     (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
   r.1 = .ret ∧ m.current = 1 ∧ ∃ b, proto.inv (upd G 1 (gP { ph := .set, cw := b })) m
 
@@ -2736,18 +2754,18 @@ theorem dv01 : (divTrunc false (sv 0 &&& 65535) (1 : BitVec 32)).run = some (.ok
 theorem dv02 : (divTrunc false (sv 0 &&& 4294901760) (65536 : BitVec 32)).run = some (.ok 0) := rfl
 theorem sb00 : (sub false (0 : BitVec 32) 0).run = some (.ok 0) := rfl
 
-theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : ThreadId → Gh) (m : Mem)
+theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → Gh) (m : Mem)
     (d : Nat) (h : sInv s G m d) :
-    proto.WP 1 ((Thread_Condition_FutexImpl_wake__anon_1.loop9 ((bPtr.add 4).add 0)).run s)
+    proto.WP 1 ((Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 (bPtr.add 4)).run s)
       (fun r G' m' d' =>
-        if Thread_Condition_FutexImpl_wake__anon_1.again9 r.1 then sInv r.2 G' m' d' ∧
+        if Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9 r.1 then sInv r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
-            (fun (_ : Thread_Condition_FutexImpl_wake__anon_1Locals) => 0) s)
+            (fun (_ : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) => 0) s)
         else sPost r G' m' d') G m d := by
   obtain ⟨st⟩ := s
   obtain ⟨hc, ⟨hs, hi⟩ | ⟨hs, hi⟩⟩ := h
   · simp only at hs; subst hs
-    unfold Thread_Condition_FutexImpl_wake__anon_1.loop9
+    unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
     refine WP.bind ?_
     refine WP.bind (WP.callRC_ok dv11 ?_)
@@ -2758,9 +2776,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
       show ((1 : BitVec 32) == 0) = false from rfl, Bool.false_eq_true, ↓reduceIte]
     refine WP.bind (WP.callRC_ok ad1 ?_)
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
-    rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl,
-      show (((bPtr.add 4).add 0).add 4).add 0 = WE.ptr from rfl,
-      show ((bPtr.add 4).add 0).add 4 = WE.ptr from rfl]
+    rw [show bPtr.add 4 = WS.ptr from rfl]
     refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gP { ph := .sg1 }) hi
       (ht1 (by simp [gM])) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
         ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
@@ -2768,13 +2784,19 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         (by rw [upd_g hg₁]; exact hL) hh
       refine WP.pure' ?_
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (projB hi₂.2.blk (p := WS.ptr) rfl (by decide) (k := 4) (by decide)) ?_)
+      dsimp only
+      rw [show WS.ptr.add 4 = WE.ptr from rfl]
       refine WP.bind (WP.bind (wp_rmw (.inr (.inl rfl)) (g := gP { ph := .sgp, cw := true }) hi₂
         (ht1 (by simp [gM])) fun k₂ hk₂ G₂ m₂ m₃ old hg₂ hi₃ hv₃ hU₃ hh₃ hacq₃ hw₃ hop₃ hL₃ => ?_))
       have hi₄ := inv_wk (G := G₂) (by rw [upd_g hg₂]; exact hi₃) hw₃ hop₃
         (by rw [upd_g hg₂]; exact hL₃) hv₃ hh₃
       refine WP.pure' ?_
       dsimp only
-      rw [threadFutexWakeC_eq, StateT.run_bind]
+      rw [StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (projB hi₄.2.blk (p := WS.ptr) rfl (by decide) (k := 4) (by decide)) ?_)
+      dsimp only
+      rw [show WS.ptr.add 4 = WE.ptr from rfl, threadFutexWakeC_eq, StateT.run_bind]
       refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₄ hg₃ hi₅ m₅ hw => ?_⟩)
       have hi₆ := inv_set (G := G₃) (by rw [upd_g hg₃]; exact hi₅) hw
       have hc₅ := (wake_w hi₅.2.q (by decide) (Nat.le_refl _) hw).1
@@ -2782,7 +2804,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         | exact ⟨rfl, hc₅, true, hi₆⟩
         | refine WP.pure' ?_
         | simp only [StateT.run_pure, StateT.run_bind, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_1.again9, Bool.false_eq_true, ↓reduceIte])
+            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true, ↓reduceIte])
       done
     · have hb : b = sv 1 := by
         apply Classical.byContradiction
@@ -2799,11 +2821,11 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         | exact ⟨⟨hop.current, .inl ⟨rfl, hi₂⟩⟩, .inl (by omega)⟩
         | refine WP.pure' ?_
         | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_1.again9, ↓reduceIte])
+            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, ↓reduceIte])
       done
 
   · simp only at hs; subst hs
-    unfold Thread_Condition_FutexImpl_wake__anon_1.loop9
+    unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
     refine WP.bind ?_
     refine WP.bind (WP.callRC_ok dv01 ?_)
@@ -2815,7 +2837,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind,
           show ((0 : BitVec 32) == 0) = true from rfl, ↓reduceIte,
-          Thread_Condition_FutexImpl_wake__anon_1.again9, Bool.false_eq_true])
+          Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true])
     done
 
 /-- `signal` by the producer after its `unlock`: it signals iff `main` did `waiters += 1`. -/
@@ -2829,12 +2851,12 @@ theorem signal_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
   refine WP.bind (WP.callC ?_)
-  unfold Thread_Condition_FutexImpl_wake__anon_1
+  unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
+  rw [show bPtr.add 4 = WS.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inl rfl) (g := gP { ph := .rdy }) hi (ht1 (by simp [gM]))
     fun k hk G₁ m₁ m' b j hg₁ hi₁ hj hv hfl _ hh hw' hop hL => ?_))
   have hcase := inv_sload (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
@@ -3028,7 +3050,7 @@ theorem set_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (b : Bool)
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  rw [show (((bPtr.add 12).add 0).add 0).add 0 = WV.ptr from rfl]
+  rw [show bPtr.add 12 = WV.ptr from rfl]
   refine WP.bind (WP.bind (WP.bind (wp_load (.inr (.inr rfl)) (g := gP { ph := .set, cw := b }) hi
     (ht1 (by simp [gM])) fun k hk G₁ m₁ m' v j hg₁ hi₁ hj hv _ _ hh hw' hop hL => ?_)))
   have hi₂ := inv_load (.inr (.inr rfl)) hi₁ hw' hop hL hh
@@ -3047,7 +3069,7 @@ theorem set_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (b : Bool)
   · refine WP.pure' ?_
     dsimp only
     simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind]
-    rw [show ((bPtr.add 12).add 0).add 0 = WV.ptr from rfl, threadFutexWakeC_eq]
+    rw [threadFutexWakeC_eq]
     refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₃ hg₃ hi₅ m₄ hw => ?_⟩)
     have hi₆ := inv_fin (G := G₃) (by decide) (by rw [upd_g hg₃]; exact hi₅) hw
     have hc₄ := (wake_w hi₅.2.q (by decide) (by decide) hw).1
@@ -3083,6 +3105,8 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
       (hf.early rfl rfl rfl (by decide) (by decide))
       (hi₂.2.reg.early (by simp [Lock.prod, gM, Ph.rank]) (by simp [Ph.rank]))
       (hi₂.2.q.p (fun _ => by simp [Ph.rank]) (fun h => by cases h)) (by decide)
+  refine WP.bind (WP.callMC_ptrProject (projB hi₂'.2.blk (p := bPtr) rfl (by decide) (k := 16) (by decide)) ?_)
+  dsimp only
   -- `v = 7`
   refine WP.bind (wp_pstep (xa := { ph := .hl }) (xb := { ph := .v7 })
     ((TTriple.store (p := bPtr.add 16) (a := 4) (v := BitVec.ofNat 32 0) (by decide)
@@ -3093,6 +3117,8 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (fun _ _ _ hr => hr.early (by simp [gK, Ph.rank]) (by simp [gK, Ph.rank]))
     (fun _ _ hq => hq.p (fun _ => by simp [gK, Ph.rank]) (fun h => by cases h)) (by decide)
     fun _ m₃ hQ hc₃ ht₃ _ hi₃ => ?_)
+  refine WP.bind (WP.callMC_ptrProject (projB hi₃.2.blk (p := bPtr) rfl (by decide) (k := 20) (by decide)) ?_)
+  dsimp only
   -- `ready = true`
   refine WP.bind (wp_pstep (xa := { ph := .v7 }) (xb := { ph := .rdy })
     ((TTriple.store (p := bPtr.add 20) (a := 1) (v := false) (by decide) true).frameL
@@ -3122,10 +3148,14 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
   have hi₆' : proto.inv (upd G₃ 1 (gP { ph := .rdy })) m₆ := hi₆
   -- `signal`
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₆'.2.blk (p := bPtr) rfl (by decide) (k := 4) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.callC (WP.mono ?_ (signal_spec G₃ m₆ d₃ hi₆' hc₆)))
   rintro _ G₄ m₈ d₄ ⟨hc₈, b, hi₈⟩
   -- `ResetEvent.set`
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₈.2.blk (p := bPtr) rfl (by decide) (k := 12) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.callC (WP.mono ?_ (set_spec G₄ m₈ d₄ b hi₈ hc₈)))
   rintro _ G₅ m₁₀ d₅ ⟨hc₁₀, hi₁₀⟩
   repeat (first
@@ -3451,16 +3481,16 @@ theorem vOf_of_rdy {x : X} (h : rdyOf x = true) : vOf x = 7 := by
   simp at h
   rw [if_pos ⟨h.1, by omega⟩]
 
-theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) : proto.WP 0 handoff QM G0 { mem0 σ with current := 0 } d := by
   unfold handoff
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 24 4 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA4⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -3469,7 +3499,7 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
   obtain ⟨hsz, -⟩ := enc_box
   refine WP.bind (WP.liftM_owned (TTriple.storeAt' (p := bPtr) (q := bPtr) (A := A) (S := 24)
     (K := .stack) (bs := Array.replicate 24 .undef) (k := 0) (a := 4) box0 hsz rfl (by decide)
-    (by simp [Enc.size]) (by simp [bPtr]; omega) (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (by simp [Enc.size]) (by simp [bPtr]; omega) (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact hb₁) fun _ m₂ h₂ hr₂ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
   rw [writeBytes_all (by rw [hsz]; simp)] at F₂
@@ -3514,6 +3544,8 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
   rw [show L.held (upd G₃ 0 (gH x hL) 0) = hL by rw [upd_self]; rfl] at hres
   have hrd : rdyOf ((upd G₃ 0 (gH x hL)) 1).2 = true := by
     rw [← hYr]; exact R_rdy (Y := fun u => (upd G₃ 0 (gH x hL) u).2) hres hRY
+  refine WP.bind (WP.callMC_ptrProject (projB hi₁₁.2.blk (p := bPtr) rfl (by decide) (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (wp_mres (Qa := fun r => ⌜r = BitVec.ofNat 32 (vOf ((upd G₃ 0 (gH x hL)) 1).2)⌝ ∗
       R (fun u => (upd G₃ 0 (gH x hL) u).2))
     ((TTriple.load (p := bPtr.add 16) (a := 4)
@@ -3532,6 +3564,8 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
   have hi₁₃' : proto.inv (upd G₄ 0 (gP x)) m₁₃ := hi₁₃
   -- the event wait
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₁₃'.2.blk (p := bPtr) rfl (by decide) (k := 12) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.callC (WP.mono ?_ (evwait_spec x.cw G₄ m₁₃ d₄ (inv_ev0 hx hi₁₃') hc₁₃)))
   rintro _ G₅ m₁₄ d₅ ⟨hc₁₄, w, hi₁₄⟩
   have hiJ := inv_joins hi₁₄
@@ -3571,17 +3605,24 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
 /-! ## The results -/
 
 /-- **`threadsync.handoff` gives 7 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem handoff_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o handoff mem0).run = some (.ok (v, m))) :
+theorem handoff_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o handoff (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 7 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `threadsync.handoff` gives an error**: no data race, no deadlock at a futex, no
 panic, under every schedule. -/
-theorem handoff_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o handoff mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem handoff_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o handoff (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+
+/-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Condition` handoff returns 7 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem handoff_completes :
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) handoff (mem0 σ)) = some 7 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 end Threadsync.HO

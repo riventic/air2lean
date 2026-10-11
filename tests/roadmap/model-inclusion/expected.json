@@ -1,0 +1,35 @@
+{
+  "schema": "air2lean-model-inclusion-expected/1",
+  "known_divergences": {
+    "alloc_probe/fixed_buffer/aliasProbe": {
+      "divergence": "D-ALLOC-ALIAS",
+      "reason": "A FixedBufferAllocator over caller-visible memory returns a block inside that memory (native 42); the model's create always returns a fresh disjoint block (0 or OutOfMemory). Fixed by the translated allocator mode.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    "alloc_probe/page/remapProbe": {
+      "divergence": "D-ALLOC-REMAP",
+      "reason": "page_allocator shrinks a []u32 in place and remap returns the slice (native 1); the model's remap of items wider than one byte returns null under every policy.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    "alloc_probe/arena/remapProbe": {
+      "divergence": "D-ALLOC-REMAP",
+      "reason": "ArenaAllocator shrinks its last allocation in place and remap returns the slice (native 1); same model root as page_allocator: non-byte remap always fails in the model.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    "io_probe/threaded/cancelProbe": {
+      "divergence": "D-IO-CANCEL",
+      "reason": "Io.Threaded delivers Group.cancel to the waiting task, whose futexWait returns error.Canceled (native 1); the model's cancel is await and its futexWait never cancels, so every schedule deadlocks.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    "io_probe/single_threaded/handoffProbe": {
+      "divergence": "D-IO-INLINE",
+      "reason": "Io.Threaded.global_single_threaded runs Group.async inline, so the task waits for a store that comes after async returns and the program hangs; under the default available spawn policy every task is a new model thread and the hand-off always completes with 5.",
+      "link": "docs/architecture-audit/models.md#divergences-native-vs-model"
+    },
+    "iogroup/single_threaded/groupConcurrent": {
+      "divergence": "D-IO-CONCURRENT",
+      "reason": "Found by this gate. Io.Threaded.global_single_threaded has no concurrency, so Group.concurrent returns error.ConcurrencyUnavailable; under the default available spawn policy the model's concurrent always assigns a thread. --spawn-policy fallible includes the error. Same root as D-IO-INLINE (THR-02, IOM-01).",
+      "link": "docs/std-models.md#caller-supplied-allocator-and-io"
+    }
+  }
+}

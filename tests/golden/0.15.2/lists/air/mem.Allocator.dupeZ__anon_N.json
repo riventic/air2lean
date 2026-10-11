@@ -2,6 +2,7 @@
  "schema": 11,
  "zig_version": "0.15.2",
  "name": "mem.Allocator.dupeZ__anon_749",
+ "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349",
  "params": [
   0,
   1
@@ -113,7 +114,8 @@
    "callee": {
     "ty": 8,
     "func": "mem.Allocator.alloc__anon_922",
-    "noreturn": false
+    "noreturn": false,
+    "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876"
    },
    "args": [
     {
@@ -1263,7 +1265,8 @@
        "callee": {
         "ty": 22,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_928",
-        "noreturn": true
+        "noreturn": true,
+        "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e"
        },
        "args": [
         {

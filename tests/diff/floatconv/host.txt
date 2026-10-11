@@ -1,1 +1,2 @@
-f80ToF64
+# Typed host differences (F3, scripts/diff-report.py HOST_KINDS): <fn> <kind>[,<kind>...].
+f80ToF64 nan_payload,zero_sign

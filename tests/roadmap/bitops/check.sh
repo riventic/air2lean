@@ -29,7 +29,9 @@ PY_INVENTORY
 lake exe air2lean "$work/air" -o "$work/Gen.lean" --namespace Bitops --prefix bitops.
 lake env lean -R "$work" -o "$work/Gen.olean" "$work/Gen.lean"
 cp tests/roadmap/bitops/GeneratedBitset.lean "$work/GeneratedBitset.lean"
-LEAN_PATH="$work:$(lake env printenv LEAN_PATH)" lake env lean -R "$work" "$work/GeneratedBitset.lean"
+# Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
+python3 -B scripts/theorem_universe.py gate "$work/GeneratedBitset.lean" --root "$work" --lean-path "$work" \
+  --output-dir "$work/universe"
 lake env lean tests/roadmap/bitops/Runtime.lean
 lake env lean tests/roadmap/bitops/Bitset.lean
 lake env lean --run tests/roadmap/bitops/Cases.lean "$work/generated"

@@ -40,6 +40,11 @@ the tool:
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
    header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   Adds the caller obligations of every generated definition reached: the translator writes
+   `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
+   parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
+   in `generated_markers` are accepted (`scripts/premise_markers.py` reads them), and a malformed marker or one that is not directly
+   above a `def` fails the check.
 5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
@@ -80,16 +85,17 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) |
+| Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
-| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
-| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
+| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
+| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
 ## Target and build profiles
@@ -242,19 +248,53 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ALC-08 — Address reuse and provenance recovery
 
 - Kind: environment.
-- Statement: `Mem.allocPolicy.reuseAddr` is an arbitrary opt-in oracle that may give a new heap
-  or owned block the address of a freed block (`Mem.reuseOk`: nonzero, aligned, below
-  `nextAddr`, clear of every live block with a 1-byte gap). Block ids stay unique and every
-  liveness check uses them, so lifetime theorems over arbitrary `Mem` hold under every reuse
-  policy. Stack blocks and globals keep fresh addresses. `@ptrFromInt` of an address that two
-  blocks cover is `.unspecified` under the default `.strict` provenance mode; the
-  address-sensitive contract `.liveBlock` recovers the live block. A theorem that observes
-  addresses holds only under the policy and mode it states. No native allocator address
-  behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withReuse`, `liveBlock` (the opt-in policy
-  and provenance mode; the default path `Mem.reuseAddr?`/`ProvenanceMode.strict` that every
-  `alloc`/`@ptrFromInt` unfolds to is not a token).
+- Statement: The placement oracle (SEM-07) may give a new block the address of a freed block.
+  Block ids stay unique and every liveness check uses them, so lifetime theorems over arbitrary
+  `Mem` hold under every placement (`Triple.withPlacement`). `@ptrFromInt` of an address that two
+  blocks cover (a dead and a live block, or one block's end and an adjacent block's start) is
+  `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
+  `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
+  mode it states. No native allocator address behavior is claimed.
+- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+  provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
+  a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
+
+<a id="alc-09"></a>
+### ALC-09 — Caller-supplied `Allocator` behaves as the std model
+
+- Kind: environment.
+- Statement: a translated function with a parameter that contains a `std.mem.Allocator` is
+  proved for the single model allocator of ALC-01, not for the allocator a caller passes. A
+  theorem about it holds for a caller only if that allocator behaves as the model: every
+  successful allocation is a fresh block, disjoint from all memory the caller can see; failures
+  are `OutOfMemory` attempts of ALC-02; `remap` and `realloc` succeed only as ALC-03 and ALC-05
+  allow; a free ends exactly that block. `std.heap.page_allocator` (its in-place shrinking
+  `remap` of non-byte items, D-ALLOC-REMAP), a `FixedBufferAllocator` or arena over
+  caller-visible memory (D-ALLOC-ALIAS), and user-written allocators are not covered.
+  `tests/roadmap/model-inclusion` records which real std allocators stay within the model's
+  outcomes for the allocator examples.
+- Derived from: the `-- air2lean-premises:` marker of a reached generated definition
+  (`generated_markers`); implies ALC-01.
+- Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
+
+## Io interface
+
+<a id="iom-01"></a>
+### IOM-01 — Caller-supplied `Io` behaves as the std model
+
+- Kind: environment.
+- Statement: a translated function with a parameter that contains a `std.Io` is proved for
+  the single model `Zig.Io` (THR-02, THR-04, THR-05), not for the `Io` implementation a
+  caller passes. A theorem about it holds for a caller only if that `Io` behaves as the model:
+  every `Group.async` and `Group.concurrent` task is a new thread under the selected spawn
+  policy, `Group.cancel` waits like `Group.await`, a futex wait returns only after a wake and
+  never with `error.Canceled`. `Io.Threaded.global_single_threaded` and other `Io`s that run
+  `async` inline (D-IO-INLINE), cancellation (D-IO-CANCEL), spurious futex wakeups, and
+  user-written `Io`s are not covered.
+- Derived from: the `-- air2lean-premises:` marker of a reached generated definition
+  (`generated_markers`).
+- Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
 
 ## Thread creation and scheduling
 
@@ -526,7 +566,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   integer is one event in `Mem.dev.trace`, in program order (`Zig.vload`/`Zig.vstore`). A read's
   value is `Mem.dev.oracle` applied to the whole trace so far, the address and the width; theorems
   quantify over the oracle or state which answers they need. Device registers are the declared
-  addresses of the generated `air2lean_device`, reached through block-less pointers. The device
+  addresses of the generated `air2lean_device`, reached through block-less pointers. A field or
+  element pointer of a device pointer is formed inside the declared register window
+  (`Zig.ptrProjectDevice`): the window is taken to be the allocation that LLVM's
+  `getelementptr inbounds` requires, outside the model. The device
   neither observes nor changes model memory (no DMA, no aliasing of model blocks), so ordinary
   memory accesses are not events and their order relative to events is not claimed. Interrupts,
   other bus masters, timing, side effects of a read beyond the trace, and multi-threaded device
@@ -534,7 +577,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   event of the same trace, with outputs from `Mem.dev.asmOracle`; a `memory` clobber is never
   declared. No correspondence with real hardware is claimed: the compiled
   program's volatile order is trusted to match the AIR order (TRU-03).
-- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`,
+- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`, `ptrProjectDevice`,
   `DevState.oracle`, `DevState.asmOracle`. The `Mem.dev` field alone (for example in a struct update) does not select it.
 - Sources: [volatile-effects.md](volatile-effects.md#device-contract), `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`.
 
@@ -566,8 +609,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: Selected operations (f128 multiply/divide, `@mulAdd`, f80→f16, version-specific
   rounding) follow ported compiler-rt functions instead of correctly rounded IEEE results.
-- Derived from: `ZigLean.Float.CompilerRt`; tokens `Rt016`, `mulRt`, `RtChk`; header `float_semantics: compiler-rt`.
+- Derived from: `ZigLean.Float.CompilerRt`; tokens `Rt016`, `mulRt`, `RtChk`, `…Xf3`, `fmaRtFused`; header `float_semantics: compiler-rt`.
 - Sources: [floats.md](floats.md#--float-semantics-ieee--compiler-rt).
+
+<a id="mth-04"></a>
+### MTH-04 — aarch64 float lowering
+
+- Kind: environment.
+- Statement: The translation targets aarch64-macos, whose float lowering differs from
+  x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3` division;
+  before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f16`/`f32`/`f64` is a fused
+  instruction. The rules are read from the Zig 0.16.0 LLVM backend and compiler_rt sources and
+  checked by the macOS differential test; no other aarch64 target is qualified.
+- Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
+- Sources: [floats.md](floats.md#targets).
 
 ## Inline assembly
 
@@ -605,6 +660,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: tokens `airAsmFx_<n>`; runtime module `ZigLean.Asm`.
 - Sources: [generated-code.md](generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01), `Air2Lean/AsmContract.lean`, `Proofs/Asm/Effects.lean`.
 
+<a id="asm-04"></a>
+### ASM-04 — Allowlisted assembly faults exactly on its entry's condition
+
+- Kind: trusted.
+- Statement: Each entry of the reviewed allowlist (`Air2Lean/AsmAllowlist.lean`) states when
+  its instruction faults (`AsmFault`): `divl` after `xorl %edx, %edx` exactly when the divisor
+  is zero (#DE); `bswap`, `lzcnt` and `popcnt` never. The generated code guards the opaque with
+  `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
+  guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
+  instruction's whole fault set on the target CPU, and the CPU has the instruction (`popcnt`
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`). `scripts/claims.py` lists ASM-04
+  in the `premises` of every such goal.
+- Derived from: implied by ASM-01.
+- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
+  [outcome-taxonomy.md](outcome-taxonomy.md).
+
 ## Core runtime semantics
 
 <a id="sem-01"></a>
@@ -624,7 +695,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
-  misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
+  misaligned or dead accesses are `.illegal`, and so is forming a derived pointer outside
+  `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`). Undefined bytes are
+  explicit.
 - Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
@@ -634,9 +707,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: meaning.
 - Statement: `Zig.loop` is a `partial_fixpoint`. Divergence is `none`. `Triple` and loop
   rules constrain only completed results, so a diverging program satisfies them. Finite
-  loops do not reduce in the kernel, so loop clients use runtime assertions or
-  invariant-based proofs.
-- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`; tokens `loop*`.
+  loops do not reduce in the kernel, so loop clients use runtime assertions,
+  invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
+  iterations (`unroll_sched`), whose result is the loop's result.
+- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
@@ -676,6 +750,44 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
 
+<a id="sem-07"></a>
+### SEM-07 — Block addresses are the environment's placement
+
+- Kind: environment.
+- Statement: The address of every block (global, stack, heap, allocator) is chosen by the
+  placement oracle `Mem.place`, an arbitrary function of the block id. The model takes a
+  proposal only if it satisfies what Zig guarantees (`Mem.placeOk`): nonzero, a multiple of the
+  block's declared alignment, ending at or below 2^64, and disjoint from every live block of
+  nonzero size; adjacency, any order and reuse of a dead block's address are allowed. Otherwise
+  the block goes after every block (`Mem.top`). A generated program-start memory is `mem0 σ`
+  and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
+  programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
+  the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
+  capped by the largest alignment of a pointer constant into it at an offset that alignment
+  divides (the export does not record a global's own `align(N)`). Zero-size objects are not separated from other blocks. In-place
+  growth needs only that the grown range is clear of other live blocks (`Mem.growFree`).
+- Derived from: `ZigLean.Mem.Basic`; implied by SEM-02.
+- Sources: [address-placement.md](address-placement.md),
+  `tests/roadmap/architecture-audit/memory-model`.
+
+<a id="stk-01"></a>
+### STK-01 — The native stack holds every call chain
+
+- Kind: environment.
+- Statement: A statement about a function that recursion reaches (a `partial_fixpoint`
+  definition, or a call of `Zig.enterFrame`) assumes that the native stack does not overflow
+  on the runs it covers, unless it bounds `Mem.stackLimit` itself. The generated `mem0` has
+  no stack budget (`stackLimit = none`); a recursive function that uses memory charges an
+  estimated frame (`Zig.frameBase` plus its escaping locals) to `Mem.stackUsed` and, under a
+  selected budget, throws `.stackOverflow` when it does not fit. The estimate is not a bound
+  on the native frame (spills, saved registers, inlining), and pure recursive functions
+  (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
+  signal, which no model outcome under `stackLimit = none` reflects (MM-5,
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
+- Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
+- Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
+  `tests/roadmap/memory-hardening/README.md`.
+
 ## External models
 
 <a id="ext-01"></a>
@@ -700,6 +812,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
+
+<a id="ext-03"></a>
+### EXT-03 — Extern functions at their linker identity
+
+- Kind: environment.
+- Statement: A call to an extern function (`extern fn`, a libc or OS primitive) is bound by its
+  linker symbol and declared library only. Bound to a registry model, the model's contract is
+  assumed to describe the real symbol that the target's linker resolves (an OS or libc
+  primitive, for example `mmap` or `abs`); each such binding names this or a more specific
+  premise. Bound to an `export fn` of the translated program, the program is assumed to be
+  linked as one image in which that definition is the symbol's strong definition. Variadic
+  and `noreturn` externs, `@export` aliases and weak definitions are outside the subset.
+- Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
+  `Air2Lean/Check.lean` `resolveExterns`.
+- Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
 
 ## Compiler and tool trust
 
@@ -759,5 +886,6 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03 |
+| Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |

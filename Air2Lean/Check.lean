@@ -132,6 +132,32 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       pending := (childTys ty).toList ++ rest
   return pending.isEmpty
 
+/-- The fields of a non-packed struct or tuple occupy disjoint byte ranges inside the type.
+Field storage the compiler does not lay out (a comptime field exported by an older exporter,
+at the offset of another field) therefore fails closed. Zero-sized fields may share an
+offset; fields of unknown size or offset are left to the layout comparison. -/
+def checkFieldRanges (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
+    (id : TyId) : Except String Unit := do
+  let fields : Array TyId ← match types[id]? with
+    | some (.struct _ layout fs) => pure (if layout == "packed" then #[] else fs.map (·.2))
+    | some (.tuple fs) => pure fs
+    | _ => pure #[]
+  let l := layouts[id]?.getD {}
+  if fields.isEmpty || l.offsets.size != fields.size then return
+  let mut ranges : Array (Nat × Nat) := #[]
+  for (fty, off) in fields.zip l.offsets do
+    let some size := (layouts[fty]?.getD {}).size | continue
+    if size == 0 then continue
+    if let some total := l.size then
+      if off + size > total then
+        throw s!"{fnName}: near line {line}: type {id}: a field at offset {off} of {size} bytes \
+          extends beyond the type's {total} bytes"
+    ranges := ranges.push (off, off + size)
+  let sorted := ranges.qsort (fun a b => a.1 < b.1)
+  for (a, b) in sorted.zip (sorted.extract 1 sorted.size) do
+    if b.1 < a.2 then
+      throw s!"{fnName}: near line {line}: type {id}: fields at offsets {a.1} and {b.1} overlap"
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -141,6 +167,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   let some ty := types[id]?
     | throw s!"{fnName}: near line {line}: unknown type id {id}"
   let recur (c : TyId) := checkTy fnName types layouts line c (seen.push id)
+  if let some attr := (layouts[id]?.getD {}).unmodeled[0]? then
+    throw s!"{fnName}: near line {line}: type {id}: {attr}; outside the subset"
+  checkFieldRanges fnName types layouts line id
   match ty with
   | .other name =>
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
@@ -480,6 +509,34 @@ def ptrChild (types : Array Ty) (id : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- The pointee of a pointer or of an optional pointer. -/
+def ptrOrOptChild (types : Array Ty) (id : TyId) : Option TyId :=
+  match types[id]? with
+  | some (.optional child) => ptrChild types child
+  | _ => ptrChild types id
+
+/-- The `slice` results whose sentinel a Sema check compares (`slice_elem_val` or
+`ptr_elem_val` of the slice, in a `cmp_eq` whose `cond_br` calls `sentinelMismatch`). Only
+these sentinel slicings may lack an exported sentinel value: the check panics before the model
+needs one. -/
+def sentinelCheckedSlices (insts : Array Inst) : Array InstId := Id.run do
+  let opOf (v : Val) : Option Op := match v with
+    | .inst id => (insts.find? (·.id == id)).map (·.op)
+    | _ => none
+  let itemOf (v : Val) : Option InstId := match opOf v with
+    | some (.sliceElemVal (.inst s) _) | some (.ptrElemVal (.inst s) _) => some s
+    | _ => none
+  let mut out := #[]
+  for i in insts do
+    if let .condBr c _ elseBody := i.op then
+      let mismatch := elseBody.any fun j => match j.op with
+        | .call (.func name ..) _ => panicMember? name == some "sentinelMismatch"
+        | _ => false
+      if mismatch then
+        if let some (.cmp .eq a b) := opOf c then
+          for s in [itemOf a, itemOf b].filterMap id do out := out.push s
+  return out
+
 structure CheckCtx where
   fnName : String
   types : Array Ty
@@ -505,6 +562,8 @@ structure CheckCtx where
   device : Option DeviceContract := none
   /-- `Func.targetArch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
   targetArch : String := ""
+  /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
+  sentinelChecked : Array InstId := #[]
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -513,6 +572,35 @@ def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
 
 def CheckCtx.fail {α : Type} (cx : CheckCtx) (line : Nat) (msg : String) : Except String α :=
   throw s!"{cx.fnName}: near line {line}: {msg}"
+
+/-- The pointee type of the pointer `ptr`. -/
+def CheckCtx.pointee? (cx : CheckCtx) (ptr : Val) : Option Ty :=
+  ((cx.valTy? ptr).bind (ptrChild cx.types)).bind (cx.types[·]?)
+
+/-- `ptr` carries an item count: a slice, or a single pointer to an array (`withVector`: or a
+vector). `Emit.lean`'s `FCtx.itemsOf` reads the count from it. A many-pointer to arrays
+(`[*][4]u8`) has none: its items are the arrays. -/
+def CheckCtx.hasLength (cx : CheckCtx) (ptr : Val) (withVector : Bool := true) : Bool :=
+  match (cx.valTy? ptr).bind (cx.types[·]?), cx.pointee? ptr with
+  | some (.ptr "slice" ..), _ | some (.ptr "one" ..), some (.array ..) => true
+  | some (.ptr "one" ..), some (.vector ..) => withVector
+  | _, _ => false
+
+/-- Field `idx` of the type `c` has a known offset: `Emit.lean`'s `FCtx.fieldOffsetIn` reads it,
+and an unknown one would be offset 0, a silent `pure p`. -/
+def CheckCtx.fieldKnown (cx : CheckCtx) (c : TyId) (idx : Nat) : Bool :=
+  let offset := (cx.layouts[c]?.bind (·.offsets[idx]?)).isSome
+  match cx.types[c]? with
+  | some (.struct _ "packed" fs) | some (.union _ _ _ fs) => idx < fs.size
+  | some (.struct _ _ fs) => idx < fs.size && offset
+  | some (.tuple fs) => idx < fs.size && offset
+  | _ => offset
+
+/-- The lane count and lane type of a vector-typed value. -/
+def CheckCtx.vectorOf? (cx : CheckCtx) (v : Val) : Option (Nat × TyId) :=
+  match (cx.valTy? v).bind (cx.types[·]?) with
+  | some (.vector len lane) => some (len, lane)
+  | _ => none
 
 /-- The pointer type of `ptr`, a pointer that is not a place, with its `ptr_align`. -/
 def CheckCtx.memPtrTy (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String TyId := do
@@ -571,7 +659,7 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
 
 /-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
 qualified fragment. Field/element projections and pointer arithmetic are
-(`Zig.ptrProjectNullable`). Cast to a nonnullable pointer after a null check first. -/
+(`Zig.ptrProject`, `Zig.ptrProjectNonnull`). Cast to a nonnullable pointer after a null check first. -/
 def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
     cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
@@ -720,28 +808,19 @@ private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlow
     let cache := { cache with
       unique := cache.unique && !cache.ids.contains inst.id
       ids := cache.ids.insert inst.id }
-    match inst.op with
-    | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
-    | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
-    | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
-    | .«repeat» _ | .switchDispatch .. => (⟨false, {}⟩, cache)
-    | .loop body =>
-      let (_, cache) := summarizeTryErrors body cache
+    match inst.op.effects.control with
+    | .next => (later, cache)
+    | .exit => (⟨true, {}⟩, cache)
+    | .br target => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
+    | .«repeat» _ | .dispatch _ => (⟨false, {}⟩, cache)
+    | .loop bodies =>
+      let cache := bodies.foldl (init := cache) fun cache b => (summarizeTryErrors b cache).2
       (⟨false, {}⟩, cache)
-    | .loopSwitchBr _ cases e =>
-      let (_, cache) := summarizeTryErrors e cache
-      let cache := cases.foldl (init := cache) fun cache c =>
-        (summarizeTryErrors c.body cache).2
-      (⟨false, {}⟩, cache)
-    | .condBr _ t e =>
-      let (thenFlow, cache) := summarizeTryErrors t cache
-      let (elseFlow, cache) := summarizeTryErrors e cache
-      (thenFlow.merge elseFlow, cache)
-    | .switchBr _ cases e =>
-      let (elseFlow, cache) := summarizeTryErrors e cache
-      cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
-        let (caseFlow, cache) := summarizeTryErrors c.body cache
-        (flow.merge caseFlow, cache)
+    | .branch bodies =>
+      -- Every branch has a body (a switch has its `else`), and `⟨true, {}⟩` is `merge`'s unit.
+      bodies.foldl (init := ((⟨true, {}⟩ : TryErrorFlow), cache)) fun (flow, cache) b =>
+        let (bodyFlow, cache) := summarizeTryErrors b cache
+        (flow.merge bodyFlow, cache)
     | .block body =>
       let (inner, cache) := summarizeTryErrors body cache
       let summaries := { cache.summaries with
@@ -752,14 +831,13 @@ private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlow
           (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
         else inner
       (flow, cache)
-    | .«try» _ errBody | .tryPtr _ errBody =>
+    | .«try» errBody =>
       let (errorFlow, cache) := summarizeTryErrors errBody cache
       let summaries := { cache.summaries with
         tryErrorExits := cache.summaries.tryErrorExits.insert inst.id
           (errorFlow.valid && errorFlow.branches.isEmpty) }
       let cache := { cache with summaries }
       (errorFlow.merge later, cache)
-    | _ => (later, cache)
 
 /-- One bottom-up traversal for both control contracts and ID uniqueness. A block may
 exit to an enclosing block; a pointer-try error body must exit the function instead. -/
@@ -792,6 +870,14 @@ def CheckCtx.checkDeviceAccess (cx : CheckCtx) (line : Nat) (p : Val) (pty : TyI
   | _ => reject "the pointee is not an integer"
   if let some (.undef _) := value then reject "a store of `undefined`"
 
+/-- With a device contract, an integer load or store through a volatile pointer to memory is a
+device event (`Zig.vload`/`Zig.vstore`): the pointer and the stored value. Every other volatile
+access stays rejected (`CheckCtx.checkVolatile`). -/
+def Op.deviceAccess? : Op → Option (Val × Option Val)
+  | .load p | .ptrElemVal p _ | .sliceElemVal p _ => some (p, none)
+  | .store p v => some (p, some v)
+  | _ => none  -- keep: fail closed, any other access is not a device event
+
 /-- Volatile and device effects (L13). A volatile access is an observable effect that may
 read or change device state, so it is never an ordinary repeatable memory operation. The
 memory model has no such effect: every volatile load, store, atomic, item access, `@memcpy`,
@@ -807,23 +893,9 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     not repeatable memory operations; move the access into a function bound by a project model \
     registry entry that lists the volatile pointer parameter in `footprint.writes`, or declare \
     the device with `--device-contract` (docs/volatile-effects.md)"
-  let accesses : Array (Val × String) := match op with
-    | .load p | .retLoad p | .ptrElemVal p _ | .sliceElemVal p _ => #[(p, "load")]
-    | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
-    | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
-      #[(p, "atomic access")]
-    | .memcpy dst src => #[(dst, "store"), (src, "load")]
-    | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
-    | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
-    | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
-    | _ => #[]
-  -- With a device contract, an integer load or store through a volatile pointer to memory is a
-  -- device event (`Zig.vload`/`Zig.vstore`); every other volatile access stays rejected.
-  let deviceAccess? : Option (Val × Option Val) := if cx.device.isNone then none else match op with
-    | .load p | .ptrElemVal p _ | .sliceElemVal p _ => some (p, none)
-    | .store p v => some (p, some v)
-    | _ => none
-  for (p, kind) in accesses do
+  let effects := op.effects
+  let deviceAccess? := if cx.device.isNone then none else op.deviceAccess?
+  for (p, kind) in effects.access do
     if let some pty := cx.valTy? p then
       if volatilePtrTy cx.types cx.layouts pty then
         if let some (dp, value) := deviceAccess? then
@@ -833,15 +905,10 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
         let guidance := if cx.device.isSome then
           "the device contract covers only an 8/16/32/64-bit integer load or store through a \
             volatile pointer to memory (docs/volatile-effects.md)" else guidance
-        cx.fail line s!"volatile {kind} through pointer type {pty}: {guidance}"
+        cx.fail line s!"volatile {kind.describe} through pointer type {pty}: {guidance}"
   -- Derivations must keep the qualifier: a result without a volatile pointer (a `@volatileCast`
   -- away, `@intFromPtr`) would let a later device access look like an ordinary one.
-  let derived? : Option Val := match op with
-    | .bitcast p | .fieldPtr p _ | .fieldParentPtr p _ | .elemPtr p _ | .ptrAdd _ p _
-    | .slice p _ | .slicePtr p | .arrayToSlice p | .sliceFieldPtr _ p | .optPayloadPtr _ p
-    | .errPayloadPtr _ p | .wrapOptional p => some p
-    | _ => none
-  if let some p := derived? then
+  if let some p := effects.derives then
     if let some pty := cx.valTy? p then
       let keeps := volatilePtrTy cx.types cx.layouts ty || match cx.types[ty]? with
         | some (.optional c) => volatilePtrTy cx.types cx.layouts c
@@ -962,6 +1029,19 @@ def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool �
     | _ => none
   | _ => none
 
+/-- Sentinel slicing (a `slice` of a type with a sentinel) needs the sentinel value for its own
+check (`Zig.checkSentinelByte`), which the export records only for a `u8` pointer on 0.16.0.
+Without it, only a Sema `sentinelMismatch` check can stand in (`sentinelCheckedSlices`);
+otherwise the sentinel is never checked, so the function is rejected (`docs/illegal-behavior.md`
+row 24). -/
+def CheckCtx.checkSentinelSlice (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Unit := do
+  if let .slice .. := inst.op then
+    if let some l := cx.layouts[inst.ty]? then
+      if l.sentinel && l.sentinelByte.isNone && !cx.sentinelChecked.contains inst.id then
+        throw s!"{cx.fnName}: near line {line}: sentinel slicing without a safety check needs the \
+          exported sentinel value (only `u8` sentinels on Zig 0.16.0 have one); slice without the \
+          sentinel or keep runtime safety on"
+
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
@@ -1002,6 +1082,7 @@ mutual
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
   cx.checkBitPtrSource line inst.ty inst.op
+  cx.checkSentinelSlice line inst
   let line ← checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
   -- Inline asm: A01's operand/effect-contract checks (in `checkOp`, with specific messages) come
   -- first, then the L13 allowlist.
@@ -1100,10 +1181,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
       if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
         cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
-      let pointerChild (id : TyId) : Option TyId :=
-        match cx.types[id]? with
-        | some (.optional child) => ptrChild cx.types child
-        | _ => ptrChild cx.types id
       -- Changing only const qualification preserves the decoder and pointer
       -- representation even when the unchanged pointee graph is recursive.
       let qualifierPointer (id : TyId) : Option (Bool × TyId × String × Bool × TyId) := do
@@ -1138,7 +1215,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- other block, L11).
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
-      match pointerChild aty, pointerChild ty with
+      match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
           let some sourceCap := castCapability source
@@ -1165,6 +1242,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
       cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+    -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
+    -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
+    -- its bytes as an array (`docs/illegal-behavior.md`).
+    let pointee (t : Option TyId) : Option TyId := t.bind (ptrOrOptChild cx.types)
+    if (isVector (pointee (some ty)) || isVector (pointee sourceTy)) &&
+        pointee sourceTy != pointee (some ty) then
+      cx.fail line "a pointer cast between a vector and another pointee type is illegal behaviour \
+        (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
@@ -1236,8 +1321,38 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           struct or union to or from an integer is outside the subset"
       | _, _ => pure line
     | none => pure line
-  | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
-  | .errCodePtr ptr => cx.memAccess line ptr; pure line
+  | .setUnionTag ptr tag =>
+    cx.memAccess line ptr
+    let some (.union _ _ tagTy fields) := cx.pointee? ptr
+      | cx.fail line "`set_union_tag` operand is not a pointer to a union"
+    -- A union local held as a Lean value retags by the tag's field name: a constant.
+    if let (some tagTy, .inst p) := (tagTy, ptr) then
+      if cx.places.contains p then
+        let named : Bool := match cx.types[tagTy]?, tag with
+          | some (.enum _ _ _ tags), .enumTag _ v =>
+            (tags.find? (·.2 == v)).any fun (name, _) => fields.any (·.1 == name)
+          | _, _ => false
+        unless named do
+          cx.fail line "`set_union_tag` of a union local needs a constant tag that names a field"
+    pure line
+  | .isNullPtr _ ptr =>
+    cx.memAccess line ptr
+    let some (.optional _) := cx.pointee? ptr
+      | cx.fail line "`is_null_ptr` operand is not a pointer to an optional"
+    pure line
+  | .isErrPtr _ ptr | .errPayloadPtr _ ptr | .errCodePtr ptr =>
+    cx.memAccess line ptr
+    let some (.errorUnion ..) := cx.pointee? ptr
+      | cx.fail line "an error-union pointer op on a pointer to another type"
+    pure line
+  | .optPayloadPtr _ ptr =>
+    cx.memAccess line ptr
+    -- The payload of `?T` is at offset 0; of a C pointer (`*[*c]T`) it is the pointer itself.
+    -- Any other pointee would make the emitted `pure p` a silent no-op.
+    match cx.pointee? ptr with
+    | some (.optional _) | some (.ptr "c" ..) => pure line
+    | _ => cx.fail line "`optional_payload_ptr` operand is not a pointer to an optional"
+  | .retLoad ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr v =>
     cx.memAccess line ptr
@@ -1253,12 +1368,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .atomicRmw op _ ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr op; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
-  | .fieldPtr base _ =>
+  | .fieldPtr base idx =>
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
-    checkMemTy fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
+    let c := (ptrChild cx.types pty).get!
+    checkMemTy fnName cx.types cx.layouts line c cx.errBits
+    unless cx.fieldKnown c idx do
+      cx.fail line "`struct_field_ptr` field index has no known offset"
     pure line
   | .fieldParentPtr fieldPtr idx =>
     cx.rejectNullableProjection line fieldPtr
@@ -1276,9 +1394,21 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let some (.ptr _ _ parent) := cx.types[ty]?
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
     checkMemTy fnName cx.types cx.layouts line parent cx.errBits
+    unless cx.fieldKnown parent idx do
+      cx.fail line "`@fieldParentPtr` field index has no known offset"
     pure line
   | .ptrElemVal p _ => cx.itemAccess line p; pure line
-  | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
+  -- A pure function indexes the items (`Array`); `checkProgram` checks the item type of a
+  -- slice read in a function that uses memory.
+  | .sliceElemVal .. => pure line
+  -- An address only: the access through the field pointer is checked at its `load`/`store`.
+  | .sliceFieldPtr .. => pure line
+  | .memset p _ =>
+    cx.rejectNullableProjection line p
+    cx.itemAccess line p
+    unless cx.hasLength p do
+      cx.fail line "`memset` destination is not a slice or a pointer to an array"
+    pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
     if let .elemPtr _ idx := op then
       if laneBitPtrTy cx.layouts ty then
@@ -1293,12 +1423,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | cx.fail line "pointer arithmetic result is not a pointer"
     cx.knownSize line child
     pure line
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     cx.rejectNullableProjection line dst
     cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
     let dty ← cx.memPtrTy line dst
     cx.knownSize line (itemTy cx.types dty).get!
+    -- The count comes from the destination if it is a slice or array pointer, else the source.
+    unless cx.hasLength dst (withVector := false) || cx.hasLength src do
+      cx.fail line "`memcpy` has no operand with an item count (a slice or a pointer to an array)"
     pure line
   | .wrapOptional p =>
     if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
@@ -1307,14 +1440,17 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .slice p _ => cx.rejectNullableProjection line p; pure line
   | .arrayToSlice p =>
     cx.rejectNullableProjection line p
-    let pty ← cx.memPtrTy line p
+    let _ ← cx.memPtrTy line p
     -- The emitted slice takes its length from the pointee (`FCtx.itemsOf`).
-    match (ptrChild cx.types pty).bind (cx.types[·]?) with
+    match cx.pointee? p with
     | some (.array ..) | some (.vector ..) => pure line
     | _ => cx.fail line "`array_to_slice` operand is not a pointer to an array"
   | .call callee _ =>
     match callee with
     | .func name true .. =>
+      if let some symbol := externSymbol? name then
+        throw s!"{fnName}: near line {line}: a call to the noreturn extern function '{symbol}' \
+          is outside the subset (docs/air-json.md §Extern calls)"
       if (panicErrorFor? name).isNone then
         throw s!"{fnName}: near line {line}: noreturn callee '{name}' is not a known \
           panic-handler function (docs/generated-code.md §Panics)"
@@ -1361,13 +1497,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let nested := errBody.foldl flattenInst #[]
     let emptyTargets : Std.HashSet InstId := {}
     let localTargets := nested.foldl (init := emptyTargets) fun targets i =>
-      match i.op with | .block _ | .loop _ => targets.insert i.id | _ => targets
+      match i.op.effects.control with
+      | .block _ | .loop _ => targets.insert i.id
+      | _ => targets
     for i in nested do
-      match i.op with
-      | .br target _ | .«repeat» target =>
+      if let some target := i.op.effects.control.jumpTarget? then
         unless localTargets.contains target do
           cx.fail line "try_ptr error body must exit the function, not branch outside its body"
-      | _ => pure ()
     let _ ← checkInsts cx line errBody
     pure line
   | .«try» _ errBody => do
@@ -1478,7 +1614,48 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         throw s!"{fnName}: near line {line}: asm input '{i.name}' is not an integer register \
           value (M21)"
     pure line
-  | _ => pure line
+  -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
+  -- arithmetic on integer and float lanes); the result is one lane.
+  | .reduce rop a =>
+    let some (_, lane) := cx.vectorOf? a | cx.fail line "`@reduce` operand is not a vector"
+    let ok := match cx.types[lane]?, rop with
+      | some (.int ..), _ => true
+      | some .bool, .and | some .bool, .or | some .bool, .xor => true
+      | some (.float _), .add | some (.float _), .mul | some (.float _), .min
+      | some (.float _), .max => true
+      | _, _ => false
+    unless ok do cx.fail line "`@reduce` operator is not defined for the vector's lane type"
+    unless ty == lane do cx.fail line "`@reduce` result is not the vector's lane type"
+    pure line
+  -- Every mask lane names an existing lane of an existing source; the result has one lane per
+  -- mask entry.
+  | .shuffle a b mask =>
+    let some (alen, _) := cx.vectorOf? a | cx.fail line "`@shuffle` operand is not a vector"
+    let blen := (b.bind cx.vectorOf?).map (·.1)
+    if b.isSome && blen.isNone then cx.fail line "`@shuffle` second operand is not a vector"
+    let some (.vector rlen _) := cx.types[ty]? | cx.fail line "`@shuffle` result is not a vector"
+    unless rlen == mask.size do cx.fail line "`@shuffle` mask length is not the result's length"
+    for lane in mask do
+      match lane with
+      | .a idx => unless idx < alen do cx.fail line "`@shuffle` mask lane is out of range"
+      | .b idx =>
+        unless blen.any (fun n => idx < n) do
+          cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
+      | _ => pure ()
+    pure line
+  | .unionInit idx _ =>
+    let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
+    unless idx < fields.size do cx.fail line "`union_init` field index is out of range"
+    pure line
+  -- Pure values, locals, jumps, returns and debug info: `checkTy` of the result and the
+  -- whole-function operand checks (`check`) are their rules. Fail closed on any other op: one
+  -- that accesses memory, uses a place or has a body needs its own arm above.
+  | _ =>
+    let e := op.effects
+    unless e.access.isEmpty && e.places.isEmpty && e.control.bodies.isEmpty do
+      cx.fail line s!"no checker rule for this {e.cls.name} op ({op.ctorName}); it accesses \
+        memory, uses a place or has a body (Air2Lean/Air/Effects.lean)"
+    pure line
 
 partial def checkInsts (cx : CheckCtx) (line : Nat) (insts : Array Inst) : Except String Nat :=
   insts.foldlM (checkInst cx) line
@@ -1508,13 +1685,8 @@ partial def Val.ptrOther? (v : Val) : Option String :=
   | .sliceConst _ p l => p.ptrOther? <|> l.ptrOther?
   | _ => none
 
-/-- The pointer operands that `valueOperands` leaves out. -/
-def ptrOperands (op : Op) : Array Val :=
-  match op with
-  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
-  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
-  | .cmpxchg _ p .. => #[p]
-  | _ => #[]
+/-- The pointer operands that `valueOperands` leaves out (`Effects.places`). -/
+def ptrOperands (op : Op) : Array Val := op.effects.places
 
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value
@@ -2104,7 +2276,7 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
   | .call _ args =>
     for v in args do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     for v in #[dst, src] do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .memset p _ =>
@@ -2116,6 +2288,8 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
       let some (g, off) := fixedGlobalOrigin? f insts p | reject
       let some global := f.globals[g]? | reject
       unless hasErrorStorage f.types item && homogeneousGlobalItems f global.ty item off do reject
+  -- Keep: these are the pointer-value sinks. A derived pointer result is checked above, and
+  -- the other stored operands (atomics, asm) are integers (`checkOp`).
   | _ => pure ()
 
 private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
@@ -2277,12 +2451,7 @@ partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
         | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
       unless valTy v == some selectorTy do
         cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
-    | .block b | .loop b | .«try» _ b | .tryPtr _ b => recur b
-    | .condBr _ t e => recur t; recur e
-    | .switchBr _ cases e =>
-      for c in cases do recur c.body
-      recur e
-    | _ => pure ()
+    | op => for b in op.effects.control.bodies do recur b
 
 /-- An unverified bit-pointer parameter (`unverifiedBitPtrError`). -/
 private def checkBitPtrParam (f : Func) (p : TyId) : Except String Unit :=
@@ -2340,6 +2509,32 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
       if packedPtr i.ty && (tyOf p).all (hostOf · == 0) then
         fail "`@fieldParentPtr` from a byte pointer to a packed struct field"
     | _ => pure ()
+
+/-- Is `op` a terminator: the one instruction that ends its containing body (`docs/air-json.md`
+/ `PLAN.md`)? A noreturn call counts (the `unreach` Sema emits right after it is dead code). -/
+def isTerminating (op : Op) : Bool :=
+  op.emitRoute == .terminator
+
+/-- `insts` ends in a control transfer as `Emit.lean`'s `emitStmts` reads it: a terminator, a
+loop (it never falls through), or a block that no `br` in `targets` continues after (its body
+ends the sequence). Instructions after it are dead. A body that runs out of instructions has no
+Lean term (MM-6). -/
+def bodyEnds (targets : Std.HashSet InstId) : List Inst → Bool
+  | [] => false
+  | i :: rest =>
+    isTerminating i.op || match i.op with
+      | .loop _ | .loopSwitchBr .. => true
+      | .block _ => !targets.contains i.id || bodyEnds targets rest
+      | _ => bodyEnds targets rest
+
+/-- Every body of `f` ends in a control transfer (`bodyEnds`). -/
+def checkBodiesEnd (f : Func) : Except String Unit := do
+  let targets := f.allInsts.foldl (init := ({} : Std.HashSet InstId)) fun targets i =>
+    match i.op with | .br t _ => targets.insert t | _ => targets
+  for body in bodyLists f.body do
+    unless bodyEnds targets body.toList do
+      throw s!"{f.name}: a body ends without a terminator (`br`, `ret`, `unreach`, a noreturn \
+        call, …)"
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
@@ -2413,10 +2608,11 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         zigVersion := f.zigVersion, device, targetArch := f.targetArch }
+                         zigVersion := f.zigVersion, device, targetArch := f.targetArch,
+                         sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
-  pure ()
+  checkBodiesEnd f
 
 /-- First-occurrence instruction types and literal IDs for one function. Building this
 index does not hide duplicate-ID errors: structural validation still scans in source order. -/
@@ -2596,9 +2792,7 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
   for i in insts do
     if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
     ids := ids.insert i.id
-    match i.op with
-    | .dbg .. | .line _ => debugIds := debugIds.insert i.id
-    | _ => pure ()
+    if i.op.effects.cls == .debug then debugIds := debugIds.insert i.id
     unless i.ty < f.types.size do throw s!"{f.name}: inst {i.id}: unknown type id {i.ty}"
   let value (root : Val) (checkForm : Bool := true) : Except String Unit := do
     if let some t := root.constTy? then
@@ -2637,12 +2831,8 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
           throw s!"{f.name}: global function initializer must be its named constant function block"
       else checkConstant f index g.ty v
   for i in insts do
-    let extra := match i.op with
-      | .sliceFieldPtr _ p => #[p]
-      | .dbg _ v => v.toArray
-      | .asm _ _ _ outputs _ => outputs.flatMap fun o => o.ref.toArray
-      | _ => #[]
-    for v in valueOperands i.op ++ ptrOperands i.op ++ extra do value v
+    let e := i.op.effects
+    for v in e.values ++ e.places ++ e.debug do value v
     match i.op with
     | .arg k =>
       let some p := f.params[k]? | throw s!"{f.name}: inst {i.id}: unknown parameter {k}"
@@ -2960,8 +3150,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     require (packedBits f.types child == some 32) "32-bit futex pointee"
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
-    unless model.qualifies f.zigVersion do
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.qualifiedVersions.toList}"
+    -- A rejected row reports its own reason (`checkProgram`); a modelled one needs a review.
+    if modelledStdFn callee && !model.qualifies f.zigVersion then
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}; no reviewed std source for Zig {f.zigVersion}"
   if let some fn := allocFn? callee then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
@@ -3236,6 +3427,99 @@ def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
   | "fallible" => .ok .fallible
   | _ => .error "invalid --spawn-policy (expected available or fallible)"
 
+/-- `i` with every direct callee renamed by `rename` (nested bodies included). -/
+private partial def renameCallees (rename : String → String) (i : Inst) : Inst :=
+  let body := Array.map (renameCallees rename)
+  let cases := Array.map fun (c : SwitchCase) => { c with body := body c.body }
+  { i with op := match i.op with
+    | .call (.func name noreturn spawnFn) args => .call (.func (rename name) noreturn spawnFn) args
+    | .block b => .block (body b)
+    | .loop b => .loop (body b)
+    | .condBr c t e => .condBr c (body t) (body e)
+    | .switchBr v cs e => .switchBr v (cases cs) (body e)
+    | .loopSwitchBr v cs e => .loopSwitchBr v (cases cs) (body e)
+    | .«try» v e => .«try» v (body e)
+    | .tryPtr p e => .tryPtr p (body e)
+    | op => op }
+
+/-- The rejection of an extern call that `resolveExterns` cannot bind. -/
+def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
+  s!"{caller}: CALLEE_EXTERN_UNBOUND: extern function '{e.name}'\
+    {(e.library.map (s!" (library '{·}')")).getD ""} {why} (docs/air-json.md §Extern calls)"
+
+/-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
+symbol, never at a Zig declaration name:
+(a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
+    declared library, if the program does not define the symbol; the call stays an extern
+    callee, which the model implements;
+(b) else to the one `export fn` of the program that defines the symbol, with the declared
+    calling convention; the call becomes a direct call of that function, whose signature
+    `checkProgram` then checks like any direct call's.
+A variadic extern is outside the subset. The result is the rewritten functions and one
+rejection per (caller, symbol) that neither binds; callers that need all-or-nothing use
+`resolveExterns`. -/
+def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[]) :
+    Except String (Array Func × Array (String × String)) := do
+  -- Every definition of each symbol; more than one is ambiguous only for a call that needs it.
+  let mut exports : Std.HashMap String (Array Func) := {}
+  for f in funcs do
+    if (externSymbol? f.name).isSome then
+      throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
+    if let some e := f.exportDecl then
+      exports := exports.insert e.name ((exports.getD e.name #[]).push f)
+  let mut unbound : Array (String × String) := #[]
+  let mut out : Array Func := #[]
+  for f in funcs do
+    -- Without an `externs` table a function has no extern call (`checkProgram` rejects one).
+    if f.externs.isEmpty then
+      out := out.push f
+      continue
+    let mut renames : Std.HashMap String String := {}
+    let mut seen : Std.HashSet String := {}
+    for i in f.allInsts do
+      let .call (.func callee ..) args := i.op | continue
+      let some symbol := externSymbol? callee | continue
+      let some e := f.externs.find? (·.name == symbol)
+        | throw s!"{f.name}: inst {i.id}: extern callee '{symbol}' has no 'externs' entry"
+      -- The declaration must describe each call (a variadic one is rejected below).
+      unless e.varargs || (args.size == e.params.size && i.ty == e.ret) do
+        throw s!"{f.name}: inst {i.id}: the call of extern '{symbol}' does not match its 'externs' entry"
+      if seen.contains callee then continue
+      seen := seen.insert callee
+      let reject (why : String) := unbound.push (f.name, externUnbound f.name e why)
+      let definitions := exports.getD symbol #[]
+      let names := ", ".intercalate (definitions.map (·.name)).toList
+      if e.varargs then
+        unbound := reject "is variadic, which is outside the subset"
+      else if definitions.size > 1 then
+        unbound := reject s!"is defined by several functions ({names}) (CALLEE_AMBIGUOUS)"
+      else if let some m := models.find? (·.symbol == callee) then
+        let some binding := m.externBinding
+          | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
+        -- The linker would resolve the symbol to the program's own definition, not the model's.
+        if let some target := definitions[0]? then
+          unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
+        else unless binding.library == e.library do
+          unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
+      else if let some target := definitions[0]? then
+        let cc := (target.exportDecl.map (·.cc)).getD ""
+        if cc == e.cc then renames := renames.insert callee target.name
+        else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
+          definition '{target.name}' has '{cc}'")
+      else
+        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
+          registry model '{callee}' (--model-registry, docs/external-models.md)"
+    out := out.push (if renames.isEmpty then f
+      else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
+  return (out, unbound)
+
+/-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
+def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[]) :
+    Except String (Array Func) := do
+  let (resolved, unbound) ← resolveExternsCollect funcs models
+  if let some (_, message) := unbound[0]? then throw message
+  return resolved
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -3249,6 +3533,9 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     (profile : Option BuildProfile := none)
     (selectedCallees : Array String := #[]) : Array ProgramIssue := Id.run do
   let mut issues : Array ProgramIssue := #[]
+  -- Every later lookup uses module-qualified keys: an ambiguous key stops collection.
+  if let .error message := Identity.checkProgram (funcs.map (·.identities)) then
+    return #[{ kind := .structure, message }]
   unless models.isEmpty do
     let some profile := profile
       | return #[{ kind := .model, message := "external model bindings require a checked program profile" }]
@@ -3327,7 +3614,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
                     issues := issues.push (issue .threadSpawn message)
                 | _ => issues := issues.push (issue .threadSpawn s!"{f.name}: Io.async has no Io.Future result")
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
-          if let some reason := rejectedThreadFn? callee then
+          if let some symbol := externSymbol? callee then
+            issues := issues.push (issue .callee s!"{f.name}: CALLEE_EXTERN_UNBOUND: extern function \
+              '{symbol}' is bound to neither a definition nor a registry model (docs/air-json.md \
+              §Extern calls)")
+          else if let some reason := rejectedThreadFn? callee then
             issues := issues.push (issue .callee s!"{f.name}: the callee '{callee}' is outside the subset: {reason}")
           else if !modelledStdFn callee then
             issues := issues.push (issue .callee
@@ -3430,7 +3721,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | _ =>
       if typeCheck.toOption.isSome && volatileCheck.toOption.isSome &&
           packedCheck.toOption.isSome && paddedCheck.toOption.isSome then
-        let opCheck := checkOp cx line i.ty i.op
+        let opCheck := do cx.checkSentinelSlice line i; checkOp cx line i.ty i.op
         log := log.record (checkDiagnostic file f .instructionFailure anchor) opCheck
         -- L13: inline asm that passes A01's operand checks but is off the reviewed allowlist and
         -- not a declared device event has its own stable code.
@@ -3520,7 +3811,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     localPaths := localPlacePaths f.types f.layouts insts
     zigVersion := f.zigVersion
     device
-    targetArch := f.targetArch }
+    targetArch := f.targetArch
+    sentinelChecked := sentinelCheckedSlices insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

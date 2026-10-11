@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "variants.lightOf",
+ "module": "root",
  "params": [
   0
  ],
@@ -169,6 +170,7 @@
   {
    "k": "enum",
    "name": "variants.Light",
+   "module": "root",
    "tag": 0,
    "exhaustive": true,
    "fields": [

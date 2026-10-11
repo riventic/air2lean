@@ -226,18 +226,18 @@ theorem tlsAlloc_ok {m m' : Mem} {bs : Array Byte} {a : Nat} {p : Ptr}
   obtain ⟨hpb, hblk, -, -, hfit, -, ho⟩ := access_eq hacc
   simp only [Option.some.injEq] at hpb
   subst hpb
-  simp only [Array.getElem?_push_size, Option.some.injEq] at hblk
+  simp only [Mem.afterAlloc, Array.getElem?_push_size, Option.some.injEq] at hblk
   subst hblk
   simp only [Int.toNat_zero] at ho
   subst ho
   refine ⟨rfl, rfl, rfl, ?_, fun b hb => ?_, ?_⟩
-  · simp [Mem.write, Mem.recordAt]
+  · simp [Mem.write, Mem.recordAt, Mem.afterAlloc]
   · simp only [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds,
-      Array.getElem?_setIfInBounds, Array.getElem?_push]
+      Array.getElem?_setIfInBounds, Mem.afterAlloc, Array.getElem?_push]
     simp [Nat.ne_of_gt hb, Nat.ne_of_lt hb]
   · refine ⟨Block.mk (writeBytes (Array.replicate bs.size .undef) 0 bs) a .global true
-      (alignUp m.nextAddr a), ?_, rfl, writeBytes_all (by simp), rfl⟩
-    simp [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds]
+      (m.newAddr bs.size a), ?_, rfl, writeBytes_all (by simp), rfl⟩
+    simp [Mem.write, Mem.recordAt, Mem.afterAlloc, Array.set!_eq_setIfInBounds]
 
 theorem tlsAllocs_ok : ∀ {inits : List (BlockId × Array Byte × Nat)} {m m' : Mem}
     {ids : Array (BlockId × BlockId)},

@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "thread_tuples.atomicShared",
+ "module": "root",
  "params": [
   0,
   0
@@ -77,6 +78,7 @@
    "callee": {
     "ty": 5,
     "func": "atomic.Value(u32).init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -220,8 +222,10 @@
    "callee": {
     "ty": 9,
     "func": "Thread.spawn__anon_26252",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "thread_tuples.atomicWorker"
+    "comptime_fn": "thread_tuples.atomicWorker",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -377,8 +381,10 @@
    "callee": {
     "ty": 9,
     "func": "Thread.spawn__anon_26252",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "thread_tuples.atomicWorker"
+    "comptime_fn": "thread_tuples.atomicWorker",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -448,6 +454,7 @@
      "callee": {
       "ty": 19,
       "func": "Thread.join",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -562,6 +569,7 @@
    "callee": {
     "ty": 19,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -599,6 +607,7 @@
    "callee": {
     "ty": 19,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -848,6 +857,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -856,6 +866,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -879,6 +890,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -921,6 +933,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -953,6 +966,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -999,6 +1013,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1012,6 +1027,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1029,6 +1045,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1037,6 +1054,7 @@
   {
    "k": "enum",
    "name": "builtin.AtomicOrder",
+   "module": "std",
    "tag": 27,
    "exhaustive": true,
    "fields": [
@@ -1076,6 +1094,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1089,6 +1108,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1102,6 +1122,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1110,6 +1131,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1129,6 +1151,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1155,6 +1178,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1168,6 +1192,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1181,6 +1206,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1193,6 +1219,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1222,6 +1249,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1255,6 +1283,7 @@
    "child": 42,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1267,6 +1296,7 @@
    "child": 43,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1279,6 +1309,7 @@
    "child": 44,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1291,6 +1322,7 @@
    "child": 45,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1299,6 +1331,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(Thread.Completion__enum_1879)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1313,6 +1346,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(i32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1339,6 +1373,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -1363,6 +1398,7 @@
   {
    "k": "enum",
    "name": "Thread.Completion__enum_1879",
+   "module": "std",
    "tag": 47,
    "exhaustive": true,
    "fields": [

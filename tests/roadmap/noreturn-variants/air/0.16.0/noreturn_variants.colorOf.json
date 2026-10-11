@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.colorOf",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 108
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -61,7 +68,8 @@
      "id": 3,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 25
     },
     {
      "id": 4,
@@ -146,7 +154,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 19
   },
   {
    "id": 10,
@@ -155,6 +164,7 @@
    "callee": {
     "ty": 6,
     "func": "noreturn_variants.isColor",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -167,7 +177,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 12,
@@ -201,6 +212,7 @@
   {
    "k": "union",
    "name": "Io.Terminal.Mode",
+   "module": "std",
    "layout": "auto",
    "tag": 5,
    "fields": [
@@ -226,6 +238,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(Io.Terminal.Mode).@\"union\".tag_type.?",
+   "module": "std",
    "tag": 7,
    "exhaustive": true,
    "fields": [

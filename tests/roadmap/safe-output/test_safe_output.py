@@ -524,8 +524,10 @@ class FinalStages(Check):
         self.generated = b'import ZigLean\n-- fresh generated output\n'
 
     def assert_gen_complete(self):
-        # Gen.lean is published before the build; it is never a prefix, and nothing else is left.
-        self.assertEqual(self.gen.read_bytes(), self.generated)
+        # The translation is published to the check report before the build, never as a prefix;
+        # check.sh writes no tracked file, so the checkout's Gen.lean is untouched.
+        self.assertEqual((self.reports / 'demo.Gen.lean').read_bytes(), self.generated)
+        self.assertEqual(self.gen.read_bytes(), PRIOR)
         self.assertEqual([p.name for p in self.gen.parent.iterdir()], ['Gen.lean'])
 
     def test_build_timeout(self):

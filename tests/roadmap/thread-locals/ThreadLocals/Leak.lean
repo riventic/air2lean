@@ -128,10 +128,10 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-! ## `main` -/
 
-theorem mem0_threads : mem0.threads.size = 1 := by decide
+theorem mem0_threads : (mem0 .fresh).threads.size = 1 := by decide
 
 set_option maxHeartbeats 1000000 in
-theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { mem0 with current := 0 } d := by
+theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fresh) with current := 0 } d := by
   unfold leaked
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s0 m₁ h₁ => ?_)
   obtain ⟨rfl, rfl⟩ := Proto.alloc_ok h₁
@@ -143,13 +143,13 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { mem0 with 
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₂ h₂ => ?_)
   obtain ⟨b, blk, o, -, -, rfl⟩ := Proto.storeUndef_ok h₂
   refine ⟨rfl, ?_⟩
-  have hs0 : (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = pBlk := by decide
+  have hs0 : (⟨some ({ (mem0 .fresh) with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = pBlk := by decide
   simp only [StateT.run_bind]
   refine WP.bind (WP.spawnC fun k _ => ⟨.main false, ⟨fun _ => ⟨fun v hv => ?_, ?_⟩,
     fun h => (by rw [upd_self] at h; cases h), .inl (upd_self _ _ _), fun c hc => ?_⟩,
     fun G₁ m₃ hg₁ hi₃ => ⟨.kid none, ⟨hs0, rfl⟩, fun child m₄ hf => ?_⟩⟩)
   · rw [upd_ne _ _ hv]
-  · simp [Mem.write, Mem.recordAt, mem0_threads]
+  · simp [Mem.write, Mem.recordAt, Mem.afterAlloc, mem0_threads]
   · rw [upd_ne _ _ (by decide)] at hc; cases hc
   obtain ⟨hnone, hsz₃⟩ := hi₃.pre hg₁
   obtain ⟨hchild, hsz₄⟩ := Proto.fork_ok hf
@@ -176,7 +176,7 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { mem0 with 
   subst ho
   have hblk5 : m₅.blocks[1]? = some blk' := hblk
   simp only [Mem.bytesOf, hblk5, Option.map_some, Option.some.injEq] at hbytes
-  rw [show Enc.size Ptr = 8 from rfl, hbytes, decode_ptr] at hdec
+  rw [show Enc.size Ptr = 8 from rfl, hbytes, decodeLoad_encode] at hdec
   simp only [pure, ExceptT.pure, ExceptT.run, ExceptT.mk, Option.some.injEq,
     Except.ok.injEq] at hdec
   subst hdec
@@ -191,7 +191,7 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { mem0 with 
 /-- **A pointer to a thread-local used after its thread ended never gives a result**, under
 every schedule and every fuel: each run throws or runs out of fuel. -/
 theorem leaked_never_ok {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
-    (Sched.run dispatch fuel o leaked mem0).run ≠ some (.ok (v, m)) := fun h => by
+    (Sched.run dispatch fuel o leaked (mem0 .fresh)).run ≠ some (.ok (v, m)) := fun h => by
   obtain ⟨_, _, hq⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
     (fun h => by cases h) mem0_threads main_spec h
   exact hq

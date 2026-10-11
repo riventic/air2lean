@@ -213,7 +213,8 @@ def divmod_shape(gen: str, ops: dict[str, dict]) -> tuple[str, str]:
     """The divmod opaque name and the tuple variable its outputs are bound to."""
     name = next(n for n, op in ops.items() if op["function"] == "divmod")
     start, end = function_span(gen, "divmod")
-    match = re.search(rf"let (a\d+) := {name} p0 p1\n", gen[start:end])
+    # S7: the divisor-zero fault guard (`Zig.asmTrap`) wraps the call.
+    match = re.search(rf"let (a\d+) ← Zig\.asmTrap \(p1 = 0\) \({name} p0 p1\)\n", gen[start:end])
     if match is None:
         raise ValueError("generated shape changed: divmod asm call")
     return name, match.group(1)

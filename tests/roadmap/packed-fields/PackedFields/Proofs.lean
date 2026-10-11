@@ -24,7 +24,7 @@ namespace PackedFieldsClients
 
 /-- The result of running `f` from `mem0`. -/
 def result {α : Type} (f : MemM α) : Option (Except Error α) :=
-  ((f.run mem0).run).map (·.map Prod.fst)
+  ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
 
 /-- `reg.a = 5; return reg.a;`: the other 20 bits of the host are still undefined. -/
 theorem setA_ok : result setA = some (.ok 5) := by decide +kernel

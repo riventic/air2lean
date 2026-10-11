@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "models": [
+    {
+      "symbol": "extern:abs",
+      "signature": {
+        "return": {
+          "type": "Air2Lean.Ty.int true 32",
+          "layout": {
+            "volatile": false,
+            "size": 4,
+            "sentinel": false,
+            "pointer_align": null,
+            "offsets": [],
+            "host_size": 0,
+            "bit_offset": 0,
+            "allowzero": false,
+            "align": 4
+          },
+          "children": []
+        },
+        "params": [
+          {
+            "type": "Air2Lean.Ty.int true 32",
+            "layout": {
+              "volatile": false,
+              "size": 4,
+              "sentinel": false,
+              "pointer_align": null,
+              "offsets": [],
+              "host_size": 0,
+              "bit_offset": 0,
+              "allowzero": false,
+              "align": 4
+            },
+            "children": []
+          }
+        ]
+      },
+      "profile": {
+        "zig_version": "0.16.0",
+        "target_triple": "x86_64-linux.5.10...6.19-musl",
+        "schema": 12,
+        "pointer_bits": 64,
+        "name": "abi64-le-v1",
+        "float_mode": "per-instruction",
+        "features": [
+          "64bit",
+          "cmov",
+          "cx8",
+          "fxsr",
+          "idivq_to_divl",
+          "macrofusion",
+          "mmx",
+          "nopl",
+          "slow_3ops_lea",
+          "slow_incdec",
+          "sse",
+          "sse2",
+          "vzeroupper",
+          "x87"
+        ],
+        "export_stage": "analyzed-air",
+        "error_tracing": false,
+        "error_set_bits": 16,
+        "error_layout": "type-table",
+        "endian": "little",
+        "cpu": "x86_64",
+        "build_mode": "ReleaseSafe",
+        "backend": "stage2_llvm",
+        "abi": "musl"
+      },
+      "extern": {
+        "library": "c",
+        "premise": "EXT-03"
+      },
+      "import": "ExternModel",
+      "implementation": "ExternModel.abs",
+      "contract": "ExternModel.absContract",
+      "trust": "assumed",
+      "termination": "total",
+      "errors": [
+        "illegal"
+      ],
+      "effects": "preserves",
+      "dependencies": []
+    }
+  ]
+}

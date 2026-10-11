@@ -22,5 +22,6 @@ memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
 panic	panic
+SIGFPE	trap
 unexpectedErrorCode	panic
 loadUninstantiableType	panic

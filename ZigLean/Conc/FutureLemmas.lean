@@ -48,7 +48,7 @@ theorem load_eq {slot : Ptr} {r v : α} {m m' : Mem} (h : Holds slot r m)
     v = r := by
   obtain ⟨b, blk, o, ha, -, hd, -⟩ := Conc.Proto.load_ok hl
   have := h b blk o ha
-  rw [this] at hd
+  rw [decodeLoad_of_decode this] at hd
   simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hd
   exact hd.symm
 
@@ -85,12 +85,12 @@ theorem complete_holds {slot : Ptr} {r : α} {m m' : Mem}
   rw [← hs, hx, hd]
 
 /-- A successful load right after a successful store at the same pointer and alignment decodes
-the stored bytes. -/
+the stored bytes (`decodeLoad` over the memory's blocks, MM-11). -/
 theorem load_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v w : β} {m m' m'' : Mem}
     {x : Unit} (hs : (Enc.encode v).size = Enc.size β)
     (h : ((store a q v).run m).run = some (.ok (x, m')))
     (hl : ((load β a q).run m').run = some (.ok (w, m''))) :
-    (Enc.decode (Enc.encode v) : Result β).run = some (.ok w) := by
+    (decodeLoad m'.blocks (Enc.encode v) : Result β).run = some (.ok w) := by
   obtain ⟨b, blk, o, ha, -, rfl⟩ := Conc.Proto.store_ok h
   obtain ⟨b', blk', o', ha', -, hd, -⟩ := Conc.Proto.load_ok hl
   rw [hs] at ha ha'
@@ -364,7 +364,7 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
   unfold asyncC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := Proto.alloc_ok' ha; rfl
+  · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
   refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩

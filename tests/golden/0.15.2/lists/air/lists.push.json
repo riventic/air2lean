@@ -84,7 +84,8 @@
    "callee": {
     "ty": 8,
     "func": "mem.Allocator.create__anon_611",
-    "noreturn": false
+    "noreturn": false,
+    "instance_key": "48603a336c43021edb70c99579014af2a006bcc1b4ee090712d51bbf48e0f7f2"
    },
    "args": [
     {

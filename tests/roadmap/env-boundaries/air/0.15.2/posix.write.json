@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "posix.write",
+ "module": "std",
  "params": [
   0,
   1
@@ -263,6 +264,7 @@
        "callee": {
         "ty": 10,
         "func": "os.linux.write",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -301,6 +303,7 @@
        "callee": {
         "ty": 12,
         "func": "posix.errno__anon_1522",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -451,6 +454,7 @@
            "callee": {
             "ty": 13,
             "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -568,6 +572,7 @@
            "callee": {
             "ty": 13,
             "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -913,6 +918,7 @@
          "callee": {
           "ty": 15,
           "func": "posix.unexpectedErrno",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -986,6 +992,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -1033,6 +1040,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1052,6 +1060,7 @@
   {
    "k": "enum",
    "name": "os.linux.E__enum_1366",
+   "module": "std",
    "tag": 18,
    "exhaustive": false,
    "fields": [

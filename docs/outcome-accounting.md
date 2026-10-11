@@ -2,16 +2,18 @@
 
 The differential runner preserves its JSONL result files, `TOTAL:` counters and per-function count pins. It additionally writes typed observation sidecars (`<function>.jsonl.outcomes`) and a schema-1 report. Set `AIR2LEAN_DIFF_REPORT` to choose the summary path; the default is `tests/diff/out/report.json`. Case evidence is stored beside it as `<summary>.jsonl`. The report always records `qualified: false`: agreement on these fixtures is not a proof of translation correctness or runtime adequacy.
 
-The Lean producer classifies `Zig.Result` and `Zig.Sched.Out` directly. Source `Except Zig.ErrName` error returns, including optional wrappers, are values tagged `error_return`. Runtime safety constructors are tagged `model_panic`, `illegal`, `unspecified`, `unspecified_timer` (`Zig.Error.unsupportedTimer`, a clock the model lacks) or `deadlock`. The native producer classifies source error unions before rendering and sends a private typed byte through its child-result pipe. The parent distinguishes returned values, reported native panics and harness failures. Harness allocation failures receive their own tag. This does not change the runtime model or claim that native allocation failures follow the model's policy.
+The Lean producer classifies `Zig.Result` and `Zig.Sched.Out` directly. Source `Except Zig.ErrName` error returns, including optional wrappers, are values tagged `error_return`. Runtime safety constructors are tagged `model_panic`, `illegal`, `unspecified`, `unspecified_timer` (`Zig.Error.unsupportedTimer`, a clock the model lacks), `deadlock` or `trap` (an allowlisted inline-asm fault, ASM-04). The native producer classifies source error unions before rendering and sends a private typed byte through its child-result pipe. The parent distinguishes returned values, reported native panics and harness failures. Harness allocation failures receive their own tag. This does not change the runtime model or claim that native allocation failures follow the model's policy.
 
 | Comparison status | Meaning |
 | --- | --- |
 | `value_match`, `error_return_match` | Typed returned values agree, including modeled buffers and live allocation counts. |
 | `panic_match` | A reported native panic agrees with the corresponding model safety constructor. |
-| `illegal_exclusion`, `unspecified_exclusion`, `unspecified_timer_exclusion` | The model produced that constructor; the native value is excluded from semantic agreement. |
+| `trap_match` | A native `SIGFPE` during the tested call agrees with a model `trap` (`panic-policy.tsv`: `SIGFPE` → `trap`). |
+| `illegal_exclusion`, `unspecified_exclusion` | The model produced that constructor on an input pinned for it in `tests/diff/<ex>/unspecified.txt` (`<fn> <input_sha256> <count>\|<min>-<max> <reason>`); the native outcome is excluded from semantic agreement. On an unpinned input the case is a `mismatch` (F3). |
+| `unspecified_timer_exclusion` | The model threw `Zig.Error.unsupportedTimer` (a clock it lacks); the native value is excluded from semantic agreement. |
 | `search_cap` | The schedule search reached its run cap. |
 | `bounded_no_result` | A run returned no result, or an unmatched search contained such a branch. |
-| `host_difference` | A declared host-dependent result differs outside the reference Linux x86_64 host. |
+| `host_difference` | Outside the reference Linux x86_64 host, two returned values differ only in float leaves, and each differing leaf pair satisfies a kind listed for the function in `tests/diff/<ex>/host.txt` (`<fn> <kind>[,<kind>]`): `nan_payload` (both NaN of one format), `zero_sign` (both zero, opposite signs), `libm_ulp` (both finite of one format, at most two ulps apart; f80/f128 values that are both f64 values are measured in f64 ulps). The case row records `host_kinds`. A panic, error, exclusion or untyped value difference is a `mismatch` (F3). |
 | `mismatch` | Comparable typed outcomes disagree. |
 | `input_failure`, `native_harness_failure` | An input or harness failure prevents comparison. |
 | `skipped` | An example was not selected; the selection record explains host, version or explicit selection constraints. |
@@ -20,11 +22,12 @@ The Lean producer classifies `Zig.Result` and `Zig.Sched.Out` directly. Source `
 
 The legacy counters remain a compatibility projection: `illegal`, `unspecified` and `unspecified_timer` share the historical `unspecified` counter. Pinned caps may still give the legacy runner exit zero. The typed counts keep those cases distinct and excluded from mutation detection. The report validates exact sidecar/wire binding, producer tags, row counts and pins. Binding compares decoded JSON recursively with exact types: booleans differ from integers, integers differ from floating numbers, signed floating zero is preserved, and object key order is irrelevant. Equivalent float spellings such as `1.0` and `1e0` decode to the same value; lexical number spelling is not retained. The legacy quoted/bare decimal compatibility applies only to a top-level returned payload after binding validation. Native memory bytes must be lowercase hexadecimal; model masks allow hexadecimal and `?` nibbles, with equal even lengths. Unresolved `pp` pointer fragments remain mismatches. Arbitrary glob masks cannot establish memory agreement. The native panic mapping lives in `scripts/panic-policy.tsv` and is loaded once by each consumer; an unknown reported panic remains a mismatch.
 
-Native `native_signal` observations retain the legacy `unknown` failure marker. The child
+Native `native_signal` observations carry the signal's name (`SIGFPE`, `SIGILL`, `SIGSEGV`, `SIGBUS`) as their legacy failure marker. The child
 writes checked phase bytes before the tested call and after it returns. Only an exact
 call-start marker, a successful pipe read and a wait status for SIGILL, SIGFPE, SIGSEGV
 or SIGBUS admit this category. It can be excluded by a model `illegal` or `unspecified`
-constructor; it does not establish panic agreement, and a valid model result is a mismatch.
+constructor on a pinned input; it does not establish panic agreement, `SIGFPE` matches only a
+model `trap`, and a valid model result is a mismatch.
 SIGKILL/SIGTERM and other interruption/resource signals, missing or malformed transport,
 pipe errors, and renderer-stage failures remain fatal `native_harness_failure`, even when
 the model reports `illegal`. These observations are test evidence, not proof of signal cause.

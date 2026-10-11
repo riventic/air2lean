@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.divCeilU",
+ "module": "root",
  "params": [
   0,
   0
@@ -34,14 +35,12 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
    "id": 1,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 1
   },
   {

@@ -6,7 +6,7 @@ from pathlib import Path
 ORACLE = '''import Gen
 open Zig
 private def value (program : MemM α) : Option (Except Error α) :=
-  (program.run GlobalPayload.mem0).run.map (·.map Prod.fst)
+  (program.run (GlobalPayload.mem0 .fresh)).run.map (·.map Prod.fst)
 private def semanticOracle : Bool :=
   decide (value GlobalPayload.optionalPtr = some (.ok (⟨some 0, 8 + 16 + 4⟩ : Ptr))) &&
   decide (value GlobalPayload.smallPtr = some (.ok (⟨some 0, 8 + 28 + 2⟩ : Ptr))) &&

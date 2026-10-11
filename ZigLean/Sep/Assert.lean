@@ -244,35 +244,6 @@ theorem bytesAt_store_core (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
     · simp only [hx, false_and, ↓reduceIte, Option.none_or] at hmx ⊢
       exact hmx
 
-/-- A step that keeps the bytes of `p`'s block at their address and size (a store) keeps
-`AddrBelow`. -/
-theorem Mem.AddrBelow.replace {m m' : Mem} {h h' hF : Heap} {p : Ptr} {A S : Nat}
-    {K : BlockKind} {bs bs' : Array Byte} (hA : m.AddrBelow) (hm : m.heap = h ∪ hF)
-    (hd : Heap.Disjoint h hF) (hb : bytesAt p A S K bs h) (hpos : 0 < bs.size)
-    (hm' : m'.heap = h' ∪ hF) (hb' : bytesAt p A S K bs' h') (hn : m'.nextAddr = m.nextAddr) :
-    m'.AddrBelow := by
-  apply hA.of_heap hn
-  intro l c hc
-  obtain ⟨b, hpb, -, hown⟩ := hb
-  obtain ⟨b', hpb', -, hown'⟩ := hb'
-  have hp0 : m.heap (b, p.off.toNat) = some ⟨bs[0]!, A, S, K⟩ := by
-    rw [hm, Heap.union_apply, hown]; simp [hpos]
-  rw [hm', Heap.union_apply] at hc
-  cases hh' : h' l with
-  | some c0 =>
-    rw [hh', Option.some_or] at hc; cases hc
-    rw [hown'] at hh'
-    split at hh'
-    · cases hh'; exact ⟨_, _, hp0, rfl, rfl⟩
-    · cases hh'
-  | none =>
-    rw [hh', Option.none_or] at hc
-    refine ⟨l, c, ?_, rfl, rfl⟩
-    rw [hm, Heap.union_apply]
-    rcases hd l with h1 | h1
-    · rw [h1, Option.none_or]; exact hc
-    · rw [h1] at hc; cases hc
-
 /-- `bytesAt_store_core` in a `Seq` memory (`hst`, so the access cannot race:
 `noRace_of_singleThread`); the result is again `Seq` (a store keeps the address and size of each
 cell). -/
@@ -284,8 +255,8 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, -, hr, h', hd', hm', hb'⟩ := bytesAt_store_core hb hm hd hq hn hk ha
     (fun b _ => noRace_of_singleThread hst.single b _ _ _) hw
-  exact ⟨_, hr, ⟨singleThread_write (singleThread_recordAt hst.single _ _ _ _) _ _ _ _,
-    hst.addr.replace hm hd hb (by omega) hm' hb' rfl⟩, h', hd', hm', hb'⟩
+  exact ⟨_, hr, ⟨singleThread_write (singleThread_recordAt hst.single _ _ _ _) _ _ _ _⟩, h', hd',
+    hm', hb'⟩
 
 /-- The live block `b` as owned bytes, and the rest of the memory. -/
 theorem Mem.heap_split {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)

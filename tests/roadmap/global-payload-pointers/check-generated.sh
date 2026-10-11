@@ -13,7 +13,9 @@ lean_path=$(lake env printenv LEAN_PATH)
 lake env lean -R "$out/baseline" -o "$out/baseline/Gen.olean" "$out/baseline/Gen.lean"
 cp "$clients/GeneratedProofs.lean" "$out/baseline/GeneratedProofs.lean"
 cp "$clients/GeneratedRuntime.lean" "$out/baseline/GeneratedRuntime.lean"
-LEAN_PATH="$out/baseline:$lean_path" lake env lean -R "$out/baseline" "$out/baseline/GeneratedProofs.lean" > "$out/proofs.log" 2>&1
+# Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
+python3 -B scripts/theorem_universe.py gate "$out/baseline/GeneratedProofs.lean" --root "$out/baseline" \
+  --lean-path "$out/baseline" --output-dir "$out/universe" > "$out/proofs.log" 2>&1
 LEAN_PATH="$out/baseline:$lean_path" lake env lean -R "$out/baseline" --run "$out/baseline/GeneratedRuntime.lean" > "$out/runtime.log" 2>&1
 python3 "$clients/generated-mutations.py" "$out/baseline/Gen.lean" "$out/mutants"
 for name in control wrong_global missing_small_payload_offset forget_parent; do

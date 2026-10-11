@@ -14,7 +14,7 @@ mkdir -p "$work/PackedFields"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/packed-fields/test_cli.py --self-test
 # The retained translation is the fresh one, byte for byte.
-"$translator" tests/roadmap/packed-fields/air/0.16.0 -o "$work/PackedFields/Gen.lean" \
+"$translator" tests/roadmap/packed-fields/air/0.16.0 --profile legacy-abi64-le -o "$work/PackedFields/Gen.lean" \
   --namespace PackedFields --prefix packed_fields.
 cmp "$work/PackedFields/Gen.lean" tests/roadmap/packed-fields/PackedFields/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/PackedFields/Gen.olean" "$work/PackedFields/Gen.lean"

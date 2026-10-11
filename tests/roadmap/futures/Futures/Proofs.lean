@@ -112,12 +112,12 @@ theorem reads_pending {α : Type} [Enc α] {p slot : Ptr} {m m' : Mem} {x : Unit
   intro f m'' hl
   rw [ha] at hl
   have := Future.load_after_store (pending_size slot) hs hl
-  rw [Future.decode_pending slot hsz] at this
+  rw [decodeLoad_of_decode (Future.decode_pending slot hsz)] at this
   cases this; rfl
 
-theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem awaitValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (squareProto x).WP 0 (Futures.awaitValue io x) (fun v _ _ _ => v = x * x)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   unfold Futures.awaitValue
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
   · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
@@ -138,11 +138,11 @@ theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
 
 /-- **Completion.** Under every schedule, every result of `awaitValue(io, x)` is `x *% x`: the
 task's result, written into its runtime record and returned by `await`. -/
-theorem awaitValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32}
-    {m : Mem} (h : (Sched.run Futures.dispatch fuel o (Futures.awaitValue io x) Futures.mem0).run =
+theorem awaitValue_result {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32}
+    {m : Mem} (h : (Sched.run Futures.dispatch fuel o (Futures.awaitValue io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = x * x := by
   obtain ⟨_, _, hv⟩ := run_sound (P := squareProto x) Futures.dispatch (fun _ => .none)
-    (square_task x) (FutureProto.not_strict) rfl (awaitValue_wp io x) h
+    (square_task x) (FutureProto.not_strict) rfl (awaitValue_wp σ io x) h
   exact hv
 
 /-! ## Error propagation: `awaitError` -/
@@ -237,9 +237,9 @@ theorem checked_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (checkedProto x
     · cases hs
   | _ => cases hs
 
-theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem awaitError_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (checkedProto x).WP 0 (Futures.awaitError io x) (fun v _ _ _ => v = checkedSpec x)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := zeroEnc
   unfold Futures.awaitError
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
@@ -263,17 +263,17 @@ theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
 
 /-- **Error propagation.** Under every schedule, every result of `awaitError(io, x)` is the
 task's result: `error.Zero` for `x = 0`, else `x - 1`. -/
-theorem awaitError_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+theorem awaitError_result {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io x) Futures.mem0).run =
+    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = checkedSpec x := by
   obtain ⟨_, _, hv⟩ := run_sound (P := checkedProto x) Futures.dispatch (fun _ => .none)
-    (checked_task x) (fun h => by cases h) rfl (awaitError_wp io x) h
+    (checked_task x) (fun h => by cases h) rfl (awaitError_wp σ io x) h
   exact hv
 
-theorem awaitError_zero (io : Io) {fuel : Nat} {o : Nat → Nat}
+theorem awaitError_zero {σ : Placement} (io : Io) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io 0) Futures.mem0).run =
+    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io 0) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = .error "Zero" :=
   awaitError_result io 0 h
 
@@ -352,9 +352,9 @@ theorem cancellable_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (cancelProt
     · cases hs
   | _ => cases hs
 
-theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
+theorem cancelValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (cancelProto x).WP 0 (Futures.cancelValue io x) (fun v _ _ _ => CancelSpec x v)
-      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+      (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := canceledEnc
   unfold Futures.cancelValue
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
@@ -380,12 +380,12 @@ theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
 own result `x +% 1` or `error.Canceled` (when the task's `io.checkCancel()` observed the
 request): `cancel` never reports another value, and in particular never success with a value
 that the task did not compute. -/
-theorem cancelValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+theorem cancelValue_result {σ : Placement} (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run Futures.dispatch fuel o (Futures.cancelValue io x) Futures.mem0).run =
+    (h : (Sched.run Futures.dispatch fuel o (Futures.cancelValue io x) (Futures.mem0 σ)).run =
       some (.ok (v, m))) : v = .ok (x + 1) ∨ v = .error "Canceled" := by
   obtain ⟨_, _, hv⟩ := run_sound (P := cancelProto x) Futures.dispatch (fun _ => .none)
-    (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp io x) h
+    (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp σ io x) h
   exact hv
 
 /-! ## Idempotence -/

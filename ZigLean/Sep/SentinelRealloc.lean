@@ -95,15 +95,15 @@ theorem remapByteBuffer_owned {m : Mem} {s : Slice} {h hF : Heap} {A : Nat} {bs 
   cases hmode : m.allocPolicy.byteRemap with
   | fail => exact absurd hmode hfail
   | inPlace =>
-    by_cases hg : blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true
+    by_cases hg : blk.bytes.size < n ∧ m.growFree b blk n ≠ true
     · apply none_of
       have hc' : ¬ (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) := by
         simp [halign, hn0, Nat.not_lt.mpr hcap]
       simp only [ne_eq, Bool.not_eq_true] at hg
       simp [remapByteBuffer, hmode, hacc, hwhole, hc', hg, zig_unfold]
-    have hlatest : blk.bytes.size < n → m.byteRemapLast b blk = true := by
+    have hlatest : blk.bytes.size < n → m.growFree b blk n = true := by
       intro hlt
-      cases ht : m.byteRemapLast b blk
+      cases ht : m.growFree b blk n
       · exact absurd ⟨hlt, by simp [ht]⟩ hg
       · rfl
     have hrun := remapByteBuffer_inPlace_run hmode hacc hK hsz halign hn0 hcap hlatest

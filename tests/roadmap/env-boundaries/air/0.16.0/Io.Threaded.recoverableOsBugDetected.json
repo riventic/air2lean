@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "Io.Threaded.recoverableOsBugDetected",
+ "module": "std",
  "params": [],
  "ret": 0,
  "body": [

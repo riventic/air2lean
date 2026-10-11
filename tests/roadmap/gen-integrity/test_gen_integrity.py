@@ -141,15 +141,15 @@ class SyntheticTests(unittest.TestCase):
         self.fx.git("add", "-A")
         self.assertEqual(self.fx.run("check")[0], 0)
 
-    def test_attest_accepts_any_version_of_the_example(self):
-        # After check.sh for 0.15.2, Proofs/Demo/Gen.lean holds that version's translation.
-        (self.fx.root / "Proofs/Demo/Gen.lean").write_text(
-            (self.fx.root / "tests/golden/0.15.2/demo/Gen.lean").read_text())
-        self.assertFails("not the fresh translation", "check")
+    def test_attest_accepts_only_the_files_own_translation(self):
         status, out, err = self.fx.run("attest", "Proofs/Demo/Gen.lean")
         self.assertEqual(status, 0, err)
         record, = json.loads(out)["files"]
-        self.assertEqual(record["fresh_translation_of"], ["demo 0.15.2 linux"])
+        self.assertEqual(record["fresh_translation_of"], ["demo 0.16.0 linux"])
+        # Verification never swaps another version's translation in: that is not this file's.
+        (self.fx.root / "Proofs/Demo/Gen.lean").write_text(
+            (self.fx.root / "tests/golden/0.15.2/demo/Gen.lean").read_text())
+        self.assertFails("Proofs/Demo/Gen.lean: not a fresh translation", "attest")
         (self.fx.root / "Proofs/Demo/Gen.lean").write_text("import ZigLean\ndef handWritten := 1\n")
         self.assertFails("Proofs/Demo/Gen.lean: not a fresh translation", "attest")
 

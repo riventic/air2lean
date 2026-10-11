@@ -1,2 +1,3 @@
-fMin
-fMax
+# Typed host differences (F3, scripts/diff-report.py HOST_KINDS): <fn> <kind>[,<kind>...].
+fMin nan_payload,zero_sign
+fMax nan_payload,zero_sign

@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "posix.read",
+ "module": "std",
  "params": [
   0,
   1
@@ -321,6 +322,7 @@
        "callee": {
         "ty": 14,
         "func": "os.linux.read",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -359,6 +361,7 @@
        "callee": {
         "ty": 16,
         "func": "os.linux.errno",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -481,6 +484,7 @@
            "callee": {
             "ty": 17,
             "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -514,6 +518,7 @@
            "callee": {
             "ty": 17,
             "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -831,6 +836,7 @@
          "callee": {
           "ty": 19,
           "func": "posix.unexpectedErrno",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -904,6 +910,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -924,6 +931,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -942,6 +950,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -955,6 +964,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -990,6 +1000,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1003,6 +1014,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1022,6 +1034,7 @@
   {
    "k": "enum",
    "name": "os.linux.E__enum_913",
+   "module": "std",
    "tag": 22,
    "exhaustive": false,
    "fields": [

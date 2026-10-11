@@ -15,9 +15,10 @@ The functions are the committed translations of `examples/recursion/recursion.zi
 * `isEven`/`isOdd`: a mutually recursive group, one `mutual` block; one conjunction, one
   measure, both members unfolded.
 * `fact`: self-recursive with a checked multiply; the specification carries a range premise.
-* `addDown`: a memory-backed recursive function (`Zig.callM`), proved as a `TotalTriple` through
-  the separation interface (`pts_load_run`, `pts_store_run`) without unfolding `Zig.load`,
-  `Zig.store`, byte encodings or blocks.
+* Not here: the memory-backed `addDown`. Since MM-5 a recursive function that uses memory
+  charges its frame to the stack budget (`Zig.enterFrame`), so a `TotalTriple` over every memory
+  fails under a small `Mem.stackLimit`; the separation layer does not carry the stack premise
+  (STK-01) yet.
 
 Each proof starts with `rec_template μ unfolding f`, which supplies the strong induction on
 `μ` and the induction hypothesis `ih`; the proof discharges the measure decrease at the
@@ -120,51 +121,6 @@ theorem fact_spec : ∀ n : BitVec 32, n.toNat ≤ 12 →
       rw [BitVec.toNat_mul, BitVec.toNat_ofNat, hmod, BitVec.toNat_ofNat, hn]; rfl
     simp [zig_unfold, hn0, hres, hn, hnomul, hmuleq]
 
-/-! ## Memory-backed recursion: `addDown` -/
-
-/-- `tri k = k + (k - 1) + … + 1`. -/
-def tri : Nat → Nat
-  | 0 => 0
-  | k + 1 => (k + 1) + tri k
-
-/-- `addDown acc n` adds `n + (n - 1) + … + 1` to `*acc`, under the explicit premise that the
-total fits in `u64` (otherwise the checked add panics). Total correctness: it returns. -/
-theorem addDown_total (p : Ptr) : ∀ (n : BitVec 32) (v : BitVec 64), v.toNat + tri n.toNat < 2 ^ 64 →
-    TotalTriple (pts p 8 v) (Pointers.addDown p n)
-      (fun _ => pts p 8 (v + BitVec.ofNat 64 (tri n.toNat))) := by
-  rec_template (fun (n : BitVec 32) (_ : BitVec 64) => n.toNat) unfolding Pointers.addDown
-  intro hfit
-  apply TotalTriple.of_run
-  intro m h hF hd hm hp hs
-  by_cases hn0 : n = 0#32
-  · subst hn0
-    refine ⟨(), m, h, ?_, hd, hm, by simpa [tri] using hp, hs⟩
-    simp [zig_unfold]
-  · have hk := toNat_pred n hn0
-    simp only [hk, tri] at hfit
-    obtain ⟨m₁, hl, hm₁, hs₁⟩ := pts_load_run hp hm (by decide) hs
-    have hz : (n.setWidth 64).toNat = n.toNat := toNat_setWidth_of_le (by decide)
-    have hadd : Zig.add false v (n.setWidth 64) = pure (v + n.setWidth 64) :=
-      add_unsigned_of_lt (by omega)
-    obtain ⟨m₂, hst, hs₂, h₂, hd₂, hm₂, hp₂⟩ :=
-      pts_store_run hp hm₁ hd (by decide) hs₁ (v + n.setWidth 64)
-    -- The recursive call `addDown acc (n - 1)` from the stored value, by `ih`.
-    have hfit' : (v + n.setWidth 64).toNat + tri (n - 1#32).toNat < 2 ^ 64 := by
-      rw [toNat_add_of_lt (by omega), hz]; omega
-    obtain ⟨u, m₃, h₃, hrec, hd₃, hm₃, hp₃, hs₃⟩ :=
-      ih (n - 1#32) (v + n.setWidth 64) (by omega) hfit' m₂ h₂ hF hd₂ hm₂ hp₂ hs₂
-    refine ⟨(), m₃, h₃, ?_, hd₃, hm₃, ?_, hs₃⟩
-    · simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hl hst hrec
-      have hnz : n.toNat ≠ 0 := by omega
-      simp [zig_unfold, hn0, hnz, hl, -Zig.add_unsigned, hadd, hst, hrec]
-    · have heq : v + BitVec.ofNat 64 (tri n.toNat) =
-          v + n.setWidth 64 + BitVec.ofNat 64 (tri (n - 1#32).toNat) := by
-        rw [BitVec.add_assoc]; congr 1
-        apply BitVec.eq_of_toNat_eq
-        simp only [hk, tri, BitVec.toNat_add, BitVec.toNat_ofNat, hz]
-        omega
-      rw [heq]; exact hp₃
-
 /-! ## Rejections -/
 
 /-- error: rec_template: the goal has fewer than 2 leading binders: ∀ (n : BitVec 32), Recursion.fact n = Recursion.fact n -/
@@ -178,10 +134,6 @@ example : ∀ n : Nat, n = n := by
   rec_template (fun n : BitVec 32 => n.toNat)
 
 end RecTemplateTest
-
-/-- info: 'RecTemplateTest.addDown_total' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in
-#print axioms RecTemplateTest.addDown_total
 
 /-- info: 'RecTemplateTest.isEven_isOdd_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

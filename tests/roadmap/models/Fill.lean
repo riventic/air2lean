@@ -71,11 +71,15 @@ theorem storeBytes_cases (p : Ptr) (a : Nat) (bs : Array Byte) (m : Mem) :
         MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw,
         throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, pure,
         ExceptT.pure]
-    · cases hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size .write with
+    · cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size .write with
       | none => exact .inr ⟨b, blk, o, h, storeBytes_run h hK hr⟩
       | some e =>
         left
-        have he := raceAt_illegal hr
+        have he : e = .illegal := by
+          unfold raceCheck at hr
+          split at hr
+          · cases hr
+          · exact raceAt_illegal hr
         subst he
         simp [storeBytes, recordAccess, Mem.accessW, h, hK, hr, StateT.run, bind, StateT.bind, get,
           getThe, MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift,

@@ -204,8 +204,8 @@ theorem and_subWrap_one_lt {n : Nat} (x : BitVec n) (hx : x ≠ 0) :
 
 /-- Clients can move between the explicit overflow flag and the existing checked shift. -/
 theorem shlExact_of_noOverflow {n m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m)
-    (h : shr s (shl a b) b = a) : shlExact s a b = pure (shl a b) := by
+    (hb : shiftCountOk n b) (h : shr s (shl a b) b = a) : shlExact s a b = pure (shl a b) := by
   have h' : shr s (a <<< b.toNat) b = a := by simpa only [shl] using h
-  simp [shlExact, shl, h']
+  simp [shlExact, shl, h', hb]
 
 end Zig

@@ -8,8 +8,8 @@ namespace DeviceAsm
 /-- The declared device `cpu` (`--device-contract`, docs/volatile-effects.md, premise DEV-01): every volatile access is `Zig.vload`/`Zig.vstore` on this register map, and every declared `asm volatile` is `Zig.vasm`. -/
 def air2lean_device : Zig.Device := { name := "cpu", regs := [], asms := ["rdtsc\n\tshlq $32, %%rdx\n\torq %%rdx, %%rax"] }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure elapsedLocals where
   deriving Inhabited

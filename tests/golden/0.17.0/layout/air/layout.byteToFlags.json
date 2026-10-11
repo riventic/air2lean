@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.byteToFlags",
+ "module": "root",
  "params": [
   0
  ],
@@ -169,6 +170,7 @@
   {
    "k": "struct",
    "name": "layout.Flags",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {

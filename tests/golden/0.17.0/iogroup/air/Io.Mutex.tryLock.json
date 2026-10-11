@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "Io.Mutex.tryLock",
+ "module": "std",
  "params": [
   0
  ],
@@ -378,6 +379,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -396,6 +398,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -414,6 +417,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -427,6 +431,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -441,6 +446,7 @@
   {
    "k": "enum",
    "name": "Io.Mutex.State",
+   "module": "std",
    "tag": 15,
    "exhaustive": true,
    "fields": [
@@ -463,6 +469,7 @@
   {
    "k": "enum",
    "name": "lang.AtomicOrder",
+   "module": "std",
    "tag": 16,
    "exhaustive": true,
    "fields": [
@@ -502,6 +509,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -515,6 +523,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -528,6 +537,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -539,6 +549,7 @@
   {
    "k": "struct",
    "name": "Io.Mutex",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -553,6 +564,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(Io.Mutex.State)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {

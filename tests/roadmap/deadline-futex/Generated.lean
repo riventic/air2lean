@@ -20,7 +20,7 @@ private def allocateWord : MemM Ptr := do
   return p
 
 def main : IO Unit := do
-  let some (.ok (p, memory)) := (allocateWord.run DeadlineActual.mem0).run
+  let some (.ok (p, memory)) := (allocateWord.run (DeadlineActual.mem0 .fresh)).run
     | throw (IO.userError "C04_GENERATED: word preparation failed")
   let observed := TimedSched.run inputs 80 (fun _ => 0) (DeadlineActual.observe {}) memory
   require (match observed.result with | some (.ok n) => n == 10 | _ => false)
@@ -39,7 +39,7 @@ def main : IO Unit := do
   require (complete.state.kernel.registration.isNone && complete.state.kernel.mem.waiters.isEmpty &&
     complete.state.kernel.mem.woken.isEmpty) "actual wait continuation leaked registration"
   let boundary := TimedSched.run inputs 160 (fun _ => 0)
-    (DeadlineActual.boundaryClient {}) DeadlineActual.mem0
+    (DeadlineActual.boundaryClient {}) (DeadlineActual.mem0 .fresh)
   require (match boundary.result with | some (.ok (.ok n)) => n == 73 | _ => false)
     "actual boundaryClient body did not propagate successful return"
   let noClock := TimedSched.run {} 80 (fun _ => 0) (DeadlineActual.observe {}) memory

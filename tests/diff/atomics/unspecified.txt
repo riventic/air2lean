@@ -1,1 +1,2 @@
-mpRelaxed 0-20
+# Per-input exclusion pins (F3, scripts/diff-report.py): <fn> <input_sha256> <count>|<min>-<max> <reason>.
+mpRelaxed 37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570 0-20 relaxed message passing: when the native run sees the flag, the model has a data race

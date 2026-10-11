@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "threads.claimOnce",
+ "module": "root",
  "params": [],
  "ret": 0,
  "body": [
@@ -141,6 +142,7 @@
    "callee": {
     "ty": 4,
     "func": "atomic.Value(threads.Phase).init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -198,6 +200,7 @@
    "callee": {
     "ty": 8,
     "func": "atomic.Value(u32).init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -328,8 +331,10 @@
    "callee": {
     "ty": 15,
     "func": "Thread.spawn__func_2",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "threads.claim"
+    "comptime_fn": "threads.claim",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -476,8 +481,10 @@
    "callee": {
     "ty": 15,
     "func": "Thread.spawn__func_2",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "threads.claim"
+    "comptime_fn": "threads.claim",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -547,6 +554,7 @@
      "callee": {
       "ty": 25,
       "func": "Thread.join",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -661,6 +669,7 @@
    "callee": {
     "ty": 25,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -698,6 +707,7 @@
    "callee": {
     "ty": 25,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -1051,6 +1061,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1059,6 +1070,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(threads.Phase)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1077,6 +1089,7 @@
   {
    "k": "enum",
    "name": "threads.Phase",
+   "module": "root",
    "tag": 9,
    "exhaustive": true,
    "fields": [
@@ -1104,6 +1117,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1112,6 +1126,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1142,6 +1157,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1155,6 +1171,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1168,6 +1185,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1198,6 +1216,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1230,6 +1249,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1276,6 +1296,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1289,6 +1310,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1306,6 +1328,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1314,6 +1337,7 @@
   {
    "k": "enum",
    "name": "lang.AtomicOrder",
+   "module": "std",
    "tag": 38,
    "exhaustive": true,
    "fields": [
@@ -1353,6 +1377,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1366,6 +1391,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1379,6 +1405,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1392,6 +1419,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1405,6 +1433,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1418,6 +1447,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1431,6 +1461,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1439,6 +1470,7 @@
   {
    "k": "struct",
    "name": "threads.ClaimCtx",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -1458,6 +1490,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1477,6 +1510,7 @@
   {
    "k": "struct",
    "name": "Thread.PosixThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1503,6 +1537,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1515,6 +1550,7 @@
    "child": 43,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1527,6 +1563,7 @@
    "child": 44,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1539,6 +1576,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },

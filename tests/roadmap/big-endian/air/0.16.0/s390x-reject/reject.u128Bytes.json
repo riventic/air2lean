@@ -20,6 +20,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.u128Bytes",
+ "module": "root",
  "params": [
   0
  ],

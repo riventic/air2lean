@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "bitcast017.enumToSigned",
+ "module": "root",
  "params": [
   0
  ],
@@ -83,6 +84,7 @@
   {
    "k": "enum",
    "name": "bitcast017.E",
+   "module": "root",
    "tag": 4,
    "exhaustive": true,
    "fields": [

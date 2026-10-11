@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "debug.assert",
+ "module": "std",
  "params": [
   0
  ],
@@ -169,6 +170,7 @@
        "callee": {
         "ty": 3,
         "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+        "module": "std",
         "noreturn": true
        },
        "args": []

@@ -26,6 +26,45 @@
       ],
       "conclusion": {
         "head": "True"
+      },
+      "statement": {
+        "args": [],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          },
+          {
+            "binder": "default",
+            "defs": [
+              "StatementFixture.root"
+            ],
+            "name": "_h",
+            "prop": true,
+            "uses": [
+              0
+            ]
+          }
+        ],
+        "head": {
+          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "True"
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "absent",
+            "theorem": null
+          }
+        }
       }
     },
     {
@@ -63,12 +102,112 @@
         "StatementFixture.root"
       ],
       "conclusion": {
-        "head": "Eq",
         "args": [
           {
             "head": "HAdd.hAdd"
           }
-        ]
+        ],
+        "head": "Eq"
+      },
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "StatementFixture.root"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "params": [
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "instHAdd"
+              },
+              {
+                "bvar": 0
+              },
+              {
+                "closed": "OfNat.ofNat"
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "HAdd.hAdd"
+            },
+            "extra": [],
+            "fn": "HAdd.hAdd",
+            "fn_module": "Init.Prelude",
+            "params": [
+              "implicit",
+              "implicit",
+              "implicit",
+              "inst_implicit",
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          }
+        }
       }
     },
     {
@@ -92,6 +231,26 @@
       ],
       "conclusion": {
         "head": "True"
+      },
+      "statement": {
+        "args": [],
+        "binders": [],
+        "head": {
+          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "True"
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          }
+        }
       }
     },
     {
@@ -130,12 +289,112 @@
         "StatementFixture.wrapper"
       ],
       "conclusion": {
-        "head": "Eq",
         "args": [
           {
             "head": "HAdd.hAdd"
           }
-        ]
+        ],
+        "head": "Eq"
+      },
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "StatementFixture.wrapper"
+            },
+            "extra": [],
+            "fn": "StatementFixture.wrapper",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "params": [
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "instHAdd"
+              },
+              {
+                "bvar": 0
+              },
+              {
+                "closed": "OfNat.ofNat"
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "HAdd.hAdd"
+            },
+            "extra": [],
+            "fn": "HAdd.hAdd",
+            "fn_module": "Init.Prelude",
+            "params": [
+              "implicit",
+              "implicit",
+              "implicit",
+              "inst_implicit",
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          }
+        }
       }
     }
   ]

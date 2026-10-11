@@ -164,13 +164,21 @@ theorem raceAt_illegal {fp : Array FootprintEntry} {c : VClock} {b o len : Nat} 
     · cases he
   · cases he
 
+/-- The race check of `recordAccess` reports only `.illegal`. -/
+theorem raceCheck_illegal {m : Mem} {c : VClock} {b o len : Nat} {k : AccessKind}
+    {err : Error} (h : raceCheck m c b o len k = some err) : err = .illegal := by
+  unfold raceCheck at h
+  split at h
+  · cases h
+  · exact raceAt_illegal h
+
 /-- An outstanding read share: a read that overlaps the bytes and did not happen before the
 current thread. A write over it races. -/
 theorem outstanding_races {e : FootprintEntry} (he : e ∈ m.footprint) (hk : e.kind = .read)
     {b o len : Nat} (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
-    (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true) :
-    ¬ NoRace m b o len .write :=
-  race_of (err := .illegal) he hb h1 h2 hc (by rw [hk]; rfl)
+    (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
+    (hs : m.solo = false) : ¬ NoRace m b o len .write :=
+  race_of (err := .illegal) he hb h1 h2 hc (by rw [hk]; rfl) hs
 
 /-- `std`'s `free` of a heap region (poison write, then `rawFree`) with a racing access, such as
 an outstanding read share (`outstanding_races`), throws `.illegal`. -/
@@ -180,7 +188,7 @@ theorem poisonFree_outstanding {p : Ptr} {n b o : Nat} {blk : Block}
     ((poisonFree p n).run m).run = some (.error .illegal) := by
   unfold NoRace at hnr
   obtain ⟨err, herr⟩ := Option.ne_none_iff_exists'.mp hnr
-  obtain rfl := raceAt_illegal herr
+  obtain rfl := raceCheck_illegal herr
   obtain ⟨hk1, rfl, hk3⟩ := hk
   simp [poisonFree, recordAccess, zig_unfold, ha, hk1, hk3, herr, ExceptT.bindCont, StateT.lift, ExceptT.run]
 

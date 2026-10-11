@@ -22,17 +22,17 @@ def okNat {α : Type} (toNat : α → Nat) (r : Result α) : Option Nat :=
   | _ => none
 
 -- Block 1 is `live`'s local: the constant global of `U.b (-7)`, at a nonzero address.
-#guard (mem0.blocks[1]?.map fun b => (b.bytes == Enc.encode (U.b (-(7 : BitVec 32))),
+#guard ((mem0 .fresh).blocks[1]?.map fun b => (b.bytes == Enc.encode (U.b (-(7 : BitVec 32))),
   b.align, b.kind == .constGlobal, decide (0 < b.addr))) == some (true, 4, true, true)
 -- The shrunk fuzz case stays pointer-free (`Result`, no memory) and returns 0.
 #guard okNat BitVec.toNat (dead 5 9) == some 0
 -- A read through the pointer to `live`'s local, the global base `⟨some 1, 0⟩`, gives the
 -- native value `@bitCast(@as(i32, -7)) +% 5`.
-#guard okNat BitVec.toNat ((read (⟨some 1, 0⟩ : Ptr) 5).run' mem0) == some 4294967294
-#guard okNat BitVec.toNat ((live 5).run' mem0) == some 4294967294
-#guard okNat BitVec.toNat ((stack 9).run' mem0) == some 10
-#guard okNat BitVec.toNat ((entry 5 9).run' mem0) == some 8
-#guard okNat BitVec.toNat ((roundTrip 8).run' mem0) == some 13
+#guard okNat BitVec.toNat ((read (⟨some 1, 0⟩ : Ptr) 5).run' (mem0 .fresh)) == some 4294967294
+#guard okNat BitVec.toNat ((live 5).run' (mem0 .fresh)) == some 4294967294
+#guard okNat BitVec.toNat ((stack 9).run' (mem0 .fresh)) == some 10
+#guard okNat BitVec.toNat ((entry 5 9).run' (mem0 .fresh)) == some 8
+#guard okNat BitVec.toNat ((roundTrip 8).run' (mem0 .fresh)) == some 13
 
 -- The original reproducer: pointer-free, no `mem0`, returns 0 like the native build.
 #guard okNat BitVec.toNat (FuzzS19.entry 3 4) == some 0

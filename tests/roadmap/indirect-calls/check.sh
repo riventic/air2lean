@@ -22,9 +22,10 @@ lake build Air2Lean Air2Lean.Check Air2Lean.Emit ZigLean air2lean
 if [ "$synthetic" = 1 ]; then
   lake env lean --run tests/roadmap/indirect-calls/Pipeline.lean "$work/generated"
   lake env lean -R "$work/generated" -o "$work/generated/Calls.olean" "$work/generated/Calls.lean"
-  # Universal dispatch theorems about the fresh generated program.
-  LEAN_PATH="$work/generated:$(lake env printenv LEAN_PATH)" \
-    lake env lean tests/roadmap/indirect-calls/Bridge.lean
+  # Universal dispatch theorems about the fresh generated program. Compiled and audited (axioms,
+  # sorry, kernel replay), not only elaborated: it is indexed (F2).
+  python3 -B scripts/theorem_universe.py gate tests/roadmap/indirect-calls/Bridge.lean \
+    --root tests/roadmap/indirect-calls --lean-path "$work/generated" --output-dir "$work/universe"
   python3 tests/roadmap/indirect-calls/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'indirect call synthetic and kernel-proof regressions passed'; exit 0; fi

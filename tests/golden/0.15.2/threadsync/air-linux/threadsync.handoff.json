@@ -190,6 +190,7 @@
    "callee": {
     "ty": 17,
     "func": "Thread.spawn__anon_1901",
+    "instance_key": "9381d0180f29f5ad679f01eb287c196b6fb257365ec1b1664c11306ea17d46a0",
     "noreturn": false,
     "comptime_fn": "threadsync.producer"
    },

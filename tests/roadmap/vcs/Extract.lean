@@ -177,12 +177,15 @@ example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) (R : Assn)
       (fun _ => pts p 8 (old + delta.setWidth 64) ∗ R) :=
   (addTo_contract p delta old fits).frame
 
--- `ensures` separates a functional result from the heap effect.
+-- `ensures` separates a functional result from the heap effect. Pointer `==` compares
+-- addresses (`ptrEqAddr_raw`): two provenance-free pointers are equal iff their addresses are.
 theorem same_contract (p q : Ptr) :
-    Triple emp (Pointers.same p q) (ensures (fun r => r = (p == q)) (fun _ => emp)) := by
+    Triple ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
+      (ensures (fun r => r = decide (p.off = q.off)) (fun _ => emp)) := by
   vc_gen
-  case result_1 => rfl
   case memory_1 => exact pre
+  case result_1 => exact summary1.1
+  case memory_2 => exact summary1.2
 
 /-! ## Loops request explicit invariants and variants; recursion is refused -/
 

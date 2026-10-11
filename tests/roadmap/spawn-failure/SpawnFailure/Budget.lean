@@ -15,7 +15,7 @@ private def require (ok : Bool) (message : String) : IO Unit :=
 private def cleaned (m : Mem) : Bool :=
   m.groups.isEmpty && m.threads.all (fun r => r.spawner != 0 || r.joined)
 
-private def withLimit (limit : Option Nat) : Mem := { SpawnFailure.mem0 with spawnLimit := limit }
+private def withLimit (limit : Option Nat) : Mem := { SpawnFailure.mem0 .fresh with spawnLimit := limit }
 
 private def children (m : Mem) : Nat := m.threads.size - 1
 

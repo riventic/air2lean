@@ -276,6 +276,7 @@
      "callee": {
       "ty": 16,
       "func": "math.sub__anon_4535",
+      "instance_key": "85a035d52c516295d94477e31536ce828addf229869e1de681013ff709717db1",
       "noreturn": false
      },
      "args": [

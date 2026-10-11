@@ -2793,7 +2793,10 @@ fn genVecMem(rng: std.Random) !void {
     }
 }
 
-/// divmod(a: u32, b: u32): `b > 0` (0 is a CPU fault). Edges of `a` with small and large `b`.
+/// divmod(a: u32, b: u32): edges of `a` with small and large `b`, random fill with `b > 0`, then
+/// the edges of `a` with `b = 0`: `divl` faults (#DE, SIGFPE), the model throws `Zig.Error.trap`
+/// (S7). The zero-divisor rows come last and use no PRNG output, so every other input stays the
+/// same.
 fn genDivmod(rng: std.Random) !void {
     var file = try openOutIn("tests/diff/asm/inputs", "divmod");
     defer file.close();
@@ -2809,6 +2812,7 @@ fn genDivmod(rng: std.Random) !void {
         const b = if (n % 2 == 0) rng.intRangeAtMost(u32, 1, 100) else rng.intRangeAtMost(u32, 1, 0xffff_ffff);
         try writer.print("[{d},{d}]\n", .{ rng.int(u32), b });
     }
+    for (edgesU(u32)) |a| try writer.print("[{d},0]\n", .{a});
 }
 
 /// claimOnce(): no argument; 20 runs, each with the OS scheduler's own interleaving.

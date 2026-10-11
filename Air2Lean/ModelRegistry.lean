@@ -19,6 +19,14 @@ structure ModelFootprint where
   writes : Array Nat
   deriving BEq, Repr
 
+/-- The trust cut of an extern-function binding (`docs/external-models.md` §Extern functions):
+the library the symbol must be declared with, and the premise that states the model's
+correspondence to the real (OS or libc) primitive. -/
+structure ExternBinding where
+  library : Option String
+  premise : String
+  deriving BEq, Repr
+
 structure ModelBinding where
   symbol : String
   profile : BuildProfile
@@ -34,6 +42,8 @@ structure ModelBinding where
   dependencies : Array String
   /-- `none`: no declared footprint; only the contract's own `access`/`frame` apply. -/
   footprint : Option ModelFootprint := none
+  /-- `some`: `symbol` is an extern callee (`externCallee`), bound at its linker identity. -/
+  externBinding : Option ExternBinding := none
 
 instance : Inhabited ModelBinding := ⟨{
   symbol := "", profile := {name := "", schema := 0, zigVersion := ""},
@@ -55,6 +65,12 @@ private def identifier (s : String) : Bool :=
   (s.splitOn ".").all fun part => !part.isEmpty &&
     (part.toList.head?.map fun c => c.isAlpha || c == '_').getD false &&
     part.toList.all (fun c => c.isAlphanum || c == '_' || c == '\'')
+
+/-- A premise ID of `docs/premises.md`: three capital letters, a hyphen, two digits. -/
+private def premiseId (s : String) : Bool :=
+  match s.toList with
+  | [a, b, c, '-', d, e] => [a, b, c].all Char.isUpper && [d, e].all Char.isDigit
+  | _ => false
 
 private def keys (j : Json) (allowed : List String) : Except String Unit := do
   for (k, _) in (← j.getObj?).toArray do
@@ -254,8 +270,23 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
   unless (← (← field j "schema").getNat?) == 1 do throw "unsupported model registry schema"
   (← (← field j "models").getArr?).mapM fun m => do
     keys m ["symbol", "profile", "signature", "import", "implementation", "contract", "trust",
-      "proof", "termination", "errors", "effects", "dependencies", "footprint"]
+      "proof", "termination", "errors", "effects", "dependencies", "footprint", "extern"]
     let symbol ← str m "symbol"
+    -- An extern function is bound by its linker identity, never by a Zig declaration name;
+    -- that trust cut must name its premise.
+    let externBinding ← match m.getObjVal? "extern", externSymbol? symbol with
+      | .error _, none => pure none
+      | .ok e, some _ => do
+        keys e ["library", "premise"]
+        let library ← match (← field e "library") with
+          | .null => pure none
+          | l => some <$> l.getStr?
+        let premise ← str e "premise"
+        unless premiseId premise do
+          throw s!"model registry: '{symbol}': premise '{premise}' is not a premise ID (docs/premises.md, e.g. OSM-01)"
+        pure (some { library, premise : ExternBinding })
+      | .error _, some _ => throw s!"model registry: extern binding '{symbol}' needs an 'extern' object with its library and premise"
+      | .ok _, none => throw s!"model registry: '{symbol}' is not an extern callee (extern:<symbol>), so it cannot carry 'extern'"
     let p ← field m "profile"
     let schema ← (← field p "schema").getNat?
     let version ← str p "zig_version"
@@ -326,6 +357,7 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
       errors := errors
       dependencies := dependencies
       footprint := footprint
+      externBinding := externBinding
     }
 
 /-- Each semantic dependency names another binding, a modelled built-in std model qualified
@@ -361,6 +393,11 @@ def checkDependencies (models : Array ModelBinding) : Except String Unit := do
         reached := reached.insert d
         frontier := frontier ++ ((bindings[d]?.map (·.dependencies)).getD #[]).filter bindings.contains
 
+/-- The module of the callee whose identity key is `key` (`Func.identities`, B1), or `none` for
+a legacy export without module identity. -/
+def calleeModule (funcs : Array Func) (key : String) : Option String :=
+  funcs.findSome? fun f => (f.identities.find? (·.key == key)).bind (·.module)
+
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
@@ -381,6 +418,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
     if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
+    if let some reason := projectStdBinding? m.symbol (calleeModule funcs m.symbol) then throw reason
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
     let sites := calls.getD m.symbol #[]
@@ -424,12 +462,17 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome ||
+            (projectStdBinding? name (calleeModule funcs name)).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
-          entries := entries.push <| Json.mkObj [("symbol", .str name),
+          -- An extern callee keeps its declared library; its premise is the author's to name.
+          let library := (externSymbol? name).map fun symbol =>
+            ("extern", Json.mkObj [("library", Lean.toJson
+              ((f.externs.find? (·.name == symbol)).bind (·.library)))])
+          entries := entries.push <| Json.mkObj ([("symbol", .str name),
             ("profile", profile.toJson),
-            ("signature", Json.mkObj [("params", .arr params), ("return", ret)])]
+            ("signature", Json.mkObj [("params", .arr params), ("return", ret)])] ++ library.toList)
   pure <| Json.mkObj [("schema", Lean.toJson (1 : Nat)), ("models", .arr entries)]
 
 /-- Report trust separately from the qualified runtime semantics. No proved label is evidence
@@ -437,7 +480,7 @@ until the generated obligation has passed Lean kernel checking. -/
 def report (models : Array ModelBinding) : Json :=
   Json.mkObj [("schema", Lean.toJson (1 : Nat)),
     ("qualification", .str "selected-sequential-direct-MemM-models"),
-    ("bindings", .arr <| models.map fun m => Json.mkObj [
+    ("bindings", .arr <| models.map fun m => Json.mkObj <| [
       ("symbol", .str m.symbol), ("profile", m.profile.toJson),
       ("signature", Json.mkObj [("params", .arr m.params), ("return", m.ret)]),
       ("implementation", .str m.implementation), ("contract", .str m.contract),
@@ -447,7 +490,10 @@ def report (models : Array ModelBinding) : Json :=
       ("dependencies", Lean.toJson m.dependencies),
       ("footprint", match m.footprint with
         | some fp => Json.mkObj [("reads", Lean.toJson fp.reads), ("writes", Lean.toJson fp.writes)]
-        | none => .null)]),
+        | none => .null)] ++
+      -- Only an extern binding has the field: other reports are unchanged.
+      (m.externBinding.map fun e => ("extern", Json.mkObj [("library", Lean.toJson e.library),
+        ("premise", .str e.premise)])).toList),
     ("assumptions", Lean.toJson <| (models.filter (·.proof.isNone)).map (·.symbol))]
 end ModelRegistry
 end Air2Lean

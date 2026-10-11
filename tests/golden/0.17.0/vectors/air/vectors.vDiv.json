@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "vectors.vDiv",
+ "module": "root",
  "params": [
   0,
   0
@@ -262,6 +263,7 @@
        "callee": {
         "ty": 6,
         "func": "debug.FullPanic((function 'defaultPanic')).integerOverflow",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -354,6 +356,7 @@
        "callee": {
         "ty": 6,
         "func": "debug.FullPanic((function 'defaultPanic')).divideByZero",
+        "module": "std",
         "noreturn": true
        },
        "args": []

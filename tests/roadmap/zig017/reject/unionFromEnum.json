@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.unionFromEnum",
+ "module": "root",
  "params": [
   1
  ],
@@ -33,7 +34,6 @@
    "id": 0,
    "tag": "arg",
    "ty": 1,
-   "args": [],
    "param": 0
   },
   {
@@ -68,6 +68,7 @@
   {
    "k": "enum",
    "name": "zig017.Color",
+   "module": "root",
    "tag": 0,
    "exhaustive": true,
    "fields": [
@@ -98,6 +99,7 @@
   {
    "k": "union",
    "name": "zig017.Choice",
+   "module": "root",
    "layout": "auto",
    "tag": 1,
    "fields": [

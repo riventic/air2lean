@@ -83,7 +83,8 @@
    "callee": {
     "ty": 7,
     "func": "mem.Allocator.dupeZ__anon_749",
-    "noreturn": false
+    "noreturn": false,
+    "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349"
    },
    "args": [
     {
@@ -497,7 +498,8 @@
    "callee": {
     "ty": 17,
     "func": "mem.Allocator.free__anon_752",
-    "noreturn": false
+    "noreturn": false,
+    "instance_key": "0ba161b45e0aeddab3b1d9d8bab41bdca5061367062dee942e9e5ef2528144b5"
    },
    "args": [
     {

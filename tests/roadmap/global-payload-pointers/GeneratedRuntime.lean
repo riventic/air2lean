@@ -6,7 +6,7 @@ private def check [DecidableEq α] [Repr α] (name : String) (actual expected : 
   unless actual = expected do
     throw (IO.userError s!"{name}: expected {reprStr expected}, got {reprStr actual}")
 
-private def execute (name : String) (program : MemM α) (memory : Mem := GlobalPayload.mem0) : IO (α × Mem) := do
+private def execute (name : String) (program : MemM α) (memory : Mem := (GlobalPayload.mem0 .fresh)) : IO (α × Mem) := do
   match (program.run memory).run with
   | some (.ok answer) => pure answer
   | some (.error error) => throw (IO.userError s!"{name}: unexpected model error {reprStr error}")
@@ -25,16 +25,15 @@ private def wideOffset : Nat := 8 + 0
 private def equalOffset : Nat := 8 + 32
 
 private def unchangedExcept (name : String) (memory : Mem) (start count : Nat) : IO Unit := do
-  check (name ++ ":block-count") memory.blocks.size GlobalPayload.mem0.blocks.size
-  check (name ++ ":allocations") memory.allocs GlobalPayload.mem0.allocs
-  check (name ++ ":next-address") memory.nextAddr GlobalPayload.mem0.nextAddr
-  for (before, index) in GlobalPayload.mem0.blocks.zipIdx do
+  check (name ++ ":block-count") memory.blocks.size (GlobalPayload.mem0 .fresh).blocks.size
+  check (name ++ ":allocations") memory.allocs (GlobalPayload.mem0 .fresh).allocs
+  for (before, index) in (GlobalPayload.mem0 .fresh).blocks.zipIdx do
     let some after := memory.blocks[index]? | throw (IO.userError "missing framed block")
     check (name ++ s!":block-metadata-{index}")
       (after.align, after.kind, after.live, after.addr, after.bytes.size)
       (before.align, before.kind, before.live, before.addr, before.bytes.size)
-  check (name ++ ":frozen-frame") (← bytes memory 0) (← bytes GlobalPayload.mem0 0)
-  let before ← bytes GlobalPayload.mem0 1
+  check (name ++ ":frozen-frame") (← bytes memory 0) (← bytes (GlobalPayload.mem0 .fresh) 0)
+  let before ← bytes (GlobalPayload.mem0 .fresh) 1
   let after ← bytes memory 1
   check (name ++ ":object-size") after.size before.size
   for (byte, index) in before.zipIdx do
@@ -85,7 +84,7 @@ def main : IO Unit := do
   check "wide source folded read" GlobalPayload.wideRead.run (some (.ok (41 : BitVec 64)))
   observeWrites
   -- Model constness control uses an actual generated getter, not an invented source export.
-  let constResult := ((store 1 optional (99 : BitVec 8)).run GlobalPayload.mem0).run
+  let constResult := ((store 1 optional (99 : BitVec 8)).run (GlobalPayload.mem0 .fresh)).run
   match constResult with
   | some (.error .illegal) => pure ()
   | _ => throw (IO.userError "actual frozen getter allowed model store or failed for the wrong reason")

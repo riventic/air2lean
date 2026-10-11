@@ -39,9 +39,34 @@ PROJECT_CHECK = 'tests/roadmap/project-check/test_check.py'
 ACCOUNTING = 'tests/roadmap/host-accounting/test_accounting.py'
 TUTORIALS = 'tests/roadmap/tutorials/test_tutorials.py'
 DIAGNOSTICS = 'tests/roadmap/project-diagnostics/test_project_diagnostics.py'
+UNIVERSE = 'tests/roadmap/theorem-universe/test_universe.py'
+RECEIPTS = 'tests/roadmap/proof-receipts/test_receipt.py'
+POLICY = 'tests/roadmap/assurance/test_policy.py'
+CLAIMS = 'tests/roadmap/claims/test_claims.py'
+COVERAGE = 'tests/roadmap/coverage-report/test_coverage.py'
+OUTCOMES = 'tests/roadmap/outcome-accounting/test_report.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
+    # V06 (F3): a host allowance must type each differing float, not accept any difference.
+    'diff-host-difference-untyped': (
+        'scripts/diff-report.py', '        kinds = leaf_host_kinds(*pair) & allowed\n', '        kinds = allowed\n',
+        OUTCOMES, 'REPORT', ('Outcomes.test_untyped_host_differences_are_mismatches',
+                             'Outcomes.test_host_kind_predicates_check_the_values')),
+    # V06 (F3): a host-listed function's native signal against a model value is a mismatch.
+    'diff-host-masks-non-values': (
+        'scripts/diff-report.py', '    if host and nkind == mkind == Kind.VALUE: return Status.HOST\n',
+        '    if host: return Status.HOST\n', OUTCOMES, 'REPORT',
+        ('Outcomes.test_native_signal_is_excluded_only_for_model_exclusion',)),
+    # V06 (F3): a model exclusion counts only on an input pinned for it.
+    'diff-exclusion-unpinned': (
+        'scripts/diff-report.py', "        if pinned or (search and (search['status'] == 'capped' or search['saw_no_result'])):\n",
+        '        if True:\n', OUTCOMES, 'REPORT', ('Outcomes.test_model_exclusion_needs_a_pin_for_its_input',)),
+    # L13 (S7): a claim over an asm opaque carries the allowlist fault-condition premise.
+    'claims-asm-fault-premise-dropped': (
+        'scripts/claims.py', "    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
+        "    return ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_asm_closure_carries_fault_premise',)),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',
@@ -114,6 +139,11 @@ MUTANTS = {
         "                    narrower = by_name.get(token, set()) - {'all-schedules'}\n",
         '                    narrower = set()\n', THEOREMS, 'ti',
         ('FixtureTests.test_narrow_theorem_labeled_all_schedules_in_docs',)),
+    # D02/S6: an all-schedules completion witness must complete a run of the same program.
+    'theorem-inventory-completion-unchecked': (
+        'scripts/theorem-inventory.py',
+        "    if not (sched_programs(statement) & sched_programs(decl['statement'])) or not re.search(r'=\\s*some\\b', statement):",
+        '    if False:', THEOREMS, 'ti', ('FixtureTests.test_completion_witness',)),
     # T06: a probe profile of another optimize mode must not qualify a mode/backend record.
     'build-mode-profile-mode-unchecked': (
         'scripts/build-modes.py', "        if profile.get('build_mode') != mode:\n", '        if False:\n',
@@ -143,6 +173,52 @@ MUTANTS = {
         '                errors.append(f"{theorem[\'name\']}: runtime module {module} has no premise mapping")\n',
         '                pass\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_unmapped_module_and_axiom',)),
+    # D03 (W1): a generated def's Allocator/Io caller obligation must reach every theorem using it.
+    'premises-interface-marker-dropped': (
+        'scripts/premises.py', '        apply_markers(via, target.name, target.markers)\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_reaches_theorems',)),
+    # D03 (W1): a marker that is not directly above a def must fail, not silently vanish.
+    'premises-interface-marker-misplaced-accepted': (
+        'scripts/premises.py',
+        '    lean.errors += [f"{lean.rel}:{number - 1}: air2lean-premises marker does not precede a def"\n'
+        '                    for number in markers]\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_fails_closed',)),
+    # D03 (W1): the kernel-graph reader of generated markers fails closed on a misplaced marker.
+    'premise-markers-misplaced-accepted': (
+        'scripts/premise_markers.py',
+        '            errors.append(f"{rel}:{number - 1}: air2lean-premises marker does not precede a def")\n',
+        '            pass\n', PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
+    # D03 (W1): the kernel-graph derivation applies the same markers.
+    'premises-compiled-interface-marker-dropped': (
+        'scripts/premises.py', '                apply_markers(via, user(name), markers.of(module, user(name)))\n', '',
+        PREMISES, 'premises', ('CompiledTests.test_compiled_interface_marker',)),
+    # E04 (W3): a native result outside the model that is not a known divergence must fail.
+    'inclusion-new-divergence-ignored': (
+        'tests/roadmap/model-inclusion/inclusion.py', "            if r['status'] == 'fail':\n",
+        "            if False:\n", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_judge',)),
+    # E04 (W3): a known divergence that no longer diverges is stale, not silently passing.
+    'inclusion-stale-known-divergence-accepted': (
+        'tests/roadmap/model-inclusion/inclusion.py', "        elif r['status'] == 'pass':\n",
+        "        elif False:\n", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_judge',)),
+    # E04 (W3): a data race admits any value, but a native hang needs a model deadlock.
+    'inclusion-hang-included-by-race': (
+        'tests/roadmap/model-inclusion/inclusion.py', "(m == ILLEGAL and t != DEADLOCK)",
+        "(m == ILLEGAL)", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_io_hang_needs_a_model_deadlock',)),
+    # E04 (W3): an input the capped model cannot evaluate is never counted as included.
+    'inclusion-cap-limited-counted-included': (
+        'tests/roadmap/model-inclusion/inclusion.py',
+        "                        None if json.loads(group[0]).get('ok') == OUT_OF_MEMORY else False\n",
+        "                        True if json.loads(group[0]).get('ok') == OUT_OF_MEMORY else False\n",
+        'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_cap_limited_input_is_unevaluated_not_included',)),
+    # D03 (W1): a claim about a function with an Allocator/Io parameter names its premise.
+    'claims-caller-obligations-dropped': (
+        'scripts/claims.py', "                         'caller_obligations': obligations.get(theorem['name'], []),\n",
+        "                         'caller_obligations': [],\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_caller_obligations_follow_the_kernel_graph',)),
+    # D03 (W1): receipts and claims derive caller obligations from the kernel graph transitively.
+    'premises-caller-obligations-not-transitive': (
+        'scripts/premise_markers.py', "        pending += [(user, premise) for user in reverse.get(name, ())]\n", '',
+        PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
         'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",
@@ -203,13 +279,90 @@ MUTANTS = {
     'diagnostics-source-span-unchecked': (
         'scripts/project-diagnostics.py', "        demand(valid_span(d), 'invalid source span')\n", '',
         DIAGNOSTICS, 'adapter', ('AdapterTests.test_invalid_protocol_controls',)),
+    # V04/S1: a module the kernel replay rejected must not be trusted (debug.skipKernelTC oleans).
+    'audit-kernel-replay-rejection-ignored': (
+        'scripts/assumptions.py', '        if node["module"] in rejected:\n', '        if False:\n',
+        POLICY, 'audit', ('PolicyTests.test_kernel_replay_rejection_fails_dependent_theorems',)),
+    # V04/S1: a project module outside the replayed set must not be trusted.
+    'audit-unreplayed-module-trusted': (
+        'scripts/assumptions.py',
+        '        elif needs_replay(node["module"]) and node["module"] not in replayed:\n', '        elif False:\n',
+        POLICY, 'audit', ('PolicyTests.test_module_outside_replay_is_not_trusted',)),
+    # V04/S1: a changed Lake olean invalidates every cached replay (its dependents may break).
+    'audit-replay-cache-ignores-digest': (
+        'scripts/assumptions.py', '        passed = {}  # Another build: a reused module could depend on a changed one.\n',
+        '        pass\n',
+        UNIVERSE, 'assumptions', ('ReplayTests.test_cache_reuses_only_identical_passed_lake_oleans',)),
+    # V04/H1: a report whose recorded artifacts changed is stale.
+    'audit-freshness-digest-unchecked': (
+        'scripts/assumptions.py',
+        'if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):', 'if False:',
+        UNIVERSE, 'assumptions', ('FreshnessTests.test_changed_artifact_or_revision_is_stale',)),
+    # V04/F2: `declaration uses 'sorry'` fails compilation of an indexed module (examples too).
+    'universe-sorry-warning-ignored': (
+        'scripts/theorem_universe.py', '    if SORRY_WARNING in result.stdout:\n', '    if False:\n',
+        UNIVERSE, 'universe', ('UniverseTests.test_compile_rejects_sorry_warnings',)),
+    # V04/S1: the source scan rejects debug.skipKernelTC and set_option debug.*.
+    'universe-kernel-bypass-unscanned': (
+        'scripts/theorem_universe.py', 'if bypass := FORBIDDEN.search(line):', 'if bypass := None:',
+        UNIVERSE, 'universe', ('UniverseTests.test_scan_rejects_kernel_bypass_and_placeholders',)),
+    # I07/H1: a release receipt from a dirty tree needs the recorded --allow-dirty.
+    'receipt-dirty-tree-accepted': (
+        'scripts/proof-receipt.py',
+        "    demand(not plan['revision']['tracked_dirty'] or plan['allow_dirty'], 'tracked changes: a release receipt needs a clean tree')\n",
+        '', RECEIPTS, 'r', ('ReceiptTests.test_dirty_tree_receipt_needs_recorded_permission',)),
+    # V04/S1: the receipt's kernel replay must come from the planned toolchain's leanchecker.
+    'receipt-replay-tool-unchecked': (
+        'scripts/proof-receipt.py',
+        "and replay['tool_sha256'] == fingerprint(toolchain / 'bin/leanchecker')['sha256']", '',
+        RECEIPTS, 'r', ('ReceiptTests.test_receipt_requires_kernel_replay_by_planned_toolchain',)),
+    # P05/S2: a claim head counts only as the registered declaration (module and fingerprint).
+    'claim-head-identity-unchecked': (
+        'scripts/claims.py', "    if found != expected or (node is not None and node.get('module') != entry['module']):",
+        '    if False:', CLAIMS, 'claims', ('ClassifyTests.test_heads_are_registered_declarations',)),
+    # I06/S5: the conclusion must be about the root, not merely mention it.
+    'claim-subject-unchecked': (
+        'scripts/claims.py', "    elif subject is not None and subject.get('fn') == definition:",
+        "    elif definition in _list(theorem.get('conclusion_dependencies')) or subject is not None:",
+        CLAIMS, 'claims', ('AssessTests.test_subject_must_be_the_root',)),
+    # I06/S4: a fixed root argument or initial state scopes the derived domain.
+    'claim-fixed-argument-universal': (
+        'scripts/claims.py', '    scoped = bool(fixed or repeated or constrained)',
+        '    scoped = bool(repeated or constrained)', CLAIMS, 'claims', ('AssessTests.test_domain_is_derived',)),
+    # P05/S3: a hypothesis about generated code or a claim head rejects the goal.
+    'claim-hypothesis-unchecked': (
+        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))",
+        '            bad = []', CLAIMS, 'claims', ('AssessTests.test_hypotheses_about_generated_code_are_rejected',)),
+    # P05/S3: functional strength needs a non-vacuity witness.
+    'claim-nonvacuity-not-required': (
+        'scripts/claims.py', '    if strength in FUNCTIONAL and not nonvacuous:', '    if False:',
+        CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05/S6: partial correctness needs a liveness witness.
+    'claim-liveness-not-required': (
+        'scripts/claims.py', "    if strength == 'partial_correctness' and witnesses['liveness'] != 'verified':",
+        '    if False:', CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05/S3: a witness counts only as an allowed audited theorem.
+    'claim-witness-unaudited-accepted': (
+        'scripts/claims.py', "        if not isinstance(companion, dict) or companion.get('allowed') is not True:",
+        '        if False:', CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # I06/S4: a scoped domain caps coverage at proved_scoped.
+    'coverage-scoped-domain-functional': (
+        'scripts/project.py',
+        "        elif goal['strength'] in FUNCTIONAL and goal.get('scope') != 'universal':",
+        '        elif False:',
+        COVERAGE, 'project', ('CoverageTests.test_fixed_arguments_scope_the_domain',)),
 }
 
 
 def load_test_module(path):
     spec = importlib.util.spec_from_file_location('q02_mutant_target_' + Path(path).stem, ROOT / path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # A test may import a sibling helper (proof-receipts: `rss_budget`), as when run as a script.
+    sys.path.insert(0, str((ROOT / path).parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str((ROOT / path).parent))
     return module
 
 

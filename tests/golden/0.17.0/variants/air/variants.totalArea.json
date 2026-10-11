@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "variants.totalArea",
+ "module": "root",
  "params": [
   0
  ],
@@ -317,6 +318,7 @@
            "callee": {
             "ty": 9,
             "func": "variants.area",
+            "module": "root",
             "noreturn": false
            },
            "args": [
@@ -477,6 +479,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -502,6 +505,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -515,6 +519,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -538,6 +543,7 @@
   {
    "k": "union",
    "name": "variants.Shape",
+   "module": "root",
    "layout": "auto",
    "tag": 10,
    "fields": [
@@ -568,6 +574,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 13,
    "exhaustive": true,
    "fields": [
@@ -601,6 +608,7 @@
   {
    "k": "struct",
    "name": "variants.Rect",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

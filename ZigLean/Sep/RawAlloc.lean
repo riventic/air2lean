@@ -130,7 +130,7 @@ theorem rawInPlace_owned {m : Mem} {b : BlockId} {blk : Block} {hF : Heap} {n : 
   by_cases hc : m.allocPolicy.byteRemap ≠ .inPlace ∨ m.allocPolicy.maxBytes < n
   · refine ⟨false, m, ?_, hst, rfl⟩
     simp [rawInPlace, hc, zig_unfold]
-  by_cases hg : blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true
+  by_cases hg : blk.bytes.size < n ∧ m.growFree b blk n ≠ true
   · refine ⟨false, m, ?_, hst, rfl⟩
     have hc' : ¬ (m.allocPolicy.byteRemap ≠ .inPlace ∨ m.allocPolicy.maxBytes < n) := hc
     simp only [ne_eq, Bool.not_eq_true] at hg hc'
@@ -145,7 +145,7 @@ theorem rawInPlace_owned {m : Mem} {b : BlockId} {blk : Block} {hF : Heap} {n : 
   obtain ⟨hd', hm', hp'⟩ := afterByteRemap_owned_frame hbr hl hd hmr n
   refine ⟨true, recorded.afterByteRemap b blk n, ?_,
     afterByteRemap_seq hbr hl hd hmr (hst.recordAt _ _ _ _) n, hd', hm', hp'⟩
-  have hg' : ¬ (blk.bytes.size < n ∧ m.byteRemapLast b blk = false) := by simpa using hg
+  have hg' : ¬ (blk.bytes.size < n ∧ m.growFree b blk n = false) := by simpa using hg
   have hc' : ¬ (m.allocPolicy.byteRemap ≠ .inPlace ∨ m.allocPolicy.maxBytes < n) := hc
   simp only [ne_eq] at hc'
   simp [rawInPlace, hc', hg', zig_unfold, hrec, ExceptT.bindCont, set, StateT.set,

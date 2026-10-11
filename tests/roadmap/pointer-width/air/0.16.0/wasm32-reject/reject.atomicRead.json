@@ -28,6 +28,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.atomicRead",
+ "module": "root",
  "params": [
   0
  ],
@@ -82,6 +83,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 4,

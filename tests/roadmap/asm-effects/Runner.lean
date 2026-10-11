@@ -17,7 +17,7 @@ open Zig
 
 def pattern : Array Byte := Array.ofFn (n := 32) fun i => .int (BitVec.ofNat 8 (0xC0 + i.val))
 
-def mem (bytes : Array Byte) : Mem := Mem.ofGlobals [(bytes, 8, .global)]
+def mem (bytes : Array Byte) : Mem := Mem.ofGlobals .fresh [(bytes, 8, .global)]
 
 def at0 (off : Nat) : Ptr := ⟨some 0, off⟩
 

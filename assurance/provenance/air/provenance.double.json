@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "provenance.double",
+ "module": "root",
+ "src": {
+  "file": "provenance.zig",
+  "module": "provenance",
+  "decl_line": 8
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 15
   },
   {
    "id": 2,
@@ -59,6 +66,7 @@
    "callee": {
     "ty": 2,
     "func": "provenance.add",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -74,7 +82,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 4,

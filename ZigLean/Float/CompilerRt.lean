@@ -516,6 +516,96 @@ def Float.divFloorRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
 def Float.divCeilRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   Float.ceil (Float.divRt016 a b)
 
+/-! ## aarch64 `f80` division (`divxf3.zig`)
+
+On aarch64 `f80` `/` is compiler_rt's `__divxf3` (`docs/floats.md` §Targets; the same source in
+0.14.1, 0.15.2 and 0.16.0). It is not correctly rounded: its 64-bit quotient comes from a
+truncated Newton-Raphson reciprocal and its rounding reads a residual modulo `2^64`, so a normal
+quotient can be one unit low (`0x7ffeffffffffffffffff / 1.0` gives `0x7ffefffffffffffffffe`),
+and a quotient below the normal range — also one that rounds up to the smallest normal — is
+flushed to a signed zero. So this port follows the source step by step, in `Nat` arithmetic
+modulo `2^64`/`2^128` for its `u64`/`u128`, with the `u128` `wideMultiply` above. -/
+
+/-- `__divxf3(a, b)` on the bits. The caller (`Float.softF80Chk`) excludes noncanonical
+operands; a NaN result is some quiet NaN. -/
+def Float.divXf3 (a b : Float .f80) : Float .f80 := Id.run do
+  let m64 : Nat := 2 ^ 64
+  let m128 : Nat := 2 ^ 128
+  let integerBit : Nat := 2 ^ 63
+  let signBit : Nat := 2 ^ 79
+  let infRep : Nat := 0x7fff * m64 + integerBit
+  let qnanRep : Nat := infRep ||| 2 ^ 62
+  let A := a.bits.toNat
+  let B := b.bits.toNat
+  let ofNat (n : Nat) : Float .f80 := Float.ofBits (BitVec.ofNat 80 n)
+  let aExp : Nat := (A >>> 64) % 2 ^ 15
+  let bExp : Nat := (B >>> 64) % 2 ^ 15
+  let sign := (A ^^^ B) &&& signBit
+  let mut aSig := A % m64
+  let mut bSig := B % m64
+  let mut scale : Int := 0
+  -- Zero, denormal, infinity or NaN.
+  if aExp == 0 || aExp == 0x7fff || bExp == 0 || bExp == 0x7fff then
+    let aAbs := A % signBit
+    let bAbs := B % signBit
+    if aAbs > infRep then return ofNat (A ||| 2 ^ 62)
+    if bAbs > infRep then return ofNat (B ||| 2 ^ 62)
+    if aAbs == infRep then return ofNat (if bAbs == infRep then qnanRep else aAbs ||| sign)
+    if bAbs == infRep then return ofNat sign
+    if aAbs == 0 then return ofNat (if bAbs == 0 then qnanRep else sign)
+    if bAbs == 0 then return ofNat (infRep ||| sign)
+    -- `normalize`: shift the significand up to the integer bit; `1 - shift`.
+    if aAbs < integerBit then
+      let shift := 63 - Nat.log2 aSig
+      aSig := aSig <<< shift; scale := scale + (1 - (shift : Int))
+    if bAbs < integerBit then
+      let shift := 63 - Nat.log2 bSig
+      bSig := bSig <<< shift; scale := scale - (1 - (shift : Int))
+  let mut qExp : Int := (aExp : Int) - bExp + scale
+  let q63b := bSig % m64
+  let mut recip64 := (0x7504f333F9DE6484 + m64 - q63b) % m64
+  for _ in [0:5] do
+    let corr := (m64 - ((recip64 * q63b) >>> 64) % m64) % m64
+    recip64 := ((recip64 * corr) >>> 63) % m64
+  recip64 := (recip64 + m64 - 1) % m64
+  let correction := (m128 - (wideMultiply128 recip64 q63b).2) % m128
+  let r64cH := (wideMultiply128 recip64 (correction >>> 64)).2
+  let r64cL := (wideMultiply128 recip64 (correction % m64)).2
+  let reciprocal := ((r64cH + (r64cL >>> 64)) % m128 + m128 - 2) % m128
+  let quotient128 := (wideMultiply128 (aSig <<< 2) reciprocal).1
+  let mut quotient : Nat := 0
+  if quotient128 < 2 * integerBit then
+    qExp := qExp - 1
+    quotient := quotient128 % m64
+  else quotient := (quotient128 >>> 1) % m64
+  let residual := (m64 - (quotient * q63b) % m64) % m64
+  let written := qExp + 0x3fff
+  if written ≥ 0x7fff then return ofNat (infRep ||| sign)
+  if written < 1 then
+    if written == 0 && residual > bSig >>> 1 && quotient == integerBit - 1 then
+      return ofNat (2 ^ 64 ||| integerBit ||| sign)
+    return ofNat sign
+  let round := if residual > bSig >>> 1 then 1 else 0
+  let absResult := ((quotient ||| (written.toNat <<< 64)) + round) % 2 ^ 80
+  return ofNat (absResult ||| sign ||| integerBit)
+
+/-- `@divTrunc` on aarch64 `f80` in `compiler-rt` mode: `__divxf3`, then truncated. -/
+def Float.divTruncXf3 (a b : Float .f80) : Float .f80 := Float.trunc (Float.divXf3 a b)
+
+/-- `@divFloor` on aarch64 `f80` in `compiler-rt` mode: `__divxf3`, then floored. -/
+def Float.divFloorXf3 (a b : Float .f80) : Float .f80 := Float.floor (Float.divXf3 a b)
+
+/-- `@mulAdd` in `compiler-rt` mode on aarch64: the fused instruction for `f16`/`f32`/`f64`
+(`Float.fmaFused`), compiler_rt `__fmax`/`fmaq` for `f80`/`f128` (`Float.fmaRt`, as on
+x86_64). -/
+def Float.fmaRtFused {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
+  match fmt with
+  | .f80 | .f128 => Float.fmaRt a b c
+  | .f16 | .f32 | .f64 => Float.fmaFused a b c
+
+/-- `@divCeil` (Zig 0.17.0) on aarch64 `f80` in `compiler-rt` mode: `__divxf3`, then ceiled. -/
+def Float.divCeilXf3 (a b : Float .f80) : Float .f80 := Float.ceil (Float.divXf3 a b)
+
 /-- `@mulAdd` in `compiler-rt` mode, guarded against group C on any operand — the same guard as
 `Float.fmaChk` (`Ops.lean`), around `Float.fmaRt` instead of `Float.fma`. -/
 def Float.fmaRtChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=

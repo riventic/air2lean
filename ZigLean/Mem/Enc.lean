@@ -88,8 +88,11 @@ instance : Enc Unit where
   encode _ := #[]
   decode _ := pure ()
 
-/-- A pointer: 8 bytes that each remember the pointer. Integer bytes are not a pointer until
-`@ptrFromInt` is in the model: `.unspecified`. -/
+/-- A pointer: 8 bytes that each remember the pointer. Eight integer bytes (a reinterpretation of
+integer memory as a pointer, MM-11) are the pointer to that address without a block: an access
+through it is `.illegal`, as one through `@ptrFromInt` of an address no block covers.
+TODO(MM-11): resolve the address to a live block like `ptrFromAddr` once the placement model
+(`codex/fix-address-placement`) settles provenance for exposed addresses. -/
 instance : Enc Ptr where
   size := 8
   align := 8
@@ -97,6 +100,9 @@ instance : Enc Ptr where
   decode bs := match (bs[0]? : Option Byte) with
     | some (.ptrFrag p _) =>
       if bs.extract 0 8 == (Array.finRange 8).map (.ptrFrag p) then pure p else throw .unspecified
+    | some (.int _) => do
+      let n ← intOfBytes 64 bs
+      pure ⟨none, n.toNat⟩
     | _ => throw .unspecified
 
 /-- `?*T`: `null` is address 0, 8 zero bytes. -/

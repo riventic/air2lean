@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "os.linux.errno",
+ "module": "std",
  "params": [
   0
  ],
@@ -284,6 +285,7 @@
   {
    "k": "enum",
    "name": "os.linux.E__enum_913",
+   "module": "std",
    "tag": 7,
    "exhaustive": false,
    "fields": [

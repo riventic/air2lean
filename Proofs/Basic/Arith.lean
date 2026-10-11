@@ -1,4 +1,5 @@
 import Proofs.Basic.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `clampAdd` and `absDiff` from `examples/basic/basic.zig`
@@ -58,3 +59,7 @@ theorem absDiff_spec (a b : BitVec 32) :
     · simp [zig_unfold, hgt', Zig.sub, hof, hiff.1 hof]
     · simp [zig_unfold, hgt', Zig.sub, hof, intCast_sub b a (by omega) hof,
         Decidable.of_not_not (mt hiff.2 hof)]
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness intCast_sub := ⟨5, 3, by decide, by decide, trivial⟩

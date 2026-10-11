@@ -1,4 +1,4 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_x86_64","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
+-- air2lean-profile: {"admission":"unqualified-build-mode","correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_x86_64","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -28,10 +28,10 @@ instance : Zig.Enc Holder where
   encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.head), (12, Zig.Enc.encode v.maybe), (20, (letI : Zig.Enc (Except Zig.ErrName (Vector (BitVec 8) 3)) := Zig.errorUnionEnc (⟨#["Bad"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Vector (BitVec 8) 3))); Zig.Enc.encode v.res)), (8, Zig.Enc.encode v.tail)]
   decode bs := do pure { head := ← Zig.Enc.decodeAt bs 0, maybe := ← Zig.Enc.decodeAt bs 12, res := ← (letI : Zig.Enc (Except Zig.ErrName (Vector (BitVec 8) 3)) := Zig.errorUnionEnc (⟨#["Bad"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Vector (BitVec 8) 3))); Zig.Enc.decodeAt bs 20), tail := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: const_bases.table
-  (Zig.Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : Holder) : Holder), 8, .constGlobal)]
+  (Zig.Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : Holder) : Holder), 1, .constGlobal)]
 
 structure maybeBytePtrLocals where
   deriving Inhabited
@@ -77,10 +77,10 @@ inductive projectMaybeExit where
 
 def projectMaybe (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add 12)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 12))
     let i2 ← pure i1
-    let i3 ← pure (i2.add 2)
-    let i4 ← pure (i3.elem 1 (1 : BitVec 64))
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 2))
+    let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 1 (1 : BitVec 64)))
     pure (.ret i4)) : Zig.MM projectMaybeLocals projectMaybeExit).run' (default : projectMaybeLocals)
   match e with
   | .ret v => pure v
@@ -93,9 +93,9 @@ inductive projectResExit where
 
 def projectRes (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add 20)
-    let i2 ← pure (Zig.errPayloadPtr (Vector (BitVec 8) 3) i1)
-    let i3 ← pure (i2.elem 1 (2 : BitVec 64))
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 20))
+    let i2 ← Zig.callM (Zig.ptrProject i1 (Zig.errPayloadPtr (Vector (BitVec 8) 3)))
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (2 : BitVec 64)))
     pure (.ret i3)) : Zig.MM projectResLocals projectResExit).run' (default : projectResLocals)
   match e with
   | .ret v => pure v

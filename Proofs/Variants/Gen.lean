@@ -36,49 +36,75 @@ inductive Shape where
   | rect (v : Rect)
   | square (v : BitVec 32)
   | empty
+  | undef_circle (v : BitVec 32) (written : List String)
+  | undef_rect (v : Rect) (written : List String)
+  | undef_square (v : BitVec 32) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def Shape.tag : Shape → ShapeTag
   | .circle _ => .circle
+  | .undef_circle _ _ => .circle
   | .rect _ => .rect
+  | .undef_rect _ _ => .rect
   | .square _ => .square
+  | .undef_square _ _ => .square
   | .empty => .empty
 
 def Shape.get_circle : Shape → Zig.Result (BitVec 32)
   | .circle v => pure v
+  | .undef_circle _ _ => throw .unspecified
   | _ => throw .panic
 
 def Shape.modify_circle (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .circle v => .circle (g v)
-  | _ => .circle (g default)
+  | .undef_circle v w => .undef_circle (g v) w
+  | _ => .undef_circle (g default) []
 
 def Shape.setTag_circle : Shape → Shape
   | .circle v => .circle v
-  | _ => .circle default
+  | .undef_circle v w => .undef_circle v w
+  | _ => .undef_circle default []
+
+def Shape.set_circle (v : BitVec 32) (_ : Shape) : Shape := .circle v
 
 def Shape.get_rect : Shape → Zig.Result (Rect)
   | .rect v => pure v
+  | .undef_rect _ _ => throw .unspecified
   | _ => throw .panic
 
 def Shape.modify_rect (g : Rect → Rect) : Shape → Shape
   | .rect v => .rect (g v)
-  | _ => .rect (g default)
+  | .undef_rect v w => .undef_rect (g v) w
+  | _ => .undef_rect (g default) []
 
 def Shape.setTag_rect : Shape → Shape
   | .rect v => .rect v
-  | _ => .rect default
+  | .undef_rect v w => .undef_rect v w
+  | _ => .undef_rect default []
+
+def Shape.set_rect (v : Rect) (_ : Shape) : Shape := .rect v
+
+def Shape.setField_rect (k : String) (g : Rect → Rect) : Shape → Shape
+  | .rect v => .rect (g v)
+  | .undef_rect v w => if ["w", "h"].all (k :: w).contains then .rect (g v) else .undef_rect (g v) (k :: w)
+  | _ => if ["w", "h"].all ([k]).contains then .rect (g default) else .undef_rect (g default) ([k])
 
 def Shape.get_square : Shape → Zig.Result (BitVec 32)
   | .square v => pure v
+  | .undef_square _ _ => throw .unspecified
   | _ => throw .panic
 
 def Shape.modify_square (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .square v => .square (g v)
-  | _ => .square (g default)
+  | .undef_square v w => .undef_square (g v) w
+  | _ => .undef_square (g default) []
 
 def Shape.setTag_square : Shape → Shape
   | .square v => .square v
-  | _ => .square default
+  | .undef_square v w => .undef_square v w
+  | _ => .undef_square default []
+
+def Shape.set_square (v : BitVec 32) (_ : Shape) : Shape := .square v
 
 def Shape.get_empty : Shape → Zig.Result (Unit)
   | .empty => pure ()
@@ -372,23 +398,23 @@ def scale (p0 : Shape) (p1 : BitVec 32) : Zig.Result (Shape) := do
         let i8 ← Zig.call (Shape.get_circle p0)
         modify (fun s => { s with local2 := (Shape.setTag_circle s.local2) })
         let i11 ← Zig.mul false i8 p1
-        modify (fun s => { s with local2 := (Shape.modify_circle (fun _ => i11) s.local2) })
+        modify (fun s => { s with local2 := (Shape.set_circle (i11) s.local2) })
         pure .br4)
       | .rect => (do
         let i14 ← Zig.call (Shape.get_rect p0)
         modify (fun s => { s with local2 := (Shape.setTag_rect s.local2) })
         let i18 ← pure ((i14).w)
         let i19 ← Zig.mul false i18 p1
-        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
+        modify (fun s => { s with local2 := (Shape.setField_rect "w" (fun x => { x with w := i19 }) s.local2) })
         let i22 ← pure ((i14).h)
         let i23 ← Zig.mul false i22 p1
-        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with h := i23 }) s.local2) })
+        modify (fun s => { s with local2 := (Shape.setField_rect "h" (fun x => { x with h := i23 }) s.local2) })
         pure .br4)
       | .square => (do
         let i26 ← Zig.call (Shape.get_square p0)
         modify (fun s => { s with local2 := (Shape.setTag_square s.local2) })
         let i29 ← Zig.mul false i26 p1
-        modify (fun s => { s with local2 := (Shape.modify_square (fun _ => i29) s.local2) })
+        modify (fun s => { s with local2 := (Shape.set_square (i29) s.local2) })
         pure .br4)
       | .empty => (do
         modify (fun s => { s with local2 := Shape.empty })

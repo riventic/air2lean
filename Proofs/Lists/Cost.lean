@@ -48,15 +48,17 @@ theorem push_cost (a : Allocator) (q : Option Ptr) (v : BitVec 32) {m : Mem} (hs
       (by rw [enc_val_size]; simp) (by simp [h0]; omega) hst₁ (by decide)
     have hw : (writeBytes (Array.replicate 16 Byte.undef) 8 (Enc.encode v)).size = 16 := by
       rw [writeBytes_size _ _ _ (by rw [enc_val_size]; simp)]; simp
-    obtain ⟨m₃, hs₂, hst₃, -, -, -, -⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
+    obtain ⟨m₃, hs₂, hst₃, -, -, -, -⟩ := bytesAt_store (q := p) (k := 0) (a := 8)
       (bs' := Enc.encode q) hb₂ hm₂ hd₂ (by simp) (by rw [enc_next_size]; decide)
       (by rw [enc_next_size, hw]; decide) (by simp [h0]; omega) hst₂ (by decide)
     have c₂ := storeBytes_cost hs₁
     have c₃ := storeBytes_cost hs₂
+    have hpr : ptrProject p (·.add 8) m₁ = pure (p.add 8, m₁) := by
+      simpa [StateT.run] using bytesAt_ptrProject_run hb hm₁ (k := 8) (by simp) (by simp)
     refine ⟨.ok p, m₃, ?_, hst₃, by rw [c₃.allocs, c₂.allocs, ha₁],
       by rw [c₃.liveHeap, c₂.liveHeap, hl₁]⟩
     simp only [StateT.run] at hs₁ hs₂
-    simp [push, zig_unfold, hc, Zig.store, hs₁, hs₂]
+    simp [push, zig_unfold, hc, Zig.store, hpr, hs₁, hs₂]
 
 /-- Every successful run of `push` from a sequential memory has `push_cost`'s cost. -/
 theorem push_cost_of_run {a : Allocator} {q : Option Ptr} {v : BitVec 32} {m m' : Mem}
@@ -144,9 +146,11 @@ theorem sum_count_step (m₀ : Mem) (total : Nat) (htot : total < 2 ^ 64) (s : s
     have hno : ¬ (18446744073709551616 ≤ s.s.toNat + z.toNat % 18446744073709551616) := by
       simp only [List.map_cons, List.sum_cons] at hsum
       rw [Nat.mod_eq_of_lt (by omega)]; omega
+    have hpr : ptrProject p (·.add 8) m = pure (p.add 8, m) := by
+      simpa [StateT.run] using node_ptrProject_run hnode hm (k := 8) (by omega)
     refine ⟨.rep6, { s with s := s.s + z.setWidth 64, p := q }, mB, ?_, ?_⟩
     · simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hv hq
-      simp [sum.loop6, zig_unfold, hp, Zig.optPayload, hv, hq, hno]
+      simp [sum.loop6, zig_unfold, hp, Zig.optPayload, hpr, hv, hq, hno]
     · simp only [sum.again6, ↓reduceIte]
       obtain ⟨-, dGr⟩ := Heap.disjoint_union_left.mp d
       refine ⟨zs.length, by simpa using hn.symm, by rw [hmB, ← hm, hH], hstB,

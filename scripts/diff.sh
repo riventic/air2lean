@@ -16,24 +16,30 @@
 # evaluation does not establish divergence) — is a mismatch: printed immediately, and
 # makes the whole run exit 1.
 #
-# A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics),
-# `.illegal` or `.unsupportedTimer` (a clock the model lacks; typed as `unspecified_timer`)
-# is projected into the legacy "unspecified" counter, distinct from an exact match in the typed report. The count per function must equal the
-# one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
-# expects 0), so a model that throws `unspecified` too often fails the test. "<fn> <min>-<max>"
-# pins a range: for a function whose count depends on the timing of the compiled threads (a race
-# that the hardware shows on some runs only).
+# A Lean `Zig.Error.unspecified` or `illegal` (Zig leaves the result open; docs/generated-code.md
+# §Panics), or `.unsupportedTimer` (a clock the model lacks; typed as `unspecified_timer`), is projected into the legacy "unspecified" counter, distinct from an exact match in the
+# typed report. tests/diff/<ex>/unspecified.txt pins each such case by input
+# ("<fn> <input_sha256> <count>|<min>-<max> <reason>" lines; a range for an input whose result
+# depends on the timing of the compiled threads, a race that the hardware shows on some runs
+# only). scripts/diff-report.py checks the pins per input and makes a model exclusion on an
+# unpinned input a mismatch (F3); this loop checks only each function's total against the sum of
+# its pins.
 #
 # A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
 # `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
 # `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
 # legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
-# The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
-# other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
-# lists the functions whose results depend on the target, one per line. Only on a host that is
-# not x86_64-linux, a mismatch of such a function counts as "host", prints no MISMATCH line and
-# does not fail the run: CI (x86_64-linux) is the reference.
+# The float model follows the translation's target profile (docs/floats.md §Targets): on
+# aarch64-macos run that host's translation (scripts/check.sh), whose exclusion pins are
+# tests/diff/<ex>/unspecified.<uname -s>-<uname -m>.txt (`pin_file` below). The compiled Zig can
+# still give other bits for some float results (NaN bits, the sign of a zero). tests/diff/<ex>/host.txt
+# lists the functions whose results depend on the target, each with the kinds of difference it
+# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a
+# host that is not x86_64-linux, and only when both sides returned a value, a disagreement of such
+# a function counts as "host" here; scripts/diff-report.py then checks each differing float
+# against the listed kinds and fails the run on any other difference (F3). A panic, error or
+# exclusion against a value is never a host difference. CI (x86_64-linux) is the reference.
 #
 # Usage: diff.sh
 # Env:
@@ -316,11 +322,20 @@ expected_ctor_for_zig_kind() {
   done
 }
 
-# The pin of function `$1` in the pin file `$2`: "<count>" or "<min>-<max>"; not listed: 0.
+# The total pin of function `$1` in the per-input pin file `$2`: "<min>-<max>", the sums of its
+# inputs' pins; not listed: "0-0".
 pin_of() {
-  local spec=0
-  [ -f "$2" ] && spec=$(awk -v f="$1" '$1 == f { print $2 }' "$2")
-  echo "${spec:-0}"
+  [ -f "$2" ] || { echo 0-0; return; }
+  awk -v f="$1" '{ sub(/#.*/, "") } $1 == f { n = split($3, r, "-"); lo += r[1]; hi += r[n] }
+    END { printf "%d-%d\n", lo, hi }' "$2"
+}
+
+# The pin file of bucket `$2` (unspecified, capped) of example `$1`: `<bucket>.<host>.txt` on that
+# host if present (host: `uname -s`-`uname -m`; scripts/diff-report.py's pin_file), else
+# `<bucket>.txt`.
+pin_file() {
+  local own="tests/diff/$1/$2.$(uname -s)-$(uname -m).txt"
+  if [ -f "$own" ]; then echo "$own"; else echo "tests/diff/$1/$2.txt"; fi
 }
 
 # The pin of function `$1` in the pin file `$2` allows the count `$3`.
@@ -384,7 +399,7 @@ for ex in $examples; do
     fn_host=0
     host_dependent=0
     if [ "$reference_host" -eq 0 ] && [ -f "tests/diff/$ex/host.txt" ] &&
-      grep -qx "$fn" "tests/diff/$ex/host.txt"; then
+      awk -v f="$fn" '$1 == f { found = 1 } END { exit !found }' "tests/diff/$ex/host.txt"; then
       host_dependent=1
     fi
     # A process substitution hides the producer's exit status from set -e/pipefail.
@@ -411,8 +426,10 @@ for ex in $examples; do
       elif [ "${exclude_ub:-0}" -eq 1 ] && [ "$lkind" = fail ] &&
         [ "$lval" != Zig.Error.unspecified ] && [ "$lval" != Zig.Error.illegal ] &&
         [ "$lval" != Zig.Error.unsupportedTimer ] &&
-        [ "$lval" != Zig.Error.capped ] && [ "$lval" != Zig.Error.deadlock ]; then
-        # The model throws: illegal behavior in a build without safety checks.
+        [ "$lval" != Zig.Error.capped ] && [ "$lval" != Zig.Error.deadlock ] &&
+        [ "$lval" != Zig.Error.trap ]; then
+        # The model throws a safety panic: illegal behavior in a build without safety checks (a
+        # hardware trap is not; it faults in every build mode).
         fn_ub=$((fn_ub + 1))
       elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ] ||
         [ "$lval" = Zig.Error.unsupportedTimer ]; }; then
@@ -424,7 +441,7 @@ for ex in $examples; do
         [ -n "$expected_ctor" ] &&
         [ "$expected_ctor" = "${lval#'Zig.Error.'}" ]; then
         fn_fail_match=$((fn_fail_match + 1))
-      elif [ "$host_dependent" -eq 1 ]; then
+      elif [ "$host_dependent" -eq 1 ] && [ "$zkind" = ok ] && [ "$lkind" = ok ]; then
         fn_host=$((fn_host + 1))
       else
         fn_mismatch=$((fn_mismatch + 1))
@@ -439,16 +456,18 @@ for ex in $examples; do
       exit 1
     }
 
-    if ! pin_ok "$fn" "tests/diff/$ex/unspecified.txt" "$fn_unspecified"; then
+    unspecified_pins=$(pin_file "$ex" unspecified)
+    if ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
       mismatch_found=1
       echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/unspecified.txt") (tests/diff/$ex/unspecified.txt)" >&2
+        "$(pin_of "$fn" "$unspecified_pins") ($unspecified_pins)" >&2
     fi
 
-    if ! pin_ok "$fn" "tests/diff/$ex/capped.txt" "$fn_capped"; then
+    capped_pins=$(pin_file "$ex" capped)
+    if ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
       mismatch_found=1
       echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/capped.txt") (tests/diff/$ex/capped.txt)" >&2
+        "$(pin_of "$fn" "$capped_pins") ($capped_pins)" >&2
     fi
 
     host_str=""

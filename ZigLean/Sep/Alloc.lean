@@ -47,10 +47,10 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
       | some p => p.off = 0 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧
           Heap.Disjoint h h' ∧ ∃ A, A % align = 0 ∧
             bytesAt p A n .heap (Array.replicate n .undef) h' ∧
-            ∀ l c, m.heap l = some c → c.addr + c.size < A ∨ A + n < c.addr := by
+            ∀ l c, m.heap l = some c → n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr := by
   let m₁ : Mem := { m with allocs := m.allocs + 1 }
   have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
-  have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
+  have hst₁ : m₁.Seq := ⟨hst.single⟩
   classical
   rw [rawAlloc_eq]
   by_cases hdn : m.allocDenied n

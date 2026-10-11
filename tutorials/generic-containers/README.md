@@ -65,12 +65,22 @@ lake env lean tutorials/generic-containers/Negative.lean   # must fail
 - [ALC-01](../../docs/premises.md#alc-01), [ALC-02](../../docs/premises.md#alc-02),
   [ALC-03](../../docs/premises.md#alc-03): one modelled allocator; `OutOfMemory` is decided by
   the allocation policy (the theorem holds for every policy); the remap policy.
+- [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
+  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
+  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
+  `remap` and a `FixedBufferAllocator` over visible memory do not).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
+  (`docs/address-placement.md`); the result holds for every placement.
 - [SEM-05](../../docs/premises.md#sem-05): `Proofs/Lists/Append.lean` imports the P06 cost
   layer (`ZigLean.Sep.Cost`) for `append`'s model allocation count; such a count is a model
   count, not a time or memory measurement.
+- [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
+  [ORD-02](../../docs/premises.md#ord-02): every load and store checks for a data race against
+  the thread and clock state (MM-14); in the sequential memory the theorem starts from, no
+  other thread exists, so the check never fires.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, the translation of the std source, and
   native lowering.

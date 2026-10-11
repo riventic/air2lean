@@ -7,9 +7,12 @@ The single table of qualified standard-library names that the translator recogni
 `Diagnose.lean` and the project registry (`ModelRegistry.lean`) consult it through
 `stdModel?` and the typed projections below; none of them carries its own name table.
 
-Each entry records the typed model it selects, its Zig-version qualification (empty: every
-version in `baseZigVersions`; the checked AIR profile still applies), and its semantic dependencies: the
-`ZigLean` declarations the emitter may reference for it. `tests/roadmap/models/StdModels.lean`
+Each entry records the typed model it selects, its Zig-version qualification, and its
+semantic dependencies: the `ZigLean` declarations the emitter may reference for it. The
+qualification is the explicit list of reviewed std sources (`StdReview`): one Zig version and
+the SHA-256 of the std file that defines the symbol, reviewed against the model. A version that
+is not listed (a new Zig release, or an empty list) is rejected, never assumed
+(`tests/roadmap/models/test_std_sources.py` rechecks the hashes against the std sources). `tests/roadmap/models/StdModels.lean`
 checks that every dependency exists in the `ZigLean` environment. Adding a model means one row
 here, one typed signature case in `checkModelSignature` and one emission case; no name test. -/
 namespace Air2Lean
@@ -53,85 +56,126 @@ inductive StdModelKind where
   | rejected (reason : String)
   deriving BEq, Repr
 
-/-- The Zig versions that a row without an explicit `zigVersions` is qualified for. A later
-version is fail-closed: a row qualifies for it only by listing it, after its std source was
-re-audited for that version (`docs/std-models.md` §Zig 0.17.0 audit). -/
-def baseZigVersions : Array String := #["0.14.1", "0.15.2", "0.16.0"]
-
-/-- `baseZigVersions` and 0.17.0: a row whose std source (name, signature and semantics) did not
-change from 0.16.0 to 0.17.0. -/
-private def through017 : Array String := baseZigVersions.push "0.17.0"
+/-- One reviewed std source of a model row: the Zig version, the std file (relative to
+`lib/std`) and its SHA-256 at review time. -/
+structure StdReview where
+  zigVersion : String
+  file : String
+  sha256 : String
+  deriving Repr
 
 structure StdModel where
   /-- The qualified std name; an instance `<symbol>__anon_<n>` selects the same model. -/
   symbol : String
   kind : StdModelKind
-  /-- Zig versions this model is qualified for; empty means `baseZigVersions`. -/
-  zigVersions : Array String := #[]
+  /-- The std sources this model was reviewed against, one per qualified Zig version. Empty:
+  qualified for no version (the row only rejects). -/
+  reviewed : Array StdReview := #[]
   /-- `ZigLean` declarations the emitted term may reference (the semantic dependencies). -/
   dependencies : Array String := #[]
   deriving Repr
 
-/-- The Zig versions `m` is qualified for. -/
-def StdModel.qualifiedVersions (m : StdModel) : Array String :=
-  if m.zigVersions.isEmpty then baseZigVersions else m.zigVersions
+/-- The Zig versions this model is qualified for: exactly the reviewed ones. -/
+def StdModel.zigVersions (m : StdModel) : Array String := m.reviewed.map (·.zigVersion)
 
-/-- A rejection holds in every version; a model only in its qualified versions. -/
+/-- Fail closed: a version without a reviewed std source is not qualified. -/
 def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
-  match m.kind with
-  | .rejected _ => true
-  | _ => m.qualifiedVersions.contains zigVersion
+  m.zigVersions.contains zigVersion
+
+/-- Reviewed std file hashes (`sha256` of `lib/std/<file>` in the release tarball). Each row
+below cites the files whose definition of its symbol was compared with the model. -/
+private def review (file : String) (hashes : List (String × String)) : Array StdReview :=
+  (hashes.map fun (zigVersion, sha256) => { zigVersion, file, sha256 }).toArray
+/-- 0.17.0 rows: the std source (name, signature and semantics) did not change from 0.16.0 for
+the models that list 0.17.0 (`docs/std-models.md` §Zig 0.17.0 audit). -/
+private def allocatorZig (versions : List String := ["0.14.1", "0.15.2", "0.16.0", "0.17.0"]) : Array StdReview :=
+  review "mem/Allocator.zig" <| [
+    ("0.14.1", "2abc46d48236f1914c5cb9f1a8d526210c1159613bdf19bb57dda054c4f408b5"),
+    ("0.15.2", "679b9ca1d9314e138a7c7303bce1520c7a8fd7de7cfaf3d47659e23c3ae3aa77"),
+    ("0.16.0", "f6ad8a10185701ef1399350f127692ed5e89141773ea3c7e5ccc54a652120397"),
+    ("0.17.0", "25099a1aaed1fe80b811e1eaedf8c3e2059a3fe7b6c29db868a68da3085b7997")].filter
+    (versions.contains ·.1)
+private def threadZig : Array StdReview := review "Thread.zig" [
+  ("0.14.1", "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d"),
+  ("0.15.2", "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a"),
+  ("0.16.0", "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"),
+  ("0.17.0", "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87")]
+private def atomicZig : Array StdReview := review "atomic.zig" [
+  ("0.14.1", "5765a0e92346ae81cae3034d1d58ba4fc2c3e800fb59f80e87b7694c9b810f72"),
+  ("0.15.2", "8421886c8789d9cf7619b40f81ea9e24f7af8c31beaf8a93ba610fcc21bba269"),
+  ("0.16.0", "1f53df09898b7c88f8ad3ffff60b22e5656c0ea1a7c84663c6a0b8466c139c22"),
+  ("0.17.0", "85b467837478ff64aba29bf52cf9eef9b973ddb3ec6b5472901500a8e4a925c5")]
+/-- `std.Io` has the futex and `Group` API only from 0.16.0 (0.14.1/0.15.2 `Io.zig` is the
+reader/writer namespace). -/
+private def ioZig : Array StdReview := review "Io.zig" [
+  ("0.16.0", "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6"),
+  ("0.17.0", "382a4e343017183eff88e311f983066f88306e7bfcd85a890723b3697f4b2732")]
+/-- `std.Thread.Futex` is removed in 0.16.0 (replaced by `Io.futex*`). -/
+private def futexZig : Array StdReview := review "Thread/Futex.zig" [
+  ("0.14.1", "f1f8fd850c94e0eb99a9332a2e51dd793f4057e35b6e8f7a04efd46a65c04960"),
+  ("0.15.2", "0b03207ea341c962122d4410cb52b52379a3e202be4556c6766efc74587a51b6")]
+/-- Byte-identical in 0.14.1 and 0.15.2; `Thread.Mutex` is removed in 0.16.0. -/
+private def mutexZig : Array StdReview := review "Thread/Mutex.zig" [
+  ("0.14.1", "6916d64495922ac3b61386b659248c7fc0002edabc489f4a4fb64f973c754bcc"),
+  ("0.15.2", "6916d64495922ac3b61386b659248c7fc0002edabc489f4a4fb64f973c754bcc")]
+/-- `std.time.Timer` is removed in 0.16.0. -/
+private def timeZig : Array StdReview := review "time.zig" [
+  ("0.14.1", "3dcf1c3db1d8f99b8b4d0f6da6dbc7ad916ef62765a1fede977517587523d7ed"),
+  ("0.15.2", "b8b686d5ecaa81cb25b3234229a85cf0ff99c5bd6153283b272fe586c558d7f1")]
 
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
-    (zigVersions : Array String := #[]) : StdModel :=
-  { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
+    (reviewed : Array StdReview := allocatorZig) : StdModel :=
+  { symbol, kind := .alloc fn, reviewed, dependencies := deps.map ("Zig.Allocator." ++ ·) }
 private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
-    (zigVersions : Array String := #[]) : StdModel :=
-  { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
+    (reviewed : Array StdReview) : StdModel :=
+  { symbol, kind := .thread fn, reviewed, dependencies := deps.map ("Zig." ++ ·) }
+
+/-- `reviewed` restricted to the Zig versions in `versions` (a model qualified for fewer versions
+than the std file exists in). -/
+private def only (versions : List String) (reviewed : Array StdReview) : Array StdReview :=
+  reviewed.filter (versions.contains ·.zigVersion)
 
 /-- The reason of an async API outside the qualified future subset (`docs/futures.md`). -/
 private def asyncReason (symbol reason : String) : String :=
   s!"{symbol} is not a qualified async API: {reason} (docs/futures.md)"
 
-/-- The one table of built-in std models. Rows without 0.17.0 are 0.17.0-unqualified on purpose
-(`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
-`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.16.0 and 0.17.0 no
-longer have. -/
+/-- The one table of built-in std models. Rows without a 0.17.0 review are 0.17.0-unqualified on
+purpose (`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.0 no longer has. -/
 def stdModels : Array StdModel := #[
-  allocModel "mem.Allocator.create" .create #["create"] through017,
-  allocModel "mem.Allocator.destroy" .destroy #["destroy"] through017,
-  allocModel "mem.Allocator.alloc" .alloc #["alloc"] through017,
-  allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"] through017,
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0", "0.17.0"],
-  allocModel "mem.Allocator.free" .free #["free", "freeSentinel"] through017,
-  allocModel "mem.Allocator.dupe" .dupe #["dupe"] through017,
-  allocModel "mem.Allocator.remap" .remap #["remap"] through017,
-  threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"] through017,
-  threadModel "Thread.join" .join #["joinC"] through017,
-  threadModel "Thread.yield" .yield #["threadYieldC"] through017,
-  threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] through017,
-  allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
-  threadModel "Thread.detach" .detach #["detachC"] #["0.16.0"],
-  threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
-  threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] through017,
-  threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] through017,
-  threadModel "Io.futexWake" .futexWake #["futexWakeC"] through017,
-  threadModel "Thread.Futex.wait" .threadFutexWait #["threadFutexWaitC"],
-  threadModel "Thread.Futex.wake" .threadFutexWake #["threadFutexWakeC"],
-  threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"],
-  threadModel "Thread.Mutex.DarwinImpl.unlock" .osUnlock #["osUnfairUnlockC"],
-  threadModel "Thread.Mutex.DarwinImpl.tryLock" .osTryLock #["osUnfairTryLockC"],
-  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"],
-  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"],
-  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"],
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] through017,
-  threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] through017,
-  threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] through017,
-  threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] through017,
-  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] #["0.16.0"],
-  threadModel "Io.Future.await" .futureAwait #["awaitC"] #["0.16.0"],
-  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] #["0.16.0"],
-  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] #["0.16.0"],
+  allocModel "mem.Allocator.create" .create #["create"],
+  allocModel "mem.Allocator.destroy" .destroy #["destroy"],
+  allocModel "mem.Allocator.alloc" .alloc #["alloc"],
+  allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"],
+  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] (allocatorZig ["0.16.0", "0.17.0"]),
+  allocModel "mem.Allocator.free" .free #["free", "freeSentinel"],
+  allocModel "mem.Allocator.dupe" .dupe #["dupe"],
+  allocModel "mem.Allocator.remap" .remap #["remap"],
+  allocModel "mem.Allocator.realloc" .realloc #["realloc"] (allocatorZig ["0.16.0"]),
+  threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"] threadZig,
+  threadModel "Thread.join" .join #["joinC"] threadZig,
+  threadModel "Thread.detach" .detach #["detachC"] (only ["0.16.0"] threadZig),
+  threadModel "Thread.yield" .yield #["threadYieldC"] threadZig,
+  threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] atomicZig,
+  threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] ioZig,
+  threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] ioZig,
+  threadModel "Io.futexWake" .futexWake #["futexWakeC"] ioZig,
+  threadModel "Thread.Futex.wait" .threadFutexWait #["threadFutexWaitC"] futexZig,
+  threadModel "Thread.Futex.wake" .threadFutexWake #["threadFutexWakeC"] futexZig,
+  threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"] mutexZig,
+  threadModel "Thread.Mutex.DarwinImpl.unlock" .osUnlock #["osUnfairUnlockC"] mutexZig,
+  threadModel "Thread.Mutex.DarwinImpl.tryLock" .osTryLock #["osUnfairTryLockC"] mutexZig,
+  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
+  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
+  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
+  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] ioZig,
+  threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
+  threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] ioZig,
+  threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] ioZig,
+  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] (only ["0.16.0"] ioZig),
+  threadModel "Io.Future.await" .futureAwait #["awaitC"] (only ["0.16.0"] ioZig),
+  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] (only ["0.16.0"] ioZig),
+  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] (only ["0.16.0"] ioZig),
   { symbol := "Io.concurrent",
     kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
   { symbol := "Io.recancel",
@@ -161,7 +205,9 @@ def stdModels : Array StdModel := #[
   { symbol := "Io.sleep",
     kind := .rejected (asyncReason "Io.sleep" "it has no clock") },
   { symbol := "Io.futexWaitTimeout",
-    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" }]
+    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
+  { symbol := "Thread.spinLoopHint",
+    kind := .rejected "Thread.spinLoopHint is not a std declaration in any audited Zig version; std.atomic.spinLoopHint is the modelled hint" }]
   -- The cancelation points of the model (`docs/std-models.md` §Cancelation, C05/C08):
   -- `Io.futexWait` (and the std code over it), `Io.Group.await` and `Io.checkCancel`; the
   -- requests come from `Io.Group.cancel` and `Io.Future.cancel`. Every other cancelable `std.Io`
@@ -213,5 +259,43 @@ def modelledStdFn (name : String) : Bool :=
   match stdKind? name with
   | some (.alloc _) | some (.thread _) => true
   | _ => false
+
+/-- The top-level namespaces of `lib/std` (its files and directories) in Zig 0.14.1, 0.15.2 and
+0.16.0. A fully qualified AIR name whose first component is one of these names std code. -/
+def stdNamespaces : Array String := #[
+  "BitStack", "Build", "DoublyLinkedList", "Io", "Progress", "Random", "RingBuffer",
+  "SemanticVersion", "SinglyLinkedList", "Target", "Thread", "Uri", "array_hash_map",
+  "array_list", "ascii", "atomic", "base64", "bit_set", "bounded_array", "buf_map", "buf_set",
+  "builtin", "c", "coff", "compress", "crypto", "debug", "deque", "dwarf", "dynamic_library",
+  "elf", "enums", "fifo", "fmt", "fs", "gpu", "hash", "hash_map", "heap", "http", "io", "json",
+  "leb128", "linked_list", "log", "macho", "math", "mem", "meta", "multi_array_list", "net",
+  "once", "os", "pdb", "pie", "posix", "priority_dequeue", "priority_queue", "process",
+  "segmented_list", "simd", "sort", "start", "static_string_map", "std", "tar", "testing",
+  "time", "treap", "tz", "unicode", "valgrind", "wasm", "zig", "zip", "zon"]
+
+/-- The std functions a project registry may bind (W4, `docs/external-models.md`): OS primitives
+only, the trusted base of the allocators-from-OS-primitives design (class A of
+`docs/architecture-audit/models.md`). Every other std function is translated from its source or
+modelled by a reviewed `stdModels` row; a project cannot hand-model it. -/
+def osPrimitiveBindings : Array String := #[
+  "os.linux.read", "os.linux.write", "os.linux.close", "os.linux.mmap", "os.linux.munmap",
+  "os.linux.mremap", "os.linux.clock_gettime", "os.linux.futex_3arg", "os.linux.futex_4arg",
+  "os.linux.futex_wait", "os.linux.futex_wake", "os.linux.sched_yield",
+  "posix.mmap", "posix.munmap", "posix.mremap"]
+
+/-- Why a project registry binding of `symbol` is rejected as a hand model of std code, if it is.
+`module` is the callee's module identity (`Air2Lean/Air/Identity.lean`, B1): the binding is std
+code exactly when that module is `std`, so a user module named like a std namespace
+(`posix.zig`, key `posix.helper` of module `root`) may be bound. Without module identity (a
+legacy export, `module = none`) the first name component is matched against `stdNamespaces`,
+which also refuses such a user module (fail closed). -/
+def projectStdBinding? (symbol : String) (module : Option String := none) : Option String :=
+  let base := stdModelBase symbol
+  let std := match module with
+    | some m => m == "std"
+    | none => stdNamespaces.contains ((base.splitOn ".").head!)
+  if std && !osPrimitiveBindings.contains base then
+    some s!"model '{symbol}' hand-models std code: a project registry may bind only the OS primitives {", ".intercalate osPrimitiveBindings.toList} in a std namespace; translate the std function instead"
+  else none
 
 end Air2Lean

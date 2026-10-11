@@ -74,6 +74,30 @@ def devAddr? (p : Ptr) : Option Nat :=
   | none => if 0 ≤ p.off then some p.off.toNat else none
   | some _ => none
 
+/-- The declared register window of `d`: from its lowest register address to one past the end
+of its highest register (`bits / 8` bytes each). -/
+def Device.window (d : Device) : Nat × Nat :=
+  match d.regs with
+  | [] => (0, 0)
+  | r :: rs => rs.foldl (fun (lo, hi) r => (Nat.min lo r.addr, Nat.max hi (r.addr + r.bits / 8)))
+      (r.addr, r.addr + r.bits / 8)
+
+/-- `addr` lies in `d`'s register window (one past its end included). -/
+def Device.inWindow (d : Device) (addr : Nat) : Bool :=
+  let (lo, hi) := d.window
+  !d.regs.isEmpty && decide (lo ≤ addr) && decide (addr ≤ hi)
+
+/-- A derived pointer of a device pointer (L13, `--device-contract`): a field or element of the
+register block, such as `&uart.data`. The device's declared register window is the allocation
+`getelementptr inbounds` needs, which lies outside the model (DEV-01): an offset of a block-less
+pointer in the window that stays in the window is formed. Any other projection is MM-3's
+`ptrProject`, so an offset of an undeclared `@ptrFromInt` address stays `.illegal`. -/
+def ptrProjectDevice (d : Device) (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := fun m =>
+  let q := project p
+  match devAddr? p, devAddr? q with
+  | some a, some b => if d.inWindow a && d.inWindow b then pure (q, m) else ptrProject p project m
+  | _, _ => ptrProject p project m
+
 /-- The memory after one more event. -/
 def Mem.withEvent (m : Mem) (e : DevEvent) : Mem :=
   { m with dev := { m.dev with trace := m.dev.trace ++ [e] } }
@@ -114,6 +138,12 @@ def vasmEffect (d : Device) (t : String) (ins : List Nat) : MemM Unit := fun m =
   if d.asms.contains t then pure ((), m.withEvent (.asm t ins 0 0)) else throw .unspecified
 
 /-! ## Run equations -/
+
+theorem ptrProjectDevice_run {d : Device} {p : Ptr} {project : Ptr → Ptr} {m : Mem} {a b : Nat}
+    (hp : devAddr? p = some a) (hq : devAddr? (project p) = some b) (ha : d.inWindow a = true)
+    (hb : d.inWindow b = true) :
+    (ptrProjectDevice d p project).run m = pure (project p, m) := by
+  simp [ptrProjectDevice, StateT.run, hp, hq, ha, hb]
 
 theorem vload_run {d : Device} {bits align addr : Nat} {p : Ptr} {m : Mem} {v : BitVec bits}
     (hp : devAddr? p = some addr) (hal : addr % align = 0) (hr : d.readable addr bits = true)

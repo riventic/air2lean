@@ -85,6 +85,6 @@ theorem appendEach_anyPolicy (P : AllocPolicy) (f : Option Nat) (a : Allocator)
       m'.Seq ∧ rs.length = vs.length ∧ (∀ r ∈ rs, r = .ok () ∨ r = .error "OutOfMemory") ∧
       ∃ hL' ptr' cap', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧
         alist p ptr' cap' (xs ++ appended vs rs) hL' ∧ ptrOk m' ptr' :=
-  appendEach_run a vs hl hm hd ⟨hst.single, hst.addr⟩ hok
+  appendEach_run a vs hl hm hd ⟨hst.single⟩ hok
 
 end Lists

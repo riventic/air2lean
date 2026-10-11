@@ -47,14 +47,12 @@ pub fn main() !void {
     const eights = [_][8]u8{ .{ 0x3f, 0xf0, 0, 0, 0, 0, 0, 0 }, .{ 1, 2, 3, 4, 5, 6, 7, 8 } };
     for (eights) |b| {
         try line("bytesToF64Bits", b, be.bytesToF64Bits(b));
-        try line("vecLane0FromBytes", b, be.vecLane0FromBytes(b));
     }
     for ([_]u64{ 0x3ff0000000000000, 0x400921fb54442d18 }) |bits| {
         const x: f64 = @bitCast(bits);
         for (0..8) |i| try line("byteOfF64", .{ bits, i }, be.byteOfF64(x, i));
     }
     for ([_][2]u16{ .{ 0x0102, 0x0304 }, .{ 0xffff, 0 } }) |p| {
-        for (0..4) |i| try line("vecByte", .{ p[0], p[1], i }, be.vecByte(p[0], p[1], i));
         try line("externToBytes", .{ p[0], p[1], 0xa1b2c3d4 }, be.externToBytes(p[0], p[1], 0xa1b2c3d4));
     }
     for ([_][2]u16{ .{ 0xabc, 0xd }, .{ 0, 0xf }, .{ 0xfff, 0 } }) |p| {

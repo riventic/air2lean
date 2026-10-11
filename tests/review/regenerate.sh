@@ -51,10 +51,13 @@ with (work / 'manifest.tsv').open('w') as manifest:
         for source_index, source in enumerate(sources):
             shutil.copyfile(source, air / f'{source_index:05d}-{source.name}')
         namespace = example[:1].upper() + example[1:]
-        manifest.write(f'{air}\t{target}\t{namespace}\t{example}\n')
+        # Schema 1-11 AIR needs the explicit legacy profile opt-in.
+        legacy = all(json.loads(p.read_text())['schema'] < 12 for p in sources)
+        manifest.write(f'{air}\t{target}\t{namespace}\t{example}\t{int(legacy)}\n')
 PY
-while IFS=$'\t' read -r air target namespace example; do
+while IFS=$'\t' read -r air target namespace example legacy; do
   args=(--namespace "$namespace" --prefix "$example.")
+  [ "$legacy" = 0 ] || args+=(--profile legacy-abi64-le)
   if [ -f "examples/$example/translate.args" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       # translate.args is intentionally a whitespace-separated argv file, not shell code.

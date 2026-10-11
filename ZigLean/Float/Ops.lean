@@ -99,23 +99,25 @@ def Float.ofInt (fmt : FloatFmt) (s : Bool) {n : Nat} (x : BitVec n) : Float fmt
   Float.roundRat fmt (v < 0) (v : Rat)
 
 /-- `@floatToInt`: truncate toward zero into an `n`-bit integer (signed per `s`). `safe`
-matches Zig's runtime safety check, i.e. whether the truncated value (incl. NaN, ±inf) is
-out of the target type's range: `x ≤ floor(min-1) ∨ x ≥ ceil(max+1)` is, for a
-truncate-toward-zero result, exactly "the truncated value is outside `[min, max]`", so this
-checks that range directly instead of re-deriving it from the pre-truncation value. Out of
-range (or NaN): `.overflow` if `safe`, `.unspecified` otherwise. -/
+matches Zig's runtime safety check, i.e. whether the truncated value (incl. ±inf) is out of
+the target type's range: `x ≤ floor(min-1) ∨ x ≥ ceil(max+1)` is, for a truncate-toward-zero
+result, exactly "the truncated value is outside `[min, max]`", so this checks that range
+directly instead of re-deriving it from the pre-truncation value. Out of range: `.overflow`
+if `safe`, `.illegal` otherwise. A NaN is out of range too, but both comparisons of the check
+are false for it, so it is unchecked illegal behaviour: `.illegal` either way
+(`docs/illegal-behavior.md`). -/
 def Float.toInt {fmt : FloatFmt} (s : Bool) (n : Nat) (safe : Bool) (x : Float fmt) :
     Result (BitVec n) :=
   match x.classify with
-  | .nan => throw .unspecified
-  | .inf _ => if safe then throw .overflow else throw .unspecified
+  | .nan => throw .illegal
+  | .inf _ => if safe then throw .overflow else throw .illegal
   | .finite sn m e =>
     let mag : Nat := if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat
     let tv : Int := if sn then -(mag : Int) else (mag : Int)
     let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
     let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
     if tv < lo || tv > hi then
-      if safe then throw .overflow else throw .unspecified
+      if safe then throw .overflow else throw .illegal
     else pure (.ofInt n tv)
 
 /-! ## Arithmetic
@@ -201,6 +203,19 @@ def Float.fma {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
     else
       Float.roundRat fmt neg sum
 
+/-- `@mulAdd` on aarch64 (`docs/floats.md` §Targets): `f16`, `f32` and `f64` use the fused
+`fmadd` instruction (`f16` with `fullfp16`, in the `apple_m1` baseline), which rounds the exact
+result once to the format itself. `Float.fma` rounds an `f16` result through `f32` (the x86_64
+promotion); every other case, incl. `f80` and `f128` (compiler_rt `__fmax`/`fmaq` on both
+targets), is `Float.fma`. -/
+def Float.fmaFused {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
+  match fmt, a.classify, b.classify, c.classify with
+  | .f16, .finite sa ma ea, .finite sb mb eb, .finite sc mc ec =>
+    let sum := finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec
+    let neg := if sum = 0 then ((sa != sb) && (ma == 0 || mb == 0)) && (sc && mc == 0) else sum < 0
+    Float.roundRat .f16 neg sum
+  | _, _, _, _ => Float.fma a b c
+
 /-! ## Round-to-integer ops
 
 `@floor`/`@ceil`/`@trunc`/`@round` return a float, not an integer: since a finite `Float fmt`
@@ -277,6 +292,12 @@ root and extends back (`docs/floats.md` §Per-version differences). The emitter 
 def Float.sqrtF128ViaF64 (x : Float .f128) : Float .f128 :=
   Float.conv .f128 (Float.sqrt (Float.conv .f64 x))
 
+/-- `@sqrt` on `f80` on aarch64 before Zig 0.16.0: compiler_rt's soft-float `__sqrtx` is
+`sqrtq` of the `f128` extension, so it rounds to `f64` too (`docs/floats.md` §Targets). x86_64
+uses the x87 `fsqrt` (`Float.sqrt`), and 0.16.0's `__sqrtx` is correctly rounded. -/
+def Float.sqrtF80ViaF64 (x : Float .f80) : Float .f80 :=
+  Float.conv .f80 (Float.sqrt (Float.conv .f64 x))
+
 /-! ## Remainder, modulo, integer division -/
 
 /-- `@rem`: `a - b * trunc(a / b)`, exact — no rounding is needed since the true remainder of
@@ -316,6 +337,32 @@ def Float.divTrunc {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.trunc
 /-- `@divFloor`: division, rounded once, then floored. -/
 def Float.divFloor {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.div a b)
 
+/-! ## `@divExact`
+
+`@divExact(a, b)` is illegal behaviour unless `@divTrunc(a, b) * b == a` (langref §`@divExact`).
+With safety on, Sema lowers it to `div_trunc`, then checks `floor(r) == r`: that panics
+(`exactDivisionRemainder`) only for a NaN quotient, so ReleaseSafe returns the truncated
+quotient of every other inexact division, and ReleaseFast/ReleaseSmall the plain quotient
+(`div_exact`). The model makes those inputs `.illegal` (`docs/illegal-behavior.md`). `q` is the
+quotient `a / b` that the build computes (`Float.div`, or a compiler-rt variant). -/
+
+/-- `q = a / b` is exact: a whole number (±∞ included) with `q * b == a`. A zero `b` never is:
+`q` is ±∞ or NaN, and `±∞ * 0` is NaN. For a whole `q`, `@divTrunc(a, b) = q`, so this is the
+langref condition; a fractional `q` is illegal on either reading (`div_exact`'s "no remainder"). -/
+def Float.exactQuotient {fmt : FloatFmt} (a b q : Float fmt) : Bool :=
+  Float.eq (Float.trunc q) q && Float.eq (Float.mul q b) a
+
+/-- `@divExact` with safety (`div_trunc`): the truncated quotient. A NaN quotient passes through
+so that the generated `floor` check panics as ReleaseSafe does; any other inexact quotient is
+`.illegal`. -/
+def Float.divExactTrunc {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt) :=
+  if q.isNaN || Float.exactQuotient a b q then pure (Float.trunc q) else throw .illegal
+
+/-- `@divExact` without safety (`div_exact`): the quotient; every inexact one, NaN included, is
+`.illegal`. -/
+def Float.divExactChk {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt) :=
+  if Float.exactQuotient a b q then pure q else throw .illegal
+
 /-- `@divCeil` (Zig 0.17.0): division, rounded once, then ceiled (LLVM backend: `fdiv`, `ceil`). -/
 def Float.divCeil {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.div a b)
 
@@ -327,12 +374,30 @@ without a guard the model would silently disagree with actual Zig output on thes
 regardless of `--float-semantics`. Each guard wraps the model's own (unmodified) op: the
 `.unspecified` throw is the only change, never a different computed value. -/
 
+/-- Is `x` a signaling NaN: a NaN encoding whose quiet bit (the top fraction bit) is clear. For
+`f80` only a NaN with the integer bit set counts; its pseudo-NaNs are group C
+(`Float.isInvalidF80`). -/
+def Float.isSignalingNaN {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  match fmt with
+  | .f80 => x.isNaN && (x.bits.toNat >>> 63) % 2 == 1 && (x.bits.toNat >>> 62) % 2 == 0
+  | _ => x.isNaN && (x.bits.toNat >>> (fmt.fracBits - 1)) % 2 == 0
+
+/-- Group I: one operand of `@min`/`@max` is a signaling NaN and the other is not a NaN. Zig
+says that a NaN operand loses, but its LLVM lowering (`llvm.minnum`/`maxnum`, LLVM 21 LangRef)
+returns a quiet NaN for a signaling one, and LLVM may also treat any signaling NaN as quiet
+(LangRef §Behavior of Floating-Point NaN values). aarch64 `fminnm` returns the NaN; x86_64's
+`minss` sequence and compiler_rt's `fmin` return the other operand. So both results are
+permitted, on every target. -/
+def Float.snanVaries {fmt : FloatFmt} (a b : Float fmt) : Bool :=
+  (a.isSignalingNaN && !b.isNaN) || (b.isSignalingNaN && !a.isNaN)
+
 /-- Group D: real SSE `minss`/`maxss` give an order-and-sign-dependent result for `f32`/`f64`
 when one operand is `+0` and the other `-0` — confirmed on real hardware for both `@min` and
 `@max` (`tests/diff` sel 16/17 mismatches), unlike `Float.min`/`Float.max`'s own deterministic
 choice. `f16`/`f80`/`f128` keep that deterministic result (compiler_rt `fmin`/`fmax`, 0
-mismatches there). -/
+mismatches there). Group I (`Float.snanVaries`) also throws `.unspecified`. -/
 def Float.minChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if Float.snanVaries a b then throw .unspecified else
   match a.classify, b.classify with
   | .finite sa 0 _, .finite sb 0 _ =>
     match fmt with
@@ -340,8 +405,9 @@ def Float.minChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
     | .f16 | .f80 | .f128 => pure (Float.min a b)
   | _, _ => pure (Float.min a b)
 
-/-- `@max`'s group D guard: the same condition as `minChk`. -/
+/-- `@max`'s group D and I guards: the same conditions as `minChk`. -/
 def Float.maxChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if Float.snanVaries a b then throw .unspecified else
   match a.classify, b.classify with
   | .finite sa 0 _, .finite sb 0 _ =>
     match fmt with
@@ -429,5 +495,24 @@ def Float.fmaChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
       a.isPseudoDenormalF80 || b.isPseudoDenormalF80 || c.isPseudoDenormalF80 then
     throw .unspecified
   else pure (Float.fma a b c)
+
+/-! ## aarch64: soft-float `f80` (`docs/floats.md` §Targets)
+
+Zig lowers `f80` to LLVM's `x86_fp80` only on x86 (`backendSupportsF80`). On aarch64 every `f80`
+operation except the sign-bit ops (`-x`, `@abs`) is a call into compiler_rt's soft-float
+routines (`__addxf3`, `__ltxf2`, `__truncxfdf2`, `__sqrtx`, `__fminx`, …). These read an
+operand's raw bits, so an unnormal, pseudo-infinity, pseudo-NaN or pseudo-denormal gives a
+routine-specific value or class (e.g. `__truncxfdf2` reads an unnormal as a number). Zig defines
+no value for these encodings, so the model makes such an operation `.unspecified`. -/
+
+/-- Not one of the encodings an IEEE format has: `Float.isInvalidF80` or
+`Float.isPseudoDenormalF80`. -/
+def Float.isNoncanonicalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  x.isInvalidF80 || x.isPseudoDenormalF80
+
+/-- An aarch64 `f80` operation on the operands `xs`: `.unspecified` if one of them is
+noncanonical, else `r`. The emitter wraps every such operation in it. -/
+def Float.softF80Chk {α : Type} (xs : List (Float .f80)) (r : Result α) : Result α :=
+  if xs.any Float.isNoncanonicalF80 then throw .unspecified else r
 
 end Zig

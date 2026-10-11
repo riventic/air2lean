@@ -111,7 +111,8 @@ theorem Mem.Owns.frameSelf (hs : StepIn hF m m') (ho : m.Owns m.current h)
 theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : m.Owns m.current h)
     (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
     NoRace m b off len kind := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   split
@@ -401,6 +402,16 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
       Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
+/-- Forming a pointer `k` bytes into owned bytes (one past the end included; `ptrProject`,
+MM-3): no access, the memory does not change. -/
+theorem TTriple.ptrProjectAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {k : Nat}
+    (hk : k ≤ bs.size) (hpos : 0 < bs.size) :
+    TTriple (bytesAt p A S K bs) (ptrProject p (·.add k))
+      (fun r => ⌜r = p.add k⌝ ∗ bytesAt p A S K bs) :=
+  TTriple.of_run fun m hP _ hd hm hb _ ho =>
+    ⟨p.add k, m, hP, bytesAt_ptrProject_run hb hm hk hpos, hd, hm, sep_lift.mpr ⟨rfl, hb⟩, ho,
+      StepIn.refl m _⟩
+
 /-- A store of the bytes `bs'` at byte `k` of owned bytes. -/
 theorem TTriple.storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {k a : Nat} (bs' : Array Byte) (hq : q = p.add k) (hn : 0 < bs'.size)
@@ -546,7 +557,7 @@ theorem sep_ex_lift {R : Assn} {φ : Nat → Prop} {P : Nat → Assn} {h : Heap}
 theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0) (hpos : 0 < S) : TTriple (bytesAt p A S K bs) (Zig.free p) (fun _ => emp) :=
   TTriple.of_run fun m _ hF hd hm hb _ ho => by
-    obtain ⟨m', hr, hm', hsz, hs, -⟩ := free_run_core hb hm hd hS h0 hpos
+    obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
     refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_,
       StepIn.sameThreads hs (by omega)⟩
     intro e he ht

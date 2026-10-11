@@ -18,5 +18,7 @@ python3 -B "$here/test_env_boundaries.py"
 for ns in EnvStd15 EnvStd16; do
   "${lean_cmd[@]}" -R "$work" -o "$work/$ns/Gen.olean" "$work/$ns/Gen.lean"
 done
-"${lean_cmd[@]}" -R "$work" "$here/StdIo.lean"
+# Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
+python3 -B scripts/theorem_universe.py gate "$here/StdIo.lean" --root "$here" \
+  --lean-path "$work" --output-dir "$work/universe"
 echo "env-boundaries passed: contract client, ENV-03 bindings, translated std I/O and its proofs"

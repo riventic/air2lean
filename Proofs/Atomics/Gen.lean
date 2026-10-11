@@ -74,8 +74,8 @@ structure Thread_SpawnConfig where
   allocator : Option (Zig.Allocator)
   deriving Repr, Inhabited, DecidableEq
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program. -/
 inductive Tgt where
@@ -108,13 +108,13 @@ inductive mpWriterExit where
 
 def mpWriter (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.load (Zig.Ptr) 8 i1
     Zig.store (α := BitVec 32) 4 i2 (42 : BitVec 32)
-    let i4 ← pure (p0.add 8)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
     let i5 ← Zig.load (Zig.Ptr) 8 i4
     match ← ((do
-      let i7 ← pure (i5.add 0)
+      let i7 ← pure i5
       Zig.atomicStoreC Zig.AtomicOrder.release 4 i7 (1 : BitVec 32)
       pure .br6) : Zig.CM Tgt mpWriterLocals mpWriterExit) with
     | .br6 => (do
@@ -146,9 +146,9 @@ def mpRelAcq  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
     let i3 ← Zig.callRC (atomic_Value_u32_init (0 : BitVec 32))
     Zig.store (α := atomic_Value_u32) 4 i2 i3
     let i5 ← pure (← get).c
-    let i6 ← pure (i5.add 0)
+    let i6 ← pure i5
     Zig.store (α := Zig.Ptr) 8 i6 i0
-    let i8 ← pure (i5.add 8)
+    let i8 ← Zig.callMC (Zig.ptrProject i5 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i8 i2
     let i10 ← pure (i5)
     let i11 ← Zig.spawnC (Tgt.mpWriter i10)
@@ -162,7 +162,7 @@ def mpRelAcq  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       match ← ((do
         let i18 ← pure (i2)
         match ← ((do
-          let i20 ← pure (i18.add 0)
+          let i20 ← pure i18
           let i21 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i20
           pure (.br19 i21)) : Zig.CM Tgt mpRelAcqLocals mpRelAcqExit) with
         | .br19 v19 => (do
@@ -194,13 +194,13 @@ inductive mpWriterRelaxedExit where
 
 def mpWriterRelaxed (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.load (Zig.Ptr) 8 i1
     Zig.store (α := BitVec 32) 4 i2 (42 : BitVec 32)
-    let i4 ← pure (p0.add 8)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
     let i5 ← Zig.load (Zig.Ptr) 8 i4
     match ← ((do
-      let i7 ← pure (i5.add 0)
+      let i7 ← pure i5
       Zig.atomicStoreC Zig.AtomicOrder.relaxed 4 i7 (1 : BitVec 32)
       pure .br6) : Zig.CM Tgt mpWriterRelaxedLocals mpWriterRelaxedExit) with
     | .br6 => (do
@@ -232,9 +232,9 @@ def mpRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
     let i3 ← Zig.callRC (atomic_Value_u32_init (0 : BitVec 32))
     Zig.store (α := atomic_Value_u32) 4 i2 i3
     let i5 ← pure (← get).c
-    let i6 ← pure (i5.add 0)
+    let i6 ← pure i5
     Zig.store (α := Zig.Ptr) 8 i6 i0
-    let i8 ← pure (i5.add 8)
+    let i8 ← Zig.callMC (Zig.ptrProject i5 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i8 i2
     let i10 ← pure (i5)
     let i11 ← Zig.spawnC (Tgt.mpWriterRelaxed i10)
@@ -248,7 +248,7 @@ def mpRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       match ← ((do
         let i18 ← pure (i2)
         match ← ((do
-          let i20 ← pure (i18.add 0)
+          let i20 ← pure i18
           let i21 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i20
           pure (.br19 i21)) : Zig.CM Tgt mpRelaxedLocals mpRelaxedExit) with
         | .br19 v19 => (do
@@ -289,10 +289,10 @@ def push.again12 : pushExit → Bool
   | _ => false
 
 def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
-  let i13 ← pure (p0.add 0)
+  let i13 ← pure p0
   let i14 ← Zig.load (Zig.Ptr) 8 i13
-  let i15 ← pure (i14.add 4)
-  let i16 ← pure (p0.add 8)
+  let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
+  let i16 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
   let i17 ← Zig.load (BitVec 32) 4 i16
   let i18 ← Zig.intCast false false 64 i17
   let i19 ← pure (Zig.lt false i18 (3 : BitVec 64))
@@ -302,18 +302,18 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
     else (do
       throw .outOfBounds)) : Zig.CM Tgt pushLocals pushExit) with
   | .br20 => (do
-    let i25 ← pure (i15.elem 4 i18)
+    let i25 ← Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
     let i26 ← pure ((← get).h)
     Zig.store (α := BitVec 32) 4 i25 i26
     match ← ((do
-      let i29 ← pure (p0.add 0)
+      let i29 ← pure p0
       let i30 ← Zig.load (Zig.Ptr) 8 i29
-      let i31 ← pure (i30.add 0)
+      let i31 ← pure i30
       let i32 ← pure ((← get).h)
-      let i33 ← pure (p0.add 8)
+      let i33 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
       let i34 ← Zig.load (BitVec 32) 4 i33
       match ← ((do
-        let i36 ← pure (i31.add 0)
+        let i36 ← pure i31
         let i37 ← Zig.cmpxchgWeakC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i36 i32 i34
         pure (.br35 i37)) : Zig.CM Tgt pushLocals pushExit) with
       | .br35 v35 => (do
@@ -332,12 +332,12 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
 
 def push (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.load (Zig.Ptr) 8 i2
-    let i4 ← pure (i3.add 0)
+    let i4 ← pure i3
     let i5 ← pure (i4)
     match ← ((do
-      let i7 ← pure (i5.add 0)
+      let i7 ← pure i5
       let i8 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i7
       pure (.br6 i8)) : Zig.CM Tgt pushLocals pushExit) with
     | .br6 v6 => (do
@@ -362,20 +362,20 @@ inductive sbExit where
 
 def sb (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.load (Zig.Ptr) 8 i1
     match ← ((do
-      let i4 ← pure (i2.add 0)
+      let i4 ← pure i2
       Zig.atomicStoreC Zig.AtomicOrder.relaxed 4 i4 (1 : BitVec 32)
       pure .br3) : Zig.CM Tgt sbLocals sbExit) with
     | .br3 => (do
-      let i7 ← pure (p0.add 16)
+      let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
       let i8 ← Zig.load (Zig.Ptr) 8 i7
-      let i9 ← pure (p0.add 8)
+      let i9 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
       let i10 ← Zig.load (Zig.Ptr) 8 i9
       let i11 ← pure (i10)
       match ← ((do
-        let i13 ← pure (i11.add 0)
+        let i13 ← pure i11
         let i14 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i13
         pure (.br12 i14)) : Zig.CM Tgt sbLocals sbExit) with
       | .br12 v12 => (do
@@ -418,18 +418,18 @@ def sbRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
     let i8 ← pure (← get).r2
     Zig.store (α := BitVec 32) 4 i8 (0 : BitVec 32)
     let i10 ← pure (← get).c1
-    let i11 ← pure (i10.add 0)
+    let i11 ← pure i10
     Zig.store (α := Zig.Ptr) 8 i11 i0
-    let i13 ← pure (i10.add 8)
+    let i13 ← Zig.callMC (Zig.ptrProject i10 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i13 i3
-    let i15 ← pure (i10.add 16)
+    let i15 ← Zig.callMC (Zig.ptrProject i10 (·.add 16))
     Zig.store (α := Zig.Ptr) 8 i15 i6
     let i17 ← pure (← get).c2
-    let i18 ← pure (i17.add 0)
+    let i18 ← pure i17
     Zig.store (α := Zig.Ptr) 8 i18 i3
-    let i20 ← pure (i17.add 8)
+    let i20 ← Zig.callMC (Zig.ptrProject i17 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i20 i0
-    let i22 ← pure (i17.add 16)
+    let i22 ← Zig.callMC (Zig.ptrProject i17 (·.add 16))
     Zig.store (α := Zig.Ptr) 8 i22 i8
     let i24 ← pure (i10)
     let i25 ← Zig.spawnC (Tgt.sb i24)
@@ -486,25 +486,25 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s16 ← Zig.allocStack 16 8
   let e ← ((do
     let i0 ← pure (← get).s
-    let i1 ← pure (i0.add 0)
+    let i1 ← pure i0
     let i2 ← Zig.callRC (atomic_Value_u32_init (0 : BitVec 32))
     Zig.store (α := atomic_Value_u32) 4 i1 i2
-    let i4 ← pure (i0.add 4)
-    let i5 ← pure (i4.elem 4 (0 : BitVec 64))
+    let i4 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+    let i5 ← pure i4
     Zig.store (α := BitVec 32) 4 i5 (0 : BitVec 32)
-    let i7 ← pure (i4.elem 4 (1 : BitVec 64))
+    let i7 ← Zig.callMC (Zig.ptrProject i4 (·.elem 4 (1 : BitVec 64)))
     Zig.store (α := BitVec 32) 4 i7 (0 : BitVec 32)
-    let i9 ← pure (i4.elem 4 (2 : BitVec 64))
+    let i9 ← Zig.callMC (Zig.ptrProject i4 (·.elem 4 (2 : BitVec 64)))
     Zig.store (α := BitVec 32) 4 i9 (0 : BitVec 32)
     let i11 ← pure (← get).c1
-    let i12 ← pure (i11.add 0)
+    let i12 ← pure i11
     Zig.store (α := Zig.Ptr) 8 i12 i0
-    let i14 ← pure (i11.add 8)
+    let i14 ← Zig.callMC (Zig.ptrProject i11 (·.add 8))
     Zig.store (α := BitVec 32) 4 i14 (1 : BitVec 32)
     let i16 ← pure (← get).c2
-    let i17 ← pure (i16.add 0)
+    let i17 ← pure i16
     Zig.store (α := Zig.Ptr) 8 i17 i0
-    let i19 ← pure (i16.add 8)
+    let i19 ← Zig.callMC (Zig.ptrProject i16 (·.add 8))
     Zig.store (α := BitVec 32) 4 i19 (2 : BitVec 32)
     let i21 ← pure (i11)
     let i22 ← Zig.spawnC (Tgt.push i21)
@@ -527,15 +527,15 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       | .ok v30 => (do
         let _i36 ← Zig.joinC v23
         let _i37 ← Zig.joinC v30
-        let i38 ← pure (i0.add 0)
+        let i38 ← pure i0
         let i39 ← pure (i38)
         match ← ((do
-          let i41 ← pure (i39.add 0)
+          let i41 ← pure i39
           let i42 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i41
           pure (.br40 i42)) : Zig.CM Tgt stackPushLocals stackPushExit) with
         | .br40 v40 => (do
           let i44 ← Zig.mul false (100 : BitVec 32) v40
-          let i45 ← pure (i0.add 4)
+          let i45 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
           let i46 ← Zig.intCast false false 64 v40
           let i47 ← pure (Zig.lt false i46 (3 : BitVec 64))
           match ← ((do
@@ -547,8 +547,8 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             let i53 ← Zig.callMC (Zig.load (BitVec 32) 4 (i45.elem 4 i46))
             let i54 ← Zig.mul false (10 : BitVec 32) i53
             let i55 ← Zig.add false i44 i54
-            let i56 ← pure (i0.add 4)
-            let i57 ← pure (i0.add 4)
+            let i56 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+            let i57 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
             let i58 ← Zig.intCast false false 64 v40
             let i59 ← pure (Zig.lt false i58 (3 : BitVec 64))
             match ← ((do
@@ -591,17 +591,17 @@ inductive wwExit where
 
 def ww (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.load (Zig.Ptr) 8 i1
     match ← ((do
-      let i4 ← pure (i2.add 0)
+      let i4 ← pure i2
       Zig.atomicStoreC Zig.AtomicOrder.relaxed 4 i4 (1 : BitVec 32)
       pure .br3) : Zig.CM Tgt wwLocals wwExit) with
     | .br3 => (do
-      let i7 ← pure (p0.add 8)
+      let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
       let i8 ← Zig.load (Zig.Ptr) 8 i7
       match ← ((do
-        let i10 ← pure (i8.add 0)
+        let i10 ← pure i8
         Zig.atomicStoreC Zig.AtomicOrder.relaxed 4 i10 (2 : BitVec 32)
         pure .br9) : Zig.CM Tgt wwLocals wwExit) with
       | .br9 => (do
@@ -637,14 +637,14 @@ def twoPlusTwoW  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
     let i4 ← Zig.callRC (atomic_Value_u32_init (0 : BitVec 32))
     Zig.store (α := atomic_Value_u32) 4 i3 i4
     let i6 ← pure (← get).c1
-    let i7 ← pure (i6.add 0)
+    let i7 ← pure i6
     Zig.store (α := Zig.Ptr) 8 i7 i0
-    let i9 ← pure (i6.add 8)
+    let i9 ← Zig.callMC (Zig.ptrProject i6 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i9 i3
     let i11 ← pure (← get).c2
-    let i12 ← pure (i11.add 0)
+    let i12 ← pure i11
     Zig.store (α := Zig.Ptr) 8 i12 i3
-    let i14 ← pure (i11.add 8)
+    let i14 ← Zig.callMC (Zig.ptrProject i11 (·.add 8))
     Zig.store (α := Zig.Ptr) 8 i14 i0
     let i16 ← pure (i6)
     let i17 ← Zig.spawnC (Tgt.ww i16)
@@ -669,14 +669,14 @@ def twoPlusTwoW  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let _i32 ← Zig.joinC v25
         let i33 ← pure (i0)
         match ← ((do
-          let i35 ← pure (i33.add 0)
+          let i35 ← pure i33
           let i36 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i35
           pure (.br34 i36)) : Zig.CM Tgt twoPlusTwoWLocals twoPlusTwoWExit) with
         | .br34 v34 => (do
           let i38 ← Zig.mul false (10 : BitVec 32) v34
           let i39 ← pure (i3)
           match ← ((do
-            let i41 ← pure (i39.add 0)
+            let i41 ← pure i39
             let i42 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i41
             pure (.br40 i42)) : Zig.CM Tgt twoPlusTwoWLocals twoPlusTwoWExit) with
           | .br40 v40 => (do

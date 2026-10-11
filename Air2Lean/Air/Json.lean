@@ -1,6 +1,7 @@
 import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Op
 import Air2Lean.Air.Profile
+import Air2Lean.Air.Schema
 
 /-!
 # AIR JSON parser
@@ -117,6 +118,10 @@ structure RawFunc where
   globals : Array Global
   /-- The function's declaration site (additive provenance; absent in older exports). -/
   src : Option RawSrc := none
+  /-- The file's identities (`Identity.rewrite`), its own first. -/
+  identities : Array Identity.Record := #[]
+  externs : Array ExternDecl := #[]
+  exportDecl : Option ExportDecl := none
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -305,7 +310,8 @@ def parseLayout (j : Json) : Except String Layout := do
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel", sentinelByte,
            isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize,
-           bitOffset := bitOffset.getD 0, vectorIndex, runtimeLane, vectorIndexExported }
+           bitOffset := bitOffset.getD 0, vectorIndex, runtimeLane, vectorIndexExported,
+           unmodeled := Schema.unmodeled j }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -333,9 +339,11 @@ or `{}`. Shared between a top-level constant and an optional's payload (below): 
 `fmtValue` reuses this same string format for the payload, disambiguated only by `ty`. -/
 def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except String Val := do
   match ty with
-  | .int .. => return .int tyId (← parseIntLit fnName s)
-  -- A packed struct constant is its backing integer (`Emit.lean` writes `Zig.Packed.ofBits`).
-  | .struct _ "packed" _ => return .int tyId (← parseIntLit fnName s)
+  | .int signed bits =>
+    let n ← parseIntLit fnName s
+    unless integerFits signed bits n do
+      throw s!"{fnName}: integer constant does not fit type {tyId}"
+    return .int tyId n
   | .bool =>
     match s with
     | "true" => return .bool true
@@ -450,12 +458,15 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
 optional constant holding a payload; nested `Ref`, recursively) / `{"ty", "null": true}` (an
 optional constant, `null`) (`docs/air-json.md`). -/
 partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
-  let forms := ["inst", "func", "undef", "err", "payload", "some", "null", "enum",
+  let forms := ["inst", "func", "extern", "undef", "err", "payload", "some", "null", "enum",
     "uval", "elems", "ptr", "slice_ptr", "fbits", "val"]
   unless (forms.filter fun k => (j.getObjVal? k).toOption.isSome).length == 1 do
     throw s!"{fnName}: a reference must have exactly one value form"
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
+  else if let some externJ := optField j "extern" then
+    -- An extern function: its symbol; the function's `externs` table declares it.
+    return .func (externCallee (← externJ.getStr?)) (← boolField j "noreturn")
   else if let some funcJ := optField j "func" then
     let name ← funcJ.getStr?
     let noreturn ← boolField j "noreturn"
@@ -495,7 +506,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       | other => throw s!"{fnName}: 'null' constant of unexpected type {repr other}"
     else if let some enumJ := optField j "enum" then
       match ty with
-      | .enum .. => return .enumTag tyId (← parseIntLit fnName (← enumJ.getStr?))
+      | .enum name tag exhaustive fields =>
+        let n ← parseIntLit fnName (← enumJ.getStr?)
+        let some (.int signed bits) := types[tag]?
+          | throw s!"{fnName}: enum '{name}' has a non-integer tag type"
+        unless integerFits signed bits n do
+          throw s!"{fnName}: enum constant '{name}' does not fit its tag type"
+        if exhaustive && !fields.any (·.2 == n) then
+          throw s!"{fnName}: enum constant '{name}' has no field with tag {n}"
+        return .enumTag tyId n
       | other => throw s!"{fnName}: 'enum' constant of unexpected type {repr other}"
     else if let some uvalJ := optField j "uval" then
       match ty with
@@ -573,8 +592,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       let s ← (← j.getObjVal? "val").getStr?
       match ty with
       | .struct _ "packed" fields =>
+        -- A packed struct constant is its backing integer (`Emit.lean` writes
+        -- `Zig.Packed.ofBits`), as `.{ .f = v, … }` or as the integer itself.
         if s.startsWith ".{" then return .int tyId (← parsePackedLit fnName types fields s)
-        parseLeafVal fnName tyId ty s
+        let n ← parseIntLit fnName s
+        let some w := packedWidth types tyId
+          | throw s!"{fnName}: packed constant of type {tyId} has no bit width"
+        unless integerFits false w n do
+          throw s!"{fnName}: packed integer constant does not fit type {tyId}"
+        return .int tyId n
       | _ => parseLeafVal fnName tyId ty s
 
 /-- One lane of a shuffle mask: `{"a": i}`, `{"b": i}`, `{"u": true}`, or `{"v": Ref}`
@@ -738,6 +764,8 @@ def parseHeader (j : Json) : Except String (String × Nat × String) := do
 placeholder) profile. -/
 def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc := do
   let (name, schema, zigVersion) ← parseHeader j
+  -- Deny by default: every key of a current-schema file is in the schema table.
+  if schema ≥ 12 then Schema.validate j |>.mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
   -- Zig 0.17.0 removed the `i0` type; one in a 0.17.0 file is a malformed export.
@@ -754,6 +782,29 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some g => g.getArr?
     | none => pure #[]
   let globals ← globalsJ.mapM (parseGlobal name types)
+  let typeId (k : String) (tj : Json) : Except String TyId := do
+    let t ← tj.getNat?
+    unless t < types.size do throw s!"{name}: {k}: unknown type id {t}"
+    pure t
+  let externsJ ← match optField j "externs" with
+    | some e => e.getArr?
+    | none => pure #[]
+  let externs ← externsJ.mapM fun ej => do
+    let symbol ← (← ej.getObjVal? "name").getStr?
+    let library ← match optField ej "library" with
+      | some l => some <$> l.getStr?
+      | none => pure none
+    let params ← (← (← ej.getObjVal? "params").getArr?).mapM (typeId s!"extern '{symbol}'")
+    return { name := symbol, library, cc := ← (← ej.getObjVal? "cc").getStr?, params,
+             ret := ← typeId s!"extern '{symbol}'" (← ej.getObjVal? "ret"),
+             varargs := ← (← ej.getObjVal? "varargs").getBool? : ExternDecl }
+  for (e, k) in externs.zipIdx do
+    if (externs.extract 0 k).any (·.name == e.name) then
+      throw s!"{name}: extern '{e.name}' is declared twice in 'externs'"
+  let exportDecl ← match optField j "export" with
+    | some ej => pure (some { name := ← (← ej.getObjVal? "name").getStr?,
+                              cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
+    | none => pure none
   return {
     schema
     zigVersion
@@ -766,6 +817,8 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     layouts
     globals
     src := parseSrc? j
+    externs
+    exportDecl
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do
@@ -773,9 +826,19 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
   parseFuncWith j profile
 
+/-- The file with every identity replaced by its module-qualified key, and its identity
+records (`Identity.rewrite`). -/
+def identify (j : Json) : Except String (Json × Array Identity.Record) :=
+  (Identity.rewrite j).mapError fun e =>
+    s!"{(j.getObjValAs? String "name").toOption.getD "AIR file"}: {e}"
+
+/-- `parseFunc` after every identity becomes its module-qualified key (`Identity.rewrite`). -/
+def parseIdentifiedFunc (j : Json) : Except String RawFunc := do
+  let (j, identities) ← identify j
+  return { ← parseFunc j with identities }
+
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do
-  let j ← StrictJson.parse contents
-  parseFunc j
+  parseIdentifiedFunc (← StrictJson.parse contents)
 
 end Air2Lean.Raw

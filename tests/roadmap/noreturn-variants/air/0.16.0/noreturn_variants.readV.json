@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "noreturn_variants.readV",
+ "module": "root",
+ "src": {
+  "file": "noreturn_variants.zig",
+  "module": "noreturn_variants",
+  "decl_line": 79
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 2,
@@ -66,7 +73,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 4,
@@ -75,6 +83,7 @@
    "callee": {
     "ty": 4,
     "func": "noreturn_variants.vValue",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -87,7 +96,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,
@@ -109,6 +119,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -129,6 +140,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.V",
+   "module": "root",
    "layout": "auto",
    "tag": 6,
    "fields": [
@@ -158,6 +170,7 @@
   {
    "k": "enum",
    "name": "noreturn_variants.Kind",
+   "module": "root",
    "tag": 7,
    "exhaustive": true,
    "fields": [

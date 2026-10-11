@@ -38,23 +38,30 @@ instance : Zig.Enc Kind where
 inductive V where
   | x (v : BitVec 16)
   | y
+  | undef_x (v : BitVec 16) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def V.tag : V → Kind
   | .x _ => .x
+  | .undef_x _ _ => .x
   | .y => .y
 
 def V.get_x : V → Zig.Result (BitVec 16)
   | .x v => pure v
+  | .undef_x _ _ => throw .unspecified
   | _ => throw .panic
 
 def V.modify_x (g : BitVec 16 → BitVec 16) : V → V
   | .x v => .x (g v)
-  | _ => .x (g default)
+  | .undef_x v w => .undef_x (g v) w
+  | _ => .undef_x (g default) []
 
 def V.setTag_x : V → V
   | .x v => .x v
-  | _ => .x default
+  | .undef_x v w => .undef_x v w
+  | _ => .undef_x default []
+
+def V.set_x (v : BitVec 16) (_ : V) : V := .x v
 
 def V.get_y : V → Zig.Result (Unit)
   | .y => pure ()
@@ -74,6 +81,7 @@ instance : Zig.Enc V where
   encode v := match v with
     | .x x => Zig.Enc.fields 4 [(2, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .y => Zig.Enc.fields 4 [(2, Zig.Enc.encode v.tag)]
+    | .undef_x _ _ => Zig.Enc.fields 4 [(2, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : Kind ← Zig.Enc.decodeAt bs 2
     match t with
@@ -115,35 +123,49 @@ instance : Zig.Enc UTag where
 inductive U where
   | a (v : BitVec 8)
   | c (v : BitVec 32)
+  | undef_a (v : BitVec 8) (written : List String)
+  | undef_c (v : BitVec 32) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def U.tag : U → UTag
   | .a _ => .a
+  | .undef_a _ _ => .a
   | .c _ => .c
+  | .undef_c _ _ => .c
 
 def U.get_a : U → Zig.Result (BitVec 8)
   | .a v => pure v
+  | .undef_a _ _ => throw .unspecified
   | _ => throw .panic
 
 def U.modify_a (g : BitVec 8 → BitVec 8) : U → U
   | .a v => .a (g v)
-  | _ => .a (g default)
+  | .undef_a v w => .undef_a (g v) w
+  | _ => .undef_a (g default) []
 
 def U.setTag_a : U → U
   | .a v => .a v
-  | _ => .a default
+  | .undef_a v w => .undef_a v w
+  | _ => .undef_a default []
+
+def U.set_a (v : BitVec 8) (_ : U) : U := .a v
 
 def U.get_c : U → Zig.Result (BitVec 32)
   | .c v => pure v
+  | .undef_c _ _ => throw .unspecified
   | _ => throw .panic
 
 def U.modify_c (g : BitVec 32 → BitVec 32) : U → U
   | .c v => .c (g v)
-  | _ => .c (g default)
+  | .undef_c v w => .undef_c (g v) w
+  | _ => .undef_c (g default) []
 
 def U.setTag_c : U → U
   | .c v => .c v
-  | _ => .c default
+  | .undef_c v w => .undef_c v w
+  | _ => .undef_c default []
+
+def U.set_c (v : BitVec 32) (_ : U) : U := .c v
 
 instance : Zig.Enc U where
   size := 8
@@ -151,6 +173,8 @@ instance : Zig.Enc U where
   encode v := match v with
     | .a x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .c x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .undef_a _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_c _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : UTag ← Zig.Enc.decodeAt bs 4
     match t with
@@ -281,8 +305,8 @@ instance : Zig.Enc Holder where
   encode v := Zig.Enc.fields 8 [(4, Zig.Enc.encode v.mode), (0, Zig.Enc.encode v.n)]
   decode bs := do pure { mode := ← Zig.Enc.decodeAt bs 4, n := ← Zig.Enc.decodeAt bs 0 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure get_air2lean1Locals where
   deriving Inhabited
@@ -301,7 +325,7 @@ def get_air2lean1 (p0 : U) : Zig.Result (BitVec 32) := do
         let i7 ← Zig.intCast false false 32 i6
         pure (.br2 i7))
       | .b => (do
-        throw .unreachable)
+        throw .illegal)
       | .c => (do
         let i10 ← Zig.call (U.get_c p0)
         pure (.br2 i10))) : Zig.M get_air2lean1Locals get_air2lean1Exit) with
@@ -324,7 +348,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     let i2 ← Zig.callR (get_air2lean1 i1)
     let i3 ← Zig.add false i2 (1 : BitVec 32)
     Zig.store (α := UTag) 1 (p0.add 4) UTag.c
-    let i5 ← pure (p0.add 0)
+    let i5 ← pure p0
     Zig.store (α := BitVec 32) 4 i5 i3
     pure .ret) : Zig.MM bumpLocals bumpExit).run' (default : bumpLocals)
   match e with
@@ -392,7 +416,7 @@ inductive holderColorExit where
 
 def holderColor (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   let e ← ((do
-    let i1 ← pure (p0.add 4)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
     let i2 ← Zig.load (Io_Terminal_Mode) 1 i1
     let i3 ← Zig.callR (isColor i2)
     pure (.ret i3)) : Zig.MM holderColorLocals holderColorExit).run' (default : holderColorLocals)
@@ -408,7 +432,7 @@ inductive setModeExit where
 
 def setMode (p0 : Zig.Ptr) (p1 : Bool) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 4)
+    let i2 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
     match ← ((do
       if p1 then (do
         pure (.br3 Io_Terminal_Mode.escape_codes))
@@ -434,21 +458,21 @@ def holderRoundTrip (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let s2 ← Zig.allocStack 8 4
   let e ← ((do
     let i2 ← pure (← get).h
-    let i3 ← pure (i2.add 4)
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 4))
     Zig.store (α := Io_Terminal_Mode) 1 i3 Io_Terminal_Mode.no_color
-    let i5 ← pure (i2.add 0)
+    let i5 ← pure i2
     Zig.store (α := BitVec 32) 4 i5 p1
     let _i7 ← Zig.callM (setMode i2 p0)
     match ← ((do
       let i9 ← pure (i2)
       let i10 ← Zig.callM (holderColor i9)
       if i10 then (do
-        let i12 ← pure (i2.add 0)
+        let i12 ← pure i2
         let i13 ← Zig.load (BitVec 32) 4 i12
         let i14 ← Zig.add false i13 (1 : BitVec 32)
         pure (.br8 i14))
       else (do
-        let i16 ← pure (i2.add 0)
+        let i16 ← pure i2
         let i17 ← Zig.load (BitVec 32) 4 i16
         pure (.br8 i17))) : Zig.MM holderRoundTripLocals holderRoundTripExit) with
     | .br8 v8 => (do
@@ -469,7 +493,7 @@ inductive mkExit where
 def mk (p0 : BitVec 8) : Zig.Result (U) := do
   let e ← ((do
     modify (fun s => { s with local1 := (U.setTag_a s.local1) })
-    modify (fun s => { s with local1 := (U.modify_a (fun _ => p0) s.local1) })
+    modify (fun s => { s with local1 := (U.set_a (p0) s.local1) })
     pure (.ret (← get).local1)) : Zig.M mkLocals mkExit).run' (default : mkLocals)
   match e with
   | .ret v => pure v
@@ -527,7 +551,7 @@ def mkV (p0 : BitVec 16) : Zig.Result (V) := do
         pure .br2)
       else (do
         modify (fun s => { s with local1 := (V.setTag_x s.local1) })
-        modify (fun s => { s with local1 := (V.modify_x (fun _ => p0) s.local1) })
+        modify (fun s => { s with local1 := (V.set_x (p0) s.local1) })
         pure .br2)) : Zig.M mkVLocals mkVExit) with
     | .br2 => (do
       let _i11 ← pure ((← get).local1)
@@ -553,7 +577,7 @@ def vValue (p0 : V) : Zig.Result (BitVec 16) := do
         let i6 ← Zig.call (V.get_x p0)
         pure (.br2 i6))
       | .gone => (do
-        throw .unreachable)
+        throw .illegal)
       | .y => (do
         pure (.br2 (0 : BitVec 16)))) : Zig.M vValueLocals vValueExit) with
     | .br2 v2 => (do
@@ -647,7 +671,7 @@ def roundTrip (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
     modify (fun s => { s with u := (U.setTag_c s.u) })
     let i6 ← Zig.intCast false false 32 p0
     let i7 ← Zig.add false i6 (1 : BitVec 32)
-    modify (fun s => { s with u := (U.modify_c (fun _ => i7) s.u) })
+    modify (fun s => { s with u := (U.set_c (i7) s.u) })
     let i9 ← pure ((← get).u)
     let i10 ← Zig.call (get_air2lean1 i9)
     pure (.ret i10)) : Zig.M roundTripLocals roundTripExit).run' (default : roundTripLocals)

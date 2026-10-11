@@ -57,7 +57,7 @@ def main():
         (out / "target").write_text(f"{target}\n")
 
     checks = ["\nprivate def tokResult (x : Zig.MemM (BitVec 32)) : Option Nat :=",
-              "  match (x.run Tok.mem0).run with",
+              "  match (x.run (Tok.mem0 .fresh)).run with",
               "  | some (.ok (v, _)) => some v.toNat",
               "  | _ => none"]
     for name, expected in SAMPLES.items():

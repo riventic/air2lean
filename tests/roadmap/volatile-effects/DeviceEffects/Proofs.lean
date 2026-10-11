@@ -41,12 +41,17 @@ theorem after_append (m : Mem) (es fs : List DevEvent) :
 
 theorem withEvent_after (m : Mem) (e : DevEvent) : m.withEvent e = after m [e] := rfl
 
-theorem status_addr : devAddr? (uart.add 0) = some STATUS := by decide
+theorem status_addr : devAddr? uart = some STATUS := by decide
 theorem data_addr : devAddr? (uart.add 4) = some DATA := by decide
+
+/-- `&uart.data`: an offset inside the declared register window (`ptrProjectDevice`, DEV-01). -/
+theorem data_ptr (m : Mem) :
+    (ptrProjectDevice air2lean_device uart (·.add 4)).run m = pure (uart.add 4, m) :=
+  ptrProjectDevice_run (a := STATUS) (b := DATA) (by decide) (by decide) (by decide) (by decide)
 
 theorem status_read {m : Mem} {v : BitVec 32}
     (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) :
-    (vload air2lean_device 32 4 (uart.add 0)).run m = pure (v, after m [rd v]) :=
+    (vload air2lean_device 32 4 uart).run m = pure (v, after m [rd v]) :=
   vload_run status_addr (by decide) (by decide) ho
 
 theorem data_write (m : Mem) (v : BitVec 32) :
@@ -107,9 +112,10 @@ theorem putc_trace (m : Mem) (c : BitVec 8) (vs : List (BitVec 32)) (r : BitVec 
     (putc uart c).run m = pure ((), after m (putcSpec vs r c)) := by
   have hp := poll_run default vs r m hc
   have hw := data_write (after m ((vs ++ [r]).map rd)) (c.setWidth 32)
+  have hd := data_ptr (after m ((vs ++ [r]).map rd))
   have hi : Zig.intCast false false 32 c = pure (c.setWidth 32) := intCast_unsigned_widen c 32 (by decide)
-  simp only [StateT.run, List.map_append, List.map_cons, List.map_nil, widen_toNat] at hp hw
-  simp [putc, zig_unfold, hp, hw, hi, after_append, putcSpec, wr]
+  simp only [StateT.run, List.map_append, List.map_cons, List.map_nil, widen_toNat] at hp hw hd
+  simp [putc, zig_unfold, hp, hw, hd, hi, after_append, putcSpec, wr]
 
 /-! ## Every device that eventually reports ready
 
@@ -182,9 +188,10 @@ theorem sendThenStatus_trace (m : Mem) (c : BitVec 8) (v : BitVec 32)
     (sendThenStatus uart c).run m = pure (v, after m [wr c, rd v]) := by
   have hi : Zig.intCast false false 32 c = pure (c.setWidth 32) := intCast_unsigned_widen c 32 (by decide)
   have hw := data_write m (c.setWidth 32)
+  have hd := data_ptr m
   have hr := status_read (m := after m [wr c]) (v := v) (by simpa [after] using ho)
-  simp only [StateT.run, widen_toNat] at hw hr
+  simp only [StateT.run, widen_toNat] at hw hr hd
   simp only [wr] at hr
-  simp [sendThenStatus, zig_unfold, hi, hw, hr, after_append, wr]
+  simp [sendThenStatus, zig_unfold, hi, hw, hd, hr, after_append, wr]
 
 end DeviceEffectsProofs

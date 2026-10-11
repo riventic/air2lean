@@ -29,9 +29,10 @@ def load(name, path):
 fs = load('float_semantics', 'scripts/float-semantics.py')
 audit = load('assumptions', 'scripts/assumptions.py')
 ALL = ['0.14.1', '0.15.2', '0.16.0']
-IEEE = {'semantics': 'ieee', 'correspondence': 'model'}
-ABSTRACT = {'semantics': 'abstract-spec', 'correspondence': 'model'}
-RT = {'semantics': 'compiler-rt', 'zig_versions': ALL, 'correspondence': 'model'}
+BOTH = ['aarch64-macos', 'x86_64-linux']
+IEEE = {'semantics': 'ieee', 'targets': BOTH, 'correspondence': 'model'}
+ABSTRACT = {'semantics': 'abstract-spec', 'targets': BOTH, 'correspondence': 'model'}
+RT = {'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': BOTH, 'correspondence': 'model'}
 
 
 def write(path, text):
@@ -88,8 +89,12 @@ class RegistryTests(unittest.TestCase):
     def test_malformed_labels_are_rejected(self):
         key = 'Proofs.Floatops.Proofs::op16_spec'
         cases = [
-            ({'semantics': 'x87', 'correspondence': 'model'}, 'unknown float semantics'),
-            ({'semantics': 'compiler-rt', 'correspondence': 'model'}, 'invalid label fields'),
+            ({'semantics': 'x87', 'targets': BOTH, 'correspondence': 'model'}, 'unknown float semantics'),
+            ({'semantics': 'compiler-rt', 'targets': BOTH, 'correspondence': 'model'}, 'invalid label fields'),
+            ({'semantics': 'ieee', 'correspondence': 'model'}, 'sorted unique targets'),
+            (dict(IEEE, targets=[]), 'sorted unique targets'),
+            (dict(IEEE, targets=['x86_64-linux', 'aarch64-macos']), 'sorted unique targets'),
+            (dict(IEEE, targets=['wasm32-wasi']), 'sorted unique targets'),
             (dict(RT, zig_versions=[]), 'sorted unique Zig versions'),
             (dict(RT, zig_versions=['0.16.0', '0.15.2']), 'sorted unique Zig versions'),
             (dict(RT, zig_versions=['0.13.0']), 'unsupported Zig version'),
@@ -117,6 +122,11 @@ class RegistryTests(unittest.TestCase):
         write(self.root / 'assurance/float-semantics.json', '{"schema_version": 1, "schema_version": 1}')
         with self.assertRaisesRegex(ValueError, 'duplicate JSON key'):
             fs.load_registry(root=self.root)
+
+    def test_witness_commands_declare_companions(self):
+        text = 'namespace A\nnonvacuity_witness t := ⟨Float.zero⟩\nliveness_witness t :=\n  rfl\nend A\n'
+        self.assertEqual([(k, n) for k, n, _ in fs.declarations(text)],
+                         [('theorem', 'A.t.nonvacuous'), ('theorem', 'A.t.returns')])
 
     def test_removed_label_is_reported_by_source_check(self):
         registry = fs.load_registry()
@@ -180,6 +190,15 @@ class SourceTests(unittest.TestCase):
         registry['checks']['tests/missing/None.lean'] = {'labels': ['ieee'], 'correspondence': 'model'}
         self.assertEqual(self.problems(registry), ['tests/missing/None.lean: listed check has no float example or theorem'])
 
+    def test_aarch64_rule_needs_aarch64_target(self):
+        write(self.root / 'Proofs/Ex/A64.lean', 'theorem div_a64 (x : Zig.F80) : Zig.Float.divXf3 x x = Zig.Float.divXf3 x x := rfl\n')
+        registry = copy.deepcopy(self.registry)
+        registry['theorems']['Proofs.Ex.A64::div_a64'] = dict(IEEE, targets=['x86_64-linux'])
+        self.assertEqual(self.problems(registry),
+                         ['Proofs.Ex.A64::div_a64: uses an aarch64-only float rule but its label omits aarch64-macos'])
+        registry['theorems']['Proofs.Ex.A64::div_a64'] = dict(IEEE, targets=['aarch64-macos'])
+        self.assertEqual(self.problems(registry), [])
+
     def test_compiler_rt_label_needs_compiler_rt_translation(self):
         registry = copy.deepcopy(self.registry)
         registry['theorems']['Proofs.Ex.Proofs::op_spec'] = RT
@@ -220,6 +239,7 @@ class GraphTests(unittest.TestCase):
         nodes = [self.node('Zig.Float.add', 'ZigLean.Float.Ops', ['Zig.Float.roundRat']),
                  self.node('Zig.Float.roundRat', 'ZigLean.Float.Round'),
                  self.node('Zig.Float.mulRt', 'ZigLean.Float.CompilerRt', ['Zig.Float.add']),
+                 self.node('Zig.Float.divXf3', 'ZigLean.Float.CompilerRt', ['Zig.Float.add']),
                  self.node('Nat.add', 'Init.Prelude'), *extra]
         rows = []
         for name, dependencies in theorems:
@@ -234,7 +254,12 @@ class GraphTests(unittest.TestCase):
         return registry
 
     def report(self, raw, registry):
-        return audit.apply_policy(raw, self.policy, registry)
+        # Every project module of the fixture graph passed kernel replay.
+        modules = sorted({*raw['modules'], *(n['module'] for n in raw['nodes'] if audit.needs_replay(n['module']))})
+        replay = {'schema_version': 1, 'tool': 'leanchecker', 'tool_sha256': '0' * 64, 'lean_sha256': '1' * 64,
+                  'toolchain': 'leanprover/lean4:test', 'modules': modules,
+                  'modules_sha256': audit.modules_digest(modules), 'reused': [], 'rejected': [], 'status': 'pass'}
+        return audit.apply_policy(dict(raw, kernel_replay=replay), self.policy, registry)
 
     def classes(self, report):
         return sorted((v['name'], v['trust_class']) for v in report['violations'])
@@ -256,7 +281,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(report['status'], 'pass', report['violations'])
         records = {t['name']: t['float_semantics'] for t in report['theorems']}
         self.assertEqual(records['mul_spec'], {'scope': 'stated', 'label': 'compiler-rt@0.14.1,0.15.2,0.16.0',
-                                               'semantics': 'compiler-rt', 'zig_versions': ALL,
+                                               'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': BOTH,
                                                'correspondence': 'model', 'binary_correspondence': 'not_claimed'})
         self.assertEqual(records['add_spec']['label'], 'ieee')
         self.assertEqual(records['round_spec']['label'], 'abstract-spec')
@@ -278,6 +303,15 @@ class GraphTests(unittest.TestCase):
             with self.subTest(name=name, entry=entry):
                 report = self.report(self.raw([(name, dependencies)]), self.labels(**{name: entry}))
                 self.assertEqual(self.classes(report), [(name, trust)])
+
+    def test_labels_record_targets(self):
+        for targets in (['aarch64-macos'], ['x86_64-linux'], BOTH):
+            with self.subTest(targets=targets):
+                report = self.report(self.raw([('div_spec', ['Zig.Float.divXf3'])]),
+                                     self.labels(div_spec=dict(RT, targets=targets)))
+                self.assertEqual(report['status'], 'pass', report['violations'])
+                record = next(t for t in report['theorems'] if t['name'] == 'div_spec')['float_semantics']
+                self.assertEqual(record['targets'], targets)
 
     def test_stale_and_wrong_exemptions_fail(self):
         registry = self.labels(gone=IEEE)

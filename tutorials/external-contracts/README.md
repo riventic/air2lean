@@ -87,6 +87,8 @@ lake env lean tutorials/external-contracts/Negative.lean   # must fail
   that correspondence is the user's obligation.
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): value
   semantics and the memory model the contract talks about.
+- [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
+  (`docs/address-placement.md`); the result holds for every placement.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel.
 
 Remaining obligations: the extension interface admits only sequential programs with direct

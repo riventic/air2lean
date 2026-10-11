@@ -57,7 +57,7 @@ pub fn setOpt(p: *?u32, x: ?u32) void {
     p.* = x;
 }
 
-/// Pointer equality: the same block and offset.
+/// Pointer equality: the same address.
 pub fn same(a: *const u32, b: *const u32) bool {
     return a == b;
 }

@@ -105,6 +105,8 @@ def main():
         ("reject.tagName.json", "`@tagName` is outside the qualified big-endian model"),
         ("reject.create.json", "the std model 'mem.Allocator.create"),
         ("reject.u128Bytes.json", "the memory model gives type"),
+        ("reject.vecByte.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
+        ("reject.vecLane0FromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
     ]:
         run(binary, one(rejects, name), error=error, prefix="reject.")
         checks += 1

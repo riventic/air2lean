@@ -24,9 +24,9 @@ MUTANTS = {
     "merge_reads": ("DeviceEffects", [(f"let i4 ← {VLOAD} i3", "let i4 ← pure i2")],
                     {"statusTwice_trace"}, {"statusTwice_not_merged"}),
     # The status read moved before the data write.
-    "reorder_write_read": ("DeviceEffects", [(f"    Zig.vstore air2lean_device 32 4 i2 i3\n    let i5 ← pure (p0.add 0)\n"
+    "reorder_write_read": ("DeviceEffects", [(f"    Zig.vstore air2lean_device 32 4 i2 i3\n    let i5 ← pure p0\n"
                              f"    let i6 ← {VLOAD} i5\n",
-                             f"    let i5 ← pure (p0.add 0)\n    let i6 ← {VLOAD} i5\n"
+                             f"    let i5 ← pure p0\n    let i6 ← {VLOAD} i5\n"
                              "    Zig.vstore air2lean_device 32 4 i2 i3\n")],
                            {"sendThenStatus_trace"}, set()),
     # An unused volatile read removed as dead code.

@@ -18,5 +18,5 @@
  "toVecSentinel": "tag 'array_to_vector': Zig 0.17.0's array-to-vector coercion",
  "unionFromEnum": "tag 'union_from_enum': Zig 0.17.0's enum-to-tagged-union coercion is outside the subset",
  "unionFromEnumOn016": "tag 'union_from_enum' is not a Zig 0.16.0 AIR tag (introduced in 0.17.0)",
- "unknownTag": "unknown AIR tag 'int_from_bitpack'"
+ "unknownTag": "tag 'int_from_bitpack' has no schema entry"
 }

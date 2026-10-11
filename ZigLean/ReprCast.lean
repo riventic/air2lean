@@ -149,7 +149,7 @@ theorem flatten_chunk {s : Nat} (l : Array (Array Byte)) (i : Nat) (h : ∀ a �
     (by simpa using hi)
   simpa using this
 
-private theorem list_mapM_pure_of {α β : Type} {f : α → Result β} {g : α → β} :
+theorem list_mapM_pure_of {α β : Type} {f : α → Result β} {g : α → β} :
     ∀ (l : List α), (∀ x ∈ l, f x = pure (g x)) → l.mapM f = pure (l.map g)
   | [], _ => rfl
   | x :: t, h => by

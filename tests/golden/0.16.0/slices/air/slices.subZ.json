@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "slices.subZ",
+ "module": "root",
  "params": [
   0,
   1,
@@ -176,6 +177,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -282,6 +284,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -378,6 +381,7 @@
        "callee": {
         "ty": 11,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_8737",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -425,6 +429,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -445,6 +450,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "sentinel_byte": "0",
    "host_size": 0,
@@ -459,6 +465,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -477,6 +484,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -490,6 +498,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "bitcast017.intToVec",
+ "module": "root",
  "params": [
   0
  ],

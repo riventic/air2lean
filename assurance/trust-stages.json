@@ -13,7 +13,7 @@
     {
       "id": "exporter",
       "name": "AIR JSON exporter patch",
-      "components": ["zig-patch/air-json/json.zig", "zig-patch/air-json/pointer-offset.zig"],
+      "components": ["zig-patch/air-json/json.zig", "zig-patch/air-json/pointer-offset.zig", "zig-patch/air-json/identity.zig"],
       "class": "independently-checked-metadata",
       "premises": ["TRU-02"],
       "summary": "The exported structure is re-checked outside the Lean decoder: instruction ids, operand scoping, block/loop/dispatch targets, terminators, type-table/global references and the per-version tag set and unsupported markers of coverage/<version>.json. Operand values and the meaning of each tag remain trusted.",
@@ -114,13 +114,19 @@
       "components": ["Proofs", "ZigLean"],
       "class": "kernel-checked",
       "premises": ["TRU-01", "TRU-04"],
-      "summary": "Every shipped theorem about the generated Lean module, and every runtime lemma it uses, is checked by the Lean kernel. The audited dependency closure may use only the standard axioms and reviewed opaques. This is preservation inside the model only.",
+      "summary": "Every shipped theorem about the generated Lean module, and every runtime lemma it uses, is checked by the Lean kernel, and every non-toolchain module of each audited dependency closure is replayed by the toolchain's independent leanchecker, so an elaborator bypass (debug.skipKernelTC) cannot enter the evidence. Every module the premise index lists (tutorials, case studies, tests/roadmap) is audited the same way. The audited dependency closure may use only the standard axioms and reviewed opaques. This is preservation inside the model only.",
       "checks": [
         {
           "what": "kernel build of Proofs, then dependency/axiom/opaque/extern audit of the checked environment",
           "checker": "scripts/assumptions.sh",
           "test": "tests/roadmap/assurance/test_policy.py",
           "ci": ["lake build Proofs", "scripts/assumptions.sh --output", "tests/roadmap/assurance/check.sh"]
+        },
+        {
+          "what": "kernel replay of every audited module and compiled audit of every indexed theorem module",
+          "checker": "scripts/theorem_universe.py",
+          "test": "tests/roadmap/theorem-universe/test_universe.py",
+          "ci": ["scripts/theorem_universe.py audit", "tests/roadmap/theorem-universe/test_universe.py"]
         },
         {
           "what": "per-theorem premise derivation and index",

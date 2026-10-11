@@ -32,10 +32,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 1
 KIND = 'air2lean-dependency-closure'
 VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
-# `Air2Lean/StdModels.lean`: a row without `zigVersions` qualifies for `baseZigVersions` only;
-# `through017` adds 0.17.0.
-BASE_ZIG_VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
-THROUGH_017 = BASE_ZIG_VERSIONS + ('0.17.0',)
+# `Air2Lean/StdModels.lean`: a row qualifies for exactly the Zig versions of its reviewed std
+# sources (`StdReview`): a `review "file" [(version, sha256), ...]` helper, `allocatorZig`
+# (optionally restricted to a version list) or `only [versions] helper`.
 OSES = ('linux', 'darwin')
 IDENTITY_MARKER = re.compile(r'__(anon|enum|opaque|union|struct)_[0-9]+')
 # A compiler identity number, raw or normalized (`__anon_N`): not stable across exports.
@@ -47,7 +46,9 @@ PANIC_HANDLERS = frozenset(
     'divideByZero reachedUnreachable exactDivisionRemainder unwrapNull unwrapError forLenMismatch '
     'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
-MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\](?: (#\[[^\]]*\]|through017))?', re.M)
+MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
+REVIEW_HELPER = re.compile(r'^private def (\w+)(?: \([^)]*\))? : Array StdReview :=\s*review "[^"]+"\s*(?:<\|\s*)?\[(.*?)\]',
+                           re.M | re.S)
 # Zig 0.17.0 names a generic instance `<fn>__func_<n>` (`Air2Lean/Air/Anon.lean` `funcInstances017`).
 FUNC_017 = re.compile(r'__func_([0-9])')
 REJECTED_ROW = re.compile(r'symbol := "([^"\n]+)",\s*kind := \.rejected "([^"\n]*)"')
@@ -88,10 +89,29 @@ def std_models(text=None):
     start = text.index('def stdModels')
     end = text.find('\n\n', start)
     table = text[start:] if end < 0 else text[start:end]
+    helpers = {name: tuple(re.findall(r'\("(\d+\.\d+\.\d+)",', body))
+               for name, body in REVIEW_HELPER.findall(text)}
+
+    def reviewed(kind, expr):
+        expr = (expr or '').strip()
+        if expr.startswith('(') and expr.endswith(')'):
+            expr = expr[1:-1].strip()
+        if not expr:
+            if kind != 'allocModel':
+                raise Invalid('Air2Lean/StdModels.lean: a thread model row without reviewed sources')
+            return helpers['allocatorZig']
+        m = re.fullmatch(r'(?:only (\[[^\]]*\]) )?(\w+)(?: (\[[^\]]*\]))?', expr)
+        if not m or m.group(2) not in helpers:
+            raise Invalid('Air2Lean/StdModels.lean: unreadable reviewed sources ' + expr)
+        versions = helpers[m.group(2)]
+        for restrict in (m.group(1), m.group(3)):
+            if restrict:
+                keep = re.findall(r'"([^"]+)"', restrict)
+                versions = tuple(v for v in versions if v in keep)
+        return versions
     models = {}
-    for _, symbol, versions in MODEL_ROW.findall(table):
-        listed = THROUGH_017 if versions == 'through017' else tuple(re.findall(r'"([^"]+)"', versions or ''))
-        models[symbol] = ('modelled', listed or BASE_ZIG_VERSIONS, None)
+    for kind, symbol, expr in MODEL_ROW.findall(table):
+        models[symbol] = ('modelled', reviewed(kind, expr), None)
     for symbol, reason in REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), reason)
     for symbol, named, reason in ASYNC_REJECTED_ROW.findall(table):

@@ -2,6 +2,23 @@
 //! must be rejected by the translator (`test_cli.py`).
 const std = @import("std");
 
+/// Byte `i` of a vector in memory: a pointer cast between a vector and another pointee is
+/// illegal behaviour (a vector has no defined byte layout; docs/illegal-behavior.md), rejected
+/// for every profile.
+pub fn vecByte(a: u16, b: u16, i: usize) u8 {
+    var v: @Vector(2, u16) = .{ a, b };
+    const bytes: *const [4]u8 = @ptrCast(&v);
+    return bytes[i];
+}
+
+/// Lane 0 of a vector whose memory bytes were stored as an array: the same illegal cast.
+pub fn vecLane0FromBytes(b: [8]u8) u32 {
+    var v: @Vector(2, u32) = .{ 0, 0 };
+    const bytes: *[8]u8 = @ptrCast(&v);
+    bytes.* = b;
+    return v[0];
+}
+
 pub fn atomicRead(p: *u32) u32 {
     return @atomicLoad(u32, p, .seq_cst);
 }
@@ -46,6 +63,8 @@ pub fn u128Bytes(x: u128) [16]u8 {
 
 comptime {
     _ = &atomicRead;
+    _ = &vecByte;
+    _ = &vecLane0FromBytes;
     _ = &packedUnion;
     _ = &f80Add;
     _ = &boolLanes;

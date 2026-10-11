@@ -576,21 +576,21 @@ theorem free_front {R : Assn} {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.s
 
 set_option maxHeartbeats 1000000 in
 /-- **`groupAsync` meets its contract from any initial budget**, for every resource outcome. -/
-theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
+theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
     (proto v).WP 0 (groupAsync io v) (QM v) (fun _ => .none)
-      { ({ mem0 with spawnLimit := lim } : Mem) with current := 0 } d := by
+      { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } d := by
   unfold groupAsync
   have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty)
-      { ({ mem0 with spawnLimit := lim } : Mem) with current := 0 } := by
+      { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
     exact Owned.start rfl rfl
   -- `out` and the `Io.Group`.
   refine WP.bind (liftMem_upd' (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl
-    (by show 0 < mem0.threads.size; decide) rfl fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ hg₁ => ?_)
+    (by show 0 < (mem0 σ).threads.size; simp [mem0, Mem.ofGlobals]) rfl fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ hg₁ => ?_)
   obtain ⟨Ax, hA⟩ := hq₁
   obtain ⟨⟨hx0, hAx⟩, hx⟩ := sep_lift.mp hA
   refine WP.bind (liftMem_upd' (alloc_next 16 8 (by decide)) ho₁ hc₁
-    (by rw [ht₁]; show 0 < mem0.threads.size; decide) hx
+    (by rw [ht₁]; show 0 < (mem0 σ).threads.size; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ h₂ ho₂ hq₂ hc₂ ht₂ hg₂ => ?_)
   obtain ⟨Ag, ⟨hg0, hAg⟩, F₂⟩ := sep_ex_lift hq₂
   have htt₂ : m₂.threads = #[{ spawner := 0, joined := true }] := by rw [ht₂, ht₁]; rfl
@@ -670,21 +670,21 @@ theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
 /-- **`groupAsync io v` returns `.ok v` under every schedule, every resource outcome and every
 initial budget**, and joins every thread it spawned. Assigned and fallback executions both
 reach this declared contract (`afterAsync_spec`). -/
-theorem groupAsync_spec {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem groupAsync_spec {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run =
+    (h : (Sched.run dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     r = .ok v ∧ joinedAll 0 m := by
   obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io lim) h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io lim) h
   exact hq
 
 /-- **No run of `groupAsync io v` gives an error**, for every schedule, resource outcome and
 budget: no race on `out` between the child and `main`, no invalid join, no use after free. -/
-theorem groupAsync_safe {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run ≠
+theorem groupAsync_safe {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
   (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
-    (main_spec io lim)
+    (main_spec σ io lim)
 
 end SpawnFailure.Group

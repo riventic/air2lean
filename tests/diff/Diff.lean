@@ -191,10 +191,28 @@ def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) (wide : Bool) : String 
   | .error name => "{\"err\":\"" ++ name ++ "\"}"
   | .ok x => natStr x wide
 
-/-- A float leaf: `"nan"` (any NaN bit pattern) or `"0x"` + zero-padded lowercase hex of its
-bits (docs/floats.md; common.zig's `renderPayload` mirrors this). -/
+/-- The harness tests a float for NaN with `v != v` (common.zig's `renderPayload`). On an
+aarch64 host an `f80` `!=` is compiler_rt's `__nexf2`, which reads a NaN only off the maximum
+exponent (`comparef.cmp_f80`): an unnormal or pseudo-denormal renders as its bits there. x87
+reads every invalid encoding as a NaN (`Float.isNaN`). The model makes every soft-float `f80` op
+on these encodings `.unspecified` (`Zig.Float.softF80Chk`); only a sign-bit op returns one. -/
+def softF80Host : Bool :=
+  System.Platform.target.startsWith "arm64" || System.Platform.target.startsWith "aarch64"
+
+def renderedNaN {fmt : Zig.FloatFmt} (v : Zig.Float fmt) : Bool :=
+  match fmt with
+  | .f80 =>
+    if softF80Host then
+      let n := v.bits.toNat
+      (n >>> 64) % 2 ^ 15 == 2 ^ 15 - 1 && n % 2 ^ 64 != 2 ^ 63
+    else v.isNaN
+  | _ => v.isNaN
+
+/-- A float leaf: `"nan"` (a NaN to the harness's `v != v`, `renderedNaN`) or `"0x"` +
+zero-padded lowercase hex of its bits (docs/floats.md; common.zig's `renderPayload` mirrors
+this). -/
 def floatStr {fmt : Zig.FloatFmt} (v : Zig.Float fmt) : String :=
-  if v.isNaN then "\"nan\"" else "\"0x" ++ natToHex v.bits.toNat (fmt.width / 4) ++ "\""
+  if renderedNaN v then "\"nan\"" else "\"0x" ++ natToHex v.bits.toNat (fmt.width / 4) ++ "\""
 
 /-- `?T` for a float `T`: `null` or the payload's own float rendering. -/
 def optFloatStr {fmt : Zig.FloatFmt} (v : Option (Zig.Float fmt)) : String :=
@@ -611,9 +629,9 @@ def runVectorCoverage : IO Unit := do
     pure (renderOk (Vectors.fMin (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
   processFile ex "fMax" fun j => do
     pure (renderOk (Vectors.fMax (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
-  -- A memory function: run from `mem0`.
+  -- A memory function: run from `mem0` under the harness's concrete placement.
   processFile ex "twiceInMem" fun j => do
-    pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' Vectors.mem0))
+    pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' (Vectors.mem0 .fresh)))
   processFile ex "vDiv" fun j => renderVecS <$> pairI Vectors.vDiv j
   processFile ex "vMod" fun j => renderVecS <$> pairI Vectors.vMod j
   processFile ex "sRem" fun j => do
@@ -657,6 +675,8 @@ def shapeStr : Variants.Shape → String
   | .rect r => s!"\{\"rect\":\{\"w\":{r.w.toNat},\"h\":{r.h.toNat}}}"
   | .square a => s!"\{\"square\":{a.toNat}}"
   | .empty => "{\"empty\":null}"
+  -- A payload that a retag left undefined (MM-13) is no Zig value: it never matches native.
+  | .undef_circle .. | .undef_rect .. | .undef_square .. => "{\"undefined_payload\":null}"
 
 def runVariants : IO Unit := do
   processFile "variants" "next" fun j => do
@@ -701,7 +721,7 @@ def runVariants : IO Unit := do
 
 /-! ### Memory: `{"bufs":[…],"args":[…]}` (docs/generated-code.md §Differential test)
 
-The memory at the start is the example's `mem0`: its `g` globals are blocks `0 … g-1`. Input
+The memory at the start is the example's `mem0 .fresh` (the harness's concrete placement): its `g` globals are blocks `0 … g-1`. Input
 buffer `i` is block `g + i`. -/
 
 /-- One 16-byte aligned block per input buffer, after the globals of `m0`. The allocator did not
@@ -795,7 +815,7 @@ def unitStr (_ : Zig.Mem) (_ : Unit) : String := "null"
 
 def runPointers : IO Unit := do
   let ex := "pointers"
-  let m0 := Pointers.mem0
+  let m0 := (Pointers.mem0 .fresh)
   processMem ex m0 "swap" (fun g a => return Pointers.swap (← ptrOf g a[0]!) (← ptrOf g a[1]!)) unitStr
   processMem ex m0 "delay"
     (fun g a => return Pointers.delay (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
@@ -821,7 +841,7 @@ def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
 
 def runLayout : IO Unit := do
   let ex := "layout"
-  let m0 := Layout.mem0
+  let m0 := (Layout.mem0 .fresh)
   let ptrRes (size : Nat) (m : Zig.Mem) (p : Zig.Ptr) := ptrStr m0.blocks.size m p size
   processMem ex m0 "addrEq" (fun g a => return Layout.addrEq (← ptrOf g a[0]!) (← ptrOf g a[1]!))
     fun _ b => if b then "1" else "0"
@@ -921,7 +941,7 @@ def runLayout : IO Unit := do
 
 def runSlices : IO Unit := do
   let ex := "slices"
-  let m0 := Slices.mem0
+  let m0 := (Slices.mem0 .fresh)
   let u32 (_ : Zig.Mem) (v : BitVec 32) := natStr v false
   let bytes (m : Zig.Mem) (s : Zig.Slice) := sliceStr m0.blocks.size m 1 s
   processMem ex m0 "reverse" (fun g a => return Slices.reverse (← sliceOf g a[0]!)) unitStr
@@ -993,7 +1013,7 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
 
 def runLists : IO Unit := do
   let ex := "lists"
-  let m0 := Lists.mem0
+  let m0 := (Lists.mem0 .fresh)
   let a : Zig.Allocator := {}
   let wide (_ : Zig.Mem) (v : Except Zig.ErrName (BitVec 64)) := errStr v true
   let items (size : Nat) (m : Zig.Mem) : Except Zig.ErrName Zig.Slice → String
@@ -1080,14 +1100,21 @@ def runLzcnt64 : IO Unit :=
 
 -- The right side of `Proofs/Asm/Proofs.lean`'s `divmod_spec`, from the opaque's two outputs:
 -- the test checks the asm op, the proof checks the translation around it (the tuple and the
--- store to `rem`).
+-- store to `rem`). The fault decision is the generated wrapper's own (S7): its `Zig.asmTrap`
+-- guard throws `trap` for a zero divisor (native: SIGFPE); its value, computed from the
+-- opaque's placeholder, is not used. The archive is called only when the wrapper does not trap:
+-- `divl` by zero would kill this process on x86_64.
 def runDivmod : IO Unit :=
   processFile "asm" "divmod" fun j => do
     let items ← getArr j
     let a := bv 32 (← getInt items[0]!)
     let b := bv 32 (← getInt items[1]!)
-    let (q, r) := Asm.airAsm_3653072158 a b
-    pure (render (pure (r.setWidth 64 <<< 32 ||| q.setWidth 64) : Zig.Result (BitVec 64)) true)
+    let value : Zig.Result (BitVec 64) := match (Asm.divmod a b).run with
+      | some (.error e) => throw e
+      | _ =>
+        let (q, r) := Asm.airAsm_3653072158 a b
+        pure (r.setWidth 64 <<< 32 ||| q.setWidth 64)
+    pure (render value true)
 
 end DiffTest
 

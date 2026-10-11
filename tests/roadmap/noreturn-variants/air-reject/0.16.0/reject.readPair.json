@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.readPair",
+ "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 21
+ },
  "params": [
   0
  ],
@@ -78,7 +84,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 5,
@@ -114,7 +121,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 9,
@@ -136,6 +144,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -156,6 +165,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -174,6 +184,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -187,6 +198,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -198,6 +210,7 @@
   {
    "k": "struct",
    "name": "reject.Pair",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -217,6 +230,7 @@
   {
    "k": "union",
    "name": "noreturn_variants.One",
+   "module": "root",
    "layout": "auto",
    "tag": 9,
    "fields": [
@@ -235,6 +249,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(noreturn_variants.One).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 11,
    "exhaustive": true,
    "fields": [

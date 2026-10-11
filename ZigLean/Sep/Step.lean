@@ -106,6 +106,11 @@ theorem Triple.arr_store_bind [LawfulEnc T] {xs : List T} {i : BitVec 64} {w : T
     Triple (arr p xs ∗ R) (Zig.store a (p.elem (Enc.size T) i) w >>= f) Q :=
   Triple.spec_bind (TotalTriple.arr_store hn ha hs hi w).toPartial fun () => k
 
+theorem Triple.arr_ptrProject_bind {xs : List T} {i : BitVec 64} {f : Ptr → MemM β}
+    (hi : i.toNat ≤ xs.length) (k : Triple (arr p xs ∗ R) (f (p.elem (Enc.size T) i)) Q) :
+    Triple (arr p xs ∗ R) (ptrProject p (·.elem (Enc.size T) i) >>= f) Q :=
+  Triple.spec_bind_eq (Triple.arr_ptrProject hi) k
+
 theorem Triple.arr_split_pre {xs : List T} {k : Nat} {c : MemM β} (hs : Enc.align T ∣ Enc.size T)
     (hk : k ≤ xs.length)
     (t : Triple ((arr p (xs.take k) ∗ arr (p.add (Enc.size T * k)) (xs.drop k)) ∗ R) c Q) : Triple (arr p xs ∗ R) c Q :=
@@ -156,6 +161,13 @@ theorem arr_load {xs : List T} {i : BitVec 64} (hn : 0 < Enc.size T)
   obtain ⟨m', hr, hm', hs''⟩ := arr_load_run hp hm hn ha hs hi hs'
   exact ⟨_, m', hP, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs''⟩
 
+/-- `&xs[i]` of an owned array, `i ≤ len`: checked pointer formation (`ptrProject`, MM-3). -/
+theorem arr_ptrProject {xs : List T} {i : BitVec 64} (hi : i.toNat ≤ xs.length) :
+    TotalTriple (arr p xs) (ptrProject p (·.elem (Enc.size T) i))
+      (fun q => ⌜q = p.elem (Enc.size T) i⌝ ∗ arr p xs) := by
+  intro m hP hF hd hm hp hs'
+  exact ⟨_, m, hP, arr_ptrProject_run hp hm hi, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+
 theorem load_bind {v : T} {f : T → MemM β} (hn : 0 < Enc.size T)
     (k : TotalTriple (pts p a v ∗ R) (f v) Q) :
     TotalTriple (pts p a v ∗ R) (Zig.load T a p >>= f) Q :=
@@ -178,6 +190,11 @@ theorem arr_store_bind [LawfulEnc T] {xs : List T} {i : BitVec 64} {w : T}
     (k : TotalTriple (arr p (xs.set i.toNat w) ∗ R) (f ()) Q) :
     TotalTriple (arr p xs ∗ R) (Zig.store a (p.elem (Enc.size T) i) w >>= f) Q :=
   spec_bind (arr_store hn ha hs hi w) fun () => k
+
+theorem arr_ptrProject_bind {xs : List T} {i : BitVec 64} {f : Ptr → MemM β}
+    (hi : i.toNat ≤ xs.length) (k : TotalTriple (arr p xs ∗ R) (f (p.elem (Enc.size T) i)) Q) :
+    TotalTriple (arr p xs ∗ R) (ptrProject p (·.elem (Enc.size T) i) >>= f) Q :=
+  spec_bind_eq (arr_ptrProject hi) k
 
 theorem arr_split_pre {xs : List T} {k : Nat} {c : MemM β} (hs : Enc.align T ∣ Enc.size T)
     (hk : k ≤ xs.length)
@@ -338,6 +355,20 @@ def cont (facts : Array Syntax) : TacticM Unit := do
   let facts : Array (TSyntax `Lean.Parser.Tactic.simpLemma) := facts.map (⟨·⟩)
   discard <| observing? (evalTactic (← `(tactic| sep_unfold [$facts,*])))
 
+/-- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3): the side goals. -/
+def ptrProjectStep (kind : Name) (P cmd : Expr) : TacticM (List MVarId) := do
+  let base := cmd.getAppArgs[0]!.consumeMData
+  let T ← mkFreshExprMVar (mkSort Level.one)
+  let inst ← mkFreshExprMVar none
+  let xs ← mkFreshExprMVar (mkApp (mkConst ``List [Level.zero]) T)
+  let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
+  unless ← findAtom P arr ``Zig.arr do
+    throwError "sep_step: the precondition has no `arr` for{indentExpr base}"
+  focus kind P #[← instantiateMVars arr]
+  match ← evalTacticAt (← `(tactic| refine $(lemmaId kind "arr_ptrProject_bind") ?_ ?_)) (← getMainGoal) with
+  | [hi, k] => setGoals [k]; tryBound hi
+  | _ => throwError "sep_step: unexpected goals after the pointer rule"
+
 /-- One symbolic-execution step on the main goal. -/
 def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMainContext do
   let (kind, _, c, _) ← goalTriple
@@ -366,7 +397,7 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
         evalTactic (← `(tactic| try dsimp only))
         intro []
       pure []
-    | none => do
+    | none => if cmd.isAppOfArity ``Zig.ptrProject 2 then ptrProjectStep kind P cmd else do
       let isLoad := cmd.isAppOfArity ``Zig.load 4
       let isStore := cmd.isAppOfArity ``Zig.store 5
       unless isLoad || isStore do

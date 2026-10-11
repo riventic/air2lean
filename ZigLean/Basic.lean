@@ -7,7 +7,9 @@ AIR operation in the air2lean subset.
 * Integers are `BitVec n`. Signedness is not in the type: each operation takes `s : Bool`
   (`true` = signed), which the translator reads from the AIR type.
 * Every check that Zig does in `Debug` / `ReleaseSafe` becomes `throw`. In `ReleaseFast`
-  the same cases are illegal behaviour, so a proof of "never throws" covers both modes.
+  the same cases are illegal behaviour, so a proof of "never throws" covers both modes. Each
+  op also checks its own illegal-behaviour precondition (`.illegal`), so illegal behaviour that
+  no safety check catches throws too (`docs/illegal-behavior.md`).
 -/
 
 namespace Zig
@@ -19,12 +21,14 @@ inductive Error where
   | unreachable
   | panic
   /-- Zig leaves the result open, and the model does not choose one: the bits of a NaN
-  (`@bitCast`), or `@intFromFloat` of a NaN or of an out-of-range value without a safety
-  check. A proof of "never throws" shows that the code never reaches such a case. -/
+  (`@bitCast`), an undefined byte in a loaded value. A proof of "never throws" shows that the
+  code never reaches such a case. -/
   | unspecified
-  /-- Illegal behaviour that `ReleaseSafe` does not check (`ZigLean/Mem/Basic.lean`): an access
-  to a freed block, out of bounds, or misaligned; a double free. A proof of "never throws" shows
-  that the code never reaches such a case. -/
+  /-- Illegal behaviour that no safety check before the op catches: each op's model checks its
+  own precondition (`docs/illegal-behavior.md`). For example an access to a freed block, out of
+  bounds, or misaligned (`ZigLean/Mem/Basic.lean`); a double free; an inexact float
+  `@divExact`; `@intFromFloat` of a NaN. A proof of "never throws" shows that the code never
+  reaches such a case. -/
   | illegal
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
@@ -36,6 +40,15 @@ inductive Error where
   the model does not supply, so reports keep it apart from `.unspecified`. A proof of "never
   throws" shows that the code never reaches such a call. -/
   | unsupportedTimer
+  /-- A CPU fault of an allowlisted inline-asm instruction (`Air2Lean/AsmAllowlist.lean`'s
+  `AsmFault`), e.g. `divl` with a zero divisor (#DE): the process is killed by a signal
+  (`SIGFPE`), it is not a Zig panic. A proof of "never throws" shows that the code never runs
+  the instruction on such an input (`Zig.asmTrap`). -/
+  | trap
+  /-- The call stack is exhausted: a frame does not fit in the stack budget that the
+  environment selected (`Mem.stackLimit`, `Zig.enterFrame`, MM-5). Native code overflows its
+  stack (a signal, not a panic); the model makes it an outcome of its own. -/
+  | stackOverflow
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/
@@ -46,6 +59,13 @@ abbrev M (σ α : Type) := StateT σ Result α
 
 abbrev usize := BitVec 64
 abbrev isize := BitVec 64
+
+/-- An allowlisted inline-asm instruction (an `opaque` `airAsm_<hash>` value `v`) that faults
+when `faults` holds: the entry's `AsmFault` condition, rendered by the translator over the
+instruction's inputs (`Air2Lean/AsmAllowlist.lean`). An instruction whose entry is `never` is
+emitted without this guard. -/
+@[inline] def asmTrap {α : Type} (faults : Prop) [Decidable faults] (v : α) : Result α :=
+  if faults then throw .trap else pure v
 
 /-- A Zig error's identity is its name, from one global namespace: `E!T` becomes
 `Except ErrName T'`. Distinct from `Zig.Error` (panics): a Zig error is a return value, not a
@@ -103,10 +123,14 @@ and `minInt / -1` are illegal, as for `@divFloor`. -/
                   else pure (.ofInt n (-Int.fdiv (-a.toInt) b.toInt)))
   else pure (.ofNat n ((a.toNat + b.toNat - 1) / b.toNat))
 
-/-- `@divExact`: the remainder must be zero. -/
-@[inline] def divExact (s : Bool) (a b : BitVec n) : Result (BitVec n) := do
-  let q ← divTrunc s a b
-  if q * b = a then pure q else throw .panic
+/-- `@divExact` as the AIR `div_exact`, which Sema emits only without safety (with safety it
+emits `div_trunc` and checks the remainder, `exactDivisionRemainder`). A zero divisor,
+`minInt / -1` and a nonzero remainder are therefore unchecked illegal behaviour. -/
+@[inline] def divExact (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
+  if b = 0 || (s && a.sdivOverflow b) then throw .illegal
+  else
+    let q := if s then a.sdiv b else a.udiv b
+    if q * b = a then pure q else throw .illegal
 
 /-- `minInt % -1`: LLVM's `srem` has no result (x86_64 `idiv` traps), and Sema does not check
 it, so `@rem`/`@mod` of these is illegal behaviour. -/
@@ -164,6 +188,12 @@ is `2^(n-1)`, the same bits). -/
 
 @[inline] def shl {m : Nat} (a : BitVec n) (b : BitVec m) : BitVec n := a <<< b.toNat
 
+/-- A shift count below the operand width (only a zero count for `u0`). A larger count is
+illegal behaviour. Sema checks it only with safety on and only for a width that is not a power
+of two (`shiftRhsTooBig`, which the translator rejects); the `Log2Int` count of a power-of-two
+width is always in range. -/
+@[inline] def shiftCountOk {m : Nat} (n : Nat) (b : BitVec m) : Bool := b.toNat < n || b.toNat == 0
+
 /-- `<<|` saturates when set bits would be shifted out. -/
 @[inline] def shlSat {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : BitVec n :=
   clamp s n (val s a * 2 ^ b.toNat)
@@ -171,13 +201,26 @@ is `2^(n-1)`, the same bits). -/
 @[inline] def shr {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : BitVec n :=
   if s then a.sshiftRight b.toNat else a >>> b.toNat
 
-/-- `@shlExact`: no set bit may be shifted out. -/
+/-- `<<` (`shl`) of a width that is not a power of two, whose count can reach the width: an
+out-of-range count is `.illegal` (`shiftCountOk`). -/
+@[inline] def shlChk {m : Nat} (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if shiftCountOk n b then pure (shl a b) else throw .illegal
+
+/-- `>>` (`shr`) of a width that is not a power of two: as `shlChk`. -/
+@[inline] def shrChk {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if shiftCountOk n b then pure (shr s a b) else throw .illegal
+
+/-- `@shlExact` as the AIR `shl_exact`, which Sema emits only without safety (with safety it
+emits `shl_with_overflow` and checks the flag, `shlOverflow`): a shifted-out bit and an
+out-of-range count are unchecked illegal behaviour. -/
 @[inline] def shlExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
   let r := a <<< b.toNat
-  if shr s r b = a then pure r else throw .overflow
+  if shiftCountOk n b && shr s r b = a then pure r else throw .illegal
 
-/-- `@shrExact`: no set bit may be shifted out. -/
+/-- `@shrExact`: no set bit may be shifted out (`.overflow`; with safety Sema also checks it
+after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shiftCountOk`). -/
 @[inline] def shrExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if !shiftCountOk n b then throw .illegal else
   let r := shr s a b
   if r <<< b.toNat = a then pure r else throw .overflow
 
@@ -196,6 +239,12 @@ is `2^(n-1)`, the same bits). -/
   let lo : Int := if s₂ then -(2 ^ (m - 1)) else 0
   let hi : Int := if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1
   if lo ≤ v ∧ v ≤ hi then pure (.ofInt m v) else throw .overflow
+
+/-- The length of an operand of a multi-operand `for` loop under `@setRuntimeSafety(false)` (a
+`slice_len` the loop does not read otherwise): it must equal the loop's length `bound`. Unequal
+lengths are illegal behaviour that only Sema's check (`forLenMismatch`) catches: `.illegal`. -/
+@[inline] def forLen (len bound : usize) : Result usize :=
+  if len = bound then pure len else throw .illegal
 
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m
@@ -240,6 +289,12 @@ instead of diverging. -/
   match e with
   | .ok v => pure v
   | .error _ => throw .panic
+
+/-- `@errorCast` to the error set `names` (a `bitcast` between error sets): an error outside it
+is illegal behaviour that only Sema's check (`error_set_has_value`, which the exporter does not
+support) catches, so the model checks it itself: `.illegal`. -/
+@[inline] def errorIn (names : List ErrName) (e : ErrName) : Result ErrName :=
+  if names.contains e then pure e else throw .illegal
 
 /-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
 statically impossible. -/

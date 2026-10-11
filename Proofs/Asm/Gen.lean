@@ -34,7 +34,7 @@ inductive divmodExit where
 def divmod (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 64) := do
   let e ← ((do
     modify (fun s => { s with rem := (0#32) })
-    let a4 := airAsm_3653072158 p0 p1
+    let a4 ← Zig.asmTrap (p1 = 0) (airAsm_3653072158 p0 p1)
     let i4 ← pure a4.1
     modify (fun s => { s with rem := a4.2 })
     let i5 ← pure ((← get).rem)

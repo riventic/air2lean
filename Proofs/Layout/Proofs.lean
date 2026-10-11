@@ -1,6 +1,7 @@
 import Proofs.Layout.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Simp
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/layout/layout.zig`
@@ -84,23 +85,26 @@ theorem headerLen_short (m : Mem) (s : Slice) (h : s.len.toNat < 8) :
     (headerLen s).run m = pure (none, m) := by
   simp [headerLen, zig_unfold, Zig.lt, BitVec.ult, h]
 
+nonvacuity_witness headerLen_short := ⟨{}, ⟨⟨none, 0⟩, 0⟩, by decide, trivial⟩
+
 /-- `headerLen` from the results of its two loads: the magic number, then the length. -/
 theorem headerLen_run {m m₁ m₂ : Mem} {s : Slice} {mg : BitVec 32} {len : BitVec 16}
     (h : 8 ≤ s.len.toNat)
-    (hmg : (load (BitVec 32) 1 (s.ptr.add 0)).run m = pure (mg, m₁))
+    (hmg : (load (BitVec 32) 1 s.ptr).run m = pure (mg, m₁))
+    (hp : (ptrProject s.ptr (·.add 4)).run m₁ = pure (s.ptr.add 4, m₁))
     (hlen : (load (BitVec 16) 1 (s.ptr.add 4)).run m₁ = pure (len, m₂)) :
     (headerLen s).run m =
       if mg = 0x4C524941#32 then pure (some len, m₂) else pure (none, m₁) := by
   have h8 : ¬ s.len.toNat < 8 := by omega
-  simp only [StateT.run] at hmg hlen
+  simp only [StateT.run] at hmg hlen hp
   by_cases hm : mg = 0x4C524941#32
-  · simp [headerLen, zig_unfold, Zig.lt, BitVec.ult, h8, hmg, hlen, hm]
+  · simp [headerLen, zig_unfold, Zig.lt, BitVec.ult, h8, hmg, hp, hlen, hm]
   · simp [headerLen, zig_unfold, Zig.lt, BitVec.ult, h8, hmg, hm]
 
 /-- `headerLen` from the bytes: the length if the first 4 bytes are the magic number. -/
 theorem headerLen_spec {m : Mem} {s : Slice} {b b' : BlockId} {blk blk' : Block} {o o' : Nat}
     {mg : BitVec 32} {len : BitVec 16} (h : 8 ≤ s.len.toNat)
-    (ha : m.access (s.ptr.add 0) 4 1 = pure (b, blk, o))
+    (ha : m.access s.ptr 4 1 = pure (b, blk, o))
     (hmg : Enc.decode (blk.bytes.extract o (o + 4)) = pure mg)
     (hnr : NoRace m b o 4 .read)
     (ha' : (m.recordAt b o 4 .read).access (s.ptr.add 4) 2 1 = pure (b', blk', o'))
@@ -109,4 +113,7 @@ theorem headerLen_spec {m : Mem} {s : Slice} {b b' : BlockId} {blk blk' : Block}
     (headerLen s).run m =
       if mg = 0x4C524941#32 then pure (some len, (m.recordAt b o 4 .read).recordAt b' o' 2 .read)
       else pure (none, m.recordAt b o 4 .read) :=
-  headerLen_run h (load_run (α := BitVec 32) ha hmg hnr) (load_run (α := BitVec 16) ha' hlen hnr')
+  headerLen_run h (load_run (α := BitVec 32) ha hmg hnr)
+    (ptrProject_add_run (by simpa using inBounds_of_access (access_recordAt.trans ha) 0 (by omega))
+      (by simpa using inBounds_of_access ha' 0 (by omega)))
+    (load_run (α := BitVec 16) ha' hlen hnr')

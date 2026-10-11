@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "array_list.Aligned(u32,null).ensureTotalCapacity",
+ "module": "std",
  "params": [
   0,
   1,
@@ -324,6 +325,7 @@
    "callee": {
     "ty": 11,
     "func": "array_list.Aligned(u32,null).growCapacity",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -345,6 +347,7 @@
    "callee": {
     "ty": 12,
     "func": "array_list.Aligned(u32,null).ensureTotalCapacityPrecise",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -385,6 +388,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -393,6 +397,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -431,6 +436,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -449,6 +455,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -462,6 +469,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -493,6 +501,7 @@
   {
    "k": "struct",
    "name": "array_list.Aligned(u32,null)",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -522,6 +531,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -535,6 +545,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -556,6 +567,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -564,6 +576,7 @@
   {
    "k": "struct",
    "name": "debug.SafetyLock",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -582,6 +595,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -618,6 +632,7 @@
   {
    "k": "enum",
    "name": "debug.SafetyLock.State__enum_1",
+   "module": "std",
    "tag": 2,
    "exhaustive": false,
    "fields": [
@@ -640,6 +655,7 @@
    "child": 27,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -652,6 +668,7 @@
    "child": 28,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -664,6 +681,7 @@
    "child": 29,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -676,6 +694,7 @@
    "child": 30,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

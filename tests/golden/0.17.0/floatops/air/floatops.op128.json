@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "floatops.op128",
+ "module": "root",
  "params": [
   0,
   1,

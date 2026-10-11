@@ -23,9 +23,9 @@ private def mutant (name got want : String) : IO Unit := do
   if got = want then throw (IO.userError s!"mutant {name} survived: {got}")
   IO.println s!"mutant {name} rejected: {got}, expected {want}"
 
-/-- A memory whose policy proposes `pick b` for block `b`, with provenance mode `pm`. -/
+/-- A memory whose placement proposes `pick b` for block `b`, with provenance mode `pm`. -/
 private def reuseMem (pick : BlockId → Option Nat) (pm : ProvenanceMode := .strict) : Mem :=
-  { allocPolicy := { reuseAddr := pick, provenance := pm } }
+  { place := ⟨pick⟩, allocPolicy := { provenance := pm } }
 
 private def addr (p : Ptr) : MemM Int := ptrAddr p
 
@@ -43,20 +43,29 @@ def main : IO Unit := do
   expect "default ignores freed address" (outcome (twoAddrs .heap .heap) {}) "ok (4096, 4112)"
   -- The opt-in policy reuses a freed heap block's address.
   expect "heap reuse" (outcome (twoAddrs .heap .heap) (reuseMem at4096)) "ok (4096, 4096)"
-  -- A proposal is taken only when valid: not over a live block, aligned, nonzero, below
-  -- nextAddr. Each invalid proposal falls back to a fresh address.
+  -- A proposal is taken exactly when Zig allows it: not over a live block, aligned, nonzero.
+  -- Adjacency and any order are allowed. Each invalid proposal falls back to a fresh address.
   expect "live overlap refused" (outcome (twoAddrs .heap .heap false) (reuseMem at4096))
     "ok (4096, 4112)"
-  expect "one-past gap kept" (outcome (twoAddrs .heap .heap false)
-    (reuseMem fun b => if b = 1 then some 4104 else none)) "ok (4096, 4112)"
+  expect "adjacent accepted" (outcome (twoAddrs .heap .heap false)
+    (reuseMem fun b => if b = 1 then some 4104 else none)) "ok (4096, 4104)"
+  expect "overlap by one refused" (outcome (twoAddrs .heap .heap false)
+    (reuseMem fun b => if b = 1 then some 4096 else none)) "ok (4096, 4112)"
+  expect "below accepted" (outcome (twoAddrs .heap .heap false)
+    (reuseMem fun b => if b = 0 then some 8192 else if b = 1 then some 64 else none))
+    "ok (8192, 64)"
   expect "misaligned refused" (outcome (twoAddrs .heap .heap)
     (reuseMem fun b => if b = 1 then some 4097 else none)) "ok (4096, 4112)"
   expect "zero refused" (outcome (twoAddrs .heap .heap)
     (reuseMem fun b => if b = 1 then some 0 else none)) "ok (4096, 4112)"
-  expect "above nextAddr refused" (outcome (twoAddrs .heap .heap)
-    (reuseMem fun b => if b = 1 then some 8192 else none)) "ok (4096, 4112)"
-  -- Stack blocks always get fresh addresses.
-  expect "stack fresh" (outcome (twoAddrs .stack .stack) (reuseMem at4096)) "ok (4096, 4112)"
+  expect "far address accepted" (outcome (twoAddrs .heap .heap)
+    (reuseMem fun b => if b = 1 then some 8192 else none)) "ok (4096, 8192)"
+  expect "last 8 bytes accepted" (outcome (twoAddrs .heap .heap)
+    (reuseMem fun b => if b = 1 then some (2 ^ 64 - 8) else none)) "ok (4096, 18446744073709551608)"
+  expect "past 2^64 refused" (outcome (twoAddrs .heap .heap)
+    (reuseMem fun b => if b = 1 then some (2 ^ 64) else none)) "ok (4096, 4112)"
+  -- Stack blocks and globals are placed the same way (MM-1).
+  expect "stack reuse" (outcome (twoAddrs .stack .stack) (reuseMem at4096)) "ok (4096, 4096)"
   -- An arena reuses a reset block's address under the policy (owned blocks).
   let arenaReset : MemM (Int × Int × Bool) := do
     let a ← Arena.init

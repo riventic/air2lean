@@ -66,8 +66,8 @@ instance : Zig.Enc Padded where
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.a), (4, Zig.Enc.encode v.b)]
   decode bs := do pure { a := ← Zig.Enc.decodeAt bs 0, b := ← Zig.Enc.decodeAt bs 4 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure bytesToPaddedLocals where
   deriving Inhabited
@@ -116,7 +116,7 @@ inductive optFromAddrExit where
 
 def optFromAddr (p0 : BitVec 64) : Zig.MemM (Option (Zig.Ptr)) := do
   let e ← ((do
-    let i1 ← Zig.callM (Zig.optPtrFromAddr (p0).toNat)
+    let i1 ← Zig.callM (Zig.checkAddr 4 false (p0).toNat >>= fun _ => Zig.optPtrFromAddr (p0).toNat)
     pure (.ret i1)) : Zig.MM optFromAddrLocals optFromAddrExit).run' (default : optFromAddrLocals)
   match e with
   | .ret v => pure v

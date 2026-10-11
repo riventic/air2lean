@@ -7,8 +7,8 @@ deriving instance DecidableEq for Except
 
 def domain : ErrorDomain := ⟨#["Alpha", "Beta", "Gamma"], by decide, by decide⟩
 def otherDomain : ErrorDomain := ⟨#["Beta", "Other"], by decide, by decide⟩
-def alpha : FiniteError domain := ⟨"Alpha", by native_decide⟩
-def beta : FiniteError domain := ⟨"Beta", by native_decide⟩
+def alpha : FiniteError domain := ⟨"Alpha", by simp [domain]⟩
+def beta : FiniteError domain := ⟨"Beta", by simp [domain]⟩
 
 example : Enc.size (FiniteError domain) = 2 := rfl
 example : Enc.size (Option (FiniteError domain)) = 2 := rfl

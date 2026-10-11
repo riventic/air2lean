@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "fs.File.writeAll",
+ "module": "std",
  "params": [
   0,
   1
@@ -375,6 +376,7 @@
                "callee": {
                 "ty": 14,
                 "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -467,6 +469,7 @@
                "callee": {
                 "ty": 14,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -536,6 +539,7 @@
                "callee": {
                 "ty": 14,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -582,6 +586,7 @@
            "callee": {
             "ty": 16,
             "func": "fs.File.write",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -743,6 +748,7 @@
   {
    "k": "struct",
    "name": "fs.File",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -762,6 +768,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -782,6 +789,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -800,6 +808,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -813,6 +822,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -826,6 +836,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -839,6 +850,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -874,6 +886,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

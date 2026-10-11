@@ -29,7 +29,7 @@ def cases():
     root = constant('order.root', 0)
     root['types'].append(dict(k='other', name='fn () u8'))
     root['body'] = [dict(id=i, tag='call', ty=0,
-                         callee=dict(ty=2, func=f'order.generic__anon_{n}', noreturn=False), args=[])
+                         callee=dict(ty=2, func=f'order.generic__anon_{n}', module='root', noreturn=False), args=[])
                     for i,n in enumerate((9,10))]
     root['body'].append(dict(id=2, tag='ret', ty=1, args=[dict(inst=1)]))
     reached.append(root)

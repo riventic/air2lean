@@ -14,6 +14,17 @@ built-in model is one row plus its typed signature and emission cases, not a new
 This API cannot override those models or translated AIR, and a translated AIR function that
 reuses a built-in std model name is rejected.
 
+A project cannot hand-model other std code either (W4 of the
+[models audit](architecture-audit/models.md)). A binding whose symbol starts with a top-level
+`lib/std` namespace (`mem.`, `heap.`, `fmt.`, `Io.`, `posix.`, ...; `stdNamespaces`) is
+rejected unless it is one of the OS primitives in `osPrimitiveBindings` (`os.linux.read`,
+`write`, `close`, `mmap`, `munmap`, `mremap`, `clock_gettime`, the futex calls,
+`sched_yield`, and `posix.mmap`/`munmap`/`mremap`): everything above them is translated from
+its source or is a reviewed `stdModels` row. The template does not offer such a symbol. AIR
+names do not yet carry module identity (B1, `codex/fix-module-identity`), so the match is on
+the first name component: a user root module named like a std namespace (`posix.zig`) is
+refused too, and any other user module is never affected.
+
 Generate an authoring template from checked AIR first:
 
 ```sh
@@ -148,6 +159,27 @@ registry test generates `fillClient` from a registered binding and proves the sa
 through the generated obligation (`FillGenerated.lean`). An assumed variant
 (`FillAssumedGenerated.lean`) also checks, but its theorem rests on the binding axiom.
 
+## Extern functions
+
+A call to an extern function (`docs/air-json.md` §Extern calls) has the callee
+`extern:<symbol>`: its linker symbol, never the name of a Zig declaration. A registry entry
+binds it only with that `symbol` and an `extern` object:
+
+```json
+"symbol": "extern:abs",
+"extern": {"library": "c", "premise": "EXT-03"}
+```
+
+`library` must equal the declared library (`extern "c" fn` gives `"c"`, a plain `extern fn`
+`null`) at every call site. `premise` names the premise (`docs/premises.md`, for example
+EXT-03 or an OS-specific one) under which the model stands for the real primitive; the
+registry report and the `-- air2lean-models:` header carry it. The `extern` object is required
+for an `extern:` symbol and forbidden for any other. A symbol that the AIR set also defines
+(`export fn`) cannot be bound to a model, since the linker resolves it to that definition; without either the program is rejected with
+`CALLEE_EXTERN_UNBOUND`. The template (`--model-registry-template`) lists each unbound extern
+call with its library filled in and no premise. `tests/roadmap/extern-calls` binds
+`extern "c" fn abs` this way (`registry.json`, `Model.lean`).
+
 ## Callback contracts (E02)
 
 `ZigLean.External.Callback` extends the contract layer to function-pointer parameters. A
@@ -249,9 +281,11 @@ obligations, mandatory fields, missing models and preservation of existing outpu
 Template mode produces JSON authoring data and intentionally does not certify program calls.
 `tests/roadmap/models/StdModels.lean` checks the built-in table (unique names, every typed
 model has a row, anonymous-instance lookup), rejection of a std call with an incompatible
-runtime signature, of an unqualified Zig version, of a translated function or project binding
-reusing a std name, of a same-name project binding with a different second call site, and the
-semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
+runtime signature, of an unqualified Zig version (every modelled row lists its reviewed
+versions; 0.17.0 is unreviewed), of a translated function or project binding reusing a std
+name, of a project binding that hand-models std code (and acceptance of the OS-primitive
+allowlist and of user-module names), of a same-name project binding with a different second
+call site, and the semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
 `ZigLean` umbrella and fails if any row's dependency is not a declaration there.
 
 The gate explicitly builds the `ZigLean` umbrella imported by generated source, compiles the

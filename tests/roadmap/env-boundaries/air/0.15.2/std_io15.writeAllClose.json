@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "std_io15.writeAllClose",
+ "module": "root",
  "params": [
   0,
   1
@@ -110,6 +111,7 @@
    "callee": {
     "ty": 6,
     "func": "fs.File.writeAll",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -170,6 +172,7 @@
      "callee": {
       "ty": 8,
       "func": "fs.File.close",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -235,6 +238,7 @@
    "callee": {
     "ty": 8,
     "func": "fs.File.close",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -262,6 +266,7 @@
   {
    "k": "struct",
    "name": "fs.File",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -281,6 +286,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -301,6 +307,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -319,6 +326,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

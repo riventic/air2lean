@@ -60,7 +60,7 @@ private def check [DecidableEq α] [Repr α] (name : String) (actual expected : 
 private def smallBytes : Array Byte :=
   #[.int 77, .int 88] ++ Enc.encode (Except.ok (19#8) : Except ErrName (BitVec 8)) ++ #[.int 99]
 private def smallMem (kind : BlockKind := .global) : Mem :=
-  Mem.ofGlobals [(smallBytes, 2, kind)]
+  Mem.ofGlobals .fresh [(smallBytes, 2, kind)]
 private def writeSmall : MemM (BitVec 8 × BitVec 8 × BitVec 8) := do
   let q := resolved root 2 2 0
   store 1 q (31#8)
@@ -76,9 +76,9 @@ private def writeWide : MemM (BitVec 64 × BitVec 8 × BitVec 8) := do
 
 -- Obtaining an absent payload address preserves provenance; decoding its undef bytes fails.
 private def absentOptional : Mem :=
-  Mem.ofGlobals [(Enc.encode (none : Option (BitVec 8)), 1, .global)]
+  Mem.ofGlobals .fresh [(Enc.encode (none : Option (BitVec 8)), 1, .global)]
 private def absentError : Mem :=
-  Mem.ofGlobals [(Enc.encode (Except.error "Bad" : Except ErrName (BitVec 8)), 2, .global)]
+  Mem.ofGlobals .fresh [(Enc.encode (Except.error "Bad" : Except ErrName (BitVec 8)), 2, .global)]
 
 def main : IO Unit := do
   check "small runtime projection alias" (resolved root 2 2 0) (errPayloadPtr (BitVec 8) (root.add 2))
@@ -86,7 +86,7 @@ def main : IO Unit := do
   check "equal-alignment runtime projection alias" (resolved root 2 0 0) (errPayloadPtr (BitVec 16) (root.add 2))
   check "optional nested alias" (resolved root 7 0 3) ((root.add 7).add 3)
   check "small write frame" (value smallMem writeSmall) (some (.ok (31#8, 77#8, 99#8)))
-  check "wide write frame" (value (Mem.ofGlobals [(wideBytes, 8, .global)]) writeWide)
+  check "wide write frame" (value (Mem.ofGlobals .fresh [(wideBytes, 8, .global)]) writeWide)
     (some (.ok (123#64, 77#8, 99#8)))
   check "const write rejected" (value (smallMem .constGlobal) writeSmall) (some (.error .illegal))
   check "absent optional stays undefined"

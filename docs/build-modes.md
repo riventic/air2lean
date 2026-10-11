@@ -40,7 +40,10 @@ have illegal behaviour. If the ReleaseSafe model does not throw on an input, the
 no illegal behaviour on that input. This holds only if export, translation and LLVM
 lowering are faithful (TRU-02, TRU-03). This is the premise behind the README sentence on
 ReleaseFast. No output, layout or performance correspondence is claimed beyond the tested
-inputs, and ReleaseFast AIR is never translated. The premise does not cover code under
+inputs, and ReleaseFast AIR is never translated by default: the translator admits only the
+qualified `ReleaseSafe`/`stage2_llvm` profile unless `--allow-unqualified-build-mode` is
+given, and that opt-in is recorded in the generated header (`docs/air-json.md` §Schema
+table). The premise does not cover code under
 `@setRuntimeSafety(false)` or `@setFloatMode(.optimized)`. It also does not cover other
 CPU features, other error-tracing settings, or comptime branches on
 `@import("builtin").mode`.
@@ -58,6 +61,36 @@ The records state this as an exception of the premise.
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
 
+**Known exceptions (open).** The premise needs the model to throw on every illegal behaviour
+that ReleaseSafe does not check. The memory-model audit
+([architecture-audit/memory-model.md](architecture-audit/memory-model.md), MM-7) found illegal
+behaviour without a model throw, so "the ReleaseSafe model does not throw" does not yet imply
+"no illegal behaviour" for programs that do the following:
+
+- **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
+  quotient; the model makes every other inexact quotient `.illegal`
+  ([illegal-behavior.md](illegal-behavior.md)). The re-recorded x86_64-linux runs have no
+  such mismatch; the aarch64-macos records still list this exception until they are re-recorded.
+
+The premise holds only for programs that do not. The item is lifted when its records are.
+
+**Fixed.** Address observation (MM-1, MM-2): every block's address is the environment's
+placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a
+no-throw proof covers the native layout, including the address-dependent safety checks
+(`@alignCast`, the alignment check of `@ptrFromInt`). Stack overflow (MM-5): a recursive function
+that uses memory charges its frame to the stack budget `Mem.stackLimit` and throws
+`.stackOverflow` when it does not fit; a statement without a budget assumes that the native stack
+holds every call chain (premise STK-01), which the claim tooling lists for such a goal.
+
+Forming a pointer outside its allocation (MM-3): LLVM lowers `ptr_add`, `ptr_sub`,
+element, field and `@fieldParentPtr` pointers to `getelementptr inbounds`, and a result outside
+`[base, base+size]` of the allocation is poison. Generated code now forms these pointers with
+`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). Residual: the
+payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
+(`Zig.tryPayloadPtr`, `Zig.errSetOk`) is formed after a checked access to the error code but
+not bounds-checked itself; it leaves the allocation only for an error union pointer that
+addresses a truncated object (a pointer cast), and every access through it is still checked.
+
 `scripts/diff.sh` also builds its libm and asm helper archives with `-OReleaseFast`,
 as Zig builds compiler_rt. These are test oracles, not a claimed program build.
 
@@ -68,7 +101,8 @@ native harness in another mode or backend (`-fllvm`, `-fno-llvm`). The model sid
 unchanged, so every run compares native behaviour with the ReleaseSafe model. In
 ReleaseFast and ReleaseSmall the safety checks are gone: an input on which the model
 throws is illegal behaviour, so it is counted as `ub_excluded` and not compared. Rows for
-which the harness cannot render the result of such a call count the same way.
+which the harness cannot render the result of such a call count the same way, and so do those
+of an input pinned illegal (`illegal_exclusion`, e.g. a slice formed outside its allocation).
 `python3 scripts/build-modes.py record` writes one record per
 (version, target, mode, backend) to [`assurance/build-mode-runs/`](../assurance/build-mode-runs/).
 A record has the case count, the count of every outcome, each exclusion by function, the
@@ -79,15 +113,18 @@ segment of release builds).
 
 Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
-run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
-those summaries (`build-mode-summaries-*`) and verifies the records on every run.
+run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
+cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
+`@fieldParentPtr` cases are pinned illegal, so the 85 float `@divExact` mismatches are now
+`illegal_exclusion`); CI uploads those summaries (`build-mode-summaries-*`) and verifies the
+records on every run.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
 | x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
