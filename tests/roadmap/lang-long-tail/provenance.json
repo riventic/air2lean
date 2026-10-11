@@ -1,0 +1,56 @@
+{
+  "air": {
+    "command": "ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<stem>. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig (export.sh)",
+    "cpu": "baseline",
+    "error_tracing": false,
+    "optimization": "ReleaseSafe",
+    "schema": 12,
+    "target": "x86_64-linux"
+  },
+  "air_sha256": {
+    "error_params/0.14.1/error_params.fail__anon_210.json": "0edc2cffedcaf467e59522391ba41aaa8a7af044b4aea4e81648c9c8cf2f41f8",
+    "error_params/0.14.1/error_params.fail__anon_221.json": "9c3469886e70004e191e92574c7d80f624f8998108ed1bf6cbba8131b14286dc",
+    "error_params/0.14.1/error_params.forward.json": "9c6d17cf618ca7b9e56b092266769a0fd86a46724501de4bc0ebcb500d38736e",
+    "error_params/0.14.1/error_params.orBoom.json": "c2490475edebe5af477ff89d54d768c2e51a4631fbe684889c8fd01fb7994fca",
+    "error_params/0.14.1/error_params.skipFirst.json": "caee51a4624f46639157d89a0f33cfb641488df6cc12710f3a45598b0e01eb64",
+    "error_params/0.14.1/error_params.unwrapEmpty.json": "5a30e56fc0cf7929321eb0b57cdf44ff3a23ffc27bc31ca9f4277d8f000973f9",
+    "error_params/0.14.1/error_params.viaFail.json": "eebb1bab7a046d2c1102e5e77273b88891f505b18ea2d468f1ea427784d9fe83",
+    "error_params/0.15.2/error_params.fail__anon_245.json": "2c490c1b4f056802a3906ab0b81be1bf4a2d63d204b17a47d3e2655763016c35",
+    "error_params/0.15.2/error_params.fail__anon_256.json": "606b670e0501dd252c93be81069f27bb7c234a303bb6931b4ea1781d9638a793",
+    "error_params/0.15.2/error_params.forward.json": "f7e989b3dbcc2ce0b3be0e6f8423af41d1f31fd73a29804455203ed7467e4eae",
+    "error_params/0.15.2/error_params.orBoom.json": "1195e2ce7648d4b4603034897c4a7ad7f009ce7ab113ddbdc9254a96c330d87b",
+    "error_params/0.15.2/error_params.skipFirst.json": "f200467c9b407601db8beb7a5de6347cf0340f79461a469ac6427cb01243841a",
+    "error_params/0.15.2/error_params.unwrapEmpty.json": "86b913e65c72500bae2b856ef1711e566e7779766e4e08cc4686c6f414b108f3",
+    "error_params/0.15.2/error_params.viaFail.json": "ea17e7cf6b0acd37e70bf130fd868da31594b23aaff43ec4a552831b3c30f841",
+    "error_params/0.16.0/error_params.fail__anon_209.json": "40e2278f596cc4d70be17e05e9b259f6afed474a6d8da4d56f88cdbfc90bbc26",
+    "error_params/0.16.0/error_params.fail__anon_220.json": "6e184b565bf8b179a5b59d62105672e111e1cc40a336681f54143c71376453af",
+    "error_params/0.16.0/error_params.forward.json": "12905ea53b4dbdef83af22c42d1606cc64991d8e2e43f8c0beebee28b50933bc",
+    "error_params/0.16.0/error_params.orBoom.json": "378354ea43d23ee48f89513c6e59ad7d00746bd88f7e626a4e8cb863055a71c2",
+    "error_params/0.16.0/error_params.skipFirst.json": "518512cdb632969b8cb1a1dddfe86bda25f2a26d179eb94d1f1bc4abb7902e4e",
+    "error_params/0.16.0/error_params.unwrapEmpty.json": "aa2094cd1ce5df9263b13a7074fa44bbaa4b597eabaa63583a3f5e69548d3233",
+    "error_params/0.16.0/error_params.viaFail.json": "d06b091062a95889fa30f5561cdb79c62b5dbbb7f5b96d9e950a4083d417c114",
+    "error_params/0.17.0/error_params.fail__func_0.json": "f3bfb7026cac3075c16755c2ba808594c87e397725a47efed4eb7a4b63953503",
+    "error_params/0.17.0/error_params.fail__func_1.json": "d4b011d841084acca43eb067fa997c983da8aaf09e9111f9e942274f1e352441",
+    "error_params/0.17.0/error_params.forward.json": "2e2e3d9f249ccd1486de408fa4411cf94d5c7e0b4a70079aa32d7ed95839196e",
+    "error_params/0.17.0/error_params.orBoom.json": "b4a0157925f64994ed592f1eb47a9021d84def3e427cb0e045984205f79ce134",
+    "error_params/0.17.0/error_params.skipFirst.json": "beab0fd24c6862dc58789011874c1d01b2473f20867a04dd1b579f8a79dfdb79",
+    "error_params/0.17.0/error_params.unwrapEmpty.json": "2893ffaf710805685cbeaa278ee5aef31672f8adfb449e524949716f2b2691ea",
+    "error_params/0.17.0/error_params.viaFail.json": "52a51e9fc1348f10444746bd937d21fedb289ac002060c617a16694a3143647a"
+  },
+  "exporter": "zig-patch/air-json/json.zig",
+  "exporter_sha256": "a9c31f3ccab71caa7f4fd287c16f7e7c1db1e40bd45debc362e72da5a4780e46",
+  "patched_compiler_sha256": {
+    "0.14.1": "a7b44c31b9718a10c7bd34ee75a89de4d772075c93a3b246401d97669485bd54",
+    "0.15.2": "f93e56be1c798ba4285e04e518cc7d0f65950bd4b422c44a03d8c71690de63e3",
+    "0.16.0": "40759ec6b90f207e56328b791cd4e1bf83a2537057910e7dbb55e555e3fb7528",
+    "0.17.0": "cfa7025cd03116b2f0c5fbf45cd7653ced69859811b757505f5e3ed7a60351d6"
+  },
+  "qualification": "Compiler exports of every function of each fixture source with patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter, x86_64-linux ReleaseSafe. They are the translator's evidence for the rows named in `sources`; other shapes are not covered.",
+  "sources": {
+    "error_params": {
+      "row": "L10",
+      "source": "tests/roadmap/lang-long-tail/error_params.zig",
+      "source_sha256": "eb0589f0c0d6a4a48aac6c452116ac3f3e5618a8c3d1a1354cff5b9cc565d69a"
+    }
+  }
+}

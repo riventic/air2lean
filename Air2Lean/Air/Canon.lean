@@ -601,24 +601,24 @@ def renumber (f : RawFunc) : RawFunc :=
   { f with body }
 
 /-- Types whose parameter has no AIR `arg`: Zig still keeps their slot in the runtime
-function signature. Comptime parameters, in contrast, have no slot in `params`. -/
+function signature. Comptime parameters, in contrast, have no slot in `params`. This follows
+Zig's `Type.onePossibleValue` (0.14.1 to 0.17.0), which is null for every error set and error
+union: a one-name `error{A}` still has a runtime error code (L10), so its parameter has an `arg`.
+An enum has one value exactly when its integer tag has none (`u0`): a one-field `enum(u8)` does
+not. -/
 partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
   if seen.contains id then false else
   let recur := fun t => onePossibleValue types t (seen.push id)
   match types[id]? with
   | some .void | some (.int _ 0) => true
-  | some (.enum _ _ true fields) => fields.size == 1
-  | some (.errorSet (some names)) => names.size == 1
-  | some (.array len c _) | some (.vector len c) => len == 0 || recur c
+  | some (.enum _ tag _ _) => recur tag
+  -- `[0:s]T` holds its sentinel: Zig counts `len + 1` items.
+  | some (.array len c sentinel) => (len == 0 && !sentinel) || recur c
+  | some (.vector len c) => len == 0 || recur c
   | some (.struct _ _ fields) => fields.all (recur ·.2)
   | some (.tuple fields) => fields.all recur
   | some (.union _ _ _ fields) => fields.size == 1 && fields.all (recur ·.2)
   | some (.optional c) => types[c]? == some .noreturn
-  | some (.errorUnion set payload) =>
-    match types[set]? with
-    | some (.errorSet (some names)) =>
-      (names.isEmpty && recur payload) || (names.size == 1 && types[payload]? == some .noreturn)
-    | _ => false
   | _ => false
 
 private def argRanking (f : RawFunc) : Array Nat × Array Nat :=
