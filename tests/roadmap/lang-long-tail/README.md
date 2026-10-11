@@ -1,4 +1,4 @@
-# Language long tail (L09, L10, L12)
+# Language long tail (L09, L10)
 
 Compiler-exported fixtures for the open L rows that real Zig code needs first. The order follows
 what each item unblocks in the std modules the allocator, thread and IO tracks translate
@@ -9,7 +9,6 @@ their closures (`--diagnostics-json`, Zig 0.16.0, x86_64-linux ReleaseSafe):
 |---|---|---|
 | `error_params.zig` | L10 | Error values as runtime parameters. A one-name error set (`error{Boom}`) or an error union has a runtime value in every supported Zig version (Zig's `Type.onePossibleValue` is null for every error set and error union), so its parameter has an AIR `arg`; the translator had treated it as one-possible-value and rejected the 47 `Io.Threaded.Syscall.fail(s, err: anytype)` instances. An enum has one value only when its tag has none (`u0`), not when it has one field. |
 | `vector_casts.zig` | L09 (L07) | Zig ≤0.16 `@bitCast` with a vector side: `[n]T` ↔ `@Vector(n, T)` is lane `i` = item `i` (also for padded items such as `u24`), and every other vector cast reinterprets the vector's bit-packed memory image (`Zig.reprCast` over `Vec.packedEnc`, `ZigLean/VecCast.lean`). `std.mem.eql(u8, …)` on more than 16 bytes runs `mem.eqlBytes`, which compares `@Vector(16, u8)` chunks cast from arrays (`stdEql`). Zig 0.17.0 exports translate with its logical bit order (`docs/bitcast-semantics.md`). |
-| `tls_pointers.zig` | L12 | Pointer-bearing `threadlocal` storage, the shape of `Io.Threaded`'s `threadlocal var current: ?*Thread = null` (`Check.lean`'s `checkThreadlocalGlobal`). Not exported yet: the exporter of this tree writes no `init` for a thread-local global in every file that names it; the global-value fix of the allocator track's exporter is needed first. |
 
 | File | Content |
 |---|---|

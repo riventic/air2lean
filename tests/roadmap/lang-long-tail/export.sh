@@ -53,16 +53,18 @@ for version in "${versions[@]}"; do
 import json, pathlib, re, sys
 out, prefix = pathlib.Path(sys.argv[1]), sys.argv[2]
 docs = {p: p.read_text() for p in out.glob("*.json")}
-names = {p: json.loads(t)["name"] for p, t in docs.items()}
-work = [p for p, n in names.items() if n.startswith(prefix)]
+by_name = {}
+for p, t in docs.items():
+    by_name.setdefault(json.loads(t)["name"], []).append(p)
+work = [p for n, ps in by_name.items() if n.startswith(prefix) for p in ps]
 keep = set()
 while work:
     p = work.pop()
     if p in keep:
         continue
     keep.add(p)
-    refs = set(re.findall(r'"func":\s*"([^"]+)"', docs[p]))
-    work.extend(q for q, n in names.items() if n in refs)
+    for ref in set(re.findall(r'"func":\s*"([^"]+)"', docs[p])):
+        work.extend(by_name.get(ref, []))
 for p in docs:
     if p not in keep:
         p.unlink()

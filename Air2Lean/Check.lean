@@ -1333,12 +1333,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         -- An array and a vector of other items: 0.16.0's LLVM `bitCast` reinterprets memory
         -- only when the source's items fill whole bytes; otherwise it copies item by item into
         -- lanes of another type, which is no representation cast.
-        let item (t : TyId) : Option TyId := match cx.types[t]? with
-          | some (.array _ c _) | some (.vector _ c) => some c
-          | _ => none
-        if (isVector (some aty) && (cx.types[ty]?.any fun | .array .. => true | _ => false)) ||
-            (isVector (some ty) && (cx.types[aty]?.any fun | .array .. => true | _ => false)) then
-          unless (item aty).any (byteStridedLane cx.types) do
+        let sourceItem : Option TyId := match cx.types[aty]?, cx.types[ty]? with
+          | some (.array _ c _), some (.vector ..) | some (.vector _ c), some (.array ..) => some c
+          | _, _ => none
+        if let some c := sourceItem then
+          unless byteStridedLane cx.types c do
             cx.fail line "a Zig ≤0.16 `@bitCast` between an array and a vector of another item \
               type whose source items do not fill whole bytes is outside the subset"
         let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
