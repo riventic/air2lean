@@ -1,6 +1,6 @@
 import Air2Lean.Air.Op
 import Air2Lean.Emit
-import Air2Lean.Sem
+import Air2Lean.SemView
 
 /-!
 # AIR semantics certificates (`--air-certificate`)
@@ -241,6 +241,37 @@ def isIntTy (f : Func) (t : TyId) : Bool :=
 slice: `Sem.loadAs`/`storeAs` are stuck on one; only a register local's cell holds it. -/
 def memValTy (f : Func) (t : TyId) : Bool := (scalar? f t).isSome && !f.plainSlice t
 
+/-- A `[]const T` parameter of a function without memory, which the translator passes as an
+`Array` that the caller read (`Zig.readSlice`): its index, its `arg` instruction, the item type
+and its scalar (an integer or `bool`), the slice type's alignment and the caller's read alignment
+(`FCtx.itemAlign`). The certificate runs the function with the items as a view (`Sem.execFuncV`,
+docs/air-semantics.md §Pure-function slices). -/
+structure ViewParam where
+  idx : Nat
+  arg : InstId
+  sliceTy : TyId
+  item : TyId
+  sc : Scalar
+  ptrAlign : Nat
+  align : Nat
+
+/-- The view parameters of `f`, or why a slice parameter cannot be one. -/
+def viewParams (f : Func) : Except String (Array ViewParam) := do
+  let mut out := #[]
+  for (p, idx) in f.params.zipIdx do
+    unless f.plainSlice p do continue
+    unless slice64 f p do throw "a slice parameter of a 32-bit target"
+    let some item := Sem.pointee? f p | throw "a slice parameter without an item type"
+    let some sc := scalar? f item | throw "a slice parameter whose items are not integers or `bool`"
+    unless memValTy f item && !(f.types[item]? matches some (.ptr ..)) do
+      throw "a slice parameter whose items are not integers or `bool`"
+    let some arg := f.body.find? (fun i => match i.op with | .arg j => j == idx | _ => false)
+      | throw "a slice parameter without its `arg`"
+    let some pa := Sem.ptrAlignOf f p | throw "a slice parameter without an alignment"
+    let some (_, ia) := Sem.layoutOf f item | throw "a slice item without a layout"
+    out := out.push { idx, arg := arg.id, sliceTy := p, item, sc, ptrAlign := pa, align := Nat.min pa ia }
+  pure out
+
 /-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`. -/
 def simpleVal (f : Func) : Val → Bool
   | .inst _ | .bool _ | .void => true
@@ -307,8 +338,14 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (forLen regs : Arr
     unless f.plainPtr i.ty && (f.fieldOffset? t idx).isSome do
       throw s!"inst {i.id}: a field pointer outside the fragment"
   | .bitcast a => do
-    let _ ← ptrVal a
-    unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
+    -- A pointer `bitcast`, or `@bitCast` between integers of one width (`Sem.evalPure`).
+    let width (t : TyId) : Option Nat := match f.types[t]? with | some (.int _ w) => some w | _ => none
+    let intCast := match a with
+      | .inst x => ((tyOfInst x).bind width).isSome && (tyOfInst x).bind width == width i.ty
+      | _ => false
+    unless intCast do
+      let _ ← ptrVal a
+      unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
   | .ptrAdd _ p n | .elemPtr p n => do
     -- The semantics checks a slice item pointer's index (illegal behaviour past the length);
     -- the translator does not.
@@ -365,8 +402,15 @@ def callsIn (f : Func) : Array String :=
 def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String (Array String) := do
   for p in f.params do
     unless (scalar? f p).isSome do throw "a parameter that is not an integer, bool, plain pointer or slice"
-    if !mem && f.plainSlice p then
-      throw "a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)"
+  if !mem then
+    let views ← viewParams f
+    unless views.isEmpty do
+      -- The view runs only where the function reads memory through its viewed slices (`roBody`).
+      let keys := views.map (·.arg)
+      let V : InstId → Option (Array Sem.Value) := fun k => if keys.contains k then some #[] else none
+      let VT : InstId → TyId := fun k => ((views.find? (·.arg == k)).map (·.item)).getD 0
+      unless Sem.roBody f V VT f.body.toList do
+        throw "a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)"
   unless (retScalar? f f.ret).isSome do
     throw "a return type that is not an integer, bool, plain pointer or void"
   let insts := allInsts f.body
@@ -401,7 +445,7 @@ def cellsIn (regs : Array InstId) (body : Array Inst) : Array InstId :=
     |>.qsort (· < ·)
 
 /-- Why `f`'s locals or loops are outside the certificate fragment. `sh`: its emitted shape. -/
-def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit := do
+def localsReason (f : Func) (sh : CertShape) : Except String Unit := do
   let insts := allInsts f.body
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let allocs := insts.filterMap fun i => if i.op matches .alloc then some i.id else none
@@ -441,7 +485,6 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
   for (k, t) in sh.blockTys do
     if sh.brT.contains k && !(f.types[t]? matches some .void) && (scalar? f t).isNone then
       throw s!"inst {k}: a block value outside the fragment"
-  if hasLoop && !mem then throw "a loop in a function without memory (`Zig.M`)"
   -- An inner loop's generated state keeps the escaping locals' fields of the outer state, which
   -- the semantics' frame does not name.
   if !sh.escaping.isEmpty && (loopCtx [] [] f.body).any (fun (_, _, _, ls) => !ls.isEmpty) then
@@ -455,6 +498,10 @@ def localsReason (f : Func) (sh : CertShape) (mem : Bool) : Except String Unit :
       unless caps.any (·.1 == k) || regs.contains k do throw s!"inst {l}: a loop reads a value it does not capture"
     for (k, _) in caps do
       unless (tys[k]?.bind (scalar? f)).isSome do throw s!"inst {l}: a loop capture outside the fragment"
+
+/-- A function without memory with a slice parameter: certified through a view of its items. -/
+def isView (f : Func) (memFuncs : Array String) : Bool :=
+  !memFuncs.contains f.name && f.params.any f.plainSlice
 
 /-- Split the functions into the certificate fragment (closed under direct calls) and the
 others, each with a reason. -/
@@ -476,21 +523,28 @@ def fragment (funcs : Array Func) (memFuncs concFuncs : Array String)
         | none => .error "no emitted certificate shape (`Emit.CertShape`)"
         | some (_, sh) =>
           localReason f (memFuncs.contains f.name) sh.forLen >>= fun cs => do
-            localsReason f sh (memFuncs.contains f.name)
+            localsReason f sh
             pure cs
     match reason with
     | .ok cs => cands := cands.push (f, cs)
     | .error e => out := out.push (f.name, e)
+  -- A function with a viewed slice is certified at the call boundary only (no fixpoint equation,
+  -- `execFunc_view`): its callers are outside until a caller's step relates the two.
+  let views := (cands.filter fun (f, _) => isView f memFuncs).map (·.1.name)
   let mut changed := true
   while changed do
     changed := false
     let names := cands.map (·.1.name)
-    let (keep, drop) := cands.partition fun (_, cs) => cs.all names.contains
+    let (keep, drop) := cands.partition fun (_, cs) => cs.all fun c => names.contains c && !views.contains c
     if !drop.isEmpty then
       changed := true
       for (f, cs) in drop do
-        let missing := ((cs.filter (!names.contains ·))[0]?).getD ""
-        out := out.push (f.name, s!"calls `{missing}`, which is outside the fragment")
+        match cs.find? views.contains with
+        | some v =>
+          out := out.push (f.name, s!"calls `{v}`, whose slice parameter is certified at the call boundary only")
+        | none =>
+          let missing := ((cs.filter (!names.contains ·))[0]?).getD ""
+          out := out.push (f.name, s!"calls `{missing}`, which is outside the fragment")
       cands := keep
   pure (cands.map (·.1), out)
 
@@ -527,11 +581,19 @@ def invertArgs (f : Func) (air : String) (indent : String) : Array String := Id.
       s!"{indent}rw [{inv} h{i}]"]
   out
 
+/-- How the certificate runs a function: in `Zig.MemM` (the generated code runs over the same
+memory) or without memory (`Zig.M`), possibly with views of its slice parameters (`ViewParam`). -/
+structure RunMode where
+  mem : Bool
+  views : Array ViewParam := #[]
+  /-- The `Ctx.view` term of the run. -/
+  view : String := "(fun _ => none)"
+
 /-- The loop machinery of a function with loops (`docs/air-semantics.md` §Loops): its AIR's field
 lemmas, the exit encoding, and per loop (innermost first) the one-iteration lemma, the loop
 commutation, the loop's exits and the rewrite used at the loop; then the step proof. -/
 def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
-    (calleeLemmas : List String) : Array String × Array String := Id.run do
+    (calleeLemmas : List String) (rm : RunMode) : Array String × Array String := Id.run do
   let L := s!"{ns}.{sh.localsName}"
   let E := s!"{ns}.{sh.exitName}"
   let enc := s!"enc_{d}"
@@ -539,10 +601,20 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
   let callBinder := if calls then "" else "(call : Oracle) "
   let callArg := if calls then "" else "call "
   let stuckArg := if calls then "" else "(fun _ _ => StateT.lift stuck) "
+  let ctx := s!"⟨{air}, args, {oracle}, {rm.view}⟩"
+  -- The view items `a<i>` of every viewed parameter, and the slice `p<i>` with its size `h<i>` of
+  -- those a loop captures (a loop's lemmas are stated for these names).
+  let viewsOf (caps : Array (InstId × String)) := rm.views.filter fun v => caps.any (·.1 == v.arg)
+  let binders (cvs : Array ViewParam) : String := String.join <|
+    (rm.views.toList.map fun v => s!"(a{v.idx} : Array ({v.sc.lean})) ") ++
+    cvs.toList.map fun v => s!"(p{v.idx} : Zig.Slice) (hs{v.idx} : a{v.idx}.size = p{v.idx}.len.toNat) "
+  let argsOf (cvs : Array ViewParam) : String := String.join <|
+    (rm.views.toList.map fun v => s!"a{v.idx} ") ++ cvs.toList.map fun v => s!"p{v.idx} hs{v.idx} "
   let insts := allInsts f.body
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let blank := (sig f).ret
   let scalarOf (k : InstId) : Scalar := ((tys[k]?).bind (scalar? f)).getD blank
+  let viewOf (k : InstId) : Option ViewParam := rm.views.find? (·.arg == k)
   let regs := registers f
   let fieldOf (a : InstId) : String := ((sh.fields.find? (·.1 == a)).map (·.2)).getD s!"local{a}"
   let cellScalar (a : InstId) : Scalar := ((tys[a]?).bind (Sem.pointee? f) |>.bind (scalar? f)).getD blank
@@ -576,28 +648,39 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
   for k in sh.repT do
     out := out.push s!"  | .rep{k} => .rep {k}"
   out := out.push ""
+  let viewSet (cvs : Array ViewParam) := if rm.views.isEmpty then [] else
+    [s!"view_{d}"] ++ cvs.toList.flatMap fun v => [s!"len_of_size hs{v.idx}", s!"hs{v.idx}"]
   let baseSet := fieldLemmas ++ ["air_sem", enc] ++ calleeLemmas ++ (if calls then ["gen"] else [])
   -- The tactic that closes a normalized step: equal binds, and after a loop a case split on its
   -- exit, restricted to the exits the loop has (`bind_congr_ok`).
-  let close (loops : List (InstId × Nat)) (set : List String) : Array String :=
+  let close (loops : List (InstId × Nat × String)) (set : List String) : Array String :=
     let set := ", ".intercalate (set ++ ["Exit.again", "exitOk"])
+    let pat := if rm.mem then "⟨⟨e, s⟩, m⟩" else "⟨e, s⟩"
     #["  all_goals repeat (first", "    | rfl"] ++
-      (loops.toArray.map fun (n, nfree) =>
-        s!"    | (refine bind_congr_ok _ _ (fun r hr => {d}_loop{n}_exits {" ".intercalate (List.replicate nfree "_")} _ _ r hr) ?_\n" ++
-        "       rintro ⟨⟨e, s⟩, m⟩ ⟨h1, h2⟩\n" ++
+      (loops.toArray.map fun (n, nfree, va) =>
+        s!"    | (refine bind_congr_ok _ _ (fun r hr => {d}_loop{n}_exits {va}{" ".intercalate (List.replicate nfree "_")} _ {if rm.mem then "_ " else ""}r hr) ?_\n" ++
+        s!"       rintro {pat} ⟨h1, h2⟩\n" ++
         "       cases e <;> simp (config := { failIfUnchanged := false }) only [" ++ set ++ "] at h1 h2 ⊢)") ++
       #["    | (refine bind_congr fun _ => ?_))"]
   let ctxs := (loopCtx [] [] f.body).reverse
-  let mut done : Array (InstId × Nat) := #[]
+  let mut done : Array (InstId × Nat × String) := #[]
   for (li, body, bs, ls) in ctxs do
     let n := li.id
+    -- A captured view slice is its parameter's `p<i>`, and the generated loop gets its items `a<i>`.
     let caps := ((sh.loops.find? (·.1 == n)).map (·.2)).getD #[]
+    let ownCaps := caps.filter fun (k, _) => (viewOf k).isNone
+    let cvs := viewsOf caps
+    let vb := binders cvs
+    let va := argsOf cvs
     let cells := cellsIn regs body
     let B := (printBody body).getD "#[]"
-    let xs := caps.map fun (k, _) => s!"x{k}"
-    let xBinders := " ".intercalate (caps.toList.map fun (k, _) => s!"(x{k} : {(scalarOf k).lean})")
+    let xs := caps.map fun (k, _) => match viewOf k with | some v => s!"a{v.idx}" | none => s!"x{k}"
+    let xBinders := " ".intercalate (ownCaps.toList.map fun (k, _) => s!"(x{k} : {(scalarOf k).lean})")
+    let capVal (val : InstId → String) (k : InstId) : String := match viewOf k with
+      | some v => s!"(Value.slice p{v.idx})"
+      | none => (scalarOf k).enc (val k)
     let hyps (val : InstId → String) := " ".intercalate
-      ((caps.toList.map fun (k, _) => s!"(h{k} : env {k} = some ({tys[k]?.getD 0}, {(scalarOf k).enc (val k)}))") ++
+      ((caps.toList.map fun (k, _) => s!"(h{k} : env {k} = some ({tys[k]?.getD 0}, {capVal val k}))") ++
         cells.toList.map fun a => s!"(h{a} : env {a} = some ({tys[a]?.getD 0}, .cell {a}))")
     let hNames := " ".intercalate ((caps.toList.map fun (k, _) => s!"h{k}") ++ cells.toList.map fun a => s!"h{a}")
     let app (args : Array String) := s!"{gen}.loop{n}{String.join (args.toList.map (" " ++ ·))}"
@@ -607,61 +690,195 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
     let bodyIds := (allInsts body).map (·.id)
     let inner := done.filter fun (k, _) => bodyIds.contains k
     let innerSet := inner.toList.map fun (k, _) => s!"{d}_loop{k}"
-    let bodySet := ", ".intercalate (baseSet ++ (caps.toList.map fun (k, _) => s!"h{k}") ++
+    let bodySet := ", ".intercalate (baseSet ++ viewSet cvs ++ (caps.toList.map fun (k, _) => s!"h{k}") ++
       (cells.toList.map fun a => s!"h{a}") ++ innerSet ++ ["Env.val", "Frame.cell"])
+    let ownXs := ownCaps.map fun (k, _) => s!"x{k}"
+    let bodyRhs := if rm.mem then s!"((fun r => ({enc} r.1, {F "st" "r.2"})) <$> ({app xs}).run s).run m"
+      else s!"(fun r => (({enc} r.1, {F "st" "r.2"}), m)) <$> ({app xs}).run s"
     out := out ++ #[
-      s!"theorem {d}_loop{n}_body {callBinder}(args : List Value) (env : Env) (st : Frame) {xBinders}",
+      s!"theorem {d}_loop{n}_body {callBinder}{vb}(args : List Value) (env : Env) (st : Frame) {xBinders}",
       s!"    {hyps (s!"x{·}")} (s : {L}) (m : Zig.Mem) :",
-      s!"    ((execBody ⟨{air}, args, {oracle}⟩ (Array.toList {B}) env).run {F "st" "s"}).run m =",
-      s!"      ((fun r => ({enc} r.1, {F "st" "r.2"})) <$> ({app xs}).run s).run m := by",
+      s!"    ((execBody {ctx} (Array.toList {B}) env).run {F "st" "s"}).run m =",
+      s!"      {bodyRhs} := by",
       s!"  conv => rhs; rw [{gen}.loop{n}]",
       s!"  simp only [{bodySet}]"] ++
-      close inner.toList (baseSet ++ innerSet ++ ["Env.val", "Frame.cell"]) ++ #["",
-      s!"theorem {d}_loop{n}_comm {callBinder}(args : List Value) (env : Env) (st : Frame) {xBinders}",
-      s!"    {hyps (s!"x{·}")} (s : {L}) :",
-      s!"    (execLoop ⟨{air}, args, {oracle}⟩ {n} {B} env).run {F "st" "s"} =",
-      s!"      mapRes {enc} (fun s : {L} => {F "st" "s"}) <$> (Zig.loop ({app xs}) {again}).run s := by",
-      "  unfold execLoop",
-      s!"  exact loop_comm _ _ (Exit.again {n}) {again} {enc} (fun s : {L} => {F "st" "s"})",
-      s!"    (fun s => by funext m; exact {d}_loop{n}_body {callArg}args env st {" ".intercalate xs.toList} {hNames} s m)",
-      "    (by intro e; cases e <;> rfl) s", ""]
-    let canon := (caps.toList.map fun (k, _) => (k, (scalarOf k).enc s!"x{k}")) ++
+      close inner.toList (baseSet ++ viewSet cvs ++ innerSet ++ ["Env.val", "Frame.cell"]) ++ #[""]
+    let bodyArgs := s!"{callArg}{va}args env st {" ".intercalate ownXs.toList} {hNames}"
+    if rm.mem then
+      out := out ++ #[
+        s!"theorem {d}_loop{n}_comm {callBinder}{vb}(args : List Value) (env : Env) (st : Frame) {xBinders}",
+        s!"    {hyps (s!"x{·}")} (s : {L}) :",
+        s!"    (execLoop {ctx} {n} {B} env).run {F "st" "s"} =",
+        s!"      mapRes {enc} (fun s : {L} => {F "st" "s"}) <$> (Zig.loop ({app xs}) {again}).run s := by",
+        "  unfold execLoop",
+        s!"  exact loop_comm _ _ (Exit.again {n}) {again} {enc} (fun s : {L} => {F "st" "s"})",
+        s!"    (fun s => by funext m; exact {d}_loop{n}_body {bodyArgs} s m)",
+        "    (by intro e; cases e <;> rfl) s", ""]
+    else
+      out := out ++ #[
+        s!"theorem {d}_loop{n}_comm {callBinder}{vb}(args : List Value) (env : Env) (st : Frame) {xBinders}",
+        s!"    {hyps (s!"x{·}")} (s : {L}) (m : Zig.Mem) :",
+        s!"    ((execLoop {ctx} {n} {B} env).run {F "st" "s"}).run m =",
+        s!"      (fun r => (mapRes {enc} (fun s : {L} => {F "st" "s"}) r, m)) <$> (Zig.loop ({app xs}) {again}).run s := by",
+        "  unfold execLoop",
+        s!"  exact loop_comm_pure _ _ (Exit.again {n}) {again} {enc} (fun s : {L} => {F "st" "s"})",
+        s!"    (fun s m => {d}_loop{n}_body {bodyArgs} s m)",
+        "    (by intro e; cases e <;> rfl) s m", ""]
+    let canon := (caps.toList.map fun (k, _) => (k, capVal (s!"x{·}") k)) ++
       cells.toList.map fun a => (a, s!"(.cell {a})")
     let envTerm := canon.foldl (init := "(fun _ => none)") fun acc (k, v) =>
       s!"(Env.set {acc} {k} {tys[k]?.getD 0} {v})"
     let byEnv := " ".intercalate (List.replicate (caps.size + cells.size) "(by simp [env, Env.set])")
+    let commArgs := s!"{stuckArg}{va}[] env " ++ "{} " ++ s!"{" ".intercalate ownXs.toList} {byEnv} s"
+    let hrTy := if rm.mem then s!"(r : ({E} × {L}) × Zig.Mem)\n    (hr : (((Zig.loop ({app xs}) {again}).run s).run m).run = some (.ok r))"
+      else s!"(r : {E} × {L})\n    (hr : ((Zig.loop ({app xs}) {again}).run s).run = some (.ok r))"
+    let rr := if rm.mem then "r.1.1" else "r.1"
     out := out ++ #[
-      s!"theorem {d}_loop{n}_exits {xBinders} (s : {L}) (m : Zig.Mem) (r : ({E} × {L}) × Zig.Mem)",
-      s!"    (hr : (((Zig.loop ({app xs}) {again}).run s).run m).run = some (.ok r)) :",
-      s!"    Exit.again {n} ({enc} r.1.1) = false ∧ exitOk {bs} {ls} ({enc} r.1.1) = true := by",
-      s!"  let env : Env := {envTerm}",
-      s!"  exact ok_transfer (F := fun s : {L} => {F "({} : Frame)" "s"})",
-      s!"    ({d}_loop{n}_comm {stuckArg}[] env " ++ "{} " ++ s!"{" ".intercalate xs.toList} {byEnv} s)",
-      s!"    (execLoop_ok _ {n} _ env {bs} {ls} (by simp [wfBody, wfInst, wfCases])) m r hr", ""]
+      s!"theorem {d}_loop{n}_exits {vb}{xBinders} (s : {L}){if rm.mem then " (m : Zig.Mem)" else ""} {hrTy} :",
+      s!"    Exit.again {n} ({enc} {rr}) = false ∧ exitOk {bs} {ls} ({enc} {rr}) = true := by",
+      s!"  let env : Env := {envTerm}"] ++
+      (if rm.mem then #[
+        s!"  exact ok_transfer (F := fun s : {L} => {F "({} : Frame)" "s"})",
+        s!"    ({d}_loop{n}_comm {commArgs})",
+        s!"    (execLoop_ok _ {n} _ env {bs} {ls} (by simp [wfBody, wfInst, wfCases])) m r hr", ""]
+      else #[
+        s!"  exact ok_transfer_pure (F := fun s : {L} => {F "({} : Frame)" "s"})",
+        s!"    (fun m => {d}_loop{n}_comm {commArgs} m)",
+        s!"    (execLoop_ok _ {n} _ env {bs} {ls} (by simp [wfBody, wfInst, wfCases])) r hr", ""])
     -- The rewrite at the loop: values decoded from the environment and the frame.
-    let decs := caps.map fun (k, _) => (scalarOf k).decT s!"(env.val {k})"
+    let decOf (k : InstId) : String := match viewOf k with
+      | some v => s!"a{v.idx}"
+      | none => (scalarOf k).decT s!"(env.val {k})"
+    let decs := caps.map fun (k, _) => decOf k
+    let ownDecs := ownCaps.map fun (k, _) => (scalarOf k).decT s!"(env.val {k})"
+    let sliceOf (v : ViewParam) := s!"(Value.toSlice (env.val {v.arg}))"
+    let useBinders := String.join <|
+      rm.views.toList.map fun v => s!"(a{v.idx} : Array ({v.sc.lean})) "
+    let sizeHyps := String.join <|
+      cvs.toList.map fun v => s!" (hs{v.idx} : a{v.idx}.size = {sliceOf v}.len.toNat)"
+    let useViewArgs := String.join <|
+      (rm.views.toList.map fun v => s!"a{v.idx} ") ++ cvs.toList.map fun v => s!"{sliceOf v} hs{v.idx} "
+    let useHyps := " ".intercalate
+      ((caps.toList.map fun (k, _) => match viewOf k with
+        | some v => s!"(h{k} : env {k} = some ({tys[k]?.getD 0}, Value.slice {sliceOf v}))"
+        | none => s!"(h{k} : env {k} = some ({tys[k]?.getD 0}, {(scalarOf k).enc ((scalarOf k).decT s!"(env.val {k})")}))") ++
+        cells.toList.map fun a => s!"(h{a} : env {a} = some ({tys[a]?.getD 0}, .cell {a}))")
     let hst := regs.toList.map fun a =>
         s!"(hc{a} : st.cells {a} = some {(cellScalar a).enc ((cellScalar a).decT s!"(st.cell {a})")})"
     let eqs := regs.toList.map fun a => s!"Frame.setCell_eq _ _ _ hc{a}"
+    let useArgs := s!"{callArg}{useViewArgs}args env st {" ".intercalate ownDecs.toList} {hNames} {stateOf "st"}"
+    let rhs := if rm.mem then
+        s!"      mapRes {enc} (fun s : {L} => {F "st" "s"}) <$>\n        (Zig.loop ({app decs}) {again}).run {stateOf "st"} := by"
+      else
+        s!"      StateT.lift (mapRes {enc} (fun s : {L} => {F "st" "s"}) <$>\n        (Zig.loop ({app decs}) {again}).run {stateOf "st"}) := by"
     out := out ++ #[
-      s!"theorem {d}_loop{n} {callBinder}(args : List Value) (env : Env) (st : Frame) (B : Array Inst)",
+      s!"theorem {d}_loop{n} {callBinder}{useBinders}(args : List Value) (env : Env) (st : Frame) (B : Array Inst)",
       s!"    (hB : B = {B})",
-      s!"    {hyps fun k => (scalarOf k).decT s!"(env.val {k})"}",
+      s!"    {useHyps}{sizeHyps}",
       s!"    {" ".intercalate hst} :",
-      s!"    (execLoop ⟨{air}, args, {oracle}⟩ {n} B env).run st =",
-      s!"      mapRes {enc} (fun s : {L} => {F "st" "s"}) <$>",
-      s!"        (Zig.loop ({app decs}) {again}).run {stateOf "st"} := by",
+      s!"    (execLoop {ctx} {n} B env).run st =",
+      rhs,
       "  subst hB",
       s!"  have e : {F "st" (stateOf "st")} = st := by",
       "    dsimp only",
       s!"    rw [{", ".intercalate eqs}]",
-      "  conv => lhs; rw [← e]",
-      s!"  exact {d}_loop{n}_comm {callArg}args env st {" ".intercalate decs.toList} {hNames} {stateOf "st"}", ""]
-    done := done.push (n, caps.size)
+      "  conv => lhs; rw [← e]"] ++
+      (if rm.mem then #[s!"  exact {d}_loop{n}_comm {useArgs}", ""]
+      else #["  apply StateT.ext; intro m",
+        "  rw [lift_map_run]",
+        s!"  exact {d}_loop{n}_comm {useArgs} m", ""])
+    done := done.push (n, ownCaps.size, va)
   let top := done.filter fun (k, _) => (ctxs.find? (·.1.id == k)).any fun (_, _, _, ls) => ls.isEmpty
-  let stepSet := ", ".intercalate (baseSet ++ top.toList.map (fun (k, _) => s!"{d}_loop{k}") ++ ["Env.val", "Frame.cell"])
-  let proof := #[s!"  simp only [{stepSet}]"] ++ close top.toList (baseSet ++ ["Env.val", "Frame.cell"])
+  let stepSet := ", ".intercalate (baseSet ++ viewSet rm.views ++ top.toList.map (fun (k, _) => s!"{d}_loop{k}") ++
+    ["Env.val", "Frame.cell"])
+  let proof := #[s!"  simp only [{stepSet}]"] ++ close top.toList (baseSet ++ viewSet rm.views ++ ["Env.val", "Frame.cell"])
   (out, proof)
+
+/-- The certificate of a function without memory with slice parameters (`isView`): its view
+(`view_<d>`, the items of each slice parameter by its `arg` instruction), `<d>_view` (the run with
+the view is the generated definition, by normalization) and `<d>_step` (from a memory in which the
+caller read the items, the AIR semantics agrees with it up to read entries, `execFunc_view` and
+`holds_of_readSlice`). -/
+def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas : List String) :
+    Array String := Id.run do
+  let views := (viewParams f).toOption.getD #[]
+  let viewOf (i : Nat) := views.find? (·.idx == i)
+  let s := sig f
+  let items := " ".intercalate (views.toList.map fun v => s!"a{v.idx}")
+  let viewTerm := s!"(view_{d} {items})"
+  let enc (v : ViewParam) := s!"(fun x => {v.sc.enc "x"})"
+  let mut out : Array String := #[
+    s!"/-- The items of `{f.name}`'s slice parameters, by their `arg` instruction. -/",
+    s!"def view_{d} {" ".intercalate (views.toList.map fun v => s!"(a{v.idx} : Array ({v.sc.lean}))")} : InstId → Option (Array Value) :=",
+    "  fun k => " ++ String.join (views.toList.map fun v => s!"if k = {v.arg} then some (a{v.idx}.map {enc v}) else ") ++ "none", "",
+    s!"/-- The item type of each viewed slice. -/",
+    s!"def viewTy_{d} : InstId → TyId :=",
+    "  fun k => " ++ String.join (views.toList.map fun v => s!"if k = {v.arg} then {v.item} else ") ++ "0", ""]
+  -- Parameters: a viewed one is its slice `p<i>`, items `a<i>` and their count `h<i>`.
+  let binders := " ".intercalate (s.ps.toList.map fun (i, sc) => match viewOf i with
+    | some v => s!"(p{i} : Zig.Slice) (a{i} : Array ({v.sc.lean})) (hs{i} : a{i}.size = p{i}.len.toNat)"
+    | none => s!"(p{i} : {sc.lean})")
+  let encArgs := ", ".intercalate (s.ps.toList.map fun (i, sc) =>
+    if (viewOf i).isSome then s!"Value.slice p{i}" else sc.enc s!"p{i}")
+  let genArgs := " ".intercalate (s.ps.toList.map fun (i, _) => if (viewOf i).isSome then s!"a{i}" else s!"p{i}")
+  let stmt := #[
+    s!"/-- `{f.name}` run with the items of its slices as a view equals the generated definition. -/",
+    s!"theorem {d}_view (call : Oracle) {binders} (m : Zig.Mem) :",
+    s!"    (execFuncV call {viewTerm} {air} [{encArgs}]).run m =",
+    s!"      (fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {gen} {genArgs} := by",
+    s!"  conv => rhs; rw [{gen}]"]
+  let viewLemmas := ["execFuncV", s!"view_{d}"] ++ views.toList.flatMap fun v => [s!"len_of_size hs{v.idx}", s!"hs{v.idx}"]
+  if (allInsts f.body).any (·.op matches .loop _) then
+    let (loopLines, stepProof) := loopCert f sh ns gen air d false (calleeLemmas ++ ["execFuncV"])
+      { mem := false, views, view := viewTerm }
+    out := out ++ loopLines ++ stmt ++ stepProof ++ #[""]
+  else
+    out := out ++ stmt ++
+      #[s!"  simp only [{", ".intercalate ([air, "air_sem"] ++ calleeLemmas ++ viewLemmas)}]", ""]
+  -- The step: the caller's materialization (`Zig.readSlice` from `m`) gives the view.
+  let stepBinders := " ".intercalate (s.ps.toList.map fun (i, sc) => match viewOf i with
+    | some _ => s!"(p{i} : Zig.Slice)"
+    | none => s!"(p{i} : {sc.lean})")
+  let reads := " ".intercalate (views.toList.map fun v =>
+    s!"(a{v.idx} : Array ({v.sc.lean})) (m{v.idx} : Zig.Mem)\n    " ++
+    s!"(r{v.idx} : ((Zig.readSlice ({v.sc.lean}) {v.align} p{v.idx}).run m).run = some (.ok (a{v.idx}, m{v.idx})))")
+  let viewArgs := " ".intercalate (s.ps.toList.map fun (i, _) =>
+    if (viewOf i).isSome then s!"p{i} a{i} hs{i}" else s!"p{i}")
+  out := out ++ #[
+    s!"/-- `{f.name}`, called with the items its caller read (`Zig.readSlice`, from `m`): the AIR",
+    "semantics has the generated definition's values and errors, and its memory is `m` up to read",
+    "entries of the running thread (`UpToReads`). -/",
+    s!"theorem {d}_step (call : Oracle) {stepBinders} (m : Zig.Mem) (hwf : m.ClockWf)",
+    s!"    {reads} :",
+    s!"    RelR (fun p q => p.1 = q.1 ∧ UpToReads m p.2 ∧ q.2 = m)",
+    s!"      ((execFunc call {air} [{encArgs}]).run m)",
+    s!"      ((fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {gen} {genArgs}) := by"]
+  for v in views do
+    out := out ++ #[
+      s!"  obtain ⟨v{v.idx}, hs{v.idx}, -⟩ := holds_of_readSlice (f := {air}) (t := {v.item}) (a := {v.ptrAlign})",
+      s!"    {enc v} r{v.idx} hwf (fun q al => by simp only [{air}, air_sem])",
+      s!"    (fun size al h => by",
+      s!"      simp only [{air}, air_sem, Option.some.injEq, Prod.mk.injEq] at h",
+      "      obtain ⟨rfl, rfl⟩ := h",
+      "      decide)"]
+  out := out ++ #[
+    s!"  rw [← {d}_view call {viewArgs} m]",
+    s!"  refine execFunc_view m {air} _ call {viewTerm} viewTy_{d}",
+    s!"    (by simp only [roBody, roNested, roCases, roInst, argAt, {air}, air_sem, view_{d}, viewTy_{d},",
+    "      List.find?_cons, List.find?_nil, cond_true, cond_false, Option.isSome_some])",
+    "    ⟨by simp [Value.noPtr], ?_⟩",
+    "  intro k items idx t hk ha",
+    s!"  simp only [view_{d}] at hk"]
+  for v in views do
+    out := out ++ #[
+      "  split at hk",
+      "  · cases hk",
+      "    subst_vars",
+      s!"    rw [show argAt {air} {v.arg} = some ({v.idx}, {v.sliceTy}) from rfl] at ha",
+      "    cases ha",
+      s!"    exact ⟨p{v.idx}, {v.ptrAlign}, rfl, rfl, v{v.idx}, by simp [Value.noPtr]⟩"]
+  out := out ++ #["  all_goals cases hk", ""]
+  out
 
 /-- The certificate file for `funcs` (the translated program, emission order). `declNames`
 maps each fully qualified name to its generated definition in namespace `ns`, which
@@ -691,7 +908,8 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     else s!"(fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {head} {args}"
   let mut lines : Array String := #[
     "-- air2lean AIR semantics certificate (docs/air-semantics.md). Generated; do not edit.",
-    "import Air2Lean.Sem", s!"import {genModule}", "",
+    (if frag.any (isView · memFuncs) then "import Air2Lean.SemView" else "import Air2Lean.Sem"),
+    s!"import {genModule}", "",
     -- One simp set serves every function: an argument a function does not need is expected.
     "set_option linter.unusedSimpArgs false", "",
     s!"namespace {ns}.AirCert", "", "open Air2Lean Air2Lean.Sem", "",
@@ -706,6 +924,23 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   for f in frag do
     lines := lines.push s!"/-- The decoded canonical AIR of `{f.name}`. -/"
     lines := lines.push s!"def {airName f} : Func :=\n{(printFunc f).getD "default"}\n"
+  -- Functions with a viewed slice parameter, and the program of the others.
+  let views := frag.filter (isView · memFuncs)
+  let frag := frag.filter (!isView · memFuncs)
+  let callees := ((frag ++ views).flatMap callsIn).toList.eraseDups
+  let mut panicLemmas : Array (String × String) := #[]
+  for (n, k) in callees.toArray.zipIdx do
+    let rhs := match panicCallee? n with | some e => s!"some {e}" | none => "none"
+    lines := lines.push s!"theorem callee_{k} : panicOf? {str n} = {rhs} := rfl"
+    panicLemmas := panicLemmas.push (n, s!"callee_{k}")
+  lines := lines.push ""
+  let calleeLemmasOf (f : Func) := (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2)
+  for f in views do
+    lines := lines ++ viewCert f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) ns (genName f)
+      (airName f) (declOf f.name) (calleeLemmasOf f)
+  if frag.isEmpty then
+    lines := lines.push s!"end {ns}.AirCert"
+    return "\n".intercalate lines.toList ++ "\n"
   lines := lines.push "/-- The certified functions, by fully qualified name. -/"
   lines := lines.push ("def table : Table := [\n" ++
     ",\n".intercalate (frag.toList.map fun f => s!"  ({str f.name}, {airName f})") ++ "]\n")
@@ -717,13 +952,6 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     let app := s!"(fun {s.ret.binder} => {s.ret.enc "v"}) <$> {genName f} {" ".intercalate args.toList}"
     lines := lines.push s!"  | {str f.name}, args =>\n    {if isMem f then app else s!"StateT.lift ({app})"}"
   lines := lines.push "  | _, _ => StateT.lift stuck\n"
-  let callees := (frag.flatMap callsIn).toList.eraseDups
-  let mut panicLemmas : Array (String × String) := #[]
-  for (n, k) in callees.toArray.zipIdx do
-    let rhs := match panicCallee? n with | some e => s!"some {e}" | none => "none"
-    lines := lines.push s!"theorem callee_{k} : panicOf? {str n} = {rhs} := rfl"
-    panicLemmas := panicLemmas.push (n, s!"callee_{k}")
-  lines := lines.push ""
   let mut fixes : Array String := #[]
   for f in frag do
     let d := declOf f.name
@@ -731,7 +959,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     let calls := calling f
     let oracle := if calls then "gen" else "call"
     let callBinder := if calls then "" else "(call : Oracle) "
-    let calleeLemmas := (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2)
+    let calleeLemmas := calleeLemmasOf f
     let simpSet := ", ".intercalate
       ([airName f, "air_sem"] ++ calleeLemmas ++ (if calls then ["gen"] else []))
     let what := if calls then ", with the generated program answering its calls,"
@@ -745,6 +973,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     let sh := (shapes.find? (·.1 == f.name)).map (·.2) |>.getD default
     if (allInsts f.body).any (·.op matches .loop _) then
       let (loopLines, stepProof) := loopCert f sh ns (genName f) (airName f) d calls calleeLemmas
+        { mem := isMem f }
       lines := lines ++ loopLines ++ stmt ++ stepProof ++ #[""]
     else
       lines := lines ++ stmt ++ #[s!"  simp only [{simpSet}]", ""]

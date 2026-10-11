@@ -294,6 +294,11 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
       | .int _ _ x => pure (.int s₂ m (Zig.trunc m x))
       | _ => stuck
     | none => stuck
+  -- `@bitCast` between integers of one width: the same bits (any other `bitcast` of a value is
+  -- outside the fragment; a pointer `bitcast` is `evalMem`'s).
+  | .bitcast a => match intTy? f i.ty with
+    | some (s, w) => do pure (.int s w (← (← operand f env a).asInt w))
+    | none => stuck
   | _ => stuck
 
 /-- Does the integer `x` select this `switch_br` case (an item equal, or inside a range)? -/
@@ -423,7 +428,7 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     if f.plainPtr i.ty then do
       let (q, _) ← StateT.lift (ptrOperand f env a)
       pure (.ptr q)
-    else StateT.lift stuck
+    else StateT.lift (evalPure f env i)
   -- Pointer arithmetic is `getelementptr inbounds` (`Zig.ptrProject`, MM-3) by items of the
   -- result's pointee.
   | .ptrAdd sub p n => do
@@ -1011,6 +1016,46 @@ theorem loop_comm {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (
       · exact hl _
       · exact PartialOrder.rel_refl
 
+/-- `loop_comm` for a generated loop of a function without memory (`Zig.M`): the semantics' loop
+runs over memory, which no iteration changes. -/
+theorem loop_comm_pure {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.M σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s m, (b₁.run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> b₂.run s)
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) (m : Zig.Mem) :
+    ((Zig.loop b₁ a₁).run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> (Zig.loop b₂ a₂).run s := by
+  apply PartialOrder.rel_antisymm
+  · revert s m
+    apply Zig.loop.fixpoint_induct b₁ a₁
+      (motive := fun l => ∀ s m, (l.run (F s)).run m ⊑ (fun r => (mapRes enc F r, m)) <$> (Zig.loop b₂ a₂).run s)
+    · apply admissible_pi; intro s; apply admissible_pi; intro m
+      exact admissible_apply (fun _ (v : MemM (ε₁ × σ₁)) => v m ⊑ _) (F s)
+        (admissible_apply (fun _ (r : Result ((ε₁ × σ₁) × Zig.Mem)) => r ⊑ _) m (adm_le _))
+    · intro l hl s m
+      rw [Zig.loop.eq_1 b₂ a₂]
+      show ((b₁ >>= fun e => if a₁ e then l else pure e).run (F s)).run m ⊑ _
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _ _
+      · exact PartialOrder.rel_refl
+  · revert s m
+    apply Zig.loop.fixpoint_induct b₂ a₂
+      (motive := fun l => ∀ s m, (fun r => (mapRes enc F r, m)) <$> l.run s ⊑ ((Zig.loop b₁ a₁).run (F s)).run m)
+    · apply admissible_pi; intro s; apply admissible_pi; intro m
+      exact admissible_apply (fun _ (r : Result (ε₂ × σ₂)) => (fun r => (mapRes enc F r, m)) <$> r ⊑
+        ((Zig.loop b₁ a₁).run (F s)).run m) s (adm_app0 _ _)
+    · intro l hl s m
+      rw [Zig.loop.eq_1 b₁ a₁]
+      show (fun r => (mapRes enc F r, m)) <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+        ((b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)).run m
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _ _
+      · exact PartialOrder.rel_refl
+
 end LoopComm
 
 /-! ### Exits
@@ -1271,6 +1316,16 @@ theorem ok_transfer {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {x₁ 
   rw [heq, StateT.run_map]
   exact Result.map_ok hr
 
+/-- `ok_transfer` for a generated loop of a function without memory (`loop_comm_pure`). -/
+theorem ok_transfer_pure {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {x₁ : Zig.MM σ₁ ε₁} {x₂ : Zig.M σ₂ ε₂}
+    {enc : ε₂ → ε₁} {F : σ₂ → σ₁} {s : σ₂}
+    (heq : ∀ m, (x₁.run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> x₂.run s)
+    (hok : Ok P x₁) (r : ε₂ × σ₂) (hr : (x₂.run s).run = some (.ok r)) : P (enc r.1) := by
+  have := hok (F s) default ((mapRes enc F r), default)
+  apply this
+  rw [heq]
+  exact Result.map_ok hr
+
 /-- After a generated loop, two continuations need to agree only on the results the loop has. -/
 theorem bind_congr_ok {α β : Type} (x : Result α) (Q : α → Prop) (hx : ∀ r, x.run = some (.ok r) → Q r)
     {k₁ k₂ : α → Result β} (h : ∀ r, Q r → k₁ r = k₂ r) : x >>= k₁ = x >>= k₂ := by
@@ -1316,6 +1371,24 @@ theorem run_le_of_table {t : Table} {G : Oracle} (h : Fixpoint G t) :
     · have : (n == name) = false := by simp [he]
       simp only [this] at hp
       exact ih ht hp
+
+/-- An item of the encoded items of an array (a view, `Ctx.view`) is the encoded item. -/
+theorem index_map {α β : Type} (f : α → β) (a : Array α) (j : BitVec 64) :
+    Zig.index (a.map f) j = f <$> Zig.index a j := by
+  unfold Zig.index
+  by_cases h : j.toNat < a.size
+  · rw [dif_pos (by simpa using h), dif_pos h]; simp
+  · rw [dif_neg (by simpa using h), dif_neg h]; rfl
+
+/-- The length of a pure function's array argument, as the slice's length it was read from. -/
+theorem len_of_size {α : Type} {a : Array α} {s : Zig.Slice} (h : a.size = s.len.toNat) :
+    Zig.len a = s.len := by
+  unfold Zig.len; rw [h]; simp
+
+/-- A lifted pure result in memory, run. -/
+theorem lift_map_run {α β : Type} (X : Result α) (g : α → β) (m : Zig.Mem) :
+    (StateT.lift (g <$> X) : MemM β).run m = (fun r => (g r, m)) <$> X := by
+  simp only [StateT.run_lift, bind_pure_comp, Functor.map_map, Function.comp_def]
 
 /-! ## Normalization lemmas for certificates -/
 
@@ -1399,6 +1472,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   ptrProject_elem_size_zero Nat.min_def ite_self Nat.reduceLeDiff
   Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
   free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self
+  index_map
 
 end Cert
 

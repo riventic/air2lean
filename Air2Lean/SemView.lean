@@ -511,7 +511,7 @@ theorem evalMem_memFree {f : Func} {V : InstId → Option (Array Value)} {args :
     | exact memFree_none (ptrOperand_none h _) _
     | (split
        · exact memFree_none (ptrOperand_none h _) _
-       · exact memFree_lift okR_stuck)
+       · exact memFree_lift hpure)
     | (split
        · exact memFree_liftPure _ _ fun _ => rfl
        · exact memFree_lift okR_stuck)
@@ -1294,5 +1294,21 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
       StateT.run_map, load_run hacc' hrc' hd]
     exact ⟨rfl, hm.withRead _ _ _⟩
   · exact hout _ _ j m hj hsize
+
+theorem relR_map_right {α β γ : Type} {R : α → γ → Prop} {x : Result α} {g : β → γ} {y : Result β} :
+    RelR R x (g <$> y) ↔ RelR (fun a b => R a (g b)) x y := by
+  unfold RelR
+  rw [← bind_pure_comp, Result.run_bind']
+  rcases x.run with _ | (e | a) <;> rcases y.run with _ | (e' | b) <;> exact Iff.rfl
+
+/-- The certificate statement of a function with a viewed slice: `execFunc_view` with the view
+replaced by the generated definition, whose memory is the materialization's `m₁`. -/
+theorem relR_view {m m₁ : Mem} {X : Result (Value × Mem)} {β : Type} {G : Result β} {e : β → Value}
+    (hu : UpToReads m m₁)
+    (h : RelR (fun (p q : Value × Mem) => p.1 = q.1 ∧ UpToReads m p.2 ∧ q.2 = m) X ((fun v => (e v, m)) <$> G)) :
+    RelR (fun (p q : Value × Mem) => p.1 = q.1 ∧ UpToReads m p.2 ∧ UpToReads m q.2) X
+      ((fun v => (e v, m₁)) <$> G) := by
+  rw [relR_map_right] at h ⊢
+  exact relR_mono h fun _ _ ⟨h1, h2, _⟩ => ⟨h1, h2, hu⟩
 
 end Air2Lean.Sem
