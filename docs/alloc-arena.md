@@ -77,7 +77,8 @@ arena's `free`, `resize`, `remap` (and `reset`) are proved where they hold.
 the token must record that this arena issued a region in its current generation.
 **Resolved by ghost state** ([sep-full-state.md](sep-full-state.md) §Ghost state): `own` holds the
 authority `gauth γ e M` of an epoch ledger of named grants (`M`: grant id ↦ region, empty without
-a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n)`. A
+a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n, q, A, K)`
+(with the lent fraction `q` and the cells' address and kind labels `A`, `K`). A
 token of the current epoch names a grant of `M` (`gfrag_mem`), so the arena has a node
 (`ArenaSpec.free_pre`). Because the token names its region, a `free`, `resize` or `remap` of a
 slice that this arena did not grant in its current epoch has no token: it is a permission
@@ -122,7 +123,9 @@ caller does not own. **Resolved by stage 3** of [sep-full-state.md](sep-full-sta
 blocks have disjoint address ranges in every `Mem.FSeq` memory (`Mem.LiveDisjoint`), and
 `Holds.apart` turns ownership of a byte in each of two blocks into disjoint ranges. A slice of
 another block never matches; a slice of the node's block that ends at `buf_ptr + end_index` lies
-past the header, which `own` holds (`ArenaSpec.region_apart`). No premise per triple.
+past the header, which `own` holds (`Core.lo_of`). The comparison needs no bytes of the slice:
+the slice's block reaches its end by the grant's extent share (`Core.last_dec`), so the refined
+`resize` (the client gives no bytes for a growth) decides it too. No premise per triple.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,
@@ -168,9 +171,11 @@ free list) is not attempted.
   node's extent share that the arena keeps; the unused tail of its buffer), the other used nodes
   and the free list as `next`-linked chains (each with its token and kept share), the child's
   `own`, `Junk` (bytes that frees of earlier allocations leaked back), one receipt per grant
-  (`Rcpts`) and the pool of shares that frees gave back (`Pool`). The token of a grant names it
-  with its fraction: `∃ i, gfrag γ e i (p, n, q)`; the grant's share is tagged with the epoch
-  (`FAllocInv.tag = some (γ, e)`), so a reset can revoke it.
+  (`Rcpts`, at any bound) and the pool of shares that frees gave back (`Pool`). The token of a
+  grant names it with its fraction and its cells' labels: `∃ i, gfrag γ e i (p, n, q, A, K)`;
+  every grant lies in the block of a used node with that node's labels (`GrantOk`; the used nodes
+  after the first are an explicit list of node records, `NodeV`); the grant's share is tagged with
+  the epoch (`FAllocInv.tag = some (γ, e)`), so a reset can revoke it.
   * **Block extents** ([sep-full-state.md](sep-full-state.md) §Block extents). A cell no longer
     records its block's size, so the node's size comes from its extent share: the child's grant
     carries `pshare N qn (N.off + sz) CI.tag` (the stronger `FAllocSpec`), and the arena keeps a
@@ -178,20 +183,28 @@ free list) is not attempted.
     (`FAllocInv.act`, an obligation of every allocator invariant: automatic for an untagged child,
     and for an arena from its own ledger and its child's `act`, so an arena over an arena works
     the same way). O-F (the slice ends at `buf + end_index` only if it lies in the first node)
-    uses the slice's owned bytes, the node's share and `Mem.LiveDisjoint.addr_ne` (two live blocks
-    share no byte address). A slice's bytes that rejoin the node's tail are relabeled as the
-    node's (`EUpd.relabel`: a cell's size is a label, its kind counts up to `BlockKind.norm`).
+    uses the slice's and the node's extent shares and `Mem.LiveDisjoint.addr_ne` (two live blocks
+    share no byte address): `last_dec`. A last grant carries the first node's labels
+    (`last_labels`: `GrantOk` and the owned headers of two nodes in one block), so bytes that
+    rejoin the node's tail are relabeled as the node's (`EUpd.relabel`: a cell's size is a label,
+    its kind counts up to `BlockKind.norm`), and the new bytes of a growth carry the grant's.
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
     (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
-    against its receipt into the pool (`EUpd.returnT`) and the grant is retired (`Upd.retire`):
-    `free_ghost`.
-  * `resize`: a slice that is not the first node's last one only shrinks (cut bytes to junk); the
-    last one moves `end_index` back (cut bytes rejoin the tail) or into the tail when it has room
-    (`Node.loadBuf` reads the `size` word: `FTriple.atomicLoadAs`; clearing the `resizing` bit of an
-    even size is the size: `toInt_ofBits`). A successful resize re-points the grant at the new
-    length (`Upd.reassign`); a shrink weakens the share's bound (`shrink_ghost`), a growth returns
-    the share, joins it into the node's kept share and lends it again at the new end
-    (`grow_ghost`). `remap` is `resize` and returns `memory.ptr`.
+    against its receipt into the pool (`EUpd.returnTw`: weakened to the receipt's bound first) and
+    the grant is retired (`Upd.retire`): `free_ghost`.
+  * `resize` meets the refined field (`FAllocSpec.resize`: the token, a part `q'` of the grant's
+    share, and only the bytes `[n, len)` a shrink releases): a slice that is not the first node's
+    last one only shrinks (released bytes to junk); the last one moves `end_index` back (released
+    bytes rejoin the tail) or into the tail when it has room (`Node.loadBuf` reads the `size` word:
+    `FTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the size:
+    `toInt_ofBits`), handing the client the new bytes. A successful resize re-points the grant at
+    the new length (`Upd.reassign`); a shrink weakens the bound of the client's part of the share
+    (`shrink_ghost`); a growth takes back the part `q'` the client gives against a split of the
+    grant's receipt, joins it into the node's kept share, lends it again at the new end and joins
+    the receipts at the lower bound (`rcpt_regrow`: `brcpt_split`, `EUpd.returnTw`,
+    `EUpd.lendT`, `EUpd.rjoin`; `grow_ghost`). The arena needs no `q' = q` for a shrink (it never
+    shrinks a block itself). `remap` is the whole-region `resize` (`resize_granted_ct`,
+    `FAllocInv.resize_granted_of`) and returns `memory.ptr`.
   * Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit of the stock arena**: the invariant keeps `end_index` within the first
   node's buffer (`OV.Facts`: `24 + ei ≤ sz`), which a failed `alloc` breaks; the stock arena has no

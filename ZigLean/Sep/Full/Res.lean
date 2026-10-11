@@ -351,10 +351,12 @@ instance : DecidableEq Frac := fun a b =>
 
 end Frac
 
-/-- A region named by a ledger token: its start pointer, its length in bytes, and the fraction of
+/-- A region named by a ledger token: its start pointer, its length in bytes, the fraction of
 its block's extent lent with it (`FAllocInv.granted`'s share), so that the allocator returns the
-share against exactly the receipt it holds for the grant. -/
-abbrev GRegion := Ptr × Nat × Frac
+share against exactly the receipt it holds for the grant, and the address and kind labels of its
+cells (`FAllocInv.tok`'s `A` and `K`): a growth hands out new bytes with the labels the client
+named (`FAllocInv.rresizePost`), and the client gives no byte to read them from. -/
+abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
 
 /-- A ledger's grant map: grant id ↦ the region granted under it. -/
 abbrev GMap := Nat → Option GRegion

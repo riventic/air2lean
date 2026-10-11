@@ -451,11 +451,35 @@ precondition comes back.
   the node with the part it kept (O-G).
 * **A shrink takes the whole share** (`q' = q`), for the same reason as `munmap` needs `bext`: an
   allocator may shrink the block itself (the page allocator's tail `munmap`), and a share held
-  elsewhere would then claim the old end. Kernel-checked regression: to do (step 7a, before the PR).
+  elsewhere would then claim the old end. Kernel-checked regression
+  (`tests/roadmap/sep-full/ShrinkCX.lean`): a mapping of two pages, the tail page's bytes and half
+  the authority in the resource, the first page and a share of the other half at bound `8192` in
+  the frame (`EUpd.lend`); the tail `munmap` succeeds and leaves `4096` bytes, so no resource holds
+  next to that frame (`frame_breaks`), and no `FTriple` from half the authority exists, whatever the
+  postcondition (`no_partial_shrink`). With the whole extent the rule holds
+  (`FTotalTriple.munmapTail'`).
 * `FAllocSpec.resize_granted`: the old whole-region contract is a corollary (the client splits off
   the released bytes, relabels the kept ones to the new token's labels, `EUpd.relabel`, and joins
   the new bytes); `FLogic.eupdPost` (an `EUpd` of the postcondition) is a field of the logic for it.
 * `remap` keeps the whole region (it may move).
+* **Receipts of a grant whose holder gives back only a part** (the arena as a child, step 7a):
+  general rules in `Extent.lean`. `EUpd.rweaken` lowers a receipt's bound (it claims less and
+  gives back a share at the lower bound; any ledger status), `EUpd.rjoin` joins two receipts of
+  one tag at the lower bound (`rweaken`, `brcpt_split`), and `EUpd.returnTw` gives a tagged share
+  back against a receipt at any bound (the share is weakened to it first). So an allocator keeps
+  one receipt per grant at some bound: a growth by a part `q'` splits the receipt, re-lends `q'`
+  at the new end and joins the two again. A grant's bound lives in its tagged share, not in the
+  receipt; the allocator's own share of the block (an arena's `qh`, at the node's end) restores
+  the bound when the pieces join (`EUpd.join` takes the higher bound).
+* **The token remembers the cells' labels.** A growth hands out new bytes with the labels `A`, `K`
+  that the client names, and the client gives no byte to read them from, so a token must pin them:
+  the FixedBufferAllocator's and the page allocator's tokens do (pure facts; the mapping's
+  authority), and an arena's ledger records them (`GRegion` carries `A`, `K`; the arena's
+  invariant ties every grant to a node of its block with those labels).
+* **Instances.** The arena's `resize` (stock x86_64-linux and aarch64-macos, patched) meets the
+  refined field (`tests/roadmap/alloc-arena`, `AllocArena/Core.lean`); `remap` uses the
+  whole-region form (`FAllocInv.resize_granted_of`, a per-triple corollary). The
+  FixedBufferAllocator and the page allocator are re-proved natively on `codex/sep-auto` (`fsym`).
 
 The design below is the original plan.
 
@@ -600,7 +624,8 @@ revoked. This is what ghost state is for: logical resources that live only in th
 is an **epoch ledger of named grants** (`ZigLean/Sep/Full/Res.lean`, rules in `Ghost.lean`):
 
 ```
-abbrev GRegion := Ptr × Nat × Frac       -- a region: start pointer, length, lent extent fraction
+abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
+                    -- a region: start pointer, length, lent extent fraction, cell labels A, K
 abbrev GMap := Nat → Option GRegion      -- grant id ↦ the region granted under it
 structure GCell where
   auth : Nat × GMap → Nat          -- how many authorities ●(e, M): current epoch e, grant map M
