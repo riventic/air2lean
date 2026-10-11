@@ -122,11 +122,11 @@ class Branch(unittest.TestCase):
         self.assertEqual(gen.entries(self.root), {self.m1: entry})
 
     def test_pending_lists_unpublished_main_commits_since_the_registry_oldest_first(self):
-        self.assertEqual(gen.pending(self.data, self.root, {}), [self.m1])
+        self.assertEqual(gen.pending(self.root, {}), [self.m1])
         self.publish(self.m1, self.produced('p1', 'one'))
         m2 = self.commit('two')
         m3 = self.commit('three')
-        self.assertEqual(gen.pending(self.data, self.root, gen.entries(self.root)), [m2, m3])
+        self.assertEqual(gen.pending(self.root, gen.entries(self.root)), [m2, m3])
 
     def test_produced_directory_must_match_commit_tree_and_digests(self):
         m2 = self.commit('two')

@@ -43,8 +43,10 @@ def setUpModule():
     # The fixtures' manifest, pins and receipt are whole-tree generated files (assurance/generated.json,
     # docs/ci.md): not tracked, materialized in the checkout (CI's `provenance` job, or
     # scripts/generated.py). The template commits them, as the fixture copies these tests edit.
-    registry = json.loads((ROOT / 'assurance/generated.json').read_text())
-    generated = [p for g in registry['groups'] if g['name'] in ('provenance', 'provenance-gap') for p in g['paths']]
+    spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
+    registry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(registry)
+    generated = registry.all_paths(registry.load(ROOT), ['provenance', 'provenance-gap'])
     missing = [p for p in generated if not (ROOT / p).is_file()]
     if missing:
         raise unittest.SkipTest('provenance fixtures not materialized (scripts/generated.py): %s' % missing[0])

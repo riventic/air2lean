@@ -38,7 +38,9 @@ message names the main commit, its tree and the CI run (trailers Main-Commit, Ma
 from __future__ import annotations
 
 import argparse
+import atexit
 import calendar
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -49,6 +51,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import tomllib
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,14 +101,29 @@ def all_paths(data: dict, names=None) -> list[str]:
     return [p for g in groups(data, names) for p in g['paths']]
 
 
+def paths(root: Path = ROOT) -> set[str]:
+    """Every registry file of the tree at `root` (none without a registry): the one reader that
+    check-tree.py, ci-reuse.py, artifact-manifest.py and the fixture tests share."""
+    return set(all_paths(load(root))) if (Path(root) / REGISTRY).is_file() else set()
+
+
+def cheap(data: dict) -> list[str]:
+    """The groups that need no build (regenerated wherever the checkout is)."""
+    return [g['name'] for g in data['groups'] if not g.get('heavy')]
+
+
 # ----------------------------------------------------------------------------- generators
 
-def pinned_source(version: str, cache: Path, scratch: Path) -> Path:
-    """The pinned pristine compiler source of `version` (zig-patch/versions.toml), as
-    zig-patch/build.sh and scripts/preflight.sh fetch it."""
-    pin = lambda key: run('zig-patch/toml-get.sh', '["%s"]' % version, key,
-                          capture_output=True, text=True).stdout.strip()
-    url, digest = pin('url'), pin('sha256')
+SOURCES = {}  # version -> extracted pristine source, shared by both passes of `produce`
+
+
+def pinned_source(version: str, cache: Path) -> Path:
+    """The pinned pristine compiler source of `version` (zig-patch/versions.toml), cached as
+    zig-patch/build.sh caches it, extracted once per process."""
+    if version in SOURCES:
+        return SOURCES[version]
+    pin = tomllib.loads((ROOT / 'zig-patch/versions.toml').read_text())[version]
+    url, digest = pin['url'], pin['sha256']
     tarball = cache / ('zig-%s.tar.xz' % version)
     if not tarball.is_file() or sha256(tarball) != digest:
         cache.mkdir(parents=True, exist_ok=True)
@@ -118,8 +136,8 @@ def pinned_source(version: str, cache: Path, scratch: Path) -> Path:
             os.replace(part, tarball)
         finally:
             part.unlink(missing_ok=True)
-    source = scratch / ('zig-%s' % version)
-    source.mkdir()
+    source = Path(tempfile.mkdtemp(prefix='air2lean-zig-%s.' % version))
+    atexit.register(shutil.rmtree, source, True)
     with tarfile.open(tarball) as archive:
         members = []
         for member in archive.getmembers():
@@ -128,18 +146,19 @@ def pinned_source(version: str, cache: Path, scratch: Path) -> Path:
                 member.name = name[1]
                 members.append(member)
         archive.extractall(source, members=members, filter='data')
+    SOURCES[version] = source
     return source
 
 
 def gen_coverage(group: dict, root: Path):
     cache = Path(os.environ.get('AIR2LEAN_CACHE', Path.home() / '.cache/air2lean'))
-    with tempfile.TemporaryDirectory() as scratch:
-        for rel in group['paths']:
-            version = Path(rel).stem
-            source = pinned_source(version, cache, Path(scratch))
-            run(sys.executable, '-B', 'scripts/coverage.py', 'generate', '--version', version,
-                '--source', source, '--os', 'linux', '--inventory', rel, cwd=root)
-            shutil.rmtree(source)
+
+    def one(rel):
+        version = Path(rel).stem
+        run(sys.executable, '-B', 'scripts/coverage.py', 'generate', '--version', version,
+            '--source', pinned_source(version, cache), '--os', 'linux', '--inventory', rel, cwd=root)
+    with concurrent.futures.ThreadPoolExecutor() as pool:  # one coverage.py process per version
+        list(pool.map(one, group['paths']))
 
 
 def gen_premise_index(group: dict, root: Path):
@@ -147,14 +166,13 @@ def gen_premise_index(group: dict, root: Path):
 
 
 def gen_provenance(group: dict, root: Path):
-    fixture = 'gap' if group['name'] == 'provenance-gap' else 'provenance'
     with tempfile.TemporaryDirectory() as scratch:
         work = Path(scratch).resolve() / 'work'  # the receipt refuses a path through a symlink (macOS /var)
-        tool = [sys.executable, '-B', 'scripts/provenance-evidence.py', '--fixture', fixture]
+        tool = [sys.executable, '-B', 'scripts/provenance-evidence.py', '--fixture', group['fixture']]
         run(*tool, 'regenerate', work, '--refresh', cwd=root)
         run(*tool, 'install', work, cwd=root)
         # The receipt `install` just wrote is untracked by design; it was produced from HEAD here.
-        run(*tool, 'record', work, cwd=root, env=dict(os.environ, AIR2LEAN_GENERATING='1'))
+        run(*tool, 'record', work, '--generated-from-head', cwd=root)
 
 
 GENERATORS = {'coverage': gen_coverage, 'premise-index': gen_premise_index, 'provenance': gen_provenance}
@@ -277,10 +295,7 @@ def install(data: dict, directories, root: Path = ROOT):
     for directory in directories:
         manifest = verified(Path(directory), data, identity['commit'], identity['tree'])
         for rel in manifest['files']:
-            # Only writes to the files themselves: the reuse tracer (scripts/ci-reuse.py) lets a
-            # part write a whole-tree file without declaring the whole tree, never stat or read it.
-            if not (root / rel).parent.is_dir():
-                (root / rel).parent.mkdir(parents=True)
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_bytes((Path(directory) / rel).read_bytes())
         print('installed %s (%s) for %s' % (directory, ', '.join(manifest['groups']), identity['commit']))
 
@@ -311,8 +326,7 @@ def entries(root: Path = ROOT, ref: str = REMOTE_REF) -> dict:
 
 
 def fetch(data: dict, names, rev: str | None, root: Path = ROOT) -> str:
-    if not fetch_branch(data, root) and git('rev-parse', '--verify', '--quiet', REMOTE_REF, cwd=root,
-                                            check=False) is None:
+    if not fetch_branch(data, root):
         raise Error('no %s branch available (offline?): regenerate with scripts/generated.py regen' % data['branch'])
     published = entries(root)
     if rev:
@@ -337,8 +351,7 @@ def fetch(data: dict, names, rev: str | None, root: Path = ROOT) -> str:
 
 
 def materialize(data: dict, heavy: str, root: Path = ROOT):
-    cheap = [g['name'] for g in data['groups'] if not g.get('heavy')]
-    regen(data, cheap, root)
+    regen(data, cheap(data), root)
     rest = [g['name'] for g in data['groups'] if g.get('heavy')]
     if heavy == 'regen':
         regen(data, rest, root)
@@ -350,17 +363,15 @@ def materialize(data: dict, heavy: str, root: Path = ROOT):
             print('note: %s not materialized (%s); CI regenerates them' % (', '.join(rest), error), file=sys.stderr)
 
 
-def api(path: str, method: str = 'GET', body=None):
-    args = ['gh', 'api', '-X', method, path]
-    if body is not None:
-        args += ['--input', '-']
-    done = subprocess.run(args, capture_output=True, text=True, input=None if body is None else json.dumps(body))
+def api(path: str):
+    """`gh api` (the publish workflow needs `gh run download` anyway)."""
+    done = subprocess.run(['gh', 'api', path], capture_output=True, text=True)
     if done.returncode:
         raise Error('gh api %s: %s' % (path, done.stderr.strip()))
     return json.loads(done.stdout) if done.stdout.strip() else None
 
 
-def pending(data: dict, root: Path, published: dict, head: str = 'origin/main') -> list[str]:
+def pending(root: Path, published: dict, head: str = 'origin/main') -> list[str]:
     """First-parent main commits since the registry exists that have no entry, oldest first.
     Walking back stops at the newest published commit."""
     found = []
@@ -406,7 +417,7 @@ def entry_commit(data: dict, directories, commit: str, tree: str, run_: dict, pa
 def publish(data: dict, repo: str, push: bool, root: Path = ROOT):
     fetch_branch(data, root)
     published = entries(root)
-    todo = pending(data, root, published)
+    todo = pending(root, published)
     if not todo:
         print('every main commit since %s exists has its %s entry' % (REGISTRY, data['branch']))
         return 0
@@ -458,7 +469,7 @@ def freshness(data: dict, minutes: int, repo: str | None, root: Path = ROOT) -> 
     landed = landing_times(repo)
     now = time.time()
     stale = []
-    for commit in pending(data, root, published):
+    for commit in pending(root, published):
         when = landed.get(commit) or int(git('show', '-s', '--format=%ct', commit, cwd=root))
         if now - when > minutes * 60:
             stale.append('%s (main for %d min)' % (commit, (now - when) // 60))
@@ -494,7 +505,7 @@ def main(argv=None) -> int:
         if args.command == 'paths':
             print('\n'.join(all_paths(data, args.groups)))
         elif args.command == 'regen':
-            regen(data, args.groups or [g['name'] for g in data['groups'] if not g.get('heavy')])
+            regen(data, args.groups or cheap(data))
         elif args.command == 'produce':
             produce(data, args.groups, args.out.resolve())
         elif args.command == 'install':

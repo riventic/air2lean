@@ -19,6 +19,7 @@
     {
       "name": "provenance",
       "generator": "provenance",
+      "fixture": "provenance",
       "heavy": true,
       "note": "scripts/provenance-evidence.py --fixture provenance regenerate --refresh, install, record (patched 0.16.0, stock 0.16.0, Lean)",
       "paths": ["assurance/provenance/manifest.json", "assurance/provenance/pins.json",
@@ -32,6 +33,7 @@
     {
       "name": "provenance-gap",
       "generator": "provenance",
+      "fixture": "gap",
       "heavy": true,
       "note": "the same for --fixture gap (aarch64-macos target, cross-built with stock Zig)",
       "paths": ["assurance/provenance-gap/manifest.json", "assurance/provenance-gap/pins.json",

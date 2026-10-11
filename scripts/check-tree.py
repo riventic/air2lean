@@ -17,6 +17,7 @@ Each run recreates DEST from scratch. DEST must be new or an earlier check tree 
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,16 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 MARKER = '.air2lean-check-tree.json'
 CACHES = ('.lake/build', 'tests/diff/.lake')
+
+
+def generated_paths(root):
+    """The whole-tree generated files of `root` (scripts/generated.py paths; none without a registry)."""
+    if not (Path(root) / 'assurance/generated.json').is_file():
+        return set()
+    spec = importlib.util.spec_from_file_location('air2lean_generated', Path(__file__).with_name('generated.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.paths(root)
 
 
 def clone_tree(source, destination):
@@ -48,10 +59,7 @@ def create(dest, replacements, root=ROOT):
     files = {p for p in os.fsdecode(listed).split('\0') if p and '.lake' not in Path(p).parts}
     # The whole-tree generated files materialized in the checkout (ignored, never committed:
     # assurance/generated.json, docs/ci.md#whole-tree-generated-files) belong to this tree too.
-    registry = root / 'assurance/generated.json'
-    if registry.is_file():
-        files |= {p for g in json.loads(registry.read_text())['groups'] for p in g['paths'] if (root / p).is_file()}
-    files = sorted(files)
+    files = sorted(files | {p for p in generated_paths(root) if (root / p).is_file()})
     if dest == root or root.is_relative_to(dest):
         raise ValueError(f'{dest}: a check tree cannot contain the checkout')
     if dest.is_relative_to(root):

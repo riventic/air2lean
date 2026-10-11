@@ -35,7 +35,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = 'air2lean-ci-reuse/1'
 DECLARATIONS = '.github/ci-inputs.json'
 WORKFLOW = '.github/workflows/ci.yml'
-GENERATED = 'assurance/generated.json'
 WORKFLOW_NAME = 'CI'
 MACHINERY = ('scripts/ci-reuse.py', 'scripts/ci-trace.sh', DECLARATIONS)
 # Jobs that are not parts: they build what the parts consume, or aggregate results.
@@ -53,6 +52,9 @@ DECLARATION_KEYS = {'reuse', 'inputs', 'listings', 'tree_names', 'commit_bound',
 _spec = importlib.util.spec_from_file_location('air2lean_release_record', ROOT / 'scripts/release-record.py')
 RR = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(RR)
+_spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
+GENERATED = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(GENERATED)
 
 
 class ReuseError(Exception):
@@ -599,7 +601,7 @@ def coverage(observations, inputs, tree, commit_bound=False, generated=()):
             elif path in generated:
                 # Installing one (`scripts/generated.py install` only writes it) reveals nothing.
                 if set(kinds) - {'write'} and not inputs.subtree(''):
-                    problems.append((path, kinds, 'whole-tree generated file (%s): declare "**"' % GENERATED))
+                    problems.append((path, kinds, 'whole-tree generated file (%s): declare "**"' % GENERATED.REGISTRY))
             else:
                 anchor = deepest_tracked_dir(path, dirs)
                 if not inputs.listing(anchor):
@@ -620,9 +622,11 @@ def read_traces(directory):
 
 
 def suggest(observations, tree):
-    """Content patterns (`dir/**` per observed file's directory) and listings for a trace."""
-    dirs, patterns, listings = tree_dirs(tree), set(), set()
+    """A declaration covering a trace: content patterns (`dir/**` per observed file's directory,
+    and per written tracked directory), listings, and `tree_names` when git listed every name."""
+    dirs, patterns, listings, names = tree_dirs(tree), set(), set(), False
     for step in observations:
+        names = names or 'names' in step.get('git', {}).values()
         for path, kinds in step.get('observed', {}).items():
             if path in tree:
                 parent = str(PurePosixPath(path).parent) if '/' in path else ''
@@ -630,6 +634,8 @@ def suggest(observations, tree):
             elif path in dirs:
                 if 'list' in kinds:
                     listings.add(path or '.')
+                if 'write' in kinds:
+                    patterns.add(path + '/**' if path else '**')
                 if set(kinds) - {'list'} and path:
                     parent = str(PurePosixPath(path).parent) if '/' in path else ''
                     listings.add(parent or '.')
@@ -637,7 +643,8 @@ def suggest(observations, tree):
                 listings.add(deepest_tracked_dir(path, dirs) or '.')
     collapsed = {p for p in patterns if not any(
         q != p and q.endswith('/**') and p.startswith(q[:-2]) for q in patterns)}
-    return sorted(collapsed), sorted(listings)
+    declaration = {'inputs': sorted(collapsed), 'listings': sorted(listings)}
+    return {**declaration, 'tree_names': True} if names else declaration
 
 
 # --- Workflow checks: declarations complete, steps guarded, no run-specific expressions. ---
@@ -813,8 +820,7 @@ def check_trace(root, part, directory, environ=os.environ):
         return 0
     inputs = part_inputs(data, entry, hashfiles_patterns(canonical(preimage['definitions'])))
     steps = read_traces(directory)
-    generated = {p for g in json.loads((Path(root) / GENERATED).read_text())['groups'] for p in g['paths']}
-    problems = coverage(steps, inputs, tracked_tree(root), bool(entry.get('commit_bound')), generated)
+    problems = coverage(steps, inputs, tracked_tree(root), bool(entry.get('commit_bound')), GENERATED.paths(root))
     observed = sum(len(s.get('observed', {})) for s in steps)
     Path(directory, 'coverage.json').write_text(canonical(
         {'part': part, 'steps': len(steps), 'observed': observed, 'problems': problems}))
@@ -823,8 +829,7 @@ def check_trace(root, part, directory, environ=os.environ):
               'or the step:' % (part, len(problems), DECLARATIONS), file=sys.stderr)
         for path, kinds, what in problems[:200]:
             print('  %s [%s]: %s' % (path, ','.join(kinds), what), file=sys.stderr)
-        patterns, listings = suggest(steps, tracked_tree(root))
-        print('suggested declaration: %s' % canonical({'inputs': patterns, 'listings': listings}), file=sys.stderr)
+        print('suggested declaration: %s' % canonical(suggest(steps, tracked_tree(root))), file=sys.stderr)
         return 1
     print('OK: %d traced steps of %s, %d workspace paths observed, all inside the declared inputs'
           % (len(steps), part, observed))
@@ -906,8 +911,7 @@ def main(argv=None):
                 print('OK: every part of %s is declared and every step after the reuse decision is guarded' % WORKFLOW)
             return 1 if errors else 0
         if args.command == 'suggest':
-            patterns, listings = suggest(read_traces(args.directory), tracked_tree(args.root))
-            print(json.dumps({'inputs': patterns, 'listings': listings}, indent=2))
+            print(json.dumps(suggest(read_traces(args.directory), tracked_tree(args.root)), indent=2))
             return 0
     except (ReuseError, RR.ReleaseError, OSError, ValueError) as error:
         print('error: %s' % error, file=sys.stderr)

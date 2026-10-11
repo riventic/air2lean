@@ -341,7 +341,17 @@ def compute_links(root, inputs, overrides=None):
     return links
 
 
-def provenance(root, links, inputs):
+def generated_paths(root):
+    """The whole-tree generated files of `root` (scripts/generated.py paths; none without a registry)."""
+    if not (Path(root) / 'assurance/generated.json').is_file():
+        return set()
+    spec = importlib.util.spec_from_file_location('air2lean_generated', Path(__file__).with_name('generated.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.paths(root)
+
+
+def provenance(root, links, inputs, generated=frozenset()):
     paths = sorted({row['path'] for record in links.values() for row in record.get('files', [])})
     inside = [p for p in paths if not Path(p).is_absolute()]
     scopes = sorted({label(root, absolute(root, s)) for s in link_scopes(inputs)})
@@ -349,14 +359,10 @@ def provenance(root, links, inputs):
     tracked_paths = set(git_paths(root, 'ls-files', '-z', '--', *scopes)) if scopes else set()
     # Diff the named scopes, not just hashed files, so deleted link files (staged or not) count.
     dirty = git_paths(root, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', '--', *scopes) if scopes else []
-    # Whole-tree generated files (assurance/generated.json, docs/ci.md) are never committed: CI
-    # produces them from HEAD and publishes them per main commit on the `generated` branch. Only
-    # while scripts/generated.py records them from HEAD (AIR2LEAN_GENERATING=1: it has just
-    # produced the linked files in this tree) is a link to one reproducible from HEAD; otherwise
-    # such a file (fetched for another commit, or edited) is an untracked link file as before.
-    registry = Path(root) / 'assurance/generated.json'
-    generated = ({p for g in json.loads(registry.read_text())['groups'] for p in g['paths']}
-                 if registry.is_file() and os.environ.get('AIR2LEAN_GENERATING') == '1' else set())
+    # `generated`: whole-tree generated files (assurance/generated.json, docs/ci.md) that the
+    # caller has just produced from HEAD (`manifest --generated-from-head`, which only
+    # scripts/generated.py passes). They are never committed, yet reproducible from HEAD. Any other
+    # untracked copy of one (fetched for another commit, or edited) is an untracked link file.
     untracked = sorted(p for p in inside if p not in tracked_paths and p not in generated)
     return {'head': git_at(root, 'rev-parse', 'HEAD').decode().strip(),
             'tracked_dirty': bool(git_at(root, 'status', '--porcelain', '--untracked-files=no')),
@@ -378,11 +384,11 @@ def seal_chain(links, inputs, provenance_record):
     return chain, current
 
 
-def build_manifest(root, inputs):
+def build_manifest(root, inputs, generated=frozenset()):
     links = compute_links(root, inputs)
     broken = sorted('%s: %s' % (k, v['error']) for k, v in links.items() if 'error' in v)
     demand(not broken, 'cannot record manifest: ' + '; '.join(broken))
-    record = provenance(root, links, inputs)
+    record = provenance(root, links, inputs, generated)
     chain, final = seal_chain(links, inputs, record)
     return {'format': MANIFEST_FORMAT, 'schema': 1, 'authentication': 'not_attested',
             'claim': 'byte identities of recorded inputs; no rebuild, proof check or source correspondence',
@@ -508,6 +514,8 @@ def manifest_main(argv):
     parser.add_argument('--expect', action='append', default=[],
                         help='LINK=SHA256, profile=PROFILE_SHA256 or zig_version=VERSION')
     parser.add_argument('--allow-dirty', action='store_true', help='accept a manifest recorded from a dirty tree')
+    parser.add_argument('--generated-from-head', action='store_true',
+                        help='the linked whole-tree generated files were just produced from HEAD (scripts/generated.py)')
     parser.add_argument('--native-binary', type=Path,
                         help='record: native build of the same source (diff-tested binary); check: binary to tie to the manifest')
     parser.add_argument('--native-compiler', type=Path, help='stock Zig that built the native binary (hashed)')
@@ -536,7 +544,7 @@ def manifest_main(argv):
             if a.native_binary is not None:
                 inputs['native'] = native_inputs(a)
             demand(inputs['proofs'], 'no proof files selected')
-            manifest = build_manifest(root, inputs)
+            manifest = build_manifest(root, inputs, generated_paths(root) if a.generated_from_head else frozenset())
             physical(path.parent)
             write_new(path, manifest)
             print(json.dumps({'manifest': str(path), 'manifest_sha256': manifest['manifest_sha256'],

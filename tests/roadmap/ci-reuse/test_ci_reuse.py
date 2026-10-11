@@ -171,9 +171,13 @@ class Coverage(unittest.TestCase):
 
     def test_suggestion_covers_the_trace(self):
         step = self.step({'scripts/a.py': ['read'], 'tests/t/run.py': ['read'], 'scripts': ['list'],
-                          'tests/t/out/r.json': ['write']})
-        patterns, listings = cr.suggest([step], TREE)
-        self.assertEqual(violations(step, patterns, [l if l != '.' else '' for l in listings]), [])
+                          'tests/t/out/r.json': ['write'], 'tests': ['probe', 'write']},
+                         git={'["git","ls-files","-z"]': 'names'})
+        found = cr.suggest([step], TREE)
+        self.assertTrue(found['tree_names'])
+        self.assertIn('tests/**', found['inputs'])
+        self.assertEqual(violations(step, found['inputs'], [l if l != '.' else '' for l in found['listings']],
+                                    tree_names=True), [])
 
 
 class Workflow(unittest.TestCase):

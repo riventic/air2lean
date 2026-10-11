@@ -158,7 +158,7 @@
         "tests/roadmap/aarch64-abi",
         "tests/roadmap/aarch64-abi/limits"
       ],
-      "note": "narrowed from the traces of run 38166335511 (scripts/ci-reuse.py suggest)"
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
     },
     "build-modes-aarch64-linux": {
       "inputs": [
@@ -213,6 +213,7 @@
         "lakefile.toml",
         "lean-toolchain",
         "scripts/**",
+        "tests/**",
         "tests/diff/**",
         "tests/roadmap/build-modes/reproducers/**",
         "zig-patch/**"
@@ -245,10 +246,12 @@
         "Proofs/Vectors",
         "ZigLean",
         "ZigLean/Conc",
+        "ZigLean/Conc/Spec",
         "ZigLean/Env",
         "ZigLean/External",
         "ZigLean/Float",
         "ZigLean/Mem",
+        "ZigLean/Os",
         "ZigLean/Sep",
         "ZigLean/Sep/Array",
         "ZigLean/VC",
@@ -316,7 +319,8 @@
         "tests/diff/vectors",
         "tests/diff/vectors/inputs"
       ],
-      "note": "narrowed from the traces of run 38166335511 (scripts/ci-reuse.py suggest)"
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)",
+      "tree_names": true
     },
     "bitops-native-arm": {
       "inputs": [
@@ -329,7 +333,7 @@
         "tests/roadmap",
         "tests/roadmap/bitops-native"
       ],
-      "note": "narrowed from the traces of run 38166335511 (scripts/ci-reuse.py suggest)"
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
     }
   }
 }
