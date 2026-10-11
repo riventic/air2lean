@@ -1663,6 +1663,45 @@ theorem grow_node_upd {CI : FAllocInv} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w
   simp only [OV.bodyE, OV.restE, OV.grow] at h ⊢
   exact of_eq (by ac_rfl) h
 
+/-! ## `reset`'s ghost part (step 8)
+
+After `Upd.bump` (epoch `e + 1`) every receipt of epoch `e` turns back into a share tagged with the
+ledger's parent (`EUpd.revoke`), whatever the clients kept. With the per-block accounting the
+revoked shares, the pool and the nodes' kept shares add up to each node's `qn` again. -/
+
+/-- A grant's receipt, revoked: a share tagged `t` at the receipt's bound. -/
+def revoked (t : STag) : Option GRegion → FAssn
+  | none => FAssn.emp
+  | some (p, _, q, _, _) => FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆ bshare b q k t
+
+/-- **Revoke every receipt** of a past epoch `e` under the ledger at epoch `e'` (`EUpd.revoke`). -/
+theorem revoke_all {γ e e' : Nat} {M M' : GMap} {t : STag} (he : e < e') :
+    ∀ N : Nat, EUpd (gauthP γ e' M' t ⋆ sepN N (fun i => rcptOf γ e (M i)))
+      (gauthP γ e' M' t ⋆ sepN N (fun i => revoked t (M i)))
+  | 0 => EUpd.of_imp fun _ h => h
+  | N + 1 => by
+    simp only [sepN]
+    refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e' M' t ⋆ rcptOf γ e (M N)) ⋆
+      sepN N (fun i => rcptOf γ e (M i))) fun _ h => sep_assoc' h) ?_
+    refine EUpd.trans (EUpd.frame (P' := gauthP γ e' M' t ⋆ revoked t (M N)) ?_) ?_
+    · cases hM : M N with
+      | none => exact EUpd.of_imp fun _ h => h
+      | some g =>
+        obtain ⟨p, n, q, A, K⟩ := g
+        simp only [rcptOf, revoked]
+        refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+          (gauthP γ e' M' t ⋆ brcpt b q k γ e)) fun _ h => ?_)
+          (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_)
+        · obtain ⟨b, h⟩ := sep_exR h
+          obtain ⟨k, h⟩ := sep_exR h
+          exact ⟨b, k, of_eq (by ac_rfl) h⟩
+        · refine EUpd.trans (EUpd.revoke he) (EUpd.of_imp fun _ h => ?_)
+          exact sep_mono_right (fun _ x => ⟨b, k, sep_lift.mpr ⟨hb, x⟩⟩) h
+    refine EUpd.trans (EUpd.of_imp (P' := revoked t (M N) ⋆ (gauthP γ e' M' t ⋆
+      sepN N (fun i => rcptOf γ e (M i)))) fun _ h => of_eq (by ac_rfl) h) ?_
+    refine EUpd.trans (EUpd.frameL (revoke_all he N)) ?_
+    exact EUpd.of_imp fun _ h => of_eq (by ac_rfl) h
+
 /-! ## Proof tactics of the entries
 
 Each is elaborated against the code of the module where it is used. The names it refers to are
