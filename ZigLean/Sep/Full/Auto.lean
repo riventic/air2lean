@@ -498,7 +498,7 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
   let some ext ← getSimpExtension? `fsym_arith | throwError "fsym: no fsym_arith"
   let mut thms ← ext.getTheorems
   -- conditional rewrites (side conditions by `omegaDisch`): no wrap-around first
-  for n in [``toNat_add_nowrap, ``toNat_sub_nowrap, ``toNat_mul_nowrap, ``toNat_ofNat_nowrap,
+  for n in [``Zig.toNat_add_of_lt, ``Zig.toNat_sub_of_le, ``BitVec.toNat_mul_of_lt, ``toNat_ofNat_nowrap,
       ``toNat_ofInt_nowrap] do
     thms ← thms.addConst n (prio := 10000)
   for n in [``pow_mod_elim, ``Nat.mod_eq_of_lt, ``Int.emod_eq_of_lt, ``sub_wrap, ``Int.toNat_add,
@@ -556,25 +556,33 @@ facts before it (`none`: a hypothesis normalized to `False`, with its proof). -/
 def normFacts : MetaM (Array Expr × Option Expr) := do
   let (ctx, procs) ← arithSimpCtx
   let mut facts : Array Expr := #[]
+  let lctx ← getLCtx
+  -- a cached proof is reused only where its free variables are in scope (`cases` and `subst`
+  -- reintroduce the hypotheses it may use)
+  let inScope : Option (Expr × Expr) → Bool
+    | some (_, pf) => !pf.hasAnyFVar (fun f => !lctx.contains f)
+    | none => true
   for d in ← propHyps do
     let r ← match (← (← caches).hyp.get).get? d.fvarId with
-      | some r => pure r
-      | none =>
-        let ty ← instantiateMVars d.type
-        (← caches).facts.set facts
-        let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
-        let out ← if r.expr == ty then pure none else
-          match r.proof? with
-          | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
-          | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
-        (← caches).hyp.modify (·.insert d.fvarId out)
-        pure out
+      | some r => if inScope r then pure r else normHyp ctx procs facts d
+      | none => normHyp ctx procs facts d
     match r with
     | none => facts := facts.push d.toExpr
     | some (t, pf) =>
       if t.isFalse then return (facts, some pf)
       unless t.isTrue do facts := facts.push pf
   return (facts, none)
+where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array Expr) (d : LocalDecl) :
+    MetaM (Option (Expr × Expr)) := do
+  let ty ← instantiateMVars d.type
+  (← caches).facts.set facts
+  let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
+  let out ← if r.expr == ty then pure none else
+    match r.proof? with
+    | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
+    | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
+  (← caches).hyp.modify (·.insert d.fvarId out)
+  return out
 
 /-- The arithmetic solver on one goal: its hypotheses as facts in `fsym_arith` normal form
 (values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
@@ -1126,7 +1134,7 @@ partial def matchArgs (q p : Expr) : MetaM Bool := do
     for (x, y) in q.getAppArgs.zip p.getAppArgs do
       unless ← matchArgs x y do return false
     return true
-  return !q.hasExprMVar && (q.isFVar == p.isFVar || true) && !(← inferType q).isSort
+  return !q.hasExprMVar && !(← inferType q).isSort
 
 /-- The planner's state: the atoms of the resource and `EUpd P₀ (sepOf ats)`. -/
 structure St where
@@ -1206,7 +1214,6 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) : TacticM (Option (St ×
         j := 1
         cur := #[p2, A, S, K, qa, bs2]
       -- the end
-      let n? := n?.orElse fun _ => none
       let n? ← match n? with
         | some n => pure (some n)
         | none => do
@@ -1260,15 +1267,12 @@ def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
           throwError "labels"
         let pe ← mkAppM ``Zig.Ptr.add #[r1[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
           ← mkAppM ``Array.size #[r1[5]!]]]
-        let some e ← proveEq r2[0]! pe | throwError "adjacent"
+        let some _ ← proveEq r2[0]! pe | throwError "adjacent"
         let r2' ← mkRegion pe r2[1]! r2[2]! r2[3]! r2[4]! r2[5]!
         let some e' ← proveEq st.ats[j]! r2' | throwError "eq"
-        let _ := e
         let st ← st.step #[j] #[r2'] (← mkAppM ``atom_eq #[e'])
-        -- now `r2'` is at 0, `r1` moved
-        let some i' := st.ats.findIdx? (· == st.ats[0]! |> fun _ => false) |> fun _ =>
-          (st.ats.toList.findIdx? (fun x => x == mkApp (mkConst ``Zig.Full.FAssn.up)
-            (mkAppN (mkConst ``Zig.regionIn) r1))) | throwError "lost"
+        -- now `r2'` is at 0 and `r1` one further unless it was after `r2`
+        let i' := if i < j then i + 1 else i
         let h ← mkAppOptM ``up_region_join #[r1[0]!, r1[1]!, r1[2]!, r1[3]!, r1[4]!, r2[4]!, r1[5]!, r2[5]!]
         let joined ← mkRegion r1[0]! r1[1]! r1[2]! r1[3]! r1[4]! (← mkAppM ``HAppend.hAppend #[r1[5]!, r2[5]!])
         return some (← st.step #[i', 0] #[joined] h)
@@ -1328,7 +1332,9 @@ def planShares (st : St) (qshares0 : Array (Array Expr)) : TacticM St := do
           break
       if again then break
   -- split, per block
-  let blocks := st.ats.filterMap fun x => if reserved.contains x then none else (shareArgs? x).map (·[0]!)
+  let blocks := (st.ats.filterMap fun x =>
+    if reserved.contains x then none else (shareArgs? x).map (·[0]!)).foldl
+    (fun acc b => if acc.contains b then acc else acc.push b) #[]
   for blk in blocks do
     let mut want := 0
     for q in rest do
@@ -1584,7 +1590,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       for m in ← getMVars pf do
         unless left.contains m do
           unless ← isProp (← m.getType) do throwError "fsym: undetermined witness ?{m.name}"
-    g.assign (← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``eupd_of_imp #[pf]])
+    g.assign (← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``EUpd.of_imp #[pf]])
     return left
   catch ex =>
     trace[fsym] "entailment: {ex.toMessageData}"
@@ -1595,7 +1601,9 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
 
 partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := do
-  if fuel == 0 then return [g]
+  if fuel == 0 then
+    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return [g]
   trace[fsym] "walk {fuel}"
   let h0 ← IO.getNumHeartbeats
   let g ← normPre g
@@ -1666,7 +1674,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
       let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.bind_pure _ ?_)) g | throwError "fsym"
-      return ← walk g' user extra fuel
+      return ← walk g' user extra (fuel - 1)
   let h2 ← IO.getNumHeartbeats
   for r in ← rules user do
     let h3 ← IO.getNumHeartbeats

@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
+import ZigLean.Range
 
 /-!
 # The rule library of the full-state symbolic executor (`fsym`, `docs/proof-automation.md`)
@@ -50,11 +51,6 @@ theorem stepAll {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : FT
     (k : ∀ v, L.T (Q₀ v) (f v) Q) : L.T P (c >>= f) Q :=
   L.bind (L.ofTotal r) k
 
-/-- A command proved by a rule of the logic itself (a partial rule in the partial logic). -/
-theorem stepL {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : L.T P₀ c Q₀)
-    (k : ∀ v, L.T (Q₀ v ⋆ R) (f v) Q) : L.T (P₀ ⋆ R) (c >>= f) Q :=
-  L.bind (L.frame r) k
-
 /-- **A return**, after a frame-preserving update into the postcondition. -/
 theorem ret {v : β} (h : EUpd P (Q v)) : L.T P (pure v) Q :=
   L.ofTotal (FTotalTriple.eupd h (FTotalTriple.ret v))
@@ -77,10 +73,6 @@ variable {b : BlockId} {A k : Nat} {P X R : FAssn}
 theorem AddrOf.of_atom (h : AddrOf b A X) (e : P = (X ⋆ R)) : AddrOf b A P := e ▸ h.sepL
 
 theorem Reaches.of_atom (h : Reaches b k X) (e : P = (X ⋆ R)) : Reaches b k P := e ▸ h.sepL
-
-/-- The cells of a legacy assertion are the resource's. -/
-theorem up_cell {Y : Assn} {r : Res} (hr : up Y r) {l : Loc} {c : Cell} (hc : r.heap.erase l = some c) :
-    ∃ fc, r.heap l = some fc ∧ fc.cell = c := erase_cell hc
 
 /-- A nonempty owned byte range at `p` (in block `b`): the block's address. -/
 theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
@@ -209,9 +201,6 @@ attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
 section Arith
 
 variable {w : Nat} {P : FAssn}
-
-theorem read_pure {α : Type} {v : α} : FTotalTriple P (pure v : MemM α) (fun r => ⟪r = v⟫ ⋆ P) :=
-  (FTotalTriple.ret (Q := fun r => ⟪r = v⟫ ⋆ P) v).pre fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
 /-- A word result with its value: the step rules below leave `r` opaque with the fact
 `r.toNat = …` (a symbolic execution in SSA form), so later terms mention `r` and not the
@@ -404,14 +393,9 @@ theorem maxAtom_left {a b : Nat} (h : b ≤ a) : maxAtom a b = a := by unfold ma
 theorem maxAtom_right {a b : Nat} (h : a ≤ b) : maxAtom a b = b := by unfold maxAtom; omega
 
 /-! **No wrap-around**: the value of a word operation whose result fits (conditional rewrites of
-the arithmetic solver, side conditions by `omega`). -/
+the arithmetic solver, side conditions by `omega`; `+ - *` are `Zig.toNat_add_of_lt`,
+`Zig.toNat_sub_of_le`, `BitVec.toNat_mul_of_lt`). -/
 
-theorem toNat_add_nowrap {x y : BitVec w} (h : x.toNat + y.toNat < 2 ^ w) : (x + y).toNat = x.toNat + y.toNat :=
-  BitVec.toNat_add_of_lt h
-theorem toNat_sub_nowrap {x y : BitVec w} (h : y.toNat ≤ x.toNat) : (x - y).toNat = x.toNat - y.toNat :=
-  BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)
-theorem toNat_mul_nowrap {x y : BitVec w} (h : x.toNat * y.toNat < 2 ^ w) : (x * y).toNat = x.toNat * y.toNat := by
-  rw [BitVec.toNat_mul, Nat.mod_eq_of_lt h]
 theorem toNat_ofNat_nowrap {n : Nat} (h : n < 2 ^ w) : (BitVec.ofNat w n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
 theorem toNat_ofInt_nowrap {i : Int} (h0 : 0 ≤ i) (h : i < 2 ^ w) : (BitVec.ofInt w i).toNat = i.toNat := by
@@ -465,8 +449,6 @@ theorem imp_junk_junk (h : ∀ r, X r → Junk r) : ∀ r, (Junk ⋆ X) r → Ju
   obtain ⟨r₁, r₂, hd, rfl, ⟨j1, h1⟩, h2⟩ := hx
   obtain ⟨j2, h2⟩ := h _ h2
   exact junk_absorb ⟨r₁, r₂, hd, rfl, h1, ⟨j2, h2⟩⟩
-
-theorem eupd_of_imp (h : ∀ r, P r → X r) : EUpd P X := EUpd.of_imp h
 
 /-- A local update, reordered: the planner's step. -/
 theorem eupd_frame_ac {R P' : FAssn} (h : EUpd X Y) (e1 : P = (X ⋆ R)) (e2 : (Y ⋆ R) = P') :

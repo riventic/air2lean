@@ -84,7 +84,7 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
 1. turns the hypotheses into **facts in normal form**, each once per run and each normalized with
    the facts before it: values of words and pointers as natural numbers, user definitions of
    values unfolded, overflow bits and shifts as values, low and high masks as remainders by
-   `2 ^ x`; and **no wrap-around** where it cannot happen (`toNat_add_nowrap` and friends: the
+   `2 ^ x`; and **no wrap-around** where it cannot happen (`Zig.toNat_add_of_lt` and friends: the
    side condition by the discharger);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
