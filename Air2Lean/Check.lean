@@ -2470,26 +2470,34 @@ private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except S
   checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- A `threadlocal var` (`docs/generated-code.md` §Thread-local storage): one instance per
-thread, initialized from the global's initial value. Only a named, non-`extern` `var` with a
-resolved, wholly defined or wholly `undefined` initial value of a pointer-free, error-free type
-that the model encodes qualifies. -/
+thread, initialized from the global's initial value. A named, non-`extern` `var` with a
+resolved, wholly defined or wholly `undefined` initial value of an error-free type that the
+model encodes qualifies. Its type may hold pointers (`Io.Threaded`'s `Thread.current: ?*Thread`,
+L12): every thread's instance starts with the same initial bytes, so a pointer in the initial
+value must name storage that is the same in every thread, an ordinary global or a function, as
+for any global initializer (`checkGlobal`); a pointer into a `threadlocal` global is rejected
+by `checkNoThreadlocalConstant`. -/
 private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
-      only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
-      storage"
+      only for a named, non-`extern` `var` with an initial value in error-free storage"
   if g.name.isNone then fail "it has no name"
   if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
   if g.isConst then fail "it is `const`"
   let some init := g.init | fail "the AIR file has no initial value"
   if init.hasNestedUndef then fail "a partly `undefined` initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  -- The finite error-storage fragment tracks error-bearing storage per global block; a
+  -- thread-local instance is a block per thread.
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
   checkNullConstants f.name f.types f.layouts init
+  checkGlobalAliasConstants f init
+  checkLlvmPayloadConstants f init
+  checkPointerPresence init fun k =>
+    s!"{f.name}: `threadlocal` global {what}: a pointer constant without a global ({k}) is \
+      outside the subset"
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- The globals that the pointer constants of `v` point into, at any depth. -/
 partial def Val.ptrGlobals (v : Val) : Array Nat :=
