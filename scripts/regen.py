@@ -177,11 +177,11 @@ def step_coverage(check):
 
 
 def step_pins(check):
-    """Input pins of the L04 try-pointers integration (check-artifacts.py): the emitter, its
-    retained translation and the exporter they were taken with."""
+    """Input pins of the L04 try-pointers integration (check-artifacts.py): its retained
+    translation and the exporter it was taken with. Outputs are pinned, not translator sources:
+    check.sh and gen-integrity.py re-translate and compare the output itself."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
     pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
-                'current_emitter_sha256': digest('Air2Lean/Emit.lean'),
                 'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
             'tests/roadmap/try-pointers/integration-qualification.json': {
                 'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}

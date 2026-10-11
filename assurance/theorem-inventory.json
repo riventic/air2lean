@@ -1336,6 +1336,172 @@
       "sources": {
         "Proofs.Floatops.Proofs": "95f4278866d3f3f23fd6a56a47b8e4fecc8c6804b38eddbb737a8e224acfeed9"
       }
+    },
+    "0.15.2-linux-aarch64-threadsync": {
+      "zig": "0.15.2",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "threadsync=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup",
+        "Proofs.Threadsync.Handoff"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-11T15:32:13.437660+00:00",
+      "elapsed_seconds": 41.473,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "881dbeb22aa87ba2361c8b0008daf0b0fa8d79005350a281d47abceed8397514",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Threadsync.Deadline",
+        "Proofs.Threadsync.Handoff",
+        "Proofs.Threadsync.Lock",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup"
+      ],
+      "gens": {
+        "threadsync": {
+          "path": "tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean",
+          "sha256": "9c5fae485e96f531326ffe9e2df11edf8b67fce1390ce4fb076d341e6f72226c"
+        }
+      },
+      "sources": {
+        "Proofs.Threadsync.Deadline": "ae4aa270b02c0d50b8e2ca19c50463fad8ac481693650fb83b5da8f850d471c2",
+        "Proofs.Threadsync.Handoff": "1416a8ce19f722e8b83f390af2d0bacc090fda3b48c2a8bd91a093c83316aaa8",
+        "Proofs.Threadsync.Lock": "334c3dd406f1b3b3db177d2ead862ab4549b2a596afbb7d0d2810cfddfc95ca8",
+        "Proofs.Threadsync.Mutex": "59d47b252fcc303dbb02131d443dd9a5af35b79e8647f25360c036f092bdc5d6",
+        "Proofs.Threadsync.WaitGroup": "2d0a0f92fbac92427150339d4567b7b32172045e84b9a939ee760556bf19d764"
+      }
+    },
+    "0.15.2-linux-aarch64-floatops": {
+      "zig": "0.15.2",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-11T15:30:55.762283+00:00",
+      "elapsed_seconds": 9.851,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "51b080e72412dbafbe8197d8cd4a9290291be3db7635c95e8ce47cb189aa10f5",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean",
+          "sha256": "50c0386c9a290e3f43a02e9aaece57ae5f49b4fd67ee90de9565ca896c4b46b9"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+      }
+    },
+    "0.16.0-linux-aarch64-floatops": {
+      "zig": "0.16.0",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-11T15:29:25.544541+00:00",
+      "elapsed_seconds": 10.546,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "aa26cb90e8f3db3f466e6fcf2d3b3796aaec2ef2f897eb88d98d8a8752293429",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean",
+          "sha256": "4d70eaac559b6ada95b12475c8246bcf72b99451d81e54d8bd3f492f6f1a6790"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+      }
+    },
+    "0.14.1-linux-aarch64-floatops": {
+      "zig": "0.14.1",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-11T15:31:15.960178+00:00",
+      "elapsed_seconds": 9.719,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "fbda28e8ffbea86827872029bcd107a6304498ffe1e11c541c7110182fcb5ec1",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean",
+          "sha256": "50c0386c9a290e3f43a02e9aaece57ae5f49b4fd67ee90de9565ca896c4b46b9"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+      }
     }
   }
 }
