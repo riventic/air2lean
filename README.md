@@ -92,6 +92,13 @@ The [single-file workflow](docs/getting-started.md#translate-your-own-file) incl
 
 ### Before a PR
 
+Run the CI rows your change touches on this Mac before pushing, and let GitHub CI be the
+confirmation: `scripts/local-ci.sh --changed` (or `--part inputs --version 0.16.0`, ...). It reads
+the steps from `ci.yml`, runs macOS rows on the host and Linux rows in Docker (x86_64 under
+Rosetta, aarch64 natively) with persistent caches, and prints a pass/fail table
+([docs/local-ci.md](docs/local-ci.md)). The older `targeted`/`full`/`matrix`/`mutations` modes
+below produce the release-record evidence.
+
 For Linux checks on a Docker host, use the local Ubuntu 24.04 runner (Python 3.12,
 pinned x86_64 Lean/Zig, matching CI's float/export target):
 

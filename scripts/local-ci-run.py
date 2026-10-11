@@ -139,6 +139,16 @@ def row_context(row, root):
     return values
 
 
+def evaluate(expression, text, values):
+    """expression() (scripts/local-ci-steps.py) without `!=`, which it deliberately rejects for
+    the release record; here each `a != b` is decided first and replaced by a truth value."""
+    def operand(token):
+        return token[1:-1] if token.startswith("'") else str(values.get(token, ''))
+    text = re.sub(r"([\w.-]+|'[^']*')\s*!=\s*([\w.-]+|'[^']*')",
+                  lambda m: "'1'" if operand(m[1]) != operand(m[2]) else "''", text)
+    return expression(text, values)
+
+
 def active_steps(workflow, row, expression):
     """Steps whose condition holds before any step ran (step outputs read as empty)."""
     values = row_context(row, Path('/work'))
@@ -150,7 +160,7 @@ def active_steps(workflow, row, expression):
             text = str(condition).replace('!cancelled()', "'1'").replace('failure()', "''")
             text = re.sub(r'steps\.[\w.-]+', "''", text)
             try:
-                if not expression(text, values):
+                if not evaluate(expression, text, values):
                     continue
             except ValueError:
                 pass  # unsure: count the step in
@@ -379,7 +389,7 @@ class Job:
         if condition is None:
             return True
         text = str(condition).replace('!cancelled()', "'1'").replace('failure()', "'1'" if self.failed else "''")
-        return bool(self.expression(text, self.step_values()))
+        return bool(evaluate(self.expression, text, self.step_values()))
 
     def render(self, text):
         return self.render_text(text, self.step_values())
@@ -405,7 +415,7 @@ class Job:
                 inner = re.sub(r"format\('([^']*)',\s*([\w.]+)\)",
                                lambda m: "'%s'" % m[1].replace('{0}', str(self.step_values()[m[2]])), inner)
                 return self.hash_files(re.findall(r"'([^']*)'", inner))[:16]
-            return str(self.expression(inner, self.step_values()))
+            return str(evaluate(self.expression, inner, self.step_values()))
         return re.sub(r'\$\{\{(.*?)\}\}', sub, str(text))
 
     def do_cache(self, step):
@@ -551,6 +561,13 @@ class Job:
                     status = self.do_memo(step, code, env)
                 else:
                     status = self.run_code(self.render(code), env, self.workspace)
+                    if status == SIGSEGV_STATUS and re.search(r'\b(lake|lean)\b', code):
+                        # Lean under Rosetta has been seen to segfault on a module that builds fine
+                        # the next time. Lake builds are incremental, so run the step once more; a
+                        # deterministic crash fails again.
+                        self.log.write(b'\nlocal-ci: step exited 139 (SIGSEGV); running it once more\n')
+                        self.say('   step exited 139; running it once more')
+                        status = self.run_code(self.render(code), env, self.workspace)
                     self.read_github_path()
                     if status == 0 and self.zig_air and 'build.sh' in code \
                             and (self.workspace / self.zig_air[0]).is_dir():
@@ -568,6 +585,9 @@ class Job:
             self.say('   (continue-on-error step failed; the row will be reported failed)')
         elif status:
             raise StepFailed(name, status)
+
+
+SIGSEGV_STATUS = 139
 
 
 class StepFailed(Exception):
