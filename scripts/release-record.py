@@ -251,7 +251,7 @@ def native_plan(name, job, commands, expression):
                 continue
             try:
                 applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
-            except (ValueError, IndexError) as error:
+            except (ValueError, IndexError, KeyError) as error:
                 raise ReleaseError('%s: %s step %r: unsupported condition: %s' % (WORKFLOW, name, step['name'], error))
             commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
             (gates if applies else skipped).append(step['name'])

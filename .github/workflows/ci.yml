@@ -446,6 +446,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/compat.py check
+          python3 scripts/ci-matrix.py check
           python3 -m unittest discover -s tests/roadmap/distribution -v
 
       # Offline fixture repositories (docs/release-record.md). The ledger check verifies each
