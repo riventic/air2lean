@@ -40,7 +40,15 @@ def setUpModule():
     global TEMPORARY, TEMPLATE
     TEMPORARY = tempfile.TemporaryDirectory()
     TEMPLATE = Path(TEMPORARY.name).resolve() / 'template'
-    for name in tracked(*TREES, *FILES, *POLICY):
+    # The fixtures' manifest, pins and receipt are whole-tree generated files (assurance/generated.json,
+    # docs/ci.md): not tracked, materialized in the checkout (CI's `provenance` job, or
+    # scripts/generated.py). The template commits them, as the fixture copies these tests edit.
+    registry = json.loads((ROOT / 'assurance/generated.json').read_text())
+    generated = [p for g in registry['groups'] if g['name'] in ('provenance', 'provenance-gap') for p in g['paths']]
+    missing = [p for p in generated if not (ROOT / p).is_file()]
+    if missing:
+        raise unittest.SkipTest('provenance fixtures not materialized (scripts/generated.py): %s' % missing[0])
+    for name in tracked(*TREES, *FILES, *POLICY) + generated:
         target = TEMPLATE / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target, follow_symlinks=False)
