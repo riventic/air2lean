@@ -150,6 +150,16 @@ fn writeAll(fd: std.posix.fd_t, bytes: []const u8) void {
     while (done < bytes.len) done += compat.write(fd, bytes[done..]) catch return;
 }
 
+/// Per-case limits of the forked child (`forkCall`). Generous: a case takes microseconds, and a
+/// limit only has to turn a runaway input into one reported failure instead of a stalled run.
+/// `var` so that a regression fixture can shorten the deadline.
+pub var case_timeout_ns: u64 = 20 * std.time.ns_per_s;
+pub var child_mem_limit: u64 = 4 << 30;
+
+/// The function and input line being run (for the note on a killed case).
+var case_name: []const u8 = "";
+var case_line: usize = 0;
+
 /// Set to the write end of the result pipe by the child right after `fork()`, so `panic` below
 /// can report which safety check tripped without threading state through `@call`.
 var panic_fd: std.posix.fd_t = -1;
@@ -475,6 +485,7 @@ pub fn forkCallBufsWithRenderingAllocator(
         compat.close(fds[0]);
         panic_fd = fds[1];
         compat.silenceStderr();
+        compat.containChild(child_mem_limit);
         // ReleaseSafe's inherited crash handler changes FPE/ILL/SEGV/BUS into ABRT.
         // Keep the original fault signal observable; the parent uses C/R for its phase.
         const crash_defaults = std.posix.Sigaction{
@@ -513,7 +524,27 @@ pub fn forkCallBufsWithRenderingAllocator(
     defer text.deinit(out_gpa);
     var chunk: [4096]u8 = undefined;
     var read_failed = false;
+    var timed_out = false;
+    const started = compat.nowNs();
     while (true) {
+        // A tested call that never returns (an infinite loop, a wedged lock) is killed at the
+        // deadline; without one a single such input stalls the whole run.
+        const elapsed = compat.nowNs() - started;
+        if (elapsed >= case_timeout_ns) {
+            timed_out = true;
+            break;
+        }
+        const wait_ms: i32 = @intCast(@min((case_timeout_ns - elapsed) / std.time.ns_per_ms + 1, 1 << 30));
+        switch (compat.pollReadable(fds[0], wait_ms)) {
+            .timeout => continue,
+            .readable => {},
+            .failed => {
+                read_failed = true;
+                compat.close(fds[0]);
+                read_open = false;
+                break;
+            },
+        }
         const n = std.posix.read(fds[0], &chunk) catch {
             read_failed = true;
             // A writer must not remain blocked on an undrained pipe while we wait.
@@ -524,9 +555,18 @@ pub fn forkCallBufsWithRenderingAllocator(
         if (n == 0) break;
         try text.appendSlice(out_gpa, chunk[0..n]);
     }
+    if (timed_out) {
+        compat.close(fds[0]);
+        read_open = false;
+        std.posix.kill(pid, std.posix.SIG.KILL) catch {};
+    }
     const wr = compat.waitpid(pid, 0);
     child_reaped = true;
     if (read_failed) return harnessFailure();
+    if (timed_out) {
+        std.debug.print("harness: {s} input {d} killed after {d} ms\n", .{ case_name, case_line, case_timeout_ns / std.time.ns_per_ms });
+        return harnessFailure();
+    }
     // Only synchronous fault signals during the tested call are semantic observations.
     // Resource kills, cancellation and renderer-stage signals remain harness failures.
     if (std.posix.W.IFSIGNALED(wr.status) and std.mem.eql(u8, text.items, "C")) {
@@ -621,8 +661,11 @@ fn forEachValue(
     defer metadata_writer = null;
 
     var lines = std.mem.splitScalar(u8, content, '\n');
+    case_name = ex ++ "/" ++ name;
+    case_line = 0;
     while (lines.next()) |line| {
         if (line.len == 0) continue;
+        case_line += 1;
         var parsed = std.json.parseFromSlice(std.json.Value, gpa, line, .{}) catch |err| {
             try metadata.writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
             return err;

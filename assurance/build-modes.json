@@ -64,6 +64,10 @@
         },
         {
           "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-linux--ReleaseSafe--llvm.json"
+        },
+        {
+          "kind": "run",
           "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseSafe--llvm.json"
         },
         {
@@ -72,6 +76,7 @@
         }
       ],
       "targets": [
+        "aarch64-linux",
         "aarch64-macos",
         "x86_64-linux"
       ],
@@ -104,6 +109,10 @@
         },
         {
           "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-linux--ReleaseFast--llvm.json"
+        },
+        {
+          "kind": "run",
           "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseFast--llvm.json"
         },
         {
@@ -112,6 +121,7 @@
         }
       ],
       "targets": [
+        "aarch64-linux",
         "aarch64-macos",
         "x86_64-linux"
       ],
@@ -139,6 +149,10 @@
       "evidence": [
         {
           "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-linux--ReleaseSmall--llvm.json"
+        },
+        {
+          "kind": "run",
           "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseSmall--llvm.json"
         },
         {
@@ -147,6 +161,7 @@
         }
       ],
       "targets": [
+        "aarch64-linux",
         "aarch64-macos",
         "x86_64-linux"
       ],
@@ -174,6 +189,10 @@
       "evidence": [
         {
           "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-linux--Debug--llvm.json"
+        },
+        {
+          "kind": "run",
           "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--Debug--llvm.json"
         },
         {
@@ -182,6 +201,7 @@
         }
       ],
       "targets": [
+        "aarch64-linux",
         "aarch64-macos",
         "x86_64-linux"
       ],

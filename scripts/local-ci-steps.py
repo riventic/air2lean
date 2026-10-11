@@ -209,12 +209,12 @@ def call(command, **kwargs):
 import yaml
 
 workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
-# The Q05 `macos`, T04 `aarch64-linux` and L02 `bitops-native-arm` jobs need native runners;
+# The Q05 `macos`, T04 `aarch64-linux`, T06 `build-modes-aarch64-linux` and L02 `bitops-native-arm` jobs need native runners;
 # local CI (an x86_64 Linux container) reproduces only the test job, and
 # scripts/release-record.py requires GitHub evidence for their gates. `lake` only pre-builds the
 # cache that the test rows restore (local-ci.sh --prepare builds it here), and `all-checks` only
 # aggregates job results.
-SKIPPED_JOBS = {'macos', 'aarch64-linux', 'bitops-native-arm', 'lake', 'all-checks'}
+SKIPPED_JOBS = {'macos', 'aarch64-linux', 'build-modes-aarch64-linux', 'bitops-native-arm', 'lake', 'all-checks'}
 if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
     raise ValueError('local CI supports only the test job (and skips %s); '
                      'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
