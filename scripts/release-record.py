@@ -224,6 +224,24 @@ NATIVE_JOBS = {
 SUPPORT_JOBS = {'lake', 'all-checks'}
 
 
+def row_gates(job, row, wanted, expression, where):
+    """(gates, not applicable) among the `wanted` step names of one matrix row (or `{}`)."""
+    context = {'matrix.%s' % key: value for key, value in row.items()}
+    runner = str(job.get('runs-on', ''))
+    context.update({'runner.os': 'macOS' if runner.startswith('macos') else 'Linux', 'github.workspace': '/work'})
+    gates, skipped = [], []
+    for step in job.get('steps') or []:
+        if step['name'] not in wanted:
+            continue
+        condition = step.get('if', True)
+        try:
+            applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
+        except (ValueError, IndexError, KeyError) as error:
+            raise ReleaseError('%s: %sstep %r: unsupported condition: %s' % (WORKFLOW, where, step['name'], error))
+        (gates if applies else skipped).append(step['name'])
+    return gates, skipped
+
+
 def native_plan(name, job, commands, expression):
     """A native job (`NATIVE_JOBS`) per matrix row (GitHub's row name), or once without a matrix.
 
@@ -231,7 +249,7 @@ def native_plan(name, job, commands, expression):
     the test job's). A step whose condition reads another step's outputs (a cache hit) is tool
     setup, not a gate; other conditions are evaluated per row as in the test job.
     """
-    rows = [None]
+    rows = [{}]
     if job.get('strategy') is not None:
         rows = ((job['strategy'].get('matrix') or {}).get('include')) or []
         if not rows or any(not isinstance(row, dict) for row in rows):
@@ -240,22 +258,15 @@ def native_plan(name, job, commands, expression):
     names = [step.get('name') for step in steps]
     if None in names or len(set(names)) != len(names):
         raise ReleaseError('%s: every %s step needs a unique name' % (WORKFLOW, name))
+    wanted = {step['name'] for step in steps
+              if 'run' in step and 'steps.' not in str(step.get('if', ''))}
+    for step in steps:
+        if step['name'] in wanted:
+            commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
     plans = []
     for row in rows:
-        context = {'matrix.%s' % key: value for key, value in (row or {}).items()}
-        context.update({'runner.os': 'macOS' if name == 'macos' else 'Linux', 'github.workspace': '/work'})
-        gates, skipped = [], []
-        for step in steps:
-            condition = step.get('if', True)
-            if 'run' not in step or (not isinstance(condition, bool) and 'steps.' in str(condition)):
-                continue
-            try:
-                applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
-            except (ValueError, IndexError, KeyError) as error:
-                raise ReleaseError('%s: %s step %r: unsupported condition: %s' % (WORKFLOW, name, step['name'], error))
-            commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
-            (gates if applies else skipped).append(step['name'])
-        plans.append({'name': name if row is None else job_name(name, row), 'matrix': None,
+        gates, skipped = row_gates(job, row, wanted, expression, name + ' ')
+        plans.append({'name': job_name(name, row) if row else name, 'matrix': None,
                       'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': skipped})
     return plans
 
@@ -284,18 +295,7 @@ def build_plan(root, revision):
                 for step in steps if 'run' in step and step['name'] not in setup}
     plan_jobs = []
     for row in rows:
-        context = {'matrix.%s' % key: value for key, value in row.items()}
-        context.update({'runner.os': 'Linux', 'github.workspace': '/work'})
-        gates, skipped = [], []
-        for step in steps:
-            if step['name'] not in commands:
-                continue
-            try:
-                condition = step.get('if', True)
-                applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
-            except (ValueError, IndexError) as error:
-                raise ReleaseError('%s: step %r: unsupported condition: %s' % (WORKFLOW, step['name'], error))
-            (gates if applies else skipped).append(step['name'])
+        gates, skipped = row_gates(job, row, commands, expression, '')
         plan_jobs.append({'name': job_name('test', row), 'matrix': row, 'reproduce': reproduce(row),
                           'gates': gates, 'not_applicable': skipped})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):

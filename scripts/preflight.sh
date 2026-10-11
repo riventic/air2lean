@@ -71,12 +71,11 @@ coverage_check() {
   url=$(zig-patch/toml-get.sh "[\"$version\"]" url) && sha256=$(zig-patch/toml-get.sh "[\"$version\"]" sha256) || return 1
   tarball="$cache/zig-$version.tar.xz"
   if [ ! -f "$tarball" ]; then
-    mkdir -p "$cache" && curl -fsSL --output "$tarball.part" "$url" && mv "$tarball.part" "$tarball" || return 1
+    local part
+    mkdir -p "$cache" && part=$(mktemp "$cache/zig-$version.part.XXXXXX") \
+      && curl -fsSL --output "$part" "$url" && mv "$part" "$tarball" || return 1
   fi
-  python3 -c 'import hashlib, sys
-digest = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
-sys.exit(0 if digest == sys.argv[2] else f"{sys.argv[1]}: sha256 {digest} is not the pinned {sys.argv[2]}")' \
-    "$tarball" "$sha256" || return 1
+  echo "$sha256  $tarball" | shasum -a 256 -c - >/dev/null || return 1
   mkdir "$scratch/$version" && tar -xJf "$tarball" -C "$scratch/$version" --strip-components=1 || return 1
   python3 scripts/coverage.py check --version "$version" --source "$scratch/$version" --os linux \
     --inventory "coverage/$version.json"

@@ -13,9 +13,9 @@ row per version whose hosts include aarch64-macos. Every step of the test job na
 in its `if`; the rows only say which parts exist. Offline: no Zig, Lake or Lean process.
 """
 import argparse
+import importlib.util
 import json
 from pathlib import Path
-import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,19 +23,14 @@ WORKFLOW = '.github/workflows/ci.yml'
 # Its std cannot build the diff harness: translation and proofs only (README, support matrix).
 RESTRICTED = {'0.14.1'}
 ONCE = ('inputs', 'native', 'audit', 'receipt', 'Debug', 'ReleaseFast', 'ReleaseSmall')
-REGIONS = {
-    'test': ('          # BEGIN test rows (scripts/ci-matrix.py write)\n',
-             '          # END test rows\n'),
-    'macos': ('          # BEGIN macos rows (scripts/ci-matrix.py write)\n',
-              '          # END macos rows\n'),
-}
+
+_spec = importlib.util.spec_from_file_location('air2lean_support_matrix', ROOT / 'scripts/support-matrix.py')
+MATRIX = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(MATRIX)
 
 
-def selection(root, version):
-    script = 'source "$1/scripts/example-selection.sh"; air2lean_default_examples "$1" "$2" x86_64'
-    out = subprocess.run(['bash', '-c', script, 'ci-matrix', str(root), version],
-                         check=True, capture_output=True, text=True).stdout
-    return ' '.join(out.split())
+def region(job):
+    return (f'          # BEGIN {job} rows (scripts/ci-matrix.py write)\n', f'          # END {job} rows\n')
 
 
 def rows(root):
@@ -44,33 +39,28 @@ def rows(root):
     versions = [v['version'] for v in compat['zig']['versions']]
     shards = len([l for l in (root/'scripts/mutation-shards.txt').read_text().splitlines() if l.strip()])
 
-    def row(version, part, **extra):
-        restricted = version in RESTRICTED
-        return {'zig': version, 'part': part,
-                'examples': selection(root, version) if restricted else '',
-                'full': not restricted and not extra.get('mutate'), 'mutate': False, **extra}
+    def row(version, part, **shard):
+        restricted, mutate = version in RESTRICTED, part == 'mutation'
+        examples = ' '.join(MATRIX.default_selection(root, version)) if restricted else ''
+        return {'zig': version, 'part': part, 'examples': examples,
+                'full': not restricted and not mutate, 'mutate': mutate, **shard}
 
     ordered = [default] + [v for v in versions if v != default]
     test = [row(v, part) for v in ordered
             for part in ('golden', 'lean') + (ONCE if v == default else ())]
-    test += [row(default, 'mutation', mutate=True, shard=n) for n in range(1, shards + 1)]
+    test += [row(default, 'mutation', shard=n) for n in range(1, shards + 1)]
     macos = [{'zig': v['version']} for v in compat['zig']['versions'] if 'aarch64-macos' in v['hosts']]
     return {'test': test, 'macos': macos}
 
 
 def render(items):
-    out = []
-    for item in items:
-        for i, (key, value) in enumerate(item.items()):
-            text = str(value).lower() if isinstance(value, bool) else (
-                str(value) if isinstance(value, int) else f'"{value}"')
-            out.append(f'          {"- " if i == 0 else "  "}{key}: {text}\n')
-    return ''.join(out)
+    return ''.join(f'          {"- " if i == 0 else "  "}{key}: {json.dumps(value)}\n'
+                   for item in items for i, (key, value) in enumerate(item.items()))
 
 
 def regenerate(root, text):
     for job, items in rows(root).items():
-        begin, end = REGIONS[job]
+        begin, end = region(job)
         if text.count(begin) != 1 or text.count(end) != 1:
             raise ValueError(f'{WORKFLOW}: the {job} job needs one generated matrix region')
         start, stop = text.index(begin) + len(begin), text.index(end)

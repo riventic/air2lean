@@ -353,7 +353,7 @@ class MacosJobTests(Repo):
 
     def test_other_jobs_and_macos_conditions_fail_closed(self):
         self.write('.github/workflows/ci.yml', self.workflow + '  lint:\n    runs-on: ubuntu-24.04\n')
-        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, aarch64-linux, all-checks, bitops-native-arm, lake, macos jobs'):
+        with self.assertRaisesRegex(rr.ReleaseError, 'only the test, .* jobs are qualified'):
             rr.build_plan(self.repo, self.commit('extra job'))
         self.write('.github/workflows/ci.yml', self.workflow.replace(
             'run: echo macos unit', 'if: failure()\n        run: echo macos unit'))

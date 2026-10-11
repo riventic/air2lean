@@ -25,7 +25,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # An exact entry means there is nothing to build: skip the download, the install and the build.
+      - name: Look up the Lake build (root package)
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          lookup-only: true
+
       - name: Install elan
+        if: steps.lookup.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           url=$(zig-patch/toml-get.sh '[ci.elan]' url)
@@ -37,21 +49,34 @@ jobs:
           ./elan-init --default-toolchain none -y
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # Saved only by this job, after a successful build: the test rows restore it read-only.
-      - name: Cache Lake build (root package)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # The latest older entry, built on incrementally.
+      - name: Restore an older Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
           restore-keys: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Prune absent-source Lake modules
+        if: steps.lookup.outputs.cache-hit != 'true'
         run: python3 scripts/local-ci-steps.py --prune-cache
 
       - name: Build the root package and its proofs
+        if: steps.lookup.outputs.cache-hit != 'true'
         run: lake build ZigLean Air2Lean air2lean Proofs AssuranceTools
+
+      # Saved only by this job, after a successful build: the test rows restore it read-only.
+      - name: Save the Lake build (root package)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
 
   # One row per (Zig version, part): scripts/ci-matrix.py derives the rows from
   # compatibility.json. Every step names its part in its `if`; a version has `golden` (pipeline,
