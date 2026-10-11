@@ -37,8 +37,9 @@ def exporter_digest(case, manifest, record):
     return expected
 
 
-def generated_inventory(repo, case, manifest, record):
-    """An explicit current-emitter input variant retains every historical AIR identity."""
+def generated_inventory(case, manifest, record):
+    """An emitter-integration record retains every historical AIR identity and pins the current
+    generated output."""
     expected = dict(manifest['artifacts'])
     path = case / 'emitter-integration.json'
     if not path.exists():
@@ -89,7 +90,7 @@ def inspect(repo=REPO, case=CASE, record=False, fresh_air=None):
             expected = exporter_digest(case, manifest, record)
         if digest(repo / manifest[role]) != expected:
             raise ValueError('stale ' + role)
-    expected_artifacts = generated_inventory(repo, case, manifest, record)
+    expected_artifacts = generated_inventory(case, manifest, record)
     air_dir = Path(fresh_air) if fresh_air is not None else case / 'air/0.16.0'
     files = sorted(air_dir.glob('*.json'))
     data = [HELPERS['parse_json'](path.read_text()) for path in files]
