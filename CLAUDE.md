@@ -10,6 +10,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - **Full language support, not snippets.** Implement general support for a Zig feature, type, std
   module or target. Do not prove one code snippet in a way that breaks when the code changes. A
   proof should follow from general semantics and reusable rules.
+- **General tactics over module-specific ones.** A proof about a module supplies its invariant and
+  little else; the generated code is walked by general tactics and rules in the libraries
+  (`ZigLean`). When a module-specific tactic seems necessary, generalize it into the library
+  instead. Module-specific tactic glue is debt to be removed.
 - **One mechanism over special cases.** When something fails, fix the underlying model, translator
   rule or proof rule. Do not add per-case exceptions, premises or allow-lists.
 - **Soundness first.** A soundness finding outranks new features. Every finding needs a concrete
