@@ -98,19 +98,19 @@ private def failures (rs : Array (Except ErrName ThreadId)) : Nat :=
 private def budgetRuns : IO Unit := do
   for seed in List.range 12 do
     let oracle := fun turn => seed + turn * 7
-    match (Sched.run dispatch 200 oracle fiveSpawns { spawnLimit := some 2 }).run with
+    match (Sched.run ⟨.threaded 1, .fallible⟩ dispatch 200 oracle fiveSpawns { spawnLimit := some 2 }).run with
     | some (.ok (rs, m)) =>
       require (failures rs ≥ 3 && m.threads.size ≤ 3) "budget exceeded"
       require (rs.all fun r => match r with | .error e => spawnErrors.contains e | .ok _ => true)
         "undeclared spawn error under budget"
       require (m.threads.all (fun r => r.spawner != 0 || r.joined)) "budgeted child leaked"
     | _ => throw (IO.userError "budgeted fixture did not return safely")
-  match (Sched.run dispatch 200 (fun _ => 0) fiveSpawns { spawnLimit := some 2 }).run with
+  match (Sched.run ⟨.threaded 1, .fallible⟩ dispatch 200 (fun _ => 0) fiveSpawns { spawnLimit := some 2 }).run with
   | some (.ok (rs, _)) =>
     require (failures rs == 3 && (rs.extract 0 2).all (fun r => match r with | .ok _ => true | _ => false))
       "assignments below the budget were refused"
   | _ => throw (IO.userError "budgeted fixture did not return safely")
-  match (Sched.run dispatch 20 (fun _ => 0) eagerCaller { spawnLimit := some 0 }).run with
+  match (Sched.run ⟨.threaded 1, .fallible⟩ dispatch 20 (fun _ => 0) eagerCaller { spawnLimit := some 0 }).run with
   | some (.ok (value, m)) =>
     require (value == 41 && m.threads.size == 1 && m.groups.isEmpty)
       "exhausted budget did not force the caller fallback"
@@ -125,7 +125,7 @@ def main : IO Unit := do
   let fixtureChoicePeriod := 6
   for seed in List.range fixtureChoicePeriod do
     let oracle := fun turn => seed + turn * 11
-    match (Sched.run dispatch 80 oracle failedCalls {}).run with
+    match (Sched.run ⟨.threaded 1, .fallible⟩ dispatch 80 oracle failedCalls {}).run with
     | some (.ok ((first, second), m)) =>
       require (m.groups.isEmpty) "group entry leaked after await/failure"
       require (m.threads.all (fun r => r.spawner != 0 || r.joined)) "unjoined child leaked"
@@ -141,7 +141,7 @@ def main : IO Unit := do
       | .ok _ => pure ()
     | _ => throw (IO.userError "finite resource fixture did not return safely")
   require (errors.size == 5 && concurrentFailure) "oracle suite did not cover failure alternatives"
-  match (Sched.run dispatch 20 (fun _ => 1) eagerCaller {}).run with
+  match (Sched.run ⟨.threaded 1, .fallible⟩ dispatch 20 (fun _ => 1) eagerCaller {}).run with
   | some (.ok (value, m)) =>
     require (value == 41 && m.threads.size == 1 && m.groups.isEmpty)
       "eager fallback created a child/group entry or used another current thread"

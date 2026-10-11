@@ -10,6 +10,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - **Full language support, not snippets.** Implement general support for a Zig feature, type, std
   module or target. Do not prove one code snippet in a way that breaks when the code changes. A
   proof should follow from general semantics and reusable rules.
+- **General tactics over module-specific ones.** A proof about a module supplies its invariant and
+  little else; the generated code is walked by general tactics and rules in the libraries
+  (`ZigLean`). When a module-specific tactic seems necessary, generalize it into the library
+  instead. Module-specific tactic glue is debt to be removed.
 - **One mechanism over special cases.** When something fails, fix the underlying model, translator
   rule or proof rule. Do not add per-case exceptions, premises or allow-lists.
 - **Soundness first.** A soundness finding outranks new features. Every finding needs a concrete
@@ -46,4 +50,11 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - Run heavy builds through `scripts/build-guard.py`. Regenerate generated files (coverage, premise
   index, theorem inventory, pins, provenance) rather than hand-merging them.
 - Run `scripts/preflight.sh` before every push: it checks every generated file CI checks for staleness, in minutes.
+- **Local first, CI confirms.** Every CI part can be run on the development Mac, and a PR is pushed
+  only after the parts it touches are green locally. CI is the final, independent check before
+  merge, never the test loop. Do not push to find out whether something is still red.
+- **x86_64-linux runs locally under Rosetta.** Native x86_64-linux runs (build modes, native
+  differential, harnesses) go in a `--platform linux/amd64` Docker container, which runs under
+  Rosetta at near-native speed. aarch64-linux runs go in a native `linux/arm64` container, and
+  aarch64-macos runs on the host. No platform needs CI just to get a result.
 - Agents keep a handoff file in `~/.cache/air2lean/handoffs/` and use private scratch directories.

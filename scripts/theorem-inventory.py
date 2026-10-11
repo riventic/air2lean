@@ -118,9 +118,13 @@ def declarations(text: str) -> dict[str, dict]:
 
 
 def all_schedules_statement(statement: str) -> bool:
-    """`Sched.run dispatch fuel o …` with `fuel` and `o` bound by the statement itself."""
-    for m in re.finditer(r'Sched\.run\s+\S+\s+(\w+)\s+(\w+)', statement):
-        fuel, oracle = m.groups()
+    """`Sched.run env dispatch fuel o …` with `fuel` and `o` bound by the statement itself (the
+    environment `env` is explicit: a bound variable or a literal)."""
+    for m in re.finditer(r'Sched\.run\b', statement):
+        args = _sched_args(statement, m.end(), 4)
+        if len(args) < 4 or not re.fullmatch(r'\w+', args[2]) or not re.fullmatch(r'\w+', args[3]):
+            continue
+        fuel, oracle = args[2], args[3]
         if (re.search(r'[({]\s*' + fuel + r'\b[^:]*:\s*Nat\s*[)}]', statement) and
                 re.search(r'[({][^:]*\b' + oracle + r'\b[^:]*:\s*Nat\s*→\s*Nat\s*[)}]', statement)):
             return True
@@ -131,9 +135,9 @@ def _sched_args(text: str, start: int, count: int) -> list[str]:
     """The next `count` whitespace-separated arguments after `start`, keeping brackets balanced."""
     args, depth, current = [], 0, ''
     for ch in text[start:]:
-        if ch in '([{':
+        if ch in '([{⟨':
             depth += 1
-        elif ch in ')]}':
+        elif ch in ')]}⟩':
             if depth == 0:
                 break
             depth -= 1
@@ -151,11 +155,11 @@ def _sched_args(text: str, start: int, count: int) -> list[str]:
 
 
 def sched_programs(statement: str) -> set[str]:
-    """Head identifiers of the programs run by `Sched.run dispatch fuel o program mem`."""
+    """Head identifiers of the programs run by `Sched.run env dispatch fuel o program mem`."""
     programs = set()
     for m in re.finditer(r'Sched\.run\b', statement):
-        args = _sched_args(statement, m.end(), 4)
-        if len(args) == 4 and (head := re.match(r'[(\s]*([\w.]+)', args[3])):
+        args = _sched_args(statement, m.end(), 5)
+        if len(args) == 5 and (head := re.match(r'[(\s]*([\w.]+)', args[4])):
             programs.add(head.group(1))
     return programs
 

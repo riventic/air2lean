@@ -1111,14 +1111,15 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gK h₉ .joins, hiJ, fun G₄ m₁₁ hg₄ hi₁₁ => ?_⟩)
   obtain ⟨h0₁₁, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₁₁.2.2.shape
   · exfalso; change (G₄ 0).2.2 = _ at h0; rw [hg₄] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun _ => ⟨fun _ => join_run (m := { m₁₁ with current := 0 }) hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the mailbox
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -1148,25 +1149,25 @@ abbrev stdDispatch := dispatch Io_Semaphore_post
 
 /-- **The consumer receives the whole message under every schedule**: every completed run of
 the mailbox client returns 34 (every oracle, every fuel). -/
-theorem mailbox_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
+theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 34 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound stdDispatch G0 (dispatch_spec (semaphore S))
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) stdDispatch G0 (dispatch_spec (semaphore S))
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec (semaphore S) σ io) h
   exact hv
 
 /-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
 (also when the consumer sleeps at the condition first), no lifetime error at the free. -/
-theorem mailbox_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
+theorem mailbox_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec (semaphore S) σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the mailbox client returns 34 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem mailbox_completes :
-    ∃ σ, Witness.okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 34 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 34 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 end Sync.Mailbox

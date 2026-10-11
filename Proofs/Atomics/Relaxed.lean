@@ -493,7 +493,7 @@ theorem read_race {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hc : m.current
   have hsolo : m.solo = false := by
     rcases hi.thr with ⟨-, -, ⟨h1, -⟩ | ⟨-, ⟨r, hr, -, hj⟩, -⟩⟩
     · omega
-    · exact solo_false_of hr hj
+    · exact solo_false_of hr hj.1
   refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) ?_ (err := .illegal)
     (by rw [hk]; rfl) hsolo
   rw [hc]
@@ -713,9 +713,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
 
 /-- **Every result of `mpRelaxed` is 0** (every oracle `o`, every `fuel`): a run where `main`
 reads 1 at the relaxed flag races at `data` and gives no result. -/
-theorem mpRelaxed_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelaxed (mem0 σ)).run = some (.ok (v, m))) : v = .ok 0 := by
-  obtain ⟨_, _, hv⟩ := proto.run_sound dispatch G0 dispatch_spec
+theorem mpRelaxed_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mpRelaxed (mem0 σ)).run = some (.ok (v, m))) : v = .ok 0 := by
+  obtain ⟨_, _, hv⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun h => absurd h (by decide)) rfl (main_spec σ) h
   exact hv
 

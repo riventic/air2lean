@@ -176,9 +176,11 @@ private def freeTests : IO Unit := do
       | some (.ok (false, .write, 2)) => true
       | _ => false) true
   check "destroy retains rawFree semantics without a poison write"
-    (match value (childReadFree false false true) with
+    (match value (childReadFree true false true) with
       | some (.ok (false, .read, 1)) => true
       | _ => false) true
+  check "destroy races with an unjoined child read (the end of a block is a write, audit #3)"
+    (value (childReadFree false false true *> pure ())) (some (.error .illegal))
   check "zero byte free accepts the allocator's zero pointer"
     (value (Allocator.free {} 0 ⟨zeroAllocPtr 1, 5⟩)) (some (.ok ()))
   let bad : MemM Unit := do
