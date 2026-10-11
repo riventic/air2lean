@@ -34,6 +34,9 @@
 #                         also when the test runs in a check tree. Default: tests/diff/out/report.json.
 #   AIR2LEAN_STAGE_TIMEOUT  Seconds per stage (AIR dump, translation, lake build, diff) (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
+#   AIR2LEAN_TARGET       A cross target triple (x86_64-windows-gnu; docs/windows-target.md): export
+#                         and translate for it; its overlays are named by its OS and arch instead of
+#                         the host's. Needs AIR2LEAN_EXAMPLES; the diff test needs AIR2LEAN_DIFF_RUNNER.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -95,8 +98,25 @@ host_arch=$(uname -m)
 # aarch64-linux AIR is exported for the baseline CPU (`generic`): the translator rejects a profile
 # with `fullfp16`, whose `f16` `@mulAdd` is fused (docs/floats.md §Targets), and the native
 # harness is built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
-mcpu=''
-if [ "$host_os-$host_arch" = linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
+target_flags=''
+if [ "$host_os-$host_arch" = linux-aarch64 ]; then target_flags=-mcpu=baseline; fi
+# A cross target (AIR2LEAN_TARGET, an arch-os-abi triple such as x86_64-windows-gnu;
+# docs/windows-target.md) is exported for its baseline CPU and named like a host in the overlay
+# directories below (air-windows/, Gen-windows.lean). scripts/diff.sh builds the harness for it
+# and runs it through AIR2LEAN_DIFF_RUNNER. Its examples are selected explicitly.
+if [ -n "${AIR2LEAN_TARGET:-}" ]; then
+  case "$AIR2LEAN_TARGET" in
+    *[!a-z0-9_.-]* | *-*-*-* | -* | *-) echo "error: invalid AIR2LEAN_TARGET: $AIR2LEAN_TARGET" >&2; exit 2 ;;
+    *-*-*) ;;
+    *) echo "error: AIR2LEAN_TARGET must be an arch-os-abi triple: $AIR2LEAN_TARGET" >&2; exit 2 ;;
+  esac
+  [ -n "${AIR2LEAN_EXAMPLES:-}" ] || {
+    echo "error: AIR2LEAN_TARGET needs an explicit AIR2LEAN_EXAMPLES (docs/windows-target.md)" >&2; exit 2; }
+  host_arch=${AIR2LEAN_TARGET%%-*}
+  host_os=${AIR2LEAN_TARGET#*-}
+  host_os=${host_os%%-*}
+  target_flags="-target $AIR2LEAN_TARGET -mcpu=baseline"
+fi
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
   # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
@@ -128,7 +148,7 @@ for ex in $examples; do
   done
   echo "== $ex: dumping AIR ==" >&2
   workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
-    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $mcpu "examples/$ex/$ex.zig"
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $target_flags "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
     echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2
@@ -145,6 +165,11 @@ for ex in $examples; do
   translate_args=""
   if [ -f "examples/$ex/translate.args" ]; then
     translate_args=$(cat "examples/$ex/translate.args")
+  fi
+  # examples/<ex>/translate-<os>.args: more arguments for that target OS only (an admission that
+  # only that OS needs, such as --assume-x87-extended on windows).
+  if [ -f "examples/$ex/translate-$host_os.args" ]; then
+    translate_args="$translate_args $(cat "examples/$ex/translate-$host_os.args")"
   fi
   generated="$cmp_dir/Gen.lean"
   workflow_run_stage lake exe air2lean "$air_dir" -o "$generated" --namespace "$Ex" --prefix "$ex." $translate_args

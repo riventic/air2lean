@@ -2,13 +2,14 @@ import ZigLean.VecMem
 import ZigLean.Float.Allowed
 import ZigLean.Mem.Thread
 
-/-! T04: the model's side of the two aarch64 profiles' recorded probe results
-(`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`, `docs/aarch64-abi.md`).
+/-! T04: the model's side of the recorded probe results of the aarch64 profiles and of
+x86_64-windows-gnu (`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`,
+`docs/aarch64-abi.md`, `docs/windows-target.md`).
 
 * Kernel-checked: for each profile, the recorded sizes and alignments of the probed integers,
   floats (incl. that profile's `c_longdouble`), vectors and atomic cells, and its atomic width
   limit, are the model's (`Zig.Enc`, `Zig.intSize`/`intAlign`, `Zig.packedVecLayout`)
-  — `linuxGnu_layouts`, `macosNone_layouts`.
+  — `linuxGnu_layouts`, `macosNone_layouts`, `windowsGnu_layouts`.
 * Run time, `lake env lean --run tests/roadmap/aarch64-abi/Model.lean TRIPLE FILE`: FILE's layout
   lines must be exactly that profile's kernel-checked table (so the theorem is about that file),
   and each float/atomic result line must be allowed by the model (`Zig.Float.Allowed`: bit for
@@ -76,8 +77,22 @@ def linuxGnu : Recorded := common .f128 16
 /-- aarch64-macos-none, Zig 0.16.0, ReleaseSafe: `long double` is `double`. -/
 def macosNone : Recorded := common .f64 8
 
+/-- x86_64-windows-gnu, ReleaseSafe: `long double` is the x87 `f80` (MinGW), and the baseline
+CPU has no `cx16`, so atomics stop at 64 bits. -/
+def windowsGnu : Recorded :=
+  let r := common .f80 16
+  { r with atomics := r.atomics.filter (·.2.1 ≤ 64), atomicMaxBits := 64 }
+
 theorem linuxGnu_layouts : linuxGnu.consistent = true := by decide
 theorem macosNone_layouts : macosNone.consistent = true := by decide
+theorem windowsGnu_layouts : windowsGnu.consistent = true := by decide
+
+/-- The kernel-checked table of a probed triple. -/
+def table? : String → Option Recorded
+  | "aarch64-linux-gnu" => some linuxGnu
+  | "aarch64-macos-none" => some macosNone
+  | "x86_64-windows-gnu" => some windowsGnu
+  | _ => none
 
 /-- The probed vectors resolve to the bit-packed instances that `packedVecLayout` describes. -/
 example : Enc.size (Vec (BitVec 24) 3) = 16 := rfl
@@ -97,6 +112,7 @@ the exporter's (`checkMemTy`), so it rejects these types in memory on 0.17.0 aar
 
 /-- The rows of a 0.17.0 file whose alignment is 8, not the model's 16. -/
 def layoutDivergences017 (triple : String) : List String :=
+  if !triple.startsWith "aarch64-" then [] else
   ["float f80", "vector f80x2"] ++ (if triple == "aarch64-macos-none" then ["float f128"] else [])
 
 /-- The table that a file of `version` must record: the kernel-checked one, with the 0.17.0
@@ -218,12 +234,39 @@ def divergences : List (String × String) := softF80Divergences ++ paddedDiverge
 
 /-- Zig 0.17.0 compares only the value bits of a padded `cmpxchg` and computes the signed `Max`
 of a padded width, as the model does, so only the soft-float `f80` rows diverge. -/
-def divergencesIn (version : String) : List (String × String) :=
+def aarch64DivergencesIn (version : String) : List (String × String) :=
   if version == "0.17.0" then softF80Divergences
   else if version == "0.14.1" || version == "0.15.2" then divergences ++ [
     ("fop f80 sqrt(2)", "@sqrt of f80 is correct to f64 precision only (compiler_rt before 0.16.0)"),
     ("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")]
   else divergences
+
+/-- x86_64-windows-gnu (`f80` on the x87, as the model). A thread that `CreateThread` makes starts
+with the x87 precision control at 53 bits, so its `f80` division rounds to 53 bits; Zig's
+`WinStartup` resets the main thread to 64 bits from 0.15.2 on, Zig 0.14.1's does not, so there
+every x87 `f80` result of the main thread is rounded to 53 bits too (`docs/windows-target.md`
+§x87 precision control). -/
+def windowsDivergencesIn (version : String) : List (String × String) :=
+  let thread := ("x87 thread", "a CreateThread thread starts with the x87 precision control at 53 bits")
+  let padded := [
+    ("rmw u40 Max 7890abcdef 8987654321", "unsigned Max of a padded u40 compares the sign-extended cell: not the unsigned maximum (padded width)"),
+    ("rmw u40 Min 7890abcdef 8987654321", "unsigned Min of a padded u40 compares the sign-extended cell: not the unsigned minimum (padded width)")]
+  if version == "0.17.0" then [thread]
+  else if version == "0.14.1" then
+    let x87 (row : String) := (row, "Zig 0.14.1's WinStartup leaves the main thread's x87 precision control at 53 bits")
+    [thread, x87 "x87 main", x87 "fop f80 1/3", x87 "fop f80 sqrt(2)", x87 "fop f80 tiny*1.5",
+      x87 "fop f80 min_normal-tiny", x87 "fop f80 mulAdd(1+e,1-e,-1)"] ++ paddedDivergences ++ padded
+  else
+    [thread] ++ paddedDivergences ++ padded ++
+      (if version == "0.15.2" then [("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")] else [])
+
+def divergencesIn (triple version : String) : List (String × String) :=
+  if triple.startsWith "aarch64-" then aarch64DivergencesIn version else windowsDivergencesIn version
+
+/-- `x87 <thread> cw <word> f80_third <bits>`: the control word with 64-bit precision
+(`0x037f`) and the model's `f80` 1/3. -/
+def x87Case (cw third : String) : Bool :=
+  cw == "037f" && (floatCase .f80 "1/3").any (·.allows third)
 
 /-! ## Synchronization rows (run time) -/
 
@@ -277,7 +320,7 @@ adding `per_thread` each, wrapping at the cell width). -/
 def litmusCase : List String → Bool
   | ["mp_release_acquire", "violations", "0", "rounds", _] => true
   | ["sb_seq_cst", "both_zero", "0", "unset", "0", "rounds", _] => true
-  | ["counters", "u8", a, "u24", b, "u128", c, "cas_u64", d, "per_thread", n] =>
+  | ["counters", "u8", a, "u24", b, _, c, "cas_u64", d, "per_thread", n] =>
     match n.toNat? with
     | some n => a.toNat? == some (4 * n % 2 ^ 8) && b.toNat? == some (4 * n % 2 ^ 24) &&
         c.toNat? == some (4 * n) && d.toNat? == some (4 * n)
@@ -337,17 +380,19 @@ def parseLayouts (ref : Recorded) (lines : List (List String)) : Except String R
 
 def main (args : List String) : IO UInt32 := do
   let [triple, path] := args
-    | IO.eprintln "usage: Model.lean aarch64-linux-gnu|aarch64-macos-none FILE"; return 2
-  let some ref := (match triple with
-      | "aarch64-linux-gnu" => some linuxGnu | "aarch64-macos-none" => some macosNone | _ => none)
+    | IO.eprintln "usage: Model.lean aarch64-linux-gnu|aarch64-macos-none|x86_64-windows-gnu FILE"; return 2
+  let some ref := table? triple
     | IO.eprintln s!"aarch64-abi: no kernel-checked table for {triple}"; return 2
   let lines := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty) |>.map
     (·.splitOn " " |>.filter (!·.isEmpty))
   let version := lines.findSome? fun l => match l with | ["meta", "zig", v] => some v | _ => none
   let some version := version | IO.eprintln s!"aarch64-abi: {path}: no `meta zig` line"; return 1
   -- Every synchronization row the probe prints must be present (a missing row is not a pass).
-  let required : List (String × Nat) := [("rmw", 110), ("order", 4), ("atomic_ext", 5),
-    ("litmus", 3), ("limit", 1 + limitMessages.length)]
+  -- 11 `rmw` rows per probed type: u8/i8, u24/i24, u40/i40, u64/i64 and, with 128-bit atomics,
+  -- u128/i128.
+  let required : List (String × Nat) := [("rmw", if ref.atomicMaxBits == 128 then 110 else 88),
+    ("order", 4), ("atomic_ext", 5), ("litmus", 3), ("limit", 1 + limitMessages.length),
+    ("x87", if triple.startsWith "x86_64-" then 2 else 0)]
   for (kind, n) in required do
     let count := (lines.filter (·.headD "" == kind)).length
     unless count == n do
@@ -382,13 +427,14 @@ def main (args : List String) : IO UInt32 := do
         | _, _ => pure (key, false)
       | "order" :: kind :: cells => pure (s!"order {kind}", orderCase kind cells)
       | "atomic_ext" :: rest => pure (s!"atomic_ext {rest.headD ""}", atomicExtRows.contains rest)
+      | ["x87", thread, "cw", cw, "f80_third", third] => pure (s!"x87 {thread}", x87Case cw third)
       | "litmus" :: rest => pure (s!"litmus {rest.headD ""}", litmusCase rest)
       | ["limit", "atomic_u256", _] => pure ("", true)
       | ["limit", name, msg] => pure (s!"limit {name}", limitMessages.lookup name == some msg)
-      | "fop" :: rest | "atomic" :: rest | "rmw" :: rest | "limit" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
+      | "fop" :: rest | "atomic" :: rest | "rmw" :: rest | "limit" :: rest | "x87" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
       | _ => pure ("", true)
     if key.isEmpty then continue
-    match (divergencesIn version).lookup key, ok with
+    match (divergencesIn triple version).lookup key, ok with
     | none, true => matched := matched + 1
     | some why, false => diverged := diverged ++ [s!"{key}: {why}"]
     | none, false => bad := bad ++ [s!"{key}: the recorded result is not allowed by the model"]
@@ -397,8 +443,9 @@ def main (args : List String) : IO UInt32 := do
     | ["fop", ty, name, _] => some s!"fop {ty} {name}"
     | ["rmw", ty, op, cell, operand, _, _] => some s!"rmw {ty} {op} {cell} {operand}"
     | "atomic" :: name :: _ :: _ :: pad :: _ => some s!"atomic {name} {pad}"
+    | "x87" :: thread :: _ => some s!"x87 {thread}"
     | _ => none
-  for (key, _) in divergencesIn version do
+  for (key, _) in divergencesIn triple version do
     unless keys.contains key do bad := bad ++ [s!"{key}: declared divergence is not in the file"]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
   for b in bad do IO.eprintln s!"aarch64-abi: {b}"

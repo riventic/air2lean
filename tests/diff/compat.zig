@@ -9,7 +9,9 @@
 //! std.heap.GeneralPurposeAllocator to DebugAllocator (an unconditional rename, handled at each
 //! call site instead of here).
 //!
-//! macOS + Linux only (this project's two targets) — no wasi/windows paths.
+//! macOS and Linux, plus the Windows process layer of the harness (`win`, `WinChild`;
+//! docs/windows-target.md): Windows has no fork, so common.zig runs the cases of one function in
+//! a child process and restarts it after a case that ends it. No wasi paths.
 //!
 //! Imported directly (same directory) by common.zig and gen_inputs.zig; wired in as the
 //! `compat` module for tests/floatprobe/probe.zig (scripts/floatprobe.sh), which lives
@@ -18,8 +20,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const is_linux = builtin.os.tag == .linux;
+pub const is_windows = builtin.os.tag == .windows;
 const posix = std.posix;
 const system = posix.system;
+
+/// The descriptor of `write` and of the harness's result channel: a POSIX file descriptor, or a
+/// Windows `HANDLE`.
+pub const Fd = posix.fd_t;
 
 /// True from 0.16.0 onward. Comptime-known, so `if (v16) ... else ...` below only ever
 /// semantically analyzes the branch that applies to the Zig compiling this file.
@@ -72,7 +79,13 @@ pub fn dup2(old_fd: posix.fd_t, new_fd: posix.fd_t) !void {
     }
 }
 
-pub fn write(fd: posix.fd_t, bytes: []const u8) !usize {
+pub fn write(fd: Fd, bytes: []const u8) !usize {
+    if (is_windows) {
+        var written: win.DWORD = 0;
+        const n: win.DWORD = @intCast(@min(bytes.len, 1 << 30));
+        if (win.WriteFile(fd, bytes.ptr, n, &written, null) == 0) return error.Unexpected;
+        return written;
+    }
     if (!v16) return posix.write(fd, bytes);
     if (bytes.len == 0) return 0;
     while (true) {
@@ -108,6 +121,7 @@ pub fn waitpid(pid: posix.pid_t, flags: u32) WaitPidResult {
 
 /// Monotonic clock in nanoseconds (the per-case deadline of common.zig's forkCall).
 pub fn nowNs() u64 {
+    if (is_windows) return win.GetTickCount64() * std.time.ns_per_ms;
     var ts: posix.timespec = undefined;
     _ = system.clock_gettime(.MONOTONIC, &ts);
     return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
@@ -153,12 +167,14 @@ pub fn containChild(mem_limit: u64) void {
 }
 
 pub fn exit(status: u8) noreturn {
+    if (is_windows) win.ExitProcess(status);
     if (!v16) posix.exit(status);
     if (is_linux) std.os.linux.exit_group(status);
     system.exit(status);
 }
 
 pub fn abort() noreturn {
+    if (is_windows) win.ExitProcess(134);
     if (!v16) posix.abort();
     // No raw abort syscall; this path is a harness-bug branch only (a panic outside a forked
     // child), never exercised by a passing test run. 134 = 128 + SIGABRT, the shell convention.
@@ -289,6 +305,209 @@ pub const StdoutWriter = FileT.Writer;
 pub fn stdoutWriter(buffer: []u8) StdoutWriter {
     if (v16) return std.Io.File.stdout().writer(ioCtx(), buffer);
     return std.fs.File.stdout().writer(buffer);
+}
+
+/// The process's standard output (`write`'s descriptor).
+pub fn stdoutFd() Fd {
+    if (is_windows) return win.GetStdHandle(win.STD_OUTPUT_HANDLE).?;
+    return 1;
+}
+
+/// A `Writer` that drops what it is given: the output of a Windows case child, which reports its
+/// results through its own channel (common.zig).
+pub const Discard = struct {
+    buf: [64]u8 = undefined,
+    impl: if (v15) std.Io.Writer.Discarding else void = undefined,
+    w: if (v15) void else Writer = undefined,
+
+    pub fn writer(self: *Discard) *Writer {
+        if (!v15) {
+            self.w = .{ .any = std.io.null_writer.any() };
+            return &self.w;
+        }
+        self.impl = std.Io.Writer.Discarding.init(&self.buf);
+        return &self.impl.writer;
+    }
+};
+
+// -- Windows process layer (docs/windows-target.md) -------------------------------------------
+
+/// kernel32, declared here with the same types on every Zig version (std's Windows bindings
+/// move between versions). Only referenced when the target is Windows.
+pub const win = struct {
+    pub const HANDLE = *anyopaque;
+    pub const BOOL = i32;
+    pub const DWORD = u32;
+    pub const STD_INPUT_HANDLE: DWORD = @bitCast(@as(i32, -10));
+    pub const STD_OUTPUT_HANDLE: DWORD = @bitCast(@as(i32, -11));
+    pub const STD_ERROR_HANDLE: DWORD = @bitCast(@as(i32, -12));
+    pub const STARTF_USESTDHANDLES: DWORD = 0x100;
+    pub const HANDLE_FLAG_INHERIT: DWORD = 1;
+    pub const WAIT_OBJECT_0: DWORD = 0;
+    pub const SECURITY_ATTRIBUTES = extern struct {
+        nLength: DWORD,
+        lpSecurityDescriptor: ?*anyopaque,
+        bInheritHandle: BOOL,
+    };
+    pub const STARTUPINFOW = extern struct {
+        cb: DWORD,
+        lpReserved: ?[*:0]u16 = null,
+        lpDesktop: ?[*:0]u16 = null,
+        lpTitle: ?[*:0]u16 = null,
+        dwX: DWORD = 0,
+        dwY: DWORD = 0,
+        dwXSize: DWORD = 0,
+        dwYSize: DWORD = 0,
+        dwXCountChars: DWORD = 0,
+        dwYCountChars: DWORD = 0,
+        dwFillAttribute: DWORD = 0,
+        dwFlags: DWORD = 0,
+        wShowWindow: u16 = 0,
+        cbReserved2: u16 = 0,
+        lpReserved2: ?*u8 = null,
+        hStdInput: ?HANDLE = null,
+        hStdOutput: ?HANDLE = null,
+        hStdError: ?HANDLE = null,
+    };
+    pub const PROCESS_INFORMATION = extern struct {
+        hProcess: HANDLE,
+        hThread: HANDLE,
+        dwProcessId: DWORD,
+        dwThreadId: DWORD,
+    };
+    pub extern "kernel32" fn GetStdHandle(n: DWORD) callconv(.winapi) ?HANDLE;
+    pub extern "kernel32" fn WriteFile(h: HANDLE, buf: [*]const u8, n: DWORD, written: ?*DWORD, ov: ?*anyopaque) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn ReadFile(h: HANDLE, buf: [*]u8, n: DWORD, read: ?*DWORD, ov: ?*anyopaque) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn PeekNamedPipe(h: HANDLE, buf: ?*anyopaque, n: DWORD, read: ?*DWORD, avail: ?*DWORD, left: ?*DWORD) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn CreatePipe(r: *HANDLE, w: *HANDLE, sa: ?*const SECURITY_ATTRIBUTES, size: DWORD) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn SetHandleInformation(h: HANDLE, mask: DWORD, flags: DWORD) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn CreateProcessW(app: ?[*:0]const u16, cmd: [*:0]u16, pa: ?*anyopaque, ta: ?*anyopaque, inherit: BOOL, flags: DWORD, env: ?*anyopaque, cwd: ?[*:0]const u16, si: *STARTUPINFOW, pi: *PROCESS_INFORMATION) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn WaitForSingleObject(h: HANDLE, ms: DWORD) callconv(.winapi) DWORD;
+    pub extern "kernel32" fn GetExitCodeProcess(h: HANDLE, code: *DWORD) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn TerminateProcess(h: HANDLE, code: u32) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn CloseHandle(h: HANDLE) callconv(.winapi) BOOL;
+    pub extern "kernel32" fn GetModuleFileNameW(m: ?HANDLE, buf: [*]u16, n: DWORD) callconv(.winapi) DWORD;
+    pub extern "kernel32" fn GetCommandLineW() callconv(.winapi) [*:0]const u16;
+    pub extern "kernel32" fn Sleep(ms: DWORD) callconv(.winapi) void;
+    pub extern "kernel32" fn GetTickCount64() callconv(.winapi) u64;
+    pub extern "kernel32" fn ExitProcess(code: u32) callconv(.winapi) noreturn;
+};
+
+/// The command-line flag that makes a harness a case child: `--air2lean-child <case> <line>`.
+const child_flag = "--air2lean-child";
+
+/// The case child's assignment: run the inputs of `name` (`<ex>/<fn>`) from input line `start`
+/// (1-based) on. `null` in the supervising process and on every other OS.
+pub const ChildCase = struct { name: []const u8, start: usize };
+
+var child_case_buf: [256]u8 = undefined;
+
+pub fn childCase() ?ChildCase {
+    if (!is_windows) return null;
+    const line = std.mem.span(win.GetCommandLineW());
+    // The command line is ASCII from `WinChild.spawn`; anything else is not a child's.
+    var ascii: [512]u8 = undefined;
+    if (line.len > ascii.len) return null;
+    for (line, 0..) |c, i| ascii[i] = if (c < 0x80) @intCast(c) else '?';
+    const text = ascii[0..line.len];
+    const at = std.mem.indexOf(u8, text, " " ++ child_flag ++ " ") orelse return null;
+    var it = std.mem.tokenizeScalar(u8, text[at + child_flag.len + 2 ..], ' ');
+    const name = it.next() orelse return null;
+    const start = std.fmt.parseInt(usize, it.next() orelse return null, 10) catch return null;
+    if (name.len > child_case_buf.len) return null;
+    @memcpy(child_case_buf[0..name.len], name);
+    return .{ .name = child_case_buf[0..name.len], .start = start };
+}
+
+/// A case child of this harness: the same executable with `--air2lean-child <case> <line>`, its
+/// standard output a pipe that the supervisor reads (common.zig's `superviseCases`).
+pub const WinChild = struct {
+    process: win.HANDLE,
+    out: win.HANDLE,
+
+    pub fn spawn(case: []const u8, start: usize) !WinChild {
+        var exe: [1024]u16 = undefined;
+        const exe_len = win.GetModuleFileNameW(null, &exe, exe.len);
+        if (exe_len == 0 or exe_len >= exe.len) return error.SpawnFailed;
+        var args_buf: [320]u8 = undefined;
+        const args = try std.fmt.bufPrint(&args_buf, " " ++ child_flag ++ " {s} {d}", .{ case, start });
+        var cmd: [1024 + 2 + 320 + 1:0]u16 = undefined;
+        var n: usize = 0;
+        cmd[n] = '"';
+        n += 1;
+        for (exe[0..exe_len]) |c| {
+            cmd[n] = c;
+            n += 1;
+        }
+        cmd[n] = '"';
+        n += 1;
+        for (args) |c| {
+            cmd[n] = c;
+            n += 1;
+        }
+        cmd[n] = 0;
+        const sa: win.SECURITY_ATTRIBUTES = .{ .nLength = @sizeOf(win.SECURITY_ATTRIBUTES), .lpSecurityDescriptor = null, .bInheritHandle = 1 };
+        var read_end: win.HANDLE = undefined;
+        var write_end: win.HANDLE = undefined;
+        if (win.CreatePipe(&read_end, &write_end, &sa, 1 << 16) == 0) return error.SpawnFailed;
+        defer _ = win.CloseHandle(write_end);
+        errdefer _ = win.CloseHandle(read_end);
+        if (win.SetHandleInformation(read_end, win.HANDLE_FLAG_INHERIT, 0) == 0) return error.SpawnFailed;
+        var si: win.STARTUPINFOW = .{ .cb = @sizeOf(win.STARTUPINFOW), .dwFlags = win.STARTF_USESTDHANDLES,
+            .hStdInput = win.GetStdHandle(win.STD_INPUT_HANDLE), .hStdOutput = write_end,
+            .hStdError = win.GetStdHandle(win.STD_ERROR_HANDLE) };
+        var pi: win.PROCESS_INFORMATION = undefined;
+        if (win.CreateProcessW(null, cmd[0..n :0], null, null, 1, 0, null, null, &si, &pi) == 0)
+            return error.SpawnFailed;
+        _ = win.CloseHandle(pi.hThread);
+        return .{ .process = pi.hProcess, .out = read_end };
+    }
+
+    /// Appends the bytes the child has written so far; `false` when there were none.
+    pub fn readAvailable(self: WinChild, gpa: std.mem.Allocator, into: *std.ArrayListUnmanaged(u8)) !bool {
+        var avail: win.DWORD = 0;
+        if (win.PeekNamedPipe(self.out, null, 0, null, &avail, null) == 0 or avail == 0) return false;
+        var chunk: [4096]u8 = undefined;
+        var got: win.DWORD = 0;
+        if (win.ReadFile(self.out, &chunk, @min(avail, chunk.len), &got, null) == 0) return false;
+        try into.appendSlice(gpa, chunk[0..got]);
+        return got != 0;
+    }
+
+    /// The exit code once the child has ended; `null` while it runs.
+    pub fn exitCode(self: WinChild) ?u32 {
+        if (win.WaitForSingleObject(self.process, 0) != win.WAIT_OBJECT_0) return null;
+        var code: win.DWORD = 0;
+        if (win.GetExitCodeProcess(self.process, &code) == 0) return 0xffff_ffff;
+        return code;
+    }
+
+    pub fn kill(self: WinChild) void {
+        _ = win.TerminateProcess(self.process, 1);
+        _ = win.WaitForSingleObject(self.process, 0xffff_ffff);
+    }
+
+    pub fn close(self: WinChild) void {
+        _ = win.CloseHandle(self.out);
+        _ = win.CloseHandle(self.process);
+    }
+};
+
+/// The legacy fault name of a Windows exception exit code (the POSIX signal of the same fault),
+/// so the native outcome is the one `scripts/panic-policy.tsv` maps on every OS; `null` for
+/// another code.
+pub fn windowsFault(code: u32) ?[]const u8 {
+    return switch (code) {
+        0xC0000094, 0xC0000095 => "SIGFPE", // integer divide by zero, integer overflow (`div`)
+        0xC000001D => "SIGILL", // illegal instruction (`ud2`)
+        0xC0000005 => "SIGSEGV", // access violation
+        0x80000002 => "SIGBUS", // datatype misalignment
+        else => null,
+    };
+}
+
+pub fn sleepMs(ms: u32) void {
+    if (is_windows) win.Sleep(ms);
 }
 
 // -- types (0.17.0) -------------------------------------------------------------------------

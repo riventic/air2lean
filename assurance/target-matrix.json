@@ -99,7 +99,8 @@
     {"profile": "legacy-abi64-le", "reason": "schema 1-11 inputs carry no target; their target is reported as unverified, so no platform is claimed"}
   ],
   "not_declared": [
-    {"target": "wasm32-wasi", "depends_on": ["T02", "T05"], "reason": "32-bit pointer parameterization and native/WASM correspondence are not implemented; WASM execution joins this matrix only once compatibility.json declares it"}
+    {"target": "wasm32-wasi", "depends_on": ["T02", "T05"], "reason": "32-bit pointer parameterization and native/WASM correspondence are not implemented; WASM execution joins this matrix only once compatibility.json declares it"},
+    {"target": "x86_64-windows-gnu", "depends_on": ["docs/windows-target.md Phase 2"], "reason": "the translator accepts the profile, and its probe and differential runs are recorded under Wine (local, pure computations only); it joins this matrix once a windows CI row confirms them natively"}
   ],
   "abi_profiles": [
     {

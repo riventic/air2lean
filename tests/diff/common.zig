@@ -145,7 +145,7 @@ pub const TestAllocator = struct {
 /// writes the number of live allocations after the call, `,"live":<n>`.
 pub var test_alloc: ?*TestAllocator = null;
 
-fn writeAll(fd: std.posix.fd_t, bytes: []const u8) void {
+fn writeAll(fd: compat.Fd, bytes: []const u8) void {
     var done: usize = 0;
     while (done < bytes.len) done += compat.write(fd, bytes[done..]) catch return;
 }
@@ -162,7 +162,7 @@ var case_line: usize = 0;
 
 /// Set to the write end of the result pipe by the child right after `fork()`, so `panic` below
 /// can report which safety check tripped without threading state through `@call`.
-var panic_fd: std.posix.fd_t = -1;
+var panic_fd: ?compat.Fd = null;
 
 /// Installed as this binary's `std.builtin.panic` (see `panic` below): reports `kind` to the
 /// parent and exits nonzero, so a safety panic in the child becomes a normal `waitpid` exit
@@ -179,12 +179,12 @@ fn reportHarnessFailure(kind: []const u8) noreturn {
 fn reportChildFailure(kind: []const u8, tag: u8) noreturn {
     // The parent (not a forked child) panicked: a harness bug, not a tested outcome. Say so.
     // Not `std.debug.panic`: that calls this override again.
-    if (panic_fd < 0) {
+    const fd = panic_fd orelse {
         std.debug.print("harness panic outside a child: {s}\n", .{kind});
         compat.abort();
-    }
-    writeAll(panic_fd, &.{tag});
-    writeAll(panic_fd, kind);
+    };
+    writeAll(fd, &.{tag});
+    writeAll(fd, kind);
     compat.exit(1);
 }
 
@@ -453,7 +453,7 @@ fn renderResult(
     quote_wide: bool,
     bufs: ?[]const Buf,
     rendering_allocator: std.mem.Allocator,
-    fd: std.posix.fd_t,
+    fd: compat.Fd,
 ) !void {
     var aw: compat.Allocating = .init(rendering_allocator);
     defer aw.deinit();
@@ -486,6 +486,7 @@ pub fn forkCallBufsWithRenderingAllocator(
     bufs: ?[]const Buf,
     rendering_allocator: std.mem.Allocator,
 ) !Outcome {
+    if (compat.is_windows) return childCall(Args, args, func, quote_wide, bufs, rendering_allocator);
     const fds = try compat.pipe();
     const pid = try compat.fork();
     if (pid == 0) {
@@ -578,22 +579,38 @@ pub fn forkCallBufsWithRenderingAllocator(
         std.debug.print("harness: {s} input {d} killed after {d} ms\n", .{ case_name, case_line, case_timeout_ns / std.time.ns_per_ms });
         return harnessFailure();
     }
-    // Only synchronous fault signals during the tested call are semantic observations.
-    // Resource kills, cancellation and renderer-stage signals remain harness failures.
-    if (std.posix.W.IFSIGNALED(wr.status) and std.mem.eql(u8, text.items, "C")) {
+    var end: ChildEnd = .other;
+    if (std.posix.W.IFEXITED(wr.status)) {
+        end = .{ .exited = std.posix.W.EXITSTATUS(wr.status) };
+    } else if (std.posix.W.IFSIGNALED(wr.status)) {
         const sig = std.posix.W.TERMSIG(wr.status);
-        // The signal's name is the legacy failure kind: `SIGFPE` matches a model `trap`.
         const faults = .{ .{ std.posix.SIG.FPE, "SIGFPE" }, .{ std.posix.SIG.ILL, "SIGILL" }, .{ std.posix.SIG.SEGV, "SIGSEGV" }, .{ std.posix.SIG.BUS, "SIGBUS" } };
         inline for (faults) |f| {
-            if (sig == f[0]) return .{ .fail = .{ .name = try out_gpa.dupe(u8, f[1]), .kind = .native_signal } };
+            if (sig == f[0]) end = .{ .fault = f[1] };
         }
+    }
+    return decodeChild(&text, end);
+}
+
+/// How the process that ran a case ended: an exit code, a synchronous CPU fault (by its POSIX
+/// signal name, also on Windows: `compat.windowsFault`), or anything else.
+const ChildEnd = union(enum) { exited: u32, fault: []const u8, other };
+
+/// The outcome of one case from the bytes its process wrote (`C`, then `R` and the `V`/`E`
+/// payload, or a `P`/`H` failure kind) and how that process ended. Takes `text`'s memory.
+fn decodeChild(text: *std.ArrayListUnmanaged(u8), end: ChildEnd) !Outcome {
+    // Only synchronous fault signals during the tested call are semantic observations.
+    // Resource kills, cancellation and renderer-stage signals remain harness failures.
+    if (end == .fault and std.mem.eql(u8, text.items, "C")) {
+        // The signal's name is the legacy failure kind: `SIGFPE` matches a model `trap`.
+        return .{ .fail = .{ .name = try out_gpa.dupe(u8, end.fault), .kind = .native_signal } };
     }
     if (text.items.len < 2 or text.items[0] != 'C') return harnessFailure();
     const returned = text.items[1] == 'R';
     const payload_start: usize = if (returned) 2 else 1;
     const payload = text.items[payload_start..];
-    const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
-    const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
+    const exited_ok = end == .exited and end.exited == 0;
+    const exited_fail = end == .exited and end.exited != 0;
     if (exited_fail and payload.len > 1 and (payload[0] == 'P' or payload[0] == 'H')) {
         const kind: OutcomeKind = if (!returned and payload[0] == 'P') .native_panic else .native_harness_failure;
         return .{ .fail = .{ .name = try out_gpa.dupe(u8, payload[1..]), .kind = kind } };
@@ -606,6 +623,89 @@ pub fn forkCallBufsWithRenderingAllocator(
         return .{ .ok = .{ .payload = try text.toOwnedSlice(out_gpa), .kind = kind } };
     }
     return harnessFailure();
+}
+
+// -- Windows (docs/windows-target.md): no fork. The supervising harness runs the inputs of one
+// function in a case child (`compat.WinChild`, the same executable), which writes each case's
+// bytes, as a forked POSIX child writes them, to its standard output, ended by `record_end`. A
+// case that ends the child (a safety panic, a fault) is its last; the supervisor decodes it with
+// the child's exit code and starts a new child at the next input. Cases of one child share its
+// process, so this is for functions without state that outlives a call (every example function
+// that the Windows target runs; docs/windows-target.md §Native evidence).
+
+/// Ends one case's bytes on the child's output (it cannot occur in the rendered JSON).
+const record_end: u8 = 0x1e;
+
+/// A case child's call: the forked child's protocol, written to standard output, and a placeholder
+/// outcome that the child's discarding writer drops.
+fn childCall(
+    comptime Args: type,
+    args: Args,
+    comptime func: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+    rendering_allocator: std.mem.Allocator,
+) !Outcome {
+    const out = compat.stdoutFd();
+    panic_fd = out;
+    writeAll(out, "C");
+    const raw = @call(.auto, func, args);
+    writeAll(out, "R");
+    renderResult(raw, quote_wide, bufs, rendering_allocator, out) catch
+        reportHarnessFailure("harnessRenderFailure");
+    writeAll(out, &.{record_end});
+    panic_fd = null;
+    return .{ .ok = .{ .payload = try out_gpa.dupe(u8, "V"), .kind = .value } };
+}
+
+/// The supervisor's loop for one function with `total` inputs: one outcome per input, in order.
+fn superviseCases(case: []const u8, total: usize, writer: anytype) !void {
+    var next: usize = 1;
+    while (next <= total) {
+        const child = compat.WinChild.spawn(case, next) catch {
+            try writeResult(writer, harnessFailure());
+            next += 1;
+            continue;
+        };
+        defer child.close();
+        var text: std.ArrayListUnmanaged(u8) = .empty;
+        defer text.deinit(out_gpa);
+        var last = compat.nowNs();
+        while (true) {
+            const got = try child.readAvailable(out_gpa, &text);
+            // Every complete record is a case that returned.
+            while (std.mem.indexOfScalar(u8, text.items, record_end)) |i| {
+                var record: std.ArrayListUnmanaged(u8) = .empty;
+                try record.appendSlice(out_gpa, text.items[0..i]);
+                std.mem.copyForwards(u8, text.items, text.items[i + 1 ..]);
+                text.items.len -= i + 1;
+                try writeResult(writer, try decodeChild(&record, .{ .exited = 0 }));
+                record.deinit(out_gpa);
+                next += 1;
+                last = compat.nowNs();
+            }
+            if (got) continue;
+            if (child.exitCode()) |code| {
+                // Drain what the child wrote before it ended.
+                while (try child.readAvailable(out_gpa, &text)) {}
+                if (std.mem.indexOfScalar(u8, text.items, record_end) != null) continue;
+                if (next > total) break;
+                // The case that ended the child (or a child that ended before its next case).
+                const end: ChildEnd = if (compat.windowsFault(code)) |f| .{ .fault = f } else .{ .exited = code };
+                try writeResult(writer, try decodeChild(&text, end));
+                next += 1;
+                break;
+            }
+            if (compat.nowNs() - last >= case_timeout_ns) {
+                child.kill();
+                std.debug.print("harness: {s} input {d} killed after {d} ms\n", .{ case, next, case_timeout_ns / std.time.ns_per_ms });
+                try writeResult(writer, harnessFailure());
+                next += 1;
+                break;
+            }
+            compat.sleepMs(1);
+        }
+    }
 }
 
 pub fn writeResult(writer: anytype, outcome: Outcome) !void {
@@ -662,6 +762,26 @@ fn forEachValue(
 
     const content = try compat.readFileAlloc(gpa, in_path, 4 << 20);
     defer gpa.free(content);
+    if (compat.is_windows) {
+        // A case child runs only its own function's inputs, from its start line on, and leaves
+        // the output files to the supervisor.
+        if (compat.childCase()) |child| {
+            if (!std.mem.eql(u8, child.name, ex ++ "/" ++ name)) return;
+            var discard: compat.Discard = .{};
+            const sink = discard.writer();
+            var child_lines = std.mem.splitScalar(u8, content, '\n');
+            var line_no: usize = 0;
+            while (child_lines.next()) |line| {
+                if (line.len == 0) continue;
+                line_no += 1;
+                if (line_no < child.start) continue;
+                var parsed = try std.json.parseFromSlice(std.json.Value, gpa, line, .{});
+                defer parsed.deinit();
+                try perValue(gpa, parsed.value, sink);
+            }
+            return;
+        }
+    }
     var out_file = try compat.OutFile.open(out_path);
     defer out_file.close();
     const writer = out_file.writer();
@@ -674,6 +794,12 @@ fn forEachValue(
     var lines = std.mem.splitScalar(u8, content, '\n');
     case_name = ex ++ "/" ++ name;
     case_line = 0;
+    if (compat.is_windows) {
+        // Each input is parsed in the case child; here only counted.
+        var total: usize = 0;
+        while (lines.next()) |line| total += @intFromBool(line.len != 0);
+        return superviseCases(case_name, total, writer);
+    }
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         case_line += 1;

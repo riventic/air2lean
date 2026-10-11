@@ -1,0 +1,9 @@
+# Wine for local x86_64-windows runs of pure computations (scripts/wine-run.sh,
+# docs/windows-target.md §Native evidence). Not Windows OS evidence: the authoritative runs are
+# CI's windows job.
+FROM debian:trixie-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends wine64 wine ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+ENV WINEDEBUG=-all WINEPREFIX=/wineprefix
+RUN wine wineboot --init >/dev/null 2>&1 || true

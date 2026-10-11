@@ -22,7 +22,7 @@ const Out = struct {
     fn flush(self: *Out) !void {
         var done: usize = 0;
         while (done < self.len) {
-            const written = try compat.write(1, self.buffer[done..self.len]);
+            const written = try compat.write(compat.stdoutFd(), self.buffer[done..self.len]);
             if (written == 0) return error.BrokenPipe;
             done += written;
         }
@@ -35,6 +35,12 @@ fn rt(comptime T: type, x: T) T {
     const p: *volatile T = &v;
     return p.*;
 }
+
+/// The widest atomic integer of the baseline CPU (Zig's `max_atomic_bits`): 128 on aarch64 and
+/// on an x86_64 with `cx16`, else 64 (the `limit atomic_*` rows record the boundary).
+const atomic_bits = if (builtin.cpu.arch == .aarch64 or
+    (builtin.cpu.arch == .x86_64 and std.Target.x86.featureSetHas(builtin.cpu.features, .cx16))) 128 else 64;
+const AtomicWide = std.math.IntFittingRange(0, (1 << atomic_bits) - 1);
 
 /// `std.meta.Int` is gone from 0.17.0 (`compat.Bits`).
 const Bits = compat.Bits;
@@ -284,7 +290,7 @@ const Litmus = struct {
     var violations: u32 = 0;
     var counter8: u8 = 0;
     var counter24: u24 = 0;
-    var counter128: u128 = 0;
+    var counter_wide: AtomicWide = 0;
     var cas64: u64 = 0;
 
     fn mpProducer() void {
@@ -320,11 +326,51 @@ const Litmus = struct {
         for (0..litmus_rounds / 2) |_| {
             _ = @atomicRmw(u8, &counter8, .Add, 1, .monotonic);
             _ = @atomicRmw(u24, &counter24, .Add, 1, .seq_cst);
-            var seen = @atomicLoad(u128, &counter128, .monotonic);
-            while (@cmpxchgWeak(u128, &counter128, seen, seen + 1, .acq_rel, .monotonic)) |actual| seen = actual;
+            var seen = @atomicLoad(AtomicWide, &counter_wide, .monotonic);
+            while (@cmpxchgWeak(AtomicWide, &counter_wide, seen, seen + 1, .acq_rel, .monotonic)) |actual| seen = actual;
             var seen64 = @atomicLoad(u64, &cas64, .monotonic);
             while (@cmpxchgWeak(u64, &cas64, seen64, seen64 + 1, .acq_rel, .monotonic)) |actual| seen64 = actual;
         }
+    }
+};
+
+/// `x87 <thread> cw <control word> f80_third <1/3 in f80>` (x86 only): the x87 control word and
+/// an `f80` division on the main thread and on a spawned one. The precision control (bits 8-9)
+/// decides how `fdiv` rounds an `f80`: 64 bits (`03`, `0x037f`) as the model computes, or 53
+/// (`02`, `0x027f`), the state Windows gives a thread that `CreateThread` makes
+/// (docs/windows-target.md §x87 precision control).
+const X87 = struct {
+    var thread_cw: u16 = 0;
+    var thread_third: f80 = 0;
+
+    fn cw() u16 {
+        var w: u16 = 0;
+        asm volatile ("fnstcw %[w]"
+            : [w] "=m" (w),
+        );
+        return w;
+    }
+
+    fn third() f80 {
+        return rt(f80, 1.0) / rt(f80, 3.0);
+    }
+
+    fn worker() void {
+        thread_cw = cw();
+        thread_third = third();
+    }
+
+    fn line(out: *Out, name: []const u8, word: u16, value: f80) !void {
+        try out.print("x87 {s} cw {x:0>4} f80_third ", .{ name, word });
+        try hex(out, f80, value);
+        try out.print("\n", .{});
+    }
+
+    fn probe(out: *Out) !void {
+        try line(out, "main", cw(), third());
+        const t = try std.Thread.spawn(.{}, worker, .{});
+        t.join();
+        try line(out, "thread", thread_cw, thread_third);
     }
 };
 
@@ -354,8 +400,8 @@ fn litmus(out: *Out) !void {
         var threads: [4]std.Thread = undefined;
         for (&threads) |*t| t.* = try std.Thread.spawn(.{}, Litmus.counters, .{});
         for (threads) |t| t.join();
-        try out.print("litmus counters u8 {d} u24 {d} u128 {d} cas_u64 {d} per_thread {d}\n", .{
-            Litmus.counter8, Litmus.counter24, Litmus.counter128, Litmus.cas64, litmus_rounds / 2,
+        try out.print("litmus counters u8 {d} u24 {d} {s} {d} cas_u64 {d} per_thread {d}\n", .{
+            Litmus.counter8, Litmus.counter24, @typeName(AtomicWide), Litmus.counter_wide, Litmus.cas64, litmus_rounds / 2,
         });
     }
 }
@@ -370,11 +416,20 @@ pub fn main() !void {
         @tagName(builtin.zig_backend), @tagName(builtin.mode), builtin.zig_version_string,
         @tagName(builtin.cpu.arch.endian()),
     });
-    // The features that decide how floats and atomics lower (LSE: single-instruction atomics
-    // and CASP for 128 bits; otherwise LL/SC loops or outlined helpers).
-    inline for (.{ "fp_armv8", "neon", "fullfp16", "lse", "lse2", "outline_atomics", "rcpc" }) |name| {
-        const enabled = std.Target.aarch64.featureSetHas(builtin.cpu.features, @field(std.Target.aarch64.Feature, name));
-        try out.print("feature {s} {d}\n", .{ name, @intFromBool(enabled) });
+    // The features that decide how floats and atomics lower (aarch64 LSE: single-instruction
+    // atomics and CASP for 128 bits; otherwise LL/SC loops or outlined helpers. x86_64: `cx16`
+    // for 128-bit atomics, `fma`/`f16c` for `@mulAdd` and `f16`).
+    if (builtin.cpu.arch == .aarch64) {
+        inline for (.{ "fp_armv8", "neon", "fullfp16", "lse", "lse2", "outline_atomics", "rcpc" }) |name| {
+            const enabled = std.Target.aarch64.featureSetHas(builtin.cpu.features, @field(std.Target.aarch64.Feature, name));
+            try out.print("feature {s} {d}\n", .{ name, @intFromBool(enabled) });
+        }
+    } else {
+        inline for (.{ "x87", "sse2", "cx16", "fma", "f16c", "avx" }) |name| {
+            const enabled = std.Target.x86.featureSetHas(builtin.cpu.features, @field(std.Target.x86.Feature, name));
+            try out.print("feature {s} {d}\n", .{ name, @intFromBool(enabled) });
+        }
+        try X87.probe(out);
     }
 
     try int(out, u7, 0x55);
@@ -408,11 +463,15 @@ pub fn main() !void {
     try floatCases(out, f128);
 
     inline for (.{ u8, u16, u24, u32, u40, u64, u128 }) |T| {
-        try atomic(out, T, 0x00);
-        try atomic(out, T, 0xff);
+        if (comptime @bitSizeOf(T) <= atomic_bits) {
+            try atomic(out, T, 0x00);
+            try atomic(out, T, 0xff);
+        }
     }
     try out.print("sync cache_line {d}\n", .{std.atomic.cache_line});
-    inline for (.{ u8, i8, u24, i24, u40, i40, u64, i64, u128, i128 }) |T| try rmwOps(out, T);
+    inline for (.{ u8, i8, u24, i24, u40, i40, u64, i64, u128, i128 }) |T| {
+        if (comptime @bitSizeOf(T) <= atomic_bits) try rmwOps(out, T);
+    }
     try orders(out);
     try atomicExt(out);
     try litmus(out);

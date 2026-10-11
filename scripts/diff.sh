@@ -54,6 +54,11 @@
 #                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
 #   AIR2LEAN_DIFF_ZIG_CACHE  Zig global cache dir for the stock-zig builds of this script (the
 #                       harnesses and libm). Unset: Zig's default. CI keeps one per build mode.
+#   AIR2LEAN_TARGET     A cross target triple (x86_64-windows-gnu; docs/windows-target.md): build each
+#                       harness for it and run it through AIR2LEAN_DIFF_RUNNER (scripts/wine-run.sh
+#                       locally; empty natively on Windows). Its pin files are `<bucket>.<Os>-<arch>.txt`
+#                       (`Windows-x86_64`), and an x86_64 target is held to the reference float model.
+#   AIR2LEAN_DIFF_RUNNER  Wrapper command that runs a harness (with AIR2LEAN_TARGET).
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
 #                       (not `asm` on a host that is not x86_64, and not an example whose
 #                       examples/<ex>/zig-versions does not list the zig's version, as in check.sh).
@@ -98,6 +103,13 @@ case "$optimize" in
   *) echo "error: invalid AIR2LEAN_DIFF_OPTIMIZE: $optimize" >&2; exit 1 ;;
 esac
 zig_version=$("$zig_bin" version)
+# The host the harness runs on, as pin files name it: `uname -s`-`uname -m`, or the cross target's
+# OS and architecture (`Windows-x86_64`).
+host_id="$(uname -s)-$(uname -m)"
+if [ -n "${AIR2LEAN_TARGET:-}" ]; then
+  target_os=${AIR2LEAN_TARGET#*-}; target_os=${target_os%%-*}
+  host_id="$(printf '%s' "${target_os:0:1}" | tr '[:lower:]' '[:upper:]')${target_os:1}-${AIR2LEAN_TARGET%%-*}"
+fi
 if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
   examples=$AIR2LEAN_EXAMPLES
 else
@@ -124,14 +136,25 @@ functions_of() {
 }
 
 echo "== building zig harnesses ==" >&2
-build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
+# A runner (a container) must see the harnesses: keep them under the working directory then.
+target_flag='' exe='' runner=()
+if [ -z "${AIR2LEAN_TARGET:-}" ]; then
+  build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
+else
+  mkdir -p .lake
+  build_dir=$(mktemp -d "$PWD/.lake/air2lean-diff.XXXXXX")
+  target_flag="-target $AIR2LEAN_TARGET"
+  case "$AIR2LEAN_TARGET" in *-windows-*) exe=.exe ;; esac
+  # shellcheck disable=SC2206  # a command with its arguments
+  runner=(${AIR2LEAN_DIFF_RUNNER:-})
+fi
 for ex in $examples; do
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
-  # shellcheck disable=SC2086  # $backend_flag is empty or one flag
-  "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$build_dir/$ex" \
+  # shellcheck disable=SC2086  # $backend_flag, $target_flag: empty or flags without spaces
+  "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $target_flag $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$build_dir/$ex$exe" \
     --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" \
     -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig
-  "$build_dir/$ex"
+  ${runner[@]+"${runner[@]}"} "$build_dir/$ex$exe"
 done
 
 diff_phase=build_libm
@@ -338,7 +361,7 @@ pin_of() {
 # host if present (host: `uname -s`-`uname -m`; scripts/diff-report.py's pin_file), else
 # `<bucket>.txt`.
 pin_file() {
-  local own="tests/diff/$1/$2.$(uname -s)-$(uname -m).txt"
+  local own="tests/diff/$1/$2.$host_id.txt"
   if [ -f "$own" ]; then echo "$own"; else echo "tests/diff/$1/$2.txt"; fi
 }
 
@@ -357,9 +380,11 @@ bufs_match() {
   [[ $z == $l ]]
 }
 
-# The reference host of the float model (docs/floats.md).
+# The reference host of the float model (docs/floats.md). A cross target is named like a host
+# (`Windows-x86_64`); x86_64-windows has the reference float lowering, so it gets no host allowance.
 reference_host=0
-if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then reference_host=1; fi
+if [ "$host_id" = Linux-x86_64 ]; then reference_host=1; fi
+case "${AIR2LEAN_TARGET:-}" in x86_64-*) reference_host=1 ;; esac
 
 echo "== comparing ==" >&2
 total_ok=0
@@ -515,7 +540,7 @@ if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
   diff_phase=compare
   python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
     --root "$repo_root" --examples "$examples" --version "$zig_version" \
-    --host "$(uname -s)-$(uname -m)" \
+    --host "$host_id" \
     ${AIR2LEAN_DIFF_OPTIMIZE:+--optimize "$AIR2LEAN_DIFF_OPTIMIZE" --backend "${AIR2LEAN_DIFF_BACKEND:-llvm}"} \
     --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" || mismatch_found=1
 fi

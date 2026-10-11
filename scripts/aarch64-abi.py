@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""T04: qualify one aarch64 profile from native probe output and its versioned expected file.
+"""T04: qualify one target profile from native probe output and its versioned expected file.
 
-  aarch64-abi.py observe --zig ZIG --target TRIPLE [--mode MODE] --output FILE
+  aarch64-abi.py observe --zig ZIG --target TRIPLE [--mode MODE] [--runner CMD] --output FILE
   aarch64-abi.py compare --target TRIPLE [--mode MODE] OBSERVED
-  aarch64-abi.py check   --zig ZIG --target TRIPLE [--mode MODE] [--output FILE]
+  aarch64-abi.py check   --zig ZIG --target TRIPLE [--mode MODE] [--runner CMD] [--output FILE]
 
-TRIPLE is aarch64-linux-gnu or aarch64-macos-none; MODE is ReleaseSafe (default). `observe`
-builds and runs, with the stock compiler ZIG, tests/roadmap/aarch64-abi/probe.zig, L09's
+TRIPLE is aarch64-linux-gnu, aarch64-macos-none or x86_64-windows-gnu
+(docs/windows-target.md); MODE is ReleaseSafe (default). `observe` builds and runs, with the
+stock compiler ZIG, tests/roadmap/aarch64-abi/probe.zig, L09's
 tests/roadmap/vector-layouts/probe.zig, and the limit probes (tests/roadmap/aarch64-abi/limits/)
-that must fail to compile, one result line each; it runs only on the profile's own host (no
-emulator, no cross execution). `compare` compares an observation file line by line with
+that must fail to compile, one result line each; it runs only on the profile's own host. `compare`
+compares an observation file line by line with
 tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt. `check` is observe + compare.
+
+`--runner CMD` runs the probes through a wrapper command instead (scripts/wine-run.sh: Wine in a
+linux/amd64 container) on any host. Its status line names the runner and says
+`"native": false`: a local check of the pure-computation rows, never native qualification
+evidence (the native runs are CI's, docs/windows-target.md §Native evidence).
 
 Every command prints one JSON status line. Exit 0: `match`; 1: `mismatch` (or an error);
 3: `excluded` (wrong host, no expected file for this Zig version). An exclusion is never a
@@ -35,7 +41,8 @@ VECTORS = 'tests/roadmap/vector-layouts/probe.zig'
 COMPAT = 'tests/diff/compat.zig'
 # triple -> (platform.system(), platform.machine() values, Zig -mcpu)
 PROFILES = {'aarch64-linux-gnu': ('Linux', ('aarch64', 'arm64'), 'baseline'),
-            'aarch64-macos-none': ('Darwin', ('arm64',), 'baseline')}
+            'aarch64-macos-none': ('Darwin', ('arm64',), 'baseline'),
+            'x86_64-windows-gnu': ('Windows', ('AMD64', 'x86_64'), 'baseline')}
 MODES = ('ReleaseSafe',)
 # The first compile error of a probe that must be rejected: `<file>.zig:<line>:<col>: error: <message>`.
 LIMIT_ERROR = re.compile(r'\.zig:\d+:\d+: error: (.+)$', re.M)
@@ -58,29 +65,32 @@ def build(zig, target, mode, root, out, compat=True):
     return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600)
 
 
-def run(binary, stream):
-    done = subprocess.run([str(binary)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
-                          check=True)
+def run(binary, stream, runner=()):
+    done = subprocess.run([*runner, str(binary)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          timeout=600 if runner else 60, check=True)
+    # A Windows console writes CRLF only where a program asks; Wine and Windows pass bytes as is.
     return getattr(done, stream).decode('utf-8')
 
 
-def observe(zig, target, mode):
+def observe(zig, target, mode, runner=()):
     system, machines, _ = PROFILES[target]
-    if platform.system() != system or platform.machine() not in machines:
+    if not runner and (platform.system() != system or platform.machine() not in machines):
         raise Excluded(f'{target} runs only natively on {system}/{"|".join(machines)}, '
                        f'not {platform.system()}/{platform.machine()}')
+    exe = '.exe' if system == 'Windows' else ''
     zig = str(Path(zig).resolve(strict=True))
     version = subprocess.run([zig, 'version'], stdout=subprocess.PIPE, check=True,
                              timeout=60).stdout.decode().strip()
     lines = []
-    with tempfile.TemporaryDirectory(prefix='air2lean-t04-') as tmp:
+    # A runner (a container) must see the binaries: keep them under the working directory.
+    with tempfile.TemporaryDirectory(prefix='air2lean-t04-', dir=Path.cwd() if runner else None) as tmp:
         tmp = Path(tmp)
-        for root, binary, stream, compat in ((PROBE, tmp / 'probe', 'stdout', True),
-                                             (VECTORS, tmp / 'vectors', 'stderr', False)):
+        for root, binary, stream, compat in ((PROBE, tmp / f'probe{exe}', 'stdout', True),
+                                             (VECTORS, tmp / f'vectors{exe}', 'stderr', False)):
             built = build(zig, target, mode, root, binary, compat)
             if built.returncode:
                 raise ValueError(f'{root} failed to compile:\n' + built.stderr.decode()[:4096])
-            lines += run(binary, stream).splitlines()
+            lines += run(binary, stream, runner).splitlines()
         # Synchronization boundaries the compiler must reject (widest atomic integer, orderings,
         # operand types): one line each with the first compile error.
         for source in sorted((ROOT / LIMITS).glob('*.zig')):
@@ -111,6 +121,11 @@ def compare(text, target, mode, version):
     return {**status, 'status': 'mismatch', 'diff': diff[:200]}
 
 
+def execution(runner):
+    """How the probes ran: natively, or through a runner, which is no native evidence."""
+    return {'native': not runner, **({'runner': ' '.join(runner)} if runner else {})}
+
+
 def version_of(text):
     found = re.search(r'^meta zig (\S+)$', text, re.M)
     if not found:
@@ -127,6 +142,7 @@ def main(argv=None):
         cmd.add_argument('--mode', default='ReleaseSafe', choices=MODES)
         if name != 'compare':
             cmd.add_argument('--zig', required=True)
+            cmd.add_argument('--runner', help='wrapper command for the probes (not native evidence)')
         if name == 'compare':
             cmd.add_argument('observed', type=Path)
         else:
@@ -137,16 +153,20 @@ def main(argv=None):
             text = args.observed.read_text(encoding='utf-8')
             version = version_of(text)
         else:
-            version, text = observe(args.zig, args.target, args.mode)
+            runner = tuple(args.runner.split()) if args.runner else ()
+            version, text = observe(args.zig, args.target, args.mode, runner)
             if version_of(text) != version:
                 raise ValueError(f'probe reports Zig {version_of(text)}, `zig version` {version}')
             if args.output:
                 args.output.write_text(text, encoding='utf-8')
             if args.action == 'observe':
                 print(json.dumps({'target': args.target, 'mode': args.mode, 'zig': version,
-                                  'status': 'observed', 'output': str(args.output)}))
+                                  'status': 'observed', 'output': str(args.output),
+                                  **execution(runner)}))
                 return 0
         status = compare(text, args.target, args.mode, version)
+        if args.action == 'check':
+            status.update(execution(runner))
     except Excluded as why:
         print(json.dumps({'target': args.target, 'mode': args.mode, 'status': 'excluded',
                           'reason': str(why)}))
