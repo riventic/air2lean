@@ -253,15 +253,18 @@ end Arith
 
 /-! ## Slices -/
 
-/-- Read-only slice element. Out of range ⇒ `outOfBounds`. -/
+/-- Read-only slice element (`slice_elem_val` of a pure function's `[]const T`). An index at or
+past the length is illegal behaviour that only Sema's bounds check (`outOfBounds`) catches, so
+the model checks it itself: `.illegal`, as `Zig.checkIndex` in memory (`docs/illegal-behavior.md`
+row 2). -/
 @[inline] def index {α : Type} (a : Array α) (i : usize) : Result α :=
-  if h : i.toNat < a.size then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < a.size then pure a[i.toNat] else throw .illegal
 
 @[inline] def len {α : Type} (a : Array α) : usize := BitVec.ofNat 64 a.size
 
-/-- Array element (`array_elem_val`). Out of range ⇒ `outOfBounds`. -/
+/-- Array element (`array_elem_val`). Out of range: illegal behaviour, `.illegal` (as `index`). -/
 @[inline] def vindex {α : Type} {n : Nat} (a : Vector α n) (i : usize) : Result α :=
-  if h : i.toNat < n then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < n then pure a[i.toNat] else throw .illegal
 
 /-! ## Optionals -/
 

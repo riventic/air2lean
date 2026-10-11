@@ -112,6 +112,12 @@ structure Ctx where
   /-- The runtime arguments, in parameter order. -/
   args : List Value
   call : Oracle
+  /-- The *view* of a slice: the items that `slice_elem_val` of the instruction `k` reads, instead
+  of reading memory. `execFunc` has no view (`fun _ => none`), so it is not part of the meaning
+  of AIR; a certificate of a pure function with a slice parameter runs the function with the
+  items the caller read (`execFuncV`), and `Air2Lean.SemView` proves once that this agrees with
+  `execFunc` up to the reads' footprint (`docs/air-semantics.md` §Pure-function slices). -/
+  view : InstId → Option (Array Value) := fun _ => none
 
 def tyOf (f : Func) (t : TyId) : Ty := f.types[t]?.getD .void
 
@@ -633,6 +639,20 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
       execBody c rest (env.set i.id i.ty v)
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
+  | .sliceElemVal (.inst k) idx =>
+    match c.view k with
+    | some items => do
+      -- A viewed slice: the same operand checks as `evalMem`, then the item from the view.
+      let (_, a) ← liftR (sliceOperand c.func env (.inst k))
+      let j ← liftR (indexOperand c.func env idx)
+      match itemLayout c.func i.ty a with
+      | some _ => do
+        let v ← liftR (Zig.index items j)
+        execBody c rest (env.set i.id i.ty v)
+      | none => liftR stuck
+    | none => do
+      let v ← liftMem (evalMem c.func env i)
+      execBody c rest (env.set i.id i.ty v)
   | _ => do
     let v ← liftMem (evalMem c.func env i)
     execBody c rest (env.set i.id i.ty v)
@@ -680,7 +700,7 @@ binds its parameter) and no local cells. A call whose arguments do not match the
 types, and a function that ends other than by `ret`, are stuck. -/
 def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
-    let (e, frame) ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run {}
+    let (e, frame) ← (execBody ⟨f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
     -- The stack frame ends at the return (a panic leaves the memory behind).
     frame.blocks.forM Zig.free
     match e with
@@ -777,13 +797,13 @@ local macro "mono_step" : tactic => `(tactic| first
 
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
-theorem execBody_mono (f : Func) (args : List Value) :
-    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o⟩ l env) := by
-  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck⟩
-    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o⟩ i rest env))
-    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
-    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o⟩ id body env))
-  case case25 => intros; unfold execSwitch; repeat' mono_step
+theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (Array Value)) :
+    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o, view⟩ l env) := by
+  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck, view⟩
+    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
+    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
+    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
+  case case27 => intros; unfold execSwitch; repeat' mono_step
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
@@ -820,8 +840,8 @@ theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : mo
   apply monotone_ite _ _ _ _ (monotone_const _)
   apply monotone_bind
   · exact monotone_compose (g := fun o : Oracle =>
-      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run {}) hg
-      (monotone_stateTRun _ (execBody_mono f args _ _) _)
+      (execBody ⟨f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
+      (monotone_stateTRun _ (execBody_mono f args _ _ _) _)
   · exact monotone_const _
 
 end Monotone
@@ -1194,11 +1214,11 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
       | br t v => exact absurd rfl (hne t v)
       | rep t => simpa [exitOk] using he
       | ret v => simp [exitOk]
-  case case24 =>
+  case case26 =>
     intro s w x el env ih bs ls _ hel
     simp only [execSwitch]
     exact ih bs ls hel
-  case case25 =>
+  case case27 =>
     intro s w x sc more el env ihb ihm bs ls hc hel
     simp only [wfCases, Bool.and_eq_true] at hc
     unfold execSwitch
@@ -1206,7 +1226,7 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
     apply ok_ite
     · exact ihb bs ls hc.1
     · exact ihm bs ls hc.2 hel
-  case case26 =>
+  case case28 =>
     intro id body env ih bs ls h
     simp only [execLoop]
     refine ok_mono (ok_loop (ok_mono (ih bs (id :: ls) h) (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_)) ?_
