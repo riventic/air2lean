@@ -490,6 +490,22 @@ theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
 theorem frameL (h : EUpd P P') : EUpd (R ⋆ P) (R ⋆ P') :=
   trans (of_imp fun _ h => sep_comm h) (trans (frame h) (of_imp fun _ h => sep_comm h))
 
+/-- An update from each witness of an existential. -/
+theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, EUpd (P x ⋆ R) P') : EUpd (FAssn.ex P ⋆ R) P' :=
+  fun m r rF hh hp hs => by obtain ⟨x, hx⟩ := sep_ex.mp hp; exact h x m r rF hh hx hs
+
+/-- An update from every witness of an existential. -/
+theorem exAll {γ : Type} {P : γ → FAssn} (h : ∀ x, EUpd (P x) P') : EUpd (FAssn.ex P) P' :=
+  fun m r rF hh hp hs => by obtain ⟨x, hx⟩ := hp; exact h x m r rF hh hx hs
+
+/-- An update under a pure fact. -/
+theorem lift {φ : Prop} (h : φ → EUpd P P') : EUpd (⟪φ⟫ ⋆ P) P' :=
+  fun m r rF hh hp hs => by obtain ⟨hφ, hp⟩ := sep_lift.mp hp; exact h hφ m r rF hh hp hs
+
+/-- An update that may use a fact of every memory that holds `P`. -/
+theorem withFact {φ : Prop} (hφ : ∀ m r rF, Holds m r rF → P r → m.FSeq → φ) (h : φ → EUpd P P') :
+    EUpd P P' := fun m r rF hh hp hs => h (hφ m r rF hh hp hs) m r rF hh hp hs
+
 /-- A fact of every memory that holds `P`. -/
 theorem fact {φ : Prop} (hφ : ∀ m r rF, Holds m r rF → P r → m.FSeq → φ) : EUpd P (⟪φ⟫ ⋆ P) :=
   fun m r rF hh hp hs => ⟨r, hh, sep_lift.mpr ⟨hφ m r rF hh hp hs, hp⟩⟩
@@ -675,6 +691,48 @@ theorem Holds.bshare {t : STag} {m : Mem} {r rF : Res} {R : FAssn} (hh : Holds m
   refine ht.2 k (ECell.Req.mono (Ghost.ls_add _ _) hle (.inl ⟨t, ha, ?_⟩))
   rw [h1.2.2.2]; simp only [Ghost.atExt, if_true]; rw [ECell.tg_shareT]; simp only [true_and, if_true]
   exact h1.1
+
+/-! ### Parts of a separating conjunction -/
+
+/-- `X` is one of the separated parts of `P`: every resource of `P` splits into one of `X` and a
+rest. The `within` tactic finds `X` in the separating conjunctions of `P`. -/
+def Within (X P : FAssn) : Prop := ∀ r, P r → ∃ R : FAssn, (X ⋆ R) r
+
+theorem Within.refl (X : FAssn) : Within X X := fun _ h => ⟨emp, sep_emp.mpr h⟩
+
+theorem Within.sepL {X P R : FAssn} (h : Within X P) : Within X (P ⋆ R) := fun _ hr => by
+  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hr
+  obtain ⟨R', h'⟩ := h r₁ h1
+  exact ⟨R' ⋆ R, sep_assoc ⟨r₁, r₂, hd, rfl, h', h2⟩⟩
+
+theorem Within.sepR {X P R : FAssn} (h : Within X P) : Within X (R ⋆ P) := fun r hr =>
+  h.sepL r (sep_comm hr)
+
+theorem Within.trans {X Y P : FAssn} (h₁ : Within X Y) (h₂ : Within Y P) : Within X P := fun r hr => by
+  obtain ⟨R, h⟩ := h₂ r hr
+  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
+  obtain ⟨R', h'⟩ := h₁ r₁ h1
+  exact ⟨R' ⋆ R, sep_assoc ⟨r₁, r₂, hd, rfl, h', h2⟩⟩
+
+/-- `within`: prove `Within X P` by finding `X` among the separated parts of `P`. Definitions
+are unfolded to find the separating conjunctions; a part matches `X` up to reducible unfolding
+(state `X` with the same definitions as `P`'s parts). -/
+syntax "within" : tactic
+macro_rules
+  | `(tactic| within) =>
+    `(tactic| first
+      | with_reducible exact Within.refl _
+      | (apply Within.sepL; within)
+      | (apply Within.sepR; within))
+
+/-- **A held share gives a live block**, for a share among the parts of the resource
+(`Holds.bshare`). -/
+theorem Holds.bshareW {t : STag} {m : Mem} {r rF : Res} {P : FAssn} (hh : Holds m r rF)
+    (hw : Within (Full.bshare b q k t) P) (hp : P r) (ha : Act r.gh.ls t := by exact Act.root) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size ∧
+      blk.kind.mappedLo < blk.bytes.size := by
+  obtain ⟨R, h⟩ := hw r hp
+  exact hh.bshare h ha
 
 /-- **The authority gives the block's extent.** -/
 theorem Holds.bauth {m : Mem} {r rF : Res} {R : FAssn} (hh : Holds m r rF) (h : (bauth b S K q ⋆ R) r) :
