@@ -16,8 +16,13 @@ parent links from the leader, so a reparented escapee stays owned. It also gives
 the environment marker AIR2LEAN_STAGE_ID=<token> and treats any process whose environment
 shows that token as owned, where `ps` can display other processes' environments (Linux;
 not every macOS configuration). A pid is trusted only while its start time is unchanged.
-A descendant forked and escaped between two samples, with its environment scrubbed, is
-the remaining blind spot.
+Where the kernel supports it (Linux PR_SET_CHILD_SUBREAPER) the runner also becomes a
+subreaper, so a descendant that escapes and whose parent exits is reparented to the runner
+rather than to init: every surviving descendant is then either below the leader or a direct
+child of the runner, however fast it forked, escaped and scrubbed its environment. There the
+sampling only needs to see the table after the fact, and no blind spot remains. Without a
+subreaper (macOS) containment is best-effort sampling; `--require-containment` (or
+AIR2LEAN_REQUIRE_CONTAINMENT=1) refuses to run the stage there (exit 126).
 
 `publish` copies SOURCE into a temporary file beside DESTINATION, fsyncs it, then
 atomically renames it (--overwrite) or hard-links it (--no-clobber, refusing an existing
@@ -35,7 +40,7 @@ import tempfile
 import time
 import uuid
 
-TIMEOUT, DESCENDANTS = 124, 125
+TIMEOUT, DESCENDANTS, NO_CONTAINMENT = 124, 125, 126
 SAMPLE_INTERVAL = 0.25
 MARKER = 'AIR2LEAN_STAGE_ID'
 MAX_ARTIFACT = 1024 * 1024 * 1024
@@ -62,11 +67,25 @@ def _signal_group(pgid, signum):
         pass
 
 
+def _become_subreaper():
+    """Make orphaned descendants reparent to this process; False where the kernel cannot."""
+    if not sys.platform.startswith('linux'):
+        return False
+    try:
+        import ctypes
+        return ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) == 0  # PR_SET_CHILD_SUBREAPER
+    except (OSError, AttributeError):
+        return False
+
+
 def _processes():
     """pid -> (ppid, start time, command and, where visible, environment); {} if ps fails."""
     try:
-        listing = subprocess.run(['ps', '-axeww', '-o', 'pid=,ppid=,lstart=,command='], capture_output=True,
-                                 text=True, timeout=5, check=True, env=dict(os.environ, LC_ALL='C')).stdout
+        with subprocess.Popen(['ps', '-axeww', '-o', 'pid=,ppid=,lstart=,command='], stdout=subprocess.PIPE,
+                              text=True, env=dict(os.environ, LC_ALL='C')) as helper:
+            listing, _ = helper.communicate(timeout=5)
+            if helper.returncode:
+                return {}
     except (OSError, subprocess.SubprocessError):
         return {}
     rows = {}
@@ -74,14 +93,16 @@ def _processes():
         fields = line.split(None, 7)  # pid ppid and the five lstart words precede the command
         if len(fields) >= 7 and fields[0].isdigit() and fields[1].isdigit():
             rows[int(fields[0])] = (int(fields[1]), ' '.join(fields[2:7]), fields[7] if len(fields) > 7 else '')
+    rows.pop(helper.pid, None)  # The listing's own helper is not part of any stage.
     return rows
 
 
 class Escapees:
     """Descendants of a stage that may have left its process group (setsid and friends)."""
 
-    def __init__(self, leader, token):
-        self.leader, self.marker = leader, f'{MARKER}={token}'
+    def __init__(self, leader, token, adopting=False):
+        # adopting: this process is a subreaper, so every orphan of the stage is its direct child.
+        self.leader, self.marker, self.adopting = leader, f'{MARKER}={token}', adopting
         self.owned = {}  # pid -> start time
 
     def scan(self):
@@ -96,9 +117,16 @@ class Escapees:
                     continue
                 parent = rows.get(ppid)
                 if (ppid == leader or (parent and self.owned.get(ppid) == parent[1])
-                        or self.marker in command.split()):
+                        or (self.adopting and ppid == os.getpid()) or self.marker in command.split()):
                     self.owned[pid] = started
                     grew = True
+        if self.adopting:  # Reap adopted children that already died, so zombies do not count as live.
+            for pid in [p for p, (ppid, _, _) in rows.items() if ppid == os.getpid() and p in self.owned]:
+                try:
+                    if os.waitpid(pid, os.WNOHANG)[0] == pid:
+                        del rows[pid]
+                except ChildProcessError:
+                    pass
         return [pid for pid, started in self.owned.items() if pid in rows and rows[pid][1] == started]
 
     def stop(self, grace):
@@ -139,7 +167,12 @@ def _stop_all(child, escapees, grace):
     escapees.stop(grace)
 
 
-def run(argv, timeout, grace):
+def run(argv, timeout, grace, require_containment=False, sample_interval=SAMPLE_INTERVAL):
+    adopting = _become_subreaper()
+    if require_containment and not adopting:
+        print('error: this host cannot contain escaped descendants (no child subreaper); stage not run',
+              file=sys.stderr)
+        return NO_CONTAINMENT
     received = []
 
     def handler(signum, frame):
@@ -148,7 +181,7 @@ def run(argv, timeout, grace):
         signal.signal(signum, handler)
     token = uuid.uuid4().hex
     child = subprocess.Popen(argv, start_new_session=True, env=dict(os.environ, **{MARKER: token}))
-    escapees = Escapees(child, token)
+    escapees = Escapees(child, token, adopting)
     next_sample = time.monotonic()
     deadline = None if timeout <= 0 else time.monotonic() + timeout
     failure = None
@@ -162,7 +195,7 @@ def run(argv, timeout, grace):
                 break
             if time.monotonic() >= next_sample:
                 escapees.scan()
-                next_sample = time.monotonic() + SAMPLE_INTERVAL
+                next_sample = time.monotonic() + sample_interval
             time.sleep(0.02)
         if failure is None:
             if not _group_alive(child.pid) and not escapees.scan():
@@ -242,6 +275,10 @@ def main(argv=None):
     runner = commands.add_parser('run')
     runner.add_argument('--timeout', type=float, default=0, help='seconds; 0 disables')
     runner.add_argument('--grace', type=float, default=2)
+    runner.add_argument('--require-containment', action='store_true',
+                        default=os.environ.get('AIR2LEAN_REQUIRE_CONTAINMENT') == '1',
+                        help='refuse to run where escaped descendants cannot be contained (exit 126)')
+    runner.add_argument('--sample-interval', type=float, default=SAMPLE_INTERVAL, help=argparse.SUPPRESS)
     runner.add_argument('argv', nargs=argparse.REMAINDER)
     publisher = commands.add_parser('publish')
     policy = publisher.add_mutually_exclusive_group(required=True)
@@ -254,7 +291,7 @@ def main(argv=None):
         command = args.argv[1:] if args.argv[:1] == ['--'] else args.argv
         if not command or args.timeout < 0 or args.grace < 0:
             parser.error('run needs -- COMMAND and nonnegative --timeout/--grace')
-        return run(command, args.timeout, args.grace)
+        return run(command, args.timeout, args.grace, args.require_containment, args.sample_interval)
 
     def interrupted(signum, frame):
         raise KeyboardInterrupt  # Unwind through publish() so the temporary file is removed.
