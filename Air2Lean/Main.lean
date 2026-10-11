@@ -45,7 +45,7 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-x87-extended] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
     "       air2lean --print-op-table"
 
@@ -64,6 +64,9 @@ def help : String :=
   "                               docs/build-modes.md does not qualify (recorded in the header).\n" ++
   "  --assume-no-libc             The program links no libc: admit the f128 ops that call long double\n" ++
   "                               libm routines where c_longdouble is f128 (recorded in the header).\n" ++
+  "  --assume-x87-extended        f80 ops run with x87 extended precision: admit the f80 arithmetic\n" ++
+  "                               of x86_64-windows, whose CreateThread threads start at 53 bits\n" ++
+  "                               (recorded in the header there; docs/windows-target.md).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
@@ -105,6 +108,9 @@ structure Args where
   allowUnqualified : Bool := false
   /-- `--assume-no-libc` (`Dialect.noLibc`); recorded in the generated header. -/
   assumeNoLibc : Bool := false
+  /-- `--assume-x87-extended` (`Dialect.x87Extended`); recorded in the generated header of a
+  target with `Target.x87ThreadPrecision`, the only targets where it admits anything. -/
+  assumeX87Extended : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -153,6 +159,9 @@ private partial def parseArgsGo (args : List String)
   | "--assume-no-libc" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeNoLibc := true })
+  | "--assume-x87-extended" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeX87Extended := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -327,6 +336,9 @@ private def run (args : List String) : IO UInt32 := do
             | .error e => err := some s!"{path}: {e}"
             | .ok f =>
               let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
+              -- Effective (and recorded) only where the precision control is per thread.
+              let f := if a.assumeX87Extended && f.dialect.target?.any (·.x87ThreadPrecision) then
+                { f with dialect := { f.dialect with x87Extended := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
               match checkedOne with
@@ -370,7 +382,8 @@ private def run (args : List String) : IO UInt32 := do
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             -- An admission opt-in is part of the claim scope: the header records it.
             let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
-              (if a.assumeNoLibc then ["no-libc"] else [])
+              (if a.assumeNoLibc then ["no-libc"] else []) ++
+              (if funcs.any (·.dialect.x87Extended) then ["x87-extended"] else [])
             let admission := if optIns.isEmpty then [] else
               [("admission", Lean.Json.str (",".intercalate optIns))]
             let metadata := Lean.Json.mkObj ([("profile", profile.toJson),

@@ -180,24 +180,47 @@ structure Target where
   target: x86_64-linux in the test job, aarch64-macos (L09's record) and aarch64-linux (the `load`
   and `pad` rows of the T04 files). `Dialect.lanePtrBitPtrs` needs it. -/
   lanePtrProbe : Bool := false
+  /-- The OS layer of the model is qualified on this target: the std models of OS-backed
+  primitives (`ThreadFn`: threads, futex, `Io`, timers) and `threadlocal` storage. Without it the
+  checker rejects both (x86_64-windows, `docs/windows-target.md`): their native behaviour rests on
+  OS primitives that have no model and no native evidence there yet. -/
+  osLayer : Bool := true
+  /-- The x87 precision control is per thread and not extended (64-bit significand) on every
+  thread: Windows starts a thread made by `CreateThread` at 53 bits, and only the startup code of
+  the main thread (Zig's `WinStartup` from 0.15.2 on, or the MinGW CRT) resets it. The checker
+  then rejects the `f80` ops whose x87 result depends on it, unless `--assume-x87-extended`
+  (`Dialect.x87Extended`, `docs/windows-target.md` §x87 precision control). -/
+  x87ThreadPrecision : Bool := false
+  /-- The document that qualifies the target, for diagnostics. -/
+  doc : String := "docs/profiles.md"
   deriving Repr, BEq
 
 /-- The Zig versions with T04 probe records for both aarch64 profiles. -/
 def Target.aarch64Probed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
 
+/-- The Zig versions with a T04 probe record for x86_64-windows-gnu
+(`tests/roadmap/aarch64-abi/expected/<version>/x86_64-windows-gnu-ReleaseSafe.txt`). -/
+def Target.windowsProbed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
+
 /-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian
 (`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). s390x and wasm32
 reject every atomic op (`Check.lean`). The two aarch64 targets are qualified separately
-(`docs/aarch64-abi.md`). -/
+(`docs/aarch64-abi.md`), x86_64-windows-gnu by the same probe (`docs/windows-target.md`). -/
 def Target.qualified : List Target := [
   { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
     atomicBits := 64, lanePtrProbe := true },
   { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
     floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed,
-    lanePtrProbe := true },
+    lanePtrProbe := true, doc := "docs/aarch64-abi.md" },
   { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
     floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
-    versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true },
+    versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true,
+    doc := "docs/aarch64-abi.md" },
+  -- The x86_64-linux layouts and float lowering (`c_longdouble` is `f80`; the exporter writes
+  -- `c_long` as the 32-bit integer it is here), without the OS layer.
+  { arch := "x86_64", os := "windows", pointerBits := 64, endian := .little, longDoubleBits := 80,
+    atomicBits := 64, versions := Target.windowsProbed, abis := ["gnu"], osLayer := false,
+    x87ThreadPrecision := true, doc := "docs/windows-target.md" },
   { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
     atomicBits := 64 },
   { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
@@ -242,6 +265,11 @@ structure Dialect where
   The AIR profile records no `link_libc` fact; without this opt-in the checker rejects the `f128`
   ops that call them (`docs/floats.md` §Targets). -/
   noLibc : Bool := false
+  /-- `--assume-x87-extended`: every `f80` op runs with the x87 precision control at extended
+  precision, as on the main thread of a Zig x86_64-windows-gnu program
+  (`Target.x87ThreadPrecision`). Without it the checker rejects the `f80` ops whose result
+  depends on it there. -/
+  x87Extended : Bool := false
   deriving Repr, Inhabited, BEq
 
 namespace Dialect

@@ -768,6 +768,35 @@ def CheckCtx.checkLongDoubleCall (cx : CheckCtx) (line : Nat) (op : Op) : Except
       compiler_rt's only in a program without libc, and the AIR profile records no link_libc \
       fact; pass --assume-no-libc for a program linked without libc (docs/floats.md §Targets)"
 
+/-- An `f80` op whose x87 result depends on the precision control, on a target where that is per
+thread and not extended on every thread (`Target.x87ThreadPrecision`: x86_64-windows starts a
+`CreateThread` thread at 53 bits). These are the ops that compute through `fadd`/`fsub`/`fmul`/
+`fdiv`/`fsqrt`, inline or inside compiler_rt's `f80` routines: arithmetic, division, `@sqrt`,
+rounding, the libm functions, `@mulAdd`, reductions and the conversions between `f80` and
+integers (`u64` goes through an `fadd`/`fsub` of `2^63`). `neg`, `abs`, comparisons, `@min`/`@max`,
+bit casts and the conversions between float types do not use the precision control. Admitted with
+`--assume-x87-extended` (`Dialect.x87Extended`). -/
+def CheckCtx.checkX87Precision (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let some d := cx.dialect | return
+  let some t := d.target? | return
+  unless t.x87ThreadPrecision && !d.x87Extended do return
+  let operands := match op with
+    | .arith _ _ a b | .div _ a b | .divFloat a b => #[a, b]
+    | .floatRound _ a | .sqrt a | .libm _ a | .floatFromInt a | .intFromFloat _ a | .reduce _ a => #[a]
+    | .mulAdd a b c => #[a, b, c]
+    | _ => #[]
+  if operands.isEmpty then return
+  let f80 (id : TyId) := match cx.types[id]? with
+    | some (.vector _ c) => cx.types[c]? == some (.float 80)
+    | other => other == some (.float 80)
+  if f80 ty || operands.any fun v => (cx.valTy? v).any f80 then
+    cx.fail line s!"an f80 arithmetic or integer conversion op is outside the {t.arch}-{t.os} \
+      model: its x87 result depends on the thread's precision control, which {t.os} starts at \
+      53 bits on a thread that CreateThread makes; only the main thread's startup code (Zig's \
+      WinStartup from 0.15.2 on, or the MinGW CRT) sets 64 bits. Pass --assume-x87-extended for \
+      code that runs with extended precision ({t.doc} §x87 precision control)"
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -1134,6 +1163,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
   cx.checkLongDoubleCall line op
+  cx.checkX87Precision line ty op
   cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>
@@ -2368,6 +2398,12 @@ private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Exc
     throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
       only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
       storage"
+  -- Thread-local storage is the OS's (Windows: the PE TLS directory and `_tls_index`).
+  if let some t := f.dialect.target? then
+    unless t.osLayer do
+      throw s!"{f.name}: `threadlocal` global {what} is outside the {t.arch}-{t.os} model: its \
+        thread-local storage rests on the OS, which has no model and no native evidence there yet \
+        ({t.doc})"
   if g.name.isNone then fail "it has no name"
   if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
   if g.isConst then fail "it is `const`"
@@ -3189,6 +3225,12 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     -- A rejected row reports its own reason (`checkProgram`); a modelled one needs a review.
     if modelledStdFn callee && !model.qualifies f.dialect.version then
       fail s!"{model.symbol} qualified Zig {", ".intercalate (model.zigVersions.toList.map toString)}; no reviewed std source for Zig {f.dialect.version}"
+    -- Threads, futex, `Io` and timers rest on OS primitives: the target needs its OS layer.
+    if let (some _, some t) := (threadFn? callee, f.dialect.target?) then
+      unless t.osLayer do
+        throw s!"{f.name}: the std model of '{model.symbol}' is outside the {t.arch}-{t.os} \
+          model: threads, futex, Io and timers rest on OS primitives that have no model and no \
+          native evidence there yet ({t.doc})"
   if let some fn := allocFn? callee then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
@@ -3544,8 +3586,14 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
           definition '{target.name}' has '{cc}'")
       else
+        -- On a target without its OS layer (x86_64-windows) such a call is an OS call (std's
+        -- `kernel32`/`ntdll` bindings) or a foreign one; neither has a model.
+        let osNote := match f.dialect.target? with
+          | some t => if t.osLayer then "" else s!"; the OS primitives of {t.arch}-{t.os} have no \
+              model yet ({t.doc})"
+          | none => ""
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
-          registry model '{callee}' (--model-registry, docs/external-models.md)"
+          registry model '{callee}' (--model-registry, docs/external-models.md){osNote}"
     out := out.push (if renames.isEmpty then f
       else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
   return (out, unbound)

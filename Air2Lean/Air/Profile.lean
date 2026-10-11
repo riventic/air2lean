@@ -140,12 +140,12 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
         let name := s!"{arch}-{osName}"
         unless target.abis.isEmpty || target.abis.contains abiName do
           report s!"profile.target_triple: the {name} model is qualified for the \
-            {", ".intercalate target.abis} ABI only"
+            {", ".intercalate target.abis} ABI only ({target.doc})"
         if let some version := ZigVersion.ofString? zigVersion then
           unless target.versions.contains version do
             report s!"profile.target_triple: the {name} model is qualified for Zig \
               {", ".intercalate (target.versions.map toString)} only (no native probe record \
-              for {version}; docs/aarch64-abi.md)"
+              for {version}; {target.doc})"
         if let some pointerBits := pointerBits then
           unless pointerBits == target.pointerBits do
             report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
