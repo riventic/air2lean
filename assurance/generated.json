@@ -27,7 +27,7 @@
                 "assurance/provenance/receipt/receipt.json"],
       "run_bound": {"assurance/provenance/receipt/receipt.json": ["artifacts"],
                     "assurance/provenance/receipt/audit.json": ["extractor.cache_reused"],
-                    "assurance/provenance/manifest.json": ["manifest_sha256", "links.receipt", "chain"],
+                    "assurance/provenance/manifest.json": ["manifest_sha256", "links.receipt", "links.theorems.files", "links.theorems.sha256", "chain"],
                     "assurance/provenance/pins.json": ["manifest_sha256"]}
     },
     {
@@ -41,7 +41,7 @@
                 "assurance/provenance-gap/receipt/receipt.json"],
       "run_bound": {"assurance/provenance-gap/receipt/receipt.json": ["artifacts"],
                     "assurance/provenance-gap/receipt/audit.json": ["extractor.cache_reused"],
-                    "assurance/provenance-gap/manifest.json": ["manifest_sha256", "links.receipt", "chain"],
+                    "assurance/provenance-gap/manifest.json": ["manifest_sha256", "links.receipt", "links.theorems.files", "links.theorems.sha256", "chain"],
                     "assurance/provenance-gap/pins.json": ["manifest_sha256"]}
     }
   ]

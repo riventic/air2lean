@@ -139,7 +139,8 @@ are whole-tree generated files (`assurance/generated.json`, [ci.md](ci.md#whole-
 not committed. Every CI run's `provenance` job regenerates both fixtures twice on the tested tree
 (`scripts/generated.py produce --group provenance --group provenance-gap`: `regenerate --refresh`,
 `install`, `record`), requires the two runs to agree up to the receipt's own run record (its
-build-guard report and log digests, and the manifest and pin digests that chain the receipt), then
+build-guard report and log digests, whether the audit rebuilt its extractor, and the manifest and
+pin digests that chain those files), then
 runs the strict `check` and `replay` below on them. The `merge_group` run's files are published on
 the `generated` branch for that main commit; `scripts/generated.py fetch --group provenance
 --group provenance-gap [--rev SHA]` writes them into a checkout, `regen` regenerates them locally.

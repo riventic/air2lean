@@ -225,9 +225,11 @@ two jobs that regenerate them on exactly the checked-out tree:
   gates that read the files (L14 fixtures, support matrix, AIR validation, premise checks,
   tutorials, inventory regressions) then check exactly them.
 - `provenance` (after `lake` and `zig-air`): the same for both provenance fixtures. A receipt
-  records its own run (the build-guard report and log digests in `receipt.json`'s artifacts, and
-  the manifest and pin digests that chain the receipt), so the two runs must agree on everything
-  else (`run_bound` in the registry names these fields); then the strict `check` and strict
+  records its own run (the build-guard report and log digests in `receipt.json`'s artifacts,
+  whether the audit rebuilt its extractor, and the manifest and pin digests that chain those
+  files), so the two runs must agree on everything else, including every compiled theorem and
+  every source, AIR, profile, `Gen.lean` and native digest (`run_bound` in the registry names the
+  excluded fields); then the strict `check` and strict
   `replay` of both fixtures and the fixture regressions run on them. Uploaded as
   `generated-provenance`.
 
