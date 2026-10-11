@@ -21,7 +21,7 @@ MUTANTS = {
                                 r'pure (Zig.Float.div \1 \2)'),
     'memcpy-as-memmove': (r'Zig\.memcpy (\d+ \d+ \d+ \S+ \S+ \S+) \S+\)', r'Zig.memmove \1)'),
     'item-read-unchecked': (r'Zig\.check(?:Sentinel)?Index (?:\([^)]*\)|[\w.]+) [\w.]+ >>= fun _ => ', ''),
-    'item-pointer-unchecked': (r'Zig\.callM \(Zig\.check(?:Sentinel)?Index [\w.]+ [\w.]+\) >>= fun _ => ', ''),
+    'item-pointer-unchecked': (r'Zig\.callM \(Zig\.check(?:Sentinel)?Index (?:\([^)]*\)|[\w.]+) [\w.]+\) >>= fun _ => ', ''),
     'shift-count-unchecked': (r'Zig\.shlChk (\w+) (\w+)', r'pure (Zig.shl \1 \2)'),
     'slice-end-unchecked': (r'Zig\.checkSliceEnd \S+ \S+ \S+ \d+ >>= fun _ => ', ''),
     'sentinel-unchecked': (r'Zig\.checkSentinelByte \S+ \S+ \(\d+ : BitVec 8\) >>= fun _ => ', ''),

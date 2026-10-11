@@ -2768,13 +2768,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | some (.ptrAdd false b s) => (b, rv s)
       | _ => (p, "(0 : BitVec 64)")
     -- The source's item count, and whether a sentinel follows its items.
+    -- A many-item pointer cast to `[*]T` has no length (`FCtx.itemCount?`).
     let srcLen : Option (String × Bool) := match fc.opOf? base with
-      | some (.slicePtr s) =>
-        let sentinel := ((fc.valTyId? s).bind (fc.layouts[·]?)).any (·.sentinel)
-        some (if s matches .inst _ then s!"{rv s}.len" else s!"({rv s}).len", sentinel)
-      | some (.bitcast a) => match fc.pointeeOf a with
-        | .array n _ sentinel => some (s!"({n} : BitVec 64)", sentinel)
-        | _ => none
+      | some (.slicePtr s) => fc.itemCount? s (rv s)
+      | some (.bitcast a) => fc.itemCount? a (rv a)
       | _ => none
     let resultSentinel := (fc.layouts[inst.ty]?).any (·.sentinel)
     -- A sentinel slicing reads the item at its end, which must be an item of the source unless
@@ -2823,10 +2820,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | some (Op.slicePtr sl) => some sl
         | _ => none
       | _ => none
-    let lenOf (sl : Val) : String := match sl with
-      | .inst _ => s!"{rv sl}.len"
-      | _ => s!"({rv sl}).len"
-    let m := if hasLen src then sn else (slicePtrOf.map lenOf).getD n
+    let m := if hasLen src then sn
+      else ((slicePtrOf.bind fun sl => fc.itemCount? sl (rv sl)).map (·.1)).getD n
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
     let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
