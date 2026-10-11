@@ -23,11 +23,18 @@ or item would hold an undefined bit, the whole cast throws. An `extern` union ke
 so its undefined bytes throw only when a field read needs them.
 
 The checker accepts the cast when both sides are an integer, float, `bool`, packed struct,
-array, `extern` struct or `extern` union, every part has a guaranteed in-memory layout, and
-both sides have the same 0.16.0 `@bitSizeOf` (`reprBitSize`). For an array, the size is
-`(len-1)·8·@sizeOf(E) + @bitSizeOf(E)`; for an `extern` type, the ABI size in bits. It rejects
-casts that involve these parts at any depth: an `auto` struct, a tuple (no guaranteed layout,
-which Sema also rejects), a tagged or packed union, a slice, a vector, a sentinel array,
+array, `extern` struct, `extern` union or vector, every part has a guaranteed in-memory layout,
+and both sides have the same 0.16.0 `@bitSizeOf` (`reprBitSize`). For an array, the size is
+`(len-1)·8·@sizeOf(E) + @bitSizeOf(E)`; for an `extern` type, the ABI size in bits; for a
+vector, `len·@bitSizeOf(lane)`. A vector's memory image is its bit-packed lanes
+(`Vec.packedEnc`, L09), as Zig 0.16.0's LLVM `bitCast` reinterprets it; `ZigLean/VecCast.lean`
+proves vector → integer is `Vec.packBits`, integer → vector splits the lanes, and the round trip.
+`[n]T` ↔ `@Vector(n, T)` is not a representation cast: lane `i` is item `i` for every item type
+(0.16.0 copies a padded item such as `u24` lane by lane), so it is translated lane-wise
+(`vectorLaneCast?`). An array and a vector of other item types are a representation cast only
+when the source's items fill whole bytes (otherwise 0.16.0 copies item by item into lanes of
+another type). It rejects casts that involve these parts at any depth: an `auto` struct, a tuple
+(no guaranteed layout, which Sema also rejects), a tagged or packed union, a slice, a sentinel array,
 error storage, or a pointer or optional pointer. Pointer-bearing repr casts are rejected (fail
 closed): the model's pointer bytes carry provenance and are not integer bits, so it could not
 give Zig's address there. It also rejects casts whose bit sizes differ. Enums, pointers and
@@ -98,4 +105,6 @@ C/allowzero pointer and an optional slice, stay rejected.
   for 0.17.0 or no version. It also checks the layout, bit-size and optional-pointer rejections.
 
 The native probe covers only the listed values on one host. Casts of auto structs, tuples,
-tagged and packed unions, vectors, sentinel arrays and error storage have no export.
+tagged and packed unions, sentinel arrays and error storage have no export. Vector casts are
+exported for 0.14.1-0.17.0 in `tests/roadmap/lang-long-tail` (`vector_casts.zig`, with
+`std.mem.eql`'s `mem.eqlBytes`), with native probes of every version.

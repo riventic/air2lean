@@ -306,6 +306,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
     'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
+    # L-series long tail: one directory per fixture source (export.sh, provenance.json).
+    'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',

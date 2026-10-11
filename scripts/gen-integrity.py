@@ -146,6 +146,13 @@ FIXTURES = [
     (f"tests/roadmap/error-width/expected/ErrorWidth{bits}.lean", f"tests/roadmap/error-width/air/bits{bits}",
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
     for bits in (8, 10, 16, 17)
+] + [
+    # tests/roadmap/lang-long-tail/check.sh: a version's own translation where it differs.
+    (f"tests/roadmap/lang-long-tail/LangLongTail/{ns}{'' if v == '0.16.0' else '-' + v}.lean",
+     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", f"{stem}."], "exact")
+    for stem, ns, versions in (("error_params", "ErrorParams", ("0.16.0",)),
+                               ("vector_casts", "VectorCasts", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")))
+    for v in versions
 ]
 
 # Reviewed generated-looking files that are not current translator output.
