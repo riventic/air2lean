@@ -13,7 +13,7 @@ private def layouts : Array Layout := #[
   {size := some 8, align := some 8, ptrAlign := some 2},
   {size := some 1, align := some 1}, {}, {size := some 2, align := some 2},
   {size := some 0, align := some 1}, {size := some 8, align := some 8, ptrAlign := some 2}]
-private def f : Func := {zigVersion := "0.16.0", name := "error_storage.optional", params := #[5], ret := 1, types, layouts, globals := #[], body := #[{id := 0, ty := 5, op := .arg 0}, {id := 1, ty := 9, op := .store (.inst 0) (.optSome 1 (.err 0 "Alpha"))}, {id := 2, ty := 1, op := .load (.inst 0)}, {id := 3, ty := 7, op := .ret (.inst 2)}]}
+private def f : Func := {dialect := .ofVersion .v0_16_0, name := "error_storage.optional", params := #[5], ret := 1, types, layouts, globals := #[], body := #[{id := 0, ty := 5, op := .arg 0}, {id := 1, ty := 9, op := .store (.inst 0) (.optSome 1 (.err 0 "Alpha"))}, {id := 2, ty := 1, op := .load (.inst 0)}, {id := 3, ty := 7, op := .ret (.inst 2)}]}
 private def require (p : Bool) (why : String) : IO Unit := unless p do throw (IO.userError why)
 private def accept (out : Except String α) : IO α := match out with
   | .ok v => pure v | .error e => throw (IO.userError e)

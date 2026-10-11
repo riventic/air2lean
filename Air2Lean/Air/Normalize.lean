@@ -4,17 +4,18 @@ import Air2Lean.Air.Canon
 # Per-version normalizer
 
 `normalize : Raw.RawFunc → Except String Func` turns the raw, tag-agnostic JSON mirror
-(`Air2Lean/Air/Json.lean`) into the version-independent IR (`Air2Lean/Air/Op.lean`). All
-version-specific knowledge — the AIR tag table — lives here. `Check.lean` and `Emit.lean`
-never see a `Raw.RawFunc` or a tag string.
+(`Air2Lean/Air/Json.lean`) into the version-independent IR (`Air2Lean/Air/Op.lean`). The AIR
+tag table lives here; every other version or target fact is the function's `Dialect`
+(`Air2Lean/Air/Dialect.lean`), derived from its profile. `Check.lean` and `Emit.lean` never see
+a `Raw.RawFunc` or a tag string.
 
 One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
 0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.0's renamed and split tags are mapped back to
 the 0.16.0 spelling by `Canon.lean`'s `versionTags`, which also rejects a tag that the file's
 version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.0
 has (`array_to_vector`, `union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
-Zig version: add it to `supportedVersions`; if a subset tag differs, add a version case to
-`normalizeOp` (`PLAN.md` §Zig version support).
+Zig version: add it to `ZigVersion` (`Air2Lean/Air/Dialect.lean`); if a subset tag differs, add a
+version case to `normalizeOp` (`PLAN.md` §Zig version support).
 -/
 
 namespace Air2Lean
@@ -478,7 +479,8 @@ def decodedTags : Array String := #[
   "call_never_inline"]
 
 
-def supportedVersions : List String := ["0.17.0", "0.16.0", "0.15.2", "0.14.1"]
+/-- The supported `zig_version` spellings, newest first (`ZigVersion.all`). -/
+def supportedVersions : List String := ZigVersion.all.map toString
 
 /-- The layout of a lane pointer `*align(a:0:n:i) T` (`&v[i]` of `@Vector(n, T)`, `T` an integer
 or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
@@ -496,34 +498,25 @@ def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/
 def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
-  unless supportedVersions.contains raw.zigVersion do
-    throw s!"{raw.name}: unsupported zig_version '{raw.zigVersion}' (supported: \
-      {String.intercalate ", " supportedVersions})"
+  let some version := raw.version?
+    | throw s!"{raw.name}: {ZigVersion.unsupported raw.profile.zigVersion}"
+  let dialect := Dialect.ofProfile version raw.profile
   let body ← raw.body.mapM (normalizeInst raw.name)
-  -- The bit-packed vector layout is the LLVM backend's (`tests/roadmap/vector-layouts`).
-  let llvm := raw.profile.backend == "stage2_llvm"
-  -- The pointer width is the profile's (`BuildProfile.parse` admits 32 and 64 bits).
-  let ptrBytes := raw.profile.pointerBits / 8
   -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
-  -- a bit-pointer into the vector's integer, as LLVM lays it out; checked natively only on
-  -- these targets, and not for Zig 0.17.0, whose lane pointers have no native evidence yet.
-  let laneTarget := llvm && lanePtrVersions.contains raw.zigVersion &&
-    ["x86_64", "aarch64"].contains ((raw.profile.targetTriple.splitOn "-").headD "")
+  -- a bit-pointer into the vector's integer, as LLVM lays it out (`Dialect.lanePtrBitPtrs`).
+  let packedLanes := dialect.packedVectorLanes
+  let laneBitPtrs := dialect.lanePtrBitPtrs
   let layouts := raw.layouts.mapIdx fun i l =>
-    let l := { l with ptrBytes }
+    let l := { l with ptrBytes := dialect.ptrBytes }
     match raw.types[i]? with
-    | some (.vector ..) => { l with packedLanes := llvm }
-    | some (.ptr "one" _ c) => if laneTarget then lanePtrLayout raw.types c l else l
+    | some (.vector ..) => { l with packedLanes }
+    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
-  return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
+  return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,
-           errorSetBits := raw.profile.errorSetBits, backend := raw.profile.backend,
-           targetArch := if raw.profile.targetTriple == "unverified" then ""
-             else (raw.profile.targetTriple.splitOn "-").headD "",
-           bigEndian := raw.profile.endian == "big", identities := raw.identities,
-           externs := raw.externs, exportDecl := raw.exportDecl }
+           identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl }
 
-/-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
+/-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
 

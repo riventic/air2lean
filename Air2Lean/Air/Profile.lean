@@ -1,11 +1,14 @@
 import Lean.Data.Json
 import Std.Data.HashSet
+import Air2Lean.Air.Dialect
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
-Admitted: the little-endian memory model with 64-bit pointers (x86_64-linux, aarch64-macos) or
-32-bit pointers (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit
-big-endian model (s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory;
-schemas 1–11 retain the explicitly named, unverified legacy 64-bit little-endian profile. -/
+Admitted: the targets of `Target.qualified` (`Air2Lean/Air/Dialect.lean`): the little-endian
+memory model with 64-bit pointers (x86_64-linux, aarch64-macos) or 32-bit pointers
+(wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit big-endian model
+(s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11 retain
+the explicitly named, unverified legacy 64-bit little-endian profile. A validated profile
+determines the translation's `Dialect` (`Dialect.ofProfile`). -/
 namespace Air2Lean
 
 open Lean (Json)
@@ -33,13 +36,21 @@ namespace BuildProfile
 
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
-/-- The big-endian model profile (T03). The exporter writes `currentName` as the raw
-`profile.name` of every target; the translator names a qualified big-endian profile by its byte
-order, so a generated header and `--profile` distinguish the two models. -/
+/-- The big-endian model profile (T03). The exporter names a profile by its byte order
+(`zig-patch/air-json/json.zig`), so a raw profile, a generated header and `--profile` all
+distinguish the two models. -/
 def bigEndianName : String := "abi64-be-v1"
 
+/-- The schema-12 profile name of a byte order. -/
+def nameOf : Endian → String
+  | .little => currentName
+  | .big => bigEndianName
+
 /-- The profile's byte order is big endian (`profile.endian`). -/
-def isBigEndian (p : BuildProfile) : Bool := p.endian == "big"
+def isBigEndian (p : BuildProfile) : Bool := Endian.ofString? p.endian == some .big
+
+/-- The profile's Zig version, if supported. -/
+def version? (p : BuildProfile) : Option ZigVersion := ZigVersion.ofString? p.zigVersion
 
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
@@ -49,14 +60,11 @@ private def strField (j : Json) (k : String) : Except String String := do
 private def natField (j : Json) (k : String) : Except String Nat :=
   ((j.getObjVal? k).bind Json.getNat?).mapError fun e => s!"profile.{k}: {e}"
 
-/-- The build mode in its 0.16.0 spelling. Zig 0.17.0 renamed `std.builtin.OptimizeMode` to
-`std.lang.Optimize` with the tags `debug`, `safe`, `fast`, `small`; the exporter writes the tag
-name. A 0.17.0 profile may carry either spelling, older ones only their own, and the parsed
-profile always holds the 0.16.0 spelling. -/
+/-- The build mode in its 0.16.0 spelling. A version may rename the exporter's tags
+(`ZigVersion.buildModeRenames`); a profile of such a version may carry either spelling, older
+ones only their own, and the parsed profile always holds the 0.16.0 spelling. -/
 def canonicalBuildMode (zigVersion mode : String) : Except String String :=
-  let renamed := if zigVersion == "0.17.0" then
-      [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")].lookup mode
-    else none
+  let renamed := ((ZigVersion.ofString? zigVersion).map (·.buildModeRenames)).getD [] |>.lookup mode
   match renamed with
   | some m => pure m
   | none =>
@@ -101,8 +109,6 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   for (key, _) in fields.toArray do
     unless allowed.contains key do report s!"unsupported profile field '{key}'"
   let name ← take? (strField p "name")
-  if let some name := name then
-    unless name == currentName do report s!"unsupported profile '{name}' (want '{currentName}')"
   let targetTriple ← take? (strField p "target_triple")
   let pointerBits ← take? (natField p "pointer_bits")
   if let some pointerBits := pointerBits then
@@ -110,9 +116,11 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       report s!"profile.pointer_bits {pointerBits} is outside the 32/64-bit memory model"
   let endian ← take? (strField p "endian")
   if let some endian := endian then
-    unless endian == "little" || endian == "big" do
+    unless (Endian.ofString? endian).isSome do
       report s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← take? (strField p "abi")
+  -- The qualified target's byte order, which names the profile (`nameOf`).
+  let mut targetEndian : Option Endian := none
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
     match triple.splitOn "-" with
@@ -120,25 +128,26 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       if let some abi := abi then
         unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
           report "profile.target_triple: empty component or ABI differs from profile.abi"
-      let osName := (os.splitOn ".").head!
-      let native := (arch == "x86_64" && osName == "linux") || (arch == "aarch64" && osName == "macos")
-      let wasm := arch == "wasm32" && (osName == "freestanding" || osName == "wasi")
-      let big := arch == "s390x" && osName == "linux"
-      if !(native || wasm || big) then
-        report "profile.target_triple: outside the x86_64-linux/aarch64-macos/s390x-linux/wasm32-freestanding/wasm32-wasi model ABI scope"
-      else
+      match Target.find? arch (os.splitOn ".").head! with
+      | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
+      | some target =>
+        targetEndian := some target.endian
         if let some pointerBits := pointerBits then
-          unless pointerBits == (if wasm then 32 else 64) do
+          unless pointerBits == target.pointerBits do
             report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
-              {if wasm then 32 else 64}-bit pointer width"
-        let targetEndian := if big then "big" else "little"
+              {target.pointerBits}-bit pointer width"
         if let some endian := endian then
-          unless endian == targetEndian do
-            report s!"profile.endian '{endian}' differs from the {arch} target's {targetEndian}-endian byte order"
+          unless endian == target.endian.toString do
+            report s!"profile.endian '{endian}' differs from the {arch} target's {target.endian}-endian byte order"
     | _ => report "profile.target_triple: expected arch-os-abi"
   if let (.ok te, some endian) := (j.getObjVal? "target_endian", endian) then
     unless (match te.getStr? with | .ok s => s == endian | .error _ => false) do
       report "target_endian differs from profile.endian"
+  -- The exporter names the profile by its target's byte order (`nameOf`); without a qualified
+  -- target, by the declared one. A conflicting `endian` was reported above.
+  if let some name := name then
+    let want := nameOf (((targetEndian <|> endian.bind Endian.ofString?)).getD .little)
+    unless name == want do report s!"unsupported profile '{name}' (want '{want}')"
   if let some profileVersion ← take? (strField p "zig_version") then
     unless profileVersion == zigVersion do
       report "profile.zig_version differs from top-level zig_version"
@@ -146,8 +155,8 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   -- The big-endian bit-pointer host is the `(bits + 7) / 8`-byte integer of the LLVM backend
   -- (`Zig.loadBitsOf`), and its vector lanes are LLVM's; no other backend targets s390x.
   if let (some "big", some backend) := (endian, backend) then
-    unless backend == "stage2_llvm" do
-      report s!"profile.backend '{backend}' is outside the big-endian model (stage2_llvm only)"
+    unless backend == Target.llvmBackend do
+      report s!"profile.backend '{backend}' is outside the big-endian model ({Target.llvmBackend} only)"
   let cpu ← take? (strField p "cpu")
   let features ← take? do
     let fs ← ((p.getObjVal? "features").bind Json.getArr?).mapError fun e => s!"profile.features: {e}"
@@ -180,7 +189,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       report "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
   let base : BuildProfile := { name := legacyName, schema, zigVersion }
   return some {
-    name := if endian == some "big" then bigEndianName else name.getD base.name
+    name := name.getD base.name
     schema
     zigVersion
     targetTriple := targetTriple.getD base.targetTriple
@@ -215,7 +224,7 @@ def toJson (p : BuildProfile) : Json :=
     ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)]
 
 /-- The (build mode, backend) pairs that `assurance/build-modes.json` qualifies. -/
-def qualifiedBuilds : List (String × String) := [("ReleaseSafe", "stage2_llvm")]
+def qualifiedBuilds : List (String × String) := [("ReleaseSafe", Target.llvmBackend)]
 
 def qualified (p : BuildProfile) : Bool := qualifiedBuilds.contains (p.buildMode, p.backend)
 
@@ -263,4 +272,20 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
   pure first
 
 end BuildProfile
+
+/-- The dialect of a program of Zig `version` (the raw record's parsed `zig_version`,
+`Raw.RawFunc.version?`) under profile `p`. The normalizer, checker and emitter read the target
+and build facts here, not from the profile (admission and the timed preflight read the profile
+itself). The target facts are those that `BuildProfile.collect` validated against
+`Target.qualified`; the diagnostics path also inspects a body under the placeholder profile of an
+invalid one (its violations already reported), whose recorded facts are kept as they are. A legacy
+profile (`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
+model. -/
+def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
+  { version
+    arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
+    ptrBytes := p.pointerBits / 8
+    endian := (Endian.ofString? p.endian).getD .little
+    errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
+
 end Air2Lean

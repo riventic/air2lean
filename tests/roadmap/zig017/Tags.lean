@@ -30,17 +30,21 @@ private def reference (s : Bool) (a b : BitVec 8) : Option Int :=
 
 private def asInt (s : Bool) (v : BitVec 8) : Int := if s then v.toInt else v.toNat
 
+/-- Why `tag` cannot occur in an AIR file of Zig `v`, if it cannot. -/
+private def tagReason? (v : ZigVersion) (tag : String) : Option String :=
+  airTagReason? (airTagsOf (some v)) v.toString tag
+
 def main : IO Unit := do
   -- Every tag delta is classified: renamed/split tags alias to a 0.16.0 tag, the rest reach the
   -- tag table or a stable rejection.
   for tag in added017 do
     require ((tagsOnly017.contains tag)) s!"0.17.0 tag {tag} is not version-gated"
-    for v in ["0.14.1", "0.15.2", "0.16.0"] do
-      require ((versionTagReason? v tag).isSome) s!"{tag} accepted in {v}"
-    require ((versionTagReason? "0.17.0" tag).isNone) s!"{tag} rejected in 0.17.0"
+    for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0] do
+      require ((tagReason? v tag).isSome) s!"{tag} accepted in {v}"
+    require ((tagReason? .v0_17_0 tag).isNone) s!"{tag} rejected in 0.17.0"
   for tag in removed017 do
-    require ((versionTagReason? "0.17.0" tag).isSome) s!"removed {tag} accepted in 0.17.0"
-    require ((versionTagReason? "0.16.0" tag).isNone) s!"{tag} rejected in 0.16.0"
+    require ((tagReason? .v0_17_0 tag).isSome) s!"removed {tag} accepted in 0.17.0"
+    require ((tagReason? .v0_16_0 tag).isNone) s!"{tag} rejected in 0.16.0"
   require (tagsOnly017.length == added017.length) "tagsOnly017 differs from the Air.zig delta"
   for (new, old) in tagAliases017 do
     require (removed017.contains old) s!"{new} aliases {old}, which 0.17.0 still has"

@@ -41,7 +41,8 @@ maintenance cost only. Costs are rough agent-days (d) or weeks (w).
 |---|---|---|
 | B1 | fixed | module identity: exporter `module` fields, `Air2Lean/Air/Identity.lean` keys, required in schema 12 |
 | S2 | fixed | `Op.effects` is the exhaustive classifier (no wildcard arm); `air2lean --print-op-table` feeds `scripts/coverage.py`; unknown and unlisted `call*` tags are rejected |
-| B2, B3, B4, S1, S3, S4, C1, C2 | open | content-addressed instances and later structure work |
+| B3 | fixed | `Air2Lean/Air/Dialect.lean`: `ZigVersion` (one constructor per version, each per-version fact an exhaustive match), `Target.qualified` and the `Dialect` record; the raw record parses `zig_version` once (`RawFunc.version?`) and `Dialect.ofProfile` derives the rest from the validated profile; `Func`, `CheckCtx` and `FCtx` read the dialect; `scripts/version-literals.py` (CI) rejects version literals elsewhere in `Air2Lean/`; the exporter names the big-endian profile `abi64-be-v1` |
+| B2, B4, S1, S3, S4, C1, C2 | open | content-addressed instances and later structure work |
 
 ## Ranked risks
 

@@ -640,7 +640,7 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
       | .bitcast a =>
         match operands.valTy? a with
         | some s =>
-          if reprCastApplies f.zigVersion f.types s i.ty then
+          if reprCastApplies f.dialect.bitCast f.types s i.ty then
             memNamed f.types f.layouts f.errorSetBits
               (memNamed f.types f.layouts f.errorSetBits acc s) i.ty
           else acc
@@ -726,19 +726,16 @@ structure FCtx where
   exitName : String
   /-- `--float-semantics` (default `ieee`), for `.div`/`.divFloat`/`.mulAdd` on a float operand. -/
   floatSemantics : FloatSemantics
-  /-- The profile's `error_set_bits` (`Func.errorSetBits`), for error storage (`errOp`). -/
-  errBits : Nat := 16
-  /-- The profile is big endian (`Func.bigEndian`): bit-pointer accesses take `.big`. -/
-  bigEndian : Bool := false
   spawnSemantics : SpawnSemantics := .available
   /-- Typed caller execution of each complete capture, including pure slice adapters. -/
   spawnFallbacks : Array (String × String) := #[]
   /-- First-match fallback lookup, prepared after assigning `spawnFallbacks`. Public callers
   changing that array must reset this cache to `none`; bare contexts retain array lookup. -/
   spawnFallbackMap : Option (Std.HashMap String String) := none
-  /-- The Zig version that wrote the AIR (`Func.zigVersion`), for the float ops whose result
-  differs by version (`docs/floats.md` §Per-version differences). -/
-  zigVersion : String
+  /-- The function's version and target facts (`Func.dialect`): the `@bitCast` semantics, the
+  float ops whose result differs by version (`docs/floats.md` §Per-version differences), the byte
+  order of bit-pointer accesses and the architecture of the asm allowlist. -/
+  dialect : Dialect
   /-- This function uses memory (`Air2Lean/Memory.lean`): it returns `Zig.MemM`, and its body
   runs in `Zig.MM`. -/
   mem : Bool
@@ -765,8 +762,6 @@ structure FCtx where
   bytePlaces : Array (InstId × InstId × Nat) := #[]
   /-- The functions that return `Zig.Bytes T` (`rawFunctions`). -/
   rawFuncs : Array String := #[]
-  /-- `Func.targetArch`: an asm op off the allowlist is a device event (`Op.isDeviceAsm`). -/
-  targetArch : String := ""
   /-- `--device-contract` was given: `air2lean_device` is declared (L13). -/
   deviceContract : Bool := false
   /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
@@ -822,6 +817,15 @@ private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std
   let empty : Std.HashMap String String := {}
   fallbacks.foldl (fun lookup (worker, body) =>
     if lookup.contains worker then lookup else lookup.insert worker body) empty
+
+/-- The profile's `error_set_bits` (`Dialect.errorSetBits`), for error storage (`errOp`). -/
+def FCtx.errBits (fc : FCtx) : Nat := fc.dialect.errorSetBits
+
+/-- The profile is big endian (`Dialect.bigEndian`): bit-pointer accesses take `.big`. -/
+def FCtx.bigEndian (fc : FCtx) : Bool := fc.dialect.bigEndian
+
+/-- `Dialect.arch`: an asm op off the allowlist is a device event (`Op.isDeviceAsm`). -/
+def FCtx.targetArch (fc : FCtx) : String := fc.dialect.arch
 
 /-- Prepare the fallback lookup once, preserving the public array's first-match rule. -/
 def FCtx.prepareSpawnFallbacks (fc : FCtx) : FCtx :=
@@ -904,7 +908,7 @@ def FCtx.rtSuffix (fc : FCtx) : String :=
 /-- Before 0.16.0, compiler_rt rounded the `f128` square root through `f64` (`sqrt.zig`) and
 flushed a subnormal `f128` quotient to zero (`divtf3.zig`). 0.16.0 rounds the square root
 correctly, and rounds a subnormal quotient in its own way (`Float.divRt016`). -/
-def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.zigVersion == "0.14.1" || fc.zigVersion == "0.15.2"
+def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.dialect.version.compilerRt == .legacy
 
 /-- `rtSuffix` for the float divisions: `divRt` before 0.16.0, `divRt016` from 0.16.0. -/
 def FCtx.divRtSuffix (fc : FCtx) : String :=
@@ -1086,7 +1090,7 @@ enum or `void` on either side (the existing `bitcast` rules then apply). An exha
 result checks the tag (`Zig.enumOf`: `invalidEnumValue`, the check of 0.17's `bit_cast_safe`). -/
 def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : Option String := do
   let src ← fc.valTyId? a
-  unless logicalBitCastApplies fc.zigVersion fc.types src dst do none
+  unless logicalBitCastApplies fc.dialect.bitCast fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
   -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
   -- (`enumIntCast`) is already this cast, so 0.16 and 0.17 translations stay identical.
@@ -2007,7 +2011,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut defs : Array AsmDef := #[]
   for f in funcs do
     for i in f.allInsts do
-      if i.op.isSpinHint || i.op.isDeviceAsm f.targetArch then continue
+      if i.op.isSpinHint || i.op.isDeviceAsm f.dialect.arch then continue
       if let .asm source _ clobbers outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
@@ -2291,7 +2295,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
-    if (fc.valTyId? a).any (reprCastApplies fc.zigVersion fc.types · inst.ty) then
+    if (fc.valTyId? a).any (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
       -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
       -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`).
       let (env, l) := bindLet fc env inst.id
@@ -2395,7 +2399,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt &&
       fc.tyOfId inst.ty == .float 80
     -- Zig 0.17.0's f80 `@trunc` keeps a pseudo-denormal whose f128 extension is zero.
-    let trunc017 := fc.zigVersion == "0.17.0" && fc.floatSemantics == .compilerRt &&
+    let trunc017 := fc.dialect.version.compilerRt == .v017 && fc.floatSemantics == .compilerRt &&
       fc.tyOfId inst.ty == .float 80
     let f := match op with
       | .floor => if legacyRt then "Zig.Float.floorRtLegacyChk" else "Zig.Float.floorChk"
@@ -3403,12 +3407,11 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
       retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
-      exitName := mangleField s!"{plain}Exit", floatSemantics, errBits := f.errorSetBits, bigEndian := f.bigEndian,
-      zigVersion := f.zigVersion, places := #[],
+      exitName := mangleField s!"{plain}Exit", floatSemantics, dialect := f.dialect, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
-      rawRet := rawFuncs.contains f.name, targetArch := f.targetArch,
+      rawRet := rawFuncs.contains f.name,
       exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
@@ -4306,7 +4309,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
     -- A big-endian profile: the big-endian encodings (`ZigLean/Endian.lean`, T03).
-    opens := wasm32Open funcs ++ (if funcs.any (·.bigEndian) then ["open scoped Zig.BigEndian"] else [])
+    opens := wasm32Open funcs ++ (if funcs.any (·.dialect.bigEndian) then ["open scoped Zig.BigEndian"] else [])
     preamble := structsStr ++ asmStr ++ modelStr ++ (device.map DeviceContract.emitDef).toList ++
       globalsStr ++ tgtStr
     groups

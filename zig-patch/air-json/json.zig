@@ -625,8 +625,12 @@ const W = struct {
         else
             target_util.zigBackend(target, zcu.comp.config.use_llvm);
         try w.j.beginObject();
+        // The model profile of the target's byte order (`BuildProfile.nameOf`).
         try w.field("name");
-        try w.j.write("abi64-le-v1");
+        try w.j.write(switch (target.cpu.arch.endian()) {
+            .little => "abi64-le-v1",
+            .big => "abi64-be-v1",
+        });
         try w.field("target_triple");
         try w.j.write(triple);
         try w.field("pointer_bits");
