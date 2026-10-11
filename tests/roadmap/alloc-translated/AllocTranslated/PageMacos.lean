@@ -1202,7 +1202,7 @@ def page_sum.loop17 (i1 : Zig.Slice) (i15 : BitVec 64) : Zig.CM Tgt page_sumLoca
     let i21 ← pure (i15)
     let i22 ← pure (Zig.lt false i20 i21)
     if i22 then (do
-      let i24 ← Zig.callMC (Zig.checkIndex i1 i18 >>= fun _ => Zig.load (BitVec 8) 1 (i1.ptr.elem 1 i18))
+      let i24 ← Zig.callMC (Zig.checkIndex i1.len i18 >>= fun _ => Zig.load (BitVec 8) 1 (i1.ptr.elem 1 i18))
       let i25 ← pure ((← get).sum)
       let i26 ← Zig.intCast false false 64 i24
       let i27 ← Zig.add false i25 i26

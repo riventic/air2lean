@@ -129,7 +129,7 @@ def allocSentinel {T : Type} [Enc T] [DecidableEq T] (k : Nat) (n : BitVec 64) (
         liftR (Zig.add false n 1) >>= fun n₂ =>
         if Zig.le false n₂ s.len = true then
           checkSliceEnd s.len 0 n 1 >>= fun _ =>
-          checkSentinelIndex ⟨s.ptr, n⟩ n >>= fun _ =>
+          checkSentinelIndex n n >>= fun _ =>
           load T (Enc.align T) (s.ptr.elem (Enc.size T) n) >>= fun x =>
           if sentinel = x then pure (.ok ⟨s.ptr, n⟩) else throw .panic
         else throw .outOfBounds

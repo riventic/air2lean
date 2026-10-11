@@ -1078,7 +1078,7 @@ def fba_sum.loop21 (i5 : Zig.Slice) (i19 : BitVec 64) : Zig.MM fba_sumLocals fba
     let i25 ← pure (i19)
     let i26 ← pure (Zig.lt false i24 i25)
     if i26 then (do
-      let i28 ← Zig.callM (Zig.checkIndex i5 i22 >>= fun _ => Zig.load (BitVec 8) 1 (i5.ptr.elem 1 i22))
+      let i28 ← Zig.callM (Zig.checkIndex i5.len i22 >>= fun _ => Zig.load (BitVec 8) 1 (i5.ptr.elem 1 i22))
       let i29 ← pure ((← get).sum)
       let i30 ← Zig.intCast false false 64 i28
       let i31 ← Zig.add false i29 i30
