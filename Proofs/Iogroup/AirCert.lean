@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Iogroup.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Iogroup.AirCert
 
 open Air2Lean Air2Lean.Sem

@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Recursion.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Recursion.AirCert
 
 open Air2Lean Air2Lean.Sem

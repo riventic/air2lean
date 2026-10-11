@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Threads.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Threads.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -10,7 +12,7 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `atomic.Value(threads.Phase).init`: a parameter that is not an integer, bool or plain pointer
+* `atomic.Value(threads.Phase).init`: a parameter that is not an integer, bool, plain pointer or slice
 * `atomic.Value(u32).init`: a return type that is not an integer, bool, plain pointer or void
 * `threads.bump`: a concurrent function (`Zig.ConcM`)
 * `threads.claim`: a concurrent function (`Zig.ConcM`)
@@ -65,7 +67,7 @@ theorem writeFlag_fix (args : List Value)
   obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" false 8) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   funext m
   show (execFunc gen air_writeFlag _).run m = (gen _ _).run m
   rw [writeFlag_step gen v0.toPtr]

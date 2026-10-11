@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Pointers.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Pointers.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -13,8 +15,8 @@ Outside the certificate fragment:
 * `pointers.addDown`: a recursive function that uses memory (stack budget `Zig.enterFrame`, STK-01)
 * `pointers.bumpOpt`: inst 2: an instruction outside the fragment
 * `pointers.copyJob`: inst 2: a load of a type outside the fragment
-* `pointers.maxPtr`: a parameter that is not an integer, bool or plain pointer
-* `pointers.setOpt`: a parameter that is not an integer, bool or plain pointer
+* `pointers.maxPtr`: a parameter that is not an integer, bool, plain pointer or slice
+* `pointers.setOpt`: a parameter that is not an integer, bool, plain pointer or slice
 * `pointers.setOptJob`: inst 2: an instruction outside the fragment
 -/
 
@@ -183,7 +185,7 @@ theorem addTo_fix (args : List Value)
   obtain ⟨v1, args, rfl, h1, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" false 3) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   replace h1 : valOk (.int false 32) v1 = true := h1
   rw [valOk_int h1]
   funext m
@@ -206,7 +208,7 @@ theorem delay_fix (args : List Value)
   obtain ⟨v1, args, rfl, h1, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" false 7) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   replace h1 : valOk (.int false 32) v1 = true := h1
   rw [valOk_int h1]
   funext m
@@ -228,7 +230,7 @@ theorem dueOf_fix (args : List Value)
   obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" false 6) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   funext m
   show (execFunc gen air_dueOf _).run m = (gen _ _).run m
   rw [dueOf_step gen v0.toPtr]
@@ -249,9 +251,9 @@ theorem same_fix (args : List Value)
   obtain ⟨v1, args, rfl, h1, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" true 4) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   replace h1 : valOk (.ptr "one" true 4) v1 = true := h1
-  rw [valOk_ptr h1]
+  rw [valOk_ptr (hs := by decide) h1]
   funext m
   show (execFunc gen air_same _).run m = (gen _ _).run m
   rw [same_step gen v0.toPtr v1.toPtr]
@@ -425,9 +427,9 @@ theorem swap_fix (args : List Value)
   obtain ⟨v1, args, rfl, h1, h⟩ := argsOk_cons h
   obtain rfl := argsOk_nil h
   replace h0 : valOk (.ptr "one" false 2) v0 = true := h0
-  rw [valOk_ptr h0]
+  rw [valOk_ptr (hs := by decide) h0]
   replace h1 : valOk (.ptr "one" false 2) v1 = true := h1
-  rw [valOk_ptr h1]
+  rw [valOk_ptr (hs := by decide) h1]
   funext m
   show (execFunc gen air_swap _).run m = (gen _ _).run m
   rw [swap_step gen v0.toPtr v1.toPtr]

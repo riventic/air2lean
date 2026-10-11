@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Atomics.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Atomics.AirCert
 
 open Air2Lean Air2Lean.Sem

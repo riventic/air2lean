@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Basic.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Basic.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -10,9 +12,9 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `basic.sum`: a parameter that is not an integer, bool or plain pointer
-* `basic.totalWeightedTardiness`: a parameter that is not an integer, bool or plain pointer
-* `basic.weightedTardiness`: a parameter that is not an integer, bool or plain pointer
+* `basic.sum`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `basic.totalWeightedTardiness`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `basic.weightedTardiness`: a parameter that is not an integer, bool, plain pointer or slice
 -/
 
 /-- The decoded canonical AIR of `basic.absDiff`. -/

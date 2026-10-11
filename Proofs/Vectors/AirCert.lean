@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Vectors.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Vectors.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -10,35 +12,35 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `vectors.addTo`: a parameter that is not an integer, bool or plain pointer
-* `vectors.andLanes`: a parameter that is not an integer, bool or plain pointer
-* `vectors.checkedAdd`: a parameter that is not an integer, bool or plain pointer
-* `vectors.fDot`: a parameter that is not an integer, bool or plain pointer
-* `vectors.fMax`: a parameter that is not an integer, bool or plain pointer
-* `vectors.fMin`: a parameter that is not an integer, bool or plain pointer
-* `vectors.interleave`: a parameter that is not an integer, bool or plain pointer
-* `vectors.maxLane`: a parameter that is not an integer, bool or plain pointer
-* `vectors.minLane`: a parameter that is not an integer, bool or plain pointer
-* `vectors.orLanes`: a parameter that is not an integer, bool or plain pointer
-* `vectors.pick`: a parameter that is not an integer, bool or plain pointer
-* `vectors.reverse`: a parameter that is not an integer, bool or plain pointer
-* `vectors.satAdd`: a parameter that is not an integer, bool or plain pointer
-* `vectors.splatAdd`: a parameter that is not an integer, bool or plain pointer
-* `vectors.twiceInMem`: a parameter that is not an integer, bool or plain pointer
-* `vectors.uDotWrap`: a parameter that is not an integer, bool or plain pointer
-* `vectors.uMinLane`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vAbs`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vBits`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vDiv`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vLess`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vMinMax`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vMod`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vNarrow`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vNeg`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vOverflow`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vShift`: a parameter that is not an integer, bool or plain pointer
-* `vectors.vToFloat`: a parameter that is not an integer, bool or plain pointer
-* `vectors.xorLanes`: a parameter that is not an integer, bool or plain pointer
+* `vectors.addTo`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.andLanes`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.checkedAdd`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.fDot`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.fMax`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.fMin`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.interleave`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.maxLane`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.minLane`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.orLanes`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.pick`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.reverse`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.satAdd`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.splatAdd`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.twiceInMem`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.uDotWrap`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.uMinLane`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vAbs`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vBits`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vDiv`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vLess`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vMinMax`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vMod`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vNarrow`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vNeg`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vOverflow`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vShift`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.vToFloat`: a parameter that is not an integer, bool, plain pointer or slice
+* `vectors.xorLanes`: a parameter that is not an integer, bool, plain pointer or slice
 -/
 
 /-- The decoded canonical AIR of `vectors.sMod`. -/

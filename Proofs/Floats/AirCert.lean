@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Floats.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Floats.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -10,13 +12,13 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `floats.celsius`: a parameter that is not an integer, bool or plain pointer
-* `floats.clamp`: a parameter that is not an integer, bool or plain pointer
-* `floats.dot`: a parameter that is not an integer, bool or plain pointer
-* `floats.fitness`: a parameter that is not an integer, bool or plain pointer
-* `floats.hypot2`: a parameter that is not an integer, bool or plain pointer
-* `floats.isNan`: a parameter that is not an integer, bool or plain pointer
-* `floats.lerp`: a parameter that is not an integer, bool or plain pointer
+* `floats.celsius`: a parameter that is not an integer, bool, plain pointer or slice
+* `floats.clamp`: a parameter that is not an integer, bool, plain pointer or slice
+* `floats.dot`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `floats.fitness`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `floats.hypot2`: a parameter that is not an integer, bool, plain pointer or slice
+* `floats.isNan`: a parameter that is not an integer, bool, plain pointer or slice
+* `floats.lerp`: a parameter that is not an integer, bool, plain pointer or slice
 -/
 
 end Floats.AirCert

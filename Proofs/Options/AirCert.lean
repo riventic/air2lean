@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Options.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Options.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -10,9 +12,9 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `options.find`: a parameter that is not an integer, bool or plain pointer
-* `options.findOr`: a parameter that is not an integer, bool or plain pointer
-* `options.firstIndexPlusOne`: a parameter that is not an integer, bool or plain pointer
+* `options.find`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `options.findOr`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
+* `options.firstIndexPlusOne`: a slice parameter of a function without memory (an `Array`; docs/air-semantics.md §Next fragments)
 -/
 
 end Options.AirCert

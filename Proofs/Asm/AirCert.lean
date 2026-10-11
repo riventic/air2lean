@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Asm.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Asm.AirCert
 
 open Air2Lean Air2Lean.Sem
