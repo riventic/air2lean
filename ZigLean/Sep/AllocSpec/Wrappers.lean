@@ -95,6 +95,7 @@ macro "tame_prim" : tactic => `(tactic| first
   | exact Wrap.tame_alignCast _ _
   | exact Wrap.tame_copyChecked _ _ _ _ _ _ _
   | exact Full.Tame.checkSliceEnd _ _ _ _
+  | exact Full.Tame.checkIndex _ _
   | exact Full.Tame.checkSentinelIndex _ _
   | exact Full.Tame.ptrProject _ _)
 
@@ -685,7 +686,7 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
       simp only [Zig.lt, Bool.false_eq_true, ↓reduceIte, BitVec.ult_iff_lt, BitVec.lt_def, e1]; omega
     have hle : Zig.le false (n + 1) (n + 1) = true := by
       simp only [Zig.le, Bool.false_eq_true, ↓reduceIte, BitVec.ule_iff_le, BitVec.le_def]; omega
-    rw [if_pos hlt]
+    rw [if_pos hlt, checkIndex_ok (by rw [e1]; omega), pure_bind]
     have hsn : Enc.size T * n.toNat ≤ (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size := by
       simp [Nat.mul_succ]
     refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok s.ptr

@@ -115,7 +115,7 @@ def dupe (size k sa : Nat) (src : Slice) : MemM (Except ErrName Slice) :=
       else throw .panic
 
 /-- `allocSentinel(T, n, sentinel)` (`allocWithOptionsRetAddr`): `n + 1` items, the last the
-sentinel (its pointer formed with `ptrProject`), which the slicing `ptr[0..n :sentinel]` reads
+sentinel (its pointer formed after the item bounds check, with `ptrProject`), which the slicing `ptr[0..n :sentinel]` reads
 back after the model's bounds checks. -/
 def allocSentinel {T : Type} [Enc T] [DecidableEq T] (k : Nat) (n : BitVec 64) (sentinel : T) :
     MemM (Except ErrName Slice) :=
@@ -124,6 +124,7 @@ def allocSentinel {T : Type} [Enc T] [DecidableEq T] (k : Nat) (n : BitVec 64) (
     | .error e => pure (.error e)
     | .ok s =>
       if Zig.lt false n s.len = true then
+        checkIndex s.len n >>= fun _ =>
         ptrProject s.ptr (·.elem (Enc.size T) n) >>= fun q =>
         store (Enc.align T) q sentinel >>= fun _ =>
         liftR (Zig.add false n 1) >>= fun n₂ =>

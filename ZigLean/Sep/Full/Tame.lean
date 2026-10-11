@@ -72,6 +72,9 @@ theorem checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) :
     Tame (Zig.checkSliceEnd srcLen start len extra) := by
   unfold Zig.checkSliceEnd; exact ite (pure' _) (throw _)
 
+theorem checkIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkIndex len i) := by
+  unfold Zig.checkIndex; exact ite (pure' _) (throw _)
+
 theorem checkSentinelIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkSentinelIndex len i) := by
   unfold Zig.checkSentinelIndex; exact ite (pure' _) (throw _)
 
@@ -278,6 +281,7 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.ptrEqAddr _ _
   | with_reducible exact Tame.checkAlign _ _
   | with_reducible exact Tame.checkSliceEnd _ _ _ _
+  | with_reducible exact Tame.checkIndex _ _
   | with_reducible exact Tame.checkSentinelIndex _ _
   | with_reducible exact Tame.memcpy _ _ _ _ _ _ _
   | with_reducible exact Tame.ptrProject _ _
