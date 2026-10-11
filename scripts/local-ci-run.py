@@ -465,34 +465,44 @@ class Job:
         return 'elan-init' in code or ('host-zig' in code and 'tar -xJ' in code)
 
     def do_memo(self, step, code, env):
-        """Run an install recipe once per recipe text; later rows reuse its effects."""
+        """Run an install recipe once per recipe text; later rows reuse its effects.
+
+        The recipe runs in a scratch directory that mirrors the workspace's top level with
+        symlinks (it reads zig-patch/ and the like), so what it creates there is exactly its
+        product: host-zig/, elan-init, tarballs."""
         code = self.render(code)
         home = self.tools / 'setup' / digest(code)[:24]
-        done = home / '.ok'
-        if not done.exists():
+        work, out = home / 'work', home / 'out'
+        if not (home / '.ok').exists():
             shutil.rmtree(home, ignore_errors=True)
             (home / 'tmp').mkdir(parents=True)
+            work.mkdir()
+            for entry in self.workspace.iterdir():
+                if entry.name not in ('.git', '.lake') and not entry.name.startswith(('host-zig', 'zig-air-', 'elan')):
+                    (work / entry.name).symlink_to(entry)
             run_env = dict(env, RUNNER_TEMP=str(home / 'tmp'), GITHUB_PATH=str(home / 'github_path'))
             (home / 'github_path').touch()
-            if self.run_code(code, run_env, home) != 0:
+            if self.run_code(code, run_env, work) != 0:
                 return 1
-            for junk in home.glob('*.tar.*'):
-                junk.unlink()
+            out.mkdir()
+            for entry in list(work.iterdir()):
+                if not entry.is_symlink() and not entry.name.endswith(('.tar.gz', '.tar.xz')) and entry.name != 'elan-init':
+                    shutil.move(str(entry), out / entry.name)
             for junk in (home / 'tmp').glob('*.tar.*'):
                 junk.unlink()
-            done.write_text('ok\n')
+            (home / 'github_path').write_text((home / 'github_path').read_text().replace(str(work), str(out)))
+            shutil.rmtree(work)
+            (home / '.ok').write_text('ok\n')
         # Materialise: cwd-relative results become physical directories of the workspace (the
         # receipt gate wants real compiler directories), RUNNER_TEMP-relative ones are linked.
         mapping = {}
-        for entry in sorted(home.iterdir()):
-            if entry.name in ('.ok', 'tmp', 'github_path', 'elan-init') or entry.name.endswith(('.tar.gz', '.tar.xz')):
-                continue
+        for entry in sorted(out.iterdir()):
             target = self.workspace / entry.name
-            marker = target / '.local-ci-recipe' if target.is_dir() else None
-            if not (marker and marker.exists() and marker.read_text() == home.name):
+            marker = target / '.local-ci-recipe'
+            if not (marker.exists() and marker.read_text() == home.name):
                 shutil.rmtree(target, ignore_errors=True)
                 shutil.copytree(entry, target, symlinks=True)
-                (target / '.local-ci-recipe').write_text(home.name)
+                marker.write_text(home.name)
             mapping[str(entry)] = str(target)
         self.runner_temp.mkdir(parents=True, exist_ok=True)
         for entry in sorted((home / 'tmp').iterdir()):
@@ -500,7 +510,6 @@ class Job:
             if not link.exists():
                 link.symlink_to(entry)
             mapping[str(entry)] = str(link)
-            mapping[str(home / 'tmp' / entry.name)] = str(link)
         for line in (home / 'github_path').read_text().split('\n'):
             if line:
                 for old, new in sorted(mapping.items(), key=lambda kv: -len(kv[0])):
@@ -650,6 +659,7 @@ def launch_row(args):
     row = {r['id']: r for r in enumerate_rows(workflow)}[args.row]
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
+    progress = open(results / 'progress.log', 'a', buffering=1)  # step headers; read by the heartbeat
     files = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], check=True, capture_output=True).stdout
     names = [p for p in files.decode().split('\0') if p and not p.startswith(('.lake/', '.claude/'))]
     names = [p for p in names if os.path.lexists(root / p) and not (root / p).is_dir()]
@@ -661,7 +671,7 @@ def launch_row(args):
             command = [sys.executable, str(root / 'scripts/local-ci-run.py'), 'exec-row', '--row', row['id'],
                        '--src', str(root), '--files', str(snapshot / 'files'), '--workspace', str(HOME / 'macos-work'),
                        '--tools', str(tools), '--artifacts', str(results)]
-            return subprocess.call(command)
+            return subprocess.call(command, stdout=progress, stderr=subprocess.STDOUT)
         arch = row['where']
         image = ensure_image(arch, root)
         mounts = []
@@ -678,7 +688,7 @@ def launch_row(args):
              '--files', '/snapshot/files', '--workspace', '/work', '--tools', '/cache', '--artifacts', '/artifacts'],
             check=True, capture_output=True, text=True).stdout.strip()
         try:
-            subprocess.run(['docker', 'start', '-a', container], check=False)
+            subprocess.run(['docker', 'start', '-a', container], check=False, stdout=progress, stderr=subprocess.STDOUT)
             status = int(subprocess.run(['docker', 'inspect', '--format', '{{.State.ExitCode}}', container],
                                         check=True, capture_output=True, text=True).stdout)
         finally:
@@ -700,6 +710,7 @@ def guarded(row, results, scale, verbose):
     lane = 'host' if row['where'] == 'host' else 'docker'
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
     log = results / 'guard.log'
+    progress = results / 'progress.log'
     command = [sys.executable, str(REPO / 'scripts/build-guard.py'), '--cwd', str(REPO),
                '--lock', str(LOCK_DIR / ('local-ci-%s.lock' % lane)), '--lock-wait', '28800',
                '--timeout', str(int(row['timeout'] * 60 * scale)),
@@ -716,7 +727,7 @@ def guarded(row, results, scale, verbose):
         seen, last_print = 0, time.monotonic()
         while not stop.wait(5):
             try:
-                lines = log.read_text(errors='replace').splitlines()
+                lines = progress.read_text(errors='replace').splitlines()
             except OSError:
                 continue
             headers = [l for l in lines if l.startswith('== CI ')]
@@ -813,7 +824,7 @@ def main(argv):
         summary.append((row, status, seconds, failed_step or guard_note))
         print('   %s in %s' % ('passed' if status == 0 else 'FAILED (exit %d)' % status, format_seconds(seconds)), flush=True)
         if status:
-            print(tail(results / 'row.log') if (results / 'row.log').exists() else out.strip()[-2000:], flush=True)
+            print(tail(results / 'row.log') if (results / 'row.log').exists() else tail(results / 'progress.log'), flush=True)
             print('   full log: %s' % (results / 'row.log'), flush=True)
     print('\nlocal-ci summary (results in %s)' % run_dir)
     for row, status, seconds, note in summary:

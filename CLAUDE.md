@@ -43,3 +43,4 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   index, theorem inventory, pins, provenance) rather than hand-merging them.
 - Run `scripts/preflight.sh` before every push: it checks every generated file CI checks for staleness, in minutes.
 - Agents keep a handoff file in `~/.cache/air2lean/handoffs/` and use private scratch directories.
+- Run `scripts/local-ci.sh --part ... --version ...` (or `--changed`) to run CI rows on this Mac before pushing: `docs/local-ci.md`.
