@@ -253,6 +253,116 @@ sequential run that compares the value it just read needs no address.
   * a moving `mremap` ends the old block and pushes the new one at `Mem.newAddr`
     (`LDMono.set_dead_push`).
 
+## Block extents (design, alloc M2 O-G; not implemented yet)
+
+Status: design approved by the coordinator (2026-10-11), phases below. Nothing in this section
+is in the code yet. It replaces "frame cells carry their block's size".
+
+### The problem (O-G)
+
+A cell records its block's address, size and kind (`Cell`, `Mem.heap`), and `Holds` matches
+the frame's cells exactly. So every change of a block's size or of a mapping's live start
+(`mremap` growth or shrink in place, `munmap` of a page prefix or tail, a heap or fixed-buffer
+remap in place) changes the cells of every owner of a byte of that block. An owner of a part of
+a block can then not resize the block without the other parts, although the change touches no
+byte they own.
+
+The translated `ArenaAllocator` shows that this is not only a proof gap. Its `alloc` grows its
+first node in place through the child (`child_allocator.rawResize(node, …)`) while clients hold
+grants inside that node:
+
+* `FAllocSpec.resize` needs `I.own ⋆ I.granted p k bs`, the region's bytes included, and the
+  arena does not own its clients' bytes. So no proof from the child's `FAllocSpec` exists.
+* With `page_allocator` as the child, the step is a real violation of the arena's
+  `FAllocSpec.alloc`. Take a client that holds an 8-byte grant in the first node and calls
+  `alloc(5000)`. `PageAllocator.resize` grows the mapping in place (`mremap` without
+  `MAYMOVE`, `Mem.mremapGrown`). The client's cells, part of the frame, record the old size, so
+  no `Holds m' r' rF` exists. This holds for every arena invariant. Natively nothing is wrong: an
+  object's bytes do not depend on the size of the mapping around them.
+
+Weakening "≤" (a frame cell's size at most the block's) works for growth but not for a shrink
+that releases only the tail: the prefix's cells would record more than the new size. That is
+why the size leaves the cells.
+
+### The design: size-free cells and extent resources (RustBelt/Iris split)
+
+1. **Cells carry no block size and no mapping start.** `FMatch` compares cells after
+   normalizing them (`Cell.norm`: size `0`, `.mapped lo` as `.mapped 0`). A cell still records
+   the byte, the block's address (which never changes) and the kind's constructor, which never
+   changes (`constGlobal` rules out writes). Owning a cell still gives what an access needs: the
+   cell is in `Mem.heap`, so the block is live, the offset is below the size and at or above
+   `lo` (`Mem.access`, `Mem.inBounds` up to one past the owned bytes).
+2. **`bext b S K`: the exclusive extent of a live block.** This is a new component
+   `ext : BlockId → Option (Nat × BlockKind)` of `Res`, disjoint between `r` and `rF`, and exact
+   in `Holds`: `m.blocks[b]` is live with size `S` and kind `K` (`lo` included). Only its owner
+   changes a block's size, start or liveness. Like a byte, it splits and joins by
+   disjointness.
+3. **`bsize b S`: persistent size knowledge** for blocks whose size never changes (`stack`,
+   `global`, `constGlobal`). It joins `know`: it is duplicable and stays true in every later
+   memory. The audit found that `.heap` blocks (`remapByteBuffer`, `Mem.afterByteRemap`) and
+   `.owned` blocks (`ownedRemapBytes`) also resize, so for them, as for `.mapped`, only `bext`
+   pins the size.
+4. **What needs what.**
+   * Load, store and atomic ops: the bytes. Unchanged.
+   * `ptrProject` within or one past the owned bytes: the bytes. A pointer up to a bound that
+     the caller does not own bytes to, such as the arena's `buf + end_index` when clients hold
+     the end of the node, needs `bext` or `bsize`.
+   * `free`, `munmap` of the whole block, and `mremap` that moves: `bext` (or `bsize` for
+     non-resizable kinds) plus every byte of the block.
+   * Shrink in place and `munmap` of a tail or prefix: `bext` plus the released bytes only.
+   * Growth in place: `bext` and no existing bytes. The new bytes go to the caller.
+   * `Holds.apart`: owned bytes of two live blocks lie at disjoint addresses. Disjointness of
+     whole blocks needs both extents; the arena's O-F needs only the owned bytes and one past.
+5. **Frame preservation** (the soundness obligation, per primitive): a step changes a block's
+   size, start or liveness only with its `bext` (or `bsize` plus all its bytes) in the
+   precondition. Frame cells keep their normalized cells: a released byte is the caller's, and a
+   grown byte is new. Frame extents are untouched. Frame knowledge stays true (`bsize` only for
+   kinds that never resize). Every rule that reads a size reads it from `bext`, from `bsize` or
+   from an owned cell, never from a frame cell.
+
+### `FAllocSpec` refined (a stronger contract)
+
+`resize` and `remap` keep their postconditions. `resize`'s precondition becomes `I.own ⋆
+I.tok p bs.size k A S K` plus `up (regionIn (p.add n) …)` of the released bytes `[n, len)` when
+`n ≤ len`, and nothing of the region when it grows. Zig's `resize` is in place and keeps the
+contents, so the bytes a caller keeps are its own throughout. `remap` may move, so its
+precondition keeps the whole region (the in-place branch is not split off; the code decides
+inside). The old `resize` field follows as a corollary (frame the kept bytes). Tokens that pin
+an extent carry `bext` (page allocator: the mapping's `bext`, replacing the tail-ownership pin
+of O2) or `bsize` (fixed buffer in a global: the buffer's `bsize`, replacing the pin byte).
+
+### The bridge from the legacy layer
+
+The legacy layer (`ZigLean/Sep`: `Cell`, `bytesAt`, `Triple`, ~95k lines of dependents) keeps its
+semantics. `FTriple.ofTriple` and `FTotalTriple.ofTotal` change their side conditions:
+
+* **Size-free assertions** (`SizeFree P`: invariant under changing the sizes and `lo`s of the
+  cells, for example `region p a bs := ∃ A S K, …` and `granted`): a legacy triple of a
+  program that changes no existing block's extent (`Tame` plus extent-preserving) lifts as
+  today. The proof instantiates the legacy triple at the memory's actual sizes.
+* **Pinned assertions** (`up P ⋆ bext …`, where every block of `P`'s cells has its extent in
+  the precondition, for example `Sep/Mmap.lean`'s `mapping`): a legacy triple lifts, and it may
+  change those extents (`mremap`, `munmap`). The post receives the new extents of those blocks,
+  and the extents of blocks the step creates.
+* If a legacy triple fits neither form, the lift is not available. Report it then; do not
+  rewrite the legacy layer for it.
+
+### Phases (one commit and one agent phase each, estimated)
+
+| | phase | content | estimate |
+|---|---|---|---|
+| 1 | design | this section | done |
+| 2 | model | `Res.ext`, `bsize` in `know`, normalized `FMatch`, `Holds`; re-prove `Res`, `Triple`, `Atomic`, `AtomicPtr`, `AtomicRules`, `Disjoint`, `Ghost`, `Seq`, `Tame`, `Toy`, `Conc`, `Dispatch`; the two bridges | 1–2 phases |
+| 3 | OS rules | native full-state `mmap` (fresh `bext`), `munmap` whole/prefix/tail, `mremap` grow (`bext` only) and shrink (`bext` + tail), and move | 1 phase |
+| 4 | spec | refined `FAllocSpec.resize`, old form as a corollary, `toLegacy` and wrappers adjusted | ½ phase |
+| 5 | re-proofs | FBA (`resize` from the token; `bsize` of the buffer; no pin byte), `PageSpec` linux+macOS (token = `bext` + tail), arena `free`/`resize`/`remap` (the invariant records that every grant lies in a used node, for O-F without the slice's bytes) | 2–3 phases |
+| 6 | arena `alloc` | patched arena for every `CAllocSpec` child (dispatch through `CVTable.dispatch` + `vtR`; `fits` per O-C); page child instance; O-G regression (`8`-byte grant, then `alloc(5000)`) | 2–3 phases |
+| 7 | the rest | `reset` (stock and patched), the `Unroll` fix-group cut, `not_fallocSpec_arena` | 1–2 phases |
+
+The general atomic rules the arena's `alloc` needs are done independently
+(`AtomicRules.lean`: `atomicXchgPtrW`, `cmpxchgWeakPtrW`, `atomicLoadUnorderedW`/`AsW`) and carry
+over to phase 2 unchanged in statement.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem
@@ -484,7 +594,9 @@ a page (`PageAlloc.own`). Item 6's rule exists (stage 3); the FBA proof still us
 * Atomic rules are sequential (choice 0). `Atomic.lean` has load and store of 64-bit integer
   words; `AtomicPtr.lean` has the pointer-valued points-to `aptsE`, the `unordered` load
   (`FTriple.atomicLoadUnorderedEnc`) and the strong pointer `cmpxchg` that succeeds
-  (`FTriple.cmpxchgPtr`). There is no RMW rule. `Seq.lean` reads a one-thread scheduler run
+  (`FTriple.cmpxchgPtr`). `AtomicRules.lean` adds RMW (`atomicRmwW`, `atomicRmwAsW`), pointer
+  `.Xchg` and weak pointer `cmpxchg` (`atomicXchgPtrW`, `cmpxchgWeakPtrW`) and `unordered`
+  integer/packed loads (`atomicLoadUnorderedW`/`AsW`), all on any owned word. `Seq.lean` reads a one-thread scheduler run
   with the oracle `0` as a `MemM` program (`Sched.run_eq_seqRun`, for a `ThreadFree` function).
 * `FTriple.ptrFromAddr` frames everything but says nothing about the result's provenance: an
   ambiguous address gives `⟨none, n⟩` (O4 fix), so a proof that dereferences the result needs

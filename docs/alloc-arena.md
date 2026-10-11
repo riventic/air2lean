@@ -137,6 +137,16 @@ make O-E unreachable (above), and `docs/premises.md` lists none.
 A child specification covers only requests within `CI.fits`; with the patch, a request outside
 the child's `fits` must be one that the arena's own `alloc` contract allows to fail.
 
+**O-G: in-place growth of a node with outstanding grants.** The patched `alloc` grows its first
+node in place through the child (`child_allocator.rawResize(node, …)`) while clients hold grants
+inside it. `FAllocSpec.resize` needs the region's bytes, which the arena does not own, and frame
+cells record their block's size. With `page_allocator` as the child, `mremap` growth in place
+changes the size that the clients' cells record. So the arena's `FAllocSpec.alloc` fails for
+every invariant, although natively nothing is wrong. Resolution (approved, not implemented):
+size-free cells and extent resources, and a stronger `FAllocSpec.resize` that grows from the
+token alone ([sep-full-state.md](sep-full-state.md) §Block extents, with phases). The patched
+`alloc` proof waits for it.
+
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
 multi-threaded specification of the lock-free code (the `resizing` bit as a lock, the stolen
@@ -206,8 +216,10 @@ free list) is not attempted.
 
 Not proved yet, in order:
 
-* The patched arena's `alloc`: fixpoint induction over the `alloc` group with the library rules
-  above. A new node's header comes from the child as a plain region (`up`, any atomic layout); the
+* The patched arena's `alloc` (after O-G's resolution, [sep-full-state.md](sep-full-state.md)
+  §Block extents): fixpoint induction over the `alloc` group with the library rules
+  above (`stealFreeList`: `FTriple.atomicXchgPtrW`; `pushFreeList`: `FTriple.cmpxchgWeakPtrW`;
+  `endResize`'s assert: `FTriple.atomicLoadUnorderedAsW`). A new node's header comes from the child as a plain region (`up`, any atomic layout); the
   atomic rules apply to it once its tag constraints are dropped (`FTriple.untag`, `wpts_of_up`;
   atomic tags are constraints, [sep-full-state.md](sep-full-state.md) §Atomic tags are
   constraints), so the invariant's header words can be any owned words (`wpts`), and the RMW rules
