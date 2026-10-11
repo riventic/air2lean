@@ -8,14 +8,14 @@ drift from CI.
 ```sh
 scripts/local-ci.sh --part inputs --version 0.16.0   # one row
 scripts/local-ci.sh --part golden --part lean        # every version's golden and lean rows
-scripts/local-ci.sh --part ReleaseFast               # x86_64-linux native build mode (Rosetta)
+scripts/local-ci.sh --part Debug --version 0.16.0    # an x86_64-linux native build mode (Rosetta)
 scripts/local-ci.sh --part aarch64-linux             # a job by name
 scripts/local-ci.sh --changed                        # the rows the diff against origin/main can affect
 scripts/local-ci.sh --changed --list                 # which rows, and why, without running them
 scripts/local-ci.sh --all                            # the whole CI (hours)
 ```
 
-`--part` takes a part of the `test` job (`golden lean inputs native audit receipt Debug ReleaseFast
+`--part` takes a part of the `test` job (the build modes are described in [build-modes.md](build-modes.md); `golden lean inputs native audit receipt Debug ReleaseFast
 ReleaseSmall mutation`, `mutation:3` for one shard) or a job (`lake macos aarch64-linux
 build-modes-aarch64-linux bitops-native-arm`). `--version` filters rows with a Zig version
 (`test`, `macos`). Both repeat. Rows run one after another and a failing row does not stop the
