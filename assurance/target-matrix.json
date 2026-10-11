@@ -33,7 +33,7 @@
       "zig": "0.14.1", "host": "x86_64-linux", "target": "x86_64-linux", "profile": "abi64-le-v1",
       "job": "test", "matrix": {"zig": "0.14.1", "full": false, "mutate": false},
       "evidence": {
-        "native_execution": ["Loop-switch dispatch regressions"],
+        "native_execution": ["Golden AIR, translate, build, differential test", "Loop-switch dispatch regressions"],
         "target_probe": ["ABI target probe (0.14.1)"],
         "proof_check": ["Build proofs"]
       }
@@ -88,7 +88,8 @@
       "zig": "0.14.1", "host": "aarch64-linux", "target": "aarch64-linux", "profile": "abi64-le-v1",
       "job": "aarch64-linux",
       "evidence": {
-        "native_execution": ["aarch64-linux loop-switch dispatch native regressions (0.14.1)"],
+        "native_execution": ["aarch64-linux golden AIR, translate, differential test (0.14.1)",
+                             "aarch64-linux loop-switch dispatch native regressions (0.14.1)"],
         "target_probe": ["aarch64-linux ABI qualification (T04, 0.14.1)"],
         "proof_check": ["aarch64-linux proofs (0.14.1)"]
       }
