@@ -165,7 +165,7 @@ that the queue then rejects; it can never merge an unchecked change.
 - `pull_request` runs: reuse on, the PR's merge with `main` checked out. `merge_group` and `workflow_dispatch`
   runs: reuse off, every part executes and is traced, and records are written.
 - `all-checks` aggregates every job; it is the one required status.
-- Repository ruleset on `main` (applied with `gh api` after this workflow is on `main`):
+- Repository ruleset `main-protection` on `main` (applied with `gh api`, 2026-10-12):
   required status check `all-checks` (integration: GitHub Actions), merge queue with merge method
   `MERGE`, grouping `ALLGREEN`, build concurrency 2, group size 1-5, no wait for a minimum group,
   status timeout 120 min; block force pushes and deletion. Admins keep bypass for emergencies;
