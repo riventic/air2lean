@@ -24,14 +24,14 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 55 | Caller-supplied `Allocator` behaves as the std model |
 | [IOM-01](premises.md#iom-01) | 361 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 1644 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1641 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 227 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 21 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 867 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 85 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1237 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1234 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
@@ -1711,9 +1711,9 @@ File premises: PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Sem.sig_body` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.signal_spec` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.enc_u64` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Sync.Sem.pts_same` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `Sync.Sem.pts_same` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Sync.Sem.pts_eq` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `Sync.Sem.sub_union_left` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Sync.Sem.sub_union_left` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.Sem.Inv.congrG` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Sync.Sem.wp_cnt` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.R_upd1` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
@@ -4148,7 +4148,7 @@ File premises: PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, S
 | `ThreadLocals.Counters.ownOf_main` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ThreadLocals.Counters.cnt_hcnt` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ThreadLocals.Counters.mem0_blocks` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ThreadLocals.Counters.hcnt_sub` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.hcnt_sub` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.mem0_t0` | PRF-02, THR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.mem0_size` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.ho₀` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |

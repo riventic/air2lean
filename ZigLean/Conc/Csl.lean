@@ -30,9 +30,6 @@ namespace Zig
 
 open Assn
 
-/-- Every cell of `h₁` is in `h`. -/
-def Heap.Sub (h₁ h : Heap) : Prop := ∀ l c, h₁ l = some c → h l = some c
-
 /-- The cells of `h` that `h₁` does not have. -/
 def Heap.diff (h h₁ : Heap) : Heap := fun l => if h₁ l = none then h l else none
 
