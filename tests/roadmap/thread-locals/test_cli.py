@@ -116,13 +116,13 @@ def main():
         del d["globals"][0]["init"]
     checks += reject(binary, mutate(no_init), "the AIR file has no initial value", "STRUCTURE_FAILURE")
 
-    # Pointer-holding storage is accepted (L12, tests/roadmap/lang-long-tail); error storage
-    # is not (the finite error-storage fragment tracks error-bearing blocks per global).
-    def error_type(d):
-        d["types"].append(dict(k="error_set", errors=["Boom"], abi_size=2, abi_align=2))
+    def pointer_type(d):
+        d["types"].append(dict(k="ptr", size="one", const=False, child=2, ptr_align=4,
+                               volatile=False, allowzero=False, address_space="generic", sentinel=False, host_size=0,
+                               abi_size=8, abi_align=8))
         d["globals"][0]["ty"] = len(d["types"]) - 1
         d["globals"][0]["init"] = dict(ty=len(d["types"]) - 1, undef=True)
-    checks += reject(binary, mutate(error_type), "its type holds error storage")
+    checks += reject(binary, mutate(pointer_type), "its type can hold a pointer")
 
     def wrong_child(d):
         d["types"].append(dict(k="int", signed=False, bits=64, abi_size=8, abi_align=8))
