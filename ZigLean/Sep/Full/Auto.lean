@@ -615,12 +615,6 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     trace[fsym.arith] "exception {ex.toMessageData}"
     s.restore; return false
 
-/-- `fsym_arith`: the arithmetic solver (`arithCore`) as a tactic. -/
-elab "fsym_arith" : tactic => do
-  let g ← getMainGoal
-  unless ← arithCore g do throwError "fsym_arith: not proved"
-  replaceMainGoal []
-
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
 goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts). -/
 partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
@@ -654,6 +648,17 @@ def arith (g : MVarId) (quick := false) : TacticM Bool := do
   trace[fsym.prof] "arith {((← IO.getNumHeartbeats) - h0) / 1000} {ok} {quick}: {← instantiateMVars (← g.getType)}"
   if ok then return true
   s.restore; return false
+
+/-- `fsym_arith`: the arithmetic solver (`arith`) as a tactic; within a run of `fsym` with the
+run's caches, else with its own. -/
+elab "fsym_arith" : tactic => do
+  let g ← getMainGoal
+  let inRun := (← getOptions).get `fsym.run (0 : Nat) != 0
+  let ok ← if inRun then arithCore g else withRunCaches do
+    discard <| arithSimpCtx
+    arith g
+  unless ok do throwError "fsym_arith: not proved"
+  replaceMainGoal []
 
 /-- Prove `x = y` of assertions by AC of `⋆`. -/
 def acEq (x y : Expr) : TacticM Expr := do

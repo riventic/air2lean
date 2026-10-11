@@ -3,8 +3,9 @@
 # the retained translation is the fresh one; the bridge (generated std.mem.Allocator wrappers =
 # Wrap.*), FBA.allocSpec and the client proof check; the client evaluates to the native results;
 # a mutated alloc fails the proof (mutant.sh); the entries satisfy the full-state FAllocSpec, proved
-# natively (Full.lean). Needs `lake build air2lean ZigLean` and `lake build ZigLean.Sep.AllocSpec.Dispatch
-# ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
+# natively by the general tactic fsym (Full.lean). Needs `lake build air2lean ZigLean` and `lake build
+# ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops
+# ZigLean.Sep.Full.Auto`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
 # Zig 0.16.0), also builds and runs native.zig and compares it with expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)

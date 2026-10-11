@@ -794,7 +794,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Dispatch 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
+          bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # Atomic tags are constraints: the exact-tag counterexample and the plain-bytes rule.
           lake env lean tests/roadmap/sep-full/ExactTags.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/exact-tags.log"
           python3 - "$RUNNER_TEMP/sep-full/exact-tags.log" <<'EOF'
@@ -1034,7 +1036,7 @@ jobs:
         if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto
           bash tests/roadmap/alloc-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
