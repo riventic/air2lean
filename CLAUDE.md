@@ -39,6 +39,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 
 - Run `/review` and `/simple` on every PR. Integrate work in batch PRs. Merge only when CI is green
   at the verified head commit.
+- **Merge through the merge queue** (docs/ci.md#coordinator-merge-flow): `gh pr merge <N> --merge
+  --auto` once `all-checks` is green on the PR head. The queue runs the full CI on the merge
+  result and advances `main` only when it is green; that `merge_group` run is the commit's
+  evidence. PR runs reuse unchanged parts' results; the queue never does.
 - Run heavy builds through `scripts/build-guard.py`. Regenerate generated files (coverage, premise
   index, theorem inventory, pins, provenance) rather than hand-merging them.
 - Run `scripts/preflight.sh` before every push: it checks every generated file CI checks for staleness, in minutes.

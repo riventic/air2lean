@@ -95,8 +95,10 @@ nondeterminism that a re-run of P on T1 already has (timing, scheduling, cache w
 - Git is modelled by command, not by its reads of `.git/`: the tracer attributes every access by
   a `git` process to the command line. `git ls-files` (names) needs all tracked names (the key
   then includes the full name list); `git status --porcelain` in the final "Checkout unchanged"
-  step needs nothing beyond the step's own traced writes; any other git command (or any
-  non-git read of `.git/`) needs commit identity, which only a `commit_bound` part may have.
+  step needs nothing beyond the step's own traced writes; `fetch`, `show`, `cat-file` and
+  `rev-parse` naming only full object ids read content-addressed objects (the ids come from
+  observed tracked files); any other git command (or any non-git read of `.git/`) needs commit
+  identity, which only a `commit_bound` part may have.
 - Environment variables cannot be traced, so the traced shell runs each step with the
   run-specific `GITHUB_*` variables removed (`GITHUB_SHA`, `GITHUB_REF*`, `GITHUB_RUN_*`,
   `GITHUB_EVENT_*`, ...); the step keeps only the workspace path and the write-only channels
@@ -110,8 +112,10 @@ What is *not* claimed: the macOS rows are not traced (no `strace`); they are reu
 
 ### Enforcement
 
-- **Every executed Linux part is traced**, and its last gate, "Declared inputs cover every
-  observation", fails the job when an observation is uncovered. The error names the step, the
+- **Every executed Linux part is traced** (`defaults: run: shell: bash scripts/ci-trace.sh {0}`;
+  the coverage and record steps after every gate are the only steps that run untraced, which
+  `check-workflow` enforces), and its step "Declared inputs cover every observation" fails the
+  job when an observation is uncovered. The error names the step, the
   path and the pattern to add. This is the CI check that fails when a step reads outside its
   declared inputs; `tests/roadmap/ci-reuse/` holds the unit tests of the checker (a synthetic
   trace that reads an undeclared file must fail; one inside the declaration must pass; the git,
@@ -202,13 +206,25 @@ and the native wide bit-operation differential. What changes:
 - Only `ci-cache.yml` on `main` saves cache entries (Lake root and `tests/diff` package per
   platform, patched compilers per version and platform, native harness caches). PR and queue
   runs use `actions/cache/restore` only.
-- Within a run, the `lake` job uploads its build as one zstd-compressed artifact (retention 1
-  day) and the `zig-air` job uploads each patched compiler it had to build; the rows download
-  them. A PR therefore builds each changed thing once per run instead of once per row, and saves
+- Within a run, the `lake` job (restored from `main`'s newest entry, built on top) uploads its
+  build as one zstd archive and the `zig-air` job each version's patched compiler (restored from
+  `main` or built), as artifacts with retention 1 day; the rows download and unpack them. The
+  unpack steps, like the reuse steps, are CI-only (`ci_only` in scripts/local-ci-steps.py;
+  `scripts/local-ci.sh --prepare` provides both locally) and are not release gates. A PR therefore builds each changed thing once per run instead of once per row, and saves
   nothing to the cache.
 - `ci-cache.yml` prunes after every `main` push and daily: it keeps the newest `main` entry per
   key prefix and deletes every other entry (older `main` entries, every PR- or queue-scoped
   entry). `main` stays far under 10 GB, so no `main` entry is ever evicted by size.
+
+### Current declarations
+
+Every traced part starts declared with `"inputs": ["**"], "tree_names": true` (the whole tree):
+sound, and reused only when a push leaves the whole tree unchanged. Each execution uploads its
+trace observations (`ci-trace-<key>`, 7 days); `scripts/ci-reuse.py suggest` turns them into
+narrower patterns, and the coverage check of the next execution verifies the narrowed
+declaration. The macOS rows are `commit_bound`. A first traced run of the offline inventory
+regressions observed 3,902 workspace paths (most of the tree), so the gain of narrowing is per
+part and has to be measured, not assumed.
 
 ## Rollout order
 

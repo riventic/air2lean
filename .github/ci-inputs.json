@@ -1,0 +1,163 @@
+{
+  "schema": "air2lean-ci-inputs/1",
+  "note": "Input declarations of the CI parts (docs/ci.md#1-input-hash-result-reuse, scripts/ci-reuse.py). Every traced execution checks that each workspace path it observed is covered; narrow a part with `scripts/ci-reuse.py suggest` over its uploaded trace observations.",
+  "defaults": {
+    "inputs": [
+      "zig-patch/**",
+      "**/.gitignore"
+    ],
+    "listings": []
+  },
+  "parts": {
+    "test/0.16.0/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/inputs": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/native": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/audit": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/receipt": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/Debug": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/ReleaseFast": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/ReleaseSmall": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.17.0/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.17.0/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.15.2/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.15.2/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.14.1/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.14.1/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/1": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/2": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/3": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/4": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/5": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "macos/0.17.0": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "macos/0.16.0": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "macos/0.15.2": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "aarch64-linux": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "build-modes-aarch64-linux": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "bitops-native-arm": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    }
+  }
+}

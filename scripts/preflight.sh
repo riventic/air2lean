@@ -6,7 +6,8 @@
 #   scripts/preflight.sh [--no-translator] [--no-sources]
 #
 # Checks (each one's own error names the regeneration command):
-#   CI matrix, compatibility and pins     ci-matrix.py, compat.py, build-modes.py, perf-budgets.py
+#   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
+#                                         build-modes.py, perf-budgets.py
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
 #   premise index and theorem inventory   premises.py, theorem-inventory.py, no-sorry.sh
 #   provenance fixture, AIR and trust     provenance-evidence.py, validate-air.py, trust-report.py,
@@ -44,6 +45,7 @@ check() {
 }
 
 check 'CI matrix derived from compatibility.json' python3 scripts/ci-matrix.py check
+check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py check-workflow
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate

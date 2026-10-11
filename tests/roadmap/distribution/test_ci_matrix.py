@@ -44,7 +44,7 @@ class CiMatrix(unittest.TestCase):
         workflow = (self.root / '.github/workflows/ci.yml').read_text()
         for part in ('golden', 'lean'):
             self.assertIn(f'- zig: "9.9.9"\n            part: "{part}"\n', workflow)
-        self.assertEqual(workflow.count('- zig: "9.9.9"'), 3)  # golden, lean and macos
+        self.assertEqual(workflow.count('- zig: "9.9.9"'), 4)  # golden, lean, macos and zig-air
         self.assertEqual(self.run_script('check').returncode, 0)
 
     def test_hand_edited_row_is_stale(self):

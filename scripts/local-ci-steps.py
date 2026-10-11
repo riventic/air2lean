@@ -219,8 +219,16 @@ if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
     raise ValueError('local CI supports only the test job (and skips %s); '
                      'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
 job = workflow['jobs']['test']
+# CI-only reuse machinery (docs/ci.md): the reuse decision, the in-run artifact unpacking that
+# local-ci.sh --prepare replaces, and the trace coverage and record steps. Local CI never reuses,
+# traces or records; scripts/release-record.py does not count these steps as gates.
+ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build',
+           'Declared inputs cover every observation', 'Record the result for reuse'}
+# The traced shell is GitHub's bash when AIR2LEAN_TRACE_DIR is unset, as it is here.
+traced_shell = {'run': {'shell': 'bash scripts/ci-trace.sh {0}'}}
 if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow
-        or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
+        or job.get('defaults', traced_shell) != traced_shell
+        or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps', 'defaults'}
         or set(job['strategy']) - {'fail-fast', 'matrix'}
         or set(job['strategy']['matrix']) != {'include'}):
     raise ValueError('unsupported CI runner, defaults or workflow environment')
@@ -261,7 +269,8 @@ setup = {
     ''').strip(),
     'Build patched zig': 'zig-patch/build.sh ${{ matrix.zig }} || zig-patch/build.sh ${{ matrix.zig }}',
 }
-allowed_actions = {'actions/checkout', 'actions/cache', 'actions/cache/restore', 'actions/upload-artifact'}
+allowed_actions = {'actions/checkout', 'actions/cache', 'actions/cache/restore', 'actions/upload-artifact',
+                   'actions/download-artifact'}
 for step in job['steps']:
     if set(step) - {'name', 'id', 'if', 'env', 'run', 'uses', 'with'}:
         raise ValueError(f"unsupported CI step fields: {step['name']}")
@@ -272,7 +281,7 @@ for step in job['steps']:
     if step['name'] in setup and step.get('run', '').strip() != setup[step['name']]:
         raise ValueError(f"changed tool setup recipe needs qualification: {step['name']}")
     if step['name'] in setup:
-        expected_if = "steps.cache-zig-air.outputs.cache-hit != 'true'" if step['name'] == 'Build patched zig' else None
+        expected_if = '${{ !env.AIR2LEAN_REUSED }}'
         if step.get('env') or step.get('if') != expected_if:
             raise ValueError(f"changed tool setup environment/guard: {step['name']}")
 
@@ -287,12 +296,12 @@ for number, row in enumerate(rows):
     temp = f"/artifacts/row-{number}-{row['zig']}"
     Path(temp).mkdir()
     context = {f'matrix.{key}': value for key, value in row.items()}
-    context.update({'github.workspace': '/work', 'runner.temp': temp, 'runner.os': 'Linux'})
+    context.update({'github.workspace': '/work', 'runner.temp': temp, 'runner.os': 'Linux', 'env.AIR2LEAN_REUSED': ''})
     env = dict(os.environ, RUNNER_TEMP=temp, GITHUB_WORKSPACE='/work', RUNNER_OS='Linux')
     env['PATH'] = f"/work/host-zig:{env['ELAN_HOME']}/bin:" + env['PATH']
     env.update({key: render(value, context) for key, value in job.get('env', {}).items()})
     for step in job['steps']:
-        if 'uses' in step or step['name'] in setup:
+        if 'uses' in step or step['name'] in setup or step['name'] in ci_only:
             continue
         if 'if' in step and not expression(step['if'], context):
             continue

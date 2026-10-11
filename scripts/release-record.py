@@ -184,16 +184,21 @@ def parse_workflow_yaml(text):
 # --- Profile and gate plan, all read from Git objects at one revision. ---
 
 def local_ci_helpers(source):
-    """The local runner's condition evaluator and substituted setup step names."""
+    """The local runner's condition evaluator and the step names that are not gates: the
+    substituted setup recipes and the CI-only reuse machinery (`ci_only`, docs/ci.md)."""
     tree = ast.parse(source)
     functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'expression']
     setups = [n.value for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Dict)
               and [getattr(t, 'id', None) for t in n.targets] == ['setup']]
-    if len(functions) != 1 or len(setups) != 1:
+    ci_only = [n.value for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Set)
+               and [getattr(t, 'id', None) for t in n.targets] == ['ci_only']]
+    if len(functions) != 1 or len(setups) != 1 or len(ci_only) > 1:
         raise ReleaseError('%s: expression() or the setup recipe table changed' % STEPS_SCRIPT)
     namespace = {'re': re}
     exec(compile(ast.Module(body=functions, type_ignores=[]), STEPS_SCRIPT, 'exec'), namespace)
-    return namespace['expression'], {ast.literal_eval(key) for key in setups[0].keys}
+    names = {ast.literal_eval(key) for key in setups[0].keys}
+    names |= ast.literal_eval(ci_only[0]) if ci_only else set()
+    return namespace['expression'], names
 
 
 def job_name(job_id, row):
@@ -220,14 +225,20 @@ NATIVE_JOBS = {
 }
 
 
-# Jobs without gates: `lake` pre-builds the Lake cache the test rows restore (each row still runs
-# `lake build` itself) and `all-checks` aggregates the other jobs' results.
-SUPPORT_JOBS = {'lake', 'all-checks'}
+# Jobs without gates: `lake` and `zig-air` build what the test rows unpack (each row still runs
+# `lake build` itself), `preflight` repeats staleness checks that the test rows gate on, and
+# `all-checks` aggregates the other jobs' results.
+SUPPORT_JOBS = {'lake', 'zig-air', 'preflight', 'all-checks'}
+# A step after the reuse decision runs only when the part is not reused (docs/ci.md); a plan
+# lists the gates of an executing part.
+REUSE_CONTEXT = {'env.AIR2LEAN_REUSED': ''}
+REUSE_STEP = 'Reuse a recorded result'
 
 
 def row_gates(job, row, wanted, expression, where):
     """(gates, not applicable) among the `wanted` step names of one matrix row (or `{}`)."""
     context = {'matrix.%s' % key: value for key, value in row.items()}
+    context.update(REUSE_CONTEXT)
     runner = str(job.get('runs-on', ''))
     context.update({'runner.os': 'macOS' if runner.startswith('macos') else 'Linux', 'github.workspace': '/work'})
     gates, skipped = [], []
@@ -243,7 +254,7 @@ def row_gates(job, row, wanted, expression, where):
     return gates, skipped
 
 
-def native_plan(name, job, commands, expression):
+def native_plan(name, job, commands, expression, setup):
     """A native job (`NATIVE_JOBS`) per matrix row (GitHub's row name), or once without a matrix.
 
     Only GitHub evidence covers it. Its commands are keyed `<name>::<step>` (step names may repeat
@@ -260,7 +271,7 @@ def native_plan(name, job, commands, expression):
     if None in names or len(set(names)) != len(names):
         raise ReleaseError('%s: every %s step needs a unique name' % (WORKFLOW, name))
     wanted = {step['name'] for step in steps
-              if 'run' in step and 'steps.' not in str(step.get('if', ''))}
+              if 'run' in step and 'steps.' not in str(step.get('if', '')) and step['name'] not in setup}
     for step in steps:
         if step['name'] in wanted:
             commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
@@ -303,10 +314,12 @@ def build_plan(root, revision):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.extend(native_plan(name, jobs[name], commands, expression))
+            plan_jobs.extend(native_plan(name, jobs[name], commands, expression, setup))
     for name in sorted(SUPPORT_JOBS & set(jobs)):
-        plan_jobs.append({'name': name, 'matrix': None, 'reproduce': 'not a gate', 'gates': [],
-                          'not_applicable': []})
+        support_rows = (((jobs[name].get('strategy') or {}).get('matrix') or {}).get('include')) or [{}]
+        for row in support_rows:
+            plan_jobs.append({'name': job_name(name, row) if row else name, 'matrix': None,
+                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': []})
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
@@ -333,8 +346,9 @@ def github_evidence(path, revision, plan):
     if data['headSha'] != revision:
         raise ReleaseError('%s: run %s is for %s, not the recorded revision %s'
                            % (path, data['databaseId'], data['headSha'], revision))
-    if data['event'] not in ('push', 'workflow_dispatch'):
-        # pull_request runs test a merge with the base branch, not the head commit itself.
+    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group'):
+        # pull_request runs test a PR head or GitHub's merge with the base branch; a merge_group
+        # run tests exactly the commit that the merge queue then fast-forwards main to.
         raise ReleaseError('%s: run %s is a %s run; it did not test %s itself'
                            % (path, data['databaseId'], data['event'], revision))
     if data['status'] != 'completed':
@@ -345,6 +359,7 @@ def github_evidence(path, revision, plan):
     by_name = {job['name']: job for job in plan['jobs']}
     results = {}
     seen = set()
+    reused = []
     for job in data['jobs']:
         name = job.get('name')
         if name not in by_name or name in seen:
@@ -359,14 +374,24 @@ def github_evidence(path, revision, plan):
             if conclusions.get(step, 'skipped') != 'skipped':
                 raise ReleaseError('%s: job %r ran step %r whose condition is false at %s; '
                                    'the run used another workflow' % (path, name, step, revision))
-        for step in by_name[name]['gates']:
+        # A reused part (docs/ci.md): the decision step passed, nothing failed and every gate was
+        # skipped. Its run executed none of them, so it is evidence for none: the gates stay
+        # missing unless the run that executed them is passed too. Any other skip is a failure.
+        gates = by_name[name]['gates']
+        if (conclusions.get(REUSE_STEP) == 'success' and gates
+                and all(conclusions.get(step) == 'skipped' for step in gates)
+                and not {'failure', 'cancelled'} & set(conclusions.values())):
+            reused.append(name)
+            continue
+        for step in gates:
             if step in conclusions:
                 conclusion = conclusions[step]
                 results[(name, step)] = ('passed' if conclusion == 'success' else 'failed',
                                          'GitHub step conclusion: %s' % (conclusion or 'none'))
     source = {'kind': 'github-actions', 'run_id': data['databaseId'], 'url': data.get('url'),
               'head_sha': data['headSha'], 'head_branch': data.get('headBranch'), 'event': data.get('event'),
-              'conclusion': data.get('conclusion'), 'jobs': sorted(seen), 'file_sha256': sha256_bytes(raw)}
+              'conclusion': data.get('conclusion'), 'jobs': sorted(seen), 'reused_jobs': sorted(reused),
+              'file_sha256': sha256_bytes(raw)}
     return source, results
 
 
