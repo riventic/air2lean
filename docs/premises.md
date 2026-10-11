@@ -744,7 +744,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
   its fragment (integer arithmetic and safety checks, blocks, branches, switches, loops, stack
   locals, loads, stores, field pointers and comparisons through plain pointers, pointer
-  arithmetic, slices of a function that uses memory, direct calls): an interpreter over the
+  arithmetic, slices of a function that uses memory, optionals and error unions as values,
+  `try`, direct calls): an interpreter over the
   decoded `Air2Lean.Func`, with a typed SSA environment, over ZigLean's primitive operations and
   `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment and ill-typed
   steps are `⊥`. An `alloc` whose address is never taken (every use is the pointer of a `load`
@@ -755,7 +756,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   relates the generated definition to this meaning, so `Check.lean` and `Emit.lean` are not
   trusted for a certified function; it does not relate the meaning to Zig, the exporter or
   canonicalization (TRU-02). The plan to shrink this premise (raw-AIR certificates, executable
-  conformance tests of `Sem`) is in air-semantics.md §How SEM-06 shrinks.
+  conformance tests of `Sem`) is in air-semantics.md §How SEM-06 shrinks. `Sem.Ctx.view` is a
+  certificate device that `execFunc` leaves empty; the relation of a viewed run to `execFunc` is
+  proved (`SemView.execFunc_view`), under the theorem's hypothesis `Mem.ClockWf` on the start
+  memory.
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
 

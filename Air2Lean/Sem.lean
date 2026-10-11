@@ -26,8 +26,14 @@ The fragment:
   `undefined`: `Zig.storeUndef`); `struct_field_ptr` of a non-`packed` struct is
   `Zig.ptrProject` by the field's offset; a pointer `bitcast` keeps the pointer; `==`/`!=` and
   the order of two pointers compare their addresses (`Zig.ptrEqAddr`, `Zig.ptrLt`, `Zig.ptrLe`);
+* optionals whose payload is not a pointer (`?T`) and error unions as values: `is_null`,
+  `is_non_null`, `optional_payload`, `wrap_optional`, `is_err`, `is_non_err`, the two unwraps, the
+  two wraps, `try`;
 * direct calls through an oracle (`Ctx.call`); `run` ties the oracle to the program;
 * debug instructions have no effect.
+
+`Ctx.view` (none in `execFunc`) is a certificate device for pure-function slices
+(`Air2Lean/SemView.lean`), not part of the meaning of AIR.
 
 Every other instruction, value or shape is *stuck*: it denotes `⊥` (no behaviour, `Option`'s
 `none`). The arithmetic primitives are ZigLean's (`Zig.add`, `Zig.intCast`, …): this file fixes

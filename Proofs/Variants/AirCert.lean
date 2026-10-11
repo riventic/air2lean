@@ -14,10 +14,10 @@ Outside the certificate fragment:
 
 * `variants.advance`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.area`: a parameter that is not an integer, bool, plain pointer or slice
-* `variants.codeOf`: a return type that is not an integer, bool, plain pointer or void
+* `variants.codeOf`: a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one
 * `variants.isRound`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.isUrgent`: a parameter that is not an integer, bool, plain pointer or slice
-* `variants.lightOf`: a return type that is not an integer, bool, plain pointer or void
+* `variants.lightOf`: a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one
 * `variants.next`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.prioValue`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.radius`: a parameter that is not an integer, bool, plain pointer or slice

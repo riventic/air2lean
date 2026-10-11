@@ -43,6 +43,9 @@ MUTATIONS = [
     ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
      'sum_loop7_body'),
     ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body'),
+    # Error unions: the test, and the error a function returns.
+    ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step'),
+    ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step'),
 ]
 
 

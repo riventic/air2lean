@@ -12,7 +12,7 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `atomic.Value(u32).init`: a return type that is not an integer, bool, plain pointer or void
+* `atomic.Value(u32).init`: a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one
 * `atomics.mpRelAcq`: a concurrent function (`Zig.ConcM`)
 * `atomics.mpRelaxed`: a concurrent function (`Zig.ConcM`)
 * `atomics.mpWriter`: a concurrent function (`Zig.ConcM`)

@@ -235,4 +235,8 @@ theorem find_step (call : Oracle) (p0 : Zig.Slice) (p1 : BitVec 32) (m : Zig.Mem
     exact ⟨p0, 4, rfl, rfl, v0, by simp [Value.noPtr]⟩
   all_goals cases hk
 
+/-- The functions certified through a view of their slices, by fully qualified name. -/
+def views : Table := [
+  ("options.find", air_find)]
+
 end Options.AirCert

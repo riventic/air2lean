@@ -29,7 +29,9 @@ EXAMPLES = ['asm', 'atomics', 'basic', 'errors', 'floatconv', 'floats', 'iogroup
 # as excluded.
 CERTIFIED = {
     'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.sum', 'basic.tardiness'],
+    'errors': ['errors.digitOrZero', 'errors.parseDigit'],
     'iogroup': ['debug.assert'],
+    'options': ['options.find'],
     'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.sumTo',
                  'pointers.swap'],
     'recursion': ['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'],
@@ -103,7 +105,8 @@ def check_flags(binary, work):
 
 
 def check_no_escape_hatches():
-    paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemAttr.lean', ROOT / 'Air2Lean/Certificate.lean',
+    paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemView.lean', ROOT / 'Air2Lean/SemAttr.lean',
+             ROOT / 'Air2Lean/Certificate.lean',
              *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)
@@ -117,8 +120,15 @@ def check_coverage():
     committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
     assert committed == EXAMPLES, (committed, EXAMPLES)
     round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
-    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" ', round_trip, re.M)
-    assert listed == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
+    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views)$', round_trip, re.M)
+    assert sorted({ex for ex, _ in listed}) == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
+    # Both tables of a certificate (`table`: the fixpoint program, `views`: functions with a viewed
+    # slice parameter) are checked.
+    for ex in CERTIFIED:
+        text = (ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean').read_text()
+        for table in ('table', 'views'):
+            assert (re.search(rf'^def {table} : Table', text, re.M) is not None) == ((ex, table) in listed), \
+                (ex, table, 'RoundTrip.lean')
 
 
 def main():

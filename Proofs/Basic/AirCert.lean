@@ -327,6 +327,10 @@ theorem sum_step (call : Oracle) (p0 : Zig.Slice) (m : Zig.Mem) (hwf : m.ClockWf
     exact ⟨p0, 4, rfl, rfl, v0, by simp [Value.noPtr]⟩
   all_goals cases hk
 
+/-- The functions certified through a view of their slices, by fully qualified name. -/
+def views : Table := [
+  ("basic.sum", air_sum)]
+
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
   ("basic.absDiff", air_absDiff),

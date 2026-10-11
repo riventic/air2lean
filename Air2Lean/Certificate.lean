@@ -459,7 +459,7 @@ def localReason (f : Func) (mem : Bool) (forLen : Array InstId) : Except String 
       unless Sem.roBody f V VT f.body.toList do
         throw "a function with a slice parameter that reads memory other than through its items (`Sem.roBody`)"
   unless (retScalar? f f.ret).isSome do
-    throw "a return type that is not an integer, bool, plain pointer or void"
+    throw "a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one"
   let insts := allInsts f.body
   let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
   let tyOfInst (x : InstId) := tys[x]?
@@ -986,6 +986,10 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   for f in views do
     lines := lines ++ viewCert f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) ns (genName f)
       (airName f) (declOf f.name) (calleeLemmasOf f)
+  unless views.isEmpty do
+    lines := lines.push "/-- The functions certified through a view of their slices, by fully qualified name. -/"
+    lines := lines.push ("def views : Table := [\n" ++
+      ",\n".intercalate (views.toList.map fun f => s!"  ({str f.name}, {airName f})") ++ "]\n")
   if frag.isEmpty then
     lines := lines.push s!"end {ns}.AirCert"
     return "\n".intercalate lines.toList ++ "\n"

@@ -33,7 +33,7 @@ decoded AIR:
 
 | Piece | Definition |
 |---|---|
-| Values | `Value.int (signed) (w) (BitVec w)`, `.bool`, `.void`, `.ptr (Zig.Ptr)`, `.slice (Zig.Slice)`, `.cell id` (the address of a register local) |
+| Values | `Value.int (signed) (w) (BitVec w)`, `.bool`, `.void`, `.ptr (Zig.Ptr)`, `.slice (Zig.Slice)`, `.cell id` (the address of a register local); `.optNone`/`.optSome v` (an optional whose payload is not a pointer), `.errOk v`/`.errErr name` (an error union), `.errName name` (an error) |
 | SSA environment | `Env : InstId → Option (TyId × Value)`: each value with its AIR type, so a memory access takes its alignment and pointee from the pointer operand's type, as AIR does |
 | Straight-line ops | `evalPure : Func → Env → Inst → Result Value` (arithmetic, comparisons, casts) and `evalMem : … → MemM Value` (loads, stores, field pointers, pointer casts and comparisons) |
 | Control flow | `execBody`/`execInst`/`execSwitch`/`execLoop : … → Zig.MM Frame Exit`, well-founded recursion over the nested bodies; `Exit` is `br target value`, `repeat target` or `ret value`; `loop` is `execLoop`, `Zig.loop` of the body |
@@ -87,12 +87,14 @@ Per instruction family, the emission strategy and its proof obligation:
 | Integer arithmetic and safety | `add`/`sub`/`mul` (checked, wrapping, saturating), division, `rem`/`mod`, `min`/`max`, bitwise, `not`, comparisons, `bool_and`/`bool_or`, `intcast`, `trunc`; panic-handler calls | `let i ← Zig.<op> s a b` / `pure (…)`; `throw .<error>` | normalization: both sides reduce to the same ZigLean primitive | **done** |
 | Blocks and branches | `block`/`br`, `cond_br`, `switch_br` on an integer, `ret`, `unreach`, `trap` | `match ← … with \| .br<n> …`, `if`, `if`-chain | normalization (the exits are literal constructors) | **done** |
 | Memory through pointers | `load`/`store` of integers, `bool`, pointers; `struct_field_ptr` of a non-`packed` struct; pointer `bitcast`; pointer `==`/`!=`/order | `Zig.load`/`Zig.store`, `Zig.ptrProject p (·.add off)` (`pure p` at offset 0), `Zig.ptrEqAddr` | normalization over the same `Zig.MemM` (equal memory) | **done** (plain single/many pointers; not `allowzero`, `volatile`, bit-pointers) |
-| Pointer arithmetic and slices | `ptr_add`/`ptr_sub`, `ptr_elem_ptr`/`slice_elem_ptr`, `ptr_elem_val`, `slice_elem_val`, `slice_len`, `slice_ptr`; slice parameters | `Zig.ptrProject p (·.elem size i)` (`·.elemSub`), `Zig.load … (p.elem size i)`, `Zig.checkIndex` then the item load; `Zig.Slice` | normalization; an item projection by zero bytes is `pure p` (`ptrProject_elem_zero`) | **done** for functions in `Zig.MemM` (plain slices: no sentinel, `volatile`, `allowzero`); not slicing (`slice`, whose bounds the translator checks from the operand's definition), `for`-length checks, `array_to_slice` |
+| Pointer arithmetic and slices | `ptr_add`/`ptr_sub`, `ptr_elem_ptr`/`slice_elem_ptr`, `ptr_elem_val`, `slice_elem_val`, `slice_len`, `slice_ptr`; slice parameters | `Zig.ptrProject p (·.elem size i)` (`·.elemSub`), `Zig.load … (p.elem size i)`, `Zig.checkIndex` then the item load; `Zig.Slice` | normalization; an item projection by zero bytes is `pure p` (`ptrProject_elem_zero`) | **done** for functions in `Zig.MemM` (plain slices: no sentinel, `volatile`, `allowzero`); not slicing (`slice`, whose bounds the translator checks from the operand's definition), `for`-length checks, `array_to_slice`; `slice_elem_ptr` stays excluded until the translator checks its index (PR #140) |
+| Pure-function slices | a `[]const T` parameter of a function without memory | an `Array` that the caller read (`Zig.readSlice`); `Zig.index`, `Zig.len` | a view ([§Pure-function slices](#pure-function-slices)): `_view` by normalization, `_step` up to read entries | **done** for integer and `bool` items, a function that reads memory only through its slices and calls only panic handlers; its callers are excluded |
+| Optionals and error unions | `is_null`/`is_non_null`, `optional_payload`, `wrap_optional`, `is_err`/`is_non_err`, `unwrap_errunion_payload`/`_err`, `wrap_errunion_payload`/`_err`, `try`; their constants | `Option α`, `Except Zig.ErrName α`; `Zig.optPayload`, `Zig.isErr`, `Zig.unwrapPayload`, `Zig.unwrapErr`; `try` a `match` | normalization: the generated value encoded (`Value.ofOpt`, `Value.ofExcept`) and one lemma per operation (`optGet_ofOpt`, …) | **done** as values (registers, returns, calls) for payloads that are integers, `bool` or `void`; not pointer optionals, not in memory (`is_null_ptr`, `optional_payload_ptr`, …), not as parameters yet |
 | Direct calls | `call` of a function in the program | `Zig.call`/`Zig.callM`/`Zig.callR`; a recursion clique is `mutual … partial_fixpoint` | fixpoint: `gen_fixpoint`; completeness by `fixpoint_induct` | **done** for pure functions; memory callers get `_sound` only; a recursive memory clique is excluded (its frame charge `Zig.enterFrame`, STK-01, is not AIR) |
-| Loops | `loop`/`repeat` | a separate `f.loop<n>` definition under `Zig.loop` with an `f.again<n>` predicate | loop commutation ([§Loops](#loops)) | **done** for functions in `Zig.MemM` |
+| Loops | `loop`/`repeat` | a separate `f.loop<n>` definition under `Zig.loop` with an `f.again<n>` predicate | loop commutation ([§Loops](#loops)) | **done** (`loop_comm` in `Zig.MemM`, `loop_comm_pure` in `Zig.M`) |
 | Escaping locals | `alloc` whose address is taken | `Zig.allocStack` at function entry, `Zig.free` at return, the pointer in a `Locals` field | normalization: the semantics allocates at the `alloc`, which is equal when only `arg`, `dbg_stmt` and other `alloc`s come before it ([§Locals](#locals)) | **done** (allocated before any effect, at the top level) |
 | Register locals | `alloc` whose address is never taken | a field of the function's `Locals` structure | normalization: the semantics keeps the local in a frame cell too ([§Locals](#locals)) | **done** (at the top level, set right after the `alloc`, allocated before every loop) |
-| Byte locals, aggregates, pure-function slices (`Array`), optionals, error unions, unions, enums, floats, vectors, globals, atomics, threads, external models, indirect calls, asm | — | — | each needs its values in `Sem.Value` first | outside |
+| Byte locals, aggregates, unions, enums, floats, vectors, globals, atomics, threads, external models, indirect calls, asm | — | — | each needs its values in `Sem.Value` first | outside |
 
 ### Loops
 
@@ -169,6 +171,43 @@ cell starts undefined, so a register must be set by the instruction after its `a
 loop lemmas map every register into the frame, so registers must also be allocated before
 every loop.
 
+### Pure-function slices
+
+The translator passes a `[]const T` parameter of a function without memory as an `Array`: the
+caller reads every item (`Zig.readSlice`) and the callee indexes the array (`Zig.index`). In AIR the
+callee reads each item from memory itself (`slice_elem_val`, a `Zig.load` that records a footprint
+entry). The relation goes at the call boundary (`Air2Lean/SemView.lean`, proved once):
+
+* **The view.** `Ctx.view` maps the `arg` instruction of a slice parameter to its items;
+  `slice_elem_val` of a viewed slice then takes `Zig.index items k` instead of reading memory.
+  `execFunc` has no view, so the hook is not part of the meaning of AIR. `execFuncV` runs a function
+  with a view; a certificate proves `f_view`, that this run is the generated definition, by the same
+  normalization as any function without memory.
+* **The simulation** `execFunc_view`: for a function that reads memory only through viewed slices
+  (`roBody`: register locals only, no item or slice pointers, `slice_elem_val` only of a viewed
+  parameter, only panic-handler calls), from a memory in which each viewed slice holds the view's
+  items (`Holds`), `execFunc` has the view's values and errors, and its memory is the starting
+  memory up to read entries of the running thread (`UpToReads`: the same blocks, threads and every
+  other field; only more read entries in the footprint and a larger own clock).
+* **The materialization** `holds_of_readSlice`: the items that `Zig.readSlice` reads are such a
+  view. Its read covers every item under the running thread before the call, so a concurrent
+  writer is still caught as a race. It needs `Mem.ClockWf`: no recorded access has observed an
+  access of the running thread that it has not made yet. Every memory that a run reaches has this
+  property (a thread's own clock component only grows, another thread learns it only through a
+  fork, join or release edge); the theorem states it as a hypothesis.
+
+So `f_step` reads: if `Zig.readSlice` of each slice parameter succeeds from `m`, then
+`execFunc` from `m` and the generated definition on the read items have the same values and
+errors, and the semantics' memory is `m` up to read entries (`RelR`). A failing materialization
+(an undefined byte in an item the function never reads, a range past the block) makes the generated
+caller panic where AIR may not: the conservative direction ([CLAUDE.md](../CLAUDE.md), fail closed).
+
+Out of range, `Zig.index` (and `Zig.vindex`) throw `.illegal`, as `Zig.checkIndex` does in memory
+(`docs/illegal-behavior.md` row 2): the model of the item read checks its own illegal behaviour.
+
+A function with a viewed slice has no fixpoint equation (`_fix`), so its callers are excluded
+until a caller's step relates its materialization to the callee's view.
+
 ### Canonicalization (V02)
 
 `Canon.lean`'s rewrites run before decoding, so the semantics today starts at canonical AIR
@@ -223,30 +262,36 @@ translation of its golden AIR (`tests/golden/<ex>/air`); the certificate is comm
 
 | Example | Certified | Theorem |
 |---|---|---|
-| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify` | `_run` |
+| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify`; `sum` (a slice parameter, a loop in `Zig.M`) | `_run`; `sum`: `_view`, `_step` up to reads |
+| `errors` | `parseDigit` (an error-union return), `digitOrZero` (a call, `is_non_err`, both unwraps) | `_eq` |
+| `options` | `find` (a slice parameter, an optional return) | `_view`, `_step` up to reads |
 | `recursion` | `gcd`, `fact` (self-recursive), `isEven`, `isOdd` (mutually recursive) | `_eq` |
 | `pointers` | `addTo`, `swap`, `delay`, `dueOf`, `same` (memory); `sumTo` (memory, register and escaping locals, a loop, a call) | `_run`; `sumTo`: `_sound` |
 | `threads` | `writeFlag` (memory) | `_run` |
 | `vectors` | `sMod`, `sRem` | `_run` |
 | `iogroup` | `debug.assert` | `_run` |
-| `asm`, `atomics`, `errors`, `floatconv`, `floats`, `options`, `variants` | — | — |
+| `asm`, `atomics`, `floatconv`, `floats`, `variants` | — | — |
 
-19 of the 124 functions of these 13 examples certify (phase 1: 18; `pointers.sumTo` is new). Every
-other function is listed in its certificate with the first reason found:
+23 of the 124 functions of these 13 examples certify (phase 2: 19; `basic.sum`, `errors.parseDigit`,
+`errors.digitOrZero` and `options.find` are new). Every other function is listed in its certificate
+with the first reason found:
 
 | Reason | Functions |
 |---|---|
-| a parameter that is not an integer, `bool`, plain pointer or slice (pure-function slices, structs, optionals, enums, floats, vectors, …) | 63 |
+| a parameter that is not an integer, `bool`, plain pointer or slice (structs, optionals, enums, floats, vectors, …) | 55 |
 | a concurrent function (`Zig.ConcM`) | 25 |
-| a return type outside the fragment | 8 |
-| an instruction outside the fragment | 6 |
+| a return type outside the fragment (enums, unions, floats, …) | 7 |
+| an instruction outside the fragment | 5 |
+| a slice parameter whose items are not integers or `bool` (structs, floats) | 3 |
+| a function with a slice parameter that reads memory other than through its items (a call: `errors.sumDigits`, `options.findOr`, `options.firstIndexPlusOne`) | 3 |
 | an operand outside the fragment (`asm.divmod`: a local whose address is taken by an `asm` output) | 1 |
 | a load of a type outside the fragment (a struct) | 1 |
 | a recursive function that uses memory (`Zig.enterFrame`) | 1 |
 
 The slices example has no committed certificate (its golden AIR mixes Zig versions); its Zig
-0.15.2 files certify `at`, `bumpAt`, `prevItem`, `second` (pointer arithmetic, item loads) and
-`sumZ` (a loop over a many-pointer with register locals) in `test_lean.py`.
+0.15.2 files certify `at`, `bumpAt`, `prevItem`, `second` (pointer arithmetic, item loads),
+`sumZ` (a loop over a many-pointer with register locals) and `sumSlice` (a pure function's slice)
+in `test_lean.py`.
 
 ### Checks (CI step "AIR semantics certificates")
 
@@ -294,17 +339,14 @@ instruction. Each theorem unfolds only its own function.
 
 Ordered by the functions they unlock in the committed examples:
 
-1. **Slices of pure functions** (`basic.sum`, `errors.sumDigits`, `options.find`, …): the emitter
-   passes a `[]const T` parameter of a function without memory as an `Array`, which the caller
-   reads (`Zig.readSlice`). The semantics' callee reads the items itself (a `Zig.load` per
-   item), which also records each read in the footprint. The relation goes at the call
-   boundary: the semantics' callee loads against the caller-side read plus the pure callee, with
-   memories equal up to read-footprint entries. The materialization must record the same set
-   of read locations, under the same thread, before the call, so that a concurrent writer is
-   still caught as a race. Dropping the footprint instead is not sound. This also needs loops
-   in `Zig.M` (a `loop_comm` for the pure state monad).
-2. **Optionals and error unions** (`is_non_null`, `optional_payload`, `wrap_optional`, `try`,
-   `wrap_errunion_*`): `options`, `errors`, and the error paths of most std code.
+1. **Calls at the slice boundary**: a view function that calls (`errors.sumDigits` calls
+   `parseDigit`, then `try`; the simulation needs the oracle memory-free on its callees), and a
+   caller of a view function (`options.findOr`, `options.firstIndexPlusOne`: its step relates its
+   own materialization to the callee's view). `try` is in the semantics and the fragment, but no
+   committed example certifies one yet.
+2. **Optionals and error unions as parameters and in memory** (`pointers.setOpt`,
+   `pointers.bumpOpt`: `is_null_ptr`, `optional_payload_ptr`, the `Zig.optEnc` layout), and
+   pointer optionals `?*T` (an address, `Zig.ptrIsNull`).
 3. **Aggregates and enums** (`struct_field_val`, `aggregate_init`, struct parameters, enum
    tags and `switch_br` on enums): `basic.weightedTardiness`, `variants`.
 4. **Wider locals and loops**: registers allocated inside or after a loop, escaping locals

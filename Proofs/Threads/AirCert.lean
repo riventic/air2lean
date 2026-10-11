@@ -13,7 +13,7 @@ open Air2Lean Air2Lean.Sem
 Outside the certificate fragment:
 
 * `atomic.Value(threads.Phase).init`: a parameter that is not an integer, bool, plain pointer or slice
-* `atomic.Value(u32).init`: a return type that is not an integer, bool, plain pointer or void
+* `atomic.Value(u32).init`: a return type that is not an integer, bool, plain pointer or void, or an optional or error union of one
 * `threads.bump`: a concurrent function (`Zig.ConcM`)
 * `threads.claim`: a concurrent function (`Zig.ConcM`)
 * `threads.claimOnce`: a concurrent function (`Zig.ConcM`)
