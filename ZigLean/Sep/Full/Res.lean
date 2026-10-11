@@ -528,6 +528,168 @@ theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
 
 end Ghost
 
+/-! ## Finite sums of fractions (epoch-tagged shares, `docs/sep-full-state.md` §Epoch-tagged shares) -/
+
+/-- The fraction `f` holds at the bounds below `n`. -/
+def ftot (f : Nat → Frac) : Nat → Rat
+  | 0 => 0
+  | n + 1 => ftot f n + (f n).val
+
+theorem ftot_nonneg (f : Nat → Frac) : ∀ n, 0 ≤ ftot f n
+  | 0 => Rat.le_refl
+  | n + 1 => by have := ftot_nonneg f n; have := (f n).nonneg; simp only [ftot]; grind
+
+theorem ftot_add (f g : Nat → Frac) : ∀ n, ftot (fun k => (f k).add (g k)) n = ftot f n + ftot g n
+  | 0 => by simp only [ftot]; grind
+  | n + 1 => by have := ftot_add f g n; simp only [ftot, Frac.add] at *; grind
+
+theorem ftot_mono (f : Nat → Frac) {n N : Nat} (h : n ≤ N) : ftot f n ≤ ftot f N := by
+  induction N with
+  | zero => rw [Nat.le_zero.mp h]; exact Rat.le_refl
+  | succ N ih =>
+    rcases Nat.lt_or_ge n (N + 1) with hn | hn
+    · have := ih (by omega); have := (f N).nonneg; simp only [ftot]; grind
+    · rw [show n = N + 1 by omega]; exact Rat.le_refl
+
+theorem ftot_le {f g : Nat → Frac} (h : ∀ k, (f k).val ≤ (g k).val) : ∀ n, ftot f n ≤ ftot g n
+  | 0 => Rat.le_refl
+  | n + 1 => by have := ftot_le h n; have := h n; simp only [ftot]; grind
+
+/-- `Σ_{e < E} f e`. -/
+def esum (f : Nat → Rat) : Nat → Rat
+  | 0 => 0
+  | E + 1 => esum f E + f E
+
+/-- `Σ_{γ < N, e < E} f γ e`. -/
+def gsum (f : Nat → Nat → Rat) : Nat → Nat → Rat
+  | 0, _ => 0
+  | N + 1, E => gsum f N E + esum (f N) E
+
+theorem esum_le {f g : Nat → Rat} (h : ∀ e, f e ≤ g e) : ∀ E, esum f E ≤ esum g E
+  | 0 => Rat.le_refl
+  | E + 1 => by have := esum_le h E; have := h E; simp only [esum]; grind
+
+theorem esum_nonneg {f : Nat → Rat} (h : ∀ e, 0 ≤ f e) : ∀ E, 0 ≤ esum f E
+  | 0 => Rat.le_refl
+  | E + 1 => by have := esum_nonneg h E; have := h E; simp only [esum]; grind
+
+theorem esum_add (f g : Nat → Rat) : ∀ E, esum (fun e => f e + g e) E = esum f E + esum g E
+  | 0 => by simp only [esum]; grind
+  | E + 1 => by have := esum_add f g E; simp only [esum] at *; grind
+
+theorem gsum_le {f g : Nat → Nat → Rat} (h : ∀ γ e, f γ e ≤ g γ e) : ∀ N E, gsum f N E ≤ gsum g N E
+  | 0, _ => Rat.le_refl
+  | N + 1, E => by
+    have := gsum_le h N E; have := esum_le (h N) E; simp only [gsum]; grind
+
+theorem gsum_nonneg {f : Nat → Nat → Rat} (h : ∀ γ e, 0 ≤ f γ e) : ∀ N E, 0 ≤ gsum f N E
+  | 0, _ => Rat.le_refl
+  | N + 1, E => by
+    have := gsum_nonneg h N E; have := esum_nonneg (h N) E; simp only [gsum]; grind
+
+theorem gsum_add (f g : Nat → Nat → Rat) : ∀ N E, gsum (fun γ e => f γ e + g γ e) N E = gsum f N E + gsum g N E
+  | 0, _ => by simp only [gsum]; grind
+  | N + 1, E => by
+    have := gsum_add f g N E; have := esum_add (f N) (g N) E; simp only [gsum] at *; grind
+
+theorem esum_le' {f g : Nat → Rat} : ∀ {E}, (∀ e, e < E → f e ≤ g e) → esum f E ≤ esum g E
+  | 0, _ => Rat.le_refl
+  | E + 1, h => by
+    have := esum_le' (E := E) fun e he => h e (by omega); have := h E (by omega)
+    simp only [esum]; grind
+
+/-- A change at one place by at most `δ`. -/
+theorem esum_single {f g : Nat → Rat} {e₀ : Nat} {δ : Rat} (hδ : 0 ≤ δ)
+    (h : ∀ e, e ≠ e₀ → f e ≤ g e) (h₀ : f e₀ ≤ g e₀ + δ) : ∀ E, esum f E ≤ esum g E + δ
+  | 0 => by simp only [esum]; grind
+  | E + 1 => by
+    simp only [esum]
+    by_cases he : E = e₀
+    · subst he
+      have := esum_le' (f := f) (g := g) (E := E) fun e he' => h e (by omega)
+      grind
+    · have := esum_single hδ h h₀ E; have := h E he; grind
+
+theorem gsum_le' {f g : Nat → Nat → Rat} : ∀ {N} E, (∀ γ e, γ < N → f γ e ≤ g γ e) → gsum f N E ≤ gsum g N E
+  | 0, _, _ => Rat.le_refl
+  | N + 1, E, h => by
+    have := gsum_le' (N := N) E fun γ e hγ => h γ e (by omega)
+    have := esum_le (fun e => h N e (by omega)) E
+    simp only [gsum]; grind
+
+/-- A change at one place `(γ₀, e₀)` by at most `δ`. -/
+theorem gsum_single {f g : Nat → Nat → Rat} {γ₀ e₀ : Nat} {δ : Rat} (hδ : 0 ≤ δ)
+    (h : ∀ γ e, (γ, e) ≠ (γ₀, e₀) → f γ e ≤ g γ e) (h₀ : f γ₀ e₀ ≤ g γ₀ e₀ + δ) :
+    ∀ N E, gsum f N E ≤ gsum g N E + δ
+  | 0, _ => by simp only [gsum]; grind
+  | N + 1, E => by
+    simp only [gsum]
+    by_cases hN : N = γ₀
+    · subst hN
+      have := gsum_le' (f := f) (g := g) (N := N) E fun γ e hγ => h γ e (by intro x; cases x; omega)
+      have := esum_single hδ (f := f N) (g := g N) (e₀ := e₀) (fun e he => h N e (by
+        intro x; cases x; exact he rfl)) h₀ E
+      grind
+    · have := gsum_single hδ h h₀ N E
+      have := esum_le (fun e => h N e (by intro x; cases x; exact hN rfl)) E
+      grind
+
+/-! ## Ledger status and the weight of a tag -/
+
+/-- Ledger `γ`'s authority is at epoch `e`. -/
+def Ghost.ep (g : Ghost) (γ e : Nat) : Prop := ∃ M, 0 < (g.led γ).auth (e, M)
+
+open Classical in
+/-- The weight of the tag `(γ, e)` with tagged fractions `T` and receipts `R` (by bound), below
+bound `n`: both (their maximum) while `γ` is at epoch `e`, the receipts once it is past `e`,
+nothing while `γ` has no authority (or an earlier one). -/
+noncomputable def tagWt (ep : Nat → Nat → Prop) (γ e : Nat) (T R : Nat → Frac) (n : Nat) : Rat :=
+  if ep γ e then Max.max (ftot T n) (ftot R n) else if ∃ e', e < e' ∧ ep γ e' then ftot R n else 0
+
+theorem tagWt_nonneg (ep : Nat → Nat → Prop) (γ e : Nat) (T R : Nat → Frac) (n : Nat) :
+    0 ≤ tagWt ep γ e T R n := by
+  have := ftot_nonneg T n; have := ftot_nonneg R n
+  unfold tagWt; split
+  · grind
+  · split <;> grind
+
+theorem tagWt_mono (ep : Nat → Nat → Prop) (γ e : Nat) (T R : Nat → Frac) {n N : Nat} (h : n ≤ N) :
+    tagWt ep γ e T R n ≤ tagWt ep γ e T R N := by
+  have := ftot_mono T h; have := ftot_mono R h
+  unfold tagWt; split
+  · grind
+  · split <;> grind
+
+/-- Fewer authorities (each ledger has at most one epoch in `ep`) and smaller fractions weigh
+less. -/
+theorem tagWt_le {ep ep' : Nat → Nat → Prop} (hsub : ∀ γ e, ep' γ e → ep γ e)
+    (huniq : ∀ γ e e', ep γ e → ep γ e' → e = e') {γ e : Nat} {T R T' R' : Nat → Frac}
+    (hT : ∀ k, (T' k).val ≤ (T k).val) (hR : ∀ k, (R' k).val ≤ (R k).val) (n : Nat) :
+    tagWt ep' γ e T' R' n ≤ tagWt ep γ e T R n := by
+  have hTl := ftot_le hT n; have hRl := ftot_le hR n
+  have := ftot_nonneg T' n; have := ftot_nonneg R' n
+  unfold tagWt
+  by_cases h1 : ep' γ e
+  · rw [if_pos h1, if_pos (hsub _ _ h1)]; grind
+  · rw [if_neg h1]
+    by_cases h2 : ∃ e', e < e' ∧ ep' γ e'
+    · rw [if_pos h2]
+      obtain ⟨e', he, hp⟩ := h2
+      have hne : ¬ ep γ e := fun h => by have := huniq _ _ _ h (hsub _ _ hp); omega
+      rw [if_neg hne, if_pos ⟨e', he, hsub _ _ hp⟩]; exact hRl
+    · rw [if_neg h2]; exact tagWt_nonneg _ _ _ _ _ _
+
+/-- A valid ledger cell has at most one epoch. -/
+theorem GCell.Valid.ep_uniq {c : GCell} (h : c.Valid) {e e' : Nat} {M M' : GMap}
+    (h1 : 0 < c.auth (e, M)) (h2 : 0 < c.auth (e', M')) : e = e' := by
+  rcases h with h | ⟨e₀, M₀, -, h0, -⟩
+  · have := h (e, M); omega
+  · by_cases x : (e, M) = (e₀, M₀)
+    · by_cases y : (e', M') = (e₀, M₀)
+      · cases x; cases y; rfl
+      · have := h0 _ y; omega
+    · have := h0 _ x; omega
+
 /-- The extent claims of `e` are true in `m`: an authority claim `(S, K)` names a live block of
 size `S` and kind `K`, and a share at bound `k` a live block of at least `k` bytes; in both cases
 the block has a live byte (`mappedLo < size`). -/
