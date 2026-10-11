@@ -42,6 +42,12 @@ DEFAULT_VERSION = '0.16.0'
 PLACEMENT = {'lake': 'amd64', 'test': 'amd64', 'macos': 'host', 'aarch64-linux': 'arm64',
              'build-modes-aarch64-linux': 'arm64', 'bitops-native-arm': 'arm64'}
 IGNORED_JOBS = {'all-checks'}
+# Steps that cannot give CI's answer in the emulated container, by step name. They are skipped
+# visibly (summary and steps.json), never silently.
+EMULATION_SKIPS = {
+    'Performance budget regression gate (portable)':
+        'wall-clock budgets: Rosetta adds ~1 s start-up to every Lean process (baselines are 0.03-0.1 s)',
+}
 # Docker caps, per container; one container runs at a time (the Docker VM has ~15 GiB).
 MEMORY = os.environ.get('AIR2LEAN_LOCAL_MEMORY', '9g')
 CPUS = os.environ.get('AIR2LEAN_LOCAL_CPUS', '6')
@@ -568,6 +574,10 @@ class Job:
                 return
         except ValueError as error:
             raise StepFailed(name, 1) from error
+        if self.row['where'] == 'amd64' and name in EMULATION_SKIPS:
+            self.say('== CI %s: %s == SKIPPED (%s)' % (self.row['id'], name, EMULATION_SKIPS[name]))
+            self.steps_report.append({'name': name, 'status': 'skipped', 'reason': EMULATION_SKIPS[name], 'seconds': 0})
+            return
         self.say('== CI %s: %s ==' % (self.row['id'], name))
         self.log.write(('\n== CI %s: %s ==\n' % (self.row['id'], name)).encode())
         try:
@@ -906,16 +916,23 @@ def main(argv):
             guard_note = '' if outcome in ('success', 'child_failed') else outcome
         except (OSError, ValueError):
             pass
-        summary.append((row, status, seconds, failed_step or guard_note))
+        skipped = []
+        try:
+            skipped = [x['name'] for x in json.loads((results / 'steps.json').read_text())['steps'] if x['status'] == 'skipped']
+        except (OSError, ValueError, KeyError):
+            pass
+        summary.append((row, status, seconds, failed_step or guard_note, skipped))
         print('   %s in %s' % ('passed' if status == 0 else 'FAILED (exit %d)' % status, format_seconds(seconds)), flush=True)
         if status:
             print(tail(results / 'row.log') if (results / 'row.log').exists() else tail(results / 'progress.log'), flush=True)
             print('   full log: %s' % (results / 'row.log'), flush=True)
     print('\nlocal-ci summary (results in %s)' % run_dir)
-    for row, status, seconds, note in summary:
+    for row, status, seconds, note, skipped in summary:
         print('  %-6s %-42s %-8s %s' % ('PASS' if status == 0 else 'FAIL', row['id'], format_seconds(seconds),
                                          ('at: ' + note) if note and status else ''))
-    failed = [s for s in summary if s[1]]
+        for name in skipped:
+            print('           skipped: %s (%s)' % (name, EMULATION_SKIPS.get(name, 'see steps.json')))
+    failed = [s for s in summary if s[1]]  # (row, status, seconds, note, skipped)
     print('%d row(s), %d failed, %s total' % (len(summary), len(failed), format_seconds(sum(s[2] for s in summary))))
     return 1 if failed else 0
 
