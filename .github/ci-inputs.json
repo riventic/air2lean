@@ -1,0 +1,323 @@
+{
+  "schema": "air2lean-ci-inputs/1",
+  "note": "Input declarations of the CI parts (docs/ci.md#1-input-hash-result-reuse, scripts/ci-reuse.py). Every traced execution checks that each workspace path it observed is covered; narrow a part with `scripts/ci-reuse.py suggest` over its uploaded trace observations.",
+  "defaults": {
+    "inputs": [
+      "zig-patch/**",
+      "**/.gitignore"
+    ],
+    "listings": []
+  },
+  "parts": {
+    "generated": {
+      "reuse": false,
+      "note": "produces the generated-files artifact that every row installs: it runs in every CI run"
+    },
+    "provenance": {
+      "reuse": false,
+      "note": "produces the generated-provenance artifact for the generated branch; binds HEAD (proof receipts)"
+    },
+    "test/0.16.0/golden": {
+      "commit_bound": true,
+      "note": "reads commit identity: the theorem-universe gate of the dispatch regressions binds its assumptions report to HEAD (scripts/assumptions.py verify_fresh); untraced"
+    },
+    "test/0.16.0/lean": {
+      "commit_bound": true,
+      "note": "reads commit identity (git rev-parse HEAD: a freshness binding to the revision, run 38175631570); untraced"
+    },
+    "test/0.16.0/inputs": {
+      "commit_bound": true,
+      "note": "reads commit identity (release-record, manifest and generated-branch regressions run git on HEAD and fetch, run 38175631570); untraced, 14 min instead of 25 traced"
+    },
+    "test/0.16.0/native": {
+      "commit_bound": true,
+      "note": "reads commit identity (git rev-parse HEAD in two of its gates, run 38175631570); untraced"
+    },
+    "test/0.16.0/audit": {
+      "reuse": false,
+      "note": "untraced: under strace the theorem audit exceeded the 90-minute job limit (10-17 min untraced, run 38166335511)"
+    },
+    "test/0.16.0/receipt": {
+      "commit_bound": true,
+      "note": "reads commit identity (the proof receipt binds HEAD; `git checkout -- Proofs`); untraced, which also keeps the guarded audit inside its deadline"
+    },
+    "test/0.16.0/Debug": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/ReleaseFast": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/ReleaseSmall": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.17.0/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.17.0/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.15.2/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.15.2/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.14.1/golden": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.14.1/lean": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/1": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/2": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/3": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/4": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "test/0.16.0/mutation/5": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true
+    },
+    "macos/0.17.0": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "macos/0.16.0": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "macos/0.15.2": {
+      "commit_bound": true,
+      "note": "untraced (no strace on macOS): reused only for the same commit"
+    },
+    "aarch64-linux": {
+      "inputs": [
+        "**"
+      ],
+      "tree_names": true,
+      "note": "#143 (merge train 1) added the declared aarch64-linux translation paths: patched compilers, Lean build, golden AIR, translation, differential test and proofs read the whole tree, as the test golden rows do"
+    },
+    "build-modes-aarch64-linux": {
+      "inputs": [
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/Asm/**",
+        "Proofs/Atomics/**",
+        "Proofs/Basic/**",
+        "Proofs/Cancel/**",
+        "Proofs/Detach/**",
+        "Proofs/Errors/**",
+        "Proofs/Floatconv/**",
+        "Proofs/Floatops/**",
+        "Proofs/Floats/**",
+        "Proofs/Iogroup/**",
+        "Proofs/Layout/**",
+        "Proofs/Lists/**",
+        "Proofs/Options/**",
+        "Proofs/Pointers/**",
+        "Proofs/Provenance/**",
+        "Proofs/ProvenanceGap/**",
+        "Proofs/Recursion/**",
+        "Proofs/Slices/**",
+        "Proofs/Sync/**",
+        "Proofs/Threads/**",
+        "Proofs/Threadsync/**",
+        "Proofs/Variants/**",
+        "Proofs/Vectors/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/asm/**",
+        "examples/atomics/**",
+        "examples/basic/**",
+        "examples/errors/**",
+        "examples/floatconv/**",
+        "examples/floatops/**",
+        "examples/floats/**",
+        "examples/iogroup/**",
+        "examples/layout/**",
+        "examples/lists/**",
+        "examples/options/**",
+        "examples/pointers/**",
+        "examples/recursion/**",
+        "examples/slices/**",
+        "examples/sync/**",
+        "examples/threads/**",
+        "examples/threadsync/**",
+        "examples/variants/**",
+        "examples/vectors/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "tests/diff/**",
+        "tests/roadmap/build-modes/reproducers/**",
+        "zig-patch/**"
+      ],
+      "listings": [
+        ".",
+        "Proofs",
+        "Proofs/Asm",
+        "Proofs/Atomics",
+        "Proofs/Basic",
+        "Proofs/Cancel",
+        "Proofs/Detach",
+        "Proofs/Errors",
+        "Proofs/Floatconv",
+        "Proofs/Floatops",
+        "Proofs/Floats",
+        "Proofs/Iogroup",
+        "Proofs/Layout",
+        "Proofs/Lists",
+        "Proofs/Options",
+        "Proofs/Pointers",
+        "Proofs/Provenance",
+        "Proofs/ProvenanceGap",
+        "Proofs/Recursion",
+        "Proofs/Slices",
+        "Proofs/Sync",
+        "Proofs/Threads",
+        "Proofs/Threadsync",
+        "Proofs/Variants",
+        "Proofs/Vectors",
+        "ZigLean",
+        "ZigLean/Conc",
+        "ZigLean/Conc/Spec",
+        "ZigLean/Env",
+        "ZigLean/External",
+        "ZigLean/Float",
+        "ZigLean/Mem",
+        "ZigLean/Os",
+        "ZigLean/Sep",
+        "ZigLean/Sep/Array",
+        "ZigLean/VC",
+        "ZigLean/Witnesses",
+        "examples",
+        "examples/asm",
+        "examples/atomics",
+        "examples/basic",
+        "examples/errors",
+        "examples/floatconv",
+        "examples/floatops",
+        "examples/floats",
+        "examples/iogroup",
+        "examples/layout",
+        "examples/lists",
+        "examples/options",
+        "examples/pointers",
+        "examples/recursion",
+        "examples/slices",
+        "examples/sync",
+        "examples/threads",
+        "examples/threadsync",
+        "examples/variants",
+        "examples/vectors",
+        "scripts",
+        "tests",
+        "tests/diff",
+        "tests/diff/asm",
+        "tests/diff/asm/inputs",
+        "tests/diff/atomics",
+        "tests/diff/atomics/inputs",
+        "tests/diff/basic",
+        "tests/diff/basic/inputs",
+        "tests/diff/errors",
+        "tests/diff/errors/inputs",
+        "tests/diff/floatconv",
+        "tests/diff/floatconv/inputs",
+        "tests/diff/floatops",
+        "tests/diff/floatops/inputs",
+        "tests/diff/floats",
+        "tests/diff/floats/inputs",
+        "tests/diff/iogroup",
+        "tests/diff/iogroup/inputs",
+        "tests/diff/layout",
+        "tests/diff/layout/inputs",
+        "tests/diff/libm",
+        "tests/diff/lists",
+        "tests/diff/lists/inputs",
+        "tests/diff/options",
+        "tests/diff/options/inputs",
+        "tests/diff/pointers",
+        "tests/diff/pointers/inputs",
+        "tests/diff/recursion",
+        "tests/diff/recursion/inputs",
+        "tests/diff/slices",
+        "tests/diff/slices/inputs",
+        "tests/diff/sync",
+        "tests/diff/sync/inputs",
+        "tests/diff/threads",
+        "tests/diff/threads/inputs",
+        "tests/diff/threadsync",
+        "tests/diff/threadsync/inputs",
+        "tests/diff/variants",
+        "tests/diff/variants/inputs",
+        "tests/diff/vectors",
+        "tests/diff/vectors/inputs"
+      ],
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)",
+      "tree_names": true
+    },
+    "bitops-native-arm": {
+      "inputs": [
+        "scripts/**",
+        "tests/roadmap/bitops-native/**"
+      ],
+      "listings": [
+        ".",
+        "tests",
+        "tests/roadmap",
+        "tests/roadmap/bitops-native"
+      ],
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
+    }
+  }
+}

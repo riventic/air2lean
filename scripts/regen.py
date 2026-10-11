@@ -11,18 +11,18 @@ skipped, so a second run changes nothing. Heavy builds run under scripts/build-g
 retried while the build lock is busy (exit 75). With AIR2LEAN_CAS_DIR set, Lake builds, patched
 compilers and pristine compiler sources come from the shared cache (scripts/cas.py).
 
-Scope: a `pr` step's output belongs to the change that causes it (translations, CI matrix, trust
-report). A `tree` step's output depends on the whole tree (coverage, premise index, theorem
-inventory, support matrix, claims fixture, pins, provenance): `--pr` skips those; the merge queue
-and `main` regenerate them on the merge result.
+Scope: a `tree` step generates the whole-tree files of assurance/generated.json (coverage
+inventories, premise index, provenance fixtures). They are never committed: CI produces them on
+the tested tree and publishes them on the `generated` branch (docs/ci.md); here they are only
+regenerated in place for local tools, and `--pr` skips them. Every other step is `pr`: its
+committed output is checked in every CI run, so a PR regenerates it.
 
 Provenance runs last: its proof receipts need a clean committed tree, so when a fixture is stale
-the earlier outputs are committed first, then provenance-gap and provenance are regenerated and
-installed (one commit) and both manifests recorded (one commit). `--no-commit` stops before that.
+the earlier (committed) outputs are committed first, then both fixtures are regenerated in place
+by scripts/generated.py. `--no-commit` stops before that commit.
 Exit 0: up to date; 1: a step failed; 2: usage; 3: provenance needs commits (--no-commit).
 """
 import argparse
-import glob
 import importlib.util
 import json
 import os
@@ -245,7 +245,6 @@ def step_inventory(check):
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
 
 
-FIXTURES = ('gap', 'provenance')  # provenance-gap first
 
 
 def provenance_current():
@@ -259,55 +258,29 @@ def commit(message, paths):
         run(['git', 'commit', '-q', '-m', message])
 
 
-def lock_busy_in(work):
-    for report in glob.glob(str(work / '**' / '*guard*.json'), recursive=True):
-        try:
-            if json.loads(Path(report).read_text()).get('outcome') == 'lock_busy':
-                return True
-        except (OSError, ValueError):
-            pass
-    return False
-
-
 def step_provenance(check, allow_commit, written):
+    """The provenance fixtures' manifest, pins and receipts: whole-tree generated files, never
+    committed (assurance/generated.json). Regenerated in place by scripts/generated.py; its proof
+    receipts need a clean tracked tree, so this step's earlier outputs are committed first."""
     if provenance_current():
         return
     if check:
-        raise Failed('provenance fixtures are stale; run scripts/regen.sh (commits, provenance last)')
-    if not allow_commit:
-        raise Failed('provenance fixtures are stale and need commits; rerun without --no-commit', code=3)
+        raise Failed('provenance fixtures are stale; run scripts/regen.sh --only provenance '
+                     '(or scripts/generated.py fetch --group provenance --group provenance-gap)')
     dirty = changed_paths()
     if dirty:
+        if not allow_commit:
+            raise Failed('provenance receipts need a clean tree; rerun without --no-commit', code=3)
         foreign = sorted(dirty - written)
         if foreign:
             raise Failed('provenance receipts need a clean tree; commit or stash these first: '
                          + ', '.join(foreign[:10]))
         commit('Regenerate generated files (scripts/regen.sh)', sorted(written))
-    zig_air, stock = cas.zig_air(ROOT, '0.16.0'), cas.host_zig('0.16.0')
-    env = dict(os.environ)
+    env = dict(os.environ, AIR2LEAN_ZIG_AIR=str(cas.zig_air(ROOT, '0.16.0')), AIR2LEAN_ZIG=str(cas.host_zig('0.16.0')))
     for name in cas.lake_env():  # Proof receipts refuse Lake environment overlays.
         env.pop(name, None)
-    # Work directories outside the checkout: the manifest counts untracked files under its links.
-    scratch = Path(tempfile.mkdtemp(prefix='air2lean-regen-provenance.')).resolve()  # no symlinked /var
-    works = {}
-    for fixture in FIXTURES:
-        work, done = retry_while_busy('provenance ' + fixture, lambda n: (
-            scratch / ('%s-%d' % (fixture, n)),
-            run([PY, 'scripts/provenance-evidence.py', '--fixture', fixture, 'regenerate',
-                 scratch / ('%s-%d' % (fixture, n)), '--zig-air', zig_air, '--stock-zig', stock],
-                env=env, check=False)), lambda r: r[1].returncode != 0 and lock_busy_in(r[0]))
-        if done.returncode != 0:
-            raise Failed('provenance %s regenerate failed (exit %d); see %s' % (fixture, done.returncode, work))
-        run([PY, 'scripts/provenance-evidence.py', '--fixture', fixture, 'install', work], env=env)
-        works[fixture] = work
-        commit('Provenance-%s receipt regenerated (scripts/regen.sh)' % fixture,
-               ['assurance/provenance-gap' if fixture == 'gap' else 'assurance/provenance'])
-    for fixture in FIXTURES:
-        run([PY, 'scripts/provenance-evidence.py', '--fixture', fixture, 'record', works[fixture],
-             '--stock-zig', stock], env=env)
-    commit('Provenance manifests and pins recorded (scripts/regen.sh)',
-           ['assurance/provenance', 'assurance/provenance-gap'])
-    shutil.rmtree(scratch, ignore_errors=True)
+    # provenance-evidence.py waits for the build lock itself (--lock-wait).
+    run([PY, '-B', 'scripts/generated.py', 'regen', '--group', 'provenance-gap', '--group', 'provenance'], env=env)
     if not provenance_current():
         raise Failed('provenance fixtures still stale after regeneration')
 
@@ -320,18 +293,27 @@ STEPS = [
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),
     ('trust-report', 'pr', ['docs/trust-report.md'],
      simple([PY, 'scripts/trust-report.py', 'check'], [PY, 'scripts/trust-report.py', 'write'])),
-    ('op-table', 'tree', ['coverage/op-table/op-table.json'], step_op_table),
+    ('op-table', 'pr', ['coverage/op-table/op-table.json'], step_op_table),
     ('coverage', 'tree', ['coverage/<version>.json'], step_coverage),
-    ('pins', 'tree', ['tests/roadmap/try-pointers/emitter-integration.json',
+    ('pins', 'pr', ['tests/roadmap/try-pointers/emitter-integration.json',
                       'tests/roadmap/try-pointers/integration-qualification.json'], step_pins),
     ('premises', 'tree', ['docs/premise-index.md'],
      simple([PY, '-B', 'scripts/premises.py', 'check'], [PY, '-B', 'scripts/premises.py', 'write'])),
-    ('support-matrix', 'tree', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
+    ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
-    ('claims', 'tree', ['tests/roadmap/claims/fixture-report.json'], step_claims),
-    ('inventory', 'tree', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
-    ('provenance', 'tree', ['assurance/provenance-gap/**', 'assurance/provenance/**'], None),
+    ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
+    ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
+    ('provenance', 'tree', ['assurance/provenance-gap/{manifest,pins}.json, receipt/',
+                            'assurance/provenance/{manifest,pins}.json, receipt/'], None),
 ]
+# The `tree` steps are exactly the generators of assurance/generated.json (one source of truth):
+# whole-tree files are never committed; CI produces them and publishes them on `generated`.
+TREE_GROUPS = {'coverage': ['coverage'], 'premises': ['premise-index'],
+               'provenance': ['provenance', 'provenance-gap']}
+GENERATED = load('generated', 'generated.py')
+assert sorted(g for groups in TREE_GROUPS.values() for g in groups) == sorted(
+    g['name'] for g in GENERATED.load(ROOT)['groups']), 'regen.py TREE_GROUPS out of step with ' + GENERATED.REGISTRY
+assert {name for name, scope, _, _ in STEPS if scope == 'tree'} == set(TREE_GROUPS)
 
 
 def changed_paths():

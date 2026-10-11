@@ -38,3 +38,18 @@ qualification/*.d/assumptions/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Whole-tree generated files (assurance/generated.json, docs/ci.md#whole-tree-generated-files):
+# produced by CI on the merged tree and published on the `generated` branch, never committed.
+# scripts/generated.py materialize (or fetch/regen) puts them here for local tools.
+/coverage/0.14.1.json
+/coverage/0.15.2.json
+/coverage/0.16.0.json
+/coverage/0.17.0.json
+/docs/premise-index.md
+/assurance/provenance/manifest.json
+/assurance/provenance/pins.json
+/assurance/provenance/receipt/
+/assurance/provenance-gap/manifest.json
+/assurance/provenance-gap/pins.json
+/assurance/provenance-gap/receipt/

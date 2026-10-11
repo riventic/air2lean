@@ -40,6 +40,9 @@ prepare() {
     cp -a "$compiler" "/work/zig-air-$version"
     printf '%s\n' "$key" >"/work/zig-air-$version/.local-ci-key"
   fi
+  # The whole-tree generated files CI's rows install (docs/ci.md#whole-tree-generated-files): the
+  # coverage inventories and premise index regenerated on this tree (pristine sources in /cache).
+  AIR2LEAN_CACHE=/cache python3 -B scripts/generated.py materialize --heavy skip
 }
 
 if [ "${1:-}" = --prepare ]; then

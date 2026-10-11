@@ -137,6 +137,8 @@ def evaluate(expression, context):
                 return FUNCTIONS[value]
             if value == 'runner.os':
                 return context['runner.os']
+            if value == 'env.AIR2LEAN_REUSED':
+                return ''  # a path is backed by a part's executing run, never by a reused one (docs/ci.md)
             if value.startswith('matrix.'):
                 if context['matrix'] is None:
                     raise Unknown(f'{value} in a job without a matrix')
