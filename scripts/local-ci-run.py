@@ -579,7 +579,7 @@ class Job:
         symlinks (it reads zig-patch/ and the like), so what it creates there is exactly its
         product: host-zig/, elan-init, tarballs."""
         code = self.render(code)
-        home = self.tools / 'setup' / digest(code)[:24]
+        home = self.tools / 'setup' / ('v2-' + digest(code)[:24])
         work, out = home / 'work', home / 'out'
         if not (home / '.ok').exists():
             shutil.rmtree(home, ignore_errors=True)
