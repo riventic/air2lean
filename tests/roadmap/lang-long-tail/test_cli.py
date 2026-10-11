@@ -82,17 +82,26 @@ def error_params(binary):
     drop_arg(dropped["error_params.orBoom.json"], 1)
     reject(binary, dropped, EP, "AIR args do not match non-OPV runtime parameters (1 args, 2 slots)")
     # A `u0` parameter has one possible value: its slot keeps no `arg`; a one-field `enum(u8)`
-    # does not, so an export without its `arg` is rejected.
-    for name, ty, ok in (("u0", {"k": "int", "signed": False, "bits": 0, "abi_size": 0, "abi_align": 1}, True),
-                         ("enum(u8)", {"k": "enum", "name": "error_params.One", "module": "root", "tag": 1,
-                                       "exhaustive": True, "fields": [{"name": "only", "value": "7"}],
-                                       "abi_size": 1, "abi_align": 1}, False)):
+    # does not, nor does a one-field `union(enum(u8))` (its tag is stored), so an export without
+    # their `arg` is rejected.
+    u8 = {"k": "int", "signed": False, "bits": 8, "abi_size": 1, "abi_align": 1}
+    void = {"k": "void", "abi_size": 0, "abi_align": 1}
+    for name, ok in (("u0", True), ("enum(u8)", False), ("union(enum(u8))", False)):
         edited = copy.deepcopy(docs)
         doc = edited["error_params.skipFirst.json"]
-        if name == "enum(u8)":
-            doc["types"].append({"k": "int", "signed": False, "bits": 8, "abi_size": 1, "abi_align": 1})
-            ty = dict(ty, tag=len(doc["types"]) - 1)
-        doc["types"].append(ty)
+        types = doc["types"]
+        if name == "u0":
+            ty = {"k": "int", "signed": False, "bits": 0, "abi_size": 0, "abi_align": 1}
+        else:
+            types.append(u8)
+            ty = {"k": "enum", "name": "error_params.One", "module": "root", "tag": len(types) - 1,
+                  "exhaustive": True, "fields": [{"name": "only", "value": "7"}], "abi_size": 1, "abi_align": 1}
+            if name == "union(enum(u8))":
+                types.extend([ty, void])
+                ty = {"k": "union", "name": "error_params.U", "module": "root", "layout": "auto",
+                      "tag": len(types) - 2, "fields": [{"name": "only", "ty": len(types) - 1}],
+                      "abi_size": 1, "abi_align": 1}
+        types.append(ty)
         doc["params"][0] = len(doc["types"]) - 1
         drop_arg(doc, 0)
         edited.pop("error_params.viaFail.json")

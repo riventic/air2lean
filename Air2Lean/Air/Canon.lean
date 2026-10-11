@@ -617,7 +617,8 @@ partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId :
   | some (.vector len c) => len == 0 || recur c
   | some (.struct _ _ fields) => fields.all (recur ·.2)
   | some (.tuple fields) => fields.all recur
-  | some (.union _ _ _ fields) => fields.size == 1 && fields.all (recur ·.2)
+  -- Zig requires the tag to have one value too: `union(enum(u8)) { a: void }` has a runtime tag.
+  | some (.union _ _ tag fields) => fields.size == 1 && tag.all recur && fields.all (recur ·.2)
   | some (.optional c) => types[c]? == some .noreturn
   | _ => false
 
