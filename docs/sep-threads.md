@@ -197,6 +197,11 @@ by `fsym` rules. There is no separate `Stops`/`Turns` judgment and no `stops`/`h
 
 ## Transitional bridge
 
+`Full/Thread.lean` does not import the legacy layer: clock ownership and `StepIn` live in
+`ZigLean/Conc/Clock.lean`. The bridge below and the primitive thread rules lifted through it
+(`alloc'`, `free'`, `storeAt`, `loadAt`, `ptrProjectAt`) are `Full/ThreadBridge.lean`, the one
+full-state module that imports `ZigLean/Conc/Own.lean`; it goes with the native rules (T6).
+
 `FTTriple.ofTTriple : TTriple P c Q → Tame c → SizeFree P → Keeps c → FTTriple (up P) c (up ∘ Q)`
 lifts a legacy thread triple, as `FTriple.ofTriple_up` lifts a legacy triple. A client file
 switches to `FOwned` and the F library in one step; its own legacy `TTriple` lemmas (and the legacy
@@ -229,6 +234,7 @@ theorems (`## Strength` at the end of the file).
 | client | theorems | statement | precondition delta |
 |---|---|---|---|
 | `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
+| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec`, `free_front` ported (`FTTAdmit.of_exts`) |
 
 ## Phases
 
@@ -236,7 +242,7 @@ theorems (`## Strength` at the end of the file).
 |---|---|---|
 | T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
-| T3 | `Proofs/Threads`, `Proofs/Cancel`, `Proofs/Iogroup`, `Proofs/Detach/Transfer` | next |
+| T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel`, `Proofs/Iogroup`, `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas`, `Detach`, `TlsLemmas` restated; `spawn-failure`, `thread-locals`, `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
 | T6 | native primitive thread rules (no bridge); `TLogic` `fsym` backend (engine change) | next |

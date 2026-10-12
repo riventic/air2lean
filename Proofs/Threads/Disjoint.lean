@@ -4,6 +4,7 @@ import ZigLean.Conc.Witness
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.ThreadBridge
 import ZigLean.Sep.Full.Init
+import ZigLean.Sep.Full.Witness
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -757,6 +758,119 @@ theorem disjoint_safe (env : Env) (henv : env.spawn = .available) {σ : Placemen
     e ≠ .stackOverflow → (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
   (proto a b).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ)
+
+/-! ## Non-vacuity and liveness witnesses
+
+The thread triples' admissible inputs (`Witness.FTTAdmit`, `FTTLive`) in concrete memories: all
+bytes of the memory with the full extents of its blocks (`FTTAdmit.of_exts`). -/
+
+section Witnesses
+
+open Zig.Witness
+
+/-- A block's bytes and its full extent, as a resource. -/
+theorem blk_of {p : Ptr} {A S : Nat} {bs : Array Byte} {b : BlockId} {F : FHeap}
+    (hb : bytesAt p A S .stack bs F.erase) :
+    blk p A S bs b ⟨F, Know.none, Ghost.atExt b (ECell.auth1 S .stack Frac.one)⟩ :=
+  ⟨⟨F, Know.none, Ghost.unit⟩, ⟨FHeap.empty, Know.none, Ghost.atExt b (ECell.auth1 S .stack Frac.one)⟩,
+    FHeap.disjoint_empty _, by simp [Know.union_none], ⟨by simpa using hb, rfl, rfl⟩, rfl, rfl, rfl⟩
+
+/-- A context block `c` (block 0) whose `x` field points to block 1 and whose value is 0. -/
+abbrev ctxW : Array Byte :=
+  Enc.encode Witness.p1 ++ Enc.encode (0 : BitVec 32) ++ Array.replicate 4 .undef
+
+abbrev flagW : Mem := Witness.mem2 ctxW (Array.replicate 4 .undef) .stack .stack
+
+theorem flagW_pre : (bytesAt Witness.p0 4096 16 .stack ctxW ∗
+    bytesAt Witness.p1 8192 4 .stack (Array.replicate 4 .undef)) flagW.heap :=
+  Witness.mem2_bytesAt' (by decide +kernel) rfl
+
+theorem flagW_fseq : flagW.FSeq := by
+  refine ⟨⟨singleThread_empty rfl Nat.zero_lt_one⟩, by simp [shapes, ShapesWF, Witness.mem2],
+    fun b b' _ _ hne hb hb' _ => ?_, fun b bl hb _ => ?_⟩
+  · have h1 := (Array.getElem?_eq_some_iff.mp hb).1
+    have h2 := (Array.getElem?_eq_some_iff.mp hb').1
+    simp only [Witness.mem2, List.size_toArray, List.length_cons, List.length_nil] at h1 h2
+    rcases (by unfold BlockId at *; omega : b = 0 ∨ b = 1) with rfl | rfl <;>
+      rcases (by unfold BlockId at *; omega : b' = 0 ∨ b' = 1) with rfl | rfl <;>
+      first | exact absurd rfl hne |
+        (simp only [Witness.mem2] at hb hb'; cases hb; cases hb'; decide +kernel)
+  · have h1 := (Array.getElem?_eq_some_iff.mp hb).1
+    simp only [Witness.mem2, List.size_toArray, List.length_cons, List.length_nil] at h1
+    rcases (by unfold BlockId at *; omega : b = 0 ∨ b = 1) with rfl | rfl <;>
+      (simp only [Witness.mem2] at hb; cases hb; decide +kernel)
+
+/-- The full extents of `flagW`'s two blocks. -/
+abbrev E2 : BlockId → Option (Nat × BlockKind) :=
+  fun x => if x = 0 then some (16, .stack) else if x = 1 then some (4, .stack) else none
+
+theorem exts_E2 : Ghost.exts E2 = (Ghost.atExt 0 (ECell.auth1 16 .stack Frac.one)).add
+    (Ghost.atExt 1 (ECell.auth1 4 .stack Frac.one)) := by
+  rw [Ghost.exts_split (b := 0) (S := 16) (K := .stack) rfl,
+    Ghost.exts_split (b := 1) (S := 4) (K := .stack) rfl]
+  have e : (fun x : BlockId => if x = 1 then none else if x = 0 then none else E2 x) = fun _ => none := by
+    funext x; by_cases h1 : x = 1 <;> by_cases h0 : x = 0 <;> simp [E2, h0, h1]
+  simp only [e, Ghost.exts_none, Ghost.add_unit]
+
+theorem flagW_exts : ExtTrue flagW (Ghost.exts E2) := exts_true fun b S K h => by
+  by_cases h0 : b = 0
+  · subst h0; simp only [E2, ↓reduceIte] at h
+    obtain ⟨rfl, rfl⟩ := h; exact ⟨_, rfl, rfl, by decide +kernel, rfl, by decide⟩
+  · by_cases h1 : b = 1
+    · subst h1; simp only [E2, ↓reduceIte] at h
+      obtain ⟨rfl, rfl⟩ := h; exact ⟨_, rfl, rfl, by decide +kernel, rfl, by decide⟩
+    · simp [E2, h0, h1] at h
+
+theorem flagW_res : (blk Witness.p0 4096 16 ctxW 0 ⋆ blk Witness.p1 8192 4 (Array.replicate 4 .undef) 1)
+    ⟨flagW.fheap, Know.none, Ghost.exts E2⟩ := by
+  obtain ⟨h₁, h₂, hd, he, hb1, hb2⟩ := flagW_pre
+  have hf : flagW.fheap = FHeap.ofHeap (shapes flagW) h₁ ∪ FHeap.ofHeap (shapes flagW) h₂ := by
+    rw [← FHeap.ofHeap_union, ← he]; rfl
+  refine ⟨_, _, FHeap.ofHeap_disjoint hd, ?_, blk_of (F := FHeap.ofHeap (shapes flagW) h₁)
+    (by simpa using hb1), blk_of (F := FHeap.ofHeap (shapes flagW) h₂) (by simpa using hb2)⟩
+  rw [hf, exts_E2, Know.union_none]
+
+nonvacuity_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 0, 1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, rfl, rfl,
+    by decide, rfl, by decide, by decide +kernel, rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl,
+    FTTAdmit.of_exts (Know.sub_none _) flagW_exts flagW_res flagW_fseq rfl⟩
+liveness_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 0, 1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, rfl, rfl,
+    by decide, rfl, by decide, by decide +kernel, rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl,
+    FTTLive.of_exts (Know.sub_none _) flagW_exts flagW_res flagW_fseq rfl
+      (Witness.ok_of_okb (by decide +kernel))⟩
+
+/-- The full extent of `mem1`'s block. -/
+abbrev E1 : BlockId → Option (Nat × BlockKind) := fun x => if x = 0 then some (1, .stack) else none
+
+theorem front_res : (blk Witness.p0 4096 1 #[.undef] 0 ⋆ emp)
+    ⟨(Witness.mem1 #[.undef] .stack).fheap, Know.none, Ghost.exts E1⟩ := by
+  have e : Ghost.exts E1 = Ghost.atExt 0 (ECell.auth1 1 .stack Frac.one) := by
+    rw [Ghost.exts_split (b := 0) (S := 1) (K := .stack) rfl]
+    have e : (fun x : BlockId => if x = 0 then none else E1 x) = fun _ => none := by
+      funext x; by_cases h0 : x = 0 <;> simp [E1, h0]
+    simp only [e, Ghost.exts_none, Ghost.add_unit]
+  rw [e]
+  exact sep_emp.mpr (blk_of (by simpa using Witness.mem1_bytesAt #[.undef] .stack))
+
+theorem front_exts : ExtTrue (Witness.mem1 #[.undef] .stack) (Ghost.exts E1) :=
+  exts_true fun b S K h => by
+    by_cases h0 : b = 0
+    · subst h0; simp only [E1, ↓reduceIte] at h
+      obtain ⟨rfl, rfl⟩ := h; exact ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+    · simp [E1, h0] at h
+
+nonvacuity_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], 0, rfl, rfl, rfl, by decide,
+    FTTAdmit.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl⟩
+liveness_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], 0, rfl, rfl, rfl, by decide,
+    FTTLive.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl
+      (Witness.ok_of_okb (by decide +kernel))⟩
+
+end Witnesses
 
 /-! ## Strength (`docs/sep-threads.md`): the legacy proof's statements, verbatim -/
 
