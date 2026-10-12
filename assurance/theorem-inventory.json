@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "78db492aba598f9b3fe906218fb7bfea5a02c51b",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:21:52.467273+00:00",
-      "elapsed_seconds": 0.488,
+      "started_utc": "2026-10-12T14:10:46.483988+00:00",
+      "elapsed_seconds": 0.889,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3a501b0adbce33ea6311ed6aaee81db81e70e39d22506bbac1d7f2dec1d27d0c",
+      "log_sha256": "b76000f4aa69e6f05f18e6c3731693ea28b89354c973551d8540e3461773b3ec",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -939,7 +939,7 @@
       },
       "sources": {
         "Proofs.Asm.AirCert": "6fb8ff76034d212095328ccbc03a742ccf4c7d621130e3f4c8660ea17c29c26d",
-        "Proofs.Asm.Effects": "c50095fddefdc30a34747bb04c6ffc7cc5dffc3996f53dfe2211cb3811c74ef8",
+        "Proofs.Asm.Effects": "10002dca60c49e3b827cb411263b6653fb58524ce29120dfdba288caebe338d9",
         "Proofs.Asm.Proofs": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
         "Proofs.Atomics.AirCert": "9c6d2311a512906599e828ea3deab7a8f26a3b119811ce49fce615a1ee968b3d",
         "Proofs.Atomics.MessagePassing": "30251ef1dfd8433540754cb5b8e7022457f8e7abf7a4c191898c89902c149f70",
