@@ -103,7 +103,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
-| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
+| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
 
 ## Target and build profiles
 
@@ -1162,6 +1162,26 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Derived from: implied by ASM-01 and MTH-02.
 - Sources: [assumptions-audit.md](assumptions-audit.md), [`assurance/policy.json`](../assurance/policy.json).
 
+<a id="tru-05"></a>
+### TRU-05 — Artifact signing key
+
+- Kind: trusted.
+- Statement: An artifact manifest or proof receipt that `scripts/attest.py verify` accepts was
+  signed by a holder of a private key whose public half the *verifier* listed in its
+  `allowed_signers` file for the attested principal and the namespace
+  `air2lean-attestation-v1`. The verifier obtains that file, or the key fingerprint it pins
+  with `--pin-fingerprint`, out of band; the attestation never carries its own trust anchor.
+  The signer is trusted to have recorded the manifest or receipt from the tree it describes,
+  and to keep the private key secret. A signature authenticates the exact bytes, not their
+  truth (TRU-02, TRU-03) and not their freshness: the manifest's own link checks decide
+  whether it still describes the tree. A stolen key forges any artifact until its entry is
+  removed from the verifier's allowed signers; there is no revocation list, timestamp or
+  transparency log, only the optional `valid-after`/`valid-before` of `allowed_signers`
+  (`--verify-time`). The signature primitive and its verification are OpenSSH's
+  (`ssh-keygen -Y sign|verify`), trusted as installed.
+- Derived from: use of an attestation (`--attestation`); not derived from any theorem.
+- Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
+
 ## Reports
 
 Each report below, and the premises a reader must accept to rely on it, is checked by the tool.
@@ -1171,6 +1191,7 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | `scripts/assumptions.sh` JSON ([assumptions-audit.md](assumptions-audit.md)) | TRU-01, TRU-04, EXT-02 |
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
 | Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
+| Authenticated manifests and receipts (`scripts/attest.py`, [artifact-manifest.md](artifact-manifest.md#authentication)) | TRU-05 |
 | Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
 | Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |

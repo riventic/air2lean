@@ -74,6 +74,16 @@ example (p0 : Array (BitVec 32)) (n : BitVec 64) :
       else pure e) =
     Zig.loop ({ns}.{api('basic.sum')}_loop0_body p0 n) {ns}.{api('basic.sum')}_loop0_again :=
   ({ns}.{api('basic.sum')}_loop0_step p0 n).symm
+
+-- The loop specification rule at this loop: the client supplies only the invariant, the
+-- measure, the post-condition and one iteration over the stable body/again names.
+example (p0 : Array (BitVec 32)) (n : BitVec 64) (inv : {ns}.sumLocals -> Prop)
+    (meas : {ns}.sumLocals -> Nat) (post : {ns}.sumExit × {ns}.sumLocals -> Prop)
+    (step : ∀ s, inv s -> ∃ e s', ({ns}.{api('basic.sum')}_loop0_body p0 n).run s = pure (e, s') ∧
+      (if {ns}.{api('basic.sum')}_loop0_again e then inv s' ∧ meas s' < meas s else post (e, s'))) :
+    ∀ s, inv s -> ∃ r, (Zig.loop ({ns}.{api('basic.sum')}_loop0_body p0 n)
+      {ns}.{api('basic.sum')}_loop0_again : Zig.M {ns}.sumLocals {ns}.sumExit).run s = pure r ∧ post r :=
+  {ns}.{api('basic.sum')}_loop0_spec p0 n inv meas post step
 ''',
     recursion=lambda ns: f'''
 -- A `partial_fixpoint` function unfolds through its equation lemma.
