@@ -364,7 +364,6 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
 
-<<<<<<< HEAD
 /-- `FTotalTriple.arr_load` in a thread (`docs/sep-threads.md` S2). -/
 theorem FTTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
