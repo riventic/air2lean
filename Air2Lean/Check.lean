@@ -74,10 +74,13 @@ partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId :=
     | none => false
 
 /-- Unlike byte-storage classification, capability classification follows pointer
-edges. Unknown, cyclic and exhausted type traversals cannot prove a safe view. -/
+edges. Unknown, exhausted and (unless `cycles`) cyclic type traversals cannot prove a safe view.
+With `cycles`, a type met again on the path (a list node's `?*Node`) adds nothing: whatever
+storage it reaches, its first visit counts. -/
 private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
-    (seen : Array TyId := #[]) : Option (Nat × Bool) := do
-  if fuel == 0 || seen.contains id then none
+    (seen : Array TyId := #[]) (cycles : Bool := false) : Option (Nat × Bool) := do
+  if fuel == 0 then none
+  if seen.contains id then if cycles then return (fuel, false) else none
   let ty ← types[id]?
   -- A function pointer stored as data is a code address: its pointee is no data storage
   -- (`Emit.lean`'s 1-byte function block, L11). A view of code itself stays unresolved.
@@ -97,18 +100,18 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   if count > remaining then none
   let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
   for child in if fnPointer then #[] else childTys ty do
-    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
+    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id) cycles
     remaining := next
     symbolic := symbolic || childCap
   return (remaining, symbolic)
 
-private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
-  (errorCapabilityScan types id 1024).map (·.2)
+private def hasErrorCapability (types : Array Ty) (id : TyId) (cycles : Bool := false) : Option Bool :=
+  (errorCapabilityScan types id 1024 (cycles := cycles)).map (·.2)
 
 /-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
 is used for global aliases whose strict capability traversal could not finish, and for pointer
-casts under `--allocator-model translated` (`translatedErrorCapability`); other casts and parent
-recovery retain the strict cycle-rejecting traversal. -/
+casts under `--allocator-model translated` (`castErrorCapability`); parent recovery
+retains the strict cycle-rejecting traversal. -/
 private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
     (opaquePtrs : Bool := false) : Bool := Id.run do
   let mut pending : List TyId := [root, child]
@@ -133,12 +136,24 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
       let remaining := 1023 - step
       if count > remaining || rest.length + count > remaining then return false
       visited := visited.insert id
-      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`translatedErrorCapability`).
+      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`castErrorCapability`).
       let opaqueEdge := opaquePtrs && match ty with
         | .ptr _ _ c => types[c]? == some (.other "anyopaque")
         | _ => false
       pending := (if opaqueEdge then [] else (childTys ty).toList) ++ rest
   return pending.isEmpty
+
+/-- The error capability of a pointer cast's pointee: reachability of error storage, so a
+cycle (a list node's `?*Node`) adds nothing (`errorCapabilityScan`'s `cycles`). Under
+`--allocator-model translated`, where that traversal does not finish (a `*anyopaque` field such
+as `Allocator.ptr`), `some false` for a closed error-free type graph whose `*anyopaque` edges
+are not followed: an opaque pointee is no typed storage, and every recovery of a typed pointer
+from it is itself a checked cast (`fromOpaque`). -/
+private def castErrorCapability (model : AllocatorModel) (types : Array Ty) (id : TyId) :
+    Option Bool :=
+  hasErrorCapability types id (cycles := true) <|>
+    if model == .translated && closedErrorFreeAliasGraph types id id (opaquePtrs := true) then
+      some false else none
 
 /-- The fields of a non-packed struct or tuple occupy disjoint byte ranges inside the type.
 Field storage the compiler does not lay out (a comptime field exported by an older exporter,
@@ -165,15 +180,6 @@ def checkFieldRanges (fnName : String) (types : Array Ty) (layouts : Array Layou
   for (a, b) in sorted.zip (sorted.extract 1 sorted.size) do
     if b.1 < a.2 then
       throw s!"{fnName}: near line {line}: type {id}: fields at offsets {a.1} and {b.1} overlap"
-
-/-- `--allocator-model translated`: the error capability of a pointer cast's pointee.
-`hasErrorCapability`, or, where its strict traversal does not finish (the cycle of a list node such
-as `ArenaAllocator.Node`, or a `*anyopaque` field such as `Allocator.ptr`), `some false` for a closed
-error-free type graph whose `*anyopaque` edges are not followed: an opaque pointee is no typed
-storage, and every recovery of a typed pointer from it is itself a checked cast (`fromOpaque`). -/
-private def translatedErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
-  hasErrorCapability types id <|>
-    if closedErrorFreeAliasGraph types id id (opaquePtrs := true) then some false else none
 
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
@@ -1402,12 +1408,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return pid == aty && a.size.isSome && a.align.isSome &&
           a.ptrAlign.isSome && b.ptrAlign.isNone &&
           a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
-      let capability (t : TyId) : Option Bool :=
-        if cx.allocatorModel == .translated then translatedErrorCapability cx.types t
-        else hasErrorCapability cx.types t
       -- A code address carries no data storage: a function pointer may be reinterpreted,
       -- and a call through it dispatches over the table of its type (`.illegal` for any
       -- other block, L11).
+      let capability := castErrorCapability cx.allocatorModel cx.types
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else capability t
       -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
@@ -1433,7 +1437,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           if sourceCap != targetCap ||
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
-              ((sourceCap || targetCap) && source != target) then
+              ((sourceCap || targetCap) && !sameTyUpToIds cx.types cx.layouts source target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
       | none, some target =>
         unless castCapability target == some false do

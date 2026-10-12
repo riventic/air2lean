@@ -33,11 +33,12 @@ rejects the same AIR):
 
 * **Pointer casts over a cyclic error-free type graph.** `Node.allocatedSliceUnsafe`,
   `beginResize`, `loadBuf`, `reset`, `alloc`, `free` and `resize` cast between `*Node` and its
-  bytes, and `Node` points to itself (`next: ?*Node`). The strict capability scan rejects every
-  cycle. `translatedErrorCapability` (`Air2Lean/Check.lean`) falls back to the bounded closed-graph
-  proof that global aliases already use (`closedErrorFreeAliasGraph`): no type reachable from the
-  pointee is an error set or error union. A cycle that reaches an error union stays rejected
-  (`test_cli.py`).
+  bytes, and `Node` points to itself (`next: ?*Node`). The capability scan of a cast's pointee
+  (`castErrorCapability`, `Air2Lean/Check.lean`; every allocator model) counts reachable error
+  storage, so a type met again on the path adds nothing. Where that scan does not finish (the
+  `*anyopaque` fields below), it falls back to the bounded closed-graph proof that global aliases
+  already use (`closedErrorFreeAliasGraph`): no type reachable from the pointee is an error set or
+  error union. A cyclic cast that reaches an error union stays rejected (`test_cli.py`).
 * **`*anyopaque` fields.** The arena state contains `child_allocator.ptr: *anyopaque`, so the
   recovery of `*ArenaAllocator` from `ctx` met an opaque type. In that fallback a `*anyopaque`
   edge is not followed: an opaque pointee is no typed storage, and every recovery of a typed

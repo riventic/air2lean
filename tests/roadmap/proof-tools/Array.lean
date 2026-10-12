@@ -1,19 +1,40 @@
-import ZigLean.Sep.Array
+import ZigLean.Sep.Full.AutoAll
 
-open Zig Assn
+/-!
+Whole-array ownership in the full-state logic (`ZigLean/Sep/Full/Arr.lean`): the assertion
+lemmas `arr_split`/`arr_focus` at their boundaries, and item loads and stores walked by `fsym`
+with `FTotalTriple.arr_load`/`arr_store`, keeping the array whole and an independent allocation
+in the frame. Bounds are obligations: a one-past-end item is rejected, and a walk never drops
+the frame, keeps an old value or changes a neighbour.
+-/
 
--- The proof exposes a real store command and retains an independent heap allocation.
-def updateMiddle (p : Ptr) (w : BitVec 32) : MemM Unit := store 4 (p.elem 4 1) w
+namespace ProofTools.ArrayTest
+
+open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
+
+-- The proof walks a real store command and keeps an independent heap allocation.
+def updateMiddle (p : Ptr) (w : BitVec 32) : MemM Unit := Zig.store 4 (p.elem 4 1) w
 
 theorem updateMiddle_contract (p q : Ptr) (first middle last w : BitVec 32)
     (A S : Nat) (other : Array Byte) :
-    Triple (arr p [first, middle, last] ∗ bytesAt q A S .heap other)
+    FTotalTriple (up (arr p [first, middle, last]) ⋆ up (bytesAt q A S .heap other))
       (updateMiddle p w)
-      (fun _ => (pts (p.elem 4 1) 4 w ∗
-        (arr p [first] ∗ arr (p.add 8) [last])) ∗ bytesAt q A S .heap other) := by
-  simpa [updateMiddle, Enc.size, intSize, intAlign, alignUp] using
-    (Triple.arr_store_focus (p := p) (vs := [first, middle, last]) (i := 1) (a := 4)
-      (R := bytesAt q A S .heap other) (by decide) (by decide) (by decide) (by simp only [List.length_cons, List.length_nil]; decide) w)
+      (fun _ => up (arr p [first, w, last]) ⋆ up (bytesAt q A S .heap other)) := by
+  unfold updateMiddle
+  fsym
+
+-- An item load returns the item and keeps the array and the frame.
+example (p : Ptr) (x y : BitVec 32) (R : FAssn) :
+    FTotalTriple (up (arr p [x, y]) ⋆ R) (Zig.load (BitVec 32) 4 (p.elem 4 1))
+      (fun v => ⟪v = y⟫ ⋆ (up (arr p [x, y]) ⋆ R)) := by
+  fsym
+
+-- A symbolic index with its bound as a premise.
+example (p : Ptr) (xs : List (BitVec 32)) (i : BitVec 64) (hi : i.toNat < xs.length) (w : BitVec 32) :
+    FTotalTriple (up (arr p xs)) (Zig.store 4 (p.elem 4 i) w) (fun _ => up (arr p (xs.set i.toNat w))) := by
+  fsym
+
+/-! ## Assertion lemmas -/
 
 -- The ownership theorem does not require encoding round-trip laws or positive size.
 example (T : Type) [Enc T] (p : Ptr) (xs : List T) (h : Heap) (hp : arr p xs h)
@@ -34,7 +55,7 @@ example (p : Ptr) (h : Heap) (hp : arr p ([] : List (BitVec 32)) h) :
     (arr p ([] : List (BitVec 32)) ∗ arr p ([] : List (BitVec 32))) h := by
   simpa [Ptr.add] using arr_split hp (k := 0) (by simp) (by decide)
 
--- First and last elements retain empty boundary ranges explicitly.
+-- First and last items keep empty boundary ranges explicitly.
 example (p : Ptr) (x y : BitVec 32) (h : Heap) (hp : arr p [x, y] h) :
     (arr p ([] : List (BitVec 32)) ∗ (pts p 4 x ∗ arr (p.add 4) [y])) h := by
   simpa [Ptr.add, Enc.size, intSize, intAlign, alignUp] using arr_focus hp (k := 0) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
@@ -48,28 +69,7 @@ example (p : Ptr) (x : BitVec 32) (h : Heap) (hp : arr p [x] h) :
       (pts p 4 x ∗ arr (p.add 4) ([] : List (BitVec 32)))) h := by
   simpa [Ptr.add, Enc.size, intSize, intAlign, alignUp] using arr_focus hp (k := 0) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
 
--- A caller-supplied element load rule uses the same view; command/results are retained.
-example (p : Ptr) (x y : BitVec 32) (R : Assn) :
-    Triple (arr p [x, y] ∗ R) (load (BitVec 32) 4 (p.add 4))
-      (fun v => ((⌜v = y⌝ ∗ pts (p.add 4) 4 y) ∗
-        (arr p [x] ∗ arr (p.add 8) ([] : List (BitVec 32)))) ∗ R) := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using Triple.arr_focus_frame (p := p) (vs := [x, y]) (k := 1) (a := 4)
-    (R := R) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide) (Triple.load (by decide))
-
--- Bounds are proof obligations: one-past-end, empty focus, and invalid splits fail.
-example (p : Ptr) (x : BitVec 32) (h : Heap) (hp : arr p [x] h) : True := by
-  fail_if_success
-    have := arr_focus hp (k := 1) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
-  fail_if_success
-    have := arr_split hp (k := 2) (by simp only [List.length_cons, List.length_nil]; decide) (by decide)
-  trivial
-
-example (p : Ptr) (h : Heap) (hp : arr p ([] : List (BitVec 32)) h) : True := by
-  fail_if_success
-    have := arr_focus hp (k := 0) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
-  trivial
-
--- Nonempty typed ownership cannot overlap itself, independently of tactic matching.
+-- Nonempty typed ownership cannot overlap itself.
 example (p : Ptr) (x : BitVec 32) (h : Heap) : ¬ (pts p 4 x ∗ pts p 4 x) h := by
   rintro ⟨h₁, h₂, hd, _, hp₁, hp₂⟩
   obtain ⟨_, _, _, bs₁, _, hs₁, _, hb₁, _⟩ := hp₁
@@ -83,36 +83,50 @@ example (p : Ptr) (x : BitVec 32) (h : Heap) : ¬ (pts p 4 x ∗ pts p 4 x) h :=
   have hne₂ : h₂ (b, p.off.toNat) ≠ none := by rw [hl₂]; simp [hpos₂]
   exact (hd (b, p.off.toNat)).elim hne₁ hne₂
 
--- After exposing a valid element, it cannot satisfy two overlapping requirements.
-example (p : Ptr) (x y : BitVec 32) (c : MemM Unit)
-    (rule : Triple (pts (p.add 4) 4 y ∗ pts (p.add 4) 4 y) c (fun _ => emp)) : True := by
+/-! ## Rejected -/
+
+-- Bounds are obligations: a one-past-end focus or split, and a focus of the empty array, fail.
+example (p : Ptr) (x : BitVec 32) (h : Heap) (hp : arr p [x] h) : True := by
   fail_if_success
-    have : Triple (arr p [x] ∗ (pts (p.add 4) 4 y ∗ arr (p.add 8) [x])) c
-        (fun _ => arr p [x] ∗ arr (p.add 8) [x]) := by sep_frame rule
+    have := arr_focus hp (k := 1) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
+  fail_if_success
+    have := arr_split hp (k := 2) (by simp only [List.length_cons, List.length_nil]; decide) (by decide)
   trivial
 
--- Array-aware framing requires neighbors and the independent allocation in the post.
-example (p q : Ptr) (x y z w : BitVec 32) (A S : Nat) (other : Array Byte) : True := by
+example (p : Ptr) (h : Heap) (hp : arr p ([] : List (BitVec 32)) h) : True := by
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ bytesAt q A S .heap other) (updateMiddle p w)
-        (fun _ => pts (p.elem 4 1) 4 w) := by
-      sep_frame (updateMiddle_contract p q x y z w A S other)
-  fail_if_success
-    have : Triple (arr p [x, y, z] ∗ bytesAt q A S .heap other) (updateMiddle p w)
-        (fun _ => (pts (p.elem 4 1) 4 w ∗ (arr p [x] ∗ arr (p.add 8) [z]))) := by
-      sep_frame (updateMiddle_contract p q x y z w A S other)
+    have := arr_focus hp (k := 0) (a := 4) (by simp only [List.length_cons, List.length_nil]; decide) (by decide) (by decide)
   trivial
 
--- A store never promises the old selected value (or altered neighboring values).
+-- A one-past-end item is not walked.
+example (p : Ptr) (x y w : BitVec 32) : True := by
+  fail_if_success
+    have : FTotalTriple (up (arr p [x, y])) (Zig.store 4 (p.elem 4 2) w)
+        (fun _ => up (arr p [x, y])) := by fsym
+  trivial
+
+-- The frame (the independent allocation) is kept, not dropped.
 example (p q : Ptr) (x y z w : BitVec 32) (A S : Nat) (other : Array Byte) : True := by
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ bytesAt q A S .heap other) (updateMiddle p w)
-        (fun _ => (pts (p.elem 4 1) 4 y ∗
-          (arr p [x] ∗ arr (p.add 8) [z])) ∗ bytesAt q A S .heap other) := by
-      sep_frame (updateMiddle_contract p q x y z w A S other)
-  fail_if_success
-    have : Triple (arr p [x, y, z] ∗ bytesAt q A S .heap other) (updateMiddle p w)
-        (fun _ => (pts (p.elem 4 1) 4 w ∗
-          (arr p [w] ∗ arr (p.add 8) [z])) ∗ bytesAt q A S .heap other) := by
-      sep_frame (updateMiddle_contract p q x y z w A S other)
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ up (bytesAt q A S .heap other)) (updateMiddle p w)
+        (fun _ => up (arr p [x, w, z])) := by
+      unfold updateMiddle; fsym
   trivial
+
+-- A store never promises the old item or changed neighbours.
+example (p q : Ptr) (x y z w : BitVec 32) (A S : Nat) (other : Array Byte) : True := by
+  fail_if_success
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ up (bytesAt q A S .heap other)) (updateMiddle p w)
+        (fun _ => up (arr p [x, y, z]) ⋆ up (bytesAt q A S .heap other)) := by
+      unfold updateMiddle; fsym
+  fail_if_success
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ up (bytesAt q A S .heap other)) (updateMiddle p w)
+        (fun _ => up (arr p [w, w, z]) ⋆ up (bytesAt q A S .heap other)) := by
+      unfold updateMiddle; fsym
+  trivial
+
+end ProofTools.ArrayTest
+
+/-- info: 'ProofTools.ArrayTest.updateMiddle_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms ProofTools.ArrayTest.updateMiddle_contract
