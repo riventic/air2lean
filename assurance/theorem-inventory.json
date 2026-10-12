@@ -79,6 +79,20 @@
       "domain": "`Triple` for every allocator and linked list: no bytes owned after it (every node freed)"
     },
     {
+      "name": "Lists.Linked.reverse_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` and per-node resource `X`: it returns the list in the other order"
+    },
+    {
+      "name": "Lists.Linked.sum_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`: it returns the sum, the list unchanged"
+    },
+    {
       "name": "Lists.push_total",
       "module": "Proofs.Lists.Sep",
       "example": "lists",
