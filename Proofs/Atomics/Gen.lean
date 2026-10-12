@@ -278,7 +278,7 @@ structure pushLocals where
 inductive pushExit where
   | ret
   | br6 (v : BitVec 32)
-  | br20
+  | br19
   | br35 (v : Option (BitVec 32))
   | br28 (v : BitVec 32)
   | br11
@@ -291,18 +291,18 @@ def push.again12 : pushExit → Bool
 def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
   let i13 ← pure p0
   let i14 ← Zig.load (Zig.Ptr) 8 i13
-  let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
-  let i16 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
-  let i17 ← Zig.load (BitVec 32) 4 i16
-  let i18 ← Zig.intCast false false 64 i17
-  let i19 ← pure (Zig.lt false i18 (3 : BitVec 64))
+  let i15 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
+  let i16 ← Zig.load (BitVec 32) 4 i15
+  let i17 ← Zig.intCast false false 64 i16
+  let i18 ← pure (Zig.lt false i17 (3 : BitVec 64))
   match ← ((do
-    if i19 then (do
-      pure .br20)
+    if i18 then (do
+      pure .br19)
     else (do
       throw .outOfBounds)) : Zig.CM Tgt pushLocals pushExit) with
-  | .br20 => (do
-    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i18) >>= fun _ => Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
+  | .br19 => (do
+    let i24 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
+    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i17) >>= fun _ => Zig.callMC (Zig.ptrProject i24 (·.elem 4 i17))
     let i26 ← pure ((← get).h)
     Zig.store (α := BitVec 32) 4 i25 i26
     match ← ((do
@@ -476,9 +476,9 @@ structure stackPushLocals where
 inductive stackPushExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
   | br40 (v : BitVec 32)
-  | br48
-  | br60
-  | br68
+  | br47
+  | br58
+  | br67
 
 def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 16 4
@@ -535,38 +535,38 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
           pure (.br40 i42)) : Zig.CM Tgt stackPushLocals stackPushExit) with
         | .br40 v40 => (do
           let i44 ← Zig.mul false (100 : BitVec 32) v40
-          let i45 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
-          let i46 ← Zig.intCast false false 64 v40
-          let i47 ← pure (Zig.lt false i46 (3 : BitVec 64))
+          let i45 ← Zig.intCast false false 64 v40
+          let i46 ← pure (Zig.lt false i45 (3 : BitVec 64))
           match ← ((do
-            if i47 then (do
-              pure .br48)
+            if i46 then (do
+              pure .br47)
             else (do
               throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
-          | .br48 => (do
-            let i53 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i46 >>= fun _ => Zig.load (BitVec 32) 4 (i45.elem 4 i46))
+          | .br47 => (do
+            let i52 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+            let i53 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i45 >>= fun _ => Zig.load (BitVec 32) 4 (i52.elem 4 i45))
             let i54 ← Zig.mul false (10 : BitVec 32) i53
             let i55 ← Zig.add false i44 i54
-            let i56 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
-            let i57 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
-            let i58 ← Zig.intCast false false 64 v40
-            let i59 ← pure (Zig.lt false i58 (3 : BitVec 64))
+            let i56 ← Zig.intCast false false 64 v40
+            let i57 ← pure (Zig.lt false i56 (3 : BitVec 64))
             match ← ((do
-              if i59 then (do
-                pure .br60)
+              if i57 then (do
+                pure .br58)
               else (do
                 throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
-            | .br60 => (do
-              let i65 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i58 >>= fun _ => Zig.load (BitVec 32) 4 (i57.elem 4 i58))
-              let i66 ← Zig.intCast false false 64 i65
-              let i67 ← pure (Zig.lt false i66 (3 : BitVec 64))
+            | .br58 => (do
+              let i63 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+              let i64 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i56 >>= fun _ => Zig.load (BitVec 32) 4 (i63.elem 4 i56))
+              let i65 ← Zig.intCast false false 64 i64
+              let i66 ← pure (Zig.lt false i65 (3 : BitVec 64))
               match ← ((do
-                if i67 then (do
-                  pure .br68)
+                if i66 then (do
+                  pure .br67)
                 else (do
                   throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
-              | .br68 => (do
-                let i73 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i66 >>= fun _ => Zig.load (BitVec 32) 4 (i56.elem 4 i66))
+              | .br67 => (do
+                let i72 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+                let i73 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i65 >>= fun _ => Zig.load (BitVec 32) 4 (i72.elem 4 i65))
                 let i74 ← Zig.add false i55 i73
                 let i75 ← pure ((.ok i74) : Except Zig.ErrName (BitVec 32))
                 pure (.ret i75))

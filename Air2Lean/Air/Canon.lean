@@ -67,13 +67,12 @@ supported version, so one translation (and the proofs over it) serves all versio
    its allocation is poison, illegal behaviour only when used, so the native program panics at
    the check; the model's checked formation (`Zig.ptrProject`) is `.illegal` at once. The pass
    moves a pointer formation (`ptr_add`, `ptr_sub`, `ptr_elem_ptr`, a struct field pointer, a
-   pointer `bitcast`) from a C/allowzero base past the safety checks (`checkCond?`) that come
-   before its first use in its body, to just before that use; chains (`ptr_add` then `bitcast`)
-   move together. A pointer formation has no effect but its `.illegal`, and a check does not read
-   it, so a run that passes the checks is unchanged. The same holds for every base (`s[a..b]`
-   with `a` past the allocation panics natively); the pass is limited to nullable bases until
-   the committed proofs that walk the current order (`Proofs/Slices` `subZ_start`/`subZ_oob`,
-   `Proofs/Atomics/Stack`) are re-walked.
+   pointer-to-pointer `bitcast`) past the safety checks (`checkCond?`) that come before its
+   first use in its body, to just before that use; chains (`ptr_add` then `bitcast`) move
+   together. A pointer formation has no effect but its `.illegal`, and a check does not read it,
+   so a run that passes the checks is unchanged, and a run that fails one now panics there as
+   the native program does: `s[a..b]` with `a` past the allocation and `b < a` or `b > s.len`,
+   and a null C pointer with any start (`docs/null-pointers.md`).
 7. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
@@ -808,13 +807,13 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
   let (body, _) ← walk true f.body { next, reg, tys }
   return { f with params, body := args ++ body, errTrace := none }
 
-/-- `sinkPastChecks` (module doc): a pointer formation from a C/allowzero base, which may be
-moved past a safety check. `tyOf`: the type of an operand. -/
-def nullableFormation (f : RawFunc) (tyOf : Val → Option TyId) (i : RawInst) : Bool :=
+/-- `sinkPastChecks` (module doc): a pointer formation from a pointer base, which may be moved
+past a safety check. `tyOf`: the type of an operand. -/
+def pointerFormation (f : RawFunc) (tyOf : Val → Option TyId) (i : RawInst) : Bool :=
+  let isPtr (t : Option TyId) := match t.bind (f.types[·]?) with | some (.ptr ..) => true | _ => false
   let formation := i.tag == "ptr_add" || i.tag == "ptr_sub" || i.tag == "ptr_elem_ptr" ||
-    (projection? i).any (·.1 == "struct_field_val") ||
-    (i.tag == "bitcast" && match i.ty.bind (f.types[·]?) with | some (.ptr ..) => true | _ => false)
-  formation && ((i.args[0]?).bind tyOf).any (nullablePtrTy f.types f.layouts)
+    (projection? i).any (·.1 == "struct_field_val") || (i.tag == "bitcast" && isPtr i.ty)
+  formation && isPtr ((i.args[0]?).bind tyOf)
 
 /-- The instruction ids that `i` reads, nested bodies and constant aggregates included. -/
 def deepUses (i : RawInst) : Array InstId :=
@@ -844,7 +843,7 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
   let tys : Std.HashMap InstId TyId := (flatten f.body).foldl (init := {}) fun m i =>
     match i.ty with | some t => m.insert i.id t | none => m
   let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
-  { f with body := sinkBody (nullableFormation f tyOf) f.body }
+  { f with body := sinkBody (pointerFormation f tyOf) f.body }
 
 /-- The eight rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do

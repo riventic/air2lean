@@ -68,27 +68,41 @@ theorem lenOr_none (m : Mem) : (lenOr none).run m = pure (0, m) := by
 theorem lenOr_some (s : Slice) (m : Mem) : (lenOr (some s)).run m = pure (s.len, m) := by
   simp [lenOr, zig_unfold, optPayload]
 
-/-- `s[a..b :0]` with `b < a` panics (`startGreaterThanEnd`). The AIR forms `s.ptr + a` before
-the check, so the pointer must be in bounds: a start past the end of the allocation is already
-illegal behaviour in the model (`ptrProject`; LLVM poison that the native panic never uses). -/
-theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Mem)
-    (hb : m.inBounds s.ptr = true) (ha : m.inBounds (s.ptr.elem 1 a) = true) :
+/-- `s[a..b :0]` with `b < a` panics (`startGreaterThanEnd`), whatever the memory: forming
+`s.ptr + a` comes after the bounds checks (`sinkPastChecks`), so a start past the end of the
+allocation panics as it does natively (LLVM poison that the panic never uses). -/
+theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Mem) :
     (subZ s a b).run m = throw .outOfBounds := by
   have hle : Zig.le false a b = false := by simp [Zig.le, BitVec.ule]; omega
-  have hp := ptrProject_run (m := m) (·.elem 1 a) rfl hb ha
-  simp only [StateT.run] at hp
-  simp [subZ, zig_unfold, hle, hp]
+  simp [subZ, zig_unfold, hle]
 
-/-- `s[a..b :0]` with a start `a > 0` outside the allocation is illegal behaviour (`ptrProject`,
-MM-3), whatever `b` is: forming `s.ptr + a` comes first. -/
-theorem subZ_oob (s : Slice) (a b : BitVec 64) (ha0 : a.toNat ≠ 0) (m : Mem)
-    (ha : m.inBounds (s.ptr.elem 1 a) = false) :
+/-- `s[a..b :0]` with `a <= b` and `b >= s.len` panics (`outOfBounds`), whatever the memory. -/
+theorem subZ_end (s : Slice) (a b : BitVec 64) (hab : a.toNat ≤ b.toNat)
+    (hb : s.len.toNat ≤ b.toNat) (hlim : b.toNat + 1 < 2 ^ 64) (m : Mem) :
+    (subZ s a b).run m = throw .outOfBounds := by
+  have hle : Zig.le false a b = true := by simp [Zig.le, BitVec.ule]; omega
+  have hov : ¬ 2 ^ 64 - 1 ≤ b.toNat := by omega
+  have hsub : ¬ b.toNat < a.toNat := by omega
+  have hend : Zig.le false (b + 1#64) s.len = false := by
+    simp [Zig.le, BitVec.ule, BitVec.toNat_add]; omega
+  simp [subZ, zig_unfold, hle, hov, hsub, hend]
+
+/-- `s[a..b :0]` that passes the bounds checks (`a <= b < s.len`) with a start `a > 0` outside
+the allocation is illegal behaviour (`ptrProject`, MM-3): `s` claims more items than its
+allocation holds. A start that fails a check panics first (`subZ_start`, `subZ_end`). -/
+theorem subZ_oob (s : Slice) (a b : BitVec 64) (ha0 : a.toNat ≠ 0) (hab : a.toNat ≤ b.toNat)
+    (hb : b.toNat < s.len.toNat) (m : Mem) (ha : m.inBounds (s.ptr.elem 1 a) = false) :
     (subZ s a b).run m = throw .illegal := by
   have hne : s.ptr.elem 1 a ≠ s.ptr := by
     intro he; have := congrArg Ptr.off he; simp [Ptr.elem, Ptr.add_off] at this; omega
   have hp := ptrProject_illegal (m := m) (·.elem 1 a) hne (by simp [ha])
   simp only [StateT.run] at hp
-  simp [subZ, zig_unfold, hp]
+  have hle : Zig.le false a b = true := by simp [Zig.le, BitVec.ule]; omega
+  have hov : ¬ 2 ^ 64 - 1 ≤ b.toNat := by omega
+  have hsub : ¬ b.toNat < a.toNat := by omega
+  have hend : Zig.le false (b + 1#64) s.len = true := by
+    simp [Zig.le, BitVec.ule, BitVec.toNat_add]; omega
+  simp [subZ, zig_unfold, hle, hov, hsub, hend, hp]
 
 /-- `@memcpy` of two slices of different lengths panics (`copyLenMismatch`). -/
 theorem copy_len (d s : Slice) (h : d.len ≠ s.len) (m : Mem) :

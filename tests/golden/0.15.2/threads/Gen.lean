@@ -401,7 +401,7 @@ inductive parallelCounterExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
   | br11
   | br8
-  | br51
+  | br49
   | br61
   | br58
   | br34
@@ -480,17 +480,17 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
         let i43 ← Zig.callRC (Zig.unwrapErr i41)
         modify (fun s => { s with local44 := (0 : BitVec 64) })
         let i46 ← pure ((← get).started)
-        let i47 ← pure (i25)
-        let i48 ← pure i47
-        let i49 ← Zig.sub false i46 (0 : BitVec 64)
-        let i50 ← pure (Zig.le false i46 (4 : BitVec 64))
+        let i47 ← Zig.sub false i46 (0 : BitVec 64)
+        let i48 ← pure (Zig.le false i46 (4 : BitVec 64))
         match ← ((do
-          if i50 then (do
-            pure .br51)
+          if i48 then (do
+            pure .br49)
           else (do
             throw .outOfBounds)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-        | .br51 => (do
-          let i56 ← Zig.callMC (Zig.checkSliceEnd (4 : BitVec 64) (0 : BitVec 64) i49 0 >>= fun _ => pure (⟨i48, i49⟩ : Zig.Slice))
+        | .br49 => (do
+          let i54 ← pure (i25)
+          let i55 ← pure i54
+          let i56 ← Zig.callMC (Zig.checkSliceEnd (4 : BitVec 64) (0 : BitVec 64) i47 0 >>= fun _ => pure (⟨i55, i47⟩ : Zig.Slice))
           let i57 ← pure i56.len
           match ← ((do
             Zig.loop (parallelCounter.loop59 i56 i57) parallelCounter.again59) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with

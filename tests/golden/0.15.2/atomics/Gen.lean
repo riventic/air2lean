@@ -278,7 +278,7 @@ structure pushLocals where
 inductive pushExit where
   | ret
   | br6 (v : BitVec 32)
-  | br20
+  | br19
   | br35 (v : Option (BitVec 32))
   | br28 (v : BitVec 32)
   | br11
@@ -291,18 +291,18 @@ def push.again12 : pushExit → Bool
 def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
   let i13 ← pure p0
   let i14 ← Zig.load (Zig.Ptr) 8 i13
-  let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
-  let i16 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
-  let i17 ← Zig.load (BitVec 32) 4 i16
-  let i18 ← Zig.intCast false false 64 i17
-  let i19 ← pure (Zig.lt false i18 (3 : BitVec 64))
+  let i15 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
+  let i16 ← Zig.load (BitVec 32) 4 i15
+  let i17 ← Zig.intCast false false 64 i16
+  let i18 ← pure (Zig.lt false i17 (3 : BitVec 64))
   match ← ((do
-    if i19 then (do
-      pure .br20)
+    if i18 then (do
+      pure .br19)
     else (do
       throw .outOfBounds)) : Zig.CM Tgt pushLocals pushExit) with
-  | .br20 => (do
-    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i18) >>= fun _ => Zig.callMC (Zig.ptrProject i15 (·.elem 4 i18))
+  | .br19 => (do
+    let i24 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
+    let i25 ← Zig.callMC (Zig.checkIndex (3 : BitVec 64) i17) >>= fun _ => Zig.callMC (Zig.ptrProject i24 (·.elem 4 i17))
     let i26 ← pure ((← get).h)
     Zig.store (α := BitVec 32) 4 i25 i26
     match ← ((do

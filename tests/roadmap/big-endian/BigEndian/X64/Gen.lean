@@ -85,22 +85,22 @@ structure byteOfF64Locals where
 
 inductive byteOfF64Exit where
   | ret (v : BitVec 8)
-  | br6
+  | br5
 
 def byteOfF64 (p0 : Zig.F64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 8 8
   let e ← ((do
     let i2 ← pure (← get).v
     Zig.store (α := Zig.F64) 8 i2 p0
-    let i4 ← pure (i2)
-    let i5 ← pure (Zig.lt false p1 (8 : BitVec 64))
+    let i4 ← pure (Zig.lt false p1 (8 : BitVec 64))
     match ← ((do
-      if i5 then (do
-        pure .br6)
+      if i4 then (do
+        pure .br5)
       else (do
         throw .outOfBounds)) : Zig.MM byteOfF64Locals byteOfF64Exit) with
-    | .br6 => (do
-      let i11 ← Zig.callM (Zig.checkIndex (8 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i4.elem 1 p1))
+    | .br5 => (do
+      let i10 ← pure (i2)
+      let i11 ← Zig.callM (Zig.checkIndex (8 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i10.elem 1 p1))
       pure (.ret i11))
     | e => pure e) : Zig.MM byteOfF64Locals byteOfF64Exit).run' { (default : byteOfF64Locals) with v := s2 }
   Zig.free s2
@@ -114,22 +114,22 @@ structure byteOfU32Locals where
 
 inductive byteOfU32Exit where
   | ret (v : BitVec 8)
-  | br6
+  | br5
 
 def byteOfU32 (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 4 4
   let e ← ((do
     let i2 ← pure (← get).v
     Zig.store (α := BitVec 32) 4 i2 p0
-    let i4 ← pure (i2)
-    let i5 ← pure (Zig.lt false p1 (4 : BitVec 64))
+    let i4 ← pure (Zig.lt false p1 (4 : BitVec 64))
     match ← ((do
-      if i5 then (do
-        pure .br6)
+      if i4 then (do
+        pure .br5)
       else (do
         throw .outOfBounds)) : Zig.MM byteOfU32Locals byteOfU32Exit) with
-    | .br6 => (do
-      let i11 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i4.elem 1 p1))
+    | .br5 => (do
+      let i10 ← pure (i2)
+      let i11 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i10.elem 1 p1))
       pure (.ret i11))
     | e => pure e) : Zig.MM byteOfU32Locals byteOfU32Exit).run' { (default : byteOfU32Locals) with v := s2 }
   Zig.free s2
@@ -357,7 +357,7 @@ structure unionByteLocals where
 
 inductive unionByteExit where
   | ret (v : BitVec 8)
-  | br8
+  | br6
 
 def unionByte (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 4 4
@@ -365,16 +365,16 @@ def unionByte (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
     let i2 ← pure (← get).local2
     let i3 ← pure i2
     Zig.store (α := BitVec 32) 4 i3 p0
-    let i5 ← pure (i2)
-    let i6 ← pure i5
-    let i7 ← pure (Zig.lt false p1 (4 : BitVec 64))
+    let i5 ← pure (Zig.lt false p1 (4 : BitVec 64))
     match ← ((do
-      if i7 then (do
-        pure .br8)
+      if i5 then (do
+        pure .br6)
       else (do
         throw .outOfBounds)) : Zig.MM unionByteLocals unionByteExit) with
-    | .br8 => (do
-      let i13 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i6.elem 1 p1))
+    | .br6 => (do
+      let i11 ← pure (i2)
+      let i12 ← pure i11
+      let i13 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p1 >>= fun _ => Zig.load (BitVec 8) 1 (i12.elem 1 p1))
       pure (.ret i13))
     | e => pure e) : Zig.MM unionByteLocals unionByteExit).run' { (default : unionByteLocals) with local2 := s2 }
   Zig.free s2

@@ -147,7 +147,7 @@ inductive array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit where
   | ret (v : Except Zig.ErrName (Unit))
   | br6
   | br17
-  | br52
+  | br51
   | br63
   | br75
 
@@ -198,17 +198,17 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
             let i45 ← Zig.load (BitVec 64) 8 i44
             let i46 ← pure ((← get).local40)
             let i47 ← pure i46.ptr
-            let i48 ← pure i47
-            let i49 ← Zig.sub false i45 (0 : BitVec 64)
-            let i50 ← pure i46.len
-            let i51 ← pure (Zig.le false i45 i50)
+            let i48 ← Zig.sub false i45 (0 : BitVec 64)
+            let i49 ← pure i46.len
+            let i50 ← pure (Zig.le false i45 i49)
             match ← ((do
-              if i51 then (do
-                pure .br52)
+              if i50 then (do
+                pure .br51)
               else (do
                 throw .outOfBounds)) : Zig.MM array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit) with
-            | .br52 => (do
-              let i57 ← Zig.callM (Zig.checkSliceEnd i46.len (0 : BitVec 64) i49 0 >>= fun _ => pure (⟨i48, i49⟩ : Zig.Slice))
+            | .br51 => (do
+              let i56 ← pure i47
+              let i57 ← Zig.callM (Zig.checkSliceEnd i46.len (0 : BitVec 64) i48 0 >>= fun _ => pure (⟨i56, i48⟩ : Zig.Slice))
               let i58 ← pure p0
               let i59 ← Zig.load (Zig.Slice) 8 i58
               let i60 ← pure i57.len
@@ -552,11 +552,11 @@ structure mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals where
 
 inductive mem_Allocator_dupeSentinel__anon_294b7c9823bdExit where
   | ret (v : Except Zig.ErrName (Zig.Slice))
-  | br15
+  | br14
   | br24
   | br36
   | br45
-  | br59
+  | br58
   | br67
 
 -- air2lean-premises: {"ALC-09":[0]}
@@ -573,17 +573,17 @@ def mem_Allocator_dupeSentinel__anon_294b7c9823bd (p0 : Zig.Allocator) (p1 : Zig
     | .ok v5 => (do
       let i9 ← pure p1.len
       let i10 ← pure v5.ptr
-      let i11 ← pure i10
-      let i12 ← Zig.sub false i9 (0 : BitVec 64)
-      let i13 ← pure v5.len
-      let i14 ← pure (Zig.le false i9 i13)
+      let i11 ← Zig.sub false i9 (0 : BitVec 64)
+      let i12 ← pure v5.len
+      let i13 ← pure (Zig.le false i9 i12)
       match ← ((do
-        if i14 then (do
-          pure .br15)
+        if i13 then (do
+          pure .br14)
         else (do
           throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
-      | .br15 => (do
-        let i20 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i12 0 >>= fun _ => pure (⟨i11, i12⟩ : Zig.Slice))
+      | .br14 => (do
+        let i19 ← pure i10
+        let i20 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i11 0 >>= fun _ => pure (⟨i19, i11⟩ : Zig.Slice))
         let i21 ← pure i20.len
         let i22 ← pure p1.len
         let i23 ← pure (i21 == i22)
@@ -620,19 +620,19 @@ def mem_Allocator_dupeSentinel__anon_294b7c9823bd (p0 : Zig.Allocator) (p1 : Zig
               Zig.store (α := BitVec 8) 1 i50 (0 : BitVec 8)
               let i52 ← pure p1.len
               let i53 ← pure v5.ptr
-              let i54 ← pure i53
-              let i55 ← Zig.sub false i52 (0 : BitVec 64)
-              let i56 ← pure v5.len
-              let i57 ← Zig.add false i52 (1 : BitVec 64)
-              let i58 ← pure (Zig.le false i57 i56)
+              let i54 ← Zig.sub false i52 (0 : BitVec 64)
+              let i55 ← pure v5.len
+              let i56 ← Zig.add false i52 (1 : BitVec 64)
+              let i57 ← pure (Zig.le false i56 i55)
               match ← ((do
-                if i58 then (do
-                  pure .br59)
+                if i57 then (do
+                  pure .br58)
                 else (do
                   throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
-              | .br59 => (do
-                let i64 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i55 1 >>= fun _ => pure (⟨i54, i55⟩ : Zig.Slice))
-                let i65 ← Zig.callM (Zig.checkSentinelIndex i64.len i55 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
+              | .br58 => (do
+                let i63 ← pure i53
+                let i64 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i54 1 >>= fun _ => pure (⟨i63, i54⟩ : Zig.Slice))
+                let i65 ← Zig.callM (Zig.checkSentinelIndex i64.len i54 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i54))
                 let i66 ← pure ((0 : BitVec 8) == i65)
                 match ← ((do
                   if i66 then (do

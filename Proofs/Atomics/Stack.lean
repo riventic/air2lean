@@ -1023,10 +1023,7 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
     (ctxS_dec hi hu) e he).elim) fun q m₁ hl => ?_)
   obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi hu ht hact (by decide) (fun A hA => by omega) (ctxS_dec hi hu) hl
   refine ⟨rfl, ?_⟩
-  -- `&s.next`, `&ctx.node` (`ptrProject`, MM-3)
-  refine WP.bind (WP.callMC_ptrProject (hi₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
-    rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
-  dsimp only
+  -- `&ctx.node` (`ptrProject`, MM-3)
   refine WP.bind (WP.callMC_ptrProject (hi₁.proj (b := u) (p := ⟨some u, ((0 : Nat) : Int)⟩)
     (f := (·.add 8)) hu3 rfl (by simp) rfl (by simp [Ptr.add]) (by simp) (by simp [Ptr.add])) ?_)
   dsimp only
@@ -1046,13 +1043,16 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   rw [hcast] at hi18'
   cases hi18'
   have hlt : lt false (BitVec.ofNat 64 u) 3 = true := by rcases hu with rfl | rfl <;> rfl
-  simp only [hlt, ↓reduceIte, StateT.run_pure, pure_bind]
+  simp only [hlt, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+  -- `&s.next`, formed after the bounds check (`sinkPastChecks`)
+  refine WP.bind (WP.callMC_ptrProject (hi₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+    rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+  dsimp only
   -- `next[u] := h`
   have hf16 : ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off ≤ 16 := by
     rcases hu with rfl | rfl <;> decide
   have hf0 : 0 ≤ ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off := by
     simp [sPtr, Ptr.elem, Ptr.add]; omega
-  simp only [StateT.run_bind]
   -- `&next[u]`: the bounds check (`u < 3`), then the pointer
   refine WP.bind (WP.bind (WP.callMC_checkIndex (len := (3 : BitVec 64)) (i := BitVec.ofNat 64 u)
     (by rcases hu with rfl | rfl <;> decide) ?_))
@@ -1983,14 +1983,16 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.bind (WP.callRC_ok (x := mul false 100 (BitVec.ofNat 32 b)) (v := BitVec.ofNat 32 (100 * b))
     (by rcases hbk with rfl | rfl <;> rfl) ?_)
   first
-  | -- Zig 0.16.0: `next[k]` through a pointer into the `Stack` (`&s.next`: `ptrProject`)
-      refine WP.bind (WP.callMC_ptrProject (hi₂₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
-        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
-      dsimp only
+  | -- Zig 0.16.0: `next[k]` through a pointer into the `Stack` (`&s.next`: `ptrProject`, formed
+    -- after the bounds check, `sinkPastChecks`)
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (hi₂₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      dsimp only
+      simp only [next_idx b hb3, pure_bind]
       rw [next_ptr b hb3]
       -- `next[top]`
       refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₁ hg₂₁ hc₂₁ hbk hnb e he).elim) fun v m₂₂ hl => ?_)
@@ -2002,15 +2004,14 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
         (v := BitVec.ofNat 32 (100 * b + 10 * a))
         (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
-      refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
-        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
-      refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
-        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
-      dsimp only
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      dsimp only
+      simp only [next_idx b hb3, pure_bind]
       rw [next_ptr b hb3]
       -- `next[top]` again
       have hnb₂ := nextAt_congr (m := m₂₁) (m' := m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hnb
@@ -2021,7 +2022,11 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
       dsimp only
-      simp only [next_lt a ha3, next_idx a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (hi₂₃.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
+        rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
+      dsimp only
+      simp only [next_idx a ha3, pure_bind]
       rw [next_ptr a ha3]
       have hna₃ := nextAt_congr (m := m₂₁) (m' := (m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read).recordAt 0
         (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hna

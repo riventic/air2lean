@@ -413,8 +413,8 @@ structure fs_File_readAllLocals where
 
 inductive fs_File_readAllExit where
   | ret (v : Except Zig.ErrName (BitVec 64))
-  | br19
-  | br27
+  | br18
+  | br26
   | br4
   | br38
   | br13
@@ -436,25 +436,25 @@ def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readA
       match ← ((do
         let i14 ← pure ((← get).index)
         let i15 ← pure p1.ptr
-        let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
-        let i17 ← pure p1.len
-        let i18 ← pure (Zig.le false i14 i17)
+        let i16 ← pure p1.len
+        let i17 ← pure (Zig.le false i14 i16)
         match ← ((do
-          if i18 then (do
-            pure .br19)
+          if i17 then (do
+            pure .br18)
           else (do
             throw .outOfBounds)) : Zig.MM fs_File_readAllLocals fs_File_readAllExit) with
-        | .br19 => (do
-          let i24 ← Zig.sub false i17 i14
-          let i25 ← pure p1.len
-          let i26 ← pure (Zig.le false i17 i25)
+        | .br18 => (do
+          let i23 ← Zig.sub false i16 i14
+          let i24 ← pure p1.len
+          let i25 ← pure (Zig.le false i16 i24)
           match ← ((do
-            if i26 then (do
-              pure .br27)
+            if i25 then (do
+              pure .br26)
             else (do
               throw .outOfBounds)) : Zig.MM fs_File_readAllLocals fs_File_readAllExit) with
-          | .br27 => (do
-            let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i24 0 >>= fun _ => pure (⟨i16, i24⟩ : Zig.Slice))
+          | .br26 => (do
+            let i31 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
+            let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i23 0 >>= fun _ => pure (⟨i31, i23⟩ : Zig.Slice))
             let i33 ← Zig.callM (fs_File_read p0 i32)
             match i33 with
             | .error _ => (do
@@ -627,8 +627,8 @@ structure fs_File_writeAllLocals where
 
 inductive fs_File_writeAllExit where
   | ret (v : Except Zig.ErrName (Unit))
-  | br19
-  | br27
+  | br18
+  | br26
   | br6
   | br4
   | rep5
@@ -648,25 +648,25 @@ def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writ
       let i13 ← pure ((← get).index)
       let i14 ← pure ((← get).index)
       let i15 ← pure p1.ptr
-      let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
-      let i17 ← pure p1.len
-      let i18 ← pure (Zig.le false i14 i17)
+      let i16 ← pure p1.len
+      let i17 ← pure (Zig.le false i14 i16)
       match ← ((do
-        if i18 then (do
-          pure .br19)
+        if i17 then (do
+          pure .br18)
         else (do
           throw .outOfBounds)) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit) with
-      | .br19 => (do
-        let i24 ← Zig.sub false i17 i14
-        let i25 ← pure p1.len
-        let i26 ← pure (Zig.le false i17 i25)
+      | .br18 => (do
+        let i23 ← Zig.sub false i16 i14
+        let i24 ← pure p1.len
+        let i25 ← pure (Zig.le false i16 i24)
         match ← ((do
-          if i26 then (do
-            pure .br27)
+          if i25 then (do
+            pure .br26)
           else (do
             throw .outOfBounds)) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit) with
-        | .br27 => (do
-          let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i24 0 >>= fun _ => pure (⟨i16, i24⟩ : Zig.Slice))
+        | .br26 => (do
+          let i31 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
+          let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i23 0 >>= fun _ => pure (⟨i31, i23⟩ : Zig.Slice))
           let i33 ← Zig.callM (fs_File_write p0 i32)
           match i33 with
           | .error _ => (do

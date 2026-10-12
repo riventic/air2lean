@@ -1385,7 +1385,7 @@ structure wordByteLocals where
 
 inductive wordByteExit where
   | ret (v : BitVec 8)
-  | br8
+  | br7
 
 def wordByte (p0 : BitVec 32) (p1 : BitVec 2) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 4 4
@@ -1393,16 +1393,16 @@ def wordByte (p0 : BitVec 32) (p1 : BitVec 2) : Zig.MemM (BitVec 8) := do
     let i2 ← pure (← get).w
     let i3 ← Zig.callR (wordOf p0)
     Zig.store (α := Word) 4 i2 i3
-    let i5 ← pure i2
-    let i6 ← Zig.intCast false false 64 p1
-    let i7 ← pure (Zig.lt false i6 (4 : BitVec 64))
+    let i5 ← Zig.intCast false false 64 p1
+    let i6 ← pure (Zig.lt false i5 (4 : BitVec 64))
     match ← ((do
-      if i7 then (do
-        pure .br8)
+      if i6 then (do
+        pure .br7)
       else (do
         throw .outOfBounds)) : Zig.MM wordByteLocals wordByteExit) with
-    | .br8 => (do
-      let i13 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) i6 >>= fun _ => Zig.load (BitVec 8) 1 (i5.elem 1 i6))
+    | .br7 => (do
+      let i12 ← pure i2
+      let i13 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) i5 >>= fun _ => Zig.load (BitVec 8) 1 (i12.elem 1 i5))
       pure (.ret i13))
     | e => pure e) : Zig.MM wordByteLocals wordByteExit).run' { (default : wordByteLocals) with w := s2 }
   Zig.free s2
