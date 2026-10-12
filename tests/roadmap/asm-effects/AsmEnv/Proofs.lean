@@ -26,8 +26,7 @@ open Zig Zig.Asm AsmEnv
 
 theorem elapsed_eq :
     elapsed = (envWord 64 >>= fun a => envWord 64 >>= fun b => pure (subWrap b a)) := by
-  simp [elapsed, ticks, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM,
-    StateT.run_lift]
+  simp [elapsed, ticks, StateT.run'_eq, StateT.run_bind, callM, StateT.run_lift]
 
 /-- Two reads, two answers: with the oracle `0, 1` the difference is `1`. -/
 theorem elapsed_counter :
@@ -48,7 +47,7 @@ theorem elapsed_not_repeatable :
   exact absurd ha.1 (by decide)
 
 theorem random_eq : random = envWord 64 := by
-  simp [random, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
+  simp [random, StateT.run'_eq, callM, StateT.run_lift]
 
 /-- `rdrand` is one oracle query and changes no byte. -/
 theorem random_reads {m m' : Mem} {v : BitVec 64} (locs : List Loc)
@@ -59,11 +58,11 @@ theorem random_reads {m m' : Mem} {v : BitVec 64} (locs : List Loc)
 /-- An `m` input is its value: with `movq` as the identity (ASM-02), `loadm` is the load. -/
 theorem loadm_eq (hmov : ∀ x, airAsm_1506351414 x = x) (p : Ptr) :
     loadm p = load (BitVec 64) 8 p := by
-  simp [loadm, hmov, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift]
+  simp [loadm, hmov, StateT.run'_eq, StateT.run_monadLift]
 
 theorem fill_eq (p : Ptr) (n : BitVec 64) (b : BitVec 8) :
     fill p n b = writeRegion p n.toNat (airAsmFx_2696465393 b n).2.2 := by
-  simp [fill, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
+  simp [fill, StateT.run'_eq, StateT.run_bind, callM, StateT.run_lift]
 
 /-- `rep stosb` writes only its declared region, whatever the opaque computes. -/
 theorem fill_frame {p : Ptr} {n : BitVec 64} {b : BitVec 8} {m m' : Mem}
@@ -81,7 +80,7 @@ theorem fill_zero (p : Ptr) (b : BitVec 8) (m : Mem) : (fill p 0 b).run m = pure
 theorem copy_eq (d s : Ptr) (n : BitVec 64) :
     copy d s n = (guard [(d, n.toNat), (s, n.toNat)] >>= fun _ => readRegion s n.toNat >>= fun r =>
       writeRegion d n.toNat (airAsmFx_2096841937 n r).2.2.2) := by
-  simp [copy, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
+  simp [copy, StateT.run'_eq, StateT.run_bind, callM, StateT.run_lift]
 
 /-- `rep movsb` reads its source region and writes only its destination region. -/
 theorem copy_frame {d s : Ptr} {n : BitVec 64} {m m' : Mem}
