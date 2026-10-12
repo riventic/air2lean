@@ -266,22 +266,37 @@ the result with the committed `nested/Nested/Gen.lean` byte for byte, and checks
 `loop_template?` without arguments, or `loop_template? _ post`, prints suggestions for the
 goal's loop and leaves the goal unchanged; it proves nothing. It unfolds the loop body once
 and follows only generated shapes: locals read by `(← get).f`, writes by
-`modify (fun s => { s with … })`, checked `Zig.add`/`Zig.sub` of a local by a literal, and
-`Zig.lt`/`le`/`gt`/`ge` guards. It reports the loop-carried locals (written by the body) and
-the unchanged ones. For an unsigned guard whose counter steps towards a bound that the loop
-does not change, it suggests the measure `bound - counter` (or `counter - bound`) and the
-bound invariant. Given `post`, it also suggests `post` with a bound from outside the loop
-replaced by the counter. It reports, and does not infer, measures for signed guards, counters
-that step away from their bound or are also reset, bounds the loop changes, and loops without
-a counter (such as list walks, which need a ghost measure). Nested loop bodies, calls and memory
-are not followed, and side premises such as overflow bounds are never inferred. `Infer.lean`
-and `nested/Proof.lean` fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
-`pairs` are the ones its invariants use.
+`modify (fun s => { s with … })`, checked `Zig.add`/`Zig.sub` of a local by a positive literal
+`k`, loads, and `Zig.lt`/`le`/`gt`/`ge` guards. It reports the loop-carried locals (written by
+the body) and the unchanged ones, and then:
+
+- **Counters.** For a guard whose counter steps towards a bound that the loop does not change,
+  the measure `bound - counter` (or `counter - bound`) and the bound invariant, in `Nat` for an
+  unsigned guard and in `Int` (`toInt`, `Int.toNat`) for a signed one. The slack is `k - 1`
+  under a strict guard and `k` otherwise, so a step of `k` keeps the invariant.
+- **Side premises.** For that counter's step, whether the guard already excludes the overflow
+  of the checked add or sub (`k = 1` under a strict guard), and otherwise the premise to supply:
+  `bound + k - 1 < 2^w` and `k ≤ bound + 1` for unsigned counters, their `toInt` forms for
+  signed ones.
+- **Reset counters.** A counter that also gets a value from outside the loop has no measure of
+  its own. With another counter that has one, the lexicographic candidate
+  `μ s * (R + 1) + μ' s` (`R` the reset counter's largest measure), valid when every path that
+  resets the counter steps the other one. A counter that resets with no other progress gets
+  nothing.
+- **Ghost measures.** A local written only from a load (a pointer that follows a link, as in a
+  list walk) gets the ghost-measure suggestion: the number of nodes from it in the invariant's
+  representation predicate.
+- Given `post`, `post` with a bound from outside the loop replaced by the counter.
+
+Counters that step away from their bound, bounds the loop changes, nested loop bodies, calls,
+other memory shapes and the side premises of other operations are reported, not inferred.
+`Infer.lean` and `nested/Proof.lean` fix these reports with `#guard_msgs`. The suggested
+measures and bounds for the two loops of `pairs` are the ones its invariants use.
 
 ### Recursive functions
 
 A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
-`<fn>.eq_1` and no induction principle. Import `ZigLean.RecTemplate` (optional, Lean-only) for
+`<fn>.eq_1` and no induction principle. Import `ZigLean.RecTemplate` (optional) for
 `rec_template μ unfolding f, g`. It proves a goal `∀ x₁ … xₖ, B` by strong induction on the
 `Nat` measure `μ` of its first `k` binders (the arity of `μ`). It leaves one goal, `step`,
 with `x₁ … xₖ` introduced and
@@ -290,27 +305,64 @@ function's `eq_1`: the first application (and identical copies) becomes the gene
 whose recursive calls stay folded. Premises and ghost values after the first `k` binders stay in `B`
 and are quantified in `ih`. A mutually recursive group is specified as one conjunction (or
 over an index type such as `Sum`) with one measure, unfolding every member.
-`rec_template? …` also reports the remaining premise. The scaffold does not infer the
-measure. Each recursive call site discharges the decrease when it applies `ih`.
+`rec_template? …` also reports the remaining premise. Each recursive call site discharges the
+decrease when it applies `ih`.
+
+`rec_template _ unfolding f, …` infers the measure. It reads each member's `eq_1` once and
+classifies, at every call to a member, the argument at each position by the value the body bound
+to it: `p - k` (a checked sub of a positive literal; `p.toNat`, or `p.toInt.toNat` when signed),
+`x % p`, `p / k` (`k ≥ 2`) and `p >> k` (unsigned, smaller when `p ≠ 0`), a value read from
+memory (a link: a ghost measure is needed), the parameter itself, or anything else. A position
+that decreases at every call is the measure, over the goal's binders up to that argument;
+`rec_template? _` prints the classification and the side premise of each decrease (`p ≥ k`,
+`p ≠ 0`). Nothing is trusted: the decrease is still discharged where `ih` is applied, and with no
+decreasing position the tactic fails with the classification.
 
 `tests/roadmap/loop-tactics/Recursion.lean` uses it on committed translations: `gcd`
 (self-recursive, the second argument decreases by `a % b < b`), the mutual `isEven`/`isOdd`
-group and `fact` (a range premise carried through `ih`). The memory-backed `Pointers.addDown`
-is not covered: it charges its frame to the stack budget (MM-5, `Zig.enterFrame`), and a
-`TotalTriple` over every memory does not hold under a small `Mem.stackLimit` until the
-separation layer carries the stack premise (STK-01).
+group and `fact` (a range premise carried through `ih`), each with the given and the inferred
+measure; a recursion that does not shrink its argument is refused.
 
-Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range
-Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean`, then run
-`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template`, `Queue`, `Infer` and
-`Recursion`, and `tests/roadmap/loop-tactics/nested/check.sh`.
+### Recursion under the stack budget (STK-01)
 
-This is a bounded P03 contribution. Templates are sequential: concurrent loops (and
-termination under a scheduler) are out of scope. Invariant inference is the syntactic
-suggestion pass above and is never trusted. The recursion scaffold needs a user-given `Nat`
-measure and specification. `zig_range` performs only conditional rewriting and is not a
-general BitVec decision procedure. No ring-buffer example exists in `examples/`, and the
-modules add no exporter or native qualification.
+A recursive function that uses memory charges a frame on entry (`Zig.enterFrame`) and releases
+it on return (`Zig.leaveFrame`); under a budget (`Mem.stackLimit = some L`) a frame that does not
+fit throws `.stackOverflow` (MM-5). So no `TotalTriple` of such a function holds:
+`not_total_of_overflow` refutes it from a memory without room, and `enterFrame_bind_overflow`
+gives that run for every generated body. `ZigLean.Sep.Stack` states the stack premise instead:
+
+- `Mem.StackRoom m need`: no budget, or `stackUsed + need ≤ L`.
+- `TotalTripleStk P c Q need held`: from every framed memory with room for `need` bytes of
+  frames, `c` returns with `Q` and the frame, releases `held` bytes charged before it (`0` for a
+  whole call; inside a body after `enterFrame b`, `frameBase + b`) and keeps the budget.
+- Rules: `mono`, `conseq`, `frame`, `bind`, `ex`, `lift`, `of_total` (a `StackFree` command with
+  a `TotalTriple` needs no room: loads, stores, pointer projection, lifted arithmetic),
+  `spec_bind` (a call whose own need fits: an induction hypothesis), and the frame bracket
+  `enterFrame_bind`/`leaveFrame_bind`.
+- `unbudgeted`: on a memory without a budget (every generated `mem0`) the triple gives the
+  `TotalTriple` conclusion; that statement assumes STK-01 for the native stack, and `need` is
+  the model's estimate of the depth it assumes.
+
+`sep_step`/`sep_steps` walk `TotalTripleStk` goals: loads, stores and arrays as for
+`TotalTriple`, `Zig.enterFrame`/`Zig.leaveFrame` by the bracket rules (room side conditions by
+`omega`), and `using r` for a callee's `TotalTripleStk`. The statement is independent of how a
+partial `Triple` reads `.stackOverflow`: it is a total statement with its own premise.
+
+`tests/roadmap/loop-tactics/Stack.lean` proves the generated `Pointers.addDown acc n` (adds
+`n + … + 1` to `*acc` by recursion) with `rec_template _` (inferred measure `n.toNat`) and
+`sep_unfold`/`sep_step`: `addDown_total` needs room for `(n + 1) * frameBase` bytes and gives
+the sum; `addDown_unbudgeted` is its `TotalTriple` form on an unbudgeted memory; and
+`addDown_not_total` shows that no `TotalTriple` of it holds without the stack premise.
+
+Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.Sep.Stack ZigLean.Sep.Witness
+ZigLean.RecTemplate ZigLean.Range Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen
+air2lean`, then run `lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template`,
+`Queue`, `Infer`, `Recursion` and `Stack`, and `tests/roadmap/loop-tactics/nested/check.sh`.
+
+Scope: templates are sequential; concurrent loops (and termination under a scheduler) are out of
+scope here. Inference is the syntactic suggestion pass above and is never trusted. `zig_range`
+performs only conditional rewriting and is not a general BitVec decision procedure. The stack
+need is the model's frame estimate (STK-01), not a bound on native frames.
 
 ### Dispatch-loop templates (L03)
 
@@ -395,8 +447,39 @@ These counts are model counts, premise SEM-05 (`docs/premises.md`). A body run, 
 and an allocation request have no time or byte weight. Nothing here relates a count
 to CPU time, cache behavior, instruction counts, or a native allocator's memory use.
 Such a claim needs a separate calibration argument, which this layer does not
-provide. The counts cover only successful runs: a panic or divergence has no
-`LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
+provide. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
+
+### Failing and diverging runs, and a queue bound (P06)
+
+`ZigLean.Sep.CostRuns` counts the other two ends of a loop in the same unit:
+
+- `LoopFails body again s m k e`: the `k`-th body run throws `e` after `k - 1` repeats.
+  `run` is the loop's run (`throw e`), `unique` makes `k` and `e` functions of the start, and
+  `not_runs` excludes a counted exit. `loopEnds_bound` bounds the body runs until an exit or a
+  failure by a decreasing measure, and `FailsWithin B P body again s bad` states that the loop
+  fails (with an error in `bad`) within `B` body runs; `FailsWithin.not_within` refutes every
+  success bound from the same inputs.
+- `LoopPrefix … k …`: `k` body runs that each repeat. From an invariant that every body run
+  keeps while repeating, `forever_prefix` builds a prefix of every length and `forever_no_end`
+  excludes a counted end for any count; `forever_not_within` refutes every bound.
+- `Fails P c e`: from every framed precondition, `c` throws `e`. `sep_step`/`sep_steps` walk
+  it as they walk a `TotalTriple` (loads, stores, arrays, total rules for calls), and
+  `Fails.throw_bind` ends the walk; `FailsWithin.of_fails` makes a failing body run a loop that
+  fails after one body run.
+- `TotalTripleWithin.of_template`: a `LoopTemplate` at measure `n` bounds the loop by `n + 1`
+  body runs.
+
+`tests/roadmap/cost/ring/` applies it to a ring-buffer queue (`ring.zig`, capacity 8: buffer,
+`head`, `len`), exported once with the patched Zig 0.17.0 and retranslated byte for byte by its
+`check.sh`. `drain` pops every item and returns their sum. `drain_within` proves, under the
+capacity premises `head < 8` and `len ≤ 8`, that its loop exits within `len + 1` body runs with
+the sum of the items in ring order (the capacity premise also excludes the overflow of the
+sum), and `drain_within_cap` the uniform bound `cap + 1 = 9`. `drain_fails` shows that a
+corrupted queue (`head ≥ 8`, `len ≠ 0`) fails its bounds check (`.outOfBounds`) in the first
+body run, and `drain_corrupt_not_within` that it has no bounded triple. `spin_not_within`
+refutes every bound for a loop that never ends. The step proof is `sep_unfold`/`sep_steps` on
+the generated body with the module's invariant and arithmetic facts. Build with `lake build
+air2lean ZigLean.Sep.CostRuns ZigLean.Range` and run `tests/roadmap/cost/ring/check.sh`.
 
 ### Resource-bounded total triples (P05)
 
@@ -418,6 +501,10 @@ the total triple it implies, and `sum_total` is the function-level total triple 
 `sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
 count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
 Proofs.Lists.Bounded`.
+
+A manifest goal can declare the bound it relies on (`"bound": {"unit": …, "max": N}` or
+`{"unit": …, "expr": "<printed bound>"}`); `scripts/claims.py` checks it against the bound the
+theorem's conclusion states ([claim-strength.md](claim-strength.md#bounds)).
 
 ## Concrete runs of programs with loops (`unroll_sched`)
 

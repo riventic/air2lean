@@ -34,6 +34,7 @@ to match the extracted declarations.
 | `Zig.Returns` | no-panic, guaranteed-return | `safety` |
 | `Zig.TotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.TotalTripleWithin` (bound: `loop_body_runs`) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
+| `Zig.TotalTripleStk` (bound: `stack_bytes`, premise STK-01) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Conc.Total.EventuallyReturns` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Conc.Total.ReturnsWithin` (bound: `scheduler_turns`) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Conc.Total.EventuallyReturnsUnder` | guaranteed-return-under-premise | none |
@@ -50,8 +51,13 @@ premise makes it vacuous (`Zig.Conc.Total.under_false`). Its claim
 `guaranteed-return-under-premise` therefore implies none of the three unconditional claims,
 and every declared strength is rejected for it with a reason naming the premise. Bounded
 heads report a `bound` object with the unit of the bound (`loop_body_runs`: `LoopRuns` body
-runs; `scheduler_turns`: scheduler fuel). Other theorems report `bound: null`. The bound's
-value is in the theorem statement and is not extracted. A conjunction is not classified even if its parts would combine into total
+runs; `scheduler_turns`: scheduler fuel; `stack_bytes`: the room on the stack that
+`TotalTripleStk` needs), its `value` when the bound argument is a closed number, and its printed
+form `expr`. Other theorems report `bound: null`. The extractor records every natural-number
+argument of a conclusion head this way (`nat: {value, pp}`), and the registry names the bound's
+position (`bound_arg`). `TotalTripleStk` returns only from memories with that room; on an
+unbudgeted memory (every generated `mem0`) it is the `TotalTriple` conclusion and rests on
+STK-01, which the report lists under `premises` (the registry's `premises` of the head). A conjunction is not classified even if its parts would combine into total
 correctness, since the parts may concern different programs; state `TotalTriple` instead.
 
 ## Witnesses
@@ -113,7 +119,8 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
   postcondition, a hypothesis or an ignored argument does not bind;
 * a hypothesis mentions a generated definition (any definition of the root's generated module)
   or a claim head, unless that definition is one of the root's declared `assumptions`;
-* the derived domain is scoped and the declared domain does not start with `scoped`.
+* the derived domain is scoped and the declared domain does not start with `scoped`;
+* the goal declares a `bound` that the conclusion does not prove ([Bounds](#bounds)).
 
 The domain is derived from the subject: each explicit root argument and initial state is
 reported as the quantified variable it is, or `fixed`. It is `universal` only when every one is
@@ -134,6 +141,22 @@ Error returns never reject a goal. Evidence can only reject: an incomplete summa
 clean evidence adds nothing to the type-derived strength. Each summary must be bound to the
 current tree: its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py`
 computes now and its `cases_sha256` the case file beside it; stale or unbound evidence exits 2.
+
+## Bounds
+
+A goal may declare the bound it relies on, as an optional `bound` object:
+
+* `{"unit": U, "max": N}`: the conclusion must state a bound of unit `U` whose argument is a
+  closed number at most `N` (a smaller proved bound implies the declared one);
+* `{"unit": U, "expr": "<printed bound>"}`: for a bound over the theorem's variables, the
+  conclusion's printed bound must be exactly this text (whitespace aside).
+
+Anything else is rejected: a goal on a head without a bound, another unit, a symbolic bound
+declared as `max`, a different expression, a malformed object. The bound is read from the
+kernel type, never from the manifest, so a declared bound is only as large as the proved one.
+`scripts/project.py check` applies the same rule (`bound_mismatch`).
+`tests/roadmap/claims/test_claims.py` covers the accepted and rejected forms on
+`exit_within` (`1`), `exit_within_sym` (`n + 1`) and `ret_stk` (`32` stack bytes).
 
 ## Vacuity
 
