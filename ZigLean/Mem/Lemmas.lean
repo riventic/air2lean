@@ -1132,11 +1132,6 @@ variable (m : Mem) (n a : Nat)
 @[simp] theorem Mem.stacksAfterAlloc_mapped (lo : Nat) : m.stacksAfterAlloc (.mapped lo) n a = m.stacks := rfl
 end
 
-/-- A block of any kind but `.stack` has no stack budget. -/
-theorem Mem.stackBudget?_of_ne {m : Mem} {kind : BlockKind} (h : kind ≠ .stack) :
-    m.stackBudget? kind = none := by
-  cases kind <;> first | rfl | exact absurd rfl h
-
 /-- With room the new block's address is valid: not 0 for a stack block of a thread with a
 budget, a multiple of `align` there, inside the address space and clear of every live block. -/
 theorem Mem.allocOk_fit {m : Mem} {kind : BlockKind} {size align : Nat}
