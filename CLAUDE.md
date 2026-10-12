@@ -14,12 +14,6 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   little else; the generated code is walked by general tactics and rules in the libraries
   (`ZigLean`). When a module-specific tactic seems necessary, generalize it into the library
   instead. Module-specific tactic glue is debt to be removed.
-- **One proof framework.** Proofs use the full-state logic (`FTriple`, `FTotalTriple`, `CTriple`)
-  and the symbolic executor `fsym` ([docs/proof-framework.md](docs/proof-framework.md)). Extend
-  them with library lemmas and `@[fsym]` rules only. Never add a new judgment, tactic, template or
-  parallel automation. If `fsym` cannot do something, write the exact request to the coordinator
-  and stop. `scripts/proof-framework.py` (preflight, CI) fails on a new judgment, tactic or
-  legacy-logic user; its list (`assurance/proof-framework.json`) only shrinks.
 - **One mechanism over special cases.** When something fails, fix the underlying model, translator
   rule or proof rule. Do not add per-case exceptions, premises or allow-lists.
 - **Soundness first.** A soundness finding outranks new features. Every finding needs a concrete
