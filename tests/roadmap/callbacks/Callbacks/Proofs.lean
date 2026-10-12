@@ -78,32 +78,20 @@ theorem sumVisit_holds : visitCallback.Holds (fun a => sumVisit a.1 a.2) := by
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hp
     obtain ⟨rfl, rfl⟩ := hp
     obtain ⟨b, blk, o, hacc, -, rfl⟩ := load_inv hl
-    obtain ⟨b', blk', o', hacc', rfl⟩ := Asm.storeBytes_inv hst
     obtain ⟨hb, -, -, -, -, -, -⟩ := access_eq hacc
-    obtain ⟨hb', hblk', hlive', -, -, -, -⟩ := access_eq (Asm.access_of_accessW hacc')
-    have hlt : b' < (before.recordAt b o (Enc.size (BitVec 32)) .read).blocks.size :=
-      (Array.getElem?_eq_some_iff.mp hblk').1
-    let m₁ := before.recordAt b o (Enc.size (BitVec 32)) .read
+    -- The load records one read of the context's block; the store is `store_effects`.
+    obtain ⟨⟨hk, hlive⟩, ⟨δ, hlog, hδ⟩, -⟩ := store_effects (x := a.2) hst
     let e₁ : FootprintEntry := ⟨before.current,
       VClock.bump (before.clocks[before.current]!) before.current, b, o,
       Enc.size (BitVec 32), .read⟩
-    let e₂ : FootprintEntry := ⟨m₁.current, VClock.bump (m₁.clocks[m₁.current]!) m₁.current,
-      b', o', (Enc.encode (addWrap v a.2)).size, .write⟩
-    refine ⟨rfl, ⟨fun c hc => ?_, fun _ => ?_⟩, ⟨#[e₁, e₂], ?_, ?_⟩, fun h => nomatch h⟩
-    · have hne : b' ≠ c := fun e => hc (e ▸ hb'.symm)
-      simp [Mem.write, Mem.recordAt, Array.getElem?_setIfInBounds_ne hne]
-    · refine ⟨b', { blk' with bytes := writeBytes blk'.bytes o' (Enc.encode (addWrap v a.2)) },
-        hb', ?_, hlive'⟩
-      simp only [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds]
-      exact Array.getElem?_setIfInBounds_self_of_lt hlt
-    · have push2 : ∀ (xs : Array FootprintEntry) x y, (xs.push x).push y = xs ++ #[x, y] := by
-        intro xs x y; apply Array.toList_inj.mp; simp
-      simp only [Mem.write, Mem.recordAt, m₁, e₁, e₂, push2]
+    refine ⟨rfl, ⟨fun c hc => hk c hc, hlive⟩, ⟨#[e₁] ++ δ, ?_, ?_⟩, fun h => nomatch h⟩
+    · rw [hlog]
+      simp only [Mem.recordAt, e₁, Array.push_eq_append, Array.append_assoc]
     · intro entry hentry
-      simp only [List.mem_cons, List.not_mem_nil, or_false, e₁, e₂] at hentry
-      rcases hentry with rfl | rfl
+      simp only [Array.toList_append, List.mem_append, List.mem_singleton] at hentry
+      rcases hentry with rfl | h
       · exact hb.symm
-      · exact hb'.symm
+      · exact hδ entry h
 
 theorem targets_holds : ∀ t ∈ targets, visitCallback.Holds t.2 := by
   intro t ht
