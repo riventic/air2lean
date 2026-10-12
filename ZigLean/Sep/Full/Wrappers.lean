@@ -15,7 +15,8 @@ their generated code, with the allocator's `FAllocSpec` fields as the rules of t
 This module is what such a proof needs beyond the step rules of `AutoRules`:
 
 * the postconditions of the contracts, over an `FAllocInv` (`owned`, `allocResult`,
-  `sliceResult`, `bytesResult`);
+  `sliceResult`, `bytesResult`, `reallocResult`);
+* the arithmetic facts of `realloc` (`@min`/`@max` of words, `keepsPrefix` of the copied prefix);
 * the step rule (`@[fsym]`) of `@returnAddress()` (`returnAddress`); the byte operations on
   regions (`@memset`, item loads and stores, `@memcpy`, the pointer order of its aliasing check)
   are the region library's (`Full/Region`).
@@ -53,6 +54,15 @@ def sliceResult (k : Nat) (len : BitVec 64) (n : Nat) : Except ErrName Slice →
 def bytesResult (k : Nat) (len : BitVec 64) (bs : Array Byte) : Except ErrName Slice → FAssn
   | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr bs
   | .error e => ⟪e = "OutOfMemory"⟫
+
+/-- The result of a reallocation of the bytes `bs` at `old` to `len` items of `n` bytes in all:
+a grant of `n` bytes that keep the common prefix (in place or moved; nothing for `n = 0`), or
+`error.OutOfMemory` and the old grant. -/
+def reallocResult (k : Nat) (old : Ptr) (bs : Array Byte) (len : BitVec 64) (n : Nat) :
+    Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ if n = 0 then emp else
+      FAssn.ex fun bs' => ⟪bs'.size = n ∧ keepsPrefix bs bs'⟫ ⋆ I.granted s.ptr k bs'
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.owned k old bs
 
 theorem owned_zero {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) : I.owned k p bs = emp := by
   simp [owned, h]
@@ -105,6 +115,39 @@ dsimproc [fsym_norm] reduceValLit (Zig.val _ _) := fun e => do
   return .done (toExpr v)
 
 /-! ## Facts -/
+
+/-- `@min`/`@max` of unsigned words, as of their values (the copy length of a reallocation). -/
+@[fsym_arith] theorem min_false {n : Nat} (a b : BitVec n) :
+    (Zig.min false a b).toNat = Min.min a.toNat b.toNat := by
+  simp only [Zig.min, Bool.false_eq_true, ↓reduceIte, BitVec.ule]
+  split <;> simp_all <;> omega
+
+@[fsym_arith] theorem max_false {n : Nat} (a b : BitVec n) :
+    (Zig.max false a b).toNat = Max.max a.toNat b.toNat := by
+  simp only [Zig.max, Bool.false_eq_true, ↓reduceIte, BitVec.ule]
+  split <;> simp_all <;> omega
+
+/-- Nothing to keep of no bytes (for `fsym`'s arithmetic: a conditional rewrite to `True`). -/
+@[fsym_arith] theorem keepsPrefix_of_size_zero {old new : Array Byte} (h : old.size = 0) :
+    keepsPrefix old new := by
+  unfold keepsPrefix
+  rw [Array.eq_empty_of_size_eq_zero h]; simp
+
+/-- The common prefix copied to the start of fresh bytes (a moved reallocation's `@memcpy`) is
+kept. -/
+@[fsym_arith] theorem keepsPrefix_writeBytes_extract {bs bn : Array Byte} {m : Nat}
+    (h : m = Min.min bn.size bs.size) : keepsPrefix bs (writeBytes bn 0 (bs.extract 0 m)) := by
+  have hs : (bs.extract 0 m).size = m := by simp; omega
+  have hw := writeBytes_size bn 0 (bs.extract 0 m) (by omega)
+  unfold keepsPrefix
+  apply Array.ext_getElem?
+  intro i
+  rw [Array.getElem?_extract, Array.getElem?_extract, hw,
+    writeBytes_getElem? _ _ _ (by omega), Array.getElem?_extract]
+  simp only [Nat.zero_add, Nat.sub_zero, hs, Nat.zero_le, true_and]
+  by_cases hi : i < m
+  · simp [show i < Min.min bs.size bn.size by omega, hi, show i < Min.min m bs.size by omega]; omega
+  · simp [show ¬ i < Min.min bs.size bn.size by omega, show ¬ i < Min.min bn.size bs.size by omega]
 
 /-- A read-only typed value (a vtable entry): the block of its pointer, a nonnegative offset. -/
 @[fsym_facts] theorem Auto.facts_cpts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} :

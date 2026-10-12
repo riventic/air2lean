@@ -250,7 +250,8 @@ hand-written model of a std module (CLAUDE.md, "Trusted base"), and its bridge t
 code was a manual equality per program. A program-independent normal form would only be added
 with an automatic bridge (one rule set per Zig version, applied by `fsym`); none is needed. Below,
 `Full/Wrappers` is the library part (postconditions over `FAllocInv`, step rules for
-`@returnAddress`, `@memset(_, undefined)` and the constants of the wrappers) and the contracts
+`@returnAddress`, `@memset(_, undefined)` and the constants of the wrappers, the `@min`/`@max`
+and `keepsPrefix` facts of `realloc`) and the contracts
 themselves are proved over the generated wrappers of `tests/roadmap/alloc-fba`.
 
 | Legacy claim | Where | Status | Replacement or reason |
