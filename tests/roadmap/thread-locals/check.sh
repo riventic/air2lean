@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # C02 thread-local storage: retranslate the retained 0.16.0 and 0.15.2 exports, compare with
 # ThreadLocals/Gen.lean, kernel-check the proofs, run sampled schedules and mutants, and run
-# the CLI rejection regressions. Needs `lake build air2lean ZigLean.Conc.TlsLemmas`; no Zig.
+# the CLI rejection regressions. Needs `lake build air2lean ZigLean.Conc.TlsLemmas
+# ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts`; no Zig.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -20,6 +21,8 @@ for mod in Gen Counters Leak; do
   lake env lean -R "$dir" -o "$work/olean/ThreadLocals/$mod.olean" "$dir/ThreadLocals/$mod.lean"
 done
 lake env lean "$dir/Check.lean"
+# The strength log of the migrated proof (tests/roadmap/strength-log).
+lake env lean tests/roadmap/strength-log/ThreadLocals.lean
 lake env lean --run "$dir/ThreadLocals/Runtime.lean"
 PYTHONDONTWRITEBYTECODE=1 python3 "$dir/test_cli.py" "$translator"
 echo 'thread-local translation, proofs, schedules, mutants and CLI checks passed'

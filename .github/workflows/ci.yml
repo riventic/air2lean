@@ -1124,7 +1124,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1231,8 +1231,12 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/strength-log"
           # shellcheck disable=SC2046
-          lake build $(sed -n 's/^import \([A-Z][^ ]*\)$/\1/p' tests/roadmap/strength-log/*.lean | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
+          lake build $(grep -hE '^import (ZigLean|Proofs)\.' tests/roadmap/strength-log/*.lean | sed 's/^import //' | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
           for f in tests/roadmap/strength-log/*.lean; do
+            # A log that imports a fixture's own module is compiled by that fixture's check.sh.
+            imports=$(grep -c '^import ' "$f" || true)
+            lake_imports=$(grep -cE '^import (ZigLean|Proofs)\.' "$f" || true)
+            [ "$imports" = "$lake_imports" ] || continue
             lake env lean "$f" 2>&1 | tee "$RUNNER_TEMP/strength-log/strength-$(basename "$f" .lean).log"
           done
 
@@ -1630,7 +1634,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.TlsLemmas
+          lake build ZigLean.Conc.TlsLemmas ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
