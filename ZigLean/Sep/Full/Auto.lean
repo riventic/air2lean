@@ -299,7 +299,7 @@ structure RunCaches where
   /-- The simp context that folds generated indirect calls (concurrent bodies). -/
   fold : IO.Ref (Option Simp.Context)
   /-- The facts lemmas (`@[fsym_facts]`) with the head of their assertion (`headKey`). -/
-  factLemmas : IO.Ref (Option (Array (Name × Name)))
+  factLemmas : IO.Ref (Option (Array (Array Name × Name)))
   /-- Failed case probes of split terms (`detProbe`): the fact sets they failed with. -/
   detFail : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr)))
 
@@ -1066,14 +1066,45 @@ def isCaseCtorApp (e : Expr) : MetaM Bool := do
   if ci.induct == ``Bool || ci.induct == ``Nat then return false
   return (← caseInduct? ci.induct).isSome
 
+/-- A value that a field's equation substitutes (`substCtor`): a constructor application of a type
+with several constructors (`isCaseCtorApp`), or a closed term of a type that is not arithmetic
+(`w.M = GMap.empty`: words and numbers stay facts of the arithmetic solver). -/
+def isSubstValue (e : Expr) : MetaM Bool := do
+  if ← isCaseCtorApp e then return true
+  if e.hasFVar || e.hasMVar || e.isLit then return false
+  let .const _ _ := e.getAppFn | return false
+  let ty ← whnfR (← inferType e)
+  if ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool || ty.isAppOf ``BitVec || ty.isSort then
+    return false
+  return !(← isProp ty)
+
+/-- A fact `o.isSome = true`, `¬o.isSome = true`, `o.isSome = false` (or the same of `isNone`):
+the lemma that turns it into `o = none` or `∃ a, o = some a`, and `o`. -/
+def optTest? (ty : Expr) : Option (Name × Expr) := do
+  let (neg, e) := if ty.isAppOfArity ``Not 1 then (true, ty.appArg!) else (false, ty)
+  let (_, l, r) ← e.eq?
+  let isSome ← if l.isAppOfArity ``Option.isSome 2 then some true
+    else if l.isAppOfArity ``Option.isNone 2 then some false else none
+  let val ← if r.isConstOf ``Bool.true then some true
+    else if r.isConstOf ``Bool.false then some false else none
+  let lem ← match isSome, val, neg with
+    | true, true, false => some ``opt_isSome_true
+    | true, true, true => some ``opt_not_isSome
+    | true, false, false => some ``opt_isSome_false
+    | false, true, false => some ``opt_isNone_true
+    | false, true, true => some ``opt_not_isNone
+    | false, false, false => some ``opt_isNone_false
+    | _, _, _ => none
+  return (lem, l.appArg!)
+
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
 and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
 which are split again, so a `match` on `t` (in the precondition, in a fact) reduces. `none` if
 there is nothing to do or the goal does not abstract over `t`. -/
 partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarId) := g.withContext do
-  let (t, symm) ← if (← isCaseCtorApp r) && !(← isCaseCtorApp l) then pure (l, false)
-    else if (← isCaseCtorApp l) && !(← isCaseCtorApp r) then pure (r, true)
+  let (t, symm) ← if (← isSubstValue r) && !(← isSubstValue l) then pure (l, false)
+    else if (← isSubstValue l) && !(← isSubstValue r) then pure (r, true)
     else return none
   -- a field of the locals or of a witness; not a library term (`p.block = some b` is a block fact)
   if let .const c _ := t.getAppFn then
@@ -1114,6 +1145,13 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
       return g
     return ← destruct g fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
+  -- a test of an optional that is not a constructor: its constructor equation (`opt_*`), next
+  -- to the test
+  if let some (lem, o) := optTest? ty then
+    unless ← isCaseCtorApp o do
+      let pf ← mkAppM lem #[mkFVar h]
+      let (h', g') ← (← g.assert `hopt (← inferType pf) pf).intro1
+      return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
       if let some g' ← observing? (subst g h) then return g'
@@ -2359,24 +2397,32 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
 
 /-! ## Facts of atoms -/
 
-/-- The facts lemmas (`@[fsym_facts]`) about the atom `a`: `(proof of AtomFacts a φ, φ)`. -/
-def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
-  -- the lemmas by the head of their assertion, once per run
+/-- The atoms a facts lemma is about: `X` or the pair `X₁ ⋆ X₂` of `AtomFacts X φ`/`MemFacts X φ`. -/
+def factSubjects (X : Expr) : Array Expr :=
+  if X.isAppOfArity sepN 2 then #[X.appFn!.appArg!, X.appArg!] else #[X]
+
+/-- The facts lemmas (`@[fsym_facts]`) about the atoms `as` (one atom, or an ordered pair):
+`(proof of AtomFacts X φ or MemFacts X φ for X the atom or `as[0] ⋆ as[1]`, φ, memory fact)`. -/
+def atomFacts (as : Array Expr) : MetaM (Array (Expr × Expr × Bool)) := do
+  -- the lemmas by the heads of their atoms, once per run
   let keyed ← match ← (← caches).factLemmas.get with
     | some k => pure k
     | none => do
       let k ← (fsymFactsExt.getState (← getEnv)).filterMapM fun n => withNewMCtxDepth do
         let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
-        return if concl.isAppOfArity ``AtomFacts 2 then some (headKey (concl.getArg! 0), n) else none
+        return if concl.isAppOfArity ``AtomFacts 2 || concl.isAppOfArity ``MemFacts 2 then
+          some ((factSubjects (concl.getArg! 0)).map headKey, n) else none
       (← caches).factLemmas.set (some k)
       pure k
+  let keys := as.map headKey
+  let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
   let mut out := #[]
   for (key, n) in keyed do
-    unless key == headKey a do continue
+    unless key == keys do continue
     let s ← saveState
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, concl) ← forallMetaTelescope (← inferType f)
-    unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) a) do s.restore; continue
+    unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) X) do s.restore; continue
     for x in args do
       unless ← x.mvarId!.isAssigned do
         if (← isClass? (← inferType x)).isSome then
@@ -2385,7 +2431,7 @@ def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
     let pf ← instantiateMVars (mkAppN f args)
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
-    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ)
+    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ, concl.isAppOfArity ``MemFacts 2)
   return out
 
 /-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
@@ -2403,28 +2449,34 @@ def knownFact (ψ : Expr) : MetaM Bool := do
   s.restore
   return r
 
-/-- Add the facts of the precondition's atoms (`@[fsym_facts]`: the block, offset and alignment
-of an owned pointer) that the context lacks, when the walk needs more facts (a rule's side goal,
+/-- Add the facts of the precondition's atoms and ordered pairs of atoms (`@[fsym_facts]`: the
+block, offset and alignment of an owned pointer; a token's grant in its authority's map; two
+owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
 an undecided `if`, a reachable panic, a return). `none` if there was none to add. -/
 partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option MVarId) := g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let ats := atoms P
-  for i in [0:ats.size] do
-    let a := ats[i]!
-    if done.contains a then continue
-    for (hX, φ) in ← atomFacts a do
+  let n := ats.size
+  -- single atoms `[i]`, then ordered pairs `[i, j]`
+  let subjects := (List.range n).map (#[·]) ++
+    ((List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·]))
+  for idx in subjects do
+    let as := idx.map (ats[·]!)
+    let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
+    if done.contains X then continue
+    for (hX, φ, mem) in ← atomFacts as do
       if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
-      trace[fsym] "facts of {a}: {φ}"
-      let R := sepOf (ats.eraseIdx! i)
-      let g1 ← if P == mkSep a R then pure g else do
-        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep a R) c Q)
-        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep a R, Q, c, ← acEq P (mkSep a R), g2])
+      trace[fsym] "facts of {X}: {φ}"
+      let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
+      let g1 ← if P == mkSep X R then pure g else do
+        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep X R) c Q)
+        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep X R, Q, c, ← acEq P (mkSep X R), g2])
         pure g2.mvarId!
-      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep a R) c Q))
-      g1.assign (← mkAppM' (← mkAppOptM (L.nm ``pre_fact) #[L.L]) #[hX, k])
+      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep X R) c Q))
+      g1.assign (← mkAppM' (← mkAppOptM (L.nm (if mem then ``pre_mfact else ``pre_fact)) #[L.L]) #[hX, k])
       let (h, g2) ← k.mvarId!.intro `hf
       let g2 ← destruct g2 h
-      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push a)
+      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X)
   return if done.isEmpty then none else some g
 
 /-! ## Rules -/
