@@ -320,8 +320,11 @@ def isSplitTerm (e : Expr) : Bool :=
     (e.isAppOfArity ``Min.min 4 && (e.getArg! 0).isConstOf ``Nat) ||
     (e.isAppOfArity ``Max.max 4 && (e.getArg! 0).isConstOf ``Nat)
 
-/-- A fact without case splits for `omega`. -/
+/-- A fact without case splits for `omega` (the negation of an order is one). -/
 def isLinearProp (t : Expr) : Bool :=
+  let ord (e : Expr) := e.isAppOfArity ``LT.lt 4 || e.isAppOfArity ``LE.le 4 ||
+    e.isAppOfArity ``GT.gt 4 || e.isAppOfArity ``GE.ge 4
+  let t := if t.isAppOfArity ``Not 1 && ord t.appArg! then t.appArg! else t
   !t.isArrow && !(t.find? fun e => isSplitTerm e || e.isAppOfArity ``Or 2 || e.isAppOfArity ``Iff 2 ||
     e.isAppOfArity ``Not 1).isSome
 
@@ -336,13 +339,14 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let ty ← instantiateMVars ty
   let hasSplit := (arith.any fun (_, t) => (t.find? isSplitTerm).isSome) || (ty.find? isSplitTerm).isSome
   unless hasSplit do return ← omegaRaw (arith.map (·.1)) ty
-  let lin := (arith.filter fun (_, t) => isLinearProp t).map (·.1)
+  -- the linear facts, and the facts that the atoms make linear
+  let linRef ← IO.mkRef ((arith.filter fun (_, t) => isLinearProp t).map (·.1))
   let atomsRef ← IO.mkRef (({} : Std.HashMap Expr Expr), (#[] : Array Expr))
   let rw (e : Expr) : MetaM Expr := Meta.transform e (post := fun x => do
     unless isSplitTerm x do return .continue
     let (m, defs) ← atomsRef.get
     if let some a := m.get? x then return .done a
-    let base := lin ++ defs
+    let base := (← linRef.get) ++ defs
     let decide (prop : Expr) : MetaM (Option Expr) :=
       probe (mkApp2 (mkConst `fsym.det) x prop) base.size (omegaRaw base prop)
     let args := x.getAppArgs
@@ -374,10 +378,18 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
       atomsRef.modify fun (m, defs) => (m.insert x atom, defs.push d)
       return .done atom
     | none => return .continue)
-  let mut facts' : Array Expr := #[]
-  for (f, t) in arith do
-    let t' ← rw t
-    facts' := facts'.push (← if t' == t then pure f else mkExpectedTypeHint f t')
+  -- twice: a fact made linear joins the base that decides the split terms of the others
+  let mut cur := arith
+  for _ in [0:2] do
+    let mut next : Array (Expr × Expr) := #[]
+    for (f, t) in cur do
+      if isLinearProp t then next := next.push (f, t); continue
+      let t' ← rw t
+      let f' ← if t' == t then pure f else mkExpectedTypeHint f t'
+      if isLinearProp t' then linRef.modify (·.push f')
+      next := next.push (f', t')
+    cur := next
+  let facts' := cur.map (·.1)
   let ty' ← rw ty
   let (_, defs) ← atomsRef.get
   let some pf ← omegaRaw (facts' ++ defs) ty' | return none

@@ -28,12 +28,12 @@ logic").
 
 | Proof | heartbeats (default budget 200k) |
 | --- | --- |
-| FBA `alloc` | 69k |
-| FBA `resize` (refined) | 72k |
-| FBA `remap` | 86k |
+| FBA `alloc` | 64k |
+| FBA `resize` (refined) | 57k |
+| FBA `remap` | 70k |
 | FBA `free` | 21k |
-| page (linux) `free` / `resize` / `remap` | 13k / 82k / 97k |
-| page (macOS) `free` / `resize` / `remap` | 13k / 81k / 58k |
+| page (linux) `free` / `resize` / `remap` | 13k / 76k / 85k |
+| page (macOS) `free` / `resize` / `remap` | 13k / 75k / 55k |
 
 FBA `Full.lean` is 139 lines, of which the proofs are four `fsym` calls (the handwritten version
 was 1025 lines); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
