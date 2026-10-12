@@ -1217,21 +1217,24 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/loop-tactics"
-          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
+          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
 
-      # Proofs/Lists in the full-state logic, and its strength log (legacy statements on every
-      # Mem.FSeq memory; deleted with the legacy logic).
-      - name: Linked-list proofs (full-state) and their strength log
+      # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
+      # every Mem.FSeq memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
+      - name: Migrated full-state proofs and their strength logs
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/lists-full"
-          lake build Proofs.Lists.Linked ZigLean.Sep.Full.Strength 2>&1 | tee "$RUNNER_TEMP/lists-full/build.log"
-          lake env lean tests/roadmap/strength-log/ProofsLists.lean 2>&1 | tee "$RUNNER_TEMP/lists-full/strength.log"
+          mkdir -p "$RUNNER_TEMP/strength-log"
+          # shellcheck disable=SC2046
+          lake build $(sed -n 's/^import \([A-Z][^ ]*\)$/\1/p' tests/roadmap/strength-log/*.lean | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
+          for f in tests/roadmap/strength-log/*.lean; do
+            lake env lean "$f" 2>&1 | tee "$RUNNER_TEMP/strength-log/strength-$(basename "$f" .lean).log"
+          done
 
       - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1849,7 +1852,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake build ZigLean ZigLean.Sep.Full.Malloc ZigLean.Conc.OsRules
           lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
@@ -2471,8 +2474,8 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
-      - name: Dispatch-loop template regressions
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"

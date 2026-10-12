@@ -1205,7 +1205,7 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   of all its bytes. Any other pointer (double free, inner pointer, stack, global, mapping or
   arena block) is `.illegal`. `malloc_size` returns the block's byte count (`0` for `null`) and
   is `.illegal` for other pointers, which is stricter than macOS.
-- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.OsMalloc`; tokens `Os.Darwin.malloc`,
+- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.Full.Malloc`; tokens `Os.Darwin.malloc`,
   `Os.Darwin.free`, `Os.Darwin.malloc_size`; implies SEM-02, ALC-02.
 - Sources: [os-threads.md](os-threads.md#malloc), `ZigLean/Os/Malloc.lean`, Zig 0.16.0
   `lib/std/heap.zig` (`c_allocator`).

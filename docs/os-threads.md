@@ -4,7 +4,7 @@
 code ([thread-io-translation.md](thread-io-translation.md), phase T2). Only the OS calls
 below them get a trusted model, one premise per group
 ([premises.md](premises.md#os-thread-primitives)). The models are in `ZigLean/Os/`, imported by
-`ZigLean.lean` through `ZigLean/Os.lean`. The proof-only rules are in `ZigLean/Sep/OsMalloc.lean`
+`ZigLean.lean` through `ZigLean/Os.lean`. The proof-only rules are in `ZigLean/Sep/Full/Malloc.lean`
 and `ZigLean/Conc/OsRules.lean`, which `ZigLean.lean` does not import.
 
 The cut is at the named OS wrapper: on Linux the `std.os.linux` function above `syscallN`, on
@@ -172,15 +172,17 @@ stack, global, mapping (OSM-01 `.mapped`) or arena block is `.illegal`.
 
 | Theorem | Statement |
 |---|---|
-| `Triple.malloc` | `emp` before; after, `mallocPost n`: `null` and no bytes, or a block of `S ≥ n` undefined bytes, 16-byte aligned. For every failure policy and slack. |
-| `Triple.mfree`, `Triple.mfreeNull` | the whole owned block before, `emp` after; `free(null)` keeps `emp`. |
+| `FTotalTriple.malloc` (`n > 0`) | `emp` before; after, `fmallocPost n`: `null` and nothing, or a block of `S ≥ n` undefined bytes, 16-byte aligned, with its full extent. Total, for every failure policy and slack. |
+| `FTotalTriple.mallocZero` | `malloc(0)`: as above when the slack gives the block bytes (macOS gives 16), else a pointer to offset 0 of a new block without bytes. The full-state logic cannot own a block without bytes, so its `free` has no triple (conservative). |
+| `FTotalTriple.mfree`, `FTotalTriple.mfreeNull` | the whole owned block and its extent before, `emp` after; `free(null)` keeps `emp`. |
 | `Os.Darwin.free_dead`, `free_inner` | `free` of a dead block (a double free) or an inner pointer is `.illegal`. |
 | `Os.wakeCount_pos`, `Os.wakeSets_mem` | a wake always has an option; each option is a sublist of the queue at the address of length `min n k`. |
 | `Os.wakeAt_frame`, `Os.interrupt_frame` | a wake and an interrupt change no block, clock, footprint, atomic location or thread record: no happens-before edge. |
 | `Os.waitCount_ne`, `Os.waitCount_eq` | the compare has one option for a different word, two (three with a timeout) for the expected one. |
 
-Kernel-checked examples (`decide +kernel`): `OsMallocExamples` covers a store into a fresh block,
-a double free, a use after free, an inner-pointer free and a stack-block free. `OsRulesExamples`
+Kernel-checked examples (`decide +kernel`): `MallocExamples` covers a store into a fresh block,
+a double free, a use after free, an inner-pointer free, a stack-block free and `malloc(0)`
+(freeable with and without slack; no byte without slack). `OsRulesExamples`
 covers a spurious `EINTR` with nobody waking, the deadlock of an untimed wait nobody wakes, a
 timed wait that times out, a wake without an edge (the woken waiter's plain read races), and the
 Linux join loop over `CHILD_CLEARTID` that reads the thread's write.
