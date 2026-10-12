@@ -200,7 +200,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
       let some bits := packedBits types child
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
-            `bool`, an enum or a packed struct is outside the subset"
+            `bool`, a float, an enum, a packed struct, a packed union or a vector of these is \
+            outside the subset"
       if l.bitOffset + bits > 8 * l.hostSize then
         throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
@@ -240,7 +241,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointers in packed aggregates are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
-        integer, a `bool`, an enum or a packed struct: outside the subset"
+        integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these \
+        (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
@@ -264,7 +266,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
           subset"
       if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
         throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
-          integer, a `bool`, an enum or a packed struct: outside the subset"
+          integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of \
+          these: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
@@ -372,7 +375,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     if layout == "packed" then
       -- Its backing integer (`Zig.Packed`).
       let some bits := packedBits types id | throw s!"packed struct '{name}' with a field other \
-        than an integer, a `bool` or a packed struct"
+        than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector \
+        of these"
       return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
       let _ ← modelLayout types layouts fty errBits
@@ -436,6 +440,19 @@ def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (field
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
+/-- A `@bitCast` between a packed struct or union and another packed struct or union, a float or a
+`bool` of the same bit size (every Zig version: both sides are their bits, `Zig.Packed`). An
+integer side keeps its own rules (`Zig.Packed.ofBits?`/`toBits`, `Zig.PackedU`). -/
+def packedScalarCast (types : Array Ty) (src dst : TyId) : Bool :=
+  let packedAgg (t : TyId) : Bool := match types[t]? with
+    | some (.struct _ "packed" _) | some (.union _ "packed" none _) => true
+    | _ => false
+  let scalar (t : TyId) : Bool := match types[t]? with
+    | some (.float _) | some .bool => true
+    | _ => packedAgg t
+  src != dst && (packedAgg src || packedAgg dst) && scalar src && scalar dst &&
+    (packedBits types src).isSome && packedBits types src == packedBits types dst
+
 /-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
 
 /-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
@@ -471,7 +488,7 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | .int _ bits | .float bits => pure bits
   | .bool => pure 1
   | .enum _ tag _ _ => reprBitSize types layouts tag
-  | .struct _ "packed" _ => packedBits types id
+  | .struct _ "packed" _ | .union _ "packed" none _ => packedBits types id
   | .struct _ "extern" fields | .union _ "extern" none fields =>
     for (_, t) in fields do let _ ← reprBitSize types layouts t
     abiBits
@@ -729,6 +746,11 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
     if bits > t.atomicBits then
       cx.fail line s!"an atomic op on a {bits}-bit integer representation is outside the \
         {t.arch}-{t.os} model ({t.atomicBits}-bit atomics at the baseline CPU)"
+  -- A packed struct with a float or packed-union field can hold undetermined bits
+  -- (`Zig.Packed.mask`), which the atomic messages (integer bytes) cannot.
+  if packedHasMask cx.types c && !(cx.types[c]? matches some (.float _)) then
+    cx.fail line "an atomic op on a packed struct with a float or packed-union field is outside \
+      the subset: its NaN or undefined bits have no atomic message bytes"
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
@@ -1390,12 +1412,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if cx.bitCast.any (reprCastApplies · cx.types aty ty) then
         let side (t : TyId) : Bool := match cx.types[t]? with
           | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _)
-          | some (.vector ..) => true
+          | some (.union _ "packed" none _) | some (.vector ..) => true
           | _ => reprAggregate cx.types t
         unless side aty && side ty do
           cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct, \
             `extern` union or vector and a type other than an integer, float, `bool`, packed \
-            struct, array, `extern` struct, `extern` union or vector is outside the subset"
+            struct, packed union, array, `extern` struct, `extern` union or vector is outside \
+            the subset (an `auto` struct, tuple or tagged union has no guaranteed layout: Sema \
+            rejects its `@bitCast`)"
         -- An array and a vector of other items: 0.16.0's LLVM `bitCast` reinterprets memory
         -- only when the source's items fill whole bytes; otherwise it copies item by item into
         -- lanes of another type, which is no representation cast.
@@ -1410,8 +1434,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             reprBitSize cx.types cx.layouts ty)
           | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
               pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
-              tagged union, packed union, slice, sentinel array or error storage, at any \
-              depth) is outside the subset"
+              tagged union, slice, sentinel array or error storage, at any depth) is outside \
+              the subset"
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
             {bbits} bits (`@bitSizeOf`) is outside the subset"
@@ -1424,6 +1448,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | some (.int ..) => "int"
         | _ => "other"
       if aty == ty then return line
+      -- A packed struct or union and another packable scalar of the same bit size (a packed
+      -- struct or union, a float, `bool`): the bits, through `Zig.Packed` (`packedScalarCast`).
+      if packedScalarCast cx.types aty ty then return line
       match kind aty, kind ty with
       | "packed", "int" | "int", "packed" => pure line
       | "packed", _ | _, "packed" | "agg", _ | _, "agg" =>
@@ -2625,6 +2652,9 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
     match t with
     | .float 80 => fail "`f80`"
     | .union _ "packed" none _ => fail "a `packed union`"
+    -- Its memory image with undetermined bits (`Zig.Packed.encodeOf`) is little endian only.
+    | .struct _ "packed" fs =>
+      if fs.any (packedHasMask f.types ·.2) then fail "a packed struct with a float field"
     | .vector _ c =>
       match f.types[c]? with
       | some (.int _ bits) => unless bits % 8 == 0 do fail "a vector of non-byte-multiple lanes"

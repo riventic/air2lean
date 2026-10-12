@@ -445,10 +445,14 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++ encUndef ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
-    -- Its backing integer (`Zig.Packed`).
+    -- Its backing integer (`Zig.Packed`). With a field whose bits can be undetermined (a
+    -- float's NaN, a packed union's undefined bits), those bits are undefined bytes
+    -- (`Zig.Packed.encodeOf`, `ZigLean/PackedRepr.lean`; little endian only, `checkBigEndian`).
     let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
+    let encode := if fields.any (packedHasMask s.srcTypes ·.2) then "Zig.Packed.encodeOf .little v"
+      else "Zig.Enc.encode (Zig.Packed.toBits v)"
     String.intercalate "\n" (head ++
-      ["  encode v := Zig.Enc.encode (Zig.Packed.toBits v)", "  decode bs := do",
+      [s!"  encode v := {encode}", "  decode bs := do",
        s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, id), o) =>
@@ -521,9 +525,20 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {withStorageEnc structNames s.srcTypes s.errBits id s!"{ns}.get ({t}) u.bytes" s.srcLayouts}", "",
        s!"def {n}.{hn s!"modify_{f}"} (g : {t} → {t}) (u : {n}) : {n} :=",
        s!"  {withStorageEnc structNames s.srcTypes s.errBits id s!"⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩" s.srcLayouts}"]
+    -- A packed union is also a packable value (`Zig.Packed`, `ZigLean/PackedRepr.lean`): a
+    -- field of a packed struct, a bit-pointer target, a logical `@bitCast` operand.
+    let width : Option Nat := fields.foldlM (init := 0) fun acc (_, t) =>
+      Nat.max acc <$> packedBits s.srcTypes t
+    let packedInst := match layout, width with
+      | "packed", some w =>
+        ["", s!"instance : Zig.Packed {n} {w} where",
+         s!"  toBits u := Zig.PackedU.bitsOf {w} u.bytes.toArray",
+         s!"  ofBits b := ⟨Zig.Raw.ofArray {size} (Zig.intBytes b)⟩",
+         s!"  mask u := Zig.PackedU.maskOf {w} u.bytes.toArray"]
+      | _, _ => []
     String.intercalate "\n"
       ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
-        "  deriving Repr, Inhabited, DecidableEq"] ++ perField)
+        "  deriving Repr, Inhabited, DecidableEq"] ++ perField ++ packedInst)
   | .union _ _ tag fields =>
     let tagName := match tag.bind (s.srcTypes[·]?) with
       | some t => emitTy structNames s.srcTypes t
@@ -596,11 +611,18 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     -- `valid`: the fields that can hold bits that are not a value (an enum, in any depth).
     let valid := (fields.toList.zip offs).filterMap fun ((_, t), o) =>
       if packedHasEnum s.srcTypes t then some s!"Zig.Packed.validAt ({tyStr t}) b {o}" else none
+    -- `mask`: the fields whose bits can be undetermined (a float's NaN, a packed union's
+    -- undefined bits; `ZigLean/PackedRepr.lean`), each at its offset; the others are all ones.
+    let mask := (fields.toList.zip offs).map fun ((f, t), o) =>
+      if packedHasMask s.srcTypes t then s!"((Zig.Packed.mask v.{fm f}).setWidth {bits} <<< {o})"
+      else s!"((BitVec.allOnes {(packedBits s.srcTypes t).getD 0}).setWidth {bits} <<< {o})"
+    let hasMask := fields.any (packedHasMask s.srcTypes ·.2)
     String.intercalate "\n" (decl ++ ["",
       s!"instance : Zig.Packed {n} {bits} where",
       s!"  toBits {if toBits.isEmpty then "_" else "v"} := {if toBits.isEmpty then "(0 : BitVec 0)" else String.intercalate " ||| " toBits}",
       s!"  ofBits {if ofBits.isEmpty then "_" else "b"} := \{ {String.intercalate ", " ofBits} }"] ++
-      (if valid.isEmpty then [] else [s!"  valid b := {String.intercalate " && " valid}"]))
+      (if valid.isEmpty then [] else [s!"  valid b := {String.intercalate " && " valid}"]) ++
+      (if hasMask then [s!"  mask v := {String.intercalate " ||| " mask}"] else []))
   | _ => ""
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
@@ -1138,6 +1160,7 @@ def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : 
     | .intLanes false .. => s!"pure (Zig.BitCast.ofLanes ({v}))"
     | .boolLanes true _ => s!"pure (Zig.BitCast.ofBools ({v}).lanes)"
     | .boolLanes false _ => s!"pure (Zig.BitCast.ofBools ({v}))"
+    | .value _ => s!"Zig.Packed.toBits? ({v})"
   let fromBits (b : String) : String := match d with
     | .int _ => s!"pure ({b})"
     | .bool => s!"pure ({b} == 1#1)"
@@ -1149,6 +1172,7 @@ def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : 
     | .intLanes false n w => s!"pure (Zig.BitCast.toLanes (n := {n}) (w := {w}) ({b}))"
     | .boolLanes true _ => s!"pure ⟨Zig.BitCast.toBools ({b})⟩"
     | .boolLanes false _ => s!"pure (Zig.BitCast.toBools ({b}))"
+    | .value _ => s!"Zig.Packed.ofBits? (α := {dstTy}) ({b})"
   -- An integer side needs no conversion; otherwise compose through `BitVec (bits)`.
   let body := match s, d with
     | .int _, _ => fromBits av
@@ -2383,7 +2407,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
     let isPacked (t : Ty) : Bool := match t with | .struct _ "packed" _ => true | _ => false
     let isPackedU (t : Ty) : Bool := match t with | .union _ "packed" none _ => true | _ => false
-    if isPackedU (fc.valTy a) then
+    if (fc.valTyId? a).any (packedScalarCast fc.types · inst.ty) then
+      -- A packed struct or union and another packable scalar of the same bit size: its bits
+      -- (`Zig.Packed`; an undetermined bit, a NaN's, is `.unspecified`).
+      let (env, l) := bindLet fc env inst.id
+        s!"Zig.Packed.bitCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
+      (env, some l)
+    else if isPackedU (fc.valTy a) then
       -- A packed union to its backing integer: the bits of its bytes.
       let expr := s!"Zig.PackedU.get ({fc.emitTyOf inst.ty}) {rv a}.bytes"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2395,8 +2425,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         s!"pure {rawUnionInit u "packed" size (rv a) (fc.emitValTy a)}"
       (env, some l)
     else if isPacked (fc.valTy a) then
-      -- A packed struct to its backing integer.
-      let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
+      -- A packed struct to its backing integer (`.unspecified` for a NaN field's bits).
+      let toBits := if (fc.valTyId? a).any (packedHasMask fc.types) then
+        s!"Zig.Packed.toBits? {rv a}" else s!"pure (Zig.Packed.toBits {rv a})"
+      let (env, l) := bindLet fc env inst.id toBits; (env, some l)
     else if isPacked (fc.tyOfId inst.ty) then
       let expr := s!"Zig.Packed.ofBits? (α := {fc.emitTyOf inst.ty}) {rv a}"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)

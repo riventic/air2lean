@@ -16,6 +16,14 @@ In memory a packed struct is its backing integer (the instance's `Enc`). A bit-p
 read and write the field's `n` bits at bit `o` of it, with defined-bit masks (§Defined bits);
 `storeUndefBits` makes them undefined. `ZigLean/PackedLemmas.lean` proves the frame: the other
 bits keep their state.
+
+`Packed` is also the *logical bit representation* of every packable type (Zig 0.17's
+`@bitCast`, `ZigLean/PackedRepr.lean`): floats, packed unions, arrays and vectors get instances
+there. `mask` gives the bits of a value that are determined: all of them for an integer, `bool`,
+enum or packed struct of these; none for a NaN (the model's canonical NaN stands for any NaN,
+`docs/floats.md` §NaN); the defined bits of a packed union's bytes. Where a value becomes bits
+that someone can observe (`toBits?`, a bit-pointer store, a packed struct's memory image), an
+undetermined bit is undefined, never the model's choice.
 -/
 
 namespace Zig
@@ -24,6 +32,8 @@ class Packed (α : Type) (n : outParam Nat) where
   toBits : α → BitVec n
   ofBits : BitVec n → α
   valid : BitVec n → Bool := fun _ => true
+  /-- The bits of a value that are determined (`toBits` gives the others as 0). -/
+  mask : α → BitVec n := fun _ => BitVec.allOnes n
 
 instance {n : Nat} : Packed (BitVec n) n where
   toBits v := v
@@ -44,6 +54,17 @@ def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result �
 /-- The `n` bits of `α` at bit `o` of `host` are `valid`. -/
 def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
   Packed.valid (α := α) (host.extractLsb' o n)
+
+/-- The bits of `v` if every one of them is determined (`mask`), else `none`. -/
+def Packed.defBits? {α : Type} {n : Nat} [Packed α n] (v : α) : Option (BitVec n) :=
+  if Packed.mask v = BitVec.allOnes n then some (Packed.toBits v) else none
+
+/-- `@bitCast` of `v` to its bits: an undetermined bit (a NaN's, an undefined bit of a packed
+union) has no value, `.unspecified`, as `Float.toBits?` does for a NaN. -/
+def Packed.toBits? {α : Type} {n : Nat} [Packed α n] (v : α) : Result (BitVec n) :=
+  match Packed.defBits? v with
+  | some b => pure b
+  | none => throw .unspecified
 
 /-! ## Defined bits
 
@@ -74,6 +95,16 @@ def Byte.ofDefBits (d x : BitVec 8) : Byte :=
   else match [1, 2, 3, 4, 5, 6, 7].find? (lowMask8 · = d) with
     | some m => .part m (x &&& d)
     | none => .mask d (x &&& d)
+
+/-- The `(n + 7) / 8` value bytes of the `n`-bit integer `v`, little-endian, with only the bits
+of `m` defined (`Byte.ofDefBits`). -/
+def maskedBytes {n : Nat} (v m : BitVec n) : Array Byte :=
+  (Array.range ((n + 7) / 8)).map fun i =>
+    Byte.ofDefBits (BitVec.ofNat 8 (m.toNat >>> (8 * i))) (BitVec.ofNat 8 (v.toNat >>> (8 * i)))
+
+/-- The value bytes of `v` (`intBytes`), each bit defined where `Packed.mask` says. -/
+def Packed.bytes {α : Type} {n : Nat} [Packed α n] (v : α) : Array Byte :=
+  maskedBytes (Packed.toBits v) (Packed.mask v)
 
 /-- Bit `k` of a byte: `some b` if it is defined, `none` if it is undefined or the byte has no
 integer bits (a pointer or error byte). -/
@@ -130,11 +161,13 @@ def loadBits (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat
   | none => throw .unspecified
 
 /-- A store through a bit-pointer: read the host, replace the field's bits, write it back.
-Every other bit keeps its state (`writeField`), defined or undefined. -/
+Every other bit keeps its state (`writeField`), defined or undefined. A value with an
+undetermined bit (`Packed.mask`: a NaN, a packed union with undefined bits) leaves the whole
+field undefined. -/
 def storeBits {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr)
     (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
-  storeBytes p align (writeField bs bitOffset (some (Packed.toBits v)))
+  storeBytes p align (writeField bs bitOffset (Packed.defBits? v))
 
 /-- A store of `undefined` through a bit-pointer: the field's `n` bits become undefined, bit by
 bit; every other bit keeps its state. -/

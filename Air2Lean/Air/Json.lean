@@ -369,14 +369,16 @@ private inductive PackedVisit where
   | unseen | active | done (width : Nat)
   deriving Inhabited
 
-/-- The bit width of an integer, bool, enum tag, or packed struct (the `packedBits` model
-in `Memory.lean`, which this file cannot import). Memoized explicit DFS completes shared
+/-- The bit width of an integer, bool, float, enum tag, packed struct (sum), packed union
+(widest field) or vector (`len` lanes) (the `packedBits` model in `Memory.lean`, which this file
+cannot import). Memoized explicit DFS completes shared
 field types once; cycles/unknown widths return `none` even for direct API calls that did not run `validateTypeGraph`. -/
 def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
   match types[id]? with
-  | some (.int _ bits) => return some bits
+  | some (.int _ bits) | some (.float bits) => return some bits
   | some .bool => return some 1
-  | some (.enum ..) | some (.struct _ "packed" _) => pure ()
+  | some (.enum ..) | some (.struct _ "packed" _) | some (.union _ "packed" none _)
+  | some (.vector ..) => pure ()
   | _ => return none
   let mut states : Array PackedVisit := Array.replicate types.size .unseen
   let mut tasks : List (TyId × Bool) := [(id, false)]
@@ -386,13 +388,18 @@ def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
     let some t := types[current]? | return none
     if finish then
       let children : Array TyId := match t with
-        | .enum _ tag _ _ => #[tag]
-        | .struct _ "packed" fs => fs.map (fun (field : String × TyId) => field.2)
+        | .enum _ tag _ _ | .vector _ tag => #[tag]
+        | .struct _ "packed" fs | .union _ "packed" none fs =>
+          fs.map (fun (field : String × TyId) => field.2)
         | _ => #[]
       let mut width : Nat := 0
       for child in children do
         let some (PackedVisit.done w) := states[child]? | return none
-        width := width + w
+        -- A packed union is its widest field; a vector `len` lanes.
+        width := match t with
+          | .union .. => Nat.max width w
+          | .vector len _ => len * w
+          | _ => width + w
       states := states.set! current (.done width)
     else
       match states[current]? with
@@ -400,11 +407,15 @@ def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
       | some .active | none => return none
       | some .unseen =>
         match t with
-        | .int _ bits => states := states.set! current (.done bits)
+        | .int _ bits | .float bits => states := states.set! current (.done bits)
         | .bool => states := states.set! current (.done 1)
-        | .enum _ tag _ _ =>
+        | .enum _ tag _ _ | .vector _ tag =>
           states := states.set! current .active
           tasks := (tag, false) :: (current, true) :: tasks
+        | .union _ "packed" none fs =>
+          if fs.isEmpty then return none
+          states := states.set! current .active
+          tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
         | .struct _ "packed" fs =>
           states := states.set! current .active
           tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
