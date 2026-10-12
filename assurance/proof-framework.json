@@ -692,10 +692,6 @@
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Strength.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Tame.lean"
     },
     {
@@ -830,14 +826,6 @@
       "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
     },
     {
-      "path": "tests/roadmap/memory-hardening/NoRoom.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "tests/roadmap/one-logic/Strength.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
     },
     {
@@ -866,6 +854,9 @@
     },
     {
       "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
+    },
+    {
+      "path": "tests/roadmap/strength-log/ProofsLists.lean"
     },
     {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Counters.lean"
