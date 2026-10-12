@@ -1,6 +1,5 @@
 import ZigLean.Mem.Enc
-import ZigLean.Sep.Triple
-import ZigLean.Sep.Try
+import ZigLean.Sep.Full.Ops
 
 open Zig
 open scoped Zig
@@ -34,19 +33,21 @@ theorem equal_alias (root : Ptr) (parent : Nat) :
   change root.add ((parent + 0 + 0 : Nat) : Int) = (root.add parent).add (0 : Int)
   simp [Ptr.add]
 
+open Full FAssn in
 theorem read_frame {T : Type} [Enc T] (root : Ptr) (parent payload leaf a : Nat)
-    (v : T) (R : Assn) (hn : 0 < Enc.size T) :
-    Triple (pts (resolved root parent payload leaf) a v ∗ R)
-      (load T a (resolved root parent payload leaf))
-      (fun r => (⌜r = v⌝ ∗ pts (resolved root parent payload leaf) a v) ∗ R) :=
-  (Triple.load hn).frame
+    (v : T) (R : FAssn) (hn : 0 < Enc.size T) :
+    FTotalTriple (up (pts (resolved root parent payload leaf) a v) ⋆ R)
+      (Zig.load T a (resolved root parent payload leaf))
+      (fun r => (⟪r = v⟫ ⋆ up (pts (resolved root parent payload leaf) a v)) ⋆ R) :=
+  (FTotalTriple.load hn).frame
 
+open Full FAssn in
 theorem write_frame {T : Type} [Enc T] [LawfulEnc T]
-    (root : Ptr) (parent payload leaf a : Nat) (v w : T) (R : Assn) (hn : 0 < Enc.size T) :
-    Triple (pts (resolved root parent payload leaf) a v ∗ R)
-      (store a (resolved root parent payload leaf) w)
-      (fun _ => pts (resolved root parent payload leaf) a w ∗ R) :=
-  (Triple.store hn w).frame
+    (root : Ptr) (parent payload leaf a : Nat) (v w : T) (R : FAssn) (hn : 0 < Enc.size T) :
+    FTotalTriple (up (pts (resolved root parent payload leaf) a v) ⋆ R)
+      (Zig.store a (resolved root parent payload leaf) w)
+      (fun _ => up (pts (resolved root parent payload leaf) a w) ⋆ R) :=
+  (FTotalTriple.store hn w).frame
 
 private def root : Ptr := { block := some 0, off := 0 }
 private def value (m : Mem) (x : MemM α) : Option (Except Error α) :=
