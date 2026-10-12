@@ -1803,9 +1803,11 @@ theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat}
     ((alloc kind size align).run m).run ≠ some (.error e) := by
   rw [alloc_run_eq m hroom]; intro h; cases h
 
-/-- A free of a live block whose end races with no access (`Mem.freeRaces`) gives no error. -/
+/-- A free of a live block that is not a `const` global, whose end races with no access
+(`Mem.freeRaces`), gives no error. -/
 theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (hnr : m.freeRaces b blk.bytes.size = false) (e : Error) :
+    (hl : blk.live = true) (hnr : m.freeRaces b blk.bytes.size = false)
+    (hk : blk.kind ≠ .constGlobal) (e : Error) :
     ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
   intro h
   unfold free at h
@@ -1813,7 +1815,7 @@ theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some b
   · exact MemM.get_err h₀
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   simp only [hb, hl, hnr] at h₁
-  simp at h₁
+  simp [hk] at h₁
 
 /-- What a fork does (`Thread.fork`): the new thread's id is the number of threads; the parent's
 clock is bumped, and the child gets a copy. -/

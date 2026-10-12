@@ -146,8 +146,8 @@ theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
 theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun m v m' h => by
   unfold Os.munmap at h
   obtain ⟨⟨b, blk, lo⟩, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
-  obtain ⟨rfl, hb, -⟩ := mappingAt_ok h1
-  simp only at hb h2
+  obtain ⟨rfl, hb, -, hkm⟩ := mappingAt_ok h1
+  simp only at hb h2 hkm
   have tail : ∀ (u : Option Os.Unmap) (m₀ : Mem) (v' : Unit) (h : ((match u with
       | none => (MonadExcept.throw Error.illegal : MemM Unit)
       | some u => do
@@ -167,7 +167,8 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
       obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h5
       have := Proto.MemM.set_ok h6
       subst this
-      refine ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl) rfl,
+      refine ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl)
+        (by rw [hkm]; nofun) rfl,
         LDMono.set (nb := Os.Unmap.apply blk u) hb0 ?_ (by cases u <;> rfl) ?_ rfl⟩
       · cases u <;> simp [Os.Unmap.apply]
       · cases u <;> simp [Os.Unmap.apply]; omega
@@ -176,9 +177,10 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
   · exact tail _ _ _ h2 hb
 
 theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Block}
-    (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr)
+    (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
     (h : m'.blocks = (m.blocks.set! b nb).push x) : KMono m m' :=
-  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha rfl) (KMono.push h)
+  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha hc rfl)
+    (KMono.push h)
 
 /-- `addrFree` survives a block's death. -/
 theorem _root_.Zig.Mem.addrFree_set_dead {m : Mem} {b : BlockId} {blk : Block} {A n : Nat}
@@ -217,12 +219,13 @@ theorem _root_.Zig.Full.LDMono.set_dead_push {m m' : Mem} {b : BlockId} {blk x :
 theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo : Nat}
     {newLen : BitVec 64} {flags : BitVec 32} {m m' : Mem} {v : Except ErrName Slice}
     (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hlo : lo ≤ blk.bytes.size)
+    (hk : blk.kind ≠ .constGlobal)
     (h : ((Os.mremapLive os p b blk lo newLen flags).run m).run = some (.ok (v, m'))) :
     m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m' := by
   unfold Os.mremapLive at h
   simp only at h
   have hset : ∀ {m₁ : Mem} {nb : Block}, m₁.blocks = m.blocks.set! b nb →
-      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 h3
+      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 hk h3
   split at h
   · exact (throw_bind_ok h).elim
   split at h
@@ -257,7 +260,7 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
       obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h12
       have e := Proto.MemM.set_ok h11
       subst e
-      refine ⟨rfl, KMono.set_push hb (nb := { blk with live := false }) rfl rfl,
+      refine ⟨rfl, KMono.set_push hb (nb := { blk with live := false }) rfl hk rfl,
         LDMono.set_dead_push hb (by rfl) (Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _) (Nat.le_refl _) ?_)
           ?_ rfl⟩
       all_goals
@@ -293,11 +296,11 @@ theorem mremap (os : Os.Target) (o : Option Ptr) (oldLen newLen : BitVec 64) (fl
     obtain ⟨_, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h1
     obtain ⟨⟨b, blk, lo⟩, m₂, h3, h4⟩ := Proto.MemM.bind_ok h2
-    obtain ⟨rfl, hb, hl, -⟩ := mappingAt_ok h3
+    obtain ⟨rfl, hb, hl, hkm⟩ := mappingAt_ok h3
     split at h4
     · exact (throw_bind_ok h4).elim
     · rename_i hchk
-      refine mremapLive_ok hb hl ?_ h4
+      refine mremapLive_ok hb hl ?_ (by simp only at hkm; rw [hkm]; nofun) h4
       dsimp only at hchk
       simp only [not_or, Decidable.not_not] at hchk
       obtain ⟨-, h0, hal⟩ := hchk

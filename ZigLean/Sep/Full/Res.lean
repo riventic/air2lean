@@ -236,73 +236,103 @@ theorem fheap_congr {m m' : Mem} (hh : m'.heap = m.heap) (hs : shapes m' = shape
 
 /-! ## Knowledge -/
 
-/-- Persistent facts `(b, A)`: block `b` exists and has address `A`. -/
-abbrev Know := BlockId → Nat → Prop
+/-- A persistent fact about a memory (`Mem.kn`). -/
+inductive KFact where
+  /-- Block `b` exists and has the address `A`. -/
+  | addr (b : BlockId) (A : Nat)
+  /-- Block `b` is a live `const` global whose byte at offset `o` is `c`
+  (`docs/sep-full-state.md` §Const globals). -/
+  | cbyte (b : BlockId) (o : Nat) (c : Byte)
+
+/-- A set of persistent facts. -/
+abbrev Know := KFact → Prop
 
 namespace Know
 
-def none : Know := fun _ _ => False
+def none : Know := fun _ => False
 
-def union (k₁ k₂ : Know) : Know := fun b A => k₁ b A ∨ k₂ b A
+def union (k₁ k₂ : Know) : Know := fun f => k₁ f ∨ k₂ f
 
-def Sub (k K : Know) : Prop := ∀ b A, k b A → K b A
+def Sub (k K : Know) : Prop := ∀ f, k f → K f
+
+/-- Exactly the fact `f`. -/
+def single (f : KFact) : Know := (· = f)
 
 theorem union_none (k : Know) : k.union none = k := by
-  funext b A; simp [union, none]
+  funext f; simp [union, none]
 
 theorem none_union (k : Know) : none.union k = k := by
-  funext b A; simp [union, none]
+  funext f; simp [union, none]
 
 theorem union_comm (k₁ k₂ : Know) : k₁.union k₂ = k₂.union k₁ := by
-  funext b A; simp [union, or_comm]
+  funext f; simp [union, or_comm]
 
 theorem union_assoc (k₁ k₂ k₃ : Know) : (k₁.union k₂).union k₃ = k₁.union (k₂.union k₃) := by
-  funext b A; simp [union, or_assoc]
+  funext f; simp [union, or_assoc]
 
-theorem union_self (k : Know) : k.union k = k := by funext b A; simp [union]
+theorem union_self (k : Know) : k.union k = k := by funext f; simp [union]
+
+/-- Adding facts that are already there changes nothing. -/
+theorem union_of_sub {k k' : Know} (h : Sub k' k) : k'.union k = k := by
+  funext f; simp only [union, eq_iff_iff]; exact ⟨fun x => x.elim (h f) id, .inr⟩
 
 theorem Sub.union {k₁ k₂ K : Know} (h₁ : Sub k₁ K) (h₂ : Sub k₂ K) : Sub (k₁.union k₂) K :=
-  fun b A h => h.elim (h₁ b A) (h₂ b A)
+  fun f h => h.elim (h₁ f) (h₂ f)
 
-theorem Sub.left {k₁ k₂ K : Know} (h : Sub (k₁.union k₂) K) : Sub k₁ K := fun b A x => h b A (.inl x)
+theorem Sub.left {k₁ k₂ K : Know} (h : Sub (k₁.union k₂) K) : Sub k₁ K := fun f x => h f (.inl x)
 
-theorem Sub.right {k₁ k₂ K : Know} (h : Sub (k₁.union k₂) K) : Sub k₂ K := fun b A x => h b A (.inr x)
+theorem Sub.right {k₁ k₂ K : Know} (h : Sub (k₁.union k₂) K) : Sub k₂ K := fun f x => h f (.inr x)
 
 theorem Sub.trans {k K K' : Know} (h : Sub k K) (h' : Sub K K') : Sub k K' :=
-  fun b A x => h' b A (h b A x)
+  fun f x => h' f (h f x)
 
-theorem sub_none (K : Know) : Sub none K := fun _ _ h => h.elim
+theorem sub_none (K : Know) : Sub none K := fun _ h => h.elim
+
+theorem sub_single {f : KFact} {K : Know} (h : K f) : Sub (single f) K := fun _ e => e ▸ h
 
 end Know
 
-/-- The knowledge of `m`: every block, live or dead, with its address. -/
-def _root_.Zig.Mem.kn (m : Mem) : Know := fun b A => ∃ blk, m.blocks[b]? = some blk ∧ blk.addr = A
+/-- The knowledge of `m`: every block, live or dead, with its address; every byte of a live
+`const` global. A `const` global is never written (`Mem.accessW`) and never freed (`free`), so
+its facts stay true in every later memory (`KMono`). -/
+def _root_.Zig.Mem.kn (m : Mem) : Know
+  | .addr b A => ∃ blk, m.blocks[b]? = some blk ∧ blk.addr = A
+  | .cbyte b o c => ∃ blk, m.blocks[b]? = some blk ∧ blk.kind = .constGlobal ∧ blk.live = true ∧
+      blk.bytes[o]? = some c
 
-/-- `m'` keeps every block of `m` at its address. -/
+/-- `m'` keeps every block of `m` at its address, and every live `const` global with its bytes. -/
 def KMono (m m' : Mem) : Prop := Know.Sub m.kn m'.kn
 
-theorem KMono.refl (m : Mem) : KMono m m := fun _ _ h => h
+theorem KMono.refl (m : Mem) : KMono m m := fun _ h => h
 
 theorem KMono.trans {m₁ m₂ m₃ : Mem} (h₁ : KMono m₁ m₂) (h₂ : KMono m₂ m₃) : KMono m₁ m₃ :=
   Know.Sub.trans h₁ h₂
 
 theorem KMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' := by
-  intro b A hk; simpa [Mem.kn, h] using hk
+  intro f hk; cases f <;> simpa [Mem.kn, h] using hk
 
-/-- Replacing block `b` by one with the same address keeps the knowledge. -/
+/-- Replacing block `b`, not a `const` global, by one with the same address keeps the knowledge. -/
 theorem KMono.set {m m' : Mem} {b : BlockId} {blk blk' : Block} (hb : m.blocks[b]? = some blk)
-    (ha : blk'.addr = blk.addr) (h : m'.blocks = m.blocks.set! b blk') : KMono m m' := by
-  intro b' A ⟨x, hx, hA⟩
-  refine ⟨if b' = b then blk' else x, ?_, ?_⟩
-  · rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    (ha : blk'.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
+    (h : m'.blocks = m.blocks.set! b blk') : KMono m m' := by
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  have get : ∀ b', m'.blocks[b']? = if b' = b then some blk' else m.blocks[b']? := fun b' => by
+    rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
     by_cases e : b = b'
-    · subst e
-      have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-      simp [hlt]
-    · simp [e, Ne.symm e, hx]
-  · by_cases e : b' = b
-    · subst e; rw [hb] at hx; cases hx; simpa [ha] using hA
-    · simpa [e] using hA
+    · subst e; simp [hlt]
+    · simp [e, Ne.symm e]
+  intro f hf
+  cases f with
+  | addr b' A =>
+    obtain ⟨x, hx, hA⟩ := hf
+    by_cases e : b' = b
+    · subst e; rw [hb] at hx; cases hx; exact ⟨blk', by simp [get], by rw [ha, hA]⟩
+    · exact ⟨x, by simp [get, e, hx], hA⟩
+  | cbyte b' o c =>
+    obtain ⟨x, hx, hk, hl, hc'⟩ := hf
+    by_cases e : b' = b
+    · subst e; rw [hb] at hx; cases hx; exact absurd hk hc
+    · exact ⟨x, by simp [get, e, hx], hk, hl, hc'⟩
 
 /-- Blocks are never removed: a memory that knows every block of `m` has at least as many. -/
 theorem KMono.size_le {m m' : Mem} (h : KMono m m') : m.blocks.size ≤ m'.blocks.size := by
@@ -310,17 +340,19 @@ theorem KMono.size_le {m m' : Mem} (h : KMono m m') : m.blocks.size ≤ m'.block
   · rw [h0]; exact Nat.zero_le _
   · obtain ⟨blk, hb⟩ : ∃ blk, m.blocks[m.blocks.size - 1]? = some blk :=
       ⟨_, Array.getElem?_eq_getElem (by omega)⟩
-    obtain ⟨blk', hb', -⟩ := h _ _ ⟨blk, hb, rfl⟩
+    obtain ⟨blk', hb', -⟩ := h (.addr _ _) ⟨blk, hb, rfl⟩
     have := (Array.getElem?_eq_some_iff.mp hb').1
     omega
 
 /-- Pushing a block keeps the knowledge. -/
 theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) : KMono m m' := by
-  intro b A ⟨x, hx, hA⟩
-  refine ⟨x, ?_, hA⟩
-  rw [h, Array.getElem?_push]
-  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hx).1
-  simp [Nat.ne_of_lt hlt, hx]
+  have get : ∀ b x, m.blocks[b]? = some x → m'.blocks[b]? = some x := fun b x hx => by
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hx).1
+    rw [h, Array.getElem?_push]; simp [Nat.ne_of_lt hlt, hx]
+  intro f hf
+  cases f with
+  | addr b A => obtain ⟨x, hx, hA⟩ := hf; exact ⟨x, get _ _ hx, hA⟩
+  | cbyte b o c => obtain ⟨x, hx, hk⟩ := hf; exact ⟨x, get _ _ hx, hk⟩
 
 /-! ## Ghost state: epoch ledgers (`docs/sep-full-state.md` §Ghost state)
 
@@ -1306,7 +1338,7 @@ open FAssn
 /-- **Persistent knowledge** (`□ blockAddr b A`): block `b` exists, at address `A`. Owns no
 bytes; true in every later memory (`KMono`), also after `free`. -/
 def known (b : BlockId) (A : Nat) : FAssn := fun r =>
-  r.heap = FHeap.empty ∧ (r.know = fun b' A' => b' = b ∧ A' = A) ∧ r.gh = Ghost.unit
+  r.heap = FHeap.empty ∧ r.know = Know.single (.addr b A) ∧ r.gh = Ghost.unit
 
 /-- `h` owns exactly the bytes `bs` at `p` (block address `A`, size `S`, kind `K`), each with the
 atomic tag `tg`. -/
