@@ -10,6 +10,9 @@ import Lean
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
   (library atoms such as `Junk`; a user may mark an opaque representation predicate).
+* `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ`: the pure facts `φ` that an assertion
+  `X` implies (the block, offset and alignment of an owned pointer). `fsym` adds the facts of the
+  precondition's atoms when it needs more facts (a rule's side goal, an `if`, a panic).
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -45,6 +48,19 @@ initialize registerBuiltinAttribute {
   name := `fsym_atom
   descr := "an assertion that `fsym` keeps opaque"
   add := fun decl _ kind => fsymAtomExt.add decl kind
+}
+
+/-- The facts lemmas (`@[fsym_facts]`), in declaration order. -/
+initialize fsymFactsExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_facts
+  descr := "a facts lemma `AtomFacts X φ` of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => fsymFactsExt.add decl kind
 }
 
 /-- `c` is an `@[fsym_atom]`. -/
