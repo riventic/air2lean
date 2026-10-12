@@ -91,6 +91,17 @@ theorem erase_cell {h : FHeap} {l : Loc} {c : Cell} (hc : h.erase l = some c) :
   simp only [FHeap.erase, Option.map_eq_some_iff] at hc
   exact hc
 
+/-- `Holds` reads a memory only through its blocks and its atomic layout. -/
+theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hh : Holds m r rF) : Holds m' r rF := by
+  have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
+  have e2 : shapes m' = shapes m := by simp only [shapes, ha]
+  have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
+  obtain ⟨hd, hm, hk, hkF, hg, ht, hcf⟩ := hh
+  refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx)⟩
+  · unfold FMatch; rw [e1, e2]; exact hm
+  · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
+
 /-! ## Rules -/
 
 namespace FTotalTriple

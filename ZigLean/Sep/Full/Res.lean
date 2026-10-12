@@ -1079,21 +1079,69 @@ theorem ECell.eq_unit_of_add {a b : ECell} (h : a.add b = ECell.unit) : a = ECel
     have := (a.rc x e k).nonneg; have := (b.rc x e k).nonneg
     simp only [Frac.zero, Frac.add] at *; grind
 
-/-- Ghost state: ledgers by ghost name (`GName := Nat`), extent claims by block, and **byte
+/-- **A counted, non-mintable resource** (`docs/sep-full-state.md` §Credits and room): `frag`
+fragments (`◯n`) and the authorities (`●N`), `auth N` of them with value `N`. Valid: at most one
+authority, and the fragments are at most its value. -/
+@[ext] structure CCell where
+  frag : Nat
+  auth : Nat → Nat
+
+namespace CCell
+
+def unit : CCell := ⟨0, fun _ => 0⟩
+
+def add (a b : CCell) : CCell := ⟨a.frag + b.frag, fun n => a.auth n + b.auth n⟩
+
+/-- At most one authority, and the fragments are at most its value. -/
+def Valid (c : CCell) : Prop :=
+  (∀ n, c.auth n ≤ 1) ∧ (∀ n n', 0 < c.auth n → 0 < c.auth n' → n = n') ∧
+    ∀ n, 0 < c.auth n → c.frag ≤ n
+
+theorem add_comm (a b : CCell) : a.add b = b.add a := by
+  ext1
+  · exact Nat.add_comm _ _
+  · funext n; exact Nat.add_comm _ _
+
+theorem add_assoc (a b c : CCell) : (a.add b).add c = a.add (b.add c) := by
+  ext1
+  · exact Nat.add_assoc _ _ _
+  · funext n; exact Nat.add_assoc _ _ _
+
+@[simp] theorem add_unit (a : CCell) : a.add unit = a := by
+  ext1 <;> (try funext n) <;> simp [add, unit]
+
+@[simp] theorem unit_add (a : CCell) : unit.add a = a := by
+  ext1 <;> (try funext n) <;> simp [add, unit]
+
+theorem valid_unit : unit.Valid := ⟨fun _ => Nat.zero_le _, fun _ _ h => absurd h (by simp [unit]),
+  fun _ h => absurd h (by simp [unit])⟩
+
+/-- Validity is closed under dropping a part. -/
+theorem Valid.of_add {a b : CCell} (h : (a.add b).Valid) : a.Valid := by
+  obtain ⟨h1, h2, h3⟩ := h
+  simp only [add] at h1 h2 h3
+  exact ⟨fun n => by have := h1 n; omega, fun n n' hn hn' => h2 n n' (by omega) (by omega),
+    fun n hn => by have := h3 n (by omega); omega⟩
+
+end CCell
+
+/-- Ghost state: ledgers by ghost name (`GName := Nat`), extent claims by block, **byte
 claims** by block and byte (`docs/sep-full-state.md` §Byte-range claims): one cell per byte, with
 the shares, tags and receipts of an extent cell at bound `0`. An exclusive claim on a byte is the
-whole fraction of its cell (`ZigLean/Sep/Full/Claims.lean`). -/
+whole fraction of its cell (`ZigLean/Sep/Full/Claims.lean`), and **credits** (`cr`, §Credits and
+room: non-mintable). -/
 @[ext] structure Ghost where
   led : Nat → GCell
   extent : BlockId → ECell
   cl : BlockId → Nat → ECell
+  cr : CCell
 
 namespace Ghost
 
-def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit⟩
+def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, CCell.unit⟩
 
 def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b),
-  fun b x => (g₁.cl b x).add (g₂.cl b x)⟩
+  fun b x => (g₁.cl b x).add (g₂.cl b x), g₁.cr.add g₂.cr⟩
 
 /-- The ledger statuses of `g`: ledger `γ`'s authority is at epoch `e` with parent tag `p`. -/
 def ls (g : Ghost) : LStat := fun γ e p => ∃ M, 0 < (g.led γ).auth (e, M, p)
@@ -1105,9 +1153,11 @@ def CValid (g : Ghost) : Prop :=
     ∃ N, ∀ γ, N ≤ γ → ∀ b x e k, ((g.cl b x).tsh γ e k).val = 0 ∧ ((g.cl b x).rc γ e k).val = 0
 
 /-- Every ledger is valid, every block's claims are valid and balanced under the ledgers'
-statuses (`ECell.TagOk`), and so are the byte claims (`CValid`). -/
+statuses (`ECell.TagOk`), and so are the byte claims (`CValid`); the credits are at most their
+authority (`CCell.Valid`). -/
 def Valid (g : Ghost) : Prop :=
-  (∀ γ, (g.led γ).Valid) ∧ (∀ b, (g.extent b).Valid ∧ (g.extent b).TagOk g.ls) ∧ g.CValid
+  (∀ γ, (g.led γ).Valid) ∧ (∀ b, (g.extent b).Valid ∧ (g.extent b).TagOk g.ls) ∧ g.CValid ∧
+    g.cr.Valid
 
 /-- Finitely many names in use: by ledgers, by tags and by ledgers' parent tags (a fresh name
 exists). -/
@@ -1124,18 +1174,20 @@ theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
   · funext γ; exact GCell.add_comm _ _
   · funext b; exact ECell.add_comm _ _
   · funext b x; exact ECell.add_comm _ _
+  · exact CCell.add_comm _ _
 
 theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
   ext1
   · funext γ; exact GCell.add_assoc _ _ _
   · funext b; exact ECell.add_assoc _ _ _
   · funext b x; exact ECell.add_assoc _ _ _
+  · exact CCell.add_assoc _ _ _
 
 @[simp] theorem add_unit (g : Ghost) : g.add unit = g := by
-  ext1 <;> funext x <;> (try funext y) <;> simp [add, unit]
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [add, unit]
 
 @[simp] theorem unit_add (g : Ghost) : unit.add g = g := by
-  ext1 <;> funext x <;> (try funext y) <;> simp [add, unit]
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [add, unit]
 
 theorem ls_add (a b : Ghost) : a.ls.Sub (a.add b).ls := fun γ e p ⟨M, h⟩ =>
   ⟨M, by simp only [add, GCell.add]; omega⟩
@@ -1171,9 +1223,12 @@ theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
       simp only [add]; rw [ECell.add_assoc, ECell.add_comm (b.cl x y), ← ECell.add_assoc]
   have hleC : ∀ x y, ((a.add c).cl x y).Le (((a.add b).add c).cl x y) := fun x y => by
     rw [eC]; exact ECell.le_add _ _
-  obtain ⟨hcv, NC, hNC⟩ := hx.2
+  obtain ⟨⟨hcv, NC, hNC⟩, hcr⟩ := hx.2
+  have eR : ((a.add b).add c).cr = (a.add c).cr.add b.cr := by
+    simp only [add]; rw [CCell.add_assoc, CCell.add_comm b.cr, ← CCell.add_assoc]
   refine ⟨⟨fun γ => ?_, fun x => ⟨?_, ECell.TagOk.of_le hsub hV.uniq (hle x) (hx.1 x).2⟩,
-    fun x y => ⟨?_, ECell.TagOk.of_le hsub hV.uniq (hleC x y) (hcv x y).2⟩, NC, fun γ hγ x y e k => ?_⟩, N,
+    ⟨fun x y => ⟨?_, ECell.TagOk.of_le hsub hV.uniq (hleC x y) (hcv x y).2⟩, NC, fun γ hγ x y e k => ?_⟩,
+    CCell.Valid.of_add (b := b.cr) (by rw [← eR]; exact hcr)⟩, N,
     fun γ hγ => ⟨?_, fun x e k => ?_, fun γ' e' M e => ?_⟩⟩
   · have := hv γ
     rw [eL] at this
@@ -1695,9 +1750,15 @@ end ECell
 
 /-- The ghost state with the extent cell `c` at block `b` and nothing else. -/
 def Ghost.atExt (b : BlockId) (c : ECell) : Ghost :=
-  ⟨fun _ => GCell.unit, fun b' => if b' = b then c else ECell.unit, fun _ _ => ECell.unit⟩
+  ⟨fun _ => GCell.unit, fun b' => if b' = b then c else ECell.unit, fun _ _ => ECell.unit, CCell.unit⟩
 
 @[simp] theorem Ghost.atExt_cl (b : BlockId) (c : ECell) : (Ghost.atExt b c).cl = fun _ _ => ECell.unit := rfl
+
+@[simp] theorem Ghost.atExt_cr (b : BlockId) (c : ECell) : (Ghost.atExt b c).cr = CCell.unit := rfl
+
+@[simp] theorem Ghost.add_cr (a b : Ghost) : (a.add b).cr = a.cr.add b.cr := rfl
+
+@[simp] theorem Ghost.unit_cr : Ghost.unit.cr = CCell.unit := rfl
 
 theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
     (Ghost.atExt b c).add (Ghost.atExt b c') = Ghost.atExt b (c.add c') := by
@@ -1705,6 +1766,7 @@ theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
   · funext γ; simp [Ghost.add, Ghost.atExt]
   · funext b'; simp only [Ghost.add, Ghost.atExt]; split <;> simp
   · funext b' x; simp [Ghost.add, Ghost.atExt]
+  · simp [Ghost.add, Ghost.atExt]
 
 /-- **The authority over block `b`'s extent with the fraction `q`**: `b` is live, `S` bytes,
 kind `K` (mapping start included); shares of `1 - q` are out. Owns no bytes. -/
@@ -1731,7 +1793,10 @@ def brcpt (b : BlockId) (q : Frac) (k γ e : Nat) : FAssn := fun r =>
 def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
   ⟨fun _ => GCell.unit, fun b => match E b with
     | some (S, K) => ECell.auth1 S K Frac.one
-    | none => ECell.unit, fun _ _ => ECell.unit⟩
+    | none => ECell.unit, fun _ _ => ECell.unit, CCell.unit⟩
+
+@[simp] theorem Ghost.exts_cr (E : BlockId → Option (Nat × BlockKind)) :
+    (Ghost.exts E).cr = CCell.unit := rfl
 
 @[simp] theorem Ghost.exts_cl (E : BlockId → Option (Nat × BlockKind)) :
     (Ghost.exts E).cl = fun _ _ => ECell.unit := rfl
@@ -1757,7 +1822,7 @@ theorem Ghost.exts_add_tags (E : BlockId → Option (Nat × BlockKind)) (g : Gho
   split <;> simp [ECell.auth1, ECell.unit]
 
 @[simp] theorem Ghost.exts_none : Ghost.exts (fun _ => none) = Ghost.unit := by
-  ext1 <;> funext x <;> (try funext y) <;> rfl
+  ext1 <;> (try funext x) <;> (try funext y) <;> rfl
 
 theorem upE_none {P : Assn} {r : Res} : upE P (fun _ => none) r ↔ up P r := by
   simp [upE, up]
