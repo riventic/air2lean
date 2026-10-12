@@ -28,4 +28,3 @@ unexpectedErrorCode	panic
 loadUninstantiableType	panic
 castTruncatedData	overflow
 negativeToUnsigned	overflow
-memcpyLenMismatch	panic
