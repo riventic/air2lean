@@ -49,6 +49,22 @@ step. The hard-linked outputs it finds in `.lake/build` are ordinary up-to-date 
 
 ## Use
 
+A new worktree starts with one command:
+
+    scripts/worktree-init.sh [--zig 0.16.0 ...] [--no-lean] [--no-generated]
+
+It builds what CI's `lake` job builds (ZigLean, Air2Lean, air2lean, Proofs, AssuranceTools, every
+tracked ZigLean module) and the `tests/diff` package through `cas.py run` under build-guard,
+then the requested patched compilers and the whole-tree generated files. With the cache on, a
+module is compiled only if no worktree has built it with the same inputs; the rest are restored
+as hard links. Measured on the dev Mac (2026-10-12, main 9ea4c9b6, fresh `git worktree add`):
+
+| start | root package | whole init |
+| --- | --- | --- |
+| `AIR2LEAN_CAS_DIR` unset (plain Lake build) | 399 s | 435 s |
+| cache from an older `main` (some modules changed since) | 48 s | 66 s |
+| cache already holding this tree's modules | 1 s | 15 s |
+
     AIR2LEAN_ZIG_AIR=$(scripts/zig-air.sh 0.16.0)         # patched compiler for this checkout
     python3 scripts/build-guard.py ... -- python3 -B scripts/cas.py run -- lake build Proofs
     eval "$(python3 -B scripts/cas.py env)"                # or: this shell's Lake builds use it

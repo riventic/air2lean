@@ -31,6 +31,28 @@ class Affected(unittest.TestCase):
             with self.subTest(paths=paths):
                 self.assertEqual(changed.affected(paths, EXAMPLES), expected)
 
+    def test_a_rename_selects_the_source_example(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(['git', '-C', d, '-c', 'user.name=t', '-c', 'user.email=t@t', *a],
+                                      check=True, capture_output=True, text=True).stdout
+            git('init', '-q')
+            (Path(d) / 'examples/basic').mkdir(parents=True)
+            (Path(d) / 'examples/basic/basic.zig').write_text('pub fn f() void {}\n' * 20)
+            git('add', '.')
+            git('commit', '-qm', 'a')
+            (Path(d) / 'examples/floats').mkdir()
+            git('mv', 'examples/basic/basic.zig', 'examples/floats/floats.zig')
+            old, root = changed.ROOT, changed.ROOT
+            changed.ROOT = Path(d)
+            try:
+                paths = changed.changed_paths('HEAD')
+            finally:
+                changed.ROOT = old
+            self.assertIn('examples/basic/basic.zig', paths)
+            self.assertEqual(changed.affected(paths, EXAMPLES), ['basic', 'floats'])
+
     def test_default_selection_without_the_variable_is_unchanged(self):
         env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CHANGED_FROM'}
         script = f'source {ROOT}/scripts/example-selection.sh; air2lean_default_examples {ROOT} 0.16.0 x86_64'
