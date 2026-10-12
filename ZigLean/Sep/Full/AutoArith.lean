@@ -269,6 +269,9 @@ attribute [fsym_arith high] and_lowMask and_lowMask' and_not_lowMask and_not_low
 -- Signed values, width changes and signed overflow in the normal form.
 attribute [fsym_arith] toInt_eq_div val_true val_false BitVec.toNat_setWidth toNat_trunc
   BitVec.saddOverflow BitVec.ssubOverflow BitVec.smulOverflow Bool.or_eq_false_iff
+-- The integer type ranges (`@intCast`'s premise) at a literal width; `i0`/`u0` hold only 0.
+attribute [fsym_arith] Zig.intLo_unsigned Zig.intHi_unsigned Zig.intLo_signed_succ
+  Zig.intHi_signed_succ Zig.intLo_zero Zig.intHi_zero
 
 open Lean Meta Simp in
 /-- The size `Enc.size T` of a closed type's encoding, as a literal (with `LawfulEnc.size_encode`:

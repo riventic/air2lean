@@ -488,8 +488,7 @@ theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : 
 /-- An `@intCast` (either signedness on either side) whose value fits in the target type. The
 result is stated by its value (the arithmetic solver reads a signed one, `r.toInt`, from it). -/
 @[fsym] theorem intCast_step {s₁ s₂ : Bool} {m : Nat} {a : BitVec w}
-    (h : (if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
-      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) :
+    (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) :
     FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
       (fun r : BitVec m => ⟪r.toNat = (BitVec.ofInt m (Zig.val s₁ a)).toNat⟫ ⋆ P) := by
   have e : Zig.intCast s₁ s₂ m a = pure (BitVec.ofInt m (Zig.val s₁ a)) := by
