@@ -1100,6 +1100,9 @@ jobs:
           lake env lean tests/roadmap/loop-tactics/Stack.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Stack.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
+          # P06: a queue-operation bound on retained Zig 0.17.0 AIR of a ring buffer.
+          lake build ZigLean.Sep.CostRuns 2>&1 | tee "$RUNNER_TEMP/loop-tactics/cost-build.log"
+          bash tests/roadmap/cost/ring/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Ring.log"
 
       - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}

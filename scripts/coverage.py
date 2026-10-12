@@ -287,6 +287,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
+    'tests/roadmap/cost/ring/air': 'tests/roadmap/cost/ring/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',

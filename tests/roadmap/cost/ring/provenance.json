@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "origin": "retained AIR exported once from ring.zig by a patched Zig 0.17.0 (zig-patch/0.17.0); not re-exported by this gate",
+  "source": "tests/roadmap/cost/ring/ring.zig",
+  "source_sha256": "54ec6b1e04dac6034cb84ff5205dcf2328e67a2c44042d732951be154731948c",
+  "functions": [
+    "ring.drain",
+    "ring.push"
+  ],
+  "profile": {
+    "zig_version": "0.17.0",
+    "air_schema": 12,
+    "profile": "abi64-le-v1",
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "export_revision": "1cf2ed590923fe339c5201012de07d8bc543e9ac",
+  "export_command": "ZIG_AIR_JSON_DIR=air ZIG_AIR_JSON_FILTER=ring. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline ring.zig",
+  "artifacts": {
+    "air/ring.drain.json": "6c502ec35be13d10d3955f72da6f390b480d20347533a4b11433a9d91d53708e",
+    "air/ring.push.json": "9a206661c91c1d3595372f76fba5247ba682a2ffc08c318751f7d1f06fc277c3"
+  },
+  "translation": {
+    "command": "air2lean tests/roadmap/cost/ring/air -o Ring/Gen.lean --namespace Ring --prefix ring.",
+    "committed": "Ring/Gen.lean",
+    "check": "tests/roadmap/cost/ring/check.sh retranslates and compares byte for byte"
+  }
+}

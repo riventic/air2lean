@@ -272,17 +272,22 @@ def sepOf (xs : Array Expr) : Expr :=
 the stack budget, with the extra arguments `need` and `held`. -/
 def stkKind : Name := `Zig.TotalTripleStk
 
+/-- `Fails P c e` (`ZigLean/Sep/CostRuns.lean`): `c` throws `e` from every framed precondition.
+Its fourth argument is the error, in the place of a postcondition. -/
+def failsKind : Name := `Zig.Fails
+
 /-- The number of arguments of a triple of this kind. -/
 def kindArity (kind : Name) : Nat := if kind == stkKind then 6 else 4
 
-/-- The main goal as `(kind, P, c, Q)` for a `Triple`, `TotalTriple` or `TotalTripleStk`. -/
+/-- The main goal as `(kind, P, c, Q)` for a `Triple`, `TotalTriple`, `TotalTripleStk` or
+`Fails`. -/
 def goalTriple : TacticM (Name × Expr × Expr × Expr) := do
   let t := (← instantiateMVars (← getMainTarget)).consumeMData
-  for kind in [``Zig.Triple, ``Zig.TotalTriple, stkKind] do
+  for kind in [``Zig.Triple, ``Zig.TotalTriple, stkKind, failsKind] do
     if t.isAppOfArity kind (kindArity kind) then
       let args := t.getAppArgs
       return (kind, args[1]!, args[2]!.consumeMData, args[3]!)
-  throwError "sep: expected a Zig.Triple, Zig.TotalTriple or Zig.TotalTripleStk goal{indentExpr t}"
+  throwError "sep: expected a Zig.Triple, Zig.TotalTriple, Zig.TotalTripleStk or Zig.Fails goal{indentExpr t}"
 
 def lemmaId (kind : Name) (l : String) : Ident := mkIdent (kind ++ Name.mkSimple l)
 
@@ -391,8 +396,10 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
       let proof ← Term.elabTerm rule none
       Term.synthesizeSyntheticMVarsNoPostponing
       let ty ← instantiateMVars (← inferType proof)
-      unless ty.isAppOfArity kind (kindArity kind) do
-        throwError "sep_step: the rule must prove a {kind} goal{indentExpr ty}"
+      -- A failing walk takes total rules for the commands before the failure.
+      let ruleKind := if kind == failsKind then ``Zig.TotalTriple else kind
+      unless ty.isAppOfArity ruleKind (kindArity ruleKind) do
+        throwError "sep_step: the rule must prove a {ruleKind} goal{indentExpr ty}"
       unless ← isDefEq ty.getAppArgs[2]! cmd do
         throwError "sep_step: the rule is about a different command{indentExpr ty.getAppArgs[2]!}"
       let pre ← instantiateMVars ty.getAppArgs[1]!
