@@ -1160,8 +1160,8 @@ def coverage_level(record, require_export=False):
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
     for goal in direct:  # Other goals already block, and their contracts are unbacked.
-        contract = goal['outcome_contract']
-        if contract['status'] == 'refuted':
+        contract = goal.get('outcome_contract') or {}  # Absent only in hand-built records, never in coverage().
+        if contract.get('status') == 'refuted':
             blockers.append(f'goal {goal["theorem"]}: outcome contract refuted ({contract["reason"]}; '
                             f'admits {", ".join(contract["admits"])})')
     for goal in direct:
