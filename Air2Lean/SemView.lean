@@ -1134,8 +1134,8 @@ theorem raceCheck_sub {m₀ m : Mem} (hm : UpToReads m₀ m) (hwf : m₀.ClockWf
           rw [if_pos] at this
           · exact hr this
           simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc ⊢
-          obtain ⟨⟨⟨hb, h1⟩, h2⟩, hconc⟩ := hc
-          refine ⟨⟨⟨hb, by omega⟩, by omega⟩, ?_⟩
+          obtain ⟨⟨⟨⟨⟨hb, hn⟩, hel⟩, h1⟩, h2⟩, hconc⟩ := hc
+          refine ⟨⟨⟨⟨⟨hb, by omega⟩, hel⟩, by omega⟩, by omega⟩, ?_⟩
           -- not concurrent with the earlier clock either
           unfold VClock.concurrent at hconc ⊢
           simp only [Bool.and_eq_true, Bool.not_eq_true'] at hconc ⊢
