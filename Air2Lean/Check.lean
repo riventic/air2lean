@@ -1011,10 +1011,12 @@ checked by `checkOp` (M21). -/
 def CheckCtx.checkAsmEffect (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
   let .asm source isVolatile clobbers outputs inputs := op | return
   let constraints := asmConstraints outputs inputs
+  -- A device contract's declaration of an environment read keeps it a device event (L13).
+  let declared := (cx.device.bind (·.asm? source constraints clobbers.toList)).isSome
   if let some entry := op.asmAllowEntry? cx.targetArch then
     if entry.semantics == .spinHint && !op.isSpinHint then
       cx.fail line s!"asm {source.quote} is allowlisted as a spin hint, which has no operands"
-    return
+    unless entry.semantics == .envRead && declared do return
   -- A spin hint off its target's list stays rejected: the emitter would make it a hint, not an event.
   if op.isSpinHint then
     cx.fail line s!"spin hint {source.quote} is not allowlisted for target \
@@ -1648,15 +1650,25 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
     -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
-    if clobbers.contains "memory" &&
+    -- A01 memory-region contract (ASM-06): the allowlist entry declares every region that the
+    -- block accesses through a pointer operand. Only a region's base may be a pointer operand.
+    let regions := ((op.asmAllowEntry? cx.targetArch).map (·.regions)).getD []
+    let regionBase (k : Nat) : Bool := regions.any (·.base == k)
+    -- A single (not slice) non-volatile, non-allowzero pointer: its value is a model `Ptr`.
+    let regionPtrTy (tid : TyId) : Bool := match cx.types[tid]? with
+      | some (.ptr size _ _) =>
+        size != "slice" && !((cx.layouts[tid]?.map fun l => l.isVolatile || l.allowzero).getD true)
+      | _ => false
+    if clobbers.contains "memory" && regions.isEmpty &&
         (asmPureEntry? source isVolatile clobbers outputs inputs).isNone then
       throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21): \
-        it may write any memory, and no reviewed registry entry declares this block pure \
-        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`)"
+        it may write any memory, and neither a reviewed registry entry declares this block pure \
+        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`) nor an allowlist entry declares its \
+        memory regions (`Air2Lean/AsmAllowlist.lean`, A01)"
     -- One output can be the expression's own result (`-> T`, no `ref`); every other output
     -- is a store through its pointer `ref` (an lvalue output).
     let mut parsed : Array AsmOutput := #[]
-    for o in outputs do
+    for (o, k) in outputs.zipIdx do
       let some po := parseAsmOutput o.constraint
         | throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
           register, read-write or memory output constraint (M21, A01)"
@@ -1679,8 +1691,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             cx.fail line s!"asm output '{o.name}' writes through a const pointer"
           cx.memAccess line r
           pure c
-      if !isIntTy outTy then
-        throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+      -- A region's base pointer (ASM-06) is a read-write register output: the instructions
+      -- move it, they cannot make a pointer from nothing.
+      let ptrOut := regionBase k && regionPtrTy outTy && po.readWrite && !po.memory
+      if !isIntTy outTy && !ptrOut then
+        throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21), \
+          nor a read-write pointer that an allowlisted memory region uses (A01)"
       if po.memory then
         match cx.types[outTy]? with
         | some (.int _ b) =>
@@ -1727,24 +1743,37 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     if inPins.any busyPins.contains then
       throw s!"{fnName}: near line {line}: an asm input pins the register of an early-clobber \
         or read-write output (A01)"
-    for i in inputs do
+    for (i, j) in inputs.zipIdx do
       let tied := match i.constraint.toNat? with
         | some k => (parsed[k]?).map fun po => !po.readWrite && !po.memory && !po.earlyClobber
         | none => none
       if tied == some false then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' ties to a \
           read-write, memory or early-clobber output (A01)"
+      -- An `m` input of an integer is its value: the compiler spills it to a private stack
+      -- slot (`codegen/llvm/FuncGen.zig` `airAssembly`), so the instructions read a copy (A01).
+      let memInput := i.constraint == "m"
       if !((!i.constraint.startsWith "=" && isRegisterConstraint i.constraint) ||
-          isMatchingConstraint outputs.size i.constraint) then
+          isMatchingConstraint outputs.size i.constraint || memInput) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
-          register or matching constraint (M21)"
+          register, matching or memory-value constraint (M21, A01)"
       let some r := i.ref
         | cx.fail line s!"asm input '{i.name}' has no operand (malformed input in the AIR file)"
       let some rty := cx.valTy? r
         | cx.fail line s!"asm input '{i.name}': operand has no known type"
-      if !isIntTy rty then
+      let ptrIn := regionBase (outputs.size + j) && regionPtrTy rty && !memInput
+      if !isIntTy rty && !ptrIn then
         throw s!"{fnName}: near line {line}: asm input '{i.name}' is not an integer register \
-          value (M21)"
+          value (M21), nor a pointer that an allowlisted memory region uses (A01)"
+    -- Each region's length is an integer operand (the entry is reviewed; the operand types are
+    -- the program's).
+    let operandTy (k : Nat) : Option TyId :=
+      if k < outputs.size then (outputs[k]!.ref.bind cx.valTy?).bind (ptrChild cx.types)
+      else (inputs[k - outputs.size]?.bind (·.ref)).bind cx.valTy?
+    for rg in regions do
+      unless (operandTy rg.len.operand).any isIntTy && (operandTy rg.base).any regionPtrTy do
+        throw s!"{fnName}: near line {line}: an asm memory region's base is not a pointer \
+          operand or its length is not an integer operand (A01)"
     pure line
   -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
   -- arithmetic on integer and float lanes); the result is one lane.
@@ -3800,12 +3829,40 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   let mut unbound : Array (String × String) := #[]
   let mut out : Array Func := #[]
   for f in funcs do
-    -- Without an `externs` table a function has no extern call (`checkProgram` rejects one).
-    if f.externs.isEmpty then
+    -- E02: the address of an `extern fn` (`externCodeGlobal`) binds like a call, by symbol. The
+    -- AIR global records no library, so a declared `externs` entry, if any, gives it.
+    let codeRefs := f.globals.filterMap fun g => match g.init with
+      | some (.func callee ..) => (externSymbol? callee).map (callee, ·)
+      | _ => none
+    -- Without an `externs` table or an extern address a function has no extern callee
+    -- (`checkProgram` rejects one).
+    if f.externs.isEmpty && codeRefs.isEmpty then
       out := out.push f
       continue
     let mut renames : Std.HashMap String String := {}
     let mut seen : Std.HashSet String := {}
+    for (callee, symbol) in codeRefs do
+      if seen.contains callee then continue
+      seen := seen.insert callee
+      let e : ExternDecl := (f.externs.find? (·.name == symbol)).getD
+        { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
+      let reject (why : String) := unbound.push (f.name, externUnbound f.name e
+        s!"(its address is taken) {why}")
+      let definitions := exports.getD symbol #[]
+      if definitions.size > 1 then
+        unbound := reject "is defined by several functions (CALLEE_AMBIGUOUS)"
+      else if let some m := models.find? (·.symbol == callee) then
+        if let some target := definitions[0]? then
+          unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
+        else if let some binding := m.externBinding then
+          unless binding.library == e.library do
+            unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
+        else throw s!"{f.name}: model '{m.symbol}' has no extern binding"
+      else if let some target := definitions[0]? then
+        renames := renames.insert callee target.name
+      else
+        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
+          registry model '{callee}' (--model-registry, docs/external-models.md)"
     for i in f.allInsts do
       let .call (.func callee ..) args := i.op | continue
       let some symbol := externSymbol? callee | continue
@@ -3839,8 +3896,14 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       else
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
           registry model '{callee}' (--model-registry, docs/external-models.md)"
+    let rename (n : String) := renames.getD n n
     out := out.push (if renames.isEmpty then f
-      else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
+      else { f with body := f.body.map (renameCallees rename),
+                    globals := f.globals.map fun g => match g.init with
+                      | some (.func callee noreturn spawnFn) =>
+                        { g with name := g.name.map rename,
+                                 init := some (.func (rename callee) noreturn spawnFn) }
+                      | _ => g })
   return (out, unbound)
 
 /-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
@@ -3915,7 +3978,10 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         | some tn =>
           for callee in targets.getD tn #[] do
             match lookupFunction callee with
-            | none => issues := issues.push (issue .indirectTarget s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file")
+            -- E02: a registry model at a code address; `ModelRegistry.check` validated this
+            -- call site's signature against the binding.
+            | none => unless modelSymbols.contains callee do
+                issues := issues.push (issue .indirectTarget s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file")
             | some (targetIndex, target) =>
               match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
               | .ok cache => signatures := cache

@@ -361,6 +361,13 @@ def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
   | .asm .. => (op.asmAllowEntry? arch).isNone
   | _ => false  -- keep: only `asm` can be a device event
 
+/-- An allowlisted asm op that runs in `Zig.MemM` (A01): an environment read (`Zig.Asm.envWord`,
+ASM-05) or a memory-region contract (`Zig.Asm.readRegion`/`writeRegion`, ASM-06). -/
+def Op.isMemAsm (arch : String) (op : Op) : Bool :=
+  match op.asmAllowEntry? arch with
+  | some e => e.semantics == .envRead || !e.regions.isEmpty
+  | none => false
+
 /-- An op that only a function that uses memory has (`Effects.memoryOnly`). A call's std model
 depends on `--allocator-model` (`modelledStdFn`). -/
 def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool := (op.effectsIn mode).memoryOnly
@@ -404,6 +411,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     insts.any fun i =>
       let values := valueOperands i.op
       memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.dialect.arch ||
+      i.op.isMemAsm f.dialect.arch ||
       values.any Val.pointsToMem ||
       -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
       -- `checkUndefOperands` admits it as a pointer operand too.
