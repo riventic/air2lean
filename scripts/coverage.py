@@ -238,8 +238,7 @@ def table_reasons(table, field):
 
 def canon_resolved(text):
     """Canon.lean's `errTraceTags`: tags resolved before normalizeOp, with their canonical tags."""
-    section = text.split('def errTraceTags', 1)[1].split('\n\n', 1)[0]
-    rows = re.findall(r'\("([^"]+)", \[([^\]]*)\]\)', section)
+    rows = re.findall(r'\("([^"]+)", \[([^\]]*)\]\)', lean_section(text, 'errTraceTags'))
     if not rows:
         raise ValueError('Canon.lean: errTraceTags not found')
     return {tag: re.findall(r'"([^"]+)"', targets) for tag, targets in rows}
@@ -256,11 +255,23 @@ BACKEND_DIRS = ('src/codegen/', 'src/arch/', 'src/link/')
 POST_HOOK_BUILDERS = ('src/Air/Legalize.zig',)  # legalization runs in the backends, after the hook
 COMPUTED_TAG = re.compile(r'@field\(\s*Air\.Inst\.Tag|stringToEnum\(\s*Air\.Inst\.Tag|'
                           r'Tag\s*=\s*@enumFromInt|@as\(\s*(?:Air\.Inst\.)?Tag\s*,\s*@enumFromInt')
-ENUM_LITERAL = re.compile(r'\.([A-Za-z_][A-Za-z0-9_]*)|\.@"([^"]+)"')
 
 
-def enum_literals(text):
-    return {a or b for a, b in ENUM_LITERAL.findall(text)}
+def enum_literals(ts):
+    """The enum literals (`.name`, `Tag.name`, `.@"name"`) of a token list."""
+    return {identifier(ts[i+1]) for i in range(len(ts)-1)
+            if ts[i] == '.' and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*|@".*"', ts[i+1])}
+
+
+def tag_helper_bodies(ts):
+    """The bodies of the functions that return an AIR `Tag` (`fn fromCmpOp(...) Tag {`)."""
+    for i in range(len(ts)-2):
+        if ts[i] == 'fn' and ts[i+2] == '(':
+            k = balanced(ts, i+2) + 1
+            while k < len(ts) and ts[k] not in ('{', ';'):
+                k += 1
+            if k < len(ts) and ts[k] == '{' and ts[k-1] == 'Tag':
+                yield ts[k+1:balanced(ts, k)]
 
 
 def producer_literals(source, cache):
@@ -274,23 +285,17 @@ def producer_literals(source, cache):
         if relative.startswith(BACKEND_DIRS) or relative in POST_HOOK_BUILDERS or relative == 'src/Air.zig':
             continue
         if AIR_BUILDERS.search(cache.text(p)):
-            producers.append(p)
-    if not any(str(p.relative_to(source)) == 'src/Sema.zig' for p in producers):
+            producers.append(relative)
+    if 'src/Sema.zig' not in producers:
         return None
     literals = set()
-    for p in producers:
-        text = cache.text(p)
-        if COMPUTED_TAG.search(text):
+    for relative in producers:
+        if COMPUTED_TAG.search(cache.text(source / relative)):
             return None
-        literals |= enum_literals(text)
+        literals |= enum_literals(cache.tokens(source / relative))
     # Air.zig helpers that return a tag (`fromCmpOp`) produce what their bodies name.
-    air = cache.text(source / 'src/Air.zig')
-    for m in re.finditer(r'fn \w+\([^)]*\)\s*(?:Air\.Inst\.)?Tag\s*\{', air):
-        depth, i = 1, m.end()
-        while depth and i < len(air):
-            depth += {'{': 1, '}': -1}.get(air[i], 0)
-            i += 1
-        literals |= enum_literals(air[m.end():i])
+    for body in tag_helper_bodies(cache.tokens(source / 'src/Air.zig')):
+        literals |= enum_literals(body)
     return literals
 
 
@@ -561,7 +566,7 @@ FIXTURE_REQUESTS = {
 }
 
 
-def fixture_request(tag, source_text, version=None):
+def fixture_request(tag, source_text):
     """The reviewed fixture request for an unfixtured tag, or None when absent or dangling."""
     if tag not in FIXTURE_REQUESTS:
         return None
@@ -750,7 +755,7 @@ def l14_problems(inventory):
             if not witnesses:
                 problems.append(f'{label}: {disposition} without a committed compiler-generated fixture containing it')
         elif disposition == 'emitted-unfixtured':
-            request = fixture_request(tag, fixture_text, inventory.get('zig_version'))
+            request = fixture_request(tag, fixture_text)
             if paths:
                 problems.append(f'{label}: emitted-unfixtured but fixture paths are recorded')
             if request is None or row.get('fixture_request') != request:
@@ -878,7 +883,7 @@ def generate(version, source, os_name='linux'):
             disposition = 'unreachable-at-export'
         else:
             # L14: no compiler-generated fixture; honest only with a reviewed fixture request.
-            request = fixture_request(tag, fixture_text, version)
+            request = fixture_request(tag, fixture_text)
             disposition = 'emitted-unfixtured' if request else FORBIDDEN
         if disposition == 'resolved-in-canon':
             ops = [op for canonical in resolved[tag] for op in norms.get(canonical, [])]

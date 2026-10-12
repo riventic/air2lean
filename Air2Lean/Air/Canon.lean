@@ -693,14 +693,15 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
           model; it is admitted only as a stored value (undefined bytes), as in `std.builtin.returnError`"
     if let some none := i.errTrace then throw unresolved
   let isPtr (t : TyId) : Bool := match f.types[t]? with | some (.ptr "one" ..) => true | _ => false
-  let mk (id : InstId) (tag : String) (ty : TyId) (args : Array Val) (index : Option Nat := none) : RawInst :=
+  let mk (id : InstId) (tag : String) (ty : TyId) (args : Array Val) (index param : Option Nat := none) :
+      RawInst :=
     { id, tag, ty := some ty, args, body := #[], thenBody := #[], elseBody := #[], cases := #[],
-      target := none, param := none, callee := none, index, name := none, line := none, order := none,
+      target := none, param, callee := none, index, name := none, line := none, order := none,
       rmwOp := none, successOrder := none, failureOrder := none, op := none, mask := #[], asm := none,
       unsupported := false }
   -- `v` (of type `t`) as a value of the optional type `want` (`?*StackTrace`): itself, or a
   -- `wrap_optional` with id `id` of the pointer it was set from.
-  let asOptional (v : Val) (t want id : InstId) : Except String (Option RawInst × Val) := do
+  let asOptional (v : Val) (t want : TyId) (id : InstId) : Except String (Option RawInst × Val) := do
     if t == want then return (none, v)
     match f.types[want]? with
     | some (.optional c) =>
@@ -741,14 +742,16 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
           | throw s!"{f.name}: inst {i.id}: `save_err_return_trace_index` needs `index` and `ptr_ty`"
         let p ← match f.types[t]? with
           | some (.optional c) =>
-            out := out.push (mk st.next "optional_payload" c #[v])
-            st := { st with next := st.next + 1 }
-            pure (Val.inst (st.next - 1))
+            let payload := st.next
+            out := out.push (mk payload "optional_payload" c #[v])
+            st := { st with next := payload + 1 }
+            pure (Val.inst payload)
           | some (.ptr "one" ..) => pure v
           | _ => throw s!"{f.name}: inst {i.id}: the error return trace is not a pointer"
-        out := out.push (mk st.next "struct_field_ptr" ptrTy #[p] (some idx))
-        out := out.push (mk i.id "load" ty #[.inst st.next])
-        st := { st with next := st.next + 1 }
+        let field := st.next
+        st := { st with next := field + 1 }
+        out := out.push (mk field "struct_field_ptr" ptrTy #[p] (some idx))
+        out := out.push (mk i.id "load" ty #[.inst field])
       | _ =>
         let mut i := i
         if let some (some want) := i.errTrace then
@@ -779,7 +782,7 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
   let (params, reg, args, next) ← match f.errTrace with
     | some (some t) =>
       pure (f.params.push t, some (Val.inst start, t),
-        #[mk start "arg" t #[] |> fun a => { a with param := some f.params.size }], start + 1)
+        #[mk start "arg" t #[] (param := some f.params.size)], start + 1)
     | some none => throw unresolved
     | none => pure (f.params, none, #[], start)
   let (body, _) ← walk true f.body { next, reg }

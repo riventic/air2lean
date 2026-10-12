@@ -84,8 +84,7 @@ class Rejections(unittest.TestCase):
             doc = files[name]
             ra = next(i for i in walk(doc["body"]) if i["tag"] == "ret_addr")
             boolean = next(k for k, t in enumerate(doc["types"]) if t["k"] == "bool")
-            k = doc["body"].index(ra) if ra in doc["body"] else None
-            body = doc["body"] if k is not None else next(
+            body = doc["body"] if ra in doc["body"] else next(
                 i[key] for i in walk(doc["body"]) for key in ("body", "then", "else") if ra in i.get(key, []))
             k = body.index(ra)
             body.insert(k + 1, {"id": 100000, "tag": "cmp_eq", "ty": boolean,

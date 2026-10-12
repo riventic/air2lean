@@ -49,13 +49,16 @@ def refresh():
     PROVENANCE.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
 
 
-def tags(body):
-    for i in body:
-        yield i["tag"]
-        for key in ("body", "then", "else"):
-            yield from tags(i.get(key, []))
-        for case in i.get("cases", []):
-            yield from tags(case["body"])
+def tags(value):
+    """Every instruction tag in an AIR JSON value, nested bodies of any kind included."""
+    if isinstance(value, dict):
+        if "tag" in value and "id" in value:
+            yield value["tag"]
+        for child in value.values():
+            yield from tags(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from tags(child)
 
 
 class Provenance(unittest.TestCase):
