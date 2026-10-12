@@ -67,7 +67,6 @@
     "ZigLean.Lemmas": ["SEM-01"],
     "ZigLean.Range": ["SEM-01"],
     "ZigLean.Loop": ["SEM-03"],
-    "ZigLean.RecTemplate": ["SEM-03"],
     "ZigLean.SimpAttr": ["TRU-01"],
     "ZigLean.Simp": ["TRU-01"],
     "ZigLean.VersionGate": ["TRU-01"],

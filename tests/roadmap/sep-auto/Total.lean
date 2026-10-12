@@ -9,7 +9,9 @@ import ZigLean.Sep.Full.Init
 false one. `FTotalTriple` is `FTriple` and `FReturns`: neither divergence nor a panic has one from
 a memory that holds the precondition (the start memory, `initRes_holds`). Neither has a panic
 (`FTriple` admits only `.stackOverflow`). A returned Zig error is a value. A loop whose locals
-count down returns (`FTotalTriple.loop_measure`, the body's step by `fsym`).
+count down returns (`FTotalTriple.loop_measure`, the body's step by `fsym`). The measure is not
+optional: a step that does not decrease it is rejected, and a body that always repeats has no
+step at all (the scenarios of the retired `loop_template` checks).
 -/
 
 namespace SepAuto.Total
@@ -71,5 +73,79 @@ theorem countdown_total (P : FAssn) (n : BitVec 64) :
     FTotalTriple P ((Zig.loop countdown fun b : Bool => b).run n) (fun r => ⟪r.1 = false ∧ r.2 = 0⟫ ⋆ P) :=
   FTotalTriple.loop_measure (fun _ => P) BitVec.toNat _
     (fun s => by unfold countdown; fsym) n
+
+/-! ## The measure must decrease -/
+
+/-- Locals of a counter loop with a bound. -/
+structure L where
+  i : BitVec 32
+  n : BitVec 32
+  deriving Inhabited
+
+/-- `while (i < n) i -= 1`: the counter steps away from its bound. -/
+def awayLoop : MM L Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.lt false i n then do
+    let i' ← callR (Zig.sub false i (1 : BitVec 32))
+    modify (fun s => { s with i := i' })
+    pure true
+  else pure false
+
+/-- `while (i < n) { if (i == 7) i = 0 else i += 1 }`: a counter that is also reset. -/
+def resetLoop : MM L Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.lt false i n then do
+    if i == 7 then modify (fun s => { s with i := 0 })
+    else do
+      let i' ← callR (Zig.add false i (1 : BitVec 32))
+      modify (fun s => { s with i := i' })
+    pure true
+  else pure false
+
+/-- The distance of the counter to its bound. -/
+def gap (s : L) : Nat := s.n.toNat - s.i.toNat
+
+/-- Away from the bound, the counter itself decreases: the step holds with that measure. -/
+theorem away_step (P : FAssn) (s : L) (h : 0 < s.i.toNat) :
+    FTotalTriple P (awayLoop.run s)
+      (fun r => if (fun b : Bool => b) r.1 then ⟪r.2.i.toNat < s.i.toNat⟫ ⋆ P else P) := by
+  unfold awayLoop; fsym
+
+set_option linter.unusedVariables false in
+/-- … but not with the distance to the bound, which grows. -/
+example (P : FAssn) (s : L) (h : 0 < s.i.toNat) : True := by
+  fail_if_success
+    have : FTotalTriple P (awayLoop.run s)
+        (fun r => if (fun b : Bool => b) r.1 then ⟪gap r.2 < gap s⟫ ⋆ P else P) := by
+      unfold awayLoop gap; fsym
+  trivial
+
+set_option linter.unusedVariables false in
+/-- A reset raises the distance to the bound: the step is rejected (the loop runs forever when
+`n > 7`). -/
+example (P : FAssn) (s : L) : True := by
+  fail_if_success
+    have : FTotalTriple P (resetLoop.run s)
+        (fun r => if (fun b : Bool => b) r.1 then ⟪gap r.2 < gap s⟫ ⋆ P else P) := by
+      unfold resetLoop gap; fsym
+  trivial
+
+/-- A body that always repeats. -/
+def spin : MM Nat Bool := pure true
+
+/-- No measure makes the step of a body that always repeats, from a memory that holds the
+precondition. -/
+theorem spin_no_measure (μ : Nat → Nat) (X : Nat → FAssn) (post : Bool × Nat → FAssn) (s : Nat)
+    (σ : Placement) :
+    ¬ FTotalTriple (globals []) (spin.run s)
+      (fun r => if (fun b : Bool => b) r.1 then ⟪μ r.2 < μ s⟫ ⋆ X r.2 else post r) := fun ht => by
+  obtain ⟨hh, hp, hs⟩ := start σ
+  have := ht.1 _ _ _ hh hp hs
+  simp only [spin, StateT.run_pure] at this
+  obtain ⟨_, _, hq, _⟩ := this
+  simp only [↓reduceIte] at hq
+  exact Nat.lt_irrefl _ (sep_lift.mp hq).1
 
 end SepAuto.Total
