@@ -17,10 +17,10 @@ import ZigLean.Mem.Repr
   concurrent command: a call through a table (`Table.call`, `CVTable.dispatch`, the
   `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
 * **An atomic op's oracle choice** is `0` in one thread (`C.pick`, `CTriple.pick_bind`).
-* **Indirect calls**: a generated chain `if f = c₁ then x₁ else … else throw .illegal` is folded
-  into `callIndirect f [(c₁, x₁), …]` (`callIndirect_fold_one'`/`cons'`, the `Prop` forms of
-  `callIndirect_fold_one`/`cons`), and the common continuation of its arms is pulled out
-  (`callIndirect_bind`), so the call is one command. `fsym` executes it by a `CTriple` rule for
+* **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else throw .illegal` is folded
+  into `callIndirect f [(c₁, x₁), …]` before the body is normalized (`callIndirect_fold_one`/
+  `cons`), read under the locals (`callIndirect_run`), and the common continuation of its arms is
+  pulled out (`callIndirect_bind`, `pullIndirect`), so the call is one command. `fsym` executes it by a `CTriple` rule for
   the table call, or reads the arm that the facts select (`callIndirect_pos`/`_neg`).
 * **`fsym_norm`** for concurrent bodies: the `CNorm` lemmas (`conc_norm`), the atomic ops of
   `CM` as an oracle pick and a `MemM` op, and `ConcM.liftMem` pushed through the `MemM` layer
@@ -204,23 +204,12 @@ theorem liftMem_ite {c : Prop} [Decidable c] (x y : MemM α) :
 
 theorem liftMem_throw (e : Error) : (ConcM.liftMem (throw e : MemM α) : ConcM Tgt α) = throw e := rfl
 
-/-- The innermost arm of a generated indirect call (`callIndirect_fold_one` after `simp` has
-turned the condition `f == c` into `f = c`). -/
-theorem callIndirect_fold_one' {f c : Ptr} {x : ConcM Tgt α} :
-    (if f = c then x else (throw .illegal : ConcM Tgt α)) = Full.callIndirect f [(c, x)] := by
-  simp only [Full.callIndirect, beq_iff_eq]
-
-/-- One more arm of a generated indirect call. -/
-theorem callIndirect_fold_cons' {f c : Ptr} {x : ConcM Tgt α} {arms : List (Ptr × ConcM Tgt α)} :
-    (if f = c then x else Full.callIndirect f arms) = Full.callIndirect f ((c, x) :: arms) := by
-  simp only [Full.callIndirect, beq_iff_eq]
-
 end Norm
 
-attribute [fsym_norm] CNorm.run_callC CNorm.run_callMC CNorm.run_callRC CNorm.run_liftR
+attribute [fsym_norm] callIndirect_run List.map_cons List.map_nil StateT.run_set CNorm.run_callC CNorm.run_callMC CNorm.run_callRC CNorm.run_liftR
   CNorm.run_pickC CNorm.run_throw CNorm.throw_bind CNorm.run_get CNorm.run_modify CNorm.pick_assoc
   CNorm.liftMem_pure CNorm.liftMem_lift_pure CNorm.liftMem_lift_throw liftMem_bind liftMem_ite
-  liftMem_throw callIndirect_fold_one' callIndirect_fold_cons'
+  liftMem_throw
   atomicLoadC atomicStoreC atomicRmwC cmpxchgC atomicLoadAsC atomicStoreAsC atomicRmwAsC cmpxchgAsC
   cmpxchgWeakC atomicLoadUnorderedC atomicLoadUnorderedEncC atomicLoadUnorderedAsC atomicLoadPtrC
   atomicStorePtrC atomicXchgPtrC cmpxchgPtrC cmpxchgWeakPtrC
