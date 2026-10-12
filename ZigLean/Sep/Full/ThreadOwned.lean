@@ -90,6 +90,18 @@ theorem rsum_comm {a b : Res} (hd : FHeap.Disjoint a.heap b.heap) : rsum a b = r
 theorem rsum_assoc {a b c : Res} : rsum (rsum a b) c = rsum a (rsum b c) := by
   simp only [rsum, FHeap.union_assoc, Know.union_assoc, Ghost.add_assoc]
 
+/-- The empty resource: the part of a thread that owns nothing (a joined one). -/
+abbrev rnil : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
+
+theorem rnil_rsum (r : Res) : rsum rnil r = r := by
+  simp [rsum, Know.none_union]
+
+theorem partOf_rnil : (fun r => r = rnil) = (emp : FAssn) := by
+  funext r; apply propext
+  constructor
+  · rintro rfl; exact ⟨rfl, rfl, rfl⟩
+  · rintro ⟨h1, h2, h3⟩; rw [res_eta r, h1, h2, h3]
+
 /-! ## The parts -/
 
 /-- The threads' parts and the protocol's rest in `m` (module doc). -/
@@ -251,6 +263,69 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     rw [upd_ne _ _ (Nat.ne_of_gt hu), upd_ne _ _ (Nat.ne_of_gt htu)]
     exact ho.outside u (Nat.le_of_succ_le hu)
 
+/-- Two threads' parts are disjoint. -/
+theorem disj (ho : FOwned own rO m) {u v : ThreadId} (hu : u < m.threads.size)
+    (hv : v < m.threads.size) (huv : u ≠ v) : FHeap.Disjoint (own u).heap (own v).heap := fun l => by
+  obtain ⟨rR, hR, -, hh⟩ := ho.part hu
+  cases e : (own v).heap l with
+  | none => exact .inr rfl
+  | some fc =>
+    have := partsBut_sub hR hv (Ne.symm huv) l (by simp [e])
+    exact .inl ((FHeap.disjoint_union_right.mp hh.disj).1 l |>.resolve_right this)
+
+/-- **Join**: the parent `t` takes the part of thread `u`, which has ended; `u` keeps nothing. -/
+theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hut : u ≠ t)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    FOwned (upd (upd own u rnil) t (rsum (own t) (own u))) rO m' := by
+  have hleg := Owned.join (legacy ho) ht hut hj
+  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
+  -- `u`'s part out of the others'
+  have hR' := hR
+  rw [sepN_pick hul] at hR'
+  obtain ⟨ru, rR', hdu, rfl, hru, hR'⟩ := hR'
+  have hut' : ¬ @Eq Nat u t := hut
+  simp only [partsBut, hut', ↓reduceIte] at hru
+  subst hru
+  have hR₁ : sepN m.threads.size (partsBut (upd own u rnil) t) rR' := by
+    rw [sepN_congr (g := fun j => if j = u then emp else partsBut own t j) fun j _ => ?_]
+    · exact hR'
+    · by_cases hju : j = u
+      · subst hju
+        have hjt : ¬ @Eq Nat j t := hut
+        simp only [partsBut, hjt, ↓reduceIte]; unfold partOf; rw [upd_self]; exact partOf_rnil
+      · simp only [partsBut, hju, ↓reduceIte]; unfold partOf; rw [upd_ne _ _ hju]
+  have hd := FHeap.disjoint_union_right.mp hh.disj
+  have hdt := FHeap.disjoint_union_right.mp hd.1
+  have hdtu : FHeap.Disjoint (rsum (own t) (own u)).heap rR'.heap :=
+    FHeap.disjoint_union_left.mpr ⟨hdt.2, hdu⟩
+  have hsz : (m.threads.set! u { rec with joined := true }).size = m.threads.size := by
+    simp [Array.set!_eq_setIfInBounds]
+  refine ⟨?_, fun w hw => ?_, fun w hw => ?_, hleg.csize, ho.conc⟩
+  · dsimp only; rw [hsz]
+    refine ⟨_, parts_put ht hR₁ hdtu, Holds.congrMem (m := m) rfl rfl ?_⟩
+    have := Holds.join hd.1 hRO hh
+    show Holds m (rsum (rsum (own t) (own u)) rR') rO
+    rw [rsum_assoc]
+    exact this
+  · refine (hleg.owns w hw).sub fun l h => ?_
+    by_cases hwt : w = t
+    · subst hwt
+      rw [upd_self] at h; rw [upd_ne _ _ (Ne.symm hut), upd_self]
+      simp only [FHeap.erase_union, Heap.union_apply] at h ⊢
+      cases e : (own w).heap l <;> cases e' : (own u).heap l <;>
+        simp_all [FHeap.erase, FHeap.fix]
+    · rw [upd_ne _ _ hwt] at h
+      by_cases hwu : w = u
+      · subst hwu; rw [upd_self] at h; simp [FHeap.erase, FHeap.empty] at h
+      · rw [upd_ne _ _ hwu] at h; rw [upd_ne _ _ hwu, upd_ne _ _ hwt]
+        exact FHeap.erase_fix_ne.mpr h
+  · dsimp only at hw; rw [hsz] at hw
+    rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hw)),
+      upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le hul hw))]
+    exact ho.outside w hw
+
 end FOwned
 
 end Full
@@ -293,6 +368,15 @@ theorem WP.liftM_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
   exact WP.bind (WP.liftMem_fowned ht ho hc htl hp fun a m' r' hr ho' hq hc' ht' =>
     WP.pure' (h a m' r' hr ho' hq hc' ht'))
+
+/-- `WP.liftMem_fowned` for a call of a `MemM` function (`callMC`). -/
+theorem WP.callMC_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
+    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
+      m'.current = t → m'.threads = m.threads → Q (a, s) G m' n) :
+    P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n :=
+  WP.liftM_fowned ht ho hc htl hp h
 
 end Proto
 end Conc
