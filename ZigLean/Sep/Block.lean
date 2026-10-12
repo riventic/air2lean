@@ -80,14 +80,6 @@ theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
     have := Mem.lt_top hblk; have := le_alignUp m.top align
     simp only; omega
 
-/-- The address range of a block that `alloc` makes with room (`Mem.allocOk`) is clear of every
-live block (`Mem.newAddr_clear` for every kind, MM-16). -/
-theorem Mem.allocAddr_clear {m : Mem} {kind : BlockKind} {size align : Nat}
-    (hroom : m.allocOk kind size align = true) {l : Loc} {c : Cell} (hc : m.heap l = some c) :
-    size = 0 ∨ c.addr + c.size ≤ m.allocAddr kind size align ∨
-      m.allocAddr kind size align + size ≤ c.addr :=
-  Mem.addrFree_cell (Mem.allocOk_fit hroom).2 hc
-
 /-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. This
 holds for every address the block gets: the heap is per block id. -/
 theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
@@ -142,7 +134,7 @@ theorem Mem.Seq.alloc {m : Mem} (hst : m.Seq) (kind : BlockKind) (size align : N
   ⟨hst.single⟩
 
 /-- `alloc` under every placement: a new block id whose bytes nothing owned, at an aligned address
-`A` whose range is clear of every live block (`Mem.allocAddr_clear`). -/
+`A` whose range is clear of every live block (`Mem.allocOk_fit`). -/
 theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
     (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.allocOk kind size align = true)
     (hst : m.Seq)
@@ -160,7 +152,7 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
   refine ⟨p, _, h', hr, h0, hd', hm', hdd, hst.alloc kind size align, by simp [Mem.afterAlloc], A,
     hA, hb, fun l c hc => ?_⟩
   subst hAe
-  exact Mem.allocAddr_clear hroom hc
+  exact Mem.addrFree_cell (Mem.allocOk_fit hroom).2 hc
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned, its end races with no
 access: `Mem.freeRaces`, not a `const` global) removes it from the heap. -/

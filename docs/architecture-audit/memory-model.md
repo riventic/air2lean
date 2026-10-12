@@ -581,8 +581,8 @@ per-thread reserve contract.
   `.stack` block of a thread with a budget these are `Mem.roomFor` and `Mem.newAddr` (by `rfl`).
   The lemmas that named `roomFor`/`newAddr` for any kind now name `allocOk`/`allocAddr`
   (`alloc_run_eq`, `alloc_run_noRoom`, `alloc_run_core`, `alloc_run`, `alloc_noErr`,
-  `alloc_new_id`, `LDMono.alloc`); `Mem.allocOk_fit`, `Mem.allocOk_le`, `Mem.allocAddr_mod` and
-  `Mem.allocAddr_clear` give what the partial rules export (aligned, clear of every live block,
+  `alloc_new_id`, `LDMono.alloc`); `Mem.allocOk_fit`, `Mem.allocOk_le` and `Mem.allocAddr_mod`
+  give what the partial rules export (aligned, clear of every live block,
   inside the address space), so no rule statement changed.
 * **State.** `Mem.stacks : Array StackState` (budget, reserve base, entries); an entry records
   its block (or a frame), the depth at its push and its charge, so the depth is O(1) (the top
