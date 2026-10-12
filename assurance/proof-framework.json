@@ -744,7 +744,8 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/ProofsSlices.lean"
+      "path": "tests/roadmap/strength-log/ProofsSlices.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
