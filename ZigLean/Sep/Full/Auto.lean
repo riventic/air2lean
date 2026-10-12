@@ -40,6 +40,7 @@ open Lean Meta Elab Tactic
 initialize registerTraceClass `fsym
 initialize registerTraceClass `fsym.arith
 initialize registerTraceClass `fsym.prof
+initialize registerTraceClass `fsym.total
 
 /-! ## Expressions -/
 
@@ -331,7 +332,9 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let h0 ← IO.getNumHeartbeats
   let r ← omegaRaw' facts ty
-  trace[fsym.prof] "raw {((← IO.getNumHeartbeats) - h0) / 1000} {facts.size} {r.isSome}"
+  let d := ((← IO.getNumHeartbeats) - h0) / 1000
+  trace[fsym.prof] "raw {d} {facts.size} {r.isSome}"
+  if d > 1000 then trace[fsym.prof] "slow omega {ty} from {← facts.mapM inferType}"
   return r
 where
   omegaRaw' (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
@@ -412,7 +415,11 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
         if x.isAppOfArity ``HSub.hSub 6 then
           match ← decide (← mkAppM ``LE.le #[b, a]) with
           | some h => pure (some (mkApp2 (mkConst ``subAtom) a b, ← mkAppM ``subAtom_add #[h]))
-          | none => pure none
+          | none =>
+            -- truncated to zero
+            match ← decide (← mkAppM ``LE.le #[a, b]) with
+            | some h => pure (some (mkApp2 (mkConst ``subAtom) a b, ← mkAppM ``subAtom_zero #[h]))
+            | none => pure none
         else
           let isMin := x.isAppOfArity ``Min.min 4
           let c := if isMin then ``minAtom else ``maxAtom
@@ -777,6 +784,13 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     if ← closeWith g (← `(tactic| decide)) then return []
   if let some (_, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
+  -- `x ≤ x` (a carved region that starts where the state's does)
+  if t.isAppOfArity ``LE.le 4 then
+    let ty := t.getArg! 0
+    if ty.isConstOf ``Nat || ty.isConstOf ``Int then
+      if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
+        g.assign (← mkAppM (if ty.isConstOf ``Nat then ``Nat.le_refl else ``Int.le_refl) #[t.getArg! 2])
+        return []
   if ← arithCore g quick then return []
   unless quick do
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
@@ -2254,18 +2268,22 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       let eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[cond, inst, h, none, t, e]
       let f ← withLocalDeclD `c (← inferType c) fun x => mkLambdaFVars #[x] (mkT L α P x Q)
       g.replaceTargetEq (mkT L α P (if pos then t else e) Q) (← mkCongrArg f eq)
+    -- a condition that matches on a variable (an error union's tag): split the variable (the
+    -- arithmetic does not decide a `match` on a variable)
+    let mut found : Option Expr := none
+    let cond' ← instantiateMVars cond
+    for sub in subterms cond' do
+      if let some m ← matchMatcherApp? sub (alsoCasesOn := true) then
+        if let some d := m.discrs.find? (·.isFVar) then found := some d; break
+    if let some d := found then
+      trace[fsym] "branch on {cond'}: split variable {d}"
+      return ← casesWalk g d user extra fuel
     let hp ← mkFreshExprMVar cond
     if ← arith hp.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hp) true) user extra (fuel - 1)
     let hn ← mkFreshExprMVar (mkNot cond)
     if ← arith hn.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
-    -- a condition that matches on a variable (an error union's tag): split the variable
-    let mut found : Option Expr := none
-    let cond' ← instantiateMVars cond
-    for sub in subterms cond' do
-      if let some m ← matchMatcherApp? sub (alsoCasesOn := true) then
-        if let some d := m.discrs.find? (·.isFVar) then found := some d; break
     -- a variable of an enumeration-like type (`Option`, `Except`, …) of the condition that the
     -- state matches on too (`match h with …` of an invariant): its cases decide both
     if found.isNone then
@@ -2385,7 +2403,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     discard <| arithSimpCtx
     let h0 ← IO.getNumHeartbeats
     let gs ← walk g user extra 400
-    trace[fsym] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
+    trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
     replaceMainGoal gs
 
 end Zig.Full.Auto

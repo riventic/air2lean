@@ -381,6 +381,7 @@ known, as an opaque atom with a linear defining fact (no case split). -/
 /-- `a - b` as an atom for `omega` where `b ≤ a` is known (no case split). -/
 @[irreducible] def subAtom (a b : Nat) : Nat := a - b
 theorem subAtom_add {a b : Nat} (h : b ≤ a) : subAtom a b + b = a := by unfold subAtom; omega
+theorem subAtom_zero {a b : Nat} (h : a ≤ b) : subAtom a b = 0 := by unfold subAtom; omega
 /-- `x.toNat` as an atom for `omega` where `0 ≤ x` is known. -/
 @[irreducible] def toNatAtom (x : Int) : Nat := x.toNat
 theorem toNatAtom_eq {x : Int} (h : 0 ≤ x) : (toNatAtom x : Int) = x := by unfold toNatAtom; omega
