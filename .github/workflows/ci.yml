@@ -1338,7 +1338,9 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean
+          lake build ZigLean ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto \
+            ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim ZigLean.Sep.Full.Typed \
+            ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
           bash tests/roadmap/interfaces/check.sh
 
       - name: Validate check-only diagnostic collection

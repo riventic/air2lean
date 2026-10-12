@@ -327,8 +327,10 @@ with `Ptr.add`). -/
   rw [hw] at e
   rw [e]; exact LawfulEnc.decode_encode v
 
-/-- **Store of an item** `v` at the start of a region (the pointer itself: the first field). -/
-@[fsym] theorem regionStore0 {T : Type} [Enc T] [LawfulEnc T] {al : Nat} (v : T)
+/-- **Store of an item** `v` at the start of a region (the pointer itself: the first field).
+Not `@[fsym]`: as a default rule it carves a region at a store through a formed pointer instead
+of `regionStoreAdd`'s in-place update (`tests/roadmap/sep-auto/Region.lean`). -/
+theorem regionStore0 {T : Type} [Enc T] [LawfulEnc T] {al : Nat} (v : T)
     (hpos : 0 < Enc.size T) (ho : Enc.size T ≤ bs.size) (hal : al ∣ a) :
     FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al p v)
       (fun _ => up (regionIn p A S K a (writeBytes bs 0 (Enc.encode v)))) := by
@@ -336,8 +338,8 @@ with `Ptr.add`). -/
     (al := al) v hpos (Int.le_refl 0) (by simpa using ho) hal (Nat.dvd_zero al)
   simpa only [Ptr.add_zero, Int.toNat_zero] using t
 
-/-- **Load of an item that a store wrote** at the start of a region. -/
-@[fsym] theorem regionLoadWritten0 {T : Type} [Enc T] [LawfulEnc T] {al : Nat} {v : T}
+/-- **Load of an item that a store wrote** at the start of a region (with `regionStore0`). -/
+theorem regionLoadWritten0 {T : Type} [Enc T] [LawfulEnc T] {al : Nat} {v : T}
     (hpos : 0 < Enc.size T) (ho : Enc.size T ≤ bs.size) (hal : al ∣ a) :
     FTotalTriple (up (regionIn p A S K a (writeBytes bs 0 (Enc.encode v)))) (Zig.load T al p)
       (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs 0 (Enc.encode v)))) := by

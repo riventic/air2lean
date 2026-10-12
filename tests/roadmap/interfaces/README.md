@@ -18,8 +18,13 @@ closure of each program's roots (`closure.py`); `provenance.json` records their 
 0.17.0 translations as `Interfaces/{Lists,Mix,Rnd}.lean` byte for byte, and runs `test_cli.py`:
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
-`.illegal` arm. The proofs over these translations (every allocator through `CAllocSpec`, the
-closure-vtable counterexample, `std.Random`) live with the full-state framework on
-`codex/alloc-arena-proof`.
+`.illegal` arm. It then checks the proofs over the 0.17.0 translations (`fsym`, only the
+standard axioms):
+
+- `ListsSpec.lean`: `create`, `push` and `destroy` of `lists` for every allocator, from
+  `CAllocSpec` of the environment's allocator at the vtable (`CVTable.env`);
+- `MixSpec.lean`: `allocBytesAligned` of `mix` for every allocator, from `CAllocSpec` of the
+  dispatch (`CVTable.dispatch`): one rule for the call whose arms are the FixedBufferAllocator
+  and the environment.
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

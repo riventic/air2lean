@@ -9,47 +9,59 @@ import ZigLean.Sep.Full.Pinned
 import ZigLean.Sep.Full.Try
 import ZigLean.Sep.Full.Region
 
+/-!
+# `examples/lists/lists.zig` for every allocator (`docs/interfaces.md`)
+
+`lists.zig` has no allocator of its own: every call through its `std.mem.Allocator` parameter
+reaches the environment (`Ext`, premise EXT-05). Its theorems assume `CAllocSpec` of the
+environment's allocator at the vtable `fns` (`CVTable.env`) and nothing else. The environment's
+entries are the generated `Ext.call<i>` for the three entries' types that the program calls, and
+any implementation `e` of the one it does not (`resize`), so the assumption holds for every
+allocator that meets the contract.
+-/
+
 namespace Interfaces.ListsSpec
 
 open Zig Zig.Full Zig.Full.FAssn Interfaces.Lists
 
-variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv)
+/-- The alignment argument of the generated entries, from its log2. -/
+def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
+
+variable [Ext]
+
+/-- The environment's allocator entries: `Ext.call0` (`alloc`), `Ext.call1` (`remap`) and
+`Ext.call2` (`free`); `e`'s `resize`, which the program never calls. -/
+def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
+  { e with
+    alloc := fun f a => Ext.call0 f a.1 a.2.1 (al a.2.2.1) a.2.2.2
+    remap := fun f a => Ext.call1 f a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2
+    free := fun f a => Ext.call2 f a.1 a.2.1 (al a.2.2.1) a.2.2.2 }
+
+variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
 
 set_option maxHeartbeats 2000000 in
 theorem create_spec (hfit : I.fits (16 : BitVec 64).toNat 3)
-    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 3 →
-      CTriple I.own (Zig.extCall (Ext.call0 fns.alloc ctx len mem_Alignment.«8» ra))
-        (I.allocPost len.toNat 3)) :
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_48603a336c43 ⟨ctx, vtp⟩)
       (fun r => I.own ⋆ (I.allocResult 3 16 r ⋆ vtR vtp fns.toList)) := by
-  fsym [hA]
-
-end Interfaces.ListsSpec
-
-namespace Interfaces.ListsSpec
-open Zig Zig.Full Zig.Full.FAssn Interfaces.Lists
-variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv)
+  fsym [CAllocSpec.alloc h]
 
 /-- The node that `push` makes: its 16 bytes (`next` at 0, `val` at 8, padding undefined). -/
 def pushResult (next : Option Ptr) (v : BitVec 32) : Except ErrName Ptr → FAssn
   | .ok p => I.granted p 3 (writeBytes (writeBytes (Array.replicate 16 .undef) 8 (Enc.encode v)) 0 (Enc.encode next))
   | .error e => ⟪e = "OutOfMemory"⟫
 
+-- the store of `next` at the start of the node's region (not a default rule, `Full/Region.lean`)
+attribute [local fsym] FTotalTriple.regionStore0
+
 set_option maxHeartbeats 2000000 in
 theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
-    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 3 →
-      CTriple I.own (Zig.extCall (Ext.call0 fns.alloc ctx len mem_Alignment.«8» ra))
-        (I.allocPost len.toNat 3)) :
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (push ⟨ctx, vtp⟩ next v)
       (fun r => I.own ⋆ (pushResult I next v r ⋆ vtR vtp fns.toList)) := by
-  fsym [create_spec ctx vtp fns I hfit hA]
+  -- `cases x`: fsym does not split a `match` on a symbolic `Except` (fsym-engine ledger)
+  fsym [create_spec ctx vtp fns I e hfit h]
   cases x <;> fsym
-
-end Interfaces.ListsSpec
-
-namespace Interfaces.ListsSpec
-open Zig Zig.Full Zig.Full.FAssn Interfaces.Lists
-variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv)
 
 omit [Ext] in
 theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8» := by
@@ -58,23 +70,15 @@ theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8
   simp only [Zig.ctz, h]
   rfl
 
-omit [Ext] in
-theorem fromByteUnits_8_step {P : FAssn} :
-    FTotalTriple P (StateT.lift (mem_Alignment_fromByteUnits 8) : MemM mem_Alignment)
-      (fun r => ⟪r = mem_Alignment.«8»⟫ ⋆ P) := by
-  rw [fromByteUnits_8]
-  exact (FTotalTriple.ret (Q := fun r => ⟪r = mem_Alignment.«8»⟫ ⋆ P) _).pre fun _ h => sep_lift.mpr ⟨rfl, h⟩
-
 set_option maxRecDepth 20000 in
 set_option maxHeartbeats 2000000 in
 theorem destroy_spec (p : Ptr) (bs : Array Byte) (hbs : bs.size = 16)
-    (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
-      CTriple (I.own ⋆ I.granted s.ptr 3 bs) (Zig.extCall (Ext.call2 fns.free ctx s mem_Alignment.«8» ra))
-        (fun _ => I.own)) :
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted p 3 bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_destroy__anon_a9add1f02861 ⟨ctx, vtp⟩ p) (fun _ => I.own ⋆ vtR vtp fns.toList) := by
+  -- fsym does not evaluate the pure helper on its literal (fsym-engine ledger)
   unfold mem_Allocator_destroy__anon_a9add1f02861
   simp only [fromByteUnits_8]
-  fsym [hF]
+  fsym [CAllocSpec.free h]
 
 end Interfaces.ListsSpec
