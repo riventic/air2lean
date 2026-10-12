@@ -345,6 +345,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
+    'tests/roadmap/const-bases/air-llvm/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/error-tracing/air/{version}': 'tests/roadmap/error-tracing/provenance.json',
     'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',

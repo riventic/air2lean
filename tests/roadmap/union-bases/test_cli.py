@@ -20,7 +20,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-VERSIONS = ("0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
 GEN = HERE / "UnionBases" / "Gen.lean"
 PROVENANCE = HERE / "provenance.json"
 ARGS = ["--namespace", "UnionBases", "--prefix", "union_bases.", "--allow-unqualified-build-mode"]

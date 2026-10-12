@@ -6,6 +6,8 @@
     "air-reject/0.15.2/union_reject.resPtr.json": "fe755b3374f860bbf135636a5512c7ff18b3419216aa418afb725bdaf2191419",
     "air-reject/0.16.0/union_reject.oddPtr.json": "3693160bcd2430047e0d819357eec6023ffa3aade86716418ab255d019604b5b",
     "air-reject/0.16.0/union_reject.resPtr.json": "1b2840a816bdb1b1fbcfb49e2c28da2eb996bba0b78c2c49fca26a4b5b0605fc",
+    "air-reject/0.17.0/union_reject.oddPtr.json": "5fcae1fdd0b4a8691fd252e2e12458da21428b1281c68a62eaf4e42866fd0acd",
+    "air-reject/0.17.0/union_reject.resPtr.json": "e077b589b488d2b5699b92e1ba72d49f6f5c2cebe73ec41e915dc38e3e1b7ad2",
     "air/0.14.1/union_bases.barePairPtr.json": "e233c78766a784fa5e6bed4f9e3f88ee6735bcb1bb052de298271364f4c87a68",
     "air/0.14.1/union_bases.extBytePtr.json": "08a7c185bbb915b6cc07834febce929f3b60d159accb00b878657c311a925ef7",
     "air/0.14.1/union_bases.extHiPtr.json": "aa2cf07bc8f44d4df82e2c3a942d31de7f45198ce48cbb05a0e7df53ce0e80e1",
@@ -53,19 +55,36 @@
     "air/0.16.0/union_bases.readWideCell.json": "e89f16f4f85d0f83da90535565e73c5d3b6506aa5fe34abeadc6b6bd9935eb41",
     "air/0.16.0/union_bases.resBytePtr.json": "29696db8c897d6bd81f728d4d61a4678d1d851975b7c8481159fa76a66ca7aa3",
     "air/0.16.0/union_bases.wideCellPtr.json": "d08b89c66ca819f9835f706ace84a85fe222320e72f29042c5da304a76424cf0",
-    "air/0.16.0/union_bases.wideSlice.json": "a6169e1b86e0516b91b360db4de4a4436d054f58fc530aff970b36f9912d53b4"
+    "air/0.16.0/union_bases.wideSlice.json": "a6169e1b86e0516b91b360db4de4a4436d054f58fc530aff970b36f9912d53b4",
+    "air/0.17.0/union_bases.barePairPtr.json": "dd98fb7ca5a0a000beb87e6a1072f35c9368f04b967506755eafa1eacb7591af",
+    "air/0.17.0/union_bases.extBytePtr.json": "af8f637f6f4548d5c94fcf6fef5879ce9531fb02a43e7df12f5927a0b6b36548",
+    "air/0.17.0/union_bases.extHiPtr.json": "235402419407b21f1e2b8fc82c50a45842f16def9862a03965c86d7e8b825f98",
+    "air/0.17.0/union_bases.extWordPtr.json": "878c1a81febae59bcf4594b674f10ee6cd96bd459080b05ecfb3c64facbdadb2",
+    "air/0.17.0/union_bases.lowPairPtr.json": "f6f0f00b0fa2b1bef68ab5de8a80f5876a6e90feb3f6d10bbf54113abbc9f937",
+    "air/0.17.0/union_bases.maybeCellPtr.json": "f860e88c333b0de8a195b2a97132cdb30761a69452540d076c917ed7e0aae94e",
+    "air/0.17.0/union_bases.mixedHighPtr.json": "529eb6c459e2198a17656fd4770cec7df12f9c65b7e3262f178325b9b5bf02c3",
+    "air/0.17.0/union_bases.mixedLowPtr.json": "fcb3cb529acba4aca4ef4161bd570e5f86a776cfd1b5b8feba977103c745955b",
+    "air/0.17.0/union_bases.outerPairPtr.json": "9523b2345e54da7ba3cb1a0734315f0053793646baa2c4a1af509e1430c8f6c9",
+    "air/0.17.0/union_bases.projectBare.json": "e9945bf96dc374bc597b757d728f6f80149aadda5b5331a0f8edcfb80ba88c9e",
+    "air/0.17.0/union_bases.projectWide.json": "c0ae253e51986b6a6f31f0368a441a4c5523849553abaf3c58d92a601d9802a3",
+    "air/0.17.0/union_bases.readExtByte.json": "d490f96ac47c8c6f8e78d29ff69ee0311156605f27f149f8ac1b8cc2d34a2f9c",
+    "air/0.17.0/union_bases.readWideCell.json": "5dd7fe1e2a705a8bc42224ced01da22b61e194cae8701945fd9f222a05b26691",
+    "air/0.17.0/union_bases.resBytePtr.json": "9af26a3266d531c9fa26ae59eaa1dee3a60b1ff73820df310417c9b3638bc641",
+    "air/0.17.0/union_bases.wideCellPtr.json": "da58a0197cb418e1045b6388103c44d3a969c94e7309fc051e70b2564fd18513",
+    "air/0.17.0/union_bases.wideSlice.json": "a0b00af504cc454a0ae7a3a04bb316be9f88ff68f8a5d92ad40a04e1e228423e"
   },
   "command": "ZIG_AIR_JSON_DIR=<dir>/<version> ZIG_AIR_JSON_FILTER=<source>. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl -mcpu=baseline <source>.zig (export.sh)",
   "exporter_sha256": {
     "identity.zig": "a03eea3791f047909d370569c24c65d8be0ffae662968cd3000b01c39a970f7e",
-    "json.zig": "814fc4948db7cd3e93c4680f15b7240da4e2d271975e6f56ee251e919e0a8de7",
+    "json.zig": "d43d4980751df0f6d15e39b5f7ecbf038f149c66fd891b42b8e294d01f37be74",
     "pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
   },
   "note": "Each compiler is zig-patch/build.sh <version> from this tree's exporter (exporter_sha256); patched_compiler_sha256 hashes bin/zig-unlocked behind the AIR-only lock wrapper.",
   "patched_compiler_sha256": {
-    "0.14.1": "12318113e4623f0b34109dcd5b2758025f01ecce6d6bf3aa50db7765881ccf38",
-    "0.15.2": "df58529a3f0d451b1848bc36be57b322ca199a029f3702acdcdc85c8bb6ef713",
-    "0.16.0": "8e77ff9ff0255fc9c455d0ba0780f0dfd73bd4d870554d4780604204095ee7c4"
+    "0.14.1": "f6d4712fe6394ca3b0dcd5fc9d2a2bc62bc46e1f837f78ca4ee5fe9b573a74e7",
+    "0.15.2": "516546ed5ee7e8f15f1d6adf124424c5fe584a8bdf13c32c5fee0979b1d1dc66",
+    "0.16.0": "cfe544501695c858bd13ce0d6bd9e83c8e8eb789bb540f844e4503d8a5fe2fb1",
+    "0.17.0": "d2352ec0e9dce16b5cd35c828eb9e2244d3b726f3b42c46854eceb53873709d0"
   },
   "sources": {
     "union_bases.zig": "dff6dd428ee9658207919e6cfac239e7b89b49ae5dd1a5596af8e62c38327cbd",

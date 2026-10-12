@@ -1,0 +1,388 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "llvm_correspondence.widePayload",
+ "module": "root",
+ "src": {
+  "file": "llvm_correspondence.zig",
+  "module": "llvm_correspondence",
+  "decl_line": 43
+ },
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 0,
+     "ptr": {
+      "global": 0,
+      "payload_base": true,
+      "off": 30
+     }
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "llvm_correspondence.table",
+   "module": "root",
+   "ty": 3,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 3,
+    "elems": [
+     {
+      "ty": 4,
+      "val": "1"
+     },
+     {
+      "ty": 5,
+      "some": {
+       "ty": 6,
+       "elems": [
+        {
+         "ty": 7,
+         "val": "85"
+        },
+        {
+         "ty": 8,
+         "elems": [
+          {
+           "ty": 9,
+           "val": "10"
+          },
+          {
+           "ty": 9,
+           "val": "11"
+          },
+          {
+           "ty": 9,
+           "val": "12"
+          },
+          {
+           "ty": 9,
+           "val": "13"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "ty": 10,
+      "payload": {
+       "ty": 11,
+       "elems": [
+        {
+         "ty": 9,
+         "val": "20"
+        },
+        {
+         "ty": 9,
+         "val": "21"
+        },
+        {
+         "ty": 9,
+         "val": "22"
+        }
+       ]
+      }
+     },
+     {
+      "ty": 12,
+      "payload": {
+       "ty": 7,
+       "val": "12337"
+      }
+     },
+     {
+      "ty": 13,
+      "utag": {
+       "ty": 14,
+       "enum": "1"
+      },
+      "uval": {
+       "ty": 8,
+       "elems": [
+        {
+         "ty": 9,
+         "val": "40"
+        },
+        {
+         "ty": 9,
+         "val": "41"
+        },
+        {
+         "ty": 9,
+         "val": "42"
+        },
+        {
+         "ty": 9,
+         "val": "43"
+        }
+       ]
+      }
+     },
+     {
+      "ty": 15,
+      "val": "99"
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 7,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "llvm_correspondence.Holder",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "head",
+     "ty": 4,
+     "offset": 0
+    },
+    {
+     "name": "maybe",
+     "ty": 5,
+     "offset": 16
+    },
+    {
+     "name": "res",
+     "ty": 10,
+     "offset": 24
+    },
+    {
+     "name": "wide",
+     "ty": 12,
+     "offset": 30
+    },
+    {
+     "name": "pair",
+     "ty": 13,
+     "offset": 8
+    },
+    {
+     "name": "tail",
+     "ty": 15,
+     "offset": 12
+    }
+   ],
+   "abi_size": 40,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 6,
+   "abi_size": 8,
+   "abi_align": 2
+  },
+  {
+   "k": "struct",
+   "name": "llvm_correspondence.Cell",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "tag",
+     "ty": 7,
+     "offset": 0
+    },
+    {
+     "name": "bytes",
+     "ty": 8,
+     "offset": 2
+    }
+   ],
+   "abi_size": 6,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 9,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 16,
+   "payload": 11,
+   "abi_size": 6,
+   "abi_align": 2
+  },
+  {
+   "k": "array",
+   "len": 3,
+   "child": 9,
+   "sentinel": false,
+   "abi_size": 3,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 16,
+   "payload": 7,
+   "abi_size": 4,
+   "abi_align": 2
+  },
+  {
+   "k": "union",
+   "name": "llvm_correspondence.Pair",
+   "module": "root",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "word",
+     "ty": 15
+    },
+    {
+     "name": "bytes",
+     "ty": 8
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "@typeInfo(llvm_correspondence.Pair).@\"union\".tag_type.?",
+   "module": "root",
+   "tag": 17,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "word",
+     "value": "0"
+    },
+    {
+     "name": "bytes",
+     "value": "1"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Bad"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

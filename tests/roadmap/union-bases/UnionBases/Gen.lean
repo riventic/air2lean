@@ -718,7 +718,7 @@ def readExtByte (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM readExtByteLocals readExtByteExit) with
     | .br2 => (do
-      let i7 ← Zig.callM (Zig.load (BitVec 8) 1 ((⟨some 0, 36⟩ : Zig.Ptr).elem 1 p0))
+      let i7 ← Zig.callM (Zig.checkIndex (4 : BitVec 64) p0 >>= fun _ => Zig.load (BitVec 8) 1 ((⟨some 0, 36⟩ : Zig.Ptr).elem 1 p0))
       pure (.ret i7))
     | e => pure e) : Zig.MM readExtByteLocals readExtByteExit).run' (default : readExtByteLocals)
   match e with
@@ -741,7 +741,7 @@ def readWideCell (p0 : BitVec 64) : Zig.MemM (BitVec 16) := do
       else (do
         throw .outOfBounds)) : Zig.MM readWideCellLocals readWideCellExit) with
     | .br2 => (do
-      let i7 ← Zig.callM (Zig.load (BitVec 16) 2 ((⟨some 0, 44⟩ : Zig.Ptr).elem 2 p0))
+      let i7 ← Zig.callM (Zig.checkIndex (3 : BitVec 64) p0 >>= fun _ => Zig.load (BitVec 16) 2 ((⟨some 0, 44⟩ : Zig.Ptr).elem 2 p0))
       pure (.ret i7))
     | e => pure e) : Zig.MM readWideCellLocals readWideCellExit).run' (default : readWideCellLocals)
   match e with
