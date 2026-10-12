@@ -223,7 +223,54 @@ theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwne
   · obtain ⟨hd, hbd⟩ := ho.conc.2
     exact ⟨fun b b' blk blk' hne h1 h2 => hd b b' blk blk' hne h1 h2, fun b blk h1 => hbd b blk h1⟩
 
+/-- A rest that is the same up to `Cell.norm` (with the same tags, knowledge and ghost state). -/
+theorem congrRest {rO' : Res} (ho : FOwned own rO m) (hs : FHeap.Sim rO'.heap rO.heap)
+    (hk : rO'.know = rO.know) (hg : rO'.gh = rO.gh) : FOwned own rO' m :=
+  ⟨let ⟨rT, h1, h2⟩ := ho.holds; ⟨rT, h1, h2.congrF hs hk hg⟩, ho.owns, ho.outside, ho.csize, ho.conc⟩
+
+/-- A byte of the rest is a live byte of the memory, up to `Cell.norm`. -/
+theorem rest_cell (ho : FOwned own rO m) {l : Loc} {fc : FCell} (hl : rO.heap l = some fc) :
+    (m.heap l).map Cell.norm = some fc.cell.norm := by
+  obtain ⟨rT, -, hh⟩ := ho.holds
+  have hT : rT.heap l = none := parts_off hh (by rw [hl]; simp)
+  have := hh.heap.1 l
+  simp only [FHeap.union_apply, hT, hl, Option.none_or, Option.map_some] at this
+  exact this
+
 end FOwned
 
 end Full
+
+/-! ## In a thread: the step's frame -/
+
+namespace Conc
+namespace Proto
+
+open Full
+
+variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+  {n : Nat} {own : ThreadId → Res} {rO : Res}
+
+/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`StepIn` of the rest). -/
+theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
+    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → StepIn rO.heap.erase m m' → Q a G m' n) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+  obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
+  have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩
+  have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  · rw [he] at hx; exact .inr hx
+  · rw [hr] at hx
+    obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
+    refine ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq
+      (hs.weaken fun l hl => ?_)⟩
+    simp only [FHeap.erase, FHeap.erase_union, Heap.union_apply, Option.map_eq_none_iff] at hl ⊢
+    cases e : rR.heap l <;> simp_all
+
+end Proto
+end Conc
+
 end Zig

@@ -419,6 +419,283 @@ theorem word_congr {m m' : Mem}
     (hb : L.BlkOk m) : L.BlkOk m' ∧ curBytes m' L.b L.o 4 = curBytes m L.b L.o 4 :=
   word_congrN (fun x h1 h2 => by rw [hw x h1 h2]) hb
 
+/-! ## A step of a thread on its own part -/
+
+/-- A step of a thread on its own part (`StepIn hF`, with the word in its frame `hF`), after which
+the word's cells are the same up to `Cell.norm`, keeps the invariant. -/
+theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv P m)
+    (hs : StepIn hF m m') (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+    (hcells : ∀ x, L.o ≤ x → x < L.o + 4 →
+      (m'.heap (L.b, x)).map Cell.norm = (m.heap (L.b, x)).map Cell.norm) :
+    L.WInv P m' := by
+  have hjb : joinedB m' = joinedB m := joinedB_congr hs.threads
+  obtain ⟨hblk', hcur⟩ := word_congrN hcells hi.blk
+  have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true :=
+    fun u _ => hs.clock u
+  have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold LockWord.U32; rw [hcur]
+  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => by unfold LockWord.Loc; rw [hs.atomics]
+  refine ⟨by rw [hs.size, hs.threads]; exact hi.csize, fun u hu => ?_, hblk', ?_, hi.one,
+    ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_, fun i l hl => ?_⟩,
+    fun e he hh => ?_, fun i l hl => ?_, by rw [hs.waiters]; exact hi.fq, fun hp => ?_,
+    fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
+  · rw [hs.threads, hjb]; exact hi.live u hu
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word
+    exact ⟨w, hw, (hU32 _).mpr hu, hz⟩
+  · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i l ((hloc i l).mp hl)
+    exact ⟨h1, h2, h3, h4, by rw [h5, hcur]⟩
+  · exact (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
+      (hs.fp e he).imp id fun h => plainHit_false_of hwF h.2.1
+  · rcases hs.fp e he with he' | ⟨-, hnt, -⟩
+    · rcases hi.wfp e he' hh with ⟨ha, hle⟩ | hle
+      · exact .inl ⟨ha, someLe_mono hs.threads hcl hle⟩
+      · exact .inr (LiveLe.mono hs.threads hcl hle)
+    · exact absurd (touches_word hh hwF) hnt
+  · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
+    refine ⟨someLe_mono hs.threads hcl h1, fun u hu => ?_⟩
+    exact VClock.le_trans (h2 u hu) (hcl u (hi.live u (by rw [hu]; decide)).1)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hp)
+    exact ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
+
+/-- A step of a thread on its own part keeps what the free lock owns in its frame. -/
+theorem Owns.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF h : Heap} (ho : L.Owns P m h)
+    (hs : StepIn hF m m') (hsub : ∀ l, h l ≠ none → hF l ≠ none) : L.Owns P m' h := by
+  intro e he htc
+  rcases hs.fp e he with he' | ⟨-, hnt, hb⟩
+  · rcases ho e he' (htc.imp id fun h => Nat.le_trans hs.blocks h) with h | ⟨i, l, hl, hle⟩
+    · exact .inl (LiveLe.mono hs.threads (fun u _ => hs.clock u) h)
+    · exact .inr ⟨i, l, by unfold LockWord.Loc; rw [hs.atomics]; exact hl, hle⟩
+  · rcases htc with ⟨x, h1, h2, h3⟩ | hb'
+    · exact absurd ⟨x, h1, h2, hsub _ h3⟩ hnt
+    · exact absurd hb' (Nat.not_le.mpr hb)
+
+/-- A change of the place of thread `t` outside the lock's code: `t` is `out` before, and `out`,
+`gone` or `away` after. -/
+theorem WInv.ghost {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.WInv P m)
+    (hph : P t = .out) (hg : p = .out ∨ p = .gone ∨ p = .away)
+    (hlive : p ≠ .gone → t < m.threads.size ∧ joinedB m t = false) : L.WInv (upd P t p) m := by
+  have hnh : P t ≠ .holds := by rw [hph]; decide
+  have hgh : p ≠ .holds := by rcases hg with h | h | h <;> rw [h] <;> decide
+  have htb : (P t).busy = false := by rw [hph]; rfl
+  have hphu : ∀ u, upd P t p u = if u = t then p else P u := fun u => upd_apply
+  have hholds : ∀ u, upd P t p u = .holds ↔ P u = .holds := by
+    intro u; rw [hphu]; split
+    · rename_i h; subst h; exact ⟨fun h => absurd h hgh, fun h => absurd h hnh⟩
+    · exact Iff.rfl
+  have hfree : Free (upd P t p) ↔ Free P := by
+    unfold LockWord.Free; exact forall_congr' fun u => not_congr (hholds u)
+  have hgw : ∀ u, upd P t p u ≠ .gone → P u ≠ .gone := fun u h => by
+    rw [hphu] at h; split at h
+    · rename_i e; subst e; rw [hph]; decide
+    · exact h
+  refine ⟨hi.csize, fun u hu => ?_, hi.blk, ?_, fun u v hu hv => hi.one u v ((hholds u).mp hu)
+    ((hholds v).mp hv), hi.loc, hi.wfpW hgw, fun i l hl => ?_, fun w hw => ?_, fun hp => ?_,
+    fun u hu => hi.owner u ((hholds u).mp hu)⟩
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; exact hlive hu
+    · exact hi.live u hu
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    exact ⟨h1, fun u hu => h2 u ((hholds u).mp hu)⟩
+  · have hwt : w.1 ≠ t := fun e => by
+      rcases hi.fq w hw with ⟨-, h2⟩ | ⟨-, h2⟩ <;>
+        rw [e, hph] at h2 <;> cases h2
+    rw [upd_ne _ _ hwt]; exact hi.fq w hw
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
+    have hvt : v ≠ t := fun e => by rw [e, htb] at h1; cases h1
+    exact ⟨v, hv, hq, by rw [upd_ne _ _ hvt]; exact h1,
+      fun hh => h2 (by rw [upd_ne _ _ hvt] at hh; exact hh)⟩
+
+/-! ## Spawn, join, start -/
+
+/-- The clocks after a fork by `t`: the old ones are not smaller, the new thread's is above
+`t`'s, and the others stay. -/
+theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
+    (∀ u < cs.size, VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]!) = true) ∧
+    VClock.le (cs[t]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[cs.size]!) = true ∧
+    (∀ u < cs.size, u ≠ t → ((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]! = cs[u]!) := by
+  refine ⟨fun u hu => ?_, ?_, fun u hu hut => ?_⟩
+  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite]
+    split
+    · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+    · exact VClock.le_refl _
+  · rw [Proto.getElem!_push, if_neg (by simp), if_pos (by simp)]
+    exact VClock.le_bump _ _
+  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite, if_neg (by omega)]
+
+/-- A spawn by `t`, which is out of the lock's code: the new thread starts out of it. -/
+theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hi : L.WInv P m) (hout : P t = .out)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    c = m.threads.size ∧ L.WInv (upd P c .out) m' ∧
+      ∀ h, L.Owns P m h → L.Owns (upd P c .out) m' h := by
+  have hcs := hi.csize
+  obtain ⟨ht, hjt⟩ := hi.live t (by rw [hout]; decide)
+  have hjb := joinedB_fork hf
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  refine ⟨rfl, ?_⟩
+  have hct : m.threads.size ≠ t := fun h => by rw [h] at ht; exact Nat.lt_irrefl _ ht
+  have hGc : P m.threads.size = .gone := by
+    cases hx : P m.threads.size <;> first | rfl |
+      exact absurd (hi.live _ (by rw [hx]; decide)).1 (Nat.lt_irrefl _)
+  have hjc : joinedB m m.threads.size = false := by
+    simp [joinedB, Array.getElem?_eq_none (Nat.le_refl _)]
+  have hphu : ∀ u, u ≠ m.threads.size → upd P m.threads.size .out u = P u := fun u hu => upd_ne _ _ hu
+  have hnc : ∀ u, P u ≠ .gone → u ≠ m.threads.size := fun u hu e => by
+    rw [e, hGc] at hu; exact hu rfl
+  obtain ⟨hcl, hcn, hco⟩ := fork_clocks (hcs ▸ ht : t < m.clocks.size)
+  have hall : ∀ {c : VClock}, LiveLe P m c → LiveLe (upd P m.threads.size .out) { m with
+      current := t,
+      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } c := by
+    intro c h u hu hg
+    simp only [Array.size_push] at hu
+    by_cases hu' : u < m.threads.size
+    · have hu'' : u ≠ m.threads.size := Nat.ne_of_lt hu'
+      exact VClock.le_trans (h u hu' (by rw [← hphu u hu'']; exact hg)) (hcl u (hcs ▸ hu'))
+    · have : u = m.threads.size := by omega
+      subst this; rw [← hcs]; exact VClock.le_trans (h t ht (by rw [hout]; decide)) hcn
+  have hsome : ∀ {c : VClock}, SomeLe m c → SomeLe { m with
+      current := t,
+      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } c := by
+    rintro c ⟨u, hu, hle⟩
+    exact ⟨u, by simp only [Array.size_push]; exact Nat.lt_succ_of_lt hu,
+      VClock.le_trans hle (hcl u (hcs ▸ hu))⟩
+  have hholds : ∀ u, upd P m.threads.size .out u = .holds ↔ P u = .holds := by
+    intro u
+    by_cases hu : u = m.threads.size
+    · subst hu; rw [upd_self, hGc]; decide
+    · rw [hphu u hu]
+  have hfree : Free (upd P m.threads.size .out) ↔ Free P := by
+    unfold LockWord.Free; exact forall_congr' fun u => not_congr (hholds u)
+  have hloc : ∀ i l, L.Loc { m with
+      current := t,
+      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } i l ↔ L.Loc m i l :=
+    fun _ _ => Iff.rfl
+  refine ⟨⟨by simp [hcs], fun u hu => ?_, hi.blk, ?_, fun u v hu hv => ?_, ⟨hi.loc.only, hi.loc.ok,
+    hi.loc.plain⟩, fun e he hh => ?_, fun i l hl => ?_, fun w hw => ?_, fun hp => ?_,
+    fun u hu => hi.owner u ((hholds u).mp hu)⟩, fun h ho e he htc => ?_⟩
+  · by_cases hc : u = m.threads.size
+    · subst hc
+      exact ⟨by simp only [Array.size_push]; exact Nat.lt_succ_self _, by rw [hjb]; exact hjc⟩
+    · rw [hphu u hc] at hu
+      obtain ⟨h1, h2⟩ := hi.live u hu
+      exact ⟨by simp only [Array.size_push]; exact Nat.lt_succ_of_lt h1, by rw [hjb]; exact h2⟩
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
+  · exact hi.one u v ((hholds u).mp hu) ((hholds v).mp hv)
+  · rcases hi.wfp e he hh with ⟨ha, hle⟩ | hle
+    · exact .inl ⟨ha, hsome hle⟩
+    · exact .inr (hall hle)
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    refine ⟨hsome h1, fun u hu => ?_⟩
+    rw [hholds] at hu
+    have hu' := (hi.live u (by rw [hu]; decide)).1
+    have hut : u ≠ t := fun e => by rw [e, hout] at hu; cases hu
+    show VClock.le _ ((_ : Array VClock)[u]!) = true
+    rw [hco u (hcs ▸ hu') hut]; exact h2 u hu
+  · have hwc : w.1 ≠ m.threads.size :=
+      hnc w.1 (by rcases hi.fq w hw with ⟨-, h2⟩ | ⟨-, h2⟩ <;> rw [h2] <;> decide)
+    rcases hi.fq w hw with ⟨h1, h2⟩ | ⟨h1, h2⟩
+    · exact .inl ⟨h1, by rw [hphu w.1 hwc]; exact h2⟩
+    · exact .inr ⟨h1, by rw [hphu w.1 hwc]; exact h2⟩
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
+    have hvc : v ≠ m.threads.size := hnc v (fun e => by rw [e] at h1; cases h1)
+    exact ⟨v, by simp only [Array.size_push]; exact Nat.lt_succ_of_lt hv, hq,
+      by rw [hphu v hvc]; exact h1, fun hh => h2 (by rw [← hphu v hvc]; exact hh)⟩
+  · rcases ho e he htc with h | ⟨i, l, hl, hle⟩
+    · exact .inl (hall h)
+    · exact .inr ⟨i, l, hl, hle⟩
+
+/-- A join of `u` (which has ended) by `t` (out of the lock's code). -/
+theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.WInv P m)
+    (hut : u ≠ t) (hu0 : u ≠ 0) (hout : P t = .out) (huo : P u = .gone)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    L.WInv P m' ∧ ∀ h, L.Owns P m h → L.Owns P m' h := by
+  have hcs := hi.csize
+  obtain ⟨ht, hjt⟩ := hi.live t (by rw [hout]; decide)
+  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  have hjb : ∀ w, joinedB { m with
+      current := t,
+      clocks := m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)),
+      threads := m.threads.set! u { rec with joined := true } } w =
+      if w = u then true else joinedB m w := by
+    intro w
+    unfold joinedB
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    by_cases hw : w = u
+    · subst hw; simp [hu0, hul]
+    · simp [hw, Ne.symm hw]
+  have hcl : ∀ w : Nat, VClock.le (m.clocks[w]!) ((m.clocks.set! t (VClock.merge
+      (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)))[w]!) = true := by
+    intro w
+    rw [getElem!_set!_ite]
+    split
+    · rename_i h; rw [h.1]
+      exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+    · exact VClock.le_refl _
+  have hco : ∀ w : Nat, w ≠ t → (m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t)
+      (m.clocks[u]!)))[w]! = m.clocks[w]! := by
+    intro w hw; rw [getElem!_set!_ite, if_neg (fun h => hw h.1)]
+  have hsz : (m.threads.set! u { rec with joined := true }).size = m.threads.size := by simp
+  have hall : ∀ {c : VClock}, LiveLe P m c → LiveLe P { m with
+      current := t,
+      clocks := m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)),
+      threads := m.threads.set! u { rec with joined := true } } c := fun h w hw hg =>
+    VClock.le_trans (h w (hsz ▸ hw) hg) (hcl w)
+  have hsome : ∀ {c : VClock}, SomeLe m c → SomeLe { m with
+      current := t,
+      clocks := m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)),
+      threads := m.threads.set! u { rec with joined := true } } c := by
+    rintro c ⟨w, hw, hle⟩; exact ⟨w, by rw [hsz]; exact hw, VClock.le_trans hle (hcl w)⟩
+  have hnu : ∀ w, P w ≠ .gone → w ≠ u := fun w hw e => hw (by rw [e, huo])
+  refine ⟨⟨by simp [hcs], fun w hw => ?_, hi.blk, hi.word, hi.one,
+    ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun e he hh => ?_,
+    fun i l hl => ?_, hi.fq, fun hp => ?_, hi.owner⟩, fun h ho e he htc => ?_⟩
+  · obtain ⟨h1, h2⟩ := hi.live w hw
+    exact ⟨by rw [hsz]; exact h1, by rw [hjb, if_neg (hnu w hw)]; exact h2⟩
+  · rcases hi.wfp e he hh with ⟨ha, hle⟩ | hle
+    · exact .inl ⟨ha, hsome hle⟩
+    · exact .inr (hall hle)
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    refine ⟨hsome h1, fun w hw => ?_⟩
+    show VClock.le _ ((_ : Array VClock)[w]!) = true
+    rw [hco w (fun e => by rw [e, hout] at hw; cases hw)]; exact h2 w hw
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
+    exact ⟨v, by rw [hsz]; exact hv, hq, h1, h2⟩
+  · rcases ho e he htc with h | ⟨i, l, hl, hle⟩
+    · exact .inl (hall h)
+    · exact .inr ⟨i, l, hl, hle⟩
+
+/-- The start of the lock: each thread is out of the lock's code (and alive) or gone, the word
+holds `0`, no atomic location is in its block, no thread waits at a futex, and each access to the
+word happened before every thread that has not ended. -/
+theorem WInv.make {P : ThreadId → LPh} {m : Mem}
+    (hc : m.clocks.size = m.threads.size)
+    (hph : ∀ u, (P u = .out ∧ u < m.threads.size ∧ joinedB m u = false) ∨ P u = .gone)
+    (hblk : L.BlkOk m) (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b) (hq : m.waiters = #[])
+    (hwle : ∀ e ∈ m.footprint, L.Hits e → LiveLe P m e.clock) : L.WInv P m := by
+  have hfree : Free P := fun u => by rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> decide
+  have hnoloc : ∀ i l, ¬ L.Loc m i l := by
+    rintro i l ⟨hf, -⟩
+    obtain ⟨hi', hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    exact hat _ (Array.getElem_mem hi') hp.1
+  exact ⟨hc, fun u hu => ((hph u).resolve_right hu).2, hblk,
+    ⟨0, .inl rfl, h0, ⟨fun _ => hfree, fun _ => rfl⟩⟩, fun u _ hu => absurd hu (hfree u),
+    ⟨fun l hl hb => absurd hb (hat l hl), fun i l hl => absurd hl (hnoloc i l),
+      fun i l hl => absurd hl (hnoloc i l)⟩, fun e he hh => .inr (hwle e he hh),
+    fun i l hl => absurd hl (hnoloc i l),
+    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp [LockWord.Waits] at hp,
+    fun u hu => absurd hu (hfree u)⟩
+
 /-! ## A step in the lock's code -/
 
 /-- A clock below one that happened before the newest message of the word. -/
