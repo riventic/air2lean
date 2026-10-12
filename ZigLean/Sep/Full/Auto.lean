@@ -3,8 +3,9 @@ import ZigLean.Sep.Full.AutoConc
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
 
-`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`) by walking
-the generated program `c` (`docs/proof-automation.md`):
+`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`), or
+`CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
+`AutoConc.lean`), by walking the generated program `c` (`docs/proof-automation.md`):
 
 * **Preconditions** are kept as a flat list of atoms. Definitions that build assertions from
   `⋆`, `⟪φ⟫` and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are
@@ -1126,10 +1127,11 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
       if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
       (← caches).prog.set (some (ctx, procs))
       pure (ctx, procs)
-  -- a concurrent body: generated indirect calls are folded first (`callIndirect_fold_one`/`cons`,
-  -- which match the chain before `simp` rewrites its conditions)
+  -- a concurrent body: generated indirect calls (tests `f == cᵢ` of pointers) are folded first
+  -- (`callIndirect_fold_one`/`cons`, which match the chain before `simp` rewrites its conditions)
   let c0 := c
-  let (c, pre?) ← if L.conc && (c.find? fun e => e.isAppOfArity ``ite 5).isSome then do
+  let (c, pre?) ← if L.conc && (c.find? fun e =>
+      e.isAppOfArity ``BEq.beq 4 && (e.getArg! 0).isConstOf ``Zig.Ptr).isSome then do
       let fold ← match ← (← caches).fold.get with
         | some f => pure f
         | none => do

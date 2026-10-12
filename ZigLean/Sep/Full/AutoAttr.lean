@@ -3,9 +3,9 @@ import Lean
 /-!
 # Registries of the full-state symbolic executor (`fsym`, `docs/proof-automation.md`)
 
-* `@[fsym]` marks a **step rule**: a theorem whose conclusion is a total triple
-  `FTotalTriple P c Q` about one command `c` (it applies in every `FLogic`; partial `FTriple`
-  and concurrent `CTriple` rules are not supported yet). `fsym` tries the
+* `@[fsym]` marks a **step rule**: a theorem whose conclusion is a triple about one command `c`:
+  total (`FTotalTriple P c Q`, every backend) or partial (`FTriple P c Q`: `FLogic.partial` and the
+  concurrent `CTriple` backend, where it executes `ConcM.liftMem c`). `fsym` tries the
   rules whose command unifies with the command it executes; the rule's hypotheses become side
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
