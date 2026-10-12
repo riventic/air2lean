@@ -30,6 +30,35 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   partially supported only when supporting it would weaken support for another version. Then it
   rejects the construct with a clear diagnostic and is never mis-modelled.
 
+## One proof framework
+
+- **There is one proof framework: the full-state separation logic with `fsym`.** Proofs are
+  `FTriple` (partial), `FTotalTriple` (total) or `CTriple` (concurrent) and are walked by `fsym`
+  (`docs/sep-full-state.md`, `docs/proof-automation.md`; both on `codex/alloc-arena-proof` until
+  that branch lands on main).
+  Termination, cost, stack room and allocation bounds are resources or pre/postconditions inside
+  these judgments, not judgments of their own.
+- **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
+  Do not add a new judgment (`…Triple`, `…Returns`, `…Within`, `Stops`, `Halts`, …), tactic
+  (`syntax`/`macro`/`elab … : tactic`), proof template or automation, and do not add to the legacy
+  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates, `vc_gen`
+  targets), which is being migrated and deleted. If `fsym` cannot do something, stop and report
+  the exact missing rule or engine feature instead of building around it.
+- **The allow-list is the gate** (being added). `assurance/proof-framework.json` lists every judgment and tactic
+  in `ZigLean` and every file that still imports the legacy layer; CI fails on new entries, and
+  the lists only shrink. Changing it needs the maintainer's approval.
+
+## Coordination
+
+- **One goal at a time.** Parallel work serves the current project goal (ROADMAP.md, "Current
+  state"). A side track starts only with the maintainer's approval, and a parked track keeps a
+  handoff and a pushed WIP branch.
+- **Scope agents to the framework, not just to a requirement.** Every task brief names the
+  framework rules above. "Make requirement X complete" never licenses new machinery.
+- **Few branches, short-lived.** A branch merges or is closed; no stacked chains of PRs on unmerged
+  branches. Remove a worktree when its branch is merged or parked, and delete merged branches.
+- **Before merging, check the diff for new judgments, tactics or legacy-layer additions.**
+
 ## Trusted base
 
 - **Allocators, threads and IO come from translated real Zig code.** Prove them down to the OS
