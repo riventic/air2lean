@@ -30,6 +30,35 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   partially supported only when supporting it would weaken support for another version. Then it
   rejects the construct with a clear diagnostic and is never mis-modelled.
 
+## One proof framework
+
+- **There is one proof framework: the full-state separation logic with `fsym`.** Proofs are
+  `FTriple` (partial), `FTotalTriple` (total) or `CTriple` (concurrent) and are walked by `fsym`
+  (`docs/sep-full-state.md`, `docs/proof-automation.md`; both on `codex/alloc-arena-proof` until
+  that branch lands on main).
+  Termination, cost, stack room and allocation bounds are resources or pre/postconditions inside
+  these judgments, not judgments of their own.
+- **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
+  Do not add a new judgment (`…Triple`, `…Returns`, `…Within`, `Stops`, `Halts`, …), tactic
+  (`syntax`/`macro`/`elab … : tactic`), proof template or automation, and do not add to the legacy
+  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates, `vc_gen`
+  targets), which is being migrated and deleted. If `fsym` cannot do something, stop and report
+  the exact missing rule or engine feature instead of building around it.
+- **The allow-list is the gate** (being added). `assurance/proof-framework.json` lists every judgment and tactic
+  in `ZigLean` and every file that still imports the legacy layer; CI fails on new entries, and
+  the lists only shrink. Changing it needs the maintainer's approval.
+
+## Coordination
+
+- **One goal at a time.** Parallel work serves the current project goal (ROADMAP.md, "Current
+  state"). A side track starts only with the maintainer's approval, and a parked track keeps a
+  handoff and a pushed WIP branch.
+- **Scope agents to the framework, not just to a requirement.** Every task brief names the
+  framework rules above. "Make requirement X complete" never licenses new machinery.
+- **Few branches, short-lived.** A branch merges or is closed; no stacked chains of PRs on unmerged
+  branches. Remove a worktree when its branch is merged or parked, and delete merged branches.
+- **Before merging, check the diff for new judgments, tactics or legacy-layer additions.**
+
 ## Trusted base
 
 - **Allocators, threads and IO come from translated real Zig code.** Prove them down to the OS
@@ -46,12 +75,12 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 
 ## Workflow
 
-- Run `/review` and `/simple` on every PR. Integrate work in batch PRs. Merge only when CI is green
-  at the verified head commit.
-- **Merge through the merge queue** (docs/ci.md#coordinator-merge-flow): `gh pr merge <N> --merge
-  --auto` once `all-checks` is green on the PR head. The queue runs the full CI on the merge
-  result and advances `main` only when it is green; that `merge_group` run is the commit's
-  evidence. PR runs reuse unchanged parts' results; the queue never does.
+- Run `/review` and `/simple` on every PR. Keep PRs small.
+- **Merge when green locally; CI does not block** (maintainer decision 2026-10-12). Before
+  merging: merge `main` into the PR, run `scripts/regen.sh --pr`, `scripts/preflight.sh` and every
+  CI part the PR touches locally (including x86_64-linux under Rosetta); then merge it at once
+  (`gh pr merge <N> --admin --merge`), one PR at a time. CI still runs on every PR and on `main`
+  as a warning; a red result after merge is fixed forward immediately.
 - **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
   inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
   merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
@@ -69,11 +98,23 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   requested patched compilers and the generated files.
 - Run `scripts/preflight.sh` before every push: it materializes the whole-tree files and checks
   every committed generated file CI checks for staleness, in minutes.
-- **Local first, CI confirms.** Every CI part can be run on the development Mac, and a PR is pushed
-  only after the parts it touches are green locally. CI is the final, independent check before
-  merge, never the test loop. Do not push to find out whether something is still red.
+- **Local first.** Every CI part can be run on the development Mac, and a PR is pushed and merged
+  only after the parts it touches are green locally. CI is never the test loop and never a
+  merge gate. Do not push to find out whether something is still red.
 - **x86_64-linux runs locally under Rosetta.** Native x86_64-linux runs (build modes, native
   differential, harnesses) go in a `--platform linux/amd64` Docker container, which runs under
   Rosetta at near-native speed. aarch64-linux runs go in a native `linux/arm64` container, and
   aarch64-macos runs on the host. No platform needs CI just to get a result.
 - Agents keep a handoff file in `~/.cache/air2lean/handoffs/` and use private scratch directories.
+
+## Agent working style
+
+- **Edit code with the Edit and Write tools**, never with `python3 - <<EOF … open(p).write(…)`,
+  `sed -i` or heredocs. Read files with Read and search with Grep/Glob, not `cat`/`sed -n`/`grep`
+  in the shell.
+- **Inner loop: build only what you changed.** While working, build the touched module
+  (`scripts/build-guard.py … lake build <Module>`) or run the one check script of the fixture.
+  Run `scripts/regen.sh --pr`, `scripts/preflight.sh` and the native/Docker rows once, before
+  merging, not after every edit.
+- **No polling.** Do not loop on CI or on other agents; CI does not gate merges. Wait for a
+  background command with one `until` loop at most.
