@@ -53,11 +53,12 @@ def main(exe):
             bad["models"][0]["signature"]["params"] = bad["models"][0]["signature"]["params"][:1]
             result = run(exe, air, out, "--model-registry", registry_file(tmp, bad))
             assert result.returncode == 1 and "incompatible signature" in result.stderr, result.stderr
-            # A binding needs a library that matches the declaration (none for this extern).
-            bad = json.loads(json.dumps(registry))
-            bad["models"][0]["extern"]["library"] = "c"
-            result = run(exe, air, out, "--model-registry", registry_file(tmp, bad))
-            assert result.returncode == 1 and "another library" in result.stderr, result.stderr
+            # The AIR global records no library and no direct call declares one, so the
+            # binding's library is not checked (docs/air-json.md §Extern calls).
+            other = json.loads(json.dumps(registry))
+            other["models"][0]["extern"]["library"] = "c"
+            result = run(exe, air, out, "--model-registry", registry_file(tmp, other))
+            assert result.returncode == 0, result.stderr
             checks += 5
             # Asynchronous callbacks: a concurrent program needs the footprint (EXT-04).
             air = HERE / "air-async" / version

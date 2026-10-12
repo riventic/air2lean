@@ -585,14 +585,16 @@ Two more effect forms are accepted, each only through a reviewed allowlist entry
   integer operand, read or written. Pointer operands are admitted only as region bases (a
   read-write register output or an input of a single, non-volatile pointer) and are not opaque
   arguments. The wrapper reads each read region (`Zig.Asm.readRegion`, one checked access, none
-  for length 0) and passes the bytes to the opaque; after the alias guard over every written
-  location it writes each write region with the opaque's bytes (`Zig.Asm.writeRegion`, exactly
+  for length 0) and passes the bytes to the opaque; the alias guard covers the read regions too (an
+  overlapping copy depends on the regions' distance, so overlap is `.unspecified`); it writes
+  each write region with the opaque's bytes (`Zig.Asm.writeRegion`, exactly
   the declared length); a pointer output is its old value moved by the opaque's signed offset
   (`Zig.Asm.movePtr`), so it keeps its provenance:
 
 ```lean
 opaque airAsmFx_2096841937 (i0 : BitVec 64) (r0 : Array Zig.Byte) : BitVec 64 × BitVec 64 × BitVec 64 × Array Zig.Byte
 
+    Zig.Asm.guard [(a9o0, (a9o2).toNat), (a9o1, (a9o2).toNat)]
     let a9r0 ← Zig.callM (Zig.Asm.readRegion a9o1 ((a9o2).toNat))
     let a9 := airAsmFx_2096841937 a9o2 a9r0
     Zig.callM (Zig.Asm.writeRegion a9o0 ((a9o2).toNat) a9.2.2.2)
@@ -602,7 +604,7 @@ opaque airAsmFx_2096841937 (i0 : BitVec 64) (r0 : Array Zig.Byte) : BitVec 64 ×
 `tests/roadmap/asm-effects/AsmEnv` (fresh 0.17.0 export of `asm_env.zig`; 0.16.0 and 0.15.2
 translate identically, 0.14.1 exports no inline asm) proves `elapsed_counter` and
 `elapsed_not_repeatable` (two `rdtsc`), `random_reads`, `loadm_eq`, `fill_frame`, `fill_zero` and
-`copy_frame` (only the declared destination region changes; `Frame.of_readRegion_run`,
+`copy_frame` (only the declared destination region changes; `copy_overlap`; `Frame.of_readRegion_run`,
 `Frame.of_writeRegion_run` in `Proofs/Asm/Effects.lean`); `test_env_cli.py` rejects the forms
 outside the entries.
 

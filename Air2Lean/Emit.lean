@@ -768,9 +768,9 @@ structure FCtx where
   rawFuncs : Array String := #[]
   /-- `--device-contract` was given: `air2lean_device` is declared (L13). -/
   deviceContract : Bool := false
-  /-- The device contract's declared asm (L13): such an asm is a device event even when the
-  allowlist makes it an environment read (A01). -/
-  deviceAsms : Array DeviceAsm := #[]
+  /-- The device contract (L13): an asm it declares is a device event even when the allowlist
+  makes it an environment read (A01). -/
+  deviceAsms : Option DeviceContract := none
   /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
@@ -3011,8 +3011,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let entry? := inst.op.asmAllowEntry? fc.targetArch
     let envRead := entry?.any (·.semantics == .envRead)
     -- A device contract's declaration of an environment read keeps it a device event (L13).
-    let declared := fc.deviceAsms.any fun a => a.template == source &&
-      a.constraints == asmConstraints outputs inputs && a.clobbers == clobbers.toList
+    let declared := (fc.deviceAsms.bind (·.asm? source (asmConstraints outputs inputs)
+      clobbers.toList)).isSome
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
       (env, some l)
@@ -3054,10 +3054,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       s!"let {readName k} ← {fc.callMName} (Zig.Asm.readRegion {operand rg.base} ({regionLen rg}))"
     -- Two or more locations written through memory pointers or regions: the aliasing guard.
     let memWrites := outputs.toList.filterMap fun o => o.ref.filter fc.isMemPtr
+    -- A read region in the guard too: a forward copy over overlapping regions depends on the
+    -- distance between them, which the opaque does not see (ASM-06).
     let locs := memWrites.map (fun ptr =>
         s!"({rv ptr}, {fc.sizeOf (((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0)})") ++
-      writes.map fun rg => s!"({operand rg.base}, {regionLen rg})"
+      (writes ++ reads).map fun rg => s!"({operand rg.base}, {regionLen rg})"
     let guard := if locs.length < 2 then [] else [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
+    -- A region guard names the old values, so it follows their reads; the earlier forms keep
+    -- the guard first.
+    let pre := if regions.isEmpty then guard ++ rwReads else rwReads ++ guard
     let args := (inputs.toList.zipIdx.filter fun (_, j) => !ptrAt (outputs.size + j)).map (fun (i, _) => rv i.ref.get!) ++
       (rwOuts.filter fun (_, k) => !ptrAt k).map (rwName ·.2) ++ (List.range reads.length).map readName
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
@@ -3096,7 +3101,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let regionWrites := writes.zipIdx.map fun (rg, k) =>
         s!"{fc.callMName} (Zig.Asm.writeRegion {operand rg.base} ({regionLen rg}) {proj (outputs.size + k)})"
       let (env, lines) := outputs.toList.zipIdx.foldl
-        (init := (env, guard ++ rwReads ++ regionReads ++ [first] ++ regionWrites))
+        (init := (env, pre ++ regionReads ++ [first] ++ regionWrites))
         fun (env, ls) (o, k) =>
           let value := if ptrAt k then s!"(Zig.Asm.movePtr {rwName k} {proj k})" else proj k
           match o.ref with
@@ -3611,7 +3616,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive,
-                      deviceContract := device.isSome, deviceAsms := (device.map DeviceContract.asms).getD #[] }.prepareInstUses
+                      deviceContract := device.isSome, deviceAsms := device }.prepareInstUses
   -- Only a function that uses memory can access memory during the call: a pure one has none,
   -- and its slice parameters are read by the caller. A function that one with `noalias`
   -- parameters may call (`naCallee`) marks its accesses for the caller's scope.

@@ -1770,10 +1770,16 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let operandTy (k : Nat) : Option TyId :=
       if k < outputs.size then (outputs[k]!.ref.bind cx.valTy?).bind (ptrChild cx.types)
       else (inputs[k - outputs.size]?.bind (·.ref)).bind cx.valTy?
+    -- The count register is read whole: a narrower operand leaves its upper bits undefined.
+    let isWordTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int _ 64) => true | _ => false
+    let constPtr (tid : TyId) : Bool := match cx.types[tid]? with | some (.ptr _ c _) => c | _ => true
     for rg in regions do
-      unless (operandTy rg.len.operand).any isIntTy && (operandTy rg.base).any regionPtrTy do
+      unless (operandTy rg.len.operand).any isWordTy && (operandTy rg.base).any regionPtrTy do
         throw s!"{fnName}: near line {line}: an asm memory region's base is not a pointer \
-          operand or its length is not an integer operand (A01)"
+          operand or its length is not a 64-bit integer operand (A01)"
+      if rg.access == .write && (operandTy rg.base).any constPtr then
+        throw s!"{fnName}: near line {line}: an asm memory region writes through a const \
+          pointer (A01)"
     pure line
   -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
   -- arithmetic on integer and float lanes); the result is one lane.
@@ -3841,10 +3847,13 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       continue
     let mut renames : Std.HashMap String String := {}
     let mut seen : Std.HashSet String := {}
+    let mut seenRefs : Std.HashSet String := {}
     for (callee, symbol) in codeRefs do
-      if seen.contains callee then continue
-      seen := seen.insert callee
-      let e : ExternDecl := (f.externs.find? (·.name == symbol)).getD
+      if seenRefs.contains callee then continue
+      seenRefs := seenRefs.insert callee
+      -- The AIR global records no library: only a declared `externs` entry fixes it.
+      let declared := f.externs.find? (·.name == symbol)
+      let e : ExternDecl := declared.getD
         { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
       let reject (why : String) := unbound.push (f.name, externUnbound f.name e
         s!"(its address is taken) {why}")
@@ -3855,7 +3864,7 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         if let some target := definitions[0]? then
           unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
         else if let some binding := m.externBinding then
-          unless binding.library == e.library do
+          unless declared.isNone || binding.library == e.library do
             unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
         else throw s!"{f.name}: model '{m.symbol}' has no extern binding"
       else if let some target := definitions[0]? then
@@ -4038,6 +4047,15 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
+  -- A01: the `noalias` analysis does not see the regions of a memory-region asm (ASM-06), so
+  -- a program with `noalias` parameters admits none (fail closed).
+  if funcs.any (!·.noalias.isEmpty) then
+    for f in funcs do
+      if f.allInsts.any fun i =>
+          ((i.op.asmAllowEntry? f.dialect.arch).map (!·.regions.isEmpty)).getD false then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          s!"{f.name}: an asm memory region (A01) in a program with `noalias` parameters is \
+            outside the subset: the noalias analysis does not see the region accesses" }
   -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
   if funcs.any (!·.noalias.isEmpty) then
     let conc := concFunctions funcs

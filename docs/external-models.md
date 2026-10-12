@@ -231,7 +231,7 @@ address table, with no per-site annotation:
   direct extern call: to the program's `export fn` of that symbol, or to a registry model of
   that symbol, else the program is rejected (`CALLEE_EXTERN_UNBOUND`, "its address is taken").
   The AIR global carries no library: an `externs` entry of the same symbol gives it, else the
-  binding's library must be `null`.
+  binding's library is not checked.
 - A model at a code address is checked at every call site that can reach it: its direct calls
   and every call through a pointer of a function type at which the program takes its address
   (`ModelRegistry.modelCallIndex`). The template (`--model-registry-template`) offers such a

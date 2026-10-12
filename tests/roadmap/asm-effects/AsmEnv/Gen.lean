@@ -30,6 +30,7 @@ def copy (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (Unit) := do
     let a9o0 ← pure ((← get).d)
     let a9o1 ← pure ((← get).s)
     let a9o2 ← pure ((← get).c)
+    Zig.Asm.guard [(a9o0, (a9o2).toNat), (a9o1, (a9o2).toNat)]
     let a9r0 ← Zig.callM (Zig.Asm.readRegion a9o1 ((a9o2).toNat))
     let a9 := airAsmFx_2096841937 a9o2 a9r0
     Zig.callM (Zig.Asm.writeRegion a9o0 ((a9o2).toNat) a9.2.2.2)

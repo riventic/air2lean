@@ -93,6 +93,24 @@ def main(binary):
     def ptr_input(i, d):
         i["inputs"][0]["ref"] = {"inst": 0}
     checks += reject(binary, docs, "asm_env.loadm.json", ptr_input, "not an integer register value")
+    # A write region through a const pointer, and a count narrower than rcx.
+    def alloc_child(d, ref):
+        alloc = next(i for i in d["body"] if i["id"] == ref["inst"])
+        return d["types"][alloc["ty"]]["child"]
+    def const_base(i, d):
+        d["types"][alloc_child(d, i["outputs"][0]["ref"])]["const"] = True
+    checks += reject(binary, docs, "asm_env.fill.json", const_base, "writes through a const pointer")
+    def narrow_count(i, d):
+        d["types"].append({"k": "int", "signed": False, "bits": 32, "abi_size": 4, "abi_align": 4})
+        alloc = next(x for x in d["body"] if x["id"] == i["outputs"][1]["ref"]["inst"])
+        ptr = dict(d["types"][alloc["ty"]], child=len(d["types"]) - 1)
+        d["types"].append(ptr)
+        alloc["ty"] = len(d["types"]) - 1
+    checks += reject(binary, docs, "asm_env.fill.json", narrow_count, "64-bit integer operand")
+    # The noalias analysis does not see region accesses: no regions next to noalias parameters.
+    def noalias(i, d):
+        d["noalias"] = [0]
+    checks += reject(binary, docs, "asm_env.fill.json", noalias, "noalias")
     # A device contract that declares the rdtsc template keeps it a device event (L13).
     result, text = run(binary, {k: v for k, v in docs.items() if k in ("asm_env.ticks.json", "asm_env.elapsed.json")},
                        ("--device-contract", str(TSC)))

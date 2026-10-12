@@ -756,8 +756,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   the read bytes (not of addresses); each pointer output is its old value moved by a signed
   offset, so it keeps its provenance. The direction flag is clear (the ABI's state at every
   call). The wrapper performs the accesses with the model's checked loads and stores
-  (`Zig.Asm.readRegion`, `writeRegion`, `movePtr`); overlapping written regions are
-  `.unspecified` (ASM-03's guard).
+  (`Zig.Asm.readRegion`, `writeRegion`, `movePtr`); overlapping accessed regions (and written
+  locations) are `.unspecified` (ASM-03's guard), since an overlapping copy depends on the
+  regions' distance.
 - Derived from: tokens `Asm.readRegion`, `Asm.writeRegion`, `Asm.movePtr`; implies ASM-03.
 - Sources: [generated-code.md](generated-code.md#memory-regions-and-environment-reads-a01),
   `Air2Lean/AsmAllowlist.lean`, `Proofs/Asm/Effects.lean`.

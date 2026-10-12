@@ -294,7 +294,8 @@ The address of an extern function (`&ext_visit`) is a named global with `"extern
 function type and no `init`. Normalization makes it the function block of the callee
 `extern:<symbol>` (E02, `externCodeGlobal`), and `resolveExterns` binds it by the same three
 rules; a call through a pointer of its type then dispatches to the binding. The global records
-no library: an `externs` entry of the symbol gives it, else it is `null`.
+no library: an `externs` entry of the symbol (a direct call) gives it, else the binding's
+library is not checked.
 
 ## Global
 

@@ -16,7 +16,8 @@ Every theorem is about that unchanged text.
 * `loadm_eq`: an `m` input is the value (the compiler's private copy, A01).
 * `fill_frame`, `copy_frame`: a memory-region contract (ASM-06) writes only its declared
   region: `n` bytes at `dst`, whatever the opaque computes; `copy`'s read of `src` changes no
-  byte. `fill_zero`: a zero count touches no memory at all, whatever `dst` holds.
+  byte. `copy_overlap`: overlapping regions are `.unspecified` (the result of a forward copy
+  depends on their distance). `fill_zero`: a zero count touches no memory at all, whatever `dst` holds.
 * `fill_spec`: with the instruction's behaviour as an ASM-02 hypothesis (`rep stosb` stores
   `al` `rcx` times), the region holds `n` copies of the byte.
 -/
@@ -78,7 +79,7 @@ theorem fill_zero (p : Ptr) (b : BitVec 8) (m : Mem) : (fill p 0 b).run m = pure
   simp [writeRegion]
 
 theorem copy_eq (d s : Ptr) (n : BitVec 64) :
-    copy d s n = (readRegion s n.toNat >>= fun r =>
+    copy d s n = (guard [(d, n.toNat), (s, n.toNat)] >>= fun _ => readRegion s n.toNat >>= fun r =>
       writeRegion d n.toNat (airAsmFx_2096841937 n r).2.2.2) := by
   simp [copy, StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
 
@@ -87,6 +88,25 @@ theorem copy_frame {d s : Ptr} {n : BitVec 64} {m m' : Mem}
     (h : (copy d s n).run m = pure ((), m')) :
     ∃ blk, (0 < n.toNat → d.block = some blk) ∧ Frame [(blk, d.off.toNat, n.toNat)] m m' := by
   rw [copy_eq] at h
-  obtain ⟨r, m₁, hr, hw⟩ := run_bind_ok h
+  obtain ⟨_, m₀, hg, hrest⟩ := run_bind_ok h
+  have hm₀ : m₀ = m := by
+    cases hd : disjoint [(d, n.toNat), (s, n.toNat)]
+    · rw [guard_of_overlap hd] at hg
+      simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at hg
+      cases hg
+    · rw [guard_of_disjoint hd] at hg
+      simp [pure, ExceptT.pure, ExceptT.mk] at hg
+      cases hg
+      rfl
+  subst hm₀
+  obtain ⟨r, m₁, hr, hw⟩ := run_bind_ok (x := readRegion s n.toNat)
+    (f := fun r => writeRegion d n.toNat (airAsmFx_2096841937 n r).2.2.2) hrest
   obtain ⟨blk, -, hb, hf⟩ := Frame.of_writeRegion_run hw
   exact ⟨blk, hb, by simpa using (Frame.of_readRegion_run [] hr).trans hf⟩
+
+/-- An overlapping copy depends on the distance between the regions, which the opaque does not
+see: the wrapper refuses it (`.unspecified`) before any access. -/
+theorem copy_overlap {p : Ptr} {b : BlockId} (hb : p.block = some b) {n : BitVec 64}
+    (hn : 0 < n.toNat) (m : Mem) : (copy p p n).run m = throw .unspecified := by
+  rw [copy_eq, StateT.run_bind, guard_of_overlap (disjoint_self hb hn hn)]
+  rfl

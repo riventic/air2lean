@@ -203,8 +203,9 @@ def asmAllowlist : List AsmAllowEntry := [
     regions := [{ base := 1, len := { operand := 2 }, access := .read },
                 { base := 0, len := { operand := 2 }, access := .write }],
     reason := "string copy (DF = 0): reads rcx bytes at rsi, writes rcx bytes at rdi, nothing \
-      else; the written bytes are a function of the read ones (byte-wise forward copy, also for \
-      overlapping regions), the new pointers move by rcx and rcx becomes 0",
+      else; for disjoint regions the written bytes are a function of the read ones (an \
+      overlapping forward copy depends on the distance, so the wrapper's guard makes overlap \
+      `.unspecified`), the new pointers move by rcx and rcx becomes 0",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.copy.json; volatile" }]
 
 /-- The entry for an asm op on the target `arch` (empty: a legacy profile, the x86_64
