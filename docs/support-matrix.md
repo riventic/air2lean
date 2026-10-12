@@ -41,8 +41,8 @@ history (M0–T5) as historical scope; current open work is the register below.
 
 | Zig | Default | Status | Translator | Exporter pin | Coverage inventory | CI |
 |---|---|---|---|---|---|---|
-| 0.17.0 | no | in-qualification | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
-| 0.16.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
+| 0.17.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
+| 0.16.0 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
 | 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
 | 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (pipeline, diff test, proofs on the listed examples) |
 
@@ -76,21 +76,21 @@ From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). 
 
 Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source inventory: it records no compiler execution, proof checking or support qualification ([docs/coverage.md](coverage.md)).
 
-| Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | `resolved-in-canon` | `unreachable-at-export` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.17.0 | 224 | 167 | 5 | 10 | 15 | 20 | 4 | 3 | 25 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.16.0 | 214 | 161 | 5 | 7 | 15 | 19 | 4 | 3 | 24 | 33 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.15.2 | 212 | 161 | 5 | 5 | 15 | 19 | 4 | 3 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.14.1 | 207 | 157 | 5 | 4 | 15 | 19 | 4 | 3 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| Zig | AIR tags | `emitted-unfixtured` | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0.17.0 | 224 | 30 | 140 | 5 | 13 | 16 | 20 | 25 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.16.0 | 214 | 3 | 161 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.15.2 | 212 | 4 | 160 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.14.1 | 207 | 4 | 156 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 89 requirements, 39 complete, 40 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 89 requirements, 37 complete, 42 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T02, T03, T04, T06 | — | T05 |
-| L: Language and representation | L01, L02, L06, L11, L13, L14 | L03, L04, L05, L07, L08, L09, L10, L12 | — | — |
+| L: Language and representation | L01, L02, L11, L13 | L03, L04, L05, L06, L07, L08, L09, L10, L12, L14 | — | — |
 | C: Concurrency | C02, C03, C04, C05, C06, C09, C11 | C01, C07, C08, C14 | — | C10, C12, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |

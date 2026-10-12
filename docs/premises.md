@@ -740,7 +740,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is a `Zig.Error` (`.illegal`, `.unspecified`, panics) rather than undefined behavior.
   Zig error unions are ordinary values. Integer, bit, vector, packed and union operations
   follow `ZigLean/Basic.lean` and its companions.
-- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
+- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.PackedRepr`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
 - Sources: [generated-code.md](generated-code.md), [docs/generated-code.md §Panics](generated-code.md#panics).
 
 <a id="sem-02"></a>

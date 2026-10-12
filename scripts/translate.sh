@@ -12,7 +12,8 @@ Export AIR, translate it and check the generated Lean. Publish OUTPUT only on su
 Run from any directory; input, output and --zig-air paths are relative to that directory.
 
 Options:
-  --zig-version VERSION     0.16.0 (default), 0.15.2, 0.14.1 (Linux only) or 0.17.0 (in qualification)
+  --zig-version VERSION     0.17.0, 0.16.0, 0.15.2 or 0.14.1 (Linux only); default: zig.default of
+                            compatibility.json
   --zig-air PATH            Existing patched compiler (default: repo/zig-air-VERSION/bin/zig)
   --prefix PREFIX           Strip this prefix from Lean names (default: input basename + '.')
   --filter PREFIXES         Comma-separated AIR name prefixes (default: --prefix)
@@ -36,7 +37,7 @@ Add unmodeled dependencies to --filter; see docs/std-models.md. This checks gene
 Lean definitions; write and check property proofs separately.
 HELP
 }
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
+zig_version=${AIR2LEAN_ZIG_VERSION:-$(air2lean_default_zig_version "$repo_root")}
 zig_air=${AIR2LEAN_ZIG_AIR:-}
 input='' output='' namespace='' prefix='' filter='' float_semantics=ieee
 overwrite=--overwrite workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}

@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Air2Lean.Air.Effects
 import Air2Lean.AsmAllowlist
+import ZigLean.Float.Value
 
 /-!
 # Memory analysis
@@ -132,6 +133,24 @@ partial def Val.hasNestedUndef (v : Val) : Bool :=
   | .sliceConst _ p l => undefOrNested p || undefOrNested l
   | _ => false
 
+/-- The type and byte offset of each of the `n` items or fields of a constant of type `tid`: an
+array, a non-`packed` struct or a tuple, from the exporter's sizes and field offsets; `none` for
+any other type or an unknown layout. -/
+def aggParts? (types : Array Ty) (layouts : Array Layout) (tid : TyId) (n : Nat) :
+    Option (Array (TyId × Nat)) :=
+  match types[tid]? with
+  | some (.array _ child _) => do
+    let stride ← (layouts[child]?).bind (·.size)
+    pure ((Array.range n).map fun k => (child, k * stride))
+  | some (.struct _ layout fields) =>
+    let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+    if layout == "packed" || offsets.size != fields.size then none
+    else some ((fields.zip offsets).map fun ((_, t), o) => (t, o))
+  | some (.tuple fields) =>
+    let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+    if offsets.size != fields.size then none else some (fields.zip offsets)
+  | _ => none
+
 /-- The byte ranges `(offset, length)`, from `base`, of the `undefined` parts of the constant
 `v` of type `tid` in memory: the bytes that a store of `v` leaves undefined. Only an `undefined`
 item of an array, or field of a non-`packed` struct or tuple, at any depth, has a range (from
@@ -146,24 +165,49 @@ partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : T
     pure (if size == 0 then #[] else #[(base, size)])
   | .agg _ elems =>
     if !v.hasNestedUndef then return #[]
-    -- The type and byte offset of each item or field.
-    let parts : Array (TyId × Nat) ← match types[tid]? with
-      | some (.array _ child _) =>
-        let stride ← (layouts[child]?).bind (·.size)
-        pure (elems.mapIdx fun k _ => (child, k * stride))
-      | some (.struct _ layout fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if layout == "packed" || offsets.size != fields.size then none
-        pure ((fields.zip offsets).map fun ((_, t), o) => (t, o))
-      | some (.tuple fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if offsets.size != fields.size then none
-        pure (fields.zip offsets)
-      | _ => none
+    let parts ← aggParts? types layouts tid elems.size
     if parts.size != elems.size then none
     (elems.zip parts).foldlM (init := #[]) fun acc (e, t, o) =>
       (acc ++ ·) <$> undefByteRanges types layouts t e (base + o)
   | v => if v.hasNestedUndef then none else pure #[]
+
+/-- The float format of `float(w)`. -/
+def floatFmtOfWidth? : Nat → Option Zig.FloatFmt
+  | 16 => some .f16
+  | 32 => some .f32
+  | 64 => some .f64
+  | 80 => some .f80
+  | 128 => some .f128
+  | _ => none
+
+/-- The NaN float constants in the constant `v`: the byte offset (from `base`), bit width and
+bits of each, each at the type the constant carries. A float's memory encoding leaves a NaN's
+bits undefined (`Zig.Float.detMask`, `ZigLean/Mem/Enc.lean`), because the model's NaN results
+stand for every NaN. A NaN *constant* has determined bits, and the compiler stores exactly them,
+so a store or global initializer of `v` writes them over its encoding (`Emit.lean`'s
+`FCtx.nanConstBytes?`). Found at any depth where the exporter gives the byte offset
+(`aggParts?`): the value itself, an item of an array, a field of a non-`packed` struct or tuple.
+A NaN constant elsewhere (in an optional, union, vector, packed struct) keeps undefined bits:
+never a wrong value. -/
+partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (v : Val) (base : Nat := 0) :
+    Array (Nat × Nat × Nat) :=
+  match v with
+  | .float ty bits =>
+    match types[ty]? with
+    | some (.float w) =>
+      match floatFmtOfWidth? w with
+      | some fmt =>
+        if (Zig.Float.ofBits (BitVec.ofNat fmt.width bits) : Zig.Float fmt).isNaN then
+          #[(base, w, bits)] else #[]
+      | none => #[]
+    | _ => #[]
+  | .agg ty elems =>
+    match aggParts? types layouts ty elems.size with
+    | some parts =>
+      if parts.size != elems.size then #[] else
+      (elems.zip parts).flatMap fun (e, _, o) => nanConstParts types layouts e (base + o)
+    | none => #[]
+  | _ => #[]
 
 /-- The `alloc`s of `f` that escape by their uses. A store of a partly `undefined` constant to a
 place makes its `alloc` escape: memory holds the undefined parts as undefined bytes
@@ -190,22 +234,40 @@ def usesEscapingAllocs (f : Func) : Array InstId :=
         | none => acc
       | _ => acc
 
-/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, an enum (its tag
-integer), or another packed struct. `none` for every other type (outside the subset). -/
+/-- The bit size of `id` as a field of a packed struct or union (`Zig.Packed`, its logical bit
+representation): an integer, a `bool`, a float, an enum (its tag integer), another packed struct
+(the sum of its fields), a packed union (its widest field: Zig 0.16+ requires equal widths,
+0.14.1/0.15.2 pad the narrower ones) or a vector of these (0.14.1/0.15.2 allow vector fields;
+`len` lanes, lane 0 lowest). `none` for every other type: pointers (0.14.1/0.15.2 only; the
+model's pointers carry provenance, not bits), arrays and the rest are outside the subset. -/
 partial def packedBits (types : Array Ty) (id : TyId) : Option Nat :=
   match types[id]? with
-  | some (.int _ bits) => some bits
+  | some (.int _ bits) | some (.float bits) => some bits
   | some .bool => some 1
   | some (.enum _ tag _ _) => packedBits types tag
   | some (.struct _ "packed" fields) =>
     fields.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedBits types t
+  | some (.union _ "packed" none fields) =>
+    if fields.isEmpty then none else
+    fields.foldlM (init := 0) fun acc (_, t) => Nat.max acc <$> packedBits types t
+  | some (.vector len c) => (len * ·) <$> packedBits types c
   | _ => none
 
-/-- A packed struct field of type `id` has an enum, in any depth. -/
+/-- A packed struct field of type `id` has an enum, in any depth (its bits can be no value). -/
 partial def packedHasEnum (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.enum ..) => true
   | some (.struct _ "packed" fields) => fields.any (packedHasEnum types ·.2)
+  | some (.vector _ c) => packedHasEnum types c
+  | _ => false
+
+/-- A packable type `id` can hold bits that are not determined (`Zig.Packed.mask`): a float (a
+NaN) or a packed union (undefined bits), in any depth. -/
+partial def packedHasMask (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.float _) | some (.union _ "packed" none _) => true
+  | some (.struct _ "packed" fields) => fields.any (packedHasMask types ·.2)
+  | some (.vector _ c) | some (.array _ c _) => packedHasMask types c
   | _ => false
 
 /-- The first bit of field `idx` of the packed struct `fields`: field 0 is at bit 0. -/
