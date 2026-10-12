@@ -357,6 +357,10 @@
       "categories": [],
       "negative_tests": [
         {
+          "path": "tests/roadmap/null-pointers/native-transcript.py",
+          "anchor": "unexpected native panic"
+        },
+        {
           "path": "tests/roadmap/null-pointers/test_classify_mutant.py",
           "anchor": "def test_missing_refutation"
         }
@@ -377,6 +381,10 @@
         "failure-cleanup"
       ],
       "negative_tests": [
+        {
+          "path": "tests/roadmap/const-bases/test_cli.py",
+          "anchor": "checks += reject(binary, {misplaced: documents[misplaced]}, marker, cli=True)"
+        },
         {
           "path": "tests/roadmap/global-payload-pointers/test_profiles.py",
           "anchor": "def test_type_indices_rejected"
@@ -645,6 +653,14 @@
     "L14": {
       "categories": [],
       "negative_tests": [
+        {
+          "path": "tests/roadmap/error-tracing/test_cli.py",
+          "anchor": "def test_nested_set"
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "def test_producer_scan"
+        },
         {
           "path": "tests/diff/options/harness.zig",
           "anchor": "\"findOr\""
