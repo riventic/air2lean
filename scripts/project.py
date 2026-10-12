@@ -229,7 +229,7 @@ def load_manifest(path):
         if not isinstance(root['goals'], list):
             raise Invalid('goals must be a list')
         for goal in root['goals']:
-            obj(goal, ('theorem', 'strength', 'domain'), ('outcomes',))
+            obj(goal, ('theorem', 'strength', 'domain'), ('bound', 'outcomes'))
             string(goal['theorem'])
             string(goal['domain'])
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
@@ -1010,6 +1010,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
             relation = None
             if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
                 binding, reason, relation = trivial
+            if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
+                binding, reason = 'bound_mismatch', problem
             row.update(binding=binding, reason=reason)
             if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -1527,6 +1529,10 @@ def audit_goal(root, goal, theorems, nodes, modules):
     if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):
         return dict(row, status='domain_mismatch',
                     reason=f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is scoped')
+    if 'bound' in goal:
+        problem = claims.check_bound(goal['bound'], found['bound'])
+        if problem:
+            return dict(row, status='bound_mismatch', bound=found['bound'], reason=problem)
     return dict(row, status='allowed', reason=None)
 
 
