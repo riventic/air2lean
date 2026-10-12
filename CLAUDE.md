@@ -44,9 +44,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates, `vc_gen`
   targets), which is being migrated and deleted. If `fsym` cannot do something, stop and report
   the exact missing rule or engine feature instead of building around it.
-- **The allow-list is the gate** (being added). `assurance/proof-framework.json` lists every judgment and tactic
-  in `ZigLean` and every file that still imports the legacy layer; CI fails on new entries, and
-  the lists only shrink. Changing it needs the maintainer's approval.
+- **The allow-list is the gate.** `assurance/proof-framework.json` lists every judgment and
+  tactic and every file that still uses the legacy layer; `scripts/proof-framework.py` (preflight,
+  so CI) fails on new entries, and the lists only shrink. Changing it needs the maintainer's
+  approval ([docs/proof-framework.md](docs/proof-framework.md)).
 
 ## Coordination
 
