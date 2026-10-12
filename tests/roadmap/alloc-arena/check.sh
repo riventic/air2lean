@@ -81,14 +81,16 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$work/native" 2> "$work/native.txt"
   diff "$here/expected.txt" "$work/native.txt"
   # The patched arena: the same clients over a standard library with upstream/arena-fix.patch.
-  # Only `std` is copied and patched; the rest of the lib directory (libc headers etc.) is linked.
+  # The lib directory is copied (`std` is patched) except the libc sources, which are linked: Zig's
+  # cache check of a linked Zig source (`compiler_rt.zig`) failed with FileNotFound on the CI runner.
   lib_dir=$("$AIR2LEAN_NATIVE_ZIG" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p')
   [ -d "$lib_dir/std" ] || { echo "no lib directory from '$AIR2LEAN_NATIVE_ZIG env'" >&2; exit 1; }
+  lib_dir=$(cd -- "$lib_dir" && pwd)
   mkdir "$work/lib"
   for entry in "$lib_dir"/*; do
-    [ "$(basename -- "$entry")" = std ] || ln -s "$entry" "$work/lib/"
+    if [ "$(basename -- "$entry")" = libc ]; then ln -s "$entry" "$work/lib/"
+    else cp -R "$entry" "$work/lib/"; fi
   done
-  cp -R "$lib_dir/std" "$work/lib/std"
   chmod -R u+w "$work/lib/std"
   patch -s -d "$work/lib" -p1 < "$here/upstream/arena-fix.patch"
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe --zig-lib-dir "$work/lib" "$work/native.zig" \

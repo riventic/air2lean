@@ -84,14 +84,14 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 | `buildThenFree_address_reuse` | the same from `m.withPlacement σ pm`: the allocator may give a freed node's address to a later node, for every placement `σ` and provenance mode `pm` |
 
 [`Controls.lean`](Controls.lean) holds the refuted clients; Lean accepts it. `Room m` says that the next 16-byte
-allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
+allocation succeeds under `m`'s policy and the address space has room for it (`Mem.roomFor`). `SafeNoLeak c` is the property of
 `buildThenFree_memory_safe`.
 
 | Client (Zig form) | Theorem |
 |---|---|
 | `doubleFree`: `freeAll(a, n); a.destroy(n);` | `doubleFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `doubleFree_unsafe`: `¬SafeNoLeak (doubleFree a v)` |
 | `useAfterFree`: `freeAll(a, n); return sum(n);` | `useAfterFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `useAfterFree_unsafe`: `¬SafeNoLeak (useAfterFree a v)` |
-| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` |
+| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` with `Room (m.withPlacement σ pm)` |
 | `forgetFree`: `_ = try push(a, null, v);` | `forgetFree_leaks`: `m.Seq → Room m → ∃ m', run m = pure (.ok (), m') ∧ m'.heap ≠ m.heap`; `forgetFree_unsafe`: `¬SafeNoLeak (forgetFree a v)` |
 
 ## How each property maps to the model
