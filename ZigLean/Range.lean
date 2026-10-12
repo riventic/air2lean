@@ -6,11 +6,8 @@ import ZigLean.Lemmas
 Conditional rewrite lemmas that move fixed-width arithmetic to `Nat`/`Int` once a range
 premise holds, and range bounds for sums of fixed-width values. Every lemma is an ordinary
 kernel-checked theorem (no compiled decision procedure, no evaluation of large numerals). The
-premises are ordinary hypotheses, discharged by `omega` or `assumption` in `zig_range`.
-
-`zig_range` rewrites with these lemmas and the unsigned lemmas of `ZigLean.Lemmas`, trying to
-discharge each range premise from the context; a premise it cannot prove leaves the original
-term in place, so the remaining range obligation stays visible in the goal.
+premises are ordinary hypotheses. Proofs in the full-state logic reach them through `fsym`'s step
+rules and its arithmetic solver `fsym_arith` (`ZigLean/Sep/Full/AutoRules.lean`).
 -/
 
 namespace Zig
@@ -116,12 +113,3 @@ theorem sum_toNat_lt {w k : Nat} (l : List (BitVec w)) (h : l.length ≤ 2 ^ k) 
     _ = 2 ^ (w + k) := by rw [Nat.pow_add, Nat.mul_comm]
 
 end Zig
-
-/-- Rewrite fixed-width arithmetic to `Nat`/`Int` where each range premise follows from the
-context by `omega` or `assumption`; undischarged premises leave the term unchanged. -/
-macro "zig_range" loc:(Lean.Parser.Tactic.location)? : tactic =>
-  `(tactic| simp (disch := first | assumption | omega) only [Zig.toNat_add_of_lt,
-    Zig.toNat_sub_of_le, Zig.toNat_mul_of_lt, Zig.toNat_setWidth_of_le, Zig.toNat_setWidth_of_lt,
-    Zig.toNat_ofNat_of_lt, Zig.toInt_of_lt, Zig.toNat_ofInt_natCast, Zig.add_unsigned_of_lt,
-    Zig.sub_unsigned_of_le, Zig.mul_unsigned_of_lt, Zig.intCast_unsigned_widen,
-    Zig.intCast_unsigned_of_lt] $[$loc]?)
