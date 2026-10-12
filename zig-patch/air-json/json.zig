@@ -720,15 +720,8 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
-        // The hidden error-return-trace parameter (§Error return trace): its type
-        // `?*StackTrace`, or `unresolved` when that type is not resolved yet.
-        if (w.takesErrTrace(fn_ty)) {
-            try w.field("err_trace");
-            if (Compat.stackTraceType(zcu)) |stack_trace| {
-                const ptr = try w.pt.singleMutPtrType(stack_trace);
-                try w.writeTypeRef(try w.pt.optionalType(ptr.toIntern()));
-            } else try w.j.write("unresolved");
-        }
+        // The hidden error-return-trace parameter (§Error return trace).
+        if (w.takesErrTrace(fn_ty)) try w.writeErrTrace();
         // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
         // program can resolve to (docs/air-json.md §Extern calls).
         if (w.exportedName(owner_nav)) |symbol| {
@@ -775,6 +768,19 @@ const W = struct {
         const ty = if (fn_ty.zigTypeTag(zcu) == .pointer) fn_ty.childType(zcu) else fn_ty;
         const info = zcu.typeToFunc(ty) orelse return false;
         return info.cc == .auto and zcu.comp.config.any_error_tracing;
+    }
+
+    /// The type `?*StackTrace` of the hidden error-return-trace parameter as `err_trace`, or the
+    /// `err_trace_unresolved` marker while `StackTrace` is not resolved.
+    fn writeErrTrace(w: *W) Error!void {
+        const stack_trace = Compat.stackTraceType(w.pt.zcu) orelse {
+            try w.field("err_trace_unresolved");
+            try w.j.write(true);
+            return;
+        };
+        const ptr = try w.pt.singleMutPtrType(stack_trace);
+        try w.field("err_trace");
+        try w.writeTypeRef(try w.pt.optionalType(ptr.toIntern()));
     }
 
     /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
@@ -1058,10 +1064,7 @@ const W = struct {
                 try w.writeRef(pl_op.operand);
                 try w.writeArgs(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.args_len]));
                 // The callee also receives the caller's error return trace (§Error return trace).
-                if (w.takesErrTrace(w.air.typeOf(pl_op.operand, ip))) {
-                    try w.field("err_trace");
-                    try w.j.write(true);
-                }
+                if (w.takesErrTrace(w.air.typeOf(pl_op.operand, ip))) try w.writeErrTrace();
             },
             // Error return tracing (`docs/air-json.md` §Error return trace): the current trace,
             // its replacement, a load of one of its fields, and the return address.

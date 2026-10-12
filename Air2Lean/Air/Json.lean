@@ -95,6 +95,11 @@ structure RawInst where
   asm : Option RawAsm
   /-- `runtime_nav_ptr`: the global's entry in the `globals` table. -/
   global : Option Nat := none
+  /-- A call: the type `?*StackTrace` of the error return trace the callee also receives
+  (`err_trace`), or `some none` when the exporter could not resolve it (`err_trace_unresolved`).
+  `save_err_return_trace_index`: `ptrTy` is its field pointer type (§Error return trace). -/
+  errTrace : Option (Option TyId) := none
+  ptrTy : Option TyId := none
   unsupported : Bool
 
 /-- One case of a `switch_br`/`loop_switch_br`, before tag interpretation. -/
@@ -125,6 +130,9 @@ structure RawFunc where
   identities : Array Identity.Record := #[]
   externs : Array ExternDecl := #[]
   exportDecl : Option ExportDecl := none
+  /-- The hidden error-return-trace parameter (`err_trace`, §Error return trace): its type
+  `?*StackTrace`, or `some none` for `err_trace_unresolved`. `Canon.errTraces` resolves it. -/
+  errTrace : Option (Option TyId) := none
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -649,6 +657,13 @@ def parseSrc? (j : Json) : Option RawSrc := do
   guard (declLine ≥ 1 && !file.isEmpty && file.length ≤ 4096 && !module.isEmpty && module.length ≤ 1024)
   pure { file, module, declLine }
 
+/-- `err_trace` (a type id) or `err_trace_unresolved` of a function or call (§Error return
+trace). -/
+def errTraceField (j : Json) : Except String (Option (Option TyId)) := do
+  if let some t := optField j "err_trace" then return some (some (← t.getNat?))
+  if (← trueMarker j "err_trace_unresolved") then return some none
+  return none
+
 mutual
 
 partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except String RawInst := do
@@ -721,10 +736,14 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
     | some gj => some <$> gj.getNat?
     | none => pure none
   let unsupported ← boolField j "unsupported"
+  let errTrace ← errTraceField j
+  let ptrTy ← match optField j "ptr_ty" with
+    | some pj => some <$> pj.getNat?
+    | none => pure none
   let column := (optField j "column").bind (·.getNat?.toOption) |>.filter (· ≥ 1)
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
            line, column, src := parseSrc? j, order, rmwOp, successOrder, failureOrder, op, mask,
-           asm, global, unsupported }
+           asm, global, errTrace, ptrTy, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?
@@ -824,6 +843,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     src := parseSrc? j
     externs
     exportDecl
+    errTrace := ← errTraceField j
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do

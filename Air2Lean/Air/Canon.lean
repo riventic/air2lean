@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Air.Json
+import Air2Lean.StdModels
 
 /-!
 # Canonical AIR
@@ -653,11 +654,143 @@ def argRanks (f : RawFunc) : Except String RawFunc := do
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }
 
-/-- The six rewrites (module doc). -/
+/-- The AIR tags of error return tracing that `errTraces` resolves before `normalizeOp`, each with
+the canonical tags it becomes (`scripts/coverage.py` reads this table). -/
+def errTraceTags : List (String × List String) :=
+  [("err_return_trace", ["wrap_optional"]), ("set_err_return_trace", []),
+   ("save_err_return_trace_index", ["optional_payload", "struct_field_ptr", "load"]),
+   ("ret_addr", [])]
+
+/-- The state of `errTraces`' walk: the next fresh instruction id, the current trace (its value
+and type), and the values that replace resolved instructions. -/
+private structure TraceWalk where
+  next : InstId
+  reg : Option (Val × TyId)
+  subst : Std.HashMap InstId Val := {}
+
+/-- `errTraces` (module doc, 7): error return tracing as data flow. Every function that the
+backends give the hidden trace parameter (`RawFunc.errTrace`: `cc == .auto` in a build with error
+tracing) gets it as a last parameter; `set_err_return_trace` (only in the top-level body) replaces
+the current trace for the instructions after it; `err_return_trace` is the current trace (wrapped
+when it was set from a pointer); `save_err_return_trace_index` loads its field through the trace's
+pointer (`optional_payload`, `struct_field_ptr`, `load`, as `airSaveErrReturnTraceIndex`); a call
+whose callee takes the trace passes the current one as a last argument. `ret_addr` is an unknown
+machine address: the model stores it as undefined bytes, its only admitted use. -/
+partial def errTraces (f : RawFunc) : Except String RawFunc := do
+  let all := flatten f.body
+  let traceUse (i : RawInst) := !i.unsupported && ((errTraceTags.lookup i.tag).isSome || i.errTrace.isSome)
+  if f.errTrace.isNone && !all.any traceUse then return f
+  let producers : Std.HashMap InstId TyId := all.foldl (init := {}) fun m i =>
+    match i.ty with | some t => m.insert i.id t | none => m
+  let unresolved := s!"{f.name}: the exporter could not resolve `std.builtin.StackTrace` for the \
+    error return trace; re-export after a function that uses it is analysed, or without error tracing"
+  for i in all do
+    if i.tag == "ret_addr" && !i.unsupported then
+      let stores := all.filter fun u => u.uses.contains i.id
+      unless stores.all fun u => (u.tag == "store" || u.tag == "store_safe") &&
+          u.args[1]? == some (.inst i.id) && u.args[0]? != some (.inst i.id) do
+        throw s!"{f.name}: inst {i.id}: `@returnAddress()` is a machine address outside the memory \
+          model; it is admitted only as a stored value (undefined bytes), as in `std.builtin.returnError`"
+    if let some none := i.errTrace then throw unresolved
+  let isPtr (t : TyId) : Bool := match f.types[t]? with | some (.ptr "one" ..) => true | _ => false
+  let mk (id : InstId) (tag : String) (ty : TyId) (args : Array Val) (index : Option Nat := none) : RawInst :=
+    { id, tag, ty := some ty, args, body := #[], thenBody := #[], elseBody := #[], cases := #[],
+      target := none, param := none, callee := none, index, name := none, line := none, order := none,
+      rmwOp := none, successOrder := none, failureOrder := none, op := none, mask := #[], asm := none,
+      unsupported := false }
+  -- `v` (of type `t`) as a value of the optional type `want` (`?*StackTrace`): itself, or a
+  -- `wrap_optional` with id `id` of the pointer it was set from.
+  let asOptional (v : Val) (t want id : InstId) : Except String (Option RawInst × Val) := do
+    if t == want then return (none, v)
+    match f.types[want]? with
+    | some (.optional c) =>
+      unless c == t do throw s!"{f.name}: the error return trace has type {t}, not the payload of {want}"
+      return (some (mk id "wrap_optional" want #[v]), .inst id)
+    | _ => throw s!"{f.name}: the error return trace type {want} is not an optional pointer"
+  let rec walk (top : Bool) (body : Array RawInst) (st : TraceWalk) :
+      Except String (Array RawInst × TraceWalk) := do
+    let mut st := st
+    let mut out := #[]
+    for i0 in body do
+      let i := i0.mapVals fun v => match v with | .inst x => (st.subst[x]?).getD v | v => v
+      let reg := fun (what : String) => match st.reg with
+        | some r => pure r
+        | none => throw s!"{f.name}: inst {i.id}: {what} without an error return trace (a function \
+            that neither receives one nor sets one)"
+      if i.unsupported then out := out.push i; continue
+      match i.tag with
+      | "ret_addr" =>
+        st := { st with subst := st.subst.insert i.id (.undef ((i.ty).getD 0)) }
+      | "set_err_return_trace" =>
+        unless top do
+          throw s!"{f.name}: inst {i.id}: `set_err_return_trace` outside the top-level body"
+        let some v := i.args[0]? | throw s!"{f.name}: inst {i.id}: `set_err_return_trace` needs an operand"
+        let some t := (match v with | .inst x => producers[x]? | _ => none)
+          | throw s!"{f.name}: inst {i.id}: `set_err_return_trace` of a constant"
+        unless isPtr t do throw s!"{f.name}: inst {i.id}: `set_err_return_trace` of a non-pointer"
+        st := { st with reg := some (v, t) }
+      | "err_return_trace" =>
+        let (v, t) ← reg "`err_return_trace`"
+        let some want := i.ty | throw s!"{f.name}: inst {i.id}: `err_return_trace` without a type"
+        match ← asOptional v t want i.id with
+        | (some w, _) => out := out.push w
+        | (none, v) => st := { st with subst := st.subst.insert i.id v }
+      | "save_err_return_trace_index" =>
+        let (v, t) ← reg "`save_err_return_trace_index`"
+        let (some ptrTy, some idx, some ty) := (i.ptrTy, i.index, i.ty)
+          | throw s!"{f.name}: inst {i.id}: `save_err_return_trace_index` needs `index` and `ptr_ty`"
+        let p ← match f.types[t]? with
+          | some (.optional c) =>
+            out := out.push (mk st.next "optional_payload" c #[v])
+            st := { st with next := st.next + 1 }
+            pure (Val.inst (st.next - 1))
+          | some (.ptr "one" ..) => pure v
+          | _ => throw s!"{f.name}: inst {i.id}: the error return trace is not a pointer"
+        out := out.push (mk st.next "struct_field_ptr" ptrTy #[p] (some idx))
+        out := out.push (mk i.id "load" ty #[.inst st.next])
+        st := { st with next := st.next + 1 }
+      | _ =>
+        let mut i := i
+        if let some (some want) := i.errTrace then
+          if let some (.func name ..) := i.callee then
+            if (allocFn? name).isSome || (threadFn? name).isSome || (rejectedThreadFn? name).isSome then
+              throw s!"{f.name}: inst {i.id}: a call of the std model `{name}` with error return tracing \
+                is outside the subset; export without error tracing (`-fno-error-tracing`)"
+          let (v, t) ← reg "a call that passes the error return trace"
+          let (w, v) ← asOptional v t want st.next
+          if let some w := w then
+            out := out.push w
+            st := { st with next := st.next + 1 }
+          i := { i with args := i.args.push v, errTrace := none }
+        let (b, st1) ← walk false i.body st
+        let (tb, st2) ← walk false i.thenBody st1
+        let (eb, st3) ← walk false i.elseBody st2
+        let mut st4 := st3
+        let mut cases := #[]
+        for c in i.cases do
+          let (cb, s) ← walk false c.body st4
+          st4 := s
+          cases := cases.push { c with body := cb }
+        -- A nested body's trace never leaks out (`set_err_return_trace` is top-level only).
+        st := { st4 with reg := st.reg }
+        out := out.push { i with body := b, thenBody := tb, elseBody := eb, cases }
+    return (out, st)
+  let start := (all.foldl (fun m i => max m i.id) 0) + 1
+  let (params, reg, args, next) ← match f.errTrace with
+    | some (some t) =>
+      pure (f.params.push t, some (Val.inst start, t),
+        #[mk start "arg" t #[] |> fun a => { a with param := some f.params.size }], start + 1)
+    | some none => throw unresolved
+    | none => pure (f.params, none, #[], start)
+  let (body, _) ← walk true f.body { next, reg }
+  return { f with params, body := args ++ body, errTrace := none }
+
+/-- The seven rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
+  let f ← errTraces f
   let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
   validateRefs f
   pure (renumber f)
