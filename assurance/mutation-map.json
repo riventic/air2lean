@@ -59,6 +59,14 @@
         {
           "path": "tests/roadmap/abi-probes/test_probe.py",
           "anchor": "def test_profiles_fail_closed"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_forbidden_outcomes_fail"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_load_buffering_is_a_rejected_shape"
         }
       ],
       "mutants": []
