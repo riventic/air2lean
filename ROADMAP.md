@@ -17,7 +17,7 @@ The repository translates a supported subset of Zig into Lean, supplies executab
 | Storage | Merged | [PR105](https://github.com/riventic/air2lean/pull/105): bounded error-storage controls, normal-function-pointer provenance and same-finite-union regressions repaired, with declared version generation/proof/runtime controls. |
 | Global payload pointers | Merged | [PR106](https://github.com/riventic/air2lean/pull/106): bounded payload-pointer identity/offset and generated alias/read clients, with fresh producers and declared proof/runtime/metadata/frame controls. |
 
-For the next agent, start from a fresh isolated checkout of current public main; preserve the dirty primary. Read this register and the acceptance companion, choose the next broader incomplete requirement, and identify its unsupported domain and acceptance evidence before implementation. The existing eight-closeout batch is finished; work now proceeds from the 52 broader incomplete requirements. The scheduler remains stopped.
+For the next agent, start from a fresh worktree of current main (`scripts/worktree-init.sh`); preserve the dirty primary. Read [Current state](#current-state-2026-10-12) for what is merged, in review and in progress, then this register and the acceptance companion. The existing eight-closeout batch is finished; work proceeds from the 52 broader incomplete requirements, in the order given there (rows not named there follow the register).
 
 For the two final feature gates, use the [finite error-storage guide](https://github.com/riventic/air2lean/blob/main/tests/roadmap/error-storage/README.md) and [global payload-pointer guide](https://github.com/riventic/air2lean/blob/main/tests/roadmap/global-payload-pointers/README.md). Their matching-version fixtures, generated clients, negative controls and semantic mutations passed locally before final CI. The later global seven-family differential run records 27,424 cases, 27,068 exact matches, 191 illegal exclusions and 165 unspecified exclusions, with zero setup failures or mismatches and `qualified=false`; it remains a focused subset.
 
@@ -25,7 +25,85 @@ The original Outcome closeout’s Zig0.16 differential report contains **87,064 
 
 Native observations remain bounded by version, target, backend and profile. Global payload-pointer qualification retains its stage2_x86_64/Linux-musl ReleaseSafe domain; the LLVM constant-offset36 versus runtime38 discrepancy is unqualified. Concurrency proofs retain explicit ownership, clock, lifetime, join-before-free, schedule and fuel premises. They do not imply fairness, termination, multiwriter support or a general synchronization library. See [standard models](https://github.com/riventic/air2lean/blob/main/docs/std-models.md) and [coverage](https://github.com/riventic/air2lean/blob/main/docs/coverage.md).
 
-Use an isolated checkout and preserve the dirty primary. Actual Lean/Zig/runtime work uses one serial lane with **8 CPUs, 16 GiB combined memory plus swap, and 512 PIDs**. Reuse quiescent version-private caches bound to current compiler inputs; keep builds, runtime checks and mutation shards serial. Keep later work scoped to an explicit requirement and its acceptance; a scheduler restart requires its own explicit instruction.
+Use an isolated worktree and preserve the dirty primary. Lean runs go through `scripts/build-guard.py` with a memory cap (`--rss-mib 12000` or lower); builds share the Lake/CAS cache (`AIR2LEAN_CAS_DIR`, [build cache](https://github.com/riventic/air2lean/blob/main/docs/build-cache.md)) and parallel check/diff scripts ([build budgets](https://github.com/riventic/air2lean/blob/main/docs/build-budgets.md)). Check locally first (x86_64-linux under Rosetta Docker); CI confirms. Every merge goes through the merge queue. Keep later work scoped to an explicit requirement and its acceptance. The scheduler remains stopped; a restart requires its own explicit instruction.
+
+## Current state (2026-10-12)
+
+**Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof framework", "Coordination"):
+
+1. Merge the open PRs that are ready. PRs that add proof machinery outside the framework (#166, #177, #178) are held until they are restated in it.
+2. Land the full-state logic, `fsym` and the translated allocators (`codex/alloc-arena-proof`) on main, with persistent const-global knowledge (`codex/const-global-know`).
+3. Migrate every legacy-layer client to the full-state logic (`codex/one-logic` for sequential code, `codex/one-logic-csl` for threads, termination and cost) and delete the legacy layer.
+4. Restructure the directories on top of the one framework.
+
+Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`, local).
+
+The register below still counts **37 complete, 42 partial, 1 open and 9 research**. The open batch PRs change these counts when they merge; each PR updates its own rows.
+
+### Merged to main on 2026-10-11/12
+
+| PR | Content |
+|---|---|
+| [#133](https://github.com/riventic/air2lean/pull/133), [#136](https://github.com/riventic/air2lean/pull/136), [#137](https://github.com/riventic/air2lean/pull/137), [#140](https://github.com/riventic/air2lean/pull/140) | Soundness: architecture-audit fixes, soundness wave 3, concurrency soundness, bounds-checked item pointers. |
+| [#135](https://github.com/riventic/air2lean/pull/135) | Roadmap batch 10. |
+| [#139](https://github.com/riventic/air2lean/pull/139) | Allocator milestone 1: translated `FixedBufferAllocator` and `PageAllocator` (M02). |
+| [#142](https://github.com/riventic/air2lean/pull/142) | V01/V02: formal AIR semantics and emission certificates (research slices). |
+| [#143](https://github.com/riventic/air2lean/pull/143) | aarch64 translator and batch-10 follow-ups. |
+| [#144](https://github.com/riventic/air2lean/pull/144) | L10 error parameters, L09 vector bit casts. |
+| [#151](https://github.com/riventic/air2lean/pull/151) | Merge train 1 (#136 #139 #142 #143 #144). |
+| [#155](https://github.com/riventic/air2lean/pull/155) | Batch A: Q01 I08 I06 V06 (all still partial; residuals below). |
+| [#146](https://github.com/riventic/air2lean/pull/146), [#148](https://github.com/riventic/air2lean/pull/148), [#152](https://github.com/riventic/air2lean/pull/152), [#153](https://github.com/riventic/air2lean/pull/153), [#157](https://github.com/riventic/air2lean/pull/157), [#161](https://github.com/riventic/air2lean/pull/161) | Development speed: result reuse and merge queue, shared build cache and `scripts/regen.sh`, parallel check/diff scripts, recipe-keyed Lake caches, one-command worktree start (435 s cold, 15 s warm). |
+
+### In review (open PRs to main)
+
+| PR | Requirements | State |
+|---|---|---|
+| [#154](https://github.com/riventic/air2lean/pull/154) | Batch B: Q06 I07 P08 P07 | All four stay partial: P07 spec lemmas restate library rules; I07 has no CI release key or revocation; P08 goal search covers only BitVec/Bool; Q06 lacks kernel time for Handoff/WaitGroup. |
+| [#159](https://github.com/riventic/air2lean/pull/159) | Batch C: L14 L06 L05 | L14 and L06 complete; L05 continued in #168. |
+| [#163](https://github.com/riventic/air2lean/pull/163) | Research T05, C12 | Native/WASM correspondence study; memory-model premise reporting. |
+| [#166](https://github.com/riventic/air2lean/pull/166) | Batch E: P03 P05 P06 | P03 complete; concurrent termination and cost for P05/P06 continue in batch J, E02 and A01 in batch I (below). |
+| [#168](https://github.com/riventic/air2lean/pull/168) | Batch H: L05 | L05 complete (null pointers, optional-of-nullable casts). |
+| [#169](https://github.com/riventic/air2lean/pull/169) | Batch D: L08 L07 T03 L04 | All four advanced, still partial. |
+| [#172](https://github.com/riventic/air2lean/pull/172) | Batch G: L12 L10 L09 T04 T06 | L12 and L10 complete; L09, T04 and T06 advanced, still partial. |
+| [#164](https://github.com/riventic/air2lean/pull/164), [#165](https://github.com/riventic/air2lean/pull/165) | CI | Generated-branch publish for commits that bypassed the queue; restricted checkout as the single result-reuse mechanism, queue reuse, nightly full run. |
+
+Zig compiler bugs found on the way are drafted in `docs/upstream/` and tracked in one issue, [#131](https://github.com/riventic/air2lean/issues/131); none is filed upstream.
+
+### In progress (branches)
+
+| Work | Requirements | State |
+|---|---|---|
+| Arena allocator proof (`codex/alloc-arena-proof`) | M01–M04 groundwork | Translated `ArenaAllocator` against `FAllocSpec` for any child allocator. Done: general symbolic execution `fsym` with a CTriple backend ([#150](https://github.com/riventic/air2lean/pull/150), [#158](https://github.com/riventic/air2lean/pull/158), [#160](https://github.com/riventic/air2lean/pull/160), [#167](https://github.com/riventic/air2lean/pull/167)): FBA and page allocator proofs are invariants plus `fsym` only; every live block lies below the target's address limit; allocation without stack room is `.stackOverflow` (STK-01); globals placement fails closed (`GLOBALS_TOO_LARGE`); `not_fallocSpec_arena` is kernel-checked. Now: byte-range claims in the ghost state (claims follow bytes through resize), then arena reset. |
+| Soundness: NaN bits through memory | — | On Zig ≤ 0.16, a NaN stored and reloaded as an integer gave canonical NaN bits in the model where native code keeps the arithmetic NaN bits. Fix in progress (`codex/soundness-nan-bits`). |
+| Ordinary-pointer slicing order | L05 follow-up | Slicing of every pointer base follows the compiler's evaluation order; re-proves the affected slice/atomic stack proofs. |
+| Batch I | E02 A01 | Callback/function-pointer contracts, assembly effects. |
+| Batch J | P05 P06 | Follow-up to #166: total correctness and cost for concurrent programs. |
+| Windows target (`codex/windows-target`) | T04 | `x86_64-windows-gnu` profile for all four Zig versions: fail-closed checks for OS-backed models, threadlocal and x87 precision; Windows T04 probe records; local Wine differential; design in `docs/windows-target.md` on that branch. |
+| Zig 0.17.0 as default (`codex/zig017-default`) | Q07 groundwork | One default from `compatibility.json` through a single helper, lint against hardcoded default versions; 0.16.0, 0.15.2 and 0.14.1 stay supported. |
+
+### Architecture work (started 2026-10-12)
+
+Weaknesses found while implementing the register. They come before new features where they block them or make results less trustworthy.
+
+| Work | Why | Plan |
+|---|---|---|
+| One proof logic | Two separation logics: the legacy `ZigLean/Sep` (`Triple`/`TotalTriple`, assertions over live heap bytes only) and the full-state logic `ZigLean/Sep/Full` (`FTriple`/`FTotalTriple`/`CTriple`, [sep-full-state](https://github.com/riventic/air2lean/blob/codex/alloc-arena-proof/docs/sep-full-state.md)), joined by bridges. The legacy logic cannot state atomic layouts, addresses of freed blocks, block extents or disjointness of live blocks; two logics mean double maintenance. | Priority. New proofs use the full-state logic only. Land the arena branch on main; migrate every legacy client (about 80 files) to invariant + `fsym`; fold the atomic tag into `Cell`, `Triple := FTriple`; delete the bridges and the legacy layer. |
+| Directory structure | The full-state logic lives in a `Full` subdirectory beside the legacy layer; proofs are spread over `Proofs/` and `tests/roadmap/*`; docs and scripts have grown per batch. | After the legacy layer is gone: `ZigLean/Sep` is the one logic (automation in its own subdirectory); a target tree for proofs, fixtures, docs and scripts; mechanical `git mv` PRs with scripted path updates, scheduled between merge waves. |
+| Const-global bytes are persistent knowledge | Constant globals (allocator vtables) are owned exclusively, so two users of one vtable cannot be framed; this blocks M01–M04 clients of `std.mem.Allocator`. | Writes to const storage are `.illegal`; a duplicable assertion established from the initial memory; dispatch rules read it (`codex/const-global-know`, into the arena branch). |
+| Encode/decode exactness | The NaN-bits bug: the model chose canonical bits on a reload where the compiler keeps others. | Audit every value↔bytes pair (padding, `undefined`, enums/bool out of range, pointer bytes, unions, f80, vectors, error unions; four versions): exact or explicitly unspecified, never a canonical choice; counterexample, native fixture and fix per finding (`codex/enc-exactness`). |
+| Canon out of the trusted base | `Canon.lean` rewrites raw AIR (including reorderings) before the V01/V02 certificates start; the slicing-order bug came from such a rewrite. | General theorems per rewrite over the formal AIR semantics, reorderings first; uncertified rewrites reported as trusted in the certificate report (`codex/canon-cert`). |
+| Requirement register as data | Every batch PR hand-edits the same rows and counts in this file and the acceptance companion, so parallel PRs conflict. | One structured file per requirement; `scripts/register.py` generates the tables and counts; preflight/CI check drift (`codex/register-data`). |
+| Smaller exporter patch | Every exporter change rebuilds four patched compilers, refreshes pins and re-exports goldens; parallel exporter PRs conflict. | Minimal per-version hook; serialization in a separately built module; byte-identical exports; after #159 and #172. |
+
+### Remaining order
+
+After the current goal; the parked architecture tracks resume first where they fix soundness (encode/decode exactness, Canon certificates).
+
+1. Residuals of merged batches: Q01 (floats, threads, allocators and generics in the program generator), I08 (macOS containment beyond sampling), I06 (relational strength), V06 (per-goal contracts and a theorem-side check); then X01 (C via translate-c).
+2. After the arena allocator: M01–M04, C01, C07.
+3. Research: F02, F03; C10 before C13; A02; V01–V03 beyond the current slices.
+4. C08, C14.
+5. Q07 last.
 
 ## Requirement register
 

@@ -509,6 +509,13 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
         if not allow_native_mismatch and not all(value['profile_agreement'].values()):
             report['problems'].append('native build disagrees with the proved profile %s (pass --allow-native-mismatch '
                                       'to accept)' % sorted(k for k, v in value['profile_agreement'].items() if not v))
+    if 'receipt' in links:  # never over a restricted CI checkout, whatever the dirty-tree permission
+        try:
+            tree = load(absolute(root, manifest['inputs']['receipt']) / 'receipt.json').get('tree') or {}
+            if tree.get('withheld'):
+                report['problems'].append('chained proof receipt was sealed over a restricted checkout (tree.withheld)')
+        except (OSError, ValueError, AttributeError) as error:
+            report['problems'].append('chained proof receipt: %s' % error)
     if 'receipt' in links and not allow_dirty:
         try:
             receipt.release_ready(load(absolute(root, manifest['inputs']['receipt']) / 'receipt.json'))
