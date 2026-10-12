@@ -39,4 +39,32 @@ theorem allocBytes_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (n ra 
       (fun r => I.own ⋆ (I.allocResult 2 n.toNat r ⋆ vtR vtp fns.toList)) := by
   fsym [CAllocSpec.alloc h]
 
+variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+
+set_option maxHeartbeats 2000000 in
+theorem create_spec (hfit : I.fits (4 : BitVec 64).toNat 2)
+    (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
+    CTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
+      (fun r => I.own ⋆ (I.allocResult 2 4 r ⋆ vtR vtp fns.toList)) := by
+  fsym [CAllocSpec.alloc h]
+
+/-- The `u32` that `make` returns: its 4 bytes hold `v`. -/
+def makeResult (v : BitVec 32) : Except ErrName Ptr → FAssn
+  | .ok p => I.granted p 2 (writeBytes (Array.replicate 4 .undef) 0 (Enc.encode v))
+  | .error e => ⟪e = "OutOfMemory"⟫
+
+-- the store of `v` at the start of the grant (not a default rule, `Full/Region.lean`)
+attribute [local fsym] FTotalTriple.regionStore0
+
+set_option maxHeartbeats 2000000 in
+/-- **`make` for every allocator**: the FixedBufferAllocator of `withFba` or any environment
+allocator that meets `CAllocSpec`. -/
+theorem make_spec (v : BitVec 32) (hfit : I.fits (4 : BitVec 64).toNat 2)
+    (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
+    CTriple (I.own ⋆ vtR vtp fns.toList) (make ⟨ctx, vtp⟩ v)
+      (fun r => I.own ⋆ (makeResult I v r ⋆ vtR vtp fns.toList)) := by
+  -- `cases x`: fsym does not split a `match` on a symbolic `Except` (fsym-engine ledger)
+  fsym [create_spec ctx vtp fns I e hfit h]
+  cases x <;> fsym
+
 end Interfaces.MixSpec
