@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Toy
+import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoAttr
@@ -22,6 +22,120 @@ namespace Zig
 namespace Full
 
 open FAssn
+
+/-! ## The block rules, lifted from the legacy logic (`FTriple.ofTriple`) -/
+
+/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent. -/
+theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
+  refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
+  refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
+    (Triple.alloc kind size align ha hk) (Tame.alloc kind size align)
+    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
+    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
+    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
+  obtain ⟨E', ⟨hq, hk', hg⟩, hcov⟩ := id h
+  obtain ⟨A, hq⟩ := hq
+  obtain ⟨⟨h0, hA⟩, hb⟩ := Zig.sep_lift.mp hq
+  obtain ⟨b, hpb, -, hl⟩ := id hb
+  have hc := hl (b, p.off.toNat)
+  rw [if_pos ⟨rfl, Nat.le_refl _, by simp; omega⟩] at hc
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
+  obtain ⟨fc, hfc, he⟩ := hc
+  have hx := upPost_bext (b := b) (S := size) (K := kind) h ⟨_, fc, hfc, by rw [he], by rw [he], fun h => h.elim⟩
+  obtain ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', e, x, hbx⟩, h2⟩ := hx
+  obtain ⟨A', x⟩ := up_ex.mp x
+  obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
+  exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
+
+/-- `alloc` of no bytes: a pointer to offset 0 of a new block. The block has no byte, so there is
+nothing to own (an extent needs a live byte: `Holds.bauth`). -/
+theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
+  refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty) ?_ (fun _ _ h => h)
+  refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
+    (Triple.alloc kind 0 align ha hk) (Tame.alloc kind 0 align)
+    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
+    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
+    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
+  obtain ⟨E', ⟨hq, -, -⟩, -⟩ := h
+  obtain ⟨A, hq⟩ := hq
+  obtain ⟨⟨h0, -⟩, b, hpb, -, hl⟩ := Zig.sep_lift.mp hq
+  have hemp : r.heap = FHeap.empty := funext fun l => by
+    have := hl l
+    simp only [Array.size_replicate, Nat.add_zero] at this
+    rw [if_neg (by omega)] at this
+    simp only [FHeap.erase, Option.map_eq_none_iff] at this
+    exact this
+  exact sep_lift.mpr ⟨⟨by simp [hpb], h0⟩, hemp⟩
+
+/-- A run of `alloc` creates the block it returns. -/
+theorem alloc_fresh {kind : BlockKind} {size align : Nat} {m m' : Mem} {p : Ptr} {b : BlockId}
+    (h : ((alloc kind size align).run m).run = some (.ok (p, m'))) (hb : p.block = some b) :
+    m.blocks.size ≤ b ∧ b < m'.blocks.size := by
+  unfold alloc at h
+  obtain ⟨_, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h1
+  split at h2
+  · obtain ⟨_, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h2
+    have e := Conc.Proto.MemM.set_ok h3
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok h4
+    subst e
+    cases hb
+    simp [Mem.afterAlloc]
+  · exact (Conc.Proto.MemM.throw_ok h2).elim
+
+/-- **`alloc` with the claim on the new block's bytes** (`FTriple.mintClaimOpt`): the bytes, the
+full extent and the exclusive claim on `[0, size)`. -/
+theorem FTriple.allocC (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ (bext b size kind ⋆ bclaim b 0 size))) := by
+  refine (FTriple.mintClaimOpt (fun p => p.block) (fun _ => 0) (fun _ => size)
+    (FTriple.alloc' kind size align ha hpos hk) (fun m v m' b h e => alloc_fresh h e)
+    fun _ b r _ hq => noCl_ex (fun A => noCl_ex fun b => noCl_sep (noCl_lift _)
+      (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _))) r hq b).post fun p r h => ?_
+  obtain ⟨A, h⟩ := sep_ex.mp h
+  obtain ⟨b, h⟩ := sep_ex.mp h
+  obtain ⟨hφ, h⟩ := sep_lift.mp (sep_assoc h)
+  rw [hφ.1] at h
+  exact ⟨A, b, sep_lift.mpr ⟨hφ, sep_assoc h⟩⟩
+
+/-- `allocStack` (a stack local whose address escapes) with the claim on its bytes. -/
+theorem FTriple.allocStackC (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTriple emp (allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ (bext b size .stack ⋆ bclaim b 0 size))) :=
+  FTriple.allocC .stack size align ha hpos
+
+/-- `free` of a whole block, not a `const` global: its bytes and its full extent go. -/
+theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) := by
+  have hcells : ∀ h, bytesAt p A S K bs h → ∀ l c, h l = some c → l.1 = b ∧ c.size = S ∧ c.kind = K := by
+    intro h hb l c hc
+    obtain ⟨b', hb', -, hl⟩ := hb
+    rw [hpb] at hb'; cases hb'
+    rw [hl l] at hc
+    split at hc
+    · rename_i hin; cases hc; exact ⟨hin.1, rfl, rfl⟩
+    · cases hc
+  refine ((FTriple.ofTriple (E := fun x => if x = b then some (S, K) else none) (B := fun x => x = b)
+    (Triple.free hS h0 hpos hK) (Tame.free p) (fun h hp l c hc => (hcells h hp l c hc).1)
+    (fun h hp l c S' K' hc hE => by
+      obtain ⟨e, hs, hk⟩ := hcells h hp l c hc
+      simp only [e, if_pos] at hE; cases hE; exact ⟨hs, hk⟩)
+    (SizeFree.of_pinned fun h hp l c hc => by simp [(hcells h hp l c hc).1])
+    (.inl fun x hx => by simp [hx])).forgetExt.pre fun _ h => up_sep_bext h).post
+    fun _ _ h => up_emp.mp h
+
+/-! ## Step rules (`fsym`) -/
 
 /-- `free` returns from every memory that holds a whole block with its full extent. -/
 theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
