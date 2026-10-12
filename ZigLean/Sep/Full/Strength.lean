@@ -89,7 +89,7 @@ theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m
     Holds m ⟨FHeap.ofHeap (shapes m) hP, Know.none, Ghost.unit⟩
       ⟨FHeap.ofHeap (shapes m) hF, Know.none, Ghost.exts (heapExts m hF)⟩ := by
   have hok := exts_ok (heapExts m hF)
-  refine ⟨FHeap.ofHeap_disjoint hd, ?_, fun _ _ h => h.elim, fun _ _ h => h.elim, ?_, ?_, ?_⟩
+  refine ⟨FHeap.ofHeap_disjoint hd, ?_, fun _ h => h.elim, fun _ h => h.elim, ?_, ?_, ?_⟩
   · have : FHeap.ofHeap (shapes m) hP ∪ FHeap.ofHeap (shapes m) hF = m.fheap := by
       rw [← FHeap.ofHeap_union, ← hm]; rfl
     show FMatch m (_ ∪ _); rw [this]; exact FMatch.fheap m

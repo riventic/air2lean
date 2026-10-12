@@ -59,7 +59,7 @@ theorem exts_true {m : Mem} {E : BlockId → Option (Nat × BlockKind)}
 theorem holds_exts {m : Mem} {h : FHeap} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
     (hm : FMatch m h) (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) :
     Holds m ⟨h, k, Ghost.exts E⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ := by
-  refine ⟨FHeap.disjoint_empty _, by simpa using hm, hk, fun _ _ h => h.elim, ?_, ?_, ?_⟩
+  refine ⟨FHeap.disjoint_empty _, by simpa using hm, hk, fun _ h => h.elim, ?_, ?_, ?_⟩
   · exact exts_ok E
   · show ExtTrue m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact ht
   · show ClFresh m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact fun _ _ _ => rfl
@@ -101,7 +101,7 @@ private def gextGh (j : BlockId) (S : Nat) (K : BlockKind) : Ghost :=
 private def gpart (m : Mem) (j : BlockId) : Res :=
   match m.blocks[j]? with
   | some blk => comb emptyRes (comb ⟨heapOf m j, Know.none, Ghost.unit⟩
-      (comb ⟨FHeap.empty, fun b' A' => b' = j ∧ A' = blk.addr, Ghost.unit⟩
+      (comb ⟨FHeap.empty, Know.single (.addr j blk.addr), Ghost.unit⟩
         ⟨FHeap.empty, Know.none, gextGh j blk.bytes.size blk.kind⟩))
   | none => emptyRes
 
@@ -149,17 +149,17 @@ private theorem initR_heap (m : Mem) (n : Nat) :
 
 private theorem initR_know (m : Mem) (n : Nat) : Know.Sub (initR m n).know m.kn := by
   induction n with
-  | zero => exact fun _ _ h => h.elim
+  | zero => exact fun _ h => h.elim
   | succ n ih =>
     refine Know.Sub.union ?_ ih
     unfold gpart
     cases hb : m.blocks[n]? with
-    | none => exact fun _ _ h => h.elim
+    | none => exact fun _ h => h.elim
     | some blk =>
-      rintro b A (h | h | h | h)
+      rintro f (h | h | h | h)
       · exact h.elim
       · exact h.elim
-      · obtain ⟨rfl, rfl⟩ := h; exact ⟨blk, hb, rfl⟩
+      · subst h; exact ⟨blk, hb, rfl⟩
       · exact h.elim
 
 private theorem gextGh_eq (j : BlockId) (S : Nat) (K : BlockKind) :
@@ -272,13 +272,13 @@ theorem initRes_holds (σ : Placement) (gs : List (Array Byte × Nat × BlockKin
         rw [hg]
         show gblock n gs[n].1 gs[n].2.1 gs[n].2.2 (gpart m n)
         have hgp : gpart m n = comb emptyRes (comb ⟨heapOf m n, Know.none, Ghost.unit⟩
-            (comb ⟨FHeap.empty, fun b' A' => b' = n ∧ A' = A, Ghost.unit⟩
+            (comb ⟨FHeap.empty, Know.single (.addr n A), Ghost.unit⟩
               ⟨FHeap.empty, Know.none, gextGh n gs[n].1.size gs[n].2.2⟩)) := by
           simp only [gpart, hb]
         rw [hgp]
         refine ⟨A, emptyRes, _, (FHeap.disjoint_empty _).symm, rfl, ⟨hA, rfl, rfl, rfl⟩,
           ⟨heapOf m n, Know.none, Ghost.unit⟩, _, fun _ => .inr rfl, rfl, ⟨?_, rfl, rfl⟩,
-          ⟨FHeap.empty, fun b' A' => b' = n ∧ A' = A, Ghost.unit⟩, _, fun _ => .inl rfl, rfl,
+          ⟨FHeap.empty, Know.single (.addr n A), Ghost.unit⟩, _, fun _ => .inl rfl, rfl,
           ⟨rfl, rfl, rfl⟩, ?_⟩
         · refine ⟨n, rfl, Int.le_refl _, fun l => ?_⟩
           obtain ⟨b, x⟩ := l

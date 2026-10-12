@@ -23,7 +23,8 @@ open FAssn
 
 /-- `free` returns from every memory that holds a whole block with its full extent. -/
 theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
-    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
     FReturns (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) := by
   intro m r rF hh hp hs
   have hcells : ∀ h, bytesAt p A S K bs h → ∀ l c, h l = some c → l.1 = b ∧ c.size = S ∧ c.kind = K := by
@@ -41,14 +42,16 @@ theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
       simp only [e, ite_true, Option.some.injEq, Prod.mk.injEq] at hE
       exact ⟨hE.1 ▸ hs', hE.2 ▸ hk⟩) hh (up_sep_bext hp)
   obtain ⟨m', hr, -⟩ := free_run hP (hh.fix.heap_exact hh.fix_exact hh.fix_exactF)
-    (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj)) hS h0 hpos hs.1
+    (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj)) hS h0 hpos hs.1 hK
   exact ⟨(), m', hr⟩
 
-/-- **`free` of a whole block** (total): its bytes and its full extent go. -/
+/-- **`free` of a whole block** (total): its bytes and its full extent go. A `const` global is
+never freed (`free` of one is illegal). -/
 @[fsym] theorem FTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
-  ⟨FTriple.free' hpb hS h0 hpos, FReturns.free hpb hS h0 hpos⟩
+  ⟨FTriple.free' hpb hS h0 hpos hK, FReturns.free hpb hS h0 hpos hK⟩
 
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/
