@@ -104,5 +104,6 @@ pub fn main() void {
         const fl = l17.floatsToNested(.{ 1.0, -0.0 });
         hexs("floatsToNested0", fl[0]);
         hexs("floatsToNested1", fl[1]);
+        hexs("fhToBytes", l17.fhToBytes(.{ .lo = -2.0, .hi = 0x1234 }));
     }
 }

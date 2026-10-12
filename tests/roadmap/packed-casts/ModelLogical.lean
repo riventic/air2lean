@@ -32,6 +32,10 @@ theorem halvesToVec_ok : ((halvesToVec #v[f16 0x3c00, f16 0xc000]).map (·.lanes
 theorem vecToHalves_nan : (vecToHalves ⟨#v[f16 0x7e00, f16 0x4000]⟩).run = some (.error .unspecified) := by
   decide +kernel
 
+/-- A NaN field of a packed struct has no determined bits. -/
+theorem fhToBytes_nan : (fhToBytes { lo := f16 0x7e00, hi := 0x1234 }).run = some (.error .unspecified) := by
+  decide +kernel
+
 end Logical017Model
 
 open Logical017Model
@@ -52,3 +56,4 @@ def main : IO Unit := do
   line "vecToHalves" (vecToHalves ⟨#v[f16 0x3800, f16 0x4000]⟩)
   line "floatsToNested0" ((·[0]) <$> floatsToNested #v[f16 0x3c00, f16 0x8000])
   line "floatsToNested1" ((·[1]) <$> floatsToNested #v[f16 0x3c00, f16 0x8000])
+  line "fhToBytes" (fhToBytes { lo := f16 0xc000, hi := 0x1234 })

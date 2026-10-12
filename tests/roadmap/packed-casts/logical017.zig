@@ -6,6 +6,7 @@ pub const Mode = enum(u2) { off, low, high };
 pub const Half = packed struct(u16) { lo: u8, hi: u8 };
 pub const U = packed union { i: u16, h: f16, p: Half };
 pub const Nib = packed struct(u6) { a: u2, m: Mode, b: u2 };
+pub const FH = packed struct(u32) { lo: f16, hi: u16 };
 
 pub fn nestedToInt(a: [2][3]u4) u24 {
     return @bitCast(a);
@@ -55,7 +56,13 @@ pub fn floatsToNested(a: [2]f16) [2][2]u8 {
     return @bitCast(a);
 }
 
+/// A packed struct with a float field to bytes: a NaN field's bits are `.unspecified`.
+pub fn fhToBytes(x: FH) [4]u8 {
+    return @bitCast(x);
+}
+
 comptime {
+    _ = &fhToBytes;
     _ = &nestedToInt;
     _ = &intToNested;
     _ = &modesToInt;

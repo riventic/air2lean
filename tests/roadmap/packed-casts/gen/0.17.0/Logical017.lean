@@ -83,6 +83,29 @@ instance : Zig.Packed Nib 6 where
   ofBits b := { a := Zig.Packed.get b 0, m := Zig.Packed.get b 2, b := Zig.Packed.get b 4 }
   valid b := Zig.Packed.validAt (Mode) b 2
 
+structure FH where
+  lo : Zig.F16
+  hi : BitVec 16
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed FH 32 where
+  toBits v := ((Zig.Packed.toBits v.lo).setWidth 32 <<< 0) ||| ((Zig.Packed.toBits v.hi).setWidth 32 <<< 16)
+  ofBits b := { lo := Zig.Packed.get b 0, hi := Zig.Packed.get b 16 }
+  mask v := ((Zig.Packed.mask v.lo).setWidth 32 <<< 0) ||| ((BitVec.allOnes 16).setWidth 32 <<< 16)
+
+structure fhToBytesLocals where
+  deriving Inhabited
+
+inductive fhToBytesExit where
+  | ret (v : Vector (BitVec 8) 4)
+
+def fhToBytes (p0 : FH) : Zig.Result (Vector (BitVec 8) 4) := do
+  let e ← ((do
+    let i1 ← (((Zig.Packed.toBits? (p0) : Zig.Result (BitVec 32)) >>= fun bits => pure (Zig.BitCast.toLanes (n := 4) (w := 8) (bits))) : Zig.Result (Vector (BitVec 8) 4))
+    pure (.ret i1)) : Zig.M fhToBytesLocals fhToBytesExit).run' (default : fhToBytesLocals)
+  match e with
+  | .ret v => pure v
+
 structure floatsToNestedLocals where
   deriving Inhabited
 

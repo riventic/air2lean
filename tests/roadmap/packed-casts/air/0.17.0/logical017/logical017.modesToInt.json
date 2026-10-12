@@ -42,7 +42,7 @@
  "src": {
   "file": "logical017.zig",
   "module": "logical017",
-  "decl_line": 18
+  "decl_line": 19
  },
  "params": [
   0

@@ -1154,7 +1154,9 @@ def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : 
     | .int _ => s!"pure ({v})"
     | .bool => s!"pure (if {v} then 1#1 else 0#1)"
     | .float _ => s!"Zig.Float.toBits? ({v})"
-    | .packed _ => s!"pure (Zig.Packed.toBits ({v}))"
+    -- A packed struct with a float or packed-union field can have undetermined bits.
+    | .packed _ => if packedHasMask fc.types src then s!"Zig.Packed.toBits? ({v})"
+      else s!"pure (Zig.Packed.toBits ({v}))"
     | .enum .. => s!"pure ({fc.emitTyOf src}.{fc.helperName (fc.tyOfId src) "toBits"} ({v}))"
     | .intLanes true .. => s!"pure (Zig.BitCast.ofLanes ({v}).lanes)"
     | .intLanes false .. => s!"pure (Zig.BitCast.ofLanes ({v}))"

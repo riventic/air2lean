@@ -163,6 +163,15 @@
       ],
       "correspondence": "model"
     },
+    "ModelLogical::Logical017Model.fhToBytes_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ModelLogical::Logical017Model.halvesToVec_ok": {
       "semantics": "ieee",
       "targets": [
