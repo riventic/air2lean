@@ -156,6 +156,8 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
 
 end Providers
 
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.pts Reaches.region
+
 /-! ## The fields of a stored slice -/
 
 theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}

@@ -10,6 +10,8 @@ import Lean
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
   (library atoms such as `Junk`; a user may mark an opaque representation predicate).
+* `@[fsym_provider]` marks a **provider lemma** `AddrOf b A X`/`Reaches b k X` of an atom `X`
+  (the address or the extent of the block of memory that `X` owns): side goals of rules.
 * `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ`: the pure facts `φ` that an assertion
   `X` implies (the block, offset and alignment of an owned pointer). `fsym` adds the facts of the
   precondition's atoms when it needs more facts (a rule's side goal, an `if`, a panic).
@@ -61,6 +63,20 @@ initialize registerBuiltinAttribute {
   name := `fsym_facts
   descr := "a facts lemma `AtomFacts X φ` of the full-state symbolic executor `fsym`"
   add := fun decl _ kind => fsymFactsExt.add decl kind
+}
+
+/-- The provider lemmas (`@[fsym_provider]`: `AddrOf b A X`, `Reaches b k X` of an atom `X`), in
+declaration order. -/
+initialize fsymProviderExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_provider
+  descr := "a provider lemma `AddrOf b A X` or `Reaches b k X` of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => fsymProviderExt.add decl kind
 }
 
 /-- `c` is an `@[fsym_atom]`. -/

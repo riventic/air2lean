@@ -112,6 +112,8 @@ theorem Reaches.aptsE {α : Type} [Enc α] {b : BlockId} {p : Ptr} {v : α} (hpb
     Reaches b (p.off.toNat + 8) (aptsE p v) := fun m r rF hh ⟨_, _, _, bs, _, _, hs, _, hab⟩ =>
   hs ▸ Reaches.abytes hpb (by omega) m r rF hh hab
 
+attribute [fsym_provider] Reaches.apts Reaches.aptsE
+
 /-- An atomic value: the block of its pointer, a nonnegative offset. -/
 @[fsym_facts] theorem facts_aptsE {α : Type} [Enc α] {p : Ptr} {v : α} :
     AtomFacts (aptsE p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by

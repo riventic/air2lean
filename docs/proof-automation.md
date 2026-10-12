@@ -186,7 +186,7 @@ parallel; a run is identified by the option `fsym.run`).
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`.
-* A provider for a new atom: `Reaches.*`/`AddrOf.*` lemmas listed in `reachLemmas`/`addrLemmas`.
+* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
 * Normalization: `attribute [fsym_norm] …` for programs, `attribute [fsym_arith] …` for
   arithmetic. A simp lemma must match the child-normalized form of terms (`0#1`, not the literal
   `(0 : BitVec 1)`).
