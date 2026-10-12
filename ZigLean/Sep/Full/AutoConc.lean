@@ -130,7 +130,7 @@ attribute [fsym_provider] Reaches.apts Reaches.aptsE
 end Seq
 
 attribute [fsym_norm] optPtrAddr_some optPtrAddr_none
-attribute [fsym_arith] Array.size_replicate Zig.subWrap Zig.addWrap Zig.mulWrap BitVec.sub_self
+attribute [fsym_arith] Zig.subWrap Zig.addWrap Zig.mulWrap BitVec.sub_self
 attribute [fsym_norm] Option.isSome_some Option.isSome_none Option.isNone_some Option.isNone_none
 
 /-! ## Partial rules in `FLogic.partial` -/
