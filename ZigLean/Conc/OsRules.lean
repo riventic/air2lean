@@ -1,4 +1,5 @@
 import ZigLean.Os
+import ZigLean.Os.Mmap
 import ZigLean.Conc.Sched
 import ZigLean.Simp
 
@@ -184,11 +185,18 @@ def joinLoop : Nat → ConcM Nat Unit
     let _ ← Linux.futex_4arg p0 0 tid none
     joinLoop k
 
+/-- A one-page mapping; its end is the child's stack top (`Linux.clone`, MM-19). -/
+def stackTop : MemM (BitVec 64) := do
+  let .ok s ← mmap .linux none 4096 (Target.protReadWrite .linux) (Target.mapPrivateAnonymous .linux)
+      noFd 0 | throw .unspecified
+  pure (BitVec.ofInt 64 ((← ptrAddr s.ptr) + 4096))
+
 def cloneMain : ConcM Nat (BitVec 64) := do
   let _ ← word 1
   let _ ← ConcM.liftMem (do let d ← alloc .heap 8 8; store 8 d (0 : BitVec 64))
   let pt ← ConcM.liftMem (alloc .heap 4 4)
-  let _ ← Linux.clone Env.example 0 0 Linux.stdCloneFlags (some pt) 0 (some p0)
+  let top ← ConcM.liftMem stackTop
+  let _ ← Linux.clone Env.example 0 top Linux.stdCloneFlags (some pt) 0 (some p0)
   joinLoop 3
   ConcM.liftMem (load (BitVec 64) 8 d1)
 
