@@ -300,11 +300,14 @@ structure RunCaches where
   fold : IO.Ref (Option Simp.Context)
   /-- The facts lemmas (`@[fsym_facts]`) with the head of their assertion (`headKey`). -/
   factLemmas : IO.Ref (Option (Array (Array Name × Name)))
+  /-- The simp context that turns Boolean tests into propositions (`boolFactCtx`). -/
+  boolCtx : IO.Ref (Option Simp.Context)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
-           rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none }
+           rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
+           boolCtx := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -926,6 +929,10 @@ def acEq (x y : Expr) : TacticM Expr := do
     throwError "fsym: cannot reorder{indentExpr x}\nto{indentExpr y}"
   instantiateMVars m
 
+/-- `t` is a block equation `p.block = _` (`solveBlock`'s goals). -/
+def isBlockEq (t : Expr) : Bool :=
+  (t.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false
+
 /-- Prove `t` (a `_.block = _` goal) from the context, possibly assigning a block variable. -/
 def solveBlock (t : Expr) : MetaM (Option Expr) := do
   -- `(p.add k).block = p.block`: definitional
@@ -1045,15 +1052,15 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   return out
 
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
-goals a candidate leaves are solved before the rest (`strict`: all of them, or the candidate
-fails). Returns the arithmetic goals of the rule left unproved, or `none` if a block, provider or
-strict goal fails. -/
+goals a candidate leaves (depth above 0) are solved before the rest: all of them, or the
+candidate fails. Returns the arithmetic goals of the rule left unproved, or `none` if a block,
+provider or nested goal fails. -/
 partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) :=
-  go (gs.map (·, false, 0))
+  go (gs.map (·, 0))
 where
-  go : List (MVarId × Bool × Nat) → TacticM (Option (List MVarId))
+  go : List (MVarId × Nat) → TacticM (Option (List MVarId))
   | [] => return some []
-  | (g, strict, depth) :: rest => do
+  | (g, depth) :: rest => do
     if ← g.isAssigned then return ← go rest
     let t ← instantiateMVars (← g.getType)
     if t.isAppOfArity ``Within 2 || (← providerKind? t).isSome then
@@ -1063,7 +1070,7 @@ where
         try
           let (pf, sub) ← g.withContext cand
           g.assign pf
-          match ← go (sub.map (·, true, depth + 1) ++ rest) with
+          match ← go (sub.map (·, depth + 1) ++ rest) with
           | some [] => return some []
           | some left => if first?.isNone then first? := some (← saveState, left)
           | none => pure ()
@@ -1072,13 +1079,13 @@ where
       match first? with
       | some (s, left) => s.restore; return some left
       | none => return none
-    else if (t.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+    else if isBlockEq t then
       let some pf ← g.withContext (solveBlock t) | return none
       g.assign pf
       go rest
     else
       let ok ← arith g
-      if strict && !ok then return none
+      if depth > 0 && !ok then return none
       let some left ← go rest | return none
       return some (if ok then left else g :: left)
 
@@ -1137,14 +1144,17 @@ def isBoolTest (ty : Expr) : Bool :=
       [``Decidable.decide, ``not, ``and, ``or].any l.isAppOf
   | none => false
 
-/-- The simp context that turns a Boolean test (`isBoolTest`) into a proposition. -/
+/-- The simp context that turns a Boolean test (`isBoolTest`) into a proposition; once per run. -/
 def boolFactCtx : MetaM Simp.Context := do
+  if let some c ← (← caches).boolCtx.get then return c
   let mut thms : SimpTheorems := {}
   for n in [``Bool.not_eq_true', ``Bool.not_eq_false', ``Bool.not_eq_true, ``Bool.not_eq_false,
       ``decide_eq_true_eq, ``decide_eq_false_iff_not, ``Bool.and_eq_true, ``Bool.or_eq_true,
       ``Decidable.not_not] do
     thms ← thms.addConst n
-  Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  let c ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  (← caches).boolCtx.set (some c)
+  return c
 
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
@@ -2208,7 +2218,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       -- block facts first
       for f in qats.filter (·.isAppOfArity liftN 1) do
         for φ in ← conjuncts (← instantiateMVars f.appArg!) do
-          if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+          if isBlockEq φ then
             discard <| solveBlock φ
       preassign st qats
       let Qi1 ← instantiateMVars Qi
@@ -2481,16 +2491,21 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
     let (args, _, concl) ← forallMetaTelescope (← inferType f)
     unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) X) do s.restore; continue
     -- instances, blocks of pointers from the context (`p.block = some b`), arithmetic
+    -- (the first premise that fails drops the lemma: no arithmetic after a failed block)
+    let mut ok := true
     for x in args do
       unless ← x.mvarId!.isAssigned do
         let ty ← instantiateMVars (← inferType x)
         if (← isClass? ty).isSome then
           if let some i ← (try some <$> synthInstance ty catch _ => pure none) then
             discard <| isDefEq x i
-        else if (ty.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
-          if let some pf ← solveBlock ty then discard <| isDefEq x pf
+        else if isBlockEq ty then
+          match ← solveBlock ty with
+          | some pf => discard <| isDefEq x pf
+          | none => ok := false; break
         else if !ty.hasExprMVar && (← isProp ty) then
-          discard <| arith x.mvarId! (quick := true)
+          unless ← arith x.mvarId! (quick := true) do ok := false; break
+    unless ok do s.restore; continue
     let pf ← instantiateMVars (mkAppN f args)
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
@@ -2517,7 +2532,8 @@ block, offset and alignment of an owned pointer; a token's grant in its authorit
 owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
 an undecided `if`, a reachable panic, a return). `none` if there was none to add. A lemma gives
 one fact per unordered pair (a symmetric lemma, such as two regions apart, matches both orders). -/
-partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option MVarId) := g.withContext do
+partial def addFacts (g : MVarId) (done : Array Expr := #[])
+    (pairs : Array (Name × Expr × Expr) := #[]) : TacticM (Option MVarId) := g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let ats := atoms P
   let n := ats.size
@@ -2529,7 +2545,7 @@ partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option M
     let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
     if done.contains X then continue
     for (lem, hX, φ, mem) in ← atomFacts as do
-      if as.size == 2 && done.contains (mkApp2 (mkConst lem) as[1]! as[0]!) then continue
+      if as.size == 2 && pairs.contains (lem, as[1]!, as[0]!) then continue
       if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
       trace[fsym] "facts of {X}: {φ}"
       let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
@@ -2541,8 +2557,8 @@ partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option M
       g1.assign (← mkAppM' (← mkAppOptM (L.nm (if mem then ``pre_mfact else ``pre_fact)) #[L.L]) #[hX, k])
       let (h, g2) ← k.mvarId!.intro `hf
       let g2 ← destruct g2 h
-      let done := if as.size == 2 then done.push (mkApp2 (mkConst lem) as[0]! as[1]!) else done
-      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X)
+      let pairs := if as.size == 2 then pairs.push (lem, as[0]!, as[1]!) else pairs
+      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X) pairs
   return if done.isEmpty then none else some g
 
 /-! ## Rules -/

@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Range
@@ -135,18 +136,6 @@ variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
     AtomFacts (apts p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
   rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
-/-- Byte `i` of an owned region is a cell of the resource. -/
-theorem region_cell {b : BlockId} {r : Res} (hb : p.block = some b) {i : Nat} (hi : i < bs.size)
-    (h : up (regionIn p A S K a bs) r) : ∃ fc, r.heap (b, p.off.toNat + i) = some fc := by
-  obtain ⟨⟨-, -, b', hb', -, hl⟩, -⟩ := h
-  rw [hb] at hb'; cases hb'
-  have := hl (b, p.off.toNat + i)
-  simp only [FHeap.erase] at this
-  rw [if_pos (by simp only [true_and]; omega)] at this
-  cases e : r.heap (b, p.off.toNat + i) with
-  | none => rw [e] at this; cases this
-  | some fc => exact ⟨fc, rfl⟩
-
 /-- Two separately owned nonempty regions of one block do not overlap (by offsets;
 `MemFacts.regions_apart` compares addresses, also across blocks). The premises come from the
 context (blocks) and the arithmetic solver (sizes). -/
@@ -163,8 +152,8 @@ context (blocks) and the arithmetic solver (sizes). -/
     rcases Nat.le_total p.off.toNat q.off.toNat with h | h
     · exact ⟨q.off.toNat, by omega, by omega⟩
     · exact ⟨p.off.toNat, by omega, by omega⟩
-  obtain ⟨f1, e1⟩ := region_cell hp (i := x - p.off.toNat) (by omega) h1
-  obtain ⟨f2, e2⟩ := region_cell hq (i := x - q.off.toNat) (by omega) h2
+  obtain ⟨f1, e1, -⟩ := Owns.region (a := a) (S := S) hp (i := x - p.off.toNat) (by omega) r₁ h1
+  obtain ⟨f2, e2, -⟩ := Owns.region (a := a') (S := S') hq (i := x - q.off.toNat) (by omega) r₂ h2
   rw [show p.off.toNat + (x - p.off.toNat) = x by omega] at e1
   rw [show q.off.toNat + (x - q.off.toNat) = x by omega] at e2
   rcases hd (b, x) with e | e <;> simp_all
@@ -189,30 +178,6 @@ theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
     obtain ⟨fc, hfc, he⟩ := erase_cell hc
     exact ⟨_, fc, hfc, by rw [he]⟩
 
-/-- A nonempty owned byte range at `p` (in block `b`): the block reaches its end. -/
-theorem Reaches.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
-    (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
-    Reaches b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
-  obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
-  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
-  rw [hpb] at hb'; cases hb'
-  obtain ⟨fc, hfc, -⟩ := erase_cell hc
-  obtain ⟨blk, hblk, -, hj, -⟩ := hh.block hfc
-  exact ⟨blk, hblk, by omega⟩
-
-/-- A typed value at `p` owns its bytes: its block reaches one past it. -/
-theorem Reaches.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
-    (hn : 0 < Enc.size T) : Reaches b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
-  Reaches.bytes hpb fun _ hp => by
-    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
-    exact ⟨A, S, K, bs, by omega, by omega, hb⟩
-
-/-- A nonempty region owns its bytes: its block reaches its end. -/
-theorem Reaches.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
-    (hpb : p.block = some b) (hpos : 0 < bs.size) :
-    Reaches b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
-  Reaches.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
-
 /-- A nonempty region: its block's address. -/
 theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
     (hpb : p.block = some b) (hpos : 0 < bs.size) : AddrOf b A (up (regionIn p A S K a bs)) :=
@@ -220,7 +185,7 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
 
 end Providers
 
-attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.pts Reaches.region
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share
 
 /-! ## Providers over the whole precondition
 
@@ -279,13 +244,6 @@ theorem _root_.Zig.Full.Live.share {q : Frac} (hw : Within (bshare b q k t) P) (
   obtain ⟨blk, hb, hl, hk, -⟩ := hh.bshareW hw hp (ha r hp)
   exact ⟨blk, hb, hl, hk⟩
 
-/-- An owned byte `j` of block `b`: the block is live with more than `j` bytes. -/
-theorem _root_.Zig.Full.Live.owned {j : Nat} (h : ∀ r, P r → ∃ fc, r.heap (b, j) = some fc) :
-    Live b (j + 1) P := fun _ r _ hh hp => by
-  obtain ⟨fc, hx⟩ := h r hp
-  obtain ⟨blk, hb, hl, hj, -⟩ := hh.block hx
-  exact ⟨blk, hb, hl, hj⟩
-
 /-- A nonempty owned byte range at `p` (in block `b`): the block is live and reaches its end. -/
 theorem _root_.Zig.Full.Live.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
     (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
@@ -310,7 +268,7 @@ theorem _root_.Zig.Full.Live.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} 
     obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
     exact ⟨A, S, K, bs, by omega, by omega, hb⟩
 
-/-- A live block reaches its bound. -/
+/-- A live block reaches its bound (owned bytes, `Live.region`/`Live.pts`; shares, `Live.share`). -/
 theorem _root_.Zig.Full.Reaches.of_live (h : Live b k P) : Reaches b k P := fun m r rF hh hp => by
   obtain ⟨blk, hb, -, hk⟩ := h m r rF hh hp
   exact ⟨blk, hb, hk⟩
