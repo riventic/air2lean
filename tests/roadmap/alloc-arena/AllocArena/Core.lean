@@ -296,11 +296,11 @@ def GrantOk (ns : List NodeV) : GRegion → Prop
       nd.N.off + 24 ≤ p.off
 
 /-- A grant's length does not matter to `GrantOk`. -/
-theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat} {K : BlockKind}
+theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q φ : Frac} {A : Nat} {K : BlockKind}
     (h : GrantOk ns (p, n, q, A, K, φ)) : GrantOk ns (p, n', q, A, K, φ) := h
 
 /-- A grant with a kind label of the same normal form, and any length, is as good. -/
-theorem GrantOk.relabel {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat}
+theorem GrantOk.relabel {ns : List NodeV} {p : Ptr} {n n' : Nat} {q φ : Frac} {A : Nat}
     {K K' : BlockKind} (h : GrantOk ns (p, n, q, A, K, φ)) (hK : K'.norm = K.norm) :
     GrantOk ns (p, n', q, A, K', φ) := by
   obtain ⟨h0, nd, hnd, hb, hA, hKn, hoff⟩ := h
@@ -377,7 +377,7 @@ theorem OV.InTail.of_first {w : OV} {N : Ptr} {b : BlockId} {x : Nat} (hf : w.fi
   rw [hf] at hf'; cases hf'; exact ⟨hb, h1, h2⟩
 
 /-- The re-pointed grant `i` has the bytes of its new region. -/
-theorem GrantHas.set {M : GMap} {i : Nat} {p : Ptr} {n : Nat} {q : Frac} {A : Nat} {K : BlockKind}
+theorem GrantHas.set {M : GMap} {i : Nat} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat} {K : BlockKind}
     {b : BlockId} {x : Nat} (hb : p.block = some b) (h1 : p.off.toNat ≤ x) (h2 : x < p.off.toNat + n) :
     GrantHas b x (M.set i (some (p, n, q, A, K, φ)) i) := by
   rw [GMap.set_same]; exact ⟨hb, h1, h2⟩
@@ -422,7 +422,7 @@ theorem OV.Cov.same {w w' : OV} (hc : w.Cov) (hn : w'.nodes = w.nodes)
 /-- **Availability after grant `i` (`n` bytes at `p`) becomes its first `n'` bytes** (none for a
 `free`; `n' > n` for a growth): the bytes past `n'` (released) and the old tail's must be
 available. -/
-theorem OV.avail_shrink {w w' : OV} {i : Nat} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat}
+theorem OV.avail_shrink {w w' : OV} {i : Nat} {p : Ptr} {n n' : Nat} {q φ : Frac} {A : Nat}
     {K : BlockKind} (hMi : w.M i = some (p, n, q, A, K, φ)) (hM : ∀ j, j ≠ i → w'.M j = w.M j)
     (hMi' : ∀ b x, p.block = some b → p.off.toNat ≤ x → x < p.off.toNat + n' → GrantHas b x (w'.M i))
     (hjh : ∀ l, w.jh l ≠ none → w'.jh l ≠ none)
@@ -463,7 +463,7 @@ theorem poolOn_push (b : BlockId) (n : Nat) (f : Nat → BlockId × Frac × Nat)
 
 /-- **Accounting of a `free`**: the grant's fraction moves from the grants to the pool. -/
 theorem acct_free {ns : List NodeV} {pn N i : Nat} {pf : Nat → BlockId × Frac × Nat} {M : GMap}
-    {p : Ptr} {n : Nat} {q : Frac} {A : Nat} {K : BlockKind} {bp : BlockId} {k : Nat}
+    {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat} {K : BlockKind} {bp : BlockId} {k : Nat}
     (h : ∀ b, ndLent b ns = poolOn b pn pf + grantsOn b M N) (hM : M i = some (p, n, q, A, K, φ))
     (hi : i < N) (hb : p.block = some bp) :
     ∀ b, ndLent b ns = poolOn b (pn + 1) (poolPush pn pf (bp, q, k)) + grantsOn b (M.set i none) N := by
@@ -483,7 +483,7 @@ theorem acct_free {ns : List NodeV} {pn N i : Nat} {pf : Nat → BlockId × Frac
   · simp only [hbb, if_false] at e ⊢; grind
 
 /-- **Accounting of a re-pointed grant** (same pointer and fraction): unchanged. -/
-theorem acct_repoint {M : GMap} {i : Nat} {p : Ptr} {n n' : Nat} {q : Frac} {A A' : Nat}
+theorem acct_repoint {M : GMap} {i : Nat} {p : Ptr} {n n' : Nat} {q φ : Frac} {A A' : Nat}
     {K K' : BlockKind} (hM : M i = some (p, n, q, A, K, φ)) (b : BlockId) (N : Nat) :
     grantsOn b (M.set i (some (p, n', q, A', K', φ))) N = grantsOn b M N :=
   esum_congr fun j _ => by
@@ -897,7 +897,7 @@ again at the new end (`EUpd.lendT`); the grant's receipt is split and joined aro
 section Glue
 
 /-- The receipts after a grant is re-pointed with the same pointer and fraction. -/
-theorem rcpts_repoint {γ e i : Nat} {M : GMap} {p : Ptr} {n n' : Nat} {q : Frac} {A A' : Nat}
+theorem rcpts_repoint {γ e i : Nat} {M : GMap} {p : Ptr} {n n' : Nat} {q φ : Frac} {A A' : Nat}
     {K K' : BlockKind} {r : Res} (hM : M i = some (p, n, q, A, K, φ)) (h : Rcpts γ e M r) :
     Rcpts γ e (M.set i (some (p, n', q, A', K', φ))) r := by
   have := rcpts_put (v := some (p, n', q, A', K', φ)) (GMap.set_same M i none)
@@ -906,7 +906,7 @@ theorem rcpts_repoint {γ e i : Nat} {M : GMap} {p : Ptr} {n n' : Nat} {q : Frac
   rwa [GMap.set_set] at this
 
 /-- The receipt of a grant, opened: its block and bound. -/
-theorem open_rcpt {γ e i : Nat} {M : GMap} {p : Ptr} {n : Nat} {q q' : Frac} {A : Nat} {K : BlockKind}
+theorem open_rcpt {γ e i : Nat} {M : GMap} {p : Ptr} {n : Nat} {q q' φ : Frac} {A : Nat} {K : BlockKind}
     {k₀ : Nat} {t : STag} {X : FAssn} {r : Res} (hM : M i = some (p, n, q, A, K, φ))
     (h : (pshare p q' k₀ t ⋆ (Rcpts γ e M ⋆ X)) r) :
     ∃ b k, p.block = some b ∧
@@ -933,7 +933,7 @@ theorem grant_fact {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} {X : FAssn
 
 /-- **`free`'s ghost part**: the share goes back against its receipt (at the receipt's bound `k`,
 on the grant's block `b`), the grant is retired. -/
-theorem free_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n : Nat} {q : Frac} {A : Nat}
+theorem free_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat}
     {K : BlockKind} :
     EUpd (gauthP γ e M t ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ (pshare p q (p.off.toNat + n) (some (γ, e)) ⋆
       Rcpts γ e M)))
@@ -956,7 +956,7 @@ theorem free_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n : Nat} {q :
 
 /-- **A shrink's ghost part**: the bound of the client's part `q'` of the share comes down to the
 new end, the grant is re-pointed; its receipt does not change. -/
-theorem shrink_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n n' : Nat} {q q' : Frac}
+theorem shrink_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n n' : Nat} {q q' φ : Frac}
     {A : Nat} {K : BlockKind} (hn : n' ≤ n) :
     EUpd (gauthP γ e M t ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ (pshare p q' (p.off.toNat + n) (some (γ, e)) ⋆
       Rcpts γ e M)))
@@ -1038,7 +1038,7 @@ theorem rcpt_regrow {γ e : Nat} {M : GMap} {t : STag} {b : BlockId} {q q' qh : 
 /-- **A growth's ghost part** (a grant in the node whose share `qh` at `kN` the arena keeps): the
 client's part `q'` of the share is re-lent at the new end (`rcpt_regrow`), the grant is re-pointed
 at the new length (with the kind label `K'` of the bytes it gets). -/
-theorem grow_ghost {γ e i : Nat} {M : GMap} {t : STag} {p N : Ptr} {n n' kN : Nat} {q q' qh : Frac}
+theorem grow_ghost {γ e i : Nat} {M : GMap} {t : STag} {p N : Ptr} {n n' kN : Nat} {q q' qh φ : Frac}
     {A : Nat} {K K' : BlockKind} (hq : q'.val ≤ q.val) (hpN : p.block = N.block)
     (hk : p.off.toNat + n' ≤ kN) :
     EUpd (gauthP γ e M t ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ (pshare p q' (p.off.toNat + n) (some (γ, e)) ⋆
@@ -1099,7 +1099,7 @@ Each branch of the entries ends in one of these updates from the precondition th
 
 /-- The facts after a `free`: the grant retired, its share pushed to the pool, the first node's
 `end_index` and tail as given (`hff`). -/
-theorem facts_free {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n : Nat} {q : Frac} {A : Nat}
+theorem facts_free {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat}
     {K : BlockKind} (hMi : w.M i = some (p, n, q, A, K, φ)) {b : BlockId} {k ei : Nat}
     {tail : Array Byte} {jh : Heap} (hb : p.block = some b)
     (hff : OV.FirstFacts { w with M := w.M.set i none, ei := ei, tail := tail })
@@ -1114,7 +1114,7 @@ theorem facts_free {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n : Nat} {q : Fr
 
 /-- The facts after a grant is re-pointed (same pointer and fraction, labels `A'`, `K'` of a node
 of its block), the first node's `end_index` and tail as given (`hff`). -/
-theorem facts_repoint {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n n' : Nat} {q : Frac}
+theorem facts_repoint {w : OV} (hw : w.Facts) {i : Nat} {p : Ptr} {n n' : Nat} {q φ : Frac}
     {A A' : Nat} {K K' : BlockKind} (hMi : w.M i = some (p, n, q, A, K, φ)) {ei : Nat} {tail : Array Byte}
     (hg : GrantOk w.nodes (p, n', q, A', K', φ))
     {jh : Heap}
@@ -1148,7 +1148,7 @@ variable {CI : Child} {γ e : Nat} {ctx : Ptr} {s : Slice}
 /-- `resize`'s postcondition `true` from the arena's variables, the re-pointed token and share,
 and the new bytes `X` of a growth. -/
 theorem rpost_true {w : OV} (hw : w.Facts) {p : Ptr} {k len n A S S' : Nat} {K K' : BlockKind}
-    {q q' : Frac} {tl : Array Byte} {i : Nat} {X : FAssn} (hK : K'.norm = K.norm)
+    {q q' φ : Frac} {tl : Array Byte} {i : Nat} {X : FAssn} (hK : K'.norm = K.norm)
     (hX : ∀ r, X r → (inv CI γ e ctx).newBytes p A S' K' len n r) {r : Res}
     (h : (w.body CI γ e ctx ⋆ ((gfrag γ e i (p, n, q, A, K', φ) ⋆
       pshare p q' (p.off.toNat + n) (some (γ, e))) ⋆ X)) r) :
@@ -1158,7 +1158,7 @@ theorem rpost_true {w : OV} (hw : w.Facts) {p : Ptr} {k len n A S S' : Nat} {K K
 
 /-- `resize`'s postcondition `true` of a shrink (no new bytes). -/
 theorem rpost_true0 {w : OV} (hw : w.Facts) {p : Ptr} {k len n A S : Nat} {K : BlockKind}
-    {q q' : Frac} {tl : Array Byte} {i : Nat} (hle : n ≤ len) {r : Res}
+    {q q' φ : Frac} {tl : Array Byte} {i : Nat} (hle : n ≤ len) {r : Res}
     (h : (w.body CI γ e ctx ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆
       pshare p q' (p.off.toNat + n) (some (γ, e)))) r) :
     (inv CI γ e ctx).rresizePost p k len n A S K q q' φ tl true r :=

@@ -185,9 +185,7 @@ theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) 
     intro r hr
     -- `alloc`'s result (a grant, or the fee back) joins the rest (`Any`).
     have hr' : ((I.own ⋆ Any) ⋆ G) r := by
-      cases v with
-      | none => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
-      | some q => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
+      cases v <;> exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
     obtain ⟨bs, hb⟩ := sep_ex.mp (sep_comm hr')
     obtain ⟨hbs, hb⟩ := Full.sep_lift.mp (sep_assoc hb)
     -- `granted ⋆ (own ⋆ Any)` to `(own ⋆ granted) ⋆ Any`.
