@@ -34,7 +34,7 @@ namespace Full
 open FAssn Os
 
 /-- `malloc` is `rawAlloc` of the request plus the slack of this attempt. -/
-theorem Os.Darwin.malloc_eq (env : Os.Env) (n : BitVec 64) (m : Mem) :
+theorem _root_.Zig.Os.Darwin.malloc_eq (env : Os.Env) (n : BitVec 64) (m : Mem) :
     (Darwin.malloc env n).run m =
       (rawAlloc (n.toNat + env.mallocSlack m.allocs n.toNat) Darwin.mallocAlign).run m := rfl
 
@@ -120,13 +120,13 @@ full extent go. -/
   FTotalTriple.ret (Q := fun _ => emp) ()
 
 /-- `free` of a pointer into a dead block (a double free, a free after a free) is `.illegal`. -/
-theorem Os.Darwin.free_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)
+theorem _root_.Zig.Os.Darwin.free_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)
     (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
     ((Darwin.free (some p)).run m).run = some (.error .illegal) := by
   simp [Darwin.free, Darwin.heapBlockAt, zig_unfold, hb, hblk, hl, ExceptT.run]
 
 /-- `free` of a pointer that is not at offset 0 of its block is `.illegal`. -/
-theorem Os.Darwin.free_inner {m : Mem} {p : Ptr} (h0 : p.off ≠ 0) :
+theorem _root_.Zig.Os.Darwin.free_inner {m : Mem} {p : Ptr} (h0 : p.off ≠ 0) :
     ((Darwin.free (some p)).run m).run = some (.error .illegal) := by
   simp only [Darwin.free, Darwin.heapBlockAt]
   cases hb : p.block with
