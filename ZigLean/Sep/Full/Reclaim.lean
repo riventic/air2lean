@@ -17,7 +17,7 @@ under any ledger, nested or not.
 | `EUpd.gather` | `sharesL t l` | `bshare b (Σ_b l) (max_b l) t ⋆ sharesL t (l without b)` | an entry on `b` |
 | `EUpd.regroup` | `sharesL t src` | `sharesL t dst` | per block equal sums; every target's bound at most the block's highest source bound |
 | `EUpd.revokeL` | `gauthP γ e' M p ⋆ rcptsL γ e l` | `gauthP γ e' M p ⋆ sharesL p l` | `e < e'` |
-| `EUpd.bumpRevoke` | `gauthP γ e M p ⋆ rcptsL γ e l` | `gauthP γ (e + 1) GMap.empty p ⋆ sharesL p l` | |
+| `EUpd.bumpRevoke` | `gauthP γ e M p ⋆ rcptsL γ e l` | `(gauthP γ (e + 1) GMap.empty p ⋆ epTok γ (e + 1) 1) ⋆ sharesL p l` | |
 
 `regroup` is `gather`, `bshare_split` and `EUpd.weaken`, one target at a time: the fractions on a
 block are a sum that can be cut differently, and a joined share certifies the highest bound of its
@@ -274,10 +274,15 @@ theorem EUpd.revokeL {γ e e' : Nat} {M : GMap} {p : STag} (he : e < e') :
 
 /-- **Bump the epoch and revoke its receipts**: the ledger goes to the next epoch with no grant
 (`Upd.bump`, which keeps the parent: a nested ledger revokes into its parent's tag), and every
-receipt of the old epoch becomes a share tagged with the parent. -/
+receipt of the old epoch becomes a share tagged with the parent; the new epoch's whole token
+comes with it. -/
 theorem EUpd.bumpRevoke {γ e : Nat} {M : GMap} {p : STag} (l : List Piece) :
-    EUpd (gauthP γ e M p ⋆ rcptsL γ e l) (gauthP γ (e + 1) GMap.empty p ⋆ sharesL p l) :=
-  EUpd.trans (EUpd.frame (EUpd.of_upd Upd.bump)) (EUpd.revokeL (Nat.lt_succ_self e) l)
+    EUpd (gauthP γ e M p ⋆ rcptsL γ e l)
+      ((gauthP γ (e + 1) GMap.empty p ⋆ epTok γ (e + 1) Frac.one) ⋆ sharesL p l) :=
+  EUpd.trans (EUpd.frame (EUpd.of_upd Upd.bump)) <|
+    EUpd.trans (EUpd.of_imp (P' := epTok γ (e + 1) Frac.one ⋆ (gauthP γ (e + 1) GMap.empty p ⋆ rcptsL γ e l))
+      fun _ h => of_eq (by ac_rfl) h) <|
+    EUpd.trans (EUpd.frameL (EUpd.revokeL (Nat.lt_succ_self e) l)) (EUpd.of_imp fun _ h => of_eq (by ac_rfl) h)
 
 
 /-! ## Junk bytes as regions

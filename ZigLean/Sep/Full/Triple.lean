@@ -1104,7 +1104,7 @@ theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
   ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
       simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _),
       by simpa using Ghost.CValid.unit, by simpa using CCell.valid_unit⟩,
-    0, fun _ _ => ⟨rfl, fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
+    0, fun _ _ => ⟨by simp [Ghost.add, Ghost.unit], fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
       fun _ _ _ _ => rfl⟩⟩,
     by simpa using ExtTrue.unit m, by simpa using ClFresh.unit m⟩
 

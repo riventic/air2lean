@@ -42,33 +42,50 @@ namespace GCell
 open Classical in
 /-- The authority `●(e, M)` of a ledger with parent tag `p`. -/
 noncomputable def auth1 (e : Nat) (M : GMap) (p : STag) : GCell :=
-  ⟨fun x => if x = (e, M, p) then 1 else 0, fun _ => 0⟩
+  ⟨fun x => if x = (e, M, p) then 1 else 0, fun _ => 0, fun _ => Frac.zero⟩
 
 /-- The token `◯(e, i ↦ g)`. -/
-def frag1 (e i : Nat) (g : GRegion) : GCell := ⟨fun _ => 0, fun t => if t = (e, i, g) then 1 else 0⟩
+def frag1 (e i : Nat) (g : GRegion) : GCell :=
+  ⟨fun _ => 0, fun t => if t = (e, i, g) then 1 else 0, fun _ => Frac.zero⟩
+
+/-- The part `q` of epoch `e`'s token. -/
+def ep1 (e : Nat) (q : Frac) : GCell := ⟨fun _ => 0, fun _ => 0, fun e' => if e' = e then q else Frac.zero⟩
+
+@[simp] theorem auth1_ep_val (e : Nat) (M : GMap) (p : STag) (e' : Nat) : ((auth1 e M p).ep e').val = 0 := rfl
+
+@[simp] theorem frag1_ep_val (e i : Nat) (g : GRegion) (e' : Nat) : ((frag1 e i g).ep e').val = 0 := rfl
+
+theorem auth1_add_ep (e : Nat) (M : GMap) (p : STag) (d : GCell) : ((auth1 e M p).add d).ep = d.ep :=
+  funext fun _ => Frac.zero_add _
 
 theorem valid_auth1_add {e : Nat} {M : GMap} {p : STag} {d : GCell} :
     ((auth1 e M p).add d).Valid ↔
-      (∀ x, d.auth x = 0) ∧ d.TokOk e M ∧ ∀ e' i g, e < e' → d.frag (e', i, g) = 0 := by
+      (∀ x, d.auth x = 0) ∧ d.TokOk e M ∧ (∀ e' i g, e < e' → d.frag (e', i, g) = 0) ∧ d.EpOk e := by
   constructor
-  · rintro (h | ⟨e', M', p', h1, h2, h3, h4⟩)
+  · rintro (h | ⟨e', M', p', h1, h2, h3, h4, h5, h6⟩)
     · have := h (e, M, p); simp [add, auth1] at this
     · by_cases hx : (e', M', p') = (e, M, p)
       · simp only [Prod.mk.injEq] at hx
         obtain ⟨rfl, rfl, rfl⟩ := hx
         refine ⟨fun x => ?_, fun i g => by simpa [add, auth1] using h3 i g,
-          fun e'' i g he => by simpa [add, auth1] using h4 e'' i g he⟩
+          fun e'' i g he => by simpa [add, auth1] using h4 e'' i g he,
+          fun e'' => by rw [auth1_add_ep] at h5; exact h5 e'',
+          fun e'' he => by rw [auth1_add_ep] at h6; exact h6 e'' he⟩
         by_cases hx' : x = (e', M', p')
         · subst hx'; simp [add, auth1] at h1; omega
         · have := h2 x hx'; simp [add, auth1, hx'] at this; omega
       · have := h2 (e, M, p) (Ne.symm hx); simp [add, auth1] at this
-  · rintro ⟨h1, h2, h3⟩
+  · rintro ⟨h1, h2, h3, h4, h5⟩
     refine .inr ⟨e, M, p, by simp [add, auth1, h1], fun x hx => by simp [add, auth1, hx, h1],
-      fun i g => by simpa [add, auth1] using h2 i g, fun e' i g he => by simpa [add, auth1] using h3 e' i g he⟩
+      fun i g => by simpa [add, auth1] using h2 i g, fun e' i g he => by simpa [add, auth1] using h3 e' i g he,
+      fun e' => by rw [auth1_add_ep]; exact h4 e', fun e' he => by rw [auth1_add_ep]; exact h5 e' he⟩
 
 theorem frag1_add (e i : Nat) (g : GRegion) (d : GCell) :
-    (frag1 e i g).add d = ⟨d.auth, fun t => (if t = (e, i, g) then 1 else 0) + d.frag t⟩ := by
-  ext <;> simp [add, frag1]
+    (frag1 e i g).add d = ⟨d.auth, fun t => (if t = (e, i, g) then 1 else 0) + d.frag t, d.ep⟩ := by
+  ext
+  · simp [add, frag1]
+  · simp [add, frag1]
+  · simp only [add, frag1, Frac.zero_add]
 
 /-- The statuses of a ledger cell with the authority `●(e, M)` under parent `p`: `(e, p)` and the
 frame's. -/
@@ -88,6 +105,19 @@ theorem frag1_add_auth (e i : Nat) (g : GRegion) (d : GCell) :
     ((frag1 e i g).add d).auth = d.auth := by
   funext x; simp [add, frag1]
 
+@[simp] theorem ep1_ep_val (e : Nat) (q : Frac) (e' : Nat) :
+    ((ep1 e q).ep e').val = if e' = e then q.val else 0 := by
+  simp only [ep1]; split <;> rfl
+
+theorem ep1_add (e : Nat) (q q' : Frac) : (ep1 e q).add (ep1 e q') = ep1 e (q.add q') := by
+  ext
+  · simp [add, ep1]
+  · simp [add, ep1]
+  · simp only [add, ep1]; split <;> simp
+
+@[simp] theorem ep1_zero (e : Nat) : ep1 e Frac.zero = unit := by
+  ext <;> simp [ep1, unit]
+
 end GCell
 
 /-! ## Ghost states with one name -/
@@ -104,6 +134,16 @@ theorem Ghost.at_add (γ : Nat) (c c' : GCell) : (Ghost.at γ c).add (Ghost.at �
   · funext b; simp [Ghost.add, Ghost.at]
   · funext b x; simp [Ghost.add, Ghost.at]
   · simp
+
+@[simp] theorem Ghost.at_unit (γ : Nat) : Ghost.at γ GCell.unit = Ghost.unit := by
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.at, Ghost.unit]
+
+/-- Epoch tokens change no ledger status. -/
+@[simp] theorem Ghost.ls_at_ep_add (γ e : Nat) (q : Frac) (g : Ghost) :
+    ((Ghost.at γ (GCell.ep1 e q)).add g).ls = g.ls := by
+  funext γ' x p
+  simp only [Ghost.ls, Ghost.add, Ghost.at]
+  split <;> simp [GCell.add, GCell.ep1, GCell.unit]
 
 @[simp] theorem Ghost.at_cl (γ : Nat) (c : GCell) : (Ghost.at γ c).cl = fun _ _ => ECell.unit := rfl
 
@@ -342,6 +382,67 @@ theorem gauth_gfrag_intro {γ e i : Nat} {M : GMap} {p : STag} {g : GRegion} :
     ⟨FHeap.empty, Know.none, Ghost.at γ (GCell.frag1 e i g)⟩, FHeap.disjoint_empty _,
     by rw [FHeap.union_empty, Know.union_none, Ghost.at_add], ⟨rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl⟩⟩
 
+/-! ### Epoch tokens (`docs/sep-full-state.md` §Epoch tokens)
+
+Each epoch of a ledger has one whole token, minted with the epoch (`Upd.alloc`, `Upd.bump`). Its
+parts split and join (`epTok_add`). Next to the ledger's authority of epoch `e`, the parts of
+epoch `e'`'s token held anywhere add up to at most one, and to nothing for `e' > e`
+(`GCell.EpOk`): so whoever holds the whole token knows that nobody else holds a part of it
+(`gauth_epTok_le`). An allocator that takes a part of the token with each grant and gives it back
+with the grant (an arena's fee, `FAllocInv.fee`) learns from the whole token that no grant is
+outstanding. -/
+
+/-- The part `q` of ledger `γ`'s token of epoch `e`. Owns no bytes, no knowledge. -/
+def epTok (γ e : Nat) (q : Frac) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.at γ (GCell.ep1 e q)
+
+/-- Parts of an epoch token split and join: an equality. -/
+theorem epTok_add (γ e : Nat) (q q' : Frac) : epTok γ e (q.add q') = (epTok γ e q ⋆ epTok γ e q') := by
+  funext r; apply propext; constructor
+  · rintro ⟨h, k, g⟩
+    exact ⟨⟨FHeap.empty, Know.none, Ghost.at γ (GCell.ep1 e q)⟩,
+      ⟨FHeap.empty, Know.none, Ghost.at γ (GCell.ep1 e q')⟩, FHeap.disjoint_empty _,
+      by rw [res_eta r, h, k, g, ← GCell.ep1_add, ← Ghost.at_add]; simp [Know.union_none],
+      ⟨rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl⟩⟩
+  · rintro ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩⟩
+    exact ⟨by simp [h1, h2], by simp [k1, k2, Know.union_none], by simp [g1, g2, Ghost.at_add, GCell.ep1_add]⟩
+
+theorem epTok_zero (γ e : Nat) : epTok γ e Frac.zero = emp := by
+  funext r; simp [epTok, emp]
+
+/-- The resource of `gauthP γ e M p ⋆ epTok γ e' q`. -/
+theorem gauth_epTok {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} {r : Res}
+    (h : (gauthP γ e M p ⋆ epTok γ e' q) r) :
+    r = ⟨FHeap.empty, Know.none, Ghost.at γ ((GCell.auth1 e M p).add (GCell.ep1 e' q))⟩ := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩⟩ := h
+  rw [h1, h2, k1, k2, g1, g2, FHeap.union_empty, Know.union_none, Ghost.at_add]
+
+theorem gauth_epTok_intro {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} :
+    (gauthP γ e M p ⋆ epTok γ e' q)
+      ⟨FHeap.empty, Know.none, Ghost.at γ ((GCell.auth1 e M p).add (GCell.ep1 e' q))⟩ :=
+  ⟨⟨FHeap.empty, Know.none, Ghost.at γ (GCell.auth1 e M p)⟩,
+    ⟨FHeap.empty, Know.none, Ghost.at γ (GCell.ep1 e' q)⟩, FHeap.disjoint_empty _,
+    by rw [FHeap.union_empty, Know.union_none, Ghost.at_add], ⟨rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl⟩⟩
+
+/-- **An epoch token is at most whole**: next to its ledger's authority of epoch `e`, a part `q` of
+epoch `e'`'s token, in a ghost state that composes with a frame, is at most one, and nothing for a
+later epoch. -/
+theorem gauth_epTok_le {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} {r : Res} {gF : Ghost}
+    (h : (gauthP γ e M p ⋆ epTok γ e' q) r) (hg : Ghost.Ok r.gh gF) :
+    q.val ≤ 1 ∧ (e < e' → q.val = 0) := by
+  rw [gauth_epTok h] at hg
+  have hv := hg.1.1 γ
+  simp only [Ghost.add, Ghost.at, ↓reduceIte] at hv
+  rw [GCell.add_assoc, GCell.valid_auth1_add] at hv
+  obtain ⟨-, -, -, h1, h2⟩ := hv
+  have a := h1 e'
+  have := ((gF.led γ).ep e').nonneg
+  have := q.nonneg
+  simp only [GCell.add_ep_val, GCell.ep1_ep_val, ↓reduceIte] at a
+  refine ⟨by grind, fun he => ?_⟩
+  have b := h2 e' he
+  simp only [GCell.add_ep_val, GCell.ep1_ep_val, ↓reduceIte] at b; grind
+
 /-! ## Frame-preserving updates -/
 
 /-- `P` can become `P'` by a ghost update: every resource of `P` is replaced, with the same bytes,
@@ -357,14 +458,15 @@ with: the map records the grant, and `d` holds no token for it. -/
 theorem GCell.valid_pair {e i : Nat} {M : GMap} {p : STag} {g : GRegion} {d : GCell}
     (hv : ((GCell.auth1 e M p).add ((GCell.frag1 e i g).add d)).Valid) :
     (∀ x, d.auth x = 0) ∧ M i = some g ∧ d.frag (e, i, g) = 0 ∧ d.TokOk e M ∧
-      ∀ e' j g', e < e' → d.frag (e', j, g') = 0 := by
+      (∀ e' j g', e < e' → d.frag (e', j, g') = 0) ∧ d.EpOk e := by
   rw [GCell.valid_auth1_add] at hv
-  obtain ⟨h1, h2, h3⟩ := hv
+  obtain ⟨h1, h2, h3, h4⟩ := hv
+  rw [GCell.frag1_add] at h4
   simp only [GCell.TokOk, GCell.add, GCell.frag1] at h1 h2 h3
   have hi := h2 i g
   simp only [↓reduceIte] at hi
   refine ⟨fun x => by simpa using h1 x, hi.2 (by omega), by omega, fun j g' => ?_,
-    fun e' j g' he => ?_⟩
+    fun e' j g' he => ?_, h4⟩
   · have := h2 j g'
     exact ⟨by omega, fun hp => this.2 (by omega)⟩
   · have := h3 e' j g' he; omega
@@ -411,8 +513,10 @@ theorem single {γ : Nat} {c c' : GCell} {P P' : FAssn}
   exact ⟨_, hp', rfl, rfl, rfl, rfl, h1, h2⟩
 
 /-- **A new ledger** with parent tag `p`, at a name no frame uses (no ledger, no tag, no parent
-link), with no grant. Its tags are lent from shares tagged `p` (`EUpd.lendT`) and die with `p`. -/
-theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p) := by
+link), with no grant, and its epoch's whole token (`epTok`). Its tags are lent from shares tagged
+`p` (`EUpd.lendT`) and die with `p`. -/
+theorem alloc (p : STag) :
+    Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p ⋆ epTok γ 0 Frac.one) := by
   rintro r ⟨h0, k0, g0⟩ g hg
   rw [g0] at hg
   unfold Ghost.Ok at hg
@@ -429,14 +533,18 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
     have h2 : ν = N + NC + p.name := rfl
     omega
   have h0ν : ∀ x, (g.led ν).auth x = 0 := fun x => by rw [hNu]; rfl
-  let G' := (Ghost.at ν (GCell.auth1 0 GMap.empty p)).add g
+  let c' := (GCell.auth1 0 GMap.empty p).add (GCell.ep1 0 Frac.one)
+  let G' := (Ghost.at ν c').add g
   have hx : G'.extent = g.extent := by funext b; simp [G', Ghost.add, Ghost.at]
   have hcl : G'.cl = g.cl := Ghost.at_add_cl _ _ _
   have hl : ∀ γ', γ' ≠ ν → G'.led γ' = g.led γ' := fun γ' hne => by
     simp [G', Ghost.add, Ghost.at, hne]
-  have hlN : G'.led ν = GCell.auth1 0 GMap.empty p := by simp [G', Ghost.add, Ghost.at, hNu]
-  have hls : ∀ γ e q, G'.ls γ e q ↔ (γ = ν ∧ e = 0 ∧ q = p) ∨ (γ ≠ ν ∧ g.ls γ e q) :=
-    fun γ e q => Ghost.ls_at_add h0ν
+  have hlN : G'.led ν = c' := by simp [G', Ghost.add, Ghost.at, hNu]
+  have hls : ∀ γ e q, G'.ls γ e q ↔ (γ = ν ∧ e = 0 ∧ q = p) ∨ (γ ≠ ν ∧ g.ls γ e q) := fun γ e q => by
+    have hG' : G' = (Ghost.at ν (GCell.auth1 0 GMap.empty p)).add ((Ghost.at ν (GCell.ep1 0 Frac.one)).add g) := by
+      simp only [G', c', ← Ghost.add_assoc, Ghost.at_add]
+    rw [hG', Ghost.ls_at_add (fun x => by simp [Ghost.add, Ghost.at, GCell.add, GCell.ep1, h0ν x]),
+      Ghost.ls_at_ep_add]
   -- no ledger names `ν` as its parent
   have hnoν : ∀ γ e e₀, ¬ g.ls γ e (some (ν, e₀)) := fun γ e e₀ ⟨M, h⟩ => by
     have := hNp γ e M e₀; omega
@@ -445,9 +553,12 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
     (fun γ => by
       by_cases h : γ = ν
       · subst h; rw [hlN]
-        have h := (GCell.valid_auth1_add (e := 0) (M := GMap.empty) (p := p) (d := GCell.unit)).mpr
-          ⟨fun _ => rfl, fun _ _ => ⟨Nat.zero_le _, fun h => absurd h (Nat.lt_irrefl 0)⟩, fun _ _ _ _ => rfl⟩
-        rwa [GCell.add_unit] at h
+        refine GCell.valid_auth1_add.mpr ⟨fun _ => rfl,
+          fun _ _ => ⟨Nat.zero_le _, fun h => absurd h (Nat.lt_irrefl 0)⟩, fun _ _ _ _ => rfl,
+          fun e' => ?_, fun e' he => ?_⟩
+        · have : Frac.one.val = 1 := rfl
+          simp only [GCell.ep1_ep_val]; split <;> grind
+        · simp [show e' ≠ 0 by omega]
       · rw [hl γ h]; exact hv.1 γ)
     (fun γ e hz b k => by
       rcases hz with hz | ⟨e', he⟩
@@ -492,14 +603,14 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
       have hq : ∀ x, G'.ls γ x w ↔ g.ls γ x w := fun x => by
         rw [hls]; simp [hγ]
       exact ⟨⟨e', hee, (hq e').mp hl'⟩, (hq e).mp⟩)
-  refine ⟨⟨FHeap.empty, Know.none, Ghost.at ν (GCell.auth1 0 GMap.empty p)⟩, ⟨ν, rfl, rfl, rfl⟩,
+  refine ⟨⟨FHeap.empty, Know.none, Ghost.at ν c'⟩, ⟨ν, gauth_epTok_intro⟩,
     h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at, Ghost.unit], by rw [g0]; rfl,
     ⟨hv', ν + 1, fun γ hγ => ⟨?_, ?_, fun γ' e' M e => ?_⟩⟩, fun m hm => ?_⟩
   · rw [hl γ (by omega)]; exact (hN γ (by omega)).1
   · rw [hx]; exact (hN γ (by omega)).2.1
   · show (G'.led γ').auth _ = 0
     by_cases h : γ' = ν
-    · rw [h, hlN]; simp only [GCell.auth1]
+    · rw [h, hlN]; simp only [c', GCell.add, GCell.auth1, GCell.ep1, Nat.add_zero]
       refine if_neg fun x => ?_
       simp only [Prod.mk.injEq] at x
       have h1 : p.name = γ + 1 := by rw [← x.2.2]; rfl
@@ -515,9 +626,9 @@ theorem issue {γ e i : Nat} {M : GMap} {p : STag} (g : GRegion) (hi : M i = non
     gauth_gfrag_intro fun d hv => by
       refine ⟨?_, fun x q => ?_⟩
       · rw [GCell.add_assoc, GCell.valid_auth1_add]
-        obtain ⟨h1, h2, h3⟩ := GCell.valid_auth1_add.mp hv
-        simp only [GCell.add, GCell.frag1]
-        refine ⟨fun x => by simpa using h1 x, fun j g' => ?_, fun e' j g' he => ?_⟩
+        obtain ⟨h1, h2, h3, h4⟩ := GCell.valid_auth1_add.mp hv
+        refine ⟨fun x => by simpa [GCell.add, GCell.frag1] using h1 x, fun j g' => ?_,
+          fun e' j g' he => ?_, by rw [GCell.frag1_add]; exact h4⟩ <;> simp only [GCell.add, GCell.frag1]
         · by_cases hji : j = i
           · subst hji
             have h0 : d.frag (e, j, g') = 0 :=
@@ -539,8 +650,8 @@ theorem retire {γ e i : Nat} {M : GMap} {p : STag} {g : GRegion} :
     ⟨rfl, rfl, rfl⟩ fun d hv => by
       refine ⟨?_, fun x q => ?_⟩
       · rw [GCell.add_assoc] at hv
-        obtain ⟨h1, hM, h0, h2, h3⟩ := GCell.valid_pair hv
-        refine GCell.valid_auth1_add.mpr ⟨h1, fun j g' => ⟨(h2 j g').1, fun hp => ?_⟩, h3⟩
+        obtain ⟨h1, hM, h0, h2, h3, h4⟩ := GCell.valid_pair hv
+        refine GCell.valid_auth1_add.mpr ⟨h1, fun j g' => ⟨(h2 j g').1, fun hp => ?_⟩, h3, h4⟩
         have hj := (h2 j g').2 hp
         by_cases hji : j = i
         · subst hji; rw [hM] at hj; cases hj; omega
@@ -554,26 +665,34 @@ theorem reassign {γ e i : Nat} {M : GMap} {p : STag} {g : GRegion} (g' : GRegio
   rw [GMap.set_set] at h
   exact trans retire h
 
-/-- **The next epoch**, with no grant and the same parent: every outstanding token becomes stale,
-and so does every share tagged with the old epoch or with a tag below it (`Ghost.valid_led_change`
-with the future tags as `Z`); the old epoch's receipts stay live (`EUpd.revoke`). -/
-theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP γ (e + 1) GMap.empty p) := by
+/-- **The next epoch**, with no grant and the same parent, and its whole token (`epTok`): every
+outstanding token becomes stale, and so does every share tagged with the old epoch or with a tag
+below it (`Ghost.valid_led_change` with the future tags as `Z`); the old epoch's receipts stay
+live (`EUpd.revoke`). No frame holds a part of the new epoch's token (`GCell.EpOk`). -/
+theorem bump {γ e : Nat} {M : GMap} {p : STag} :
+    Upd (gauthP γ e M p) (gauthP γ (e + 1) GMap.empty p ⋆ epTok γ (e + 1) Frac.one) := by
   rintro r ⟨h0, k0, g0⟩ g hg
   rw [g0] at hg
   obtain ⟨hv, N, hN⟩ := hg
+  let c' := (GCell.auth1 (e + 1) GMap.empty p).add (GCell.ep1 (e + 1) Frac.one)
   let G := (Ghost.at γ (GCell.auth1 e M p)).add g
-  let G' := (Ghost.at γ (GCell.auth1 (e + 1) GMap.empty p)).add g
+  let G' := (Ghost.at γ c').add g
   have hlv := hv.1 γ
   simp only [Ghost.add, Ghost.at, ↓reduceIte] at hlv
-  obtain ⟨hd1, -, hd3⟩ := GCell.valid_auth1_add.mp hlv
+  obtain ⟨hd1, -, hd3, hd4⟩ := GCell.valid_auth1_add.mp hlv
   have hx : G'.extent = G.extent := by funext b; simp [G, G', Ghost.add, Ghost.at]
   have hcl : G'.cl = G.cl := by simp only [G, G', Ghost.at_add_cl]
   have hl : ∀ γ', γ' ≠ γ → G'.led γ' = G.led γ' := fun γ' hne => by
     simp [G, G', Ghost.add, Ghost.at, hne]
   have hls : ∀ γ' x q, G.ls γ' x q ↔ (γ' = γ ∧ x = e ∧ q = p) ∨ (γ' ≠ γ ∧ g.ls γ' x q) :=
     fun γ' x q => Ghost.ls_at_add hd1
+  have hG' : G' = (Ghost.at γ (GCell.auth1 (e + 1) GMap.empty p)).add
+      ((Ghost.at γ (GCell.ep1 (e + 1) Frac.one)).add g) := by
+    simp only [G', c', ← Ghost.add_assoc, Ghost.at_add]
   have hls' : ∀ γ' x q, G'.ls γ' x q ↔ (γ' = γ ∧ x = e + 1 ∧ q = p) ∨ (γ' ≠ γ ∧ g.ls γ' x q) :=
-    fun γ' x q => Ghost.ls_at_add hd1
+    fun γ' x q => by
+      rw [hG', Ghost.ls_at_add (fun x => by simp [Ghost.add, Ghost.at, GCell.add, GCell.ep1, hd1 x]),
+        Ghost.ls_at_ep_add]
   have hG : G.ls γ e p := (hls γ e p).mpr (.inl ⟨rfl, rfl, rfl⟩)
   -- a tag of another ledger has the same status
   have hoth : ∀ γ' x q, γ' ≠ γ → (G'.ls γ' x q ↔ G.ls γ' x q) := fun γ' x q hne => by
@@ -583,9 +702,20 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP 
     (fun γ' => by
       by_cases h : γ' = γ
       · subst h
-        simp only [G', Ghost.add, Ghost.at, ↓reduceIte]
-        exact GCell.valid_auth1_add.mpr ⟨hd1, fun i g => by simp [hd3 (e + 1) i g (by omega)],
-          fun e' i g he => hd3 e' i g (by omega)⟩
+        simp only [G', c', Ghost.add, Ghost.at, ↓reduceIte]
+        rw [GCell.add_assoc]
+        refine GCell.valid_auth1_add.mpr ⟨fun x => by simp [GCell.add, GCell.ep1, hd1 x],
+          fun i g => by simp [GCell.add, GCell.ep1, hd3 (e + 1) i g (by omega)],
+          fun e' i g he => by simp [GCell.add, GCell.ep1, hd3 e' i g (by omega)], fun e' => ?_,
+          fun e' he => ?_⟩
+        · have h1 := hd4.1 e'
+          by_cases he : e' = e + 1
+          · have h2 := hd4.2 e' (by omega)
+            have : Frac.one.val = 1 := rfl
+            simp only [GCell.add_ep_val, GCell.ep1_ep_val, if_pos he, h2]; grind
+          · simp only [GCell.add_ep_val, GCell.ep1_ep_val, if_neg he]; grind
+        · have h2 := hd4.2 e' (by omega)
+          simp only [GCell.add_ep_val, GCell.ep1_ep_val, if_neg (show e' ≠ e + 1 by omega), h2]; grind
       · rw [hl γ' h]; exact hv.1 γ')
     (fun γ' x hz b k => (hv.2.1 b).2.2 γ' x k hz)
     (fun γ' x hz b y k => (hv.2.2.1.1 b y).2.2 γ' x k hz)
@@ -626,7 +756,7 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP 
           · exact absurd rfl hne
         · exact absurd hγ hne
       · exact ⟨⟨x', hxx, (hoth γ' x' w hγ).mp hl'⟩, (hoth γ' x w hγ).mp⟩)
-  refine ⟨⟨FHeap.empty, Know.none, Ghost.at γ (GCell.auth1 (e + 1) GMap.empty p)⟩, ⟨rfl, rfl, rfl⟩,
+  refine ⟨⟨FHeap.empty, Know.none, Ghost.at γ c'⟩, gauth_epTok_intro,
     h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at], by rw [g0]; rfl,
     ⟨hv', N + γ + 1, fun γ' hγ => ⟨?_, ?_, fun γ'' x' M' x => ?_⟩⟩,
     fun m hm => by rw [g0] at hm; exact ht' m hm⟩
@@ -637,7 +767,8 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP 
     · subst h
       have h1 := hold γ'' x' M' x
       have h2 := hold γ'' e M x
-      simp only [G, G', Ghost.add, Ghost.at, ↓reduceIte, GCell.add, GCell.auth1] at h1 h2 ⊢
+      simp only [G, G', c', Ghost.add, Ghost.at, ↓reduceIte, GCell.add, GCell.auth1, GCell.ep1,
+        Nat.add_zero] at h1 h2 ⊢
       by_cases hp : p = some (γ', x)
       · subst hp; simp at h2
       · rw [if_neg (fun y => hp (by simp only [Prod.mk.injEq] at y; exact y.2.2.symm))]
