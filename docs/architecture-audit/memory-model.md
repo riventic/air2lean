@@ -34,6 +34,7 @@ fix lands; the fixture then becomes an agreement test.
 | MM-14 | Race footprint and dead blocks grow without bound in single-threaded runs | HARDENING | measured |
 | MM-15 | Model `@memcpy` copies like `@memmove`; it relies on the ReleaseSafe alias check in AIR | control (agrees) | reproduced (`memcpyOverlap`) |
 | MM-16 | `noalias` parameters are not modelled: an overlapping call gives a value | SOUNDNESS | reproduced (`na.shiftCopy`, `na.swapSelf`); fixed |
+| MM-17 | A NaN stored to memory and read as an integer gives the model's canonical NaN bits | SOUNDNESS | reproduced on x86_64 and aarch64 ([nan-bits.md](nan-bits.md)); fixed |
 
 Mechanisms checked and found sound: block-id provenance for liveness (use after free, double
 free, foreign free are `.illegal` by block id, not address); one-past-the-end accesses;
@@ -67,6 +68,7 @@ build for each fixed finding below.
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
 | MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
+| MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
 
 ## Measurements
 

@@ -62,7 +62,7 @@ own bit-packed instance (`W = 1`).
 |---|---|
 | `intOfBytes_intBytes`, `intOfBytes_of_extract` | The bytes of an integer of any width read back as that integer. |
 | `laneOf_packLanes` | Lane `i` of the packed integer is the `i`-th lane. |
-| `Vec.packedEnc_lawful`; `LawfulEnc (Vec (BitVec w) n)`, `LawfulEnc (Vec (Float fmt) n)` | Every vector has an image of exactly `Enc.size` bytes, and decoding it gives the vector back (so `load_store_same`/`load_store_other` apply). |
+| `Vec.packedEnc_lawful`; `LawfulEnc (Vec (BitVec w) n)`; `Vec.float_size_encode`, `Vec.float_decode_encode` | Every vector has an image of exactly `Enc.size` bytes, and decoding it gives the vector back (so `load_store_same`/`load_store_other` apply). A float vector reads back if no lane is a NaN: a NaN lane's bits are undefined in memory (`Float.detMask`, [floats.md](floats.md#nan-in-memory)). |
 | `Vec.set_lane_self`, `Vec.set_lane_ne` | A lane write replaces lane `i` and keeps every other lane. |
 | `packLanes_set_mod`, `packLanes_set_shiftRight` | In the memory image, a write of lane `i` keeps every bit below bit `i * W` and every bit from `(i + 1) * W` up. |
 | `laneOf_packBits_set_ne` | Lane `j ≠ i` of the image after a write of lane `i` is unchanged. |
