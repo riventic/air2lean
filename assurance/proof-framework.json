@@ -776,12 +776,6 @@
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Group.lean"
-    },
-    {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
-    },
-    {
       "path": "tests/roadmap/strength-log/ProofsLayout.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
