@@ -211,8 +211,9 @@ that the queue then rejects; it can never merge an unchecked change.
   `MERGE`, grouping `ALLGREEN`, build concurrency 2, group size 1-5, no wait for a minimum group,
   status timeout 120 min; block force pushes and deletion. Admins keep bypass for emergencies;
   a bypassing push gets a `workflow_dispatch` run.
-- Repository ruleset on `generated`: block force pushes and deletion, restrict updates; bypass
-  only for the GitHub Actions app (integration 15368), which `generated.yml` pushes as.
+- Repository ruleset `generated-protection` on `generated`: block force pushes and deletion
+  (append-only); bypass only for the admin role. `generated.yml` only fast-forwards it, so the
+  Actions token needs no bypass.
 - `scripts/release-record.py` and the target-matrix tooling accept `merge_group` runs as
   evidence: a `merge_group` run's `headSha` is the commit the queue merges.
 
@@ -301,10 +302,17 @@ CI-Run: https://github.com/riventic/air2lean/actions/runs/38200000000
 
 So `git log origin/generated --grep "Main-Commit: <M>"` finds M's entry, and
 `https://github.com/riventic/air2lean/blob/generated/<path>` always shows the newest main
-commit's file (the documentation links to the premise index point there). A push to `main` that
-did not come through the queue (admin bypass) has no `merge_group` run: run CI on it with
-`workflow_dispatch`, and the next publish picks it up. Entries stay in main's order: publishing
-stops at the first commit without a run.
+commit's file (the documentation links to the premise index point there). Entries stay in
+main's order: publishing stops at the first commit without a successful run.
+
+A push to `main` that did not come through the queue (admin bypass) has no `merge_group` run.
+After publishing, `publish --dispatch` pushes a branch `ci-evidence/<M>` at each such commit M
+(the dispatch API needs a branch or tag; M is already in the repository, so the push adds no
+commit and no workflow change) and starts a full `workflow_dispatch` CI run there. The next
+publish after that run is green picks M up and deletes the branch. A commit whose run is queued,
+running, green, failed or timed out is not dispatched again; one whose run was cancelled,
+skipped or never started is. A failed run needs a human (`gh run rerun`), and the freshness
+check keeps reporting it.
 
 **Freshness, loudly.** The same workflow runs every 30 minutes and after each publish:
 `scripts/generated.py freshness` fails when a main commit has been main's head for longer than
