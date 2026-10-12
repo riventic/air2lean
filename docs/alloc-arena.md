@@ -182,6 +182,22 @@ model, not a premise of a triple. Kernel-checked regression (`ArenaObstruction.l
 `Mem.FSeq`), `node_buf_low` and `aligned_index_ok` (a placement proposing `2^64 - 64` for
 `node_buf` no longer gets it, and `alignedIndex` on the memory it does get succeeds).
 
+**O1: two nodes of one child block need not be disjoint (found in step 8 (reset); library fix in
+progress).** `reset` gives the nodes back to the child one by one, and the child's `free` needs
+each node's whole region. But nothing in `own` said that two used nodes in one child block are
+disjoint: with a `FixedBufferAllocator` child, nodes `[x, x+64)` and `[x+32, x+96)` of one buffer
+were consistent with the invariant, because the old nodes' bytes are held by clients and
+`FAllocSpec` related nothing between a new child grant and the outstanding ones. Coordinator
+decision O1 (2026-10-12): **byte-range claims** next to the extent shares
+([sep-full-state.md](sep-full-state.md) §Byte-range claims). A grant will carry the exclusive
+claim on its bytes, tagged with the allocator's tag; two claims of one active world on one byte
+make the ghost state invalid. Done: the library (`ZigLean/Sep/Full/Claims.lean`: `bclaim`,
+`bcrcpt`, `pclaim`, split/join, `Holds.bclaim_disjoint`, `FTriple.mintClaim`) and the kernel-checked
+regressions `tests/roadmap/sep-full/ClaimsCX.lean` (`overlap_invalid`; `arena_nodes_disjoint`: the
+O1 scenario is impossible). Next: `FAllocInv.granted` and the client token carry the claim (a
+client still gets exclusive bytes, now also the claim: `FAllocSpec` is not weakened), lend/return/
+revoke of claims, the FBA and page re-proofs, then `reset`.
+
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
 multi-threaded specification of the lock-free code (the `resizing` bit as a lock, the stolen

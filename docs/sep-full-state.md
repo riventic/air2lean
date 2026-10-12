@@ -602,6 +602,47 @@ The general atomic rules the arena's `alloc` needs are done independently
 (`AtomicRules.lean`: `atomicXchgPtrW`, `cmpxchgWeakPtrW`, `atomicLoadUnorderedW`/`AsW`) and carry
 over to phase 2 unchanged in statement.
 
+### Byte-range claims (decision O1, 2026-10-12)
+
+**The problem.** An extent share says that a block is live and long enough, not who may use which
+bytes. An allocator that holds several grants of one child allocator in one block (an arena's
+nodes from a fixed-buffer child) cannot learn that they are disjoint: their bytes are with the
+clients, and the child's specification relates no new grant to the outstanding ones
+([alloc-arena.md](alloc-arena.md) O1).
+
+**The design.** `Ghost` has a third component, `cl : BlockId → Nat → ECell`: one claim cell per
+byte of every block, the same kind of cell as a block's extent claims, used at bound `0`
+(`ZigLean/Sep/Full/Claims.lean`).
+
+* `bclaim b lo hi t`: the whole fraction `1` of the cell of every byte of `[lo, hi)` in world `t`
+  (`ECell.shareT t 1 0`); `bcrcpt b lo hi γ e`: the receipts (`ECell.rcpt γ e 1 0`) of a claim lent
+  as one tagged `(γ, e)`; `pclaim p lo hi t` names the block through a pointer.
+* Validity (`Ghost.CValid`, the third conjunct of `Ghost.Valid`) is the extent cells' validity per
+  byte (`ECell.Valid`, `ECell.TagOk` under the ledgers' statuses) and a bound on the ledger names
+  that carry byte claims (a new ledger has none, `Upd.alloc`). So two claims on one byte of one
+  active world are invalid (`Holds.bclaim_disjoint`, `ECell.ftot_act_le`), and tagged claims are
+  lent, returned and revoked exactly as tagged shares are, with the same tag tree.
+* A range claim is the union of its bytes' claims: split and join are **equalities**
+  (`bclaim_split`, `bcrcpt_split`), not updates.
+* Truth (`ClFresh`, the third conjunct of `GOk`): no resource claims a byte of a block the memory
+  has not created. Primitives keep it because blocks are never removed (`KMono.size_le`).
+
+**Claims are born with their block.** The creator of a block claims any range of it
+(`FTriple.mintClaim`: a program whose run creates block `nb v` yields `bclaim (nb v) lo hi` next
+to a post without claims on that block). There is no other source. Minting from `bext` later is
+unsound with the existing extent rules: validity must be closed under dropping parts
+(`Ghost.Ok.mono`), so a claim cannot require the presence of anything, and every condition of the
+form "a live claim excludes the full extent" is broken by `EUpd.unlend`, which re-completes `bext`
+from a share without looking at claims. Claims on bytes beyond a block's size or of a freed
+block are harmless: block ids are never reused and in-place growth mints nothing. Existing rules
+are unchanged (`bext`, `bauth`, the extent updates, `fsym`'s rules); proofs that build ghost states
+by hand add the claim component (`Ghost.CValid.congr`, `ClFresh.congr`).
+
+**Use.** An allocator's grant carries the claim on its bytes tagged with the allocator's tag
+(next: `FAllocInv.granted`); an arena holds its nodes' claims (the child's tag), so its nodes are
+pairwise disjoint while the child's tag is active (`tests/roadmap/sep-full/ClaimsCX.lean`,
+`arena_nodes_disjoint`), and `reset` revokes its clients' claims like their shares.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem

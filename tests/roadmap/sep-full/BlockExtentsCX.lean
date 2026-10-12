@@ -70,11 +70,14 @@ def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
 
 theorem gF_ok : GOk m1 Ghost.unit gF := by
   refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
-    fun b => ?_⟩, 0, fun _ _ => ⟨rfl, fun b e k => ?_, fun _ _ _ _ => rfl⟩⟩, fun b => ?_⟩
+    fun b => ?_, Ghost.CValid.congr (g := Ghost.unit) (by funext x y; simp [gF, Ghost.atExt, Ghost.unit])
+      (by funext γ e p; simp [Ghost.ls, Ghost.add, gF, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit⟩,
+    0, fun _ _ => ⟨rfl, fun b e k => ?_, fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
+    fun _ _ _ => by simp [gF, Ghost.atExt, Ghost.unit]⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
-        fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit⟩)).auth1_ok
+        fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
@@ -163,7 +166,7 @@ theorem cell_size_bext {A : Nat} {x : Byte} :
   have hE := up_sep_bext hp
   have hauth : 0 < ((r.gh.add rF.gh).extent 0).auth (2, .heap) := by
     rw [hE.2.2]; simp [Ghost.add, ECell.add, Ghost.exts, ECell.auth1]; omega
-  obtain ⟨blk, hblk, -, hsz, -, -⟩ := (hh.ghost.2 0).1 2 .heap hauth
+  obtain ⟨blk, hblk, -, hsz, -, -⟩ := (hh.ghost.2.1 0).1 2 .heap hauth
   exact ⟨_, m, r, ptrProject_add_run (inBounds_of rfl hblk (by decide) (by simp [q]))
     (inBounds_of rfl hblk (by simp [q, Ptr.add]) (by simp [q, Ptr.add, hsz])), hh, hp, hs⟩
 
@@ -185,7 +188,7 @@ theorem no_free_without_ext (Q : Unit → FAssn) :
   obtain ⟨r', hh, -, -⟩ := hx
   have hauth : 0 < ((r'.gh.add gF).extent 0).auth (1, .heap) := by
     simp [Ghost.add, ECell.add, gF, Ghost.atExt, ECell.auth1]
-  obtain ⟨blk, hblk, hlive, -⟩ := (hh.ghost.2 0).1 1 .heap hauth
+  obtain ⟨blk, hblk, hlive, -⟩ := (hh.ghost.2.1 0).1 1 .heap hauth
   rw [hb] at hblk; cases hblk
   simp at hlive
 

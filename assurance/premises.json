@@ -206,6 +206,7 @@
     "ZigLean.Sep.Full.Logic": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.Full.AllocSpec": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Reclaim": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
+    "ZigLean.Sep.Full.Claims": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Tame": ["SEM-02", "SEM-03", "OSM-01"],
     "ZigLean.Sep.Full.AtomicPtr": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
     "ZigLean.Sep.Full.AtomicRules": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
