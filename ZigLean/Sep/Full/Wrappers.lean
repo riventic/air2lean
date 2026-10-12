@@ -16,7 +16,7 @@ This module is what such a proof needs beyond the step rules of `AutoRules`:
 
 * the postconditions of the contracts, over an `FAllocInv` (`owned`, `allocResult`,
   `sliceResult`, `bytesResult`, `reallocResult`);
-* the arithmetic facts of `realloc` (`@min`/`@max` of words, `keepsPrefix` of the copied prefix);
+* the arithmetic facts of `realloc` (`@min` of words, `keepsPrefix` of the copied prefix);
 * the step rule (`@[fsym]`) of `@returnAddress()` (`returnAddress`); the byte operations on
   regions (`@memset`, item loads and stores, `@memcpy`, the pointer order of its aliasing check)
   are the region library's (`Full/Region`).
@@ -116,15 +116,10 @@ dsimproc [fsym_norm] reduceValLit (Zig.val _ _) := fun e => do
 
 /-! ## Facts -/
 
-/-- `@min`/`@max` of unsigned words, as of their values (the copy length of a reallocation). -/
+/-- `@min` of unsigned words, as of their values (the copy length of a reallocation). -/
 @[fsym_arith] theorem min_false {n : Nat} (a b : BitVec n) :
     (Zig.min false a b).toNat = Min.min a.toNat b.toNat := by
   simp only [Zig.min, Bool.false_eq_true, ↓reduceIte, BitVec.ule]
-  split <;> simp_all <;> omega
-
-@[fsym_arith] theorem max_false {n : Nat} (a b : BitVec n) :
-    (Zig.max false a b).toNat = Max.max a.toNat b.toNat := by
-  simp only [Zig.max, Bool.false_eq_true, ↓reduceIte, BitVec.ule]
   split <;> simp_all <;> omega
 
 /-- Nothing to keep of no bytes (for `fsym`'s arithmetic: a conditional rewrite to `True`). -/
