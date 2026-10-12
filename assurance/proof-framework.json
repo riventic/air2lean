@@ -562,12 +562,6 @@
       "path": "ZigLean/Sep/ArenaClient.lean"
     },
     {
-      "path": "ZigLean/Sep/Array.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Array/Reassemble.lean"
-    },
-    {
       "path": "ZigLean/Sep/Automation.lean"
     },
     {
@@ -733,18 +727,6 @@
     },
     {
       "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Array.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/ArrayClients.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Reassemble.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/StepClients.lean"
     },
     {
       "path": "tests/roadmap/resize-remap/Check.lean"
