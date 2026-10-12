@@ -1845,12 +1845,16 @@
       "categories": [],
       "negative_tests": [
         {
-          "path": "tests/roadmap/loop-tactics/Template.lean",
-          "anchor": "fail_if_success loop_template inv post"
+          "path": "tests/roadmap/sep-auto/Total.lean",
+          "anchor": "/-- … but not with the distance to the bound, which grows. -/"
         },
         {
-          "path": "tests/roadmap/loop-tactics/Template.lean",
-          "anchor": "fail_if_success zig_range"
+          "path": "tests/roadmap/sep-auto/Total.lean",
+          "anchor": "theorem spin_no_measure"
+        },
+        {
+          "path": "tests/roadmap/sep-auto/Arith.lean",
+          "anchor": "/-- Without a range premise the sum may wrap: nothing is proved. -/"
         }
       ],
       "mutants": []
