@@ -170,7 +170,7 @@ Fix (coordinator decision 2026-10-12: in the model, one mechanism for every bloc
 takes a proposal only if the block ends at or below it, and `Mem.roomFor` checks the fallback
 after `Mem.top` against it. An allocation without room fails as for an exhausted address space:
 `rawAlloc` returns null, `mmap`/`mremap` fail with `ENOMEM` (OSM-01, `Os.Target.addrLimit`), and
-`alloc` has no outcome (`Zig.noRoom`). Every primitive keeps the live blocks below `2^63`
+`alloc` throws `.stackOverflow` (STK-01; partial triples read it as non-termination). Every primitive keeps the live blocks below `2^63`
 (`Mem.LiveBounded`, proved per primitive with `Mem.LiveDisjoint` in `LDMono`, part of `Tame`), so
 the full-state invariant `Mem.FSeq` (its third part is now `Mem.LiveLayout`, both properties)
 gives every node `addr + end_index + 2^k - 1 < 2^64` for `k < 64`. It is a consequence of the

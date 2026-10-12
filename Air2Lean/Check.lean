@@ -3769,6 +3769,29 @@ def splitAllocatorModelFlag (args : List String) : List String :=
       ["--allocator-model", (a.drop "--allocator-model=".length).toString]
     else [a]
 
+/-- The number of globals of the program and the sum of their sizes and alignments, from the
+exported layouts (a named global once; every unnamed constant, an upper bound on the blocks that
+emission shares). -/
+def globalsExtent (funcs : Array Func) : Nat × Nat := Id.run do
+  let mut named : Std.HashSet String := {}
+  let mut count := 0
+  let mut total := 0
+  for f in funcs do
+    for g in f.globals do
+      if let some n := g.name then
+        if named.contains n then continue
+        named := named.insert n
+      let l := f.layouts[g.ty]?
+      count := count + 1
+      total := total + (l.bind (·.size)).getD 0 + (l.bind (·.align)).getD 1
+  return (count, total)
+
+/-- The bound on the globals (O-H): at most `2 ^ 20` globals of at most `2 ^ 40` bytes with their
+alignments, so the program's globals fit in the address space (`Zig.Mem.GlobalsFit`, with room
+for the tag and error name blocks that emission adds) and every global ends below `2 ^ 63` under
+every placement (`Zig.Mem.ofGlobals_liveBounded`). -/
+def globalsLimit : Nat × Nat := (2 ^ 20, 2 ^ 40)
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -3793,6 +3816,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         "external model bindings are outside the qualified big-endian model (`docs/profiles.md` §Byte order)" }]
     if let .error message := ModelRegistry.check models profile funcs then
       return #[{ kind := .model, message }]
+  let (count, total) := globalsExtent funcs
+  if count > globalsLimit.1 || total > globalsLimit.2 then
+    return #[{ kind := .memory, message :=
+      s!"GLOBALS_TOO_LARGE: {count} globals of {total} bytes with their alignments exceed the \
+        address-space bound ({globalsLimit.1} globals, {globalsLimit.2} bytes; docs/address-placement.md)" }]
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let (indexes, shared) := sharedDefinitionIssues funcs
   issues := issues ++ shared

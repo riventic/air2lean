@@ -145,6 +145,12 @@ private def validationChecks : IO Unit := do
     "inconsistent shared global 'state'") "global flag mutation accepted"
   require (rejected (checkProgram #[a, { b with globals := #[{ b.globals[0]! with init := some (.ptrConst 0 0 1) }] }])
     "inconsistent shared global 'state'") "recursive global value mutation accepted"
+  -- O-H: globals that cannot fit in the address space are rejected (`Zig.Mem.GlobalsFit`).
+  let huge : Global := { self with name := some "huge", init := some (.undef 1) }
+  let big := { a with globals := #[huge], layouts := #[{}, { size := some (2 ^ 41), align := some 8 }] }
+  require (rejected (checkProgram #[big]) "GLOBALS_TOO_LARGE") "globals beyond the address space accepted"
+  require (accepted (checkProgram #[{ big with layouts := #[{}, { size := some 4096, align := some 8 }] }]))
+    "a small global rejected"
   let badGlobal := { self with name := some "a", init := some (.undef 1) }
   require (rejected (checkProgram #[{ a with globals := #[badGlobal] }]) "collides with a function name")
     "function/global collision accepted"

@@ -1057,9 +1057,141 @@ theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
   · exact (Mem.placed?_ok ‹_›).2.1
   · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
 
+/-! ### First fit (globals at program start)
+
+The walk `Mem.fitFrom` moves past one overlapping live block per step and never comes back to it,
+so `blocks.size + 1` steps reach a clear address. Its cost is bounded by the potential
+`A + Σ c(b)` over the live blocks that still end above `A`. -/
+
+/-- The blocks that still end above `A`, weighted by `w`. -/
+def Mem.fitWeight (m : Mem) (w : Block → Nat) (A : Nat) : Nat :=
+  (m.blocks.toList.map fun b =>
+    if b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size then w b else 0).sum
+
+private theorem sum_map_le {l : List Block} {f g : Block → Nat} (h : ∀ x ∈ l, f x ≤ g x) :
+    (l.map f).sum ≤ (l.map g).sum := by
+  induction l with
+  | nil => simp
+  | cons x l ih =>
+    simp only [List.map_cons, List.sum_cons]
+    have := h x (by simp); have := ih fun y hy => h y (by simp [hy]); omega
+
+private theorem sum_map_drop {l : List Block} {f g : Block → Nat} {x₀ : Block} {c : Nat}
+    (h : ∀ x ∈ l, f x ≤ g x) (hx : x₀ ∈ l) (h₀ : f x₀ + c ≤ g x₀) :
+    (l.map f).sum + c ≤ (l.map g).sum := by
+  induction l with
+  | nil => cases hx
+  | cons x l ih =>
+    simp only [List.map_cons, List.sum_cons]
+    rcases List.mem_cons.mp hx with rfl | hx
+    · have := sum_map_le (l := l) fun y hy => h y (by simp [hy]); omega
+    · have := h x (by simp); have := ih (fun y hy => h y (by simp [hy])) hx; omega
+
+private theorem fitWeight_drop {m : Mem} {w : Block → Nat} {A A' : Nat} {b : Block}
+    (hb : b ∈ m.blocks) (hA : A ≤ A') (hin : b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size)
+    (hout : b.addr + b.bytes.size ≤ A') : m.fitWeight w A' + w b ≤ m.fitWeight w A := by
+  unfold Mem.fitWeight
+  refine sum_map_drop (x₀ := b) (fun x _ => ?_) (Array.mem_toList_iff.mpr hb) ?_
+  · by_cases h : x.live = true ∧ 0 < x.bytes.size ∧ A' < x.addr + x.bytes.size
+    · rw [if_pos h, if_pos ⟨h.1, h.2.1, by omega⟩]; exact Nat.le_refl _
+    · rw [if_neg h]; exact Nat.zero_le _
+  · rw [if_neg (by omega), if_pos hin]; omega
+
+private theorem fitWeight_le_length (m : Mem) (A : Nat) :
+    m.fitWeight (fun _ => 1) A ≤ m.blocks.size := by
+  simp only [Mem.fitWeight]
+  rw [← Array.length_toList]
+  generalize m.blocks.toList = l
+  induction l with
+  | nil => simp
+  | cons x l ih => simp only [List.map_cons, List.sum_cons, List.length_cons]; split <;> omega
+
+private theorem fitWeight_le_sum (m : Mem) (w : Block → Nat) (A : Nat) :
+    m.fitWeight w A ≤ (m.blocks.toList.map w).sum :=
+  sum_map_le fun x _ => by split <;> omega
+
+theorem alignUp_le_add (n a : Nat) : alignUp n a ≤ n + a := by
+  unfold alignUp
+  split
+  · omega
+  · have := Nat.div_mul_le_self (n + a - 1) a; omega
+
+theorem alignUp_mod' {n a : Nat} (ha : 0 < a) : alignUp n a % a = 0 := by
+  simp [alignUp, Nat.ne_of_gt ha, Nat.mul_mod_left]
+
+/-- The first-fit walk from an aligned `A` with more steps than the live blocks that end above
+`A`: a clear, aligned address at or above `A`, within the potential. -/
+theorem Mem.fitFrom_spec (m : Mem) (size align : Nat) : ∀ (fuel A : Nat),
+    m.fitWeight (fun _ => 1) A < fuel → (0 < align → A % align = 0) →
+    m.addrFree (m.fitFrom size align fuel A) size = true ∧
+      (0 < align → m.fitFrom size align fuel A % align = 0) ∧ A ≤ m.fitFrom size align fuel A ∧
+      m.fitFrom size align fuel A ≤ A + m.fitWeight (fun b => size + b.bytes.size + align) A
+  | 0, _, h, _ => absurd h (Nat.not_lt_zero _)
+  | fuel + 1, A, hf, hA => by
+    unfold Mem.fitFrom
+    split
+    · rename_i hn
+      refine ⟨?_, hA, Nat.le_refl _, Nat.le_add_right _ _⟩
+      unfold Mem.addrFree
+      rw [Array.all_eq_true']
+      intro x hx
+      simpa using (Array.find?_eq_none.mp hn) x hx
+    · rename_i b hb
+      have hmem := Array.mem_of_find?_eq_some hb
+      have hp := Array.find?_some hb
+      simp only [Block.clearOf, Bool.not_or, Bool.and_eq_true, Bool.not_eq_true', Bool.not_eq_true,
+        beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le] at hp
+      obtain ⟨⟨⟨⟨hl', -⟩, hs0⟩, hlt1⟩, hlt2⟩ := hp
+      generalize hA' : alignUp (b.addr + b.bytes.size) align = A'
+      have h1 := le_alignUp (b.addr + b.bytes.size) align
+      have h2 := alignUp_le_add (b.addr + b.bytes.size) align
+      rw [hA'] at h1 h2
+      have hin : b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size :=
+        ⟨by simpa using hl', Nat.pos_of_ne_zero (by simpa using hs0), hlt2⟩
+      have d1 := fitWeight_drop (w := fun _ => 1) hmem (by omega) hin h1
+      have d2 := fitWeight_drop (w := fun b => size + b.bytes.size + align) hmem (by omega) hin h1
+      obtain ⟨hfree, hmod, hge, hle⟩ := Mem.fitFrom_spec m size align fuel A' (by omega)
+        (fun ha => by rw [← hA']; exact alignUp_mod' ha)
+      refine ⟨hfree, hmod, by omega, ?_⟩
+      omega
+
+/-- The first fit is a clear, aligned address from 4096 up, at most `4096 + align` plus one
+`size + len + align` per live block. -/
+theorem Mem.firstFit_spec (m : Mem) (size align : Nat) :
+    m.addrFree (m.firstFit size align) size = true ∧
+      (0 < align → m.firstFit size align % align = 0) ∧ 4096 ≤ m.firstFit size align ∧
+      m.firstFit size align ≤
+        4096 + align + (m.blocks.toList.map fun b => size + b.bytes.size + align).sum := by
+  obtain ⟨h1, h2, h3, h4⟩ := m.fitFrom_spec size align (m.blocks.size + 1) (alignUp 4096 align)
+    (Nat.lt_succ_of_le (fitWeight_le_length m _)) alignUp_mod'
+  have := le_alignUp 4096 align
+  have := alignUp_le_add 4096 align
+  have := fitWeight_le_sum m (fun b => size + b.bytes.size + align) (alignUp 4096 align)
+  exact ⟨h1, h2, by unfold Mem.firstFit; omega, by unfold Mem.firstFit; omega⟩
+
+/-- A global's address is clear of every live block. -/
+theorem Mem.globalPlace_addrFree (m : Mem) (size align : Nat) :
+    m.addrFree (m.globalPlace size align) size = true := by
+  unfold Mem.globalPlace; split
+  · unfold Mem.newAddr; split
+    · exact (Mem.placed?_ok ‹_›).2.2.2
+    · unfold Mem.addrFree
+      rw [Array.all_eq_true]
+      intro i hi
+      have := Mem.lt_top (m := m) (b := i) (Array.getElem?_eq_getElem hi)
+      have := le_alignUp m.top align
+      simp [Block.clearOf]; omega
+  · exact (m.firstFit_spec size align).1
+
+theorem Mem.globalPlace_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
+    m.globalPlace size align % align = 0 := by
+  unfold Mem.globalPlace; split
+  · exact m.newAddr_mod size align ha
+  · exact (m.firstFit_spec size align).2.1 ha
+
 theorem Mem.addGlobal_blocks (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
     (m.addGlobal bs a k).blocks =
-      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.newAddr bs.size a } :=
+      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.globalPlace bs.size a } :=
   rfl
 
 private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m : Mem) :
@@ -1082,7 +1214,7 @@ private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m 
     · rw [hold i (by omega)]; simp [Mem.addGlobal_blocks, Array.getElem?_push, Nat.ne_of_lt hi]
     · cases j with
       | zero =>
-        refine ⟨m.newAddr bs.size a, fun ha => m.newAddr_mod bs.size a ha, ?_⟩
+        refine ⟨m.globalPlace bs.size a, fun ha => m.globalPlace_mod bs.size a ha, ?_⟩
         rw [Nat.add_zero, hold m.blocks.size (by omega)]
         simp [Mem.addGlobal_blocks]
       | succ j =>

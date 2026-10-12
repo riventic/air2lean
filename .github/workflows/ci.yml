@@ -1145,12 +1145,13 @@ jobs:
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done
-          # NoRoom.lean: two theorems, standard axioms only.
-          python3 - "$RUNNER_TEMP/memory-hardening/NoRoom.log" <<'EOF'
+          # NoRoom.lean (two theorems) and GlobalsFit.lean (one): standard axioms only.
+          python3 - "$RUNNER_TEMP/memory-hardening" <<'EOF'
           import re, sys
-          text = open(sys.argv[1]).read()
-          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          for name, count in (('NoRoom', 2), ('GlobalsFit', 1)):
+              text = open(f'{sys.argv[1]}/{name}.log').read()
+              used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+              assert text.count('depends on axioms') == count and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
 
       - name: Validate AIR input and whole-program signatures

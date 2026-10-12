@@ -799,11 +799,15 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   64-bit target has its user space in the lower half; `2^47` by default): no block of any kind
   is placed above it (O-H). An allocation that has no room below it fails as for an exhausted
   address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
-  (OSM-01), and `alloc` (a stack, global-like or heap block) has no outcome (`Zig.noRoom`, outside
-  every partial-correctness statement; a total-correctness statement shows room,
-  `Mem.roomFor`). The full-state invariant `Mem.FSeq` holds only memories whose live blocks end
-  below `2^63` (`Mem.LiveBounded`). Globals are placed at program start with the same fallback;
-  a statement that needs `Mem.LiveBounded` of `mem0 σ` shows that the globals fit. A generated program-start memory is `mem0 σ`
+  (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
+  `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
+  total-correctness statement shows room, `Mem.roomFor`, e.g. with `TotalTripleIn`). The
+  full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
+  (`Mem.LiveBounded`). A global at program start that the placement does not place and that has
+  no room after `Mem.top` goes to the first fit (`Mem.globalPlace`, `Mem.firstFit`), so the
+  memory at program start has that layout under every placement whenever the globals fit
+  (`Mem.ofGlobals_liveBounded`, `Mem.GlobalsFit`); the translator rejects programs with more than
+  `2^20` globals or `2^40` bytes of them (`GLOBALS_TOO_LARGE`). A generated program-start memory is `mem0 σ`
   and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
   programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
   the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
@@ -827,7 +831,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   on the native frame (spills, saved registers, inlining), and pure recursive functions
   (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
   signal, which no model outcome under `stackLimit = none` reflects (MM-5,
-  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)). The same outcome
+  covers address-space exhaustion of stack blocks: an `alloc` (stack local, thread-local
+  instance, runtime cell) without room below `Placement.addrLimit` throws `.stackOverflow`
+  (O-H, SEM-07). Every partial-correctness statement (`Triple`, `TTriple`, `FTriple`, `CTriple`,
+  and the strict concurrent `run_safe`, which excludes every other error) reads `.stackOverflow`
+  as it reads a run that does not terminate; a total-correctness statement excludes it, so one
+  that allocates shows room (`TotalTripleIn`). Regressions:
+  `tests/roadmap/memory-hardening/NoRoom.lean`, `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
   `tests/roadmap/memory-hardening/README.md`.
