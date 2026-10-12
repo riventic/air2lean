@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Atomic
+import ZigLean.Sep.Full.Claims
 
 /-!
 # A toy page allocator with an atomic hint (prototype, `docs/sep-full-state.md`)
@@ -103,6 +104,46 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   obtain ⟨A', x⟩ := up_ex.mp x
   obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
   exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
+
+/-- A run of `alloc` creates the block it returns. -/
+theorem alloc_fresh {kind : BlockKind} {size align : Nat} {m m' : Mem} {p : Ptr} {b : BlockId}
+    (h : ((alloc kind size align).run m).run = some (.ok (p, m'))) (hb : p.block = some b) :
+    m.blocks.size ≤ b ∧ b < m'.blocks.size := by
+  unfold alloc at h
+  obtain ⟨_, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h1
+  split at h2
+  · obtain ⟨_, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h2
+    have e := Conc.Proto.MemM.set_ok h3
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok h4
+    subst e
+    cases hb
+    simp [Mem.afterAlloc]
+  · exact (Conc.Proto.MemM.throw_ok h2).elim
+
+/-- **`alloc` with the claim on the new block's bytes** (`FTriple.mintClaimOpt`): the bytes, the
+full extent and the exclusive claim on `[0, size)`. -/
+theorem FTriple.allocC (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ (bext b size kind ⋆ bclaim b 0 size))) := by
+  refine (FTriple.mintClaimOpt (fun p => p.block) (fun _ => 0) (fun _ => size)
+    (FTriple.alloc' kind size align ha hpos hk) (fun m v m' b h e => alloc_fresh h e)
+    fun _ b r _ hq => noCl_ex (fun A => noCl_ex fun b => noCl_sep (noCl_lift _)
+      (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _))) r hq b).post fun p r h => ?_
+  obtain ⟨A, h⟩ := sep_ex.mp h
+  obtain ⟨b, h⟩ := sep_ex.mp h
+  obtain ⟨hφ, h⟩ := sep_lift.mp (sep_assoc h)
+  rw [hφ.1] at h
+  exact ⟨A, b, sep_lift.mpr ⟨hφ, sep_assoc h⟩⟩
+
+/-- `allocStack` (a stack local whose address escapes) with the claim on its bytes. -/
+theorem FTriple.allocStackC (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTriple emp (allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ (bext b size .stack ⋆ bclaim b 0 size))) :=
+  FTriple.allocC .stack size align ha hpos
 
 /-- `free` of a whole block: its bytes and its full extent go. -/
 theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}

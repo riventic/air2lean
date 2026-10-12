@@ -884,6 +884,207 @@ theorem FTotalTriple.mremapMove' (os : Os.Target) (hhas : os.hasMremap = true) {
   FTotalTriple.lift fun h => FTotalTriple.mremapMoveCore os hhas hfl hpb hp0 (by omega) (by omega) hA
     hlo hold0 (by rw [h]; exact hold) (by omega)
 
+/-! ## Claims of mappings (`docs/sep-full-state.md` §Byte-range claims)
+
+A new mapping's creator claims its bytes (`FTriple.mintClaimOpt`): `mmap` yields the claim on
+`[0, 2^64)` of the new block, past the mapping's end as well, so that an in-place `mremap` growth
+(which mints nothing: the block is not new) finds the new bytes already claimed. `mremap` passes the
+mapping's claim on: in place it stays, a moved mapping's new block gets a fresh one (the old block's
+claim is dropped with the old block). -/
+
+/-- The end of a mapping's claim: past every offset. -/
+abbrev claimEnd : Nat := 2 ^ 64
+
+/-- A run of `mmap` that returns a mapping creates its block. -/
+theorem Os.mmap_fresh {os : Os.Target} {hint : Option Ptr} {len : BitVec 64} {prot flags fd : BitVec 32}
+    {off : BitVec 64} {m m' : Mem} {s : Slice} {b : BlockId}
+    (h : ((Os.mmap os hint len prot flags fd off).run m).run = some (.ok (.ok s, m')))
+    (hb : s.ptr.block = some b) : m.blocks.size ≤ b ∧ b < m'.blocks.size := by
+  unfold Os.mmap at h
+  simp only at h
+  split at h
+  · exact (Tame.throw_bind_ok h).elim
+  split at h
+  · exact (Tame.throw_bind_ok h).elim
+  obtain ⟨_, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h3
+  obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+  have e := Conc.Proto.MemM.set_ok h5
+  subst e
+  split at h6
+  · obtain ⟨h7, -⟩ := Conc.Proto.MemM.pure_ok h6; cases h7
+  · obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h7
+    obtain ⟨_, m₅, h9, h10⟩ := Conc.Proto.MemM.bind_ok h8
+    obtain ⟨h11, rfl⟩ := Conc.Proto.MemM.pure_ok h10
+    have e := Conc.Proto.MemM.set_ok h9
+    subst e
+    cases h11; cases hb
+    simp [Mem.afterMmap]
+
+/-- A run of `mremap` that returns a mapping other than the old one creates its block. -/
+theorem Os.mremap_fresh {os : Os.Target} {p : Ptr} {oldLen newLen : BitVec 64} {flags : BitVec 32}
+    {m m' : Mem} {s : Slice} {b : BlockId}
+    (h : ((Os.mremap os (some p) oldLen newLen flags none).run m).run = some (.ok (.ok s, m')))
+    (hp : s.ptr ≠ p) (hb : s.ptr.block = some b) : m.blocks.size ≤ b ∧ b < m'.blocks.size := by
+  unfold Os.mremap at h
+  simp only at h
+  split at h
+  · exact (Tame.throw_bind_ok h).elim
+  obtain ⟨_, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok h1
+  obtain ⟨⟨b₀, blk, lo⟩, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h2
+  obtain ⟨rfl, -, -, -⟩ := Tame.mappingAt_ok h3
+  split at h4
+  · exact (Tame.throw_bind_ok h4).elim
+  unfold Os.mremapLive at h4
+  simp only at h4
+  split at h4
+  · exact (Tame.throw_bind_ok h4).elim
+  split at h4
+  · obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+    obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
+    obtain ⟨h9, -⟩ := Conc.Proto.MemM.pure_ok h8
+    cases h9; exact absurd rfl hp
+  · obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h5
+    obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
+    have e := Conc.Proto.MemM.set_ok h7
+    subst e
+    split at h8
+    · obtain ⟨h9, -⟩ := Conc.Proto.MemM.pure_ok h8; cases h9
+    split at h8
+    · split at h8
+      · obtain ⟨h9, -⟩ := Conc.Proto.MemM.pure_ok h8; cases h9
+      obtain ⟨_, m₅, h9, h10⟩ := Conc.Proto.MemM.bind_ok h8
+      obtain ⟨-, rfl⟩ := Conc.Proto.recordAccess_ok h9
+      obtain ⟨_, m₆, h11, h12⟩ := Conc.Proto.MemM.bind_ok h10
+      obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h11
+      obtain ⟨_, m₇, h13, h14⟩ := Conc.Proto.MemM.bind_ok h12
+      obtain ⟨h15, rfl⟩ := Conc.Proto.MemM.pure_ok h14
+      have e := Conc.Proto.MemM.set_ok h13
+      subst e
+      cases h15; cases hb
+      simp [Mem.mremapMoved, Mem.recordAt]
+    split at h8
+    · obtain ⟨h9, -⟩ := Conc.Proto.MemM.pure_ok h8; cases h9
+    · obtain ⟨_, m₅, h9, h10⟩ := Conc.Proto.MemM.bind_ok h8
+      obtain ⟨h11, -⟩ := Conc.Proto.MemM.pure_ok h10
+      cases h11; exact absurd rfl hp
+
+/-- What `mmap` returns, with the new mapping's claim (`fmmapPost`). -/
+def fmmapPostC (P L : Nat) (len : BitVec 64) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len ∧ s.ptr.off = 0⟫ ⋆ FAssn.ex fun b => FAssn.ex fun A : Nat =>
+      ⟪s.ptr.block = some b ∧ A % P = 0 ∧ A + alignUp len.toNat P ≤ L⟫ ⋆
+        (up (regionIn s.ptr A len.toNat (.mapped 0) P (Array.replicate len.toNat (.int 0))) ⋆
+          (bext b len.toNat (.mapped 0) ⋆ bclaim b 0 claimEnd))
+  | .error e => ⟪e = "OutOfMemory"⟫
+
+/-- **mmap with the new mapping's claim** (`FTotalTriple.mmap'`, `FTotalTriple.mintClaimOpt`). -/
+theorem FTotalTriple.mmapC (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : 0 < len.toNat) :
+    FTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+      (fmmapPostC os.pageSize os.addrLimit len) := by
+  refine (FTotalTriple.mintClaimOpt (fun v => match v with | .ok s => s.ptr.block | .error _ => none)
+    (fun _ => 0) (fun _ => claimEnd) (FTotalTriple.mmap' os hint len hlen) (fun m v m' b h e => ?_)
+    (fun v b r e hq => ?_)).post fun v r h => ?_
+  · cases v with
+    | error => cases e
+    | ok s => exact Os.mmap_fresh h e
+  · cases v with
+    | error => cases e
+    | ok s =>
+      exact noCl_sep (noCl_lift _) (noCl_ex fun b => noCl_ex fun A => noCl_sep (noCl_lift _)
+        (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _))) r hq b
+  · cases v with
+    | error => exact sep_emp.mp h
+    | ok s =>
+      obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
+      obtain ⟨b, h⟩ := sep_ex.mp h
+      obtain ⟨A, h⟩ := sep_ex.mp h
+      obtain ⟨h2, h⟩ := sep_lift.mp (sep_assoc h)
+      have e : (match (Except.ok s : Except ErrName Slice) with | .ok s => s.ptr.block | .error _ => none) =
+        some b := h2.1
+      rw [e] at h
+      exact sep_lift.mpr ⟨h1, b, A, sep_lift.mpr ⟨h2, sep_assoc h⟩⟩
+
+/-- What `mremap` of a whole mapping returns, with the mapping's claim (`fmremapPost`). -/
+def fmremapPostC (P : Nat) (p : Ptr) (b : BlockId) (A S lo a : Nat) (bs : Array Byte)
+    (newLen : BitVec 64) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = newLen⟫ ⋆ FAssn.ex fun b' => FAssn.ex fun A' : Nat => FAssn.ex fun lo' : Nat =>
+      ⟪s.ptr.block = some b' ∧ s.ptr.off = (lo' : Int) ∧ A' % P = 0 ∧ lo' % P = 0⟫ ⋆
+        (up (regionIn s.ptr A' (lo' + newLen.toNat) (.mapped lo') P
+          (bs ++ mremapFill P bs.size newLen.toNat)) ⋆
+          (bext b' (lo' + newLen.toNat) (.mapped lo') ⋆ bclaim b' lo' claimEnd))
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
+      (bext b S (.mapped lo) ⋆ bclaim b lo claimEnd))
+
+/-- **mremap, growth of a whole mapping, with its claim** (`FTotalTriple.mremapMove'`): in place the
+claim stays, a moved mapping gets a fresh one. -/
+theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
+        (bext b S (.mapped lo) ⋆ bclaim b lo claimEnd)))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fmremapPostC os.pageSize p b A S lo a bs newLen) := by
+  let nb : Except ErrName Slice → Option BlockId := fun v => match v with
+    | .ok s => if s.ptr = p then none else s.ptr.block
+    | .error _ => none
+  let lo' : Except ErrName Slice → Nat := fun v => match v with
+    | .ok s => s.ptr.off.toNat
+    | .error _ => 0
+  refine (((FTotalTriple.mintClaimOpt nb lo' (fun _ => claimEnd)
+    (FTotalTriple.mremapMove' os hhas hfl (A := A) (S := S) (lo := lo) (a := a) (bs := bs) hpb hp0 hlt hA
+      hlo hold0 hold hn) ?_ ?_).frame (R := bclaim b lo claimEnd)).pre ?_).eupd_post ?_
+  · intro m v m' b' h e
+    cases v with
+    | error => cases e
+    | ok s =>
+      by_cases hs : s.ptr = p
+      · simp [nb, hs] at e
+      · simp only [nb, if_neg hs] at e; exact Os.mremap_fresh h hs e
+  · intro v b' r e hq
+    cases v with
+    | error => cases e
+    | ok s =>
+      exact noCl_sep (noCl_lift _) (noCl_ex fun b => noCl_ex fun A => noCl_ex fun lo => noCl_sep (noCl_lift _)
+        (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _))) r hq b'
+  · exact fun r h => sep_assoc' (sep_mono_right (fun _ x => sep_assoc' x) h)
+  intro v
+  cases v with
+  | error e =>
+    refine EUpd.of_imp fun r h => ?_
+    simp only [nb, lo', optClaim, fmremapPost, fmremapPostC] at h ⊢
+    have h := sep_mono_left (fun _ x => sep_emp.mp x) h
+    exact sep_mono_right (fun _ x => sep_assoc x) (sep_assoc h)
+  | ok s =>
+    by_cases hs : s.ptr = p
+    · refine EUpd.of_imp fun r h => ?_
+      simp only [nb, lo', if_pos hs, optClaim, fmremapPost, fmremapPostC] at h ⊢
+      have h := sep_mono_left (fun _ x => sep_emp.mp x) h
+      obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
+      obtain ⟨b', h⟩ := sep_ex.mp h
+      obtain ⟨A', h⟩ := sep_ex.mp h
+      obtain ⟨lo', h⟩ := sep_ex.mp h
+      obtain ⟨h2, h⟩ := sep_lift.mp (sep_assoc h)
+      have eb : b' = b := by rw [hs, hpb] at h2; exact (Option.some.inj h2.1).symm
+      have el : lo' = lo := by have := h2.2.1; rw [hs, hp0] at this; exact_mod_cast this.symm
+      subst eb el
+      exact sep_lift.mpr ⟨h1, b', A', lo', sep_lift.mpr ⟨h2, sep_assoc h⟩⟩
+    · refine (EUpd.drop (fun _ h => ⟨h.1, h.2.1⟩)).trans (EUpd.of_imp fun r h => ?_)
+      simp only [nb, lo', if_neg hs, fmremapPost, fmremapPostC] at h ⊢
+      obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
+      obtain ⟨b', h⟩ := sep_ex.mp h
+      obtain ⟨A', h⟩ := sep_ex.mp h
+      obtain ⟨lo', h⟩ := sep_ex.mp h
+      obtain ⟨h2, h⟩ := sep_lift.mp (sep_assoc h)
+      rw [h2.1, h2.2.1] at h
+      simp only [optClaim, Int.toNat_natCast] at h
+      exact sep_lift.mpr ⟨h1, b', A', lo', sep_lift.mpr ⟨h2, sep_assoc h⟩⟩
+
 /-! ## Step rules of the symbolic executor
 
 The mapping rules over regions (`regionIn`, the region library's form), tagged `@[fsym]`
@@ -934,7 +1135,7 @@ theorem alignUp_pos_eq {n a : Nat} (h : 0 < a) : alignUp n a = (n + a - 1) / a *
 
 attribute [fsym_arith] alignUp_pos_eq Os.Target.pageSize Os.Target.hasMremap mremapFill_size
 
-attribute [fsym] FTotalTriple.mmap' FTotalTriple.munmapWhole' FTotalTriple.mremapMove'
+attribute [fsym] FTotalTriple.mmapC FTotalTriple.munmapWhole' FTotalTriple.mremapMoveC
   FTotalTriple.munmapTailR FTotalTriple.mremapShrinkR
 
 end Full

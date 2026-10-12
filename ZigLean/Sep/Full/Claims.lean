@@ -1,4 +1,5 @@
-import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Extent
 
 /-!
 # Byte-range claims (`docs/sep-full-state.md` §Byte-range claims)
@@ -456,14 +457,20 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     · exact absurd hb (Nat.not_lt.mpr (h ▸ hx))
     · rw [ecl, if_neg h]; exact hcf x hx y
 
-/-- **The creator of a block claims its bytes** (any range `[lo, hi)`): a program whose run
-creates block `nb v` (absent before, present after) yields the untagged claim next to its post,
-when the post holds no claim on the new block. -/
-theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → BlockId)
-    (lo hi : Nat) (ht : FTriple P c Q)
-    (hfresh : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m.blocks.size ≤ nb v ∧ nb v < m'.blocks.size)
-    (hQ : ∀ v r, Q v r → ∀ x, r.gh.cl (nb v) x = ECell.unit) :
-    FTriple P c (fun v => Q v ⋆ bclaim (nb v) lo hi) := by
+/-- A claim on `[lo, hi)` of block `b` if there is one (`nb = some b`), nothing otherwise. -/
+def optClaim : Option BlockId → Nat → Nat → FAssn
+  | some b, lo, hi => bclaim b lo hi
+  | none, _, _ => emp
+
+/-- **The creator of a block claims its bytes** (any range `[lo v, hi v)`): a program whose run
+creates block `b` whenever `nb v = some b` (absent before, present after) yields that block's
+untagged claim next to its post, when the post holds no claim on the new block. -/
+theorem FTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → Option BlockId)
+    (lo hi : α → Nat) (ht : FTriple P c Q)
+    (hfresh : ∀ m v m' b, (c.run m).run = some (.ok (v, m')) → nb v = some b →
+      m.blocks.size ≤ b ∧ b < m'.blocks.size)
+    (hQ : ∀ v b r, nb v = some b → Q v r → ∀ x, r.gh.cl b x = ECell.unit) :
+    FTriple P c (fun v => Q v ⋆ optClaim (nb v) (lo v) (hi v)) := by
   intro m r rF hh hp hs
   have h := ht m r rF hh hp hs
   revert h
@@ -475,16 +482,69 @@ theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAss
     | ok p =>
       obtain ⟨v, m'⟩ := p
       rintro ⟨r', hh', hq, hs'⟩
-      obtain ⟨h1, h2⟩ := hfresh m v m' hrun
-      have hz : ∀ y, (r'.gh.cl (nb v) y).add (rF.gh.cl (nb v) y) = ECell.unit := fun y => by
-        rw [hQ v r' hq y, hh.ghost.2.2.frame (nb v) h1 y, ECell.add_unit]
-      refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
-          r'.gh.add (Ghost.atCl (nb v) (ECell.onRange lo hi (ECell.shareT none Frac.one 0)))⟩,
-        ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
-          by rw [Know.union_none]; exact hh'.know, hh'.knowF,
-          GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok lo hi y ls hu)
-            (fun y γ e k => onRange_share_tags lo hi y γ e k)⟩,
-        ⟨r', ⟨FHeap.empty, Know.none, _⟩, FHeap.disjoint_empty _, rfl, hq, rfl, rfl, rfl⟩, hs'⟩
+      cases hnb : nb v with
+      | none =>
+        refine ⟨r', hh', ?_, hs'⟩
+        show (Q v ⋆ optClaim (nb v) (lo v) (hi v)) r'
+        rw [hnb]; exact sep_emp.mpr hq
+      | some b =>
+        obtain ⟨h1, h2⟩ := hfresh m v m' b hrun hnb
+        have hz : ∀ y, (r'.gh.cl b y).add (rF.gh.cl b y) = ECell.unit := fun y => by
+          rw [hQ v b r' hnb hq y, hh.ghost.2.2.frame b h1 y, ECell.add_unit]
+        refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
+            r'.gh.add (Ghost.atCl b (ECell.onRange (lo v) (hi v) (ECell.shareT none Frac.one 0)))⟩,
+          ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
+            by rw [Know.union_none]; exact hh'.know, hh'.knowF,
+            GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok (lo v) (hi v) y ls hu)
+              (fun y γ e k => onRange_share_tags (lo v) (hi v) y γ e k)⟩, ?_, hs'⟩
+        show (Q v ⋆ optClaim (nb v) (lo v) (hi v)) _
+        rw [hnb]
+        exact ⟨r', ⟨FHeap.empty, Know.none, _⟩, FHeap.disjoint_empty _, rfl, hq, rfl, rfl, rfl⟩
+
+/-- **The creator of a block claims its bytes** (any range `[lo, hi)`): a program whose run
+creates block `nb v` (absent before, present after) yields the untagged claim next to its post,
+when the post holds no claim on the new block. -/
+theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → BlockId)
+    (lo hi : Nat) (ht : FTriple P c Q)
+    (hfresh : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m.blocks.size ≤ nb v ∧ nb v < m'.blocks.size)
+    (hQ : ∀ v r, Q v r → ∀ x, r.gh.cl (nb v) x = ECell.unit) :
+    FTriple P c (fun v => Q v ⋆ bclaim (nb v) lo hi) :=
+  FTriple.mintClaimOpt (fun v => some (nb v)) (fun _ => lo) (fun _ => hi) ht
+    (fun m v m' b h e => by cases e; exact hfresh m v m' h) (fun v b r e hq => by cases e; exact hQ v r hq)
+
+/-- `FTriple.mintClaimOpt` for a total triple (the precondition is unchanged). -/
+theorem FTotalTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (nb : α → Option BlockId) (lo hi : α → Nat) (ht : FTotalTriple P c Q)
+    (hfresh : ∀ m v m' b, (c.run m).run = some (.ok (v, m')) → nb v = some b →
+      m.blocks.size ≤ b ∧ b < m'.blocks.size)
+    (hQ : ∀ v b r, nb v = some b → Q v r → ∀ x, r.gh.cl b x = ECell.unit) :
+    FTotalTriple P c (fun v => Q v ⋆ optClaim (nb v) (lo v) (hi v)) :=
+  ⟨FTriple.mintClaimOpt nb lo hi ht.1 hfresh hQ, ht.2⟩
+
+/-- An assertion whose resources hold no byte claim (bytes, knowledge, extents, ledgers). -/
+def NoCl (Q : FAssn) : Prop := ∀ r, Q r → ∀ b x, r.gh.cl b x = ECell.unit
+
+theorem noCl_sep {P Q : FAssn} (hp : NoCl P) (hq : NoCl Q) : NoCl (P ⋆ Q) := by
+  rintro _ ⟨r₁, r₂, -, rfl, h1, h2⟩ b x
+  simp only [Ghost.add_cl, hp _ h1 b x, hq _ h2 b x, ECell.add_unit]
+
+theorem noCl_ex {γ : Type} {P : γ → FAssn} (h : ∀ x, NoCl (P x)) : NoCl (FAssn.ex P) := by
+  rintro _ ⟨y, hy⟩ b x; exact h y _ hy b x
+
+theorem noCl_lift (φ : Prop) : NoCl ⟪φ⟫ := by
+  rintro _ ⟨-, -, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_emp : NoCl emp := by
+  rintro _ ⟨-, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_up (P : Assn) : NoCl (up P) := by
+  rintro _ ⟨-, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : NoCl (bauth b S K q) := by
+  rintro _ ⟨-, -, hg⟩ b' x; rw [hg]; rfl
+
+theorem noCl_bshare (b : BlockId) (q : Frac) (k : Nat) (t : STag) : NoCl (bshare b q k t) := by
+  rintro _ ⟨-, -, -, hg⟩ b' x; rw [hg]; rfl
 
 end Full
 end Zig

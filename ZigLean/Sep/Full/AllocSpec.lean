@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Extent
+import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.AllocSpec
 
 /-!
@@ -65,7 +66,8 @@ variable (I : FAllocInv)
 its block's extent up to the region's end. -/
 def granted (p : Ptr) (k : Nat) (bs : Array Byte) : FAssn :=
   FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q =>
-    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆ pshare p q (p.off.toNat + bs.size) I.tag)
+    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆
+      (pshare p q (p.off.toNat + bs.size) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + bs.size) I.tag))
 
 /-- After `alloc` of `len` bytes (`Zig.allocPost`). -/
 def allocPost (len k : Nat) : Option Ptr → FAssn
@@ -81,7 +83,7 @@ def resizePost (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : Bool → FAssn
 of the grant's extent share at the grant's end (any part of it: the holder may have lent the rest
 on, as an arena does with its nodes). -/
 def held (p : Ptr) (len k A S : Nat) (K : BlockKind) (q q' : Frac) : FAssn :=
-  I.tok p len k A S K q ⋆ pshare p q' (p.off.toNat + len) I.tag
+  I.tok p len k A S K q ⋆ (pshare p q' (p.off.toNat + len) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + len) I.tag)
 
 /-- The bytes `tl` that a shrink of a grant of `len` bytes at `p` to `n` bytes releases: the
 bytes `[n, len)`, with the cell labels `A S K`; nothing for a growth. -/
