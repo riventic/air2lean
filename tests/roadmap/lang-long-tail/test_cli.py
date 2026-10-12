@@ -18,10 +18,18 @@ def fixtures(stem, version="0.16.0"):
     return {p.name: json.loads(p.read_text()) for p in sorted((HERE / "air" / stem / version).glob("*.json"))}
 
 
+TABLE = "error-table.air2lean"
+
+
+def table(stem, version="0.16.0"):
+    return json.loads((HERE / "air" / stem / version / TABLE).read_text())
+
+
 def translate(binary, documents, directory, args):
     air = directory / "air"
     air.mkdir()
     for name, document in documents.items():
+        # A file that is not a function (the error numbering) keeps its own name.
         (air / name).write_text(json.dumps(document))
     out = directory / "Gen.lean"
     out.write_text("sentinel\n")
@@ -139,10 +147,102 @@ def vector_casts(binary):
     reject(binary, docs, VC + ["--allow-unqualified-build-mode"], "LLVM backend")
 
 
+ES = ["--namespace", "ExternStorage", "--prefix", "extern_storage."]
+EI = ["--namespace", "ErrorInts", "--prefix", "error_ints."]
+RL = ["--namespace", "RuntimeLanes", "--prefix", "runtime_lanes."]
+FL = ["--namespace", "FloatLanes", "--prefix", "float_lanes."]
+
+
+def global_named(doc, name):
+    return next(g for g in doc["globals"] if g.get("name") == name)
+
+
+def extern_storage(binary):
+    # Pointer-bearing externs are accepted; a function pointer is not (an indirect call
+    # dispatches on the program's address-taken functions).
+    docs = one("extern_storage", "extern_storage.slotValue.json")
+    accept(binary, docs, ES)
+    doc = docs["extern_storage.slotValue.json"]
+    slot = global_named(doc, "ext_slot")
+    doc["types"].append({"k": "other", "name": "fn () callconv(.c) void"})
+    doc["types"].append(dict(doc["types"][slot["ty"]], child=len(doc["types"]) - 1))
+    slot["ty"] = len(doc["types"]) - 1
+    reject(binary, docs, ES, "its type can hold a function pointer")
+    # Error storage stays rejected.
+    docs = one("extern_storage", "extern_storage.counter.json")
+    doc = docs["extern_storage.counter.json"]
+    doc["types"].append({"k": "error_set", "errors": ["Boom"], "abi_size": 2, "abi_align": 2})
+    global_named(doc, "ext_counter")["ty"] = len(doc["types"]) - 1
+    reject(binary, docs, ES, "its type holds error storage")
+    # A pointer-bearing extern in a program with error-bearing globals: the finite
+    # error-storage fragment tracks every pointer into those.
+    docs = one("extern_storage", "extern_storage.slotValue.json")
+    doc = docs["extern_storage.slotValue.json"]
+    doc["types"].append({"k": "error_set", "errors": ["Boom"], "abi_size": 2, "abi_align": 2})
+    doc["globals"].append({"name": "extern_storage.boom", "module": "root", "ty": len(doc["types"]) - 1,
+                           "const": False, "extern": False, "threadlocal": False,
+                           "init": {"ty": len(doc["types"]) - 1, "err": "Boom"}})
+    reject(binary, docs, ES, "the program has error-bearing globals")
+
+
+def error_ints(binary):
+    funcs = fixtures("error_ints")
+    numbering = table("error_ints")
+    accept(binary, {**funcs, TABLE: numbering}, EI)
+    # No numbering beside the AIR files: integer/error casts are rejected, never guessed.
+    reject(binary, funcs, EI, "needs the compilation's error numbering")
+    # A numbering of another compilation (version, width) or naming an error twice.
+    reject(binary, {**funcs, TABLE: dict(numbering, zig_version="0.15.2")}, EI,
+           "error-table.air2lean is of Zig 0.15.2")
+    reject(binary, {**funcs, TABLE: dict(numbering, error_set_bits=8)}, EI, "with 8-bit errors")
+    reject(binary, {**funcs, TABLE: dict(numbering, names=numbering["names"] + numbering["names"][:1])},
+           EI, "an error name occurs twice")
+    # More errors than the error integer has codes.
+    narrow = {name: copy.deepcopy(d) for name, d in funcs.items()}
+    for d in narrow.values():
+        d["profile"]["error_set_bits"] = 7
+        for t in d["types"]:
+            if t.get("k") == "int" and t.get("bits") == 16 and not t.get("signed"):
+                t.update(bits=7, abi_size=1, abi_align=1)
+            if t.get("k") in ("error_set",):
+                t.update(abi_size=1, abi_align=1)
+    reject(binary, {**narrow, TABLE: dict(numbering, error_set_bits=7)}, EI, "more than the 127 codes")
+
+
+def runtime_lanes(binary):
+    docs = {"runtime_lanes.setU9.json": fixtures("runtime_lanes", "0.15.2")["runtime_lanes.setU9.json"]}
+    accept(binary, docs, RL)
+    # The lane store follows the LLVM backend's bit-packed layout: another backend is rejected.
+    other = copy.deepcopy(docs)
+    other["runtime_lanes.setU9.json"]["profile"]["backend"] = "stage2_x86_64"
+    reject(binary, other, RL + ["--allow-unqualified-build-mode"], "runtime-index vector lane store")
+    # A runtime lane pointer that is read is not dropped and stays rejected.
+    read = copy.deepcopy(docs)
+    doc = read["runtime_lanes.setU9.json"]
+    for inst in walk(doc["body"]):
+        if inst["tag"] == "vector_store_elem":
+            lane_ptr = next(i for i in walk(doc["body"]) if i["tag"] == "ptr_elem_ptr")
+            inst["tag"] = "store"
+            inst["args"] = [{"inst": lane_ptr["id"]}, inst["args"][2]]
+    reject(binary, read, RL, "a pointer to a vector lane (vector_index)")
+
+
+def float_lanes(binary):
+    docs = one("float_lanes", "float_lanes.middle.json")
+    accept(binary, docs, FL)
+    other = copy.deepcopy(docs)
+    other["float_lanes.middle.json"]["profile"]["backend"] = "stage2_x86_64"
+    reject(binary, other, FL + ["--allow-unqualified-build-mode"], "LLVM backend")
+
+
 def main():
     binary = Path(sys.argv[1]).resolve()
     error_params(binary)
     vector_casts(binary)
+    extern_storage(binary)
+    error_ints(binary)
+    runtime_lanes(binary)
+    float_lanes(binary)
     print("lang-long-tail test_cli: ok")
 
 

@@ -5,10 +5,11 @@ open Air2Lean
 /-! L09 checker controls: a vector with non-byte (`u9`) or ABI-padded (`u24`, `f80`) lanes is a
 memory type only for an AIR file whose schema-12 profile names the LLVM backend, with the
 bit-packed size and alignment; byte-strided lanes keep their backend-independent layout. A lane
-pointer (`vector_index`) into an integer or `bool` vector becomes a bit-pointer into the vector's
-integer only for an LLVM profile on a target with a vector-layouts probe
-(`Target.lanePtrProbe`: x86_64-linux, aarch64-macos, aarch64-linux); float lanes, runtime lanes,
-other backends and other targets stay rejected.
+pointer (`vector_index`) into an integer, float or `bool` vector becomes a bit-pointer into the
+vector's integer only for an LLVM profile on a target with a vector-layouts probe
+(`Target.lanePtrProbe`: x86_64-linux, aarch64-macos, aarch64-linux); runtime lane pointers,
+other backends and other targets stay rejected (a runtime-index lane store is `vector_store_elem`,
+`tests/roadmap/lang-long-tail`).
 
     lake env lean --run tests/roadmap/vector-layouts/Checker.lean -/
 
@@ -69,7 +70,7 @@ private def tyOk (layouts : Array Layout) (id : TyId) : Bool :=
 def main : IO Unit := do
   let llvm ← layoutsOf "stage2_llvm"
   require ([1, 4, 7, 9, 11, 14].all fun i => llvm[i]!.packedLanes) "LLVM vector layouts are not marked bit-packed"
-  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 17, 18].all fun i => !llvm[i]!.packedLanes)
+  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 18].all fun i => !llvm[i]!.packedLanes)
     "a non-vector layout is marked"
   require (modelLayout types llvm 1 == .ok (8, 8)) "u9x4: bit-packed 36 bits, 8 bytes"
   require (modelLayout types llvm 9 == .ok (16, 16)) "u24x3: bit-packed 72 bits, 16 bytes"
@@ -96,7 +97,10 @@ def main : IO Unit := do
   let b5 := llvm[16]!
   require (b5.laneBitPtr && b5.hostSize == 1 && b5.bitOffset == 3) "bool5 lane 3: 1 host byte, bit 3"
   require (tyOk llvm 12 && tyOk llvm 16) "an integer or bool lane pointer is rejected"
-  require (!tyOk llvm 17 && !llvm[17]!.laneBitPtr) "an f80 lane pointer is accepted"
+  -- An `f80` lane is its 80 bits (`Zig.Packed (Float fmt)`): lane 1 of f80x2 at bit 80.
+  let f80 := llvm[17]!
+  require (tyOk llvm 17 && f80.laneBitPtr && f80.hostSize == 20 && f80.bitOffset == 80)
+    "f80x2 lane 1: 20 host bytes, bit 80"
   require (!tyOk llvm 18 && !llvm[18]!.laneBitPtr) "a runtime lane pointer is accepted"
   let lane (cx : CheckCtx) (ty : TyId) (k : Int) := (cx.lanePtr 0 ty (.inst 0) (.int 3 k)).toOption.isSome
   require (lane (laneCx llvm 2) 12 2 && lane (laneCx llvm 15) 16 3) "&v[i] with its own lane is rejected"
@@ -109,12 +113,12 @@ def main : IO Unit := do
   let arm ← layoutsOf "stage2_llvm" 12 "aarch64-linux.6.8...6.8-gnu.2.39"
   require ([12, 16].all fun i => tyOk arm i && arm[i]!.laneBitPtr)
     "an aarch64-linux integer or bool lane pointer is rejected"
-  IO.println "lane pointers: integer and bool lanes are bit-pointers on LLVM x86_64/aarch64"
+  IO.println "lane pointers: integer, float and bool lanes are bit-pointers on LLVM x86_64/aarch64"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
       ("stage2_c", 12, "x86_64-linux.5.10...6.19-musl"), ("unverified", 11, "unverified"),
       ("stage2_llvm", 12, "riscv64-linux.5.10...6.19-musl"),
       ("stage2_llvm", 12, "arm-linux.5.10...6.19-musleabihf")] do
     let other ← layoutsOf backend schema triple
-    require ([12, 16].all fun i => !tyOk other i && !other[i]!.laneBitPtr)
+    require ([12, 16, 17].all fun i => !tyOk other i && !other[i]!.laneBitPtr)
       s!"{backend} {triple}: a lane pointer is accepted"
   IO.println "lane pointers: other backends and targets rejected"
