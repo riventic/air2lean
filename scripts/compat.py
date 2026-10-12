@@ -169,6 +169,9 @@ def check(root):
                                      and e.get('status') == 'qualified'
                                      and 'x86_64-linux' in (e.get('hosts') or []) for e in entries):
         errors.append('zig.ci_once %r is not a qualified x86_64-linux version' % once)
+    dialect = text('Air2Lean/Air/Dialect.lean')
+    named = re.search(r'def defaultVersion : ZigVersion := \.v(\d+)_(\d+)_(\d+)\b', dialect)
+    expect('zig.default', default, '.'.join(named.groups()) if named else None, 'Air2Lean/Air/Dialect.lean')
     translate = text('scripts/translate.sh')
 
     # Every hard-coded supported-version list agrees.

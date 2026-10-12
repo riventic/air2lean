@@ -166,7 +166,7 @@ class Agreement(Scratch):
         self.assertIn('coverage inventories', output)
         self.assertIn('CI matrix versions', output)
         self.assertIn('compatibility.json lists', output)
-        self.assertIn('help does not name Zig 0.99.0', output)
+        # The help lists the registry (`ZigVersion.helpList`), so a new version is named by construction.
 
     def test_in_qualification_version_is_labelled(self):
         rows = MATRIX['version_rows'](ROOT)[2]

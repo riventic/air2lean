@@ -41,10 +41,10 @@ history (M0–T5) as historical scope; current open work is the register below.
 
 | Zig | Default | Status | Translator | Exporter pin | Coverage inventory | CI |
 |---|---|---|---|---|---|---|
-| 0.17.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | missing | full job (pipeline, diff test, proofs) |
-| 0.16.0 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | missing | full job (pipeline, diff test, proofs); 5 mutation shards |
-| 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | missing | full job (pipeline, diff test, proofs) |
-| 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | missing | restricted job (pipeline, diff test, proofs on the listed examples) |
+| 0.17.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
+| 0.16.0 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
+| 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
+| 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (pipeline, diff test, proofs on the listed examples) |
 
 ## Examples by version
 
@@ -76,12 +76,12 @@ From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). 
 
 Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source inventory: it records no compiler execution, proof checking or support qualification ([docs/coverage.md](coverage.md)).
 
-| Zig | AIR tags |  | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
-|---|---:|---:|---:|---:|---:|---|
-| 0.17.0 | missing | | | | | |
-| 0.16.0 | missing | | | | | |
-| 0.15.2 | missing | | | | | |
-| 0.14.1 | missing | | | | | |
+| Zig | AIR tags | `emitted-unfixtured` | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0.17.0 | 224 | 33 | 137 | 5 | 13 | 16 | 20 | 25 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.16.0 | 214 | 3 | 161 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.15.2 | 212 | 4 | 160 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.14.1 | 207 | 4 | 156 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 
 ## Requirement register
 

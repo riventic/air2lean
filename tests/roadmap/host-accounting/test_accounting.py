@@ -296,7 +296,7 @@ class Claims(Temp):
         self.assertClaim('README claims a full Zig 0.15.2 job')
 
     def test_supported_version_absent_from_ci(self):
-        self.edit('README.md', 'Supported: Zig **0.17.0**,', 'Supported: Zig **0.13.0**, **0.17.0**,')
+        self.edit('README.md', 'Supported: Zig **0.17.0** (default),', 'Supported: Zig **0.13.0**, **0.17.0** (default),')
         self.assertClaim('CI matrix runs')
 
     def test_restricted_prose_contradicting_row(self):
