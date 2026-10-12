@@ -29,7 +29,7 @@ if [ "$synthetic" = 1 ]; then
   python3 tests/roadmap/indirect-calls/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'indirect call synthetic and kernel-proof regressions passed'; exit 0; fi
-version=${AIR2LEAN_INDIRECT_CALLS_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_INDIRECT_CALLS_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 [ "$version" = 0.16.0 ] || { echo 'only Zig 0.16.0 is qualified by this slice' >&2; exit 2; }
 zig_air=${AIR2LEAN_INDIRECT_CALLS_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_INDIRECT_CALLS_ZIG_STOCK:-zig}

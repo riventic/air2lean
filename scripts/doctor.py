@@ -28,7 +28,8 @@ USAGE = '''Usage: scripts/doctor.sh [--zig-version VERSION] [--zig-air PATH] [--
 Check every prerequisite: host, compatibility metadata, elan and the pinned Lean toolchain
 (lean-toolchain), stock Zig, each patched Zig and its AIR-only lock, the translator build,
 bootstrap tools, Docker, disk and memory. No downloads or builds.
-Defaults: Zig 0.16.0, zig-air-VERSION/bin/zig, --require translate.
+Defaults: the Zig version of compatibility.json (zig.default), zig-air-VERSION/bin/zig,
+--require translate.
   --require proofs     exit 0 once committed proofs can be checked (no Zig needed)
   --require translate  exit 0 once scripts/translate.sh can run (default)
   --json               print one machine-readable JSON report (schema air2lean-doctor/1)

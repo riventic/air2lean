@@ -20,7 +20,7 @@ FILES = ('compatibility.json', 'lean-toolchain', 'tests/diff/lean-toolchain', 'l
          'zig-patch/lock.sh', 'zig-patch/air-json/json.zig', 'zig-patch/air-json/pointer-offset.zig',
          'zig-patch/air-json/identity.zig',
          'scripts/workflow-common.sh', 'scripts/translate.sh', 'scripts/local-ci.sh',
-         'scripts/clean-env.sh', '.github/workflows/ci.yml', 'Air2Lean/Air/Profile.lean',
+         'scripts/clean-env.sh', '.github/workflows/ci.yml', 'Air2Lean/Air/Profile.lean', 'Air2Lean/Air/Dialect.lean',
          'Dockerfile.clean-env', 'tutorials/first-proof/Main.lean')
 # Every listed version's hook; a hook another track has not merged yet is left for check() to report.
 META = json.loads((ROOT / 'compatibility.json').read_text())
@@ -107,14 +107,17 @@ class Compat(unittest.TestCase):
         self.assertDrift('hosts must be')
         self.setUp()
         self.meta(lambda d: d['zig'].update(default='0.15.2'))
-        self.assertDrift('scripts/translate.sh')
+        self.assertDrift('Air2Lean/Air/Dialect.lean')
 
     def test_qualification_status(self):
         self.meta(lambda d: entry(d, '0.16.0').pop('status'))
         self.assertDrift('zig 0.16.0 status must be')
         self.setUp()
+        self.meta(lambda d: entry(d, '0.17.0').update(status='in-qualification'))
+        self.assertDrift("zig.default '0.17.0' is not a qualified version")
+        self.setUp()
         self.meta(lambda d: entry(d, '0.16.0').update(status='in-qualification'))
-        self.assertDrift("zig.default '0.16.0' is not a qualified version")
+        self.assertDrift("zig.ci_once '0.16.0' is not a qualified x86_64-linux version")
 
     def test_translator_constants(self):
         self.edit('Air2Lean/Air/Profile.lean', 'schema ≤ 12 do', 'schema ≤ 13 do')

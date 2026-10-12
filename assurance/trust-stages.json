@@ -86,16 +86,22 @@
     {
       "id": "provenance",
       "name": "Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain)",
-      "components": ["scripts/artifact-manifest.py"],
+      "components": ["scripts/artifact-manifest.py", "scripts/attest.py"],
       "class": "independently-checked-metadata",
-      "premises": ["TRU-02"],
-      "summary": "Hash links between the artifacts of one run are recomputed and staleness is named per link. Identity is checked; correspondence between the linked artifacts is not.",
+      "premises": ["TRU-02", "TRU-05"],
+      "summary": "Hash links between the artifacts of one run are recomputed and staleness is named per link. Identity is checked; correspondence between the linked artifacts is not. A manifest or receipt is authenticated only by an attestation (an SSH signature) checked against the verifier's own allowed signers; without one it is unauthenticated.",
       "checks": [
         {
           "what": "chained manifest hashes and per-link staleness",
           "checker": "scripts/artifact-manifest.py",
           "test": "tests/roadmap/artifact-manifest/test_manifest.py",
           "ci": ["tests/roadmap/artifact-manifest/test_manifest.py"]
+        },
+        {
+          "what": "signed manifests and receipts: signature, trust anchor, subject digests and tamper rejection",
+          "checker": "scripts/attest.py",
+          "test": "tests/roadmap/attestation/test_attestation.py",
+          "ci": ["tests/roadmap/attestation/test_attestation.py"]
         }
       ]
     },

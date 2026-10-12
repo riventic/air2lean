@@ -174,6 +174,13 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the single reviewed data file: template, ordered constraints (outputs, then inputs), clobbers
    and target architecture. A legacy profile without a target is the x86_64 reference model
    (PRF-01). Each entry records its reason and a reviewer note naming the fixture that needs it.
+   An entry also names the CPU `features` it needs beyond the baseline (`lzcnt`, `popcnt`,
+   `rdrnd`). The translator derives support from `profile.features` and rejects a block whose
+   feature the profile lacks (on a CPU without LZCNT the `lzcnt` encoding runs as `bsr`).
+   `--assume-asm-cpu-features` admits it: the running CPU has the feature (premise ASM-09, the
+   admission `asm-cpu-features` in the header). The legacy profile lists no features, so
+   `examples/asm` (schema-11 goldens) passes the flag in its `translate.args`; `asm_env` is
+   exported with `-mcpu=x86_64+rdrnd`.
 
    | Template | Constraints | Clobbers | Target | Semantics | Faults | Fixture |
    | --- | --- | --- | --- | --- | --- | --- |
@@ -181,6 +188,12 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    | `xorl %%edx, %%edx` / `divl %[b]` | `={eax}`, `=&{edx}`, `{eax}`, `r` | none | x86_64 | opaque | `b = 0` (#DE) | `asm.divmod` |
    | `lzcnt %[x], %[ret]` | `=r`, `r` | `cc` | x86_64 | opaque | never | `asm.lzcnt64` (volatile) |
    | `popcnt %[x], %[ret]` | `=r`, `r` | none | x86_64 | opaque | never | `asm.popcnt64` |
+   | `rdtsc` / `shlq $32, %%rdx` / `orq %%rdx, %%rax` | `={rax}` | `cc`, `rdx` | x86_64 | A01 environment read (ASM-05) | never | `asm_env.ticks`, `device_asm.elapsed`, `device_asm.ticksPlain` |
+   | `rdrand %[ret]` | `=r` | `cc` | x86_64 | A01 environment read (ASM-05) | never | `asm_env.random`, `device_asm.random` |
+   | `rdrand %[v]` / `setc %[ok]` | `=r`, `=r` | `cc` | x86_64 | A01 environment read (ASM-05) | never | `asm_env.rand64` |
+   | `movq %[x], %[ret]` | `=r`, `m` | none | x86_64 | opaque (A01 memory input) | never | `asm_env.loadm` |
+   | `rep stosb` | `+{rdi}`, `+{rcx}`, `{al}` | `memory` | x86_64 | opaque + write region (ASM-06) | never | `asm_env.fill` |
+   | `rep movsb` | `+{rdi}`, `+{rsi}`, `+{rcx}` | `memory` | x86_64 | opaque + read and write regions (ASM-06) | never | `asm_env.copy` |
    | `pause` | none | none | x86_64 | C03 spin hint | never | `progress.idle` |
    | `isb` | none | none | aarch64 | C03 spin hint | never | `docs/progress-hints.md` |
    | `incl %[x]`, `incl %[y]` | `+m` | `cc` | x86_64 | opaque (A01 effect contract) | never | `asm_effects.incm`, `asm_effects.incLocal` |
@@ -219,10 +232,16 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    because DEV-01 says the device does not touch model memory. A non-volatile asm cannot be an
    event, because the compiler may merge or delete it.
 
+   An environment read (A01, [ASM-05](premises.md#asm-05)) is not an opaque: each output is a
+   fresh query of the oracle `Mem.arbitrary` (`Zig.Asm.envWord`), so two counter reads are two
+   answers. This holds for non-volatile asm too: a run in which the compiler merged two reads is
+   one of the oracle's answer sequences. When the device contract declares the same template,
+   the device event takes precedence (the device rules then apply: `volatile`, one result).
+
 Every other asm is `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, with
-guidance). This covers `rdtsc`, `rdrand`, `cpuid`, port I/O, fences, output-less asm, every
-`memory` clobber other than A01's empty barrier, an allowlisted template with other constraints or clobbers, and non-volatile
-asm off the list.
+guidance). This covers `cpuid`, port I/O, fences, output-less asm, every `memory` clobber other
+than A01's empty barrier and its memory-region entries, an allowlisted template with other
+constraints or clobbers, and non-volatile asm off the list.
 
 **Non-volatile asm.** Before L13, non-volatile asm with outputs was also a repeatable opaque. Zig
 lowers it to an LLVM `call asm` without `sideeffect` and without memory attributes
@@ -242,8 +261,9 @@ in the rejection message, which now names `--device-contract`).
 **Real-export evidence.** `device_asm.zig` (0.15.2/0.16.0 syntax; the committed export is 0.16.0
 in `air-asm/`) has `elapsed` (two `rdtsc`), `random` (`rdrand`), `fence` (output-less `mfence`),
 `barrier` (A01's empty `memory`-clobber compiler barrier) and `ticksPlain` (non-volatile `rdtsc`).
-The default rejects every one of them except `barrier`, which is on the allowlist, with
-`ASM_VOLATILE_EFFECT`. Under `tsc.json`, which declares only the `rdtsc` template, `elapsed`
+The default rejected every one of them except `barrier` with `ASM_VOLATILE_EFFECT` until A01's
+environment-read entries: `elapsed`, `random` and `ticksPlain` are now accepted as environment
+reads, `fence` stays rejected. Under `tsc.json`, which declares only the `rdtsc` template, `elapsed`
 translates to two `Zig.vasm` (`DeviceAsm/Gen.lean`) and the others stay rejected. (The source
 comments of `device_asm.zig` predate A01's barrier entry; the source is pinned by `provenance.json`.)
 `DeviceAsm/Proofs.lean` proves `elapsed_trace` (two `asm` events in order, the second answered

@@ -1,0 +1,9 @@
+x=0000000000000000 rev=0000000000000000 clz=64 rbit=0000000000000000 cnt=0 agrees_with_builtins=true
+x=0000000000000001 rev=0100000000000000 clz=63 rbit=8000000000000000 cnt=1 agrees_with_builtins=true
+x=8000000000000000 rev=0000000000000080 clz=0 rbit=0000000000000001 cnt=1 agrees_with_builtins=true
+x=ffffffffffffffff rev=ffffffffffffffff clz=0 rbit=ffffffffffffffff cnt=64 agrees_with_builtins=true
+x=00f0000000000000 rev=000000000000f000 clz=8 rbit=0000000000000f00 cnt=4 agrees_with_builtins=true
+x=0123456789abcdef rev=efcdab8967452301 clz=7 rbit=f7b3d591e6a2c480 cnt=32 agrees_with_builtins=true
+udiv 100/0=0 (no #DE on aarch64) udiv 100/7=14
+cntvct_el0 t1>=t0=true (EL0-readable counter: an environment read)
+mismatches=0

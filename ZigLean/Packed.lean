@@ -16,6 +16,14 @@ In memory a packed struct is its backing integer (the instance's `Enc`). A bit-p
 read and write the field's `n` bits at bit `o` of it, with defined-bit masks (§Defined bits);
 `storeUndefBits` makes them undefined. `ZigLean/PackedLemmas.lean` proves the frame: the other
 bits keep their state.
+
+`Packed` is also the *logical bit representation* of every packable type (Zig 0.17's
+`@bitCast`, `ZigLean/PackedRepr.lean`): floats, packed unions, arrays and vectors get instances
+there. `mask` gives the bits of a value that are determined: all of them for an integer, `bool`,
+enum or packed struct of these; none for a NaN (the model's canonical NaN stands for any NaN,
+`docs/floats.md` §NaN); the defined bits of a packed union's bytes. Where a value becomes bits
+that someone can observe (`toBits?`, a bit-pointer store, a packed struct's memory image), an
+undetermined bit is undefined, never the model's choice.
 -/
 
 namespace Zig
@@ -24,6 +32,8 @@ class Packed (α : Type) (n : outParam Nat) where
   toBits : α → BitVec n
   ofBits : BitVec n → α
   valid : BitVec n → Bool := fun _ => true
+  /-- The bits of a value that are determined (`toBits` gives the others as 0). -/
+  mask : α → BitVec n := fun _ => BitVec.allOnes n
 
 instance {n : Nat} : Packed (BitVec n) n where
   toBits v := v
@@ -32,6 +42,12 @@ instance {n : Nat} : Packed (BitVec n) n where
 instance : Packed Bool 1 where
   toBits b := if b then 1#1 else 0#1
   ofBits v := v == 1#1
+
+/-- A float lane is its bits (`Float.bits`): the lane of a lane pointer into a bit-packed float
+vector (`@Vector(n, f80)`'s 80-bit lanes, L09; `Zig.loadLane`/`Zig.storeLane`). -/
+instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
+  toBits f := f.bits
+  ofBits b := ⟨b⟩
 
 /-- The `n` bits of `α` at bit `o` of `host`. -/
 def Packed.get {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : α :=
@@ -45,35 +61,29 @@ def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result �
 def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
   Packed.valid (α := α) (host.extractLsb' o n)
 
+/-- The bits of `v` if every one of them is determined (`mask`), else `none`. -/
+def Packed.defBits? {α : Type} {n : Nat} [Packed α n] (v : α) : Option (BitVec n) :=
+  if Packed.mask v = BitVec.allOnes n then some (Packed.toBits v) else none
+
+/-- `@bitCast` of `v` to its bits: an undetermined bit (a NaN's, an undefined bit of a packed
+union) has no value, `.unspecified`, as `Float.toBits?` does for a NaN. -/
+def Packed.toBits? {α : Type} {n : Nat} [Packed α n] (v : α) : Result (BitVec n) :=
+  match Packed.defBits? v with
+  | some b => pure b
+  | none => throw .unspecified
+
 /-! ## Defined bits
 
 A bit-pointer access reads and writes the field's bits only. Each host byte is a defined-bit
-mask and a value (`Byte.defBits`): `.int` all, `.undef` none, `.part m` the low `m` bits,
+mask and a value (`Byte.defBits`, `ZigLean/Mem/Enc.lean`): `.int` all, `.undef` none, `.part m` the low `m` bits,
 `.mask d` the bits of `d`. A store sets the field's bits of each byte (`Byte.writeBits`) and
 keeps every other bit as it was, defined or not: an undefined neighbour field stays undefined
 bit by bit, and `undefined` stored to a field makes only the field's bits undefined. A load needs
 only the field's bits to be defined (`readBits`). -/
 
-/-- The low `m` bits of a byte. -/
-def lowMask8 (m : Nat) : BitVec 8 := BitVec.ofNat 8 (2 ^ m - 1)
-
-/-- A byte as its defined-bit mask and its value (0 in undefined bits); `none` for a pointer
-or error byte, which has no integer bits. -/
-def Byte.defBits : Byte → Option (BitVec 8 × BitVec 8)
-  | .undef => some (0, 0)
-  | .int x => some (BitVec.allOnes 8, x)
-  | .part m x => some (lowMask8 m, x &&& lowMask8 m)
-  | .mask d x => some (d, x &&& d)
-  | _ => none
-
-/-- The byte with the defined bits `d` and the values `x` there, in its canonical form:
-`.int`, `.undef`, `.part m` for the low `m` bits, else `.mask`. -/
-def Byte.ofDefBits (d x : BitVec 8) : Byte :=
-  if d = BitVec.allOnes 8 then .int x
-  else if d = 0 then .undef
-  else match [1, 2, 3, 4, 5, 6, 7].find? (lowMask8 · = d) with
-    | some m => .part m (x &&& d)
-    | none => .mask d (x &&& d)
+/-- The value bytes of `v` (`intBytes`), each bit defined where `Packed.mask` says. -/
+def Packed.bytes {α : Type} {n : Nat} [Packed α n] (v : α) : Array Byte :=
+  maskedBytes (Packed.toBits v) (Packed.mask v)
 
 /-- Bit `k` of a byte: `some b` if it is defined, `none` if it is undefined or the byte has no
 integer bits (a pointer or error byte). -/
@@ -130,11 +140,13 @@ def loadBits (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat
   | none => throw .unspecified
 
 /-- A store through a bit-pointer: read the host, replace the field's bits, write it back.
-Every other bit keeps its state (`writeField`), defined or undefined. -/
+Every other bit keeps its state (`writeField`), defined or undefined. A value with an
+undetermined bit (`Packed.mask`: a NaN, a packed union with undefined bits) leaves the whole
+field undefined. -/
 def storeBits {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr)
     (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
-  storeBytes p align (writeField bs bitOffset (some (Packed.toBits v)))
+  storeBytes p align (writeField bs bitOffset (Packed.defBits? v))
 
 /-- A store of `undefined` through a bit-pointer: the field's `n` bits become undefined, bit by
 bit; every other bit keeps its state. -/
@@ -206,5 +218,13 @@ def storeLane {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Na
     (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
   storeBytes p align (bs.mapIdx fun k b => b.setLane k bitOffset n (Packed.toBits v).toNat)
+
+/-- `vector_store_elem`: `v[i] = x` through a pointer `p` to a bit-packed vector of `lanes`
+lanes of `w` bits with a runtime index (Zig 0.14.1/0.15.2; 0.16.0 rejects a runtime vector
+index): the store through the lane pointer of lane `i` (`storeLane` at bit `i * w`). An index
+past the lanes is illegal behaviour; a safe build checks it first (the `outOfBounds` panic). -/
+def storeLaneAt {α : Type} {w : Nat} [Packed α w] (lanes hostSize align : Nat) (p : Ptr)
+    (i : BitVec 64) (v : α) : MemM Unit :=
+  if i.toNat < lanes then storeLane hostSize align (i.toNat * w) p v else throw .illegal
 
 end Zig

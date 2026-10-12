@@ -4,6 +4,10 @@
 #                                     bit-pointer host widths) and OUTPUT_DIR/x86_64 (the
 #                                     self-hosted backend, `hostAbi` only: ABI host widths)
 #   compiler.sh --native              stock host Zig runs the source's tests
+#   compiler.sh --native-linux        stock Zig (any of 0.14.1-0.17.0) builds the tests for
+#                                     x86_64-linux-musl (LLVM ReleaseSafe and Debug, and the
+#                                     self-hosted x86_64 backend) and runs them (Docker
+#                                     linux/amd64, or AIR2LEAN_X86_64_RUN; empty: the host)
 #   compiler.sh --check               retained export -> translation -> proofs (no compiler)
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -14,6 +18,25 @@ case "${1:---check}" in
     [ "$#" -eq 1 ] || { echo 'usage: compiler.sh --native' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}"
     "$AIR2LEAN_ZIG_NATIVE" test "$here/packed_fields.zig" -OReleaseSafe
+    exit ;;
+  --native-linux)
+    [ "$#" -eq 1 ] || { echo 'usage: compiler.sh --native-linux' >&2; exit 2; }
+    : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig}"
+    work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-packed-native.XXXXXX")
+    trap 'rm -rf "$work"' EXIT
+    for build in ReleaseSafe Debug x86_64; do
+      flags=("-O$build")
+      [ "$build" = x86_64 ] && flags=(-ODebug -fno-llvm -fno-lld)
+      "$AIR2LEAN_ZIG_NATIVE" test "$here/packed_fields.zig" "${flags[@]}" -target x86_64-linux-musl \
+        --test-no-exec -femit-bin="$work/test-$build"
+      if [ -n "${AIR2LEAN_X86_64_RUN+set}" ]; then
+        # shellcheck disable=SC2086
+        ${AIR2LEAN_X86_64_RUN} "$work/test-$build"
+      else
+        docker run --rm --platform linux/amd64 -v "$work:/w:ro" alpine:3 "/w/test-$build"
+      fi
+      echo "x86_64-linux-musl $build: the packed-field tests pass"
+    done
     exit ;;
   --export)
     [ "$#" -eq 2 ] || { echo 'usage: compiler.sh --export OUTPUT_DIR' >&2; exit 2; }
@@ -30,7 +53,7 @@ case "${1:---check}" in
       -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline "$here/packed_fields.zig"
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: compiler.sh [--check]' >&2; exit 2; } ;;
-  *) echo 'usage: compiler.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: compiler.sh [--check|--native|--native-linux|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }

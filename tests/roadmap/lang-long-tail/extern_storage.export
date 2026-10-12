@@ -1,0 +1,1 @@
+native_extra='provider_extern_storage.c -lc'

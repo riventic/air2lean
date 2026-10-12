@@ -46,7 +46,8 @@ ENTRY = """\
 TITLES = {"PRF-01": "Legacy", "PRF-02": "Recorded", "PRF-03": "Gate", "ASM-01": "Opaque asm",
           "ASM-02": "Asm hypothesis", "THR-01": "Scheduler", "SEM-01": "Semantics",
           "EXT-02": "Axiom", "TRU-01": "Kernel", "TRU-02": "Translator",
-          "ALC-09": "Caller allocator", "IOM-01": "Caller Io"}
+          "ALC-09": "Caller allocator", "IOM-01": "Caller Io", "ORD-06": "Memory-model adequacy",
+          "MTH-05": "No libc"}
 
 PROFILE = ('-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee",'
            '"profile":{"name":"abi64-le-v1","schema":12}}\n')
@@ -62,11 +63,16 @@ def fixture_config():
         "generated_markers": {"ALC-09": "allocator parameter", "IOM-01": "Io parameter"},
         "profiles": {"absent": "PRF-01", "legacy-abi64-le": "PRF-01", "abi64-le-v1": "PRF-02",
                      "gate-time": "PRF-03"},
-        "float_semantics": {"ieee": []}, "source_axiom": ["EXT-02"],
+        "float_semantics": {"ieee": []}, "admissions": {"no-libc": ["MTH-05"]},
+        "source_axiom": ["EXT-02"],
         "runtime_modules": {"ZigLean.Basic": ["SEM-01"], "ZigLean.Sched": ["THR-01"]},
         "rules": [{"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
                   {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"}],
-        "implies": {"ASM-02": ["ASM-01"], "TRU-02": ["SEM-01"]},
+        "implies": {"ASM-02": ["ASM-01"], "TRU-02": ["SEM-01"], "THR-01": ["ORD-06"]},
+        "memory_model": {"premise": "ORD-06", "concurrency": ["THR-01"],
+                         "targets": {"x86_64-linux": {"hardware": "x86-TSO", "argument": "fixture",
+                                                      "evidence": ["ZigLean/Sched.lean"]}},
+                         "unqualified": {"wasm32-freestanding": "fixture"}},
     }
 
 
@@ -158,7 +164,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["via_helper"]["premises"], ["PRF-01", "SEM-01", "TRU-01", "TRU-02"])
         self.assertEqual(entries["pure_fact"]["premises"], ["TRU-01"])
         self.assertEqual(entries["example@L11"]["premises"], ["TRU-01"])
-        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "TRU-01"])
+        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
@@ -266,6 +272,30 @@ class FixtureTests(unittest.TestCase):
                 errors, _ = self.fixture.check(write=True)
                 self.assertTrue(any(message in e for e in errors), errors)
 
+    def test_admission_is_a_premise(self):
+        """An `--assume-no-libc` translation: every theorem over it lists MTH-05."""
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"', '"admission":"no-libc","float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertIn("PRF-02", entries["plain_spec"]["premises"])
+        self.assertNotIn("MTH-05", entries["pure_fact"]["premises"])
+
+    def test_example_translate_args_admission(self):
+        """A committed (headerless) example translation takes the opt-ins of its translate.args."""
+        self.fixture.files["examples/asm/translate.args"] = "--float-semantics compiler-rt --assume-no-libc\n"
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertIn("PRF-01", entries["plain_spec"]["premises"])
+
+    def test_unmapped_admission_fails(self):
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"', '"admission":"no-libc,new-opt-in","float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        errors, _ = self.fixture.check(write=True)
+        self.assertTrue(any("admission 'new-opt-in' has no premise mapping" in e for e in errors), errors)
+
     def test_unknown_profile_fails(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace("abi64-le-v1", "wasm32") + \
             textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -286,6 +316,27 @@ class FixtureTests(unittest.TestCase):
         self.fixture.config["runtime_modules"]["ZigLean.Gone"] = ["SEM-01"]
         errors, _ = self.fixture.check(write=True)
         self.assertIn("runtime_modules names missing module ZigLean.Gone", errors)
+
+    def test_concurrency_theorem_without_adequacy_premise_fails(self):
+        """C12: a concurrency claim never omits the memory-model adequacy premise."""
+        del self.fixture.config["implies"]["THR-01"]
+        errors, _ = self.fixture.check(write=True)
+        self.assertIn("Proofs/Conc/Proofs.lean: run_id makes a concurrency claim without the "
+                      "memory-model adequacy premise ORD-06", errors)
+
+    def test_concurrency_report_without_adequacy_premise_fails(self):
+        self.fixture.titles["THR-01"] = "Scheduler"
+        self.fixture.write()
+        catalog = self.fixture.root / "docs/premises.md"
+        catalog.write_text(catalog.read_text() + "| Fixture schedule search | THR-01 |\n")
+        errors, _ = premises.check(self.fixture.root, write=True)
+        self.assertIn("report 'Fixture schedule search' rests on a concurrency premise but does not list ORD-06",
+                      errors)
+
+    def test_adequacy_evidence_must_exist(self):
+        self.fixture.config["memory_model"]["targets"]["x86_64-linux"]["evidence"] = ["tests/gone.zig"]
+        errors, _ = self.fixture.check(write=True)
+        self.assertIn("memory_model.targets.x86_64-linux: evidence tests/gone.zig does not exist", errors)
 
     def test_undefined_premise_fails(self):
         self.fixture.config["rules"].append({"premise": "ZZZ-99", "scope": "closure", "pattern": "x"})
@@ -380,6 +431,17 @@ class CompiledTests(unittest.TestCase):
         theorem = result["theorems"][0]
         # Zig.Result's body reaches ZigLean.Sched, but runtime bodies are not followed.
         self.assertEqual(theorem["premises"], ["PRF-01", "ASM-01", "SEM-01", "TRU-01", "TRU-02"])
+
+    def test_compiled_concurrency_needs_adequacy_premise(self):
+        report = self.report()
+        report["theorems"].append({"name": "run_spec", "module": "Proofs.Conc.Proofs", "axioms": []})
+        report["nodes"] += [self.node("run_spec", "Proofs.Conc.Proofs", "theorem", ["Zig.Inner"])]
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertIn("ORD-06", next(t for t in result["theorems"] if t["name"] == "run_spec")["premises"])
+        del self.config["implies"]["THR-01"]
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertIn("run_spec makes a concurrency claim without the memory-model adequacy premise ORD-06",
+                      result["errors"])
 
     def test_compiled_unmapped_module_and_axiom(self):
         result = premises.compiled(self.report("Zig.now", ["Fixture.extra"]), self.fixture.root, self.config, None)
@@ -482,7 +544,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("MTH-02", self.premises_of("Proofs/Floatops/Proofs.lean", "op64_spec"))
         self.assertEqual(self.premises_of("Proofs/Floatops/Proofs.lean", "sel_ne"), ["TRU-01"])
         counter = self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.parallelCounter_spec")
-        self.assertLessEqual({"THR-01", "THR-02", "THR-08", "ORD-01", "ORD-02", "TRU-02", "PRF-01"}, set(counter))
+        self.assertLessEqual({"THR-01", "THR-02", "THR-08", "ORD-01", "ORD-02", "ORD-06", "TRU-02", "PRF-01"},
+                             set(counter))
         self.assertIn("TMR-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dl0_size"))
         # The committed Linux translation selects FutexImpl; the DarwinImpl block is not elaborated.
         lock = self.premises_of("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")

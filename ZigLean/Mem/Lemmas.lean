@@ -249,6 +249,32 @@ theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
   · cases h; exact ⟨rfl, rfl⟩
   · cases h
 
+/-- An error union's payload is first (offset 0) or follows the 2-byte error code at offset 0. -/
+theorem errUnionOffsets_payload (size align : Nat) :
+    (errUnionOffsets size align).2 = 0 ∨ errUnionOffsets size align = (0, 2) := by
+  unfold errUnionOffsets
+  split
+  · simp
+  · split
+    · simp
+    · have : align = 0 ∨ align = 1 := by omega
+      rcases this with h | h <;> simp [h, alignUp]
+
+/-- Once an access reached the error code of the error union at `p`, its payload pointer is
+formed (`tryPayloadPtr`, `errSetOk`): it is the base, or one past the 2-byte code at the base,
+so it lies in bounds of the code's block. -/
+theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
+    {r : BlockId × Block × Nat}
+    (h : m.access (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 a = pure r) :
+    (ptrProject p (errPayloadPtr α)).run m = pure (errPayloadPtr α p, m) := by
+  rcases errUnionOffsets_payload (Enc.size α) (Enc.align α) with h0 | he
+  · have hp : errPayloadPtr α p = p := by simp [errPayloadPtr, h0]
+    rw [hp]; exact ptrProject_same _ hp
+  · obtain ⟨b, blk, o⟩ := r
+    have h' : m.access p 2 a = pure (b, blk, o) := by simpa [he] using h
+    exact ptrProject_run _ rfl (by simpa using inBounds_of_access h' 0 (by omega))
+      (by simpa [errPayloadPtr, he] using inBounds_of_access h' 2 (by omega))
+
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
   simp [writeBytes]; omega
@@ -796,6 +822,31 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
 
+/-- Inverts a successful `loadBytes`: the access succeeds and only the read is recorded. -/
+theorem loadBytes_inv {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs : Array Byte}
+    (h : (loadBytes p n a kind).run m = pure (bs, m')) :
+    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧ bs = blk.bytes.extract o (o + n) ∧
+      m' = m.recordAt b o n kind := by
+  simp only [loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
+    MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
+    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set,
+    MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
+  generalize hacc : m.access p n a = r at h
+  match r, hacc, h with
+  | none, _, h => simp at h
+  | some (.error _), _, h =>
+    simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
+  | some (.ok (b, blk, o)), hacc, h =>
+    simp only [ExceptT.bindCont, Option.bind_some] at h
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
+    match r, hr, h with
+    | some _, _, h => cases h
+    | none, hr, h =>
+      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure,
+        ExceptT.mk] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨b, blk, o, rfl, rfl, rfl⟩
+
 /-- A load of the bytes of a value of a lawful encoding decodes the value. -/
 @[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
     decodeLoad blocks (Enc.encode v) = pure v :=
@@ -1320,6 +1371,18 @@ theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat ×
     simp [Mem.globalAddr, h, List.getElem?_eq_getElem hj]
   · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
     simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
+
+/-- External storage at program start (L12): after the program's globals `gs`, block
+`gs.length + i` is the external block `ext[i]`, live, with its bytes and alignment, read-only
+unless it is writable. -/
+theorem Mem.ofGlobals_extern (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (ext : List ExternBlock) (i : Nat) :
+    (Mem.ofGlobals σ (gs ++ ext.map ExternBlock.global)).blocks[gs.length + i]? = ext[i]?.map fun b =>
+      { bytes := b.bytes, align := b.align, kind := if b.writable then .global else .constGlobal,
+        live := true, addr := Mem.globalAddr σ (gs ++ ext.map ExternBlock.global) (gs.length + i) } := by
+  rw [Mem.ofGlobals_getElem?, List.getElem?_append_right (by omega)]
+  simp only [Nat.add_sub_cancel_left, List.getElem?_map, Option.map_map]
+  rfl
 
 /-- A block at program start is aligned: its address is a multiple of its alignment, under every
 placement. -/

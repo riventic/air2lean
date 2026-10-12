@@ -3,3 +3,4 @@ tests/golden/**/*.json linguist-generated=true
 coverage/*.json linguist-generated=true
 qualification/**/*.json linguist-generated=true
 qualification/**/*.log linguist-generated=true
+tests/roadmap/wasm-correspondence/records/**/*.json linguist-generated=true

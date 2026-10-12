@@ -790,5 +790,26 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     FTriple (apts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
   (FTriple.atomicStoreW p v w ord).pre fun _ => apts_wpts
 
+/-- **O3.** A memory that holds a word as `apts` has no atomic location of another offset or size
+over it (`docs/alloc-page.md`'s `odd` memory, with a 4-byte location at the page allocator's
+hint, holds no `apts` of the hint, though its heap is that of the program start). -/
+theorem apts_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq) {p : Ptr}
+    {v : BitVec 64} (hp : apts p v r) {b : BlockId} (hpb : p.block = some b) {l : ALoc}
+    (hl : l ∈ m.atomics) (hb : l.block = b) (h1 : p.off.toNat < l.off + l.len)
+    (h2 : l.off < p.off.toNat + 8) : l.off = p.off.toNat ∧ l.len = 8 := by
+  obtain ⟨A, S, K, bs, -, -, hsz, -, hab⟩ := hp
+  have hmem : ALoc.shape l ∈ shapes m :=
+    List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩
+  -- a byte of the word under `l`: its location is `l`, which its constraint names
+  obtain ⟨x, hx1, hx2, hcov⟩ : ∃ x, p.off.toNat ≤ x ∧ x < p.off.toNat + 8 ∧ Covers b x (ALoc.shape l) := by
+    by_cases ho : p.off.toNat ≤ l.off
+    · exact ⟨l.off, ho, h2, hb, Nat.le_refl _, by have := hs.2.1.1 _ hmem; simp only [ALoc.shape] at this ⊢; omega⟩
+    · exact ⟨p.off.toNat, Nat.le_refl _, by omega, hb, by simp only [ALoc.shape]; omega, h1⟩
+  have hc := abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, hx1, by rw [hsz]; exact hx2⟩
+  have hsat := hh.heap.2 (b, x) _ (by rw [FHeap.union_apply, hc]; rfl)
+  have ht := tagOf_of_mem hs.2.1 hmem hcov
+  simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
+  simpa [ALoc.shape] using hsat
+
 end Full
 end Zig

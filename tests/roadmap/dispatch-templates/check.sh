@@ -20,7 +20,7 @@ lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigL
 lake env lean "$here/Template.lean"
 if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi
 
-version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 zig_air=${AIR2LEAN_DISPATCH_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_DISPATCH_ZIG_STOCK:-zig}
 # The proof names the 0.16.0 translation's loop (`loop10`/`dispatchValue10`).

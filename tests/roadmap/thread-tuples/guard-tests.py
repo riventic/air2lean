@@ -103,7 +103,7 @@ import json, os
 from pathlib import Path
 manifest=json.loads(Path('tests/roadmap/thread-tuples/provenance.json').read_text())
 mode=os.environ.get('FAKE_AIR_MODE','good')
-version=os.environ.get('FAKE_AIR_VERSION','0.16.0')
+version=os.environ.get('FAKE_AIR_VERSION','0.16.0')  # zig-pin: test double
 names=['thread_tuples.'+n for n in manifest['functions']] + manifest['stdlib_functions']
 if version!='0.16.0': names.remove('thread_tuples.groupMixed')
 if mode=='missing': names.pop()
