@@ -127,22 +127,24 @@ This is an honest total/partial interface and a bounded contribution to P05.
 Reports classify theorems over these interfaces by their kernel types, not by labels
 (`docs/claim-strength.md`).
 
-The regression files in `tests/roadmap/proof-tools/` check AC normalization,
-unit/duplicate handling, rejected framing, array mutation with inferred frames,
-total bind, rejection of divergence/panics, and explicit conversion between
-partial and total correctness. `Array.lean` checks prefix/element/suffix ownership,
+The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC normalization,
+unit/duplicate handling, rejected framing, total bind, rejection of divergence/panics, partial
+and total correctness) are `fsym` regressions in the full-state logic:
+`tests/roadmap/sep-auto/Frame.lean` and `tests/roadmap/sep-auto/Total.lean`
+([proof-automation.md](proof-automation.md)). The array regressions stay in
+`tests/roadmap/proof-tools/` until the full-state library has array rules (`Full/Arr`):
+`Array.lean` checks prefix/element/suffix ownership,
 endpoint and singleton boundaries, a store preserving neighboring elements and an
 independent heap allocation, and rejection of out-of-bounds access, overlap,
 dropped frames, and incorrect postconditions. Build the optional modules with
 `lake build ZigLean.Sep.Automation ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble
 ZigLean.Sep.Total Proofs.Slices.Gen`, then run
-each with `lake env lean tests/roadmap/proof-tools/<name>.lean` (`Normalize`,
-`Clients`, `Array`, `Reassemble`, `ArrayClients`, and `Total`). Reassembly fixtures
+each with `lake env lean tests/roadmap/proof-tools/<name>.lean` (`Array`, `Reassemble` and
+`ArrayClients`). Reassembly fixtures
 include endpoint/singleton/empty boundaries, missing memory backing, inconsistent
 metadata, duplicated ownership, lost frames, stale values, and changed neighbors.
 CI retains the build and fixture logs.
-The optional-module build and all six proof-tool fixtures have passed kernel
-checking with the pinned Lean toolchain. These checks establish the stated model
+These checks establish the stated model
 contracts and rejected proof attempts; they add no native/export qualification.
 
 ## Symbolic execution steps (P01)
@@ -194,17 +196,14 @@ heaps, run equations) disappears entirely. What remains in `reverse_step` is the
 arithmetic of the invariant. `ArrayClients.lean` keeps its manual proofs as evidence for the
 reassembly interface; `StepClients.lean` proves the same statements with the tactics.
 
-`tests/roadmap/proof-tools/Steps.lean` checks the following:
-
-- framed `pts` and `arr` steps in partial and total form;
-- a bound left visible as a goal;
-- `sep_split`, caller rules with existential/pure postconditions, `sep_intro` naming, and a
-  generated-style `MM` body.
-
-It also rejects a missing points-to, a dropped frame, a store claiming the old value, a wrong
-array neighbor, and a rule for a different command. Run it after
-`lake build ZigLean.Sep.Step Proofs.Slices.Gen` with
-`lake env lean tests/roadmap/proof-tools/Steps.lean` (and `StepClients.lean`).
+The scenarios of the retired `Steps.lean` regressions are `fsym` regressions in the
+full-state logic, `tests/roadmap/sep-auto/Steps.lean`: framed `pts` steps in partial and total
+form, an item store through `p.elem` with its neighbours framed, a side condition left visible
+as a goal, caller rules with existential/pure postconditions, existentials and facts of the
+precondition, and a generated-style `MM` body. It also rejects a missing points-to, a dropped
+frame, a store claiming the old value, a wrong array neighbor, and a rule for a different
+command. Steps on whole-array ownership `arr p xs` at a symbolic index wait for `Full/Arr`;
+`StepClients.lean` keeps the legacy tactics' generated array clients until then.
 
 ## Loop templates and range conversions
 

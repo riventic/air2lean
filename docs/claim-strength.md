@@ -145,7 +145,7 @@ refutes every bound for a loop that never exits, and `stuck_not_total` refutes
 `EventuallyReturns` for a concurrent program that never returns. `stuck_under_false` proves
 `EventuallyReturnsUnder` with an unsatisfiable premise for that same program, and the check
 rejects every goal for it.
-`tests/roadmap/proof-tools/Total.lean` also rejects panics. An unsatisfiable precondition or
+`tests/roadmap/sep-auto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
 hypothesis has no non-vacuity witness, so it caps the claim at `safety`.
 
 ## Scope
