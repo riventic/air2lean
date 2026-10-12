@@ -21,7 +21,7 @@ open Zig Zig.Full Zig.Full.FAssn
 theorem overlap_invalid {r : Res} (h : (bclaim 0 0 64 ⋆ bclaim 0 32 96) r) : ¬ r.gh.Valid := by
   intro hv
   obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨-, -, g2⟩⟩ := h
-  have h1 := (hv.2.2.1 0 32).1.2.2 1
+  have h1 := (hv.2.2.1.1 0 32).1.2.2 1
   simp only [Ghost.add_cl, g1, g2, Ghost.atCl, if_true, ECell.onRange,
     show (0 ≤ 32 ∧ 32 < 64) = True by decide, show (32 ≤ 32 ∧ 32 < 96) = True by decide, and_self,
     if_true, ECell.total, ECell.shareT_none, ECell.share, ECell.add, Frac.add, Frac.one] at h1
