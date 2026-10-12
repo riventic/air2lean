@@ -457,9 +457,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Atomics/PtrPublish.lean"
-    },
-    {
       "path": "Proofs/Iogroup/Counter.lean"
     },
     {
@@ -736,12 +733,6 @@
     },
     {
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Group.lean"
-    },
-    {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
     },
     {
       "path": "tests/roadmap/strength-log/ProofsLayout.lean",
