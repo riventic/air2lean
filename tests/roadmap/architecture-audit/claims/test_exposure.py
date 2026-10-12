@@ -134,15 +134,15 @@ def lean_case(name):
 
 
 def spoofed_total_head():
-    """A contract that defines its own `Zig.TotalTriple := True` cannot be audited next to the
+    """A contract that defines its own `Zig.Full.FTotalTriple := True` cannot be audited next to the
     registered head that the extractor imports: the name clashes and the audit errors."""
     shadow = SNAPSHOT['shadow_audit']
     return shadow['status'] == 'pass', f'Shadow audit status={shadow["status"]} name_clash={shadow["name_clash"]}'
 
 
 def spoofed_registered_head():
-    """`Zig.TotalTripleWithin` (codex/roadmap-batch8) is a registered head: the extractor imports
-    it, so a contract's same-named declaration cannot be audited next to it (name clash)."""
+    """`Zig.Full.FTTotalTriple` (another defining module) is a registered head too: the extractor
+    imports it, so a contract's same-named declaration cannot be audited next to it (name clash)."""
     shadow = SNAPSHOT['shadow_within_audit']
     return shadow['status'] == 'pass', f'ShadowWithin audit status={shadow["status"]} name_clash={shadow["name_clash"]}'
 
