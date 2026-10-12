@@ -109,7 +109,7 @@ theorem sumVisit_holds : visitCallback.Holds (fun a => sumVisit a.1 a.2) := by
 
 theorem targets_holds : ∀ t ∈ targets, visitCallback.Holds t.2 := by
   intro t ht
-  simp only [targets, List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at ht
+  simp only [targets, List.mem_cons, List.not_mem_nil, or_false] at ht
   rcases ht with rfl | rfl
   · exact model_holds
   · exact sumVisit_holds

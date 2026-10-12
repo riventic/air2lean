@@ -552,7 +552,7 @@ opaque airAsmFx_3102165980 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitV
 - **Aliases.** Two written locations that overlap would make the result depend on the instructions' store order, which the opaque does not fix: `Zig.Asm.guard` throws `.unspecified` (the model picks no order). Two outputs with the same pointer value or the same local are rejected statically. A successful run therefore had disjoint operands (`swapm_disjoint`).
 - **Clobbers.** `cc`, flags and named registers have no Lean-visible state and are accepted, but a clobber may not name the register of a pinned operand (`{eax}` with a `rax` clobber: the x86_64 sub-register families are one register), two outputs or two inputs may not pin one register, and an input may not pin the register of an early-clobber or read-write output. A matching input may tie only to a write-only register output.
 - **`"memory"` clobber.** Rejected (the block may write any memory) unless the whole block is an entry of the reviewed `asmPureRegistry`. The only entry is the compiler barrier `asm volatile ("" ::: "memory")`: no instruction, so no effect in a model that runs accesses in program order.
-- **Still rejected.** `m` and immediate inputs, `rm`/`g` alternatives, `=&m`, `+&r`, a read-write or memory result (`-> T`), a memory operand of another width, an output through a `const` pointer.
+- **Still rejected.** immediate inputs, `m` inputs off the allowlist, `rm`/`g` alternatives, `=&m`, `+&r`, a read-write or memory result (`-> T`), a memory operand of another width, an output through a `const` pointer.
 
 Zig source names a variable as an output operand, so real `=m`/`+m` refs are local `alloc`s (a `Locals` field, or a stack block if the local escapes). The translator accepts any pointer ref the AIR names; `tests/roadmap/asm-effects` reaches the memory-pointer path with hand-written AIR. Zig 0.16.0's LLVM backend fails module verification for `+m` (`Elementtype attribute can only be applied for indirect constraints`); the self-hosted x86_64 backend compiles it.
 
@@ -566,6 +566,45 @@ clobbers. With `--device-contract`, a declared `asm volatile` is instead `Zig.va
 the device trace. See [volatile-effects.md](volatile-effects.md#inline-asm), which also explains
 why non-volatile asm needs the list. `volatile` and `clobbers` do not change the translation of an
 allowlisted op.
+
+### Memory regions and environment reads (A01)
+
+Two more effect forms are accepted, each only through a reviewed allowlist entry
+(`Air2Lean/AsmAllowlist.lean`):
+
+- **Environment reads** (`semantics := .envRead`, premise [ASM-05](premises.md#asm-05)):
+  `rdtsc` combined into `rax` and `rdrand` (alone or with its `setc` flag). No opaque is
+  emitted: each output is `Zig.Asm.envWord w`, the next query of the oracle `Mem.arbitrary`
+  cut to `w` bits, so two reads are two answers and never one repeatable value. A device
+  contract that declares the same template keeps it a device event (`Zig.vasm`, L13).
+- **Memory inputs.** An integer `m` input is its value: the compiler stores it to a private
+  stack slot and passes that address (`codegen/llvm/FuncGen.zig` `airAssembly`), so the opaque
+  takes the value like an `r` input.
+- **Memory regions** (`regions`, premise [ASM-06](premises.md#asm-06)): `rep stosb` and
+  `rep movsb` with a `"memory"` clobber. A region is a pointer operand and a byte length from an
+  integer operand, read or written. Pointer operands are admitted only as region bases (a
+  read-write register output or an input of a single, non-volatile pointer) and are not opaque
+  arguments. The wrapper reads each read region (`Zig.Asm.readRegion`, one checked access, none
+  for length 0) and passes the bytes to the opaque; after the alias guard over every written
+  location it writes each write region with the opaque's bytes (`Zig.Asm.writeRegion`, exactly
+  the declared length); a pointer output is its old value moved by the opaque's signed offset
+  (`Zig.Asm.movePtr`), so it keeps its provenance:
+
+```lean
+opaque airAsmFx_2096841937 (i0 : BitVec 64) (r0 : Array Zig.Byte) : BitVec 64 × BitVec 64 × BitVec 64 × Array Zig.Byte
+
+    let a9r0 ← Zig.callM (Zig.Asm.readRegion a9o1 ((a9o2).toNat))
+    let a9 := airAsmFx_2096841937 a9o2 a9r0
+    Zig.callM (Zig.Asm.writeRegion a9o0 ((a9o2).toNat) a9.2.2.2)
+    modify (fun s => { s with d := (Zig.Asm.movePtr a9o0 a9.1) })
+```
+
+`tests/roadmap/asm-effects/AsmEnv` (fresh 0.17.0 export of `asm_env.zig`; 0.16.0 and 0.15.2
+translate identically, 0.14.1 exports no inline asm) proves `elapsed_counter` and
+`elapsed_not_repeatable` (two `rdtsc`), `random_reads`, `loadm_eq`, `fill_frame`, `fill_zero` and
+`copy_frame` (only the declared destination region changes; `Frame.of_readRegion_run`,
+`Frame.of_writeRegion_run` in `Proofs/Asm/Effects.lean`); `test_env_cli.py` rejects the forms
+outside the entries.
 
 ### Differential-test implementation
 
