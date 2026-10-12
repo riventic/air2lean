@@ -839,7 +839,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (O-H, SEM-07). Every partial-correctness statement (`Triple`, `TTriple`, `FTriple`, `CTriple`,
   and the strict concurrent `run_safe`, which excludes every other error) reads `.stackOverflow`
   as it reads a run that does not terminate; a total-correctness statement excludes it, so one
-  that allocates shows room (`TotalTripleIn`). Regressions:
+  that allocates shows room (legacy `TotalTripleIn`; in the full-state logic, until room is a
+  resource, the start-memory run premise of `FTriple.run_init_ok`). Regressions:
   `tests/roadmap/memory-hardening/NoRoom.lean`, `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),

@@ -10,7 +10,9 @@ shows that the memory at program start (`Mem.ofGlobals σ gs`, under every place
 every global (`globals gs`): for global `j`, its initial bytes at block `j`, the knowledge of its
 address (`known j A`, `A` a multiple of its alignment) and its full extent (`bext`, for a
 non-empty global). `FTriple.run_init` applies a triple about the program's entry to the real run
-from that memory.
+from that memory; `FTotalTriple.run_init` gives that the run returns, and `FTriple.run_init_ok`
+gives it from a partial triple and the start-memory run premise "this run ends without
+`.stackOverflow`" (for programs that allocate, until room is a resource).
 
 The general pieces are `exts_ok` and `exts_true`: full extents `E` compose with the empty ghost
 state, and they are true in a memory whose blocks have them.
@@ -307,6 +309,40 @@ theorem FTriple.run_init {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Plac
     | some (.ok (v, m')) => ∃ r', Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq :=
   have hi := initRes_holds σ gs hK
   ht _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
+
+/-- **Adequacy at program start, given the run's outcome**: a triple whose precondition is the
+globals applies to a run from the memory at program start that ends without `.stackOverflow`;
+the run returns, with the postcondition.
+
+This is the start-memory run premise a statement takes that cannot be total yet: a program that
+allocates throws `.stackOverflow` when the address space has no room for the block (premise
+STK-01, `tests/roadmap/memory-hardening/NoRoom.lean`), and no assertion states that room until
+the stack-depth resource lands (`sp` tokens from `Mem.withStack`). `hrun` is about this one run
+from this one memory, so it is an explicit premise of the claim that uses it. -/
+theorem FTriple.run_init_ok {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (ht : FTriple (globals gs) c Q)
+    (hrun : ∃ x, (c.run (Mem.ofGlobals σ gs)).run = some x ∧ x ≠ .error .stackOverflow) :
+    ∃ v m' r', c.run (Mem.ofGlobals σ gs) = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq := by
+  obtain ⟨x, hx, hne⟩ := hrun
+  have := FTriple.run_init σ gs h hK ht
+  rw [hx] at this
+  rcases x with e | ⟨v, m'⟩
+  · exact absurd (congrArg Except.error this) hne
+  · obtain ⟨r', hh, hq, hs⟩ := this
+    exact ⟨v, m', r', hx, hh, hq, hs⟩
+
+/-- **Adequacy at program start, total**: the run of a program with a total triple whose
+precondition is the globals returns from the memory at program start, with the postcondition. -/
+theorem FTotalTriple.run_init {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (ht : FTotalTriple (globals gs) c Q) :
+    ∃ v m' r', c.run (Mem.ofGlobals σ gs) = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq := by
+  have hi := initRes_holds σ gs hK
+  obtain ⟨v, m', hr⟩ := ht.2 _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
+  exact FTriple.run_init_ok σ gs h hK ht.1 ⟨.ok (v, m'), by rw [hr]; rfl, nofun⟩
 
 end Full
 end Zig
