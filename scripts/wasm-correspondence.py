@@ -404,19 +404,19 @@ def check_claims(relation: dict, root: Path = ROOT) -> list[str]:
             errors.append(f'{where}: unknown kernel or target')
             continue
         proof = root / claim['file']
-        statement = theorem_text(proof.read_text(), claim['theorem']) if proof.is_file() else None
+        text = proof.read_text() if proof.is_file() else ''
+        statement = theorem_text(text, claim['theorem'])
         if statement is None:
             errors.append(f'{where}: theorem {claim["theorem"]} not found in {claim["file"]}')
             continue
         targets = generated_targets(proof, root)
-        enclosing = re.findall(r'^namespace (\S+)$', proof.read_text(), re.M)
+        enclosing = re.findall(r'^namespace (\S+)$', text, re.M)
         cited = set()
         for token in re.findall(r'[A-Za-z_][\w.]*', statement):
-            for namespace, target in targets.items():
-                names = [token] + [f'{e}.{token}' for e in enclosing] + \
-                        [f'{e.rsplit(".", 1)[0]}.{token}' for e in enclosing if '.' in e]
-                if any(n.startswith(namespace + '.') for n in names):
-                    cited.add(target)
+            names = [token] + [f'{e}.{token}' for e in enclosing] + \
+                    [f'{e.rsplit(".", 1)[0]}.{token}' for e in enclosing if '.' in e]
+            cited |= {target for namespace, target in targets.items()
+                      if any(n.startswith(namespace + '.') for n in names)}
         want = relation['targets'][claim['target']]['model_target']
         if not cited:
             errors.append(f'{where}: {claim["theorem"]} states nothing about a generated module')

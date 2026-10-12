@@ -11,6 +11,7 @@ derived claim.
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 from pathlib import Path
@@ -77,20 +78,15 @@ def memory_model_premises(theorem: dict) -> list[str] | None:
     config = premise_config()
     if not isinstance(modules, list) or any(m not in config['runtime_modules'] for m in modules):
         return None
-    via = {p: [] for m in modules for p in config['runtime_modules'].get(m, ())}
+    via = {p: [] for m in modules for p in config['runtime_modules'][m]}
     reached = PREMISES.close(config, via)
     model = config['memory_model']
     return [model['premise']] if set(model['concurrency']) & set(reached) else []
 
 
-_PREMISE_CONFIG = None
-
-
+@functools.cache
 def premise_config() -> dict:
-    global _PREMISE_CONFIG
-    if _PREMISE_CONFIG is None:
-        _PREMISE_CONFIG = PREMISES.load_config(ROOT / PREMISES.CONFIG)
-    return _PREMISE_CONFIG
+    return PREMISES.load_config(ROOT / PREMISES.CONFIG)
 
 
 def load_heads(path: Path = HEADS_PATH) -> dict:
