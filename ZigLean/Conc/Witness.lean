@@ -62,4 +62,10 @@ def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
   | some (.ok (.ok v, _)) => some v.toNat
   | _ => none
 
+/-- The error of a run, if it ends in one: for a statement that a schedule fails. -/
+def errOf {α : Type} (r : Result α) : Option Error :=
+  match r.run with
+  | some (.error e) => some e
+  | _ => none
+
 end Zig.Witness
