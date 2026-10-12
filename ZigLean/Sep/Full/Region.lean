@@ -12,7 +12,8 @@ the memory an allocator grants (`FAllocInv.granted`), a stack local, a buffer. T
 what generated code that works on regions needs beyond the step rules of `AutoRules`:
 
 * **Memory facts** (`MemFacts P φ`): a fact of every memory that holds `P` (not only of the
-  resource, as `AtomFacts`). `MemFacts.regions_apart`: two separately owned nonempty regions lie
+  resource, as `AtomFacts`; `@[fsym_facts]`, `fsym` adds them for a pair of atoms when it needs
+  more facts). `MemFacts.regions_apart`: two separately owned nonempty regions lie
   at disjoint address ranges: in one block by separation, in two blocks because live blocks lie
   apart (`Holds.apart`). This is the `@memcpy` aliasing check of the generated `dupe` and
   `realloc` wrappers (`ptrLe(src + n, dst) or ptrLe(dst + n, src)`); no premise about the
@@ -35,24 +36,7 @@ namespace Full
 
 open FAssn
 
-/-! ## Memory facts -/
-
-/-- Every memory that holds `P` (sequentially) has the fact `φ`. -/
-def MemFacts (P : FAssn) (φ : Prop) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FSeq → φ
-
-theorem MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X φ) : MemFacts (X ⋆ R) φ :=
-  fun m _ _ hh hp hs => by
-    obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
-    exact h m r₁ _ (Holds.split hd hh) h1 hs
-
-/-- A memory fact of the precondition, in the context (any logic). -/
-theorem MemFacts.pre (L : FLogic) {β : Type} {P : FAssn} {c : MemM β} {Q : β → FAssn} {φ : Prop}
-    (hX : MemFacts P φ) (t : φ → L.T P c Q) : L.T P c Q := by
-  have h0 : FTotalTriple P (pure () : MemM Unit) (fun _ => ⟪φ⟫ ⋆ P) :=
-    FTotalTriple.of_run fun m r rF hh hp hs =>
-      ⟨(), m, r, rfl, hh, sep_lift.mpr ⟨hX m r rF hh hp hs, hp⟩, hs⟩
-  exact L.congr (fun _ _ => by simp) (L.bind (L.ofTotal h0) fun _ => L.lift t)
+/-! ## Memory facts (`MemFacts`, `MemFacts.pre`: `ZigLean/Sep/Full/AutoRules.lean`) -/
 
 section Apart
 
@@ -127,6 +111,8 @@ theorem MemFacts.regions_apart :
     have := hh.apart hs hbb (inL _ _ e1) (inR _ _ e2)
     rw [a1, a2] at this
     omega
+
+attribute [fsym_facts] MemFacts.regions_apart
 
 end Apart
 
