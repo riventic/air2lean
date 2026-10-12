@@ -613,10 +613,6 @@
       "path": "ZigLean/Sep/Full/Tame.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/ThreadBridge.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {

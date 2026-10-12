@@ -2,7 +2,7 @@ import Proofs.Cancel.Client
 import ZigLean.Conc.Lemmas
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 
 /-!
 # `cancelClient` over all schedules (C05)
@@ -525,14 +525,14 @@ theorem main_spec (n : Nat) :
   refine WP.map ?_
   simp only [StateT.run_bind]
   -- `status`
-  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc' .heap 4 4 (by decide) (by decide)) start rfl
+  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc .heap 4 4 (by decide) (by decide)) start rfl
     (by decide) ⟨rfl, rfl, rfl⟩ fun st m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨As, ks, hA₁⟩ := hq₁
   obtain ⟨⟨hsb, hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
   refine WP.bind (WP.callMC_fownedS (word_init hsb hs0 hAs 0) ho₁ (by rw [hs₁.current]) (by
     rw [hs₁.threads]; decide) hb₁ fun _ m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   -- `done`
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .heap 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .heap 4 4 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₂ (by rw [hs₂.current, hs₁.current])
     (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ r₃ _ _ ho₃ hq₃ hs₃ => ?_)
   obtain ⟨Ad, kd, ⟨hdb, hd0, hAd⟩, hb₃⟩ := sep_ex_ex_lift hq₃
@@ -543,7 +543,7 @@ theorem main_spec (n : Nat) :
   let W : Words := ⟨st, dn, As, Ad, ks, kd⟩
   have hW : W.Ok := ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩
   -- the group
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₄
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) hq₄

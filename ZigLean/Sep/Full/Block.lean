@@ -366,6 +366,20 @@ theorem FTTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byt
       rw [hb] at hb'; cases hb'
       exact (OwnsAt.bytesAt hpb).sepL r hp x (by simp [h0]) (by simp [h0]; omega))
 
+/-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go. -/
+theorem FTTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
+  (FTTotalTriple.free hpb hS h0 hpos hK).toPartial
+
+/-- `free'` of the block in front of a frame `R`: the frame stays. -/
+theorem FTTriple.free_front {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTTriple ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (free p) (fun _ => R) :=
+  (free' hpb hS h0 hpos hK).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
+
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/
 @[fsym] theorem FTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
