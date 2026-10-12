@@ -87,6 +87,17 @@ theorem subZ_end (s : Slice) (a b : BitVec 64) (hab : a.toNat ≤ b.toNat)
     simp [Zig.le, BitVec.ule, BitVec.toNat_add]; omega
   simp [subZ, zig_unfold, hle, hov, hsub, hend]
 
+/-- `s[a..b :0]` with `a <= b = 2^64 - 1`: the end check's `b + 1` overflows (a safety panic),
+whatever the memory. With `subZ_start`, `subZ_end` and `subZ_oob` every out-of-range slicing is
+covered. -/
+theorem subZ_max (s : Slice) (a b : BitVec 64) (hab : a.toNat ≤ b.toNat)
+    (hmax : b.toNat = 2 ^ 64 - 1) (m : Mem) :
+    (subZ s a b).run m = throw .overflow := by
+  have hle : Zig.le false a b = true := by simp [Zig.le, BitVec.ule]; omega
+  have hov : 2 ^ 64 - 1 ≤ b.toNat := by omega
+  have hsub : ¬ b.toNat < a.toNat := by omega
+  simp [subZ, zig_unfold, hle, hov, hsub]
+
 /-- `s[a..b :0]` that passes the bounds checks (`a <= b < s.len`) with a start `a > 0` outside
 the allocation is illegal behaviour (`ptrProject`, MM-3): `s` claims more items than its
 allocation holds. A start that fails a check panics first (`subZ_start`, `subZ_end`). -/

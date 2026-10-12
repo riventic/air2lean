@@ -166,17 +166,21 @@ same rule, since the langref makes it illegal behaviour when the argument is not
 emitter (`FCtx.projectExpr`) writes `pure p` for a constant offset 0. L05's
 `ptrProjectNullable` is gone: projections from a C/allowzero base use `ptrProject`
 (`ptrProjectNonnull` when the result type is nonnullable), so a nonzero offset from a
-provenance-free address, including address zero, is now `.illegal`. Slicing forms `ptr + start`
-before Sema's `start <= end` check, so an out-of-allocation start is `.illegal` in the model
-where native ReleaseSafe panics (conservative). The audit fixture is an agreement test:
+provenance-free address, including address zero, is now `.illegal`. Sema forms `ptr + start`
+before the slicing's `start <= end` and bounds checks; canonicalization moves every pointer
+formation past the safety checks before its first use (`sinkPastChecks`,
+`Air2Lean/Air/Canon.lean`), so an out-of-allocation start panics in the model where native
+ReleaseSafe panics (the x86_64-linux differential `slices` cases `subZ` and `copyWithin` agree
+without exclusion pins). The audit fixture is an agreement test:
 `oobCompare(1)` is `1` in both, and `oobCompare(2^63)`, `oobPtrCompare(2^63)` are `.illegal`.
 Residual: `Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer after a checked access
 to the error code, without a bounds check of their own (`docs/build-modes.md`).
 
 Deliberate over-approximations (each `.illegal` where native Zig may be defined; conservative
 for no-illegal proofs, wrong for outcome reports and native diffs): an out-of-allocation result is
-`.illegal` when formed, while LLVM's poison is only illegal behaviour when used (the slicing
-case above); a nonzero offset from a provenance-free address that an object outside the model
+`.illegal` when formed, while LLVM's poison is only illegal behaviour when used (a formation
+is moved past the safety checks before its first use, so a failing check panics first, as
+above; a pointer that is formed out of the allocation and then only compared stays `.illegal`); a nonzero offset from a provenance-free address that an object outside the model
 owns (MMIO, a `@ptrFromInt` register window) is `.illegal`, since the model has no such object;
 `Ptr.elem` reads a `usize` index as unsigned, so `p + n` with `n ≥ 2^63` (a wrapped negative
 offset that LLVM's signed GEP index would keep in bounds) is `.illegal`; and an offset-0
