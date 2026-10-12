@@ -268,14 +268,21 @@ def sepOf (xs : Array Expr) : Expr :=
   if xs.isEmpty then mkConst ``Zig.Assn.emp
   else xs.pop.foldr (fun p q => mkApp2 (mkConst ``Zig.Assn.sep) p q) xs.back!
 
-/-- The main goal as `(kind, P, c, Q)` for a `Triple` or `TotalTriple`. -/
+/-- `TotalTripleStk` (`ZigLean/Sep/Stack.lean`, which imports this file): total correctness under
+the stack budget, with the extra arguments `need` and `held`. -/
+def stkKind : Name := `Zig.TotalTripleStk
+
+/-- The number of arguments of a triple of this kind. -/
+def kindArity (kind : Name) : Nat := if kind == stkKind then 6 else 4
+
+/-- The main goal as `(kind, P, c, Q)` for a `Triple`, `TotalTriple` or `TotalTripleStk`. -/
 def goalTriple : TacticM (Name × Expr × Expr × Expr) := do
   let t := (← instantiateMVars (← getMainTarget)).consumeMData
-  for kind in [``Zig.Triple, ``Zig.TotalTriple] do
-    if t.isAppOfArity kind 4 then
+  for kind in [``Zig.Triple, ``Zig.TotalTriple, stkKind] do
+    if t.isAppOfArity kind (kindArity kind) then
       let args := t.getAppArgs
       return (kind, args[1]!, args[2]!.consumeMData, args[3]!)
-  throwError "sep: expected a Zig.Triple or Zig.TotalTriple goal{indentExpr t}"
+  throwError "sep: expected a Zig.Triple, Zig.TotalTriple or Zig.TotalTripleStk goal{indentExpr t}"
 
 def lemmaId (kind : Name) (l : String) : Ident := mkIdent (kind ++ Name.mkSimple l)
 
@@ -384,7 +391,7 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
       let proof ← Term.elabTerm rule none
       Term.synthesizeSyntheticMVarsNoPostponing
       let ty ← instantiateMVars (← inferType proof)
-      unless ty.isAppOfArity kind 4 do
+      unless ty.isAppOfArity kind (kindArity kind) do
         throwError "sep_step: the rule must prove a {kind} goal{indentExpr ty}"
       unless ← isDefEq ty.getAppArgs[2]! cmd do
         throwError "sep_step: the rule is about a different command{indentExpr ty.getAppArgs[2]!}"
@@ -399,7 +406,14 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
         evalTactic (← `(tactic| try dsimp only))
         intro []
       pure []
-    | none => if cmd.isAppOfArity ``Zig.ptrProject 2 then ptrProjectStep kind P cmd else do
+    | none =>
+      if kind == stkKind && (cmd.isAppOfArity ``Zig.enterFrame 1 || cmd.isAppOfArity ``Zig.leaveFrame 1) then
+        -- The frame bracket of a recursive function (`TotalTripleStk.enterFrame_bind`,
+        -- `leaveFrame_bind`); the room/held side condition is closed by `omega`.
+        let l := if cmd.isAppOfArity ``Zig.enterFrame 1 then "enterFrame_bind" else "leaveFrame_bind"
+        evalTactic (← `(tactic| refine $(lemmaId kind l) ?_))
+        pure []
+      else if cmd.isAppOfArity ``Zig.ptrProject 2 then ptrProjectStep kind P cmd else do
       let isLoad := cmd.isAppOfArity ``Zig.load 4
       let isStore := cmd.isAppOfArity ``Zig.store 5
       unless isLoad || isStore do

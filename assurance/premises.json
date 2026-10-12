@@ -191,6 +191,7 @@
     "ZigLean.Sep.DispatchTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.Sep.Bounded": ["SEM-04", "SEM-05"],
+    "ZigLean.Sep.Stack": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.AllocSpec.Region": ["SEM-02", "SEM-04"],
     "ZigLean.Sep.AllocSpec": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.AllocSpec.Wrappers": ["SEM-02", "SEM-03", "SEM-04"],

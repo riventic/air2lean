@@ -16,9 +16,8 @@ The functions are the committed translations of `examples/recursion/recursion.zi
   measure, both members unfolded.
 * `fact`: self-recursive with a checked multiply; the specification carries a range premise.
 * Not here: the memory-backed `addDown`. Since MM-5 a recursive function that uses memory
-  charges its frame to the stack budget (`Zig.enterFrame`), so a `TotalTriple` over every memory
-  fails under a small `Mem.stackLimit`; the separation layer does not carry the stack premise
-  (STK-01) yet.
+  charges its frame to the stack budget (`Zig.enterFrame`), so no `TotalTriple` of it holds; it
+  is proved with the stack premise (`TotalTripleStk`, STK-01) in `Stack.lean`.
 
 Each proof starts with `rec_template μ unfolding f`, which supplies the strong induction on
 `μ` and the induction hypothesis `ih`; the proof discharges the measure decrease at the

@@ -857,7 +857,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
 - Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
-  `tests/roadmap/memory-hardening/README.md`.
+  `tests/roadmap/memory-hardening/README.md`; total correctness that states its stack room
+  instead (`TotalTripleStk`, `Mem.StackRoom`): `ZigLean/Sep/Stack.lean`,
+  `tests/roadmap/loop-tactics/Stack.lean`.
 
 ## External models
 
