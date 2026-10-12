@@ -203,6 +203,21 @@ def step_claims(check):
             env=lake_env(), timeout=7200)
 
 
+def step_audit_exposure(check):
+    """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
+    audit fixtures (their fingerprints and redirections follow the library they import)."""
+    snapshot = [PY, '-B', 'tests/roadmap/architecture-audit/claims/snapshot.py']
+    guarded('audit-exposure', ['bash', 'tests/roadmap/architecture-audit/claims/build.sh'],
+            env=lake_env(), timeout=7200)
+    if ok(snapshot + ['check']):
+        return
+    if check:
+        raise Failed('exposure-report.json is stale; regenerate with: '
+                     'tests/roadmap/architecture-audit/claims/snapshot.py write')
+    run(snapshot + ['write'])
+    run(snapshot + ['check'])
+
+
 def run_is_current(inv_mod, run_record):
     """Whether a recorded theorem-inventory run still matches the tree (the hashes `record` took)."""
     if run_record.get('outcome') != 'success' or run_record.get('exit_code') != 0:
@@ -304,6 +319,8 @@ STEPS = [
     ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
     ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
+    ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
+     step_audit_exposure),
     ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
     ('provenance', 'tree', ['assurance/provenance-gap/{manifest,pins}.json, receipt/',
                             'assurance/provenance/{manifest,pins}.json, receipt/'], None),

@@ -1236,7 +1236,10 @@
     "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM"
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str"
    ],
    "violations": [],
    "allowed": true,
@@ -1386,7 +1389,10 @@
     "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM"
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str"
    ],
    "violations": [],
    "allowed": true,
@@ -1439,7 +1445,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "c6c5472570166be24da2d010bd33478d",
+     "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
      "kind": "definition",
      "module": "ZigLean.Sep.Triple",
      "name": "Zig.Triple"
@@ -1644,7 +1650,10 @@
     "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM"
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str"
    ],
    "violations": [],
    "allowed": true,
