@@ -363,8 +363,7 @@
   {
    "id": 36,
    "tag": "ret_addr",
-   "ty": 10,
-   "unsupported": true
+   "ty": 10
   },
   {
    "id": 37,

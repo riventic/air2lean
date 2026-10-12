@@ -640,8 +640,7 @@
                   {
                    "id": 59,
                    "tag": "ret_addr",
-                   "ty": 5,
-                   "unsupported": true
+                   "ty": 5
                   },
                   {
                    "id": 60,

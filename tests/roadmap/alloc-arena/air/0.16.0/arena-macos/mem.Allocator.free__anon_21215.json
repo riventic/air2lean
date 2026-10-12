@@ -414,8 +414,7 @@
   {
    "id": 36,
    "tag": "ret_addr",
-   "ty": 9,
-   "unsupported": true
+   "ty": 9
   },
   {
    "id": 37,

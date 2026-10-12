@@ -3038,8 +3038,7 @@
           {
            "id": 296,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 297,
@@ -7006,8 +7005,7 @@
               {
                "id": 692,
                "tag": "ret_addr",
-               "ty": 1,
-               "unsupported": true
+               "ty": 1
               },
               {
                "id": 693,
@@ -9920,8 +9918,7 @@
           {
            "id": 979,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 980,

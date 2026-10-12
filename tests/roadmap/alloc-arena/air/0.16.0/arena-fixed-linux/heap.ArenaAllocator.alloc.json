@@ -4351,8 +4351,7 @@
           {
            "id": 426,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 427,
@@ -8503,8 +8502,7 @@
                   {
                    "id": 839,
                    "tag": "ret_addr",
-                   "ty": 1,
-                   "unsupported": true
+                   "ty": 1
                   },
                   {
                    "id": 840,
@@ -12390,8 +12388,7 @@
           {
            "id": 1222,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 1223,

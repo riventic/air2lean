@@ -569,9 +569,6 @@
       "path": "Proofs/Sync/SnapshotCache.lean"
     },
     {
-      "path": "Proofs/Threads/Disjoint.lean"
-    },
-    {
       "path": "Proofs/Threadsync/Handoff.lean"
     },
     {
@@ -695,13 +692,16 @@
       "path": "ZigLean/Sep/Full/Tame.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Thread.lean"
+      "path": "ZigLean/Sep/Full/ThreadBridge.lean"
     },
     {
       "path": "ZigLean/Sep/Full/Toy.lean"
     },
     {
       "path": "ZigLean/Sep/Full/Triple.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Wrappers.lean"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"

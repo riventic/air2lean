@@ -1687,8 +1687,7 @@
                   {
                    "id": 162,
                    "tag": "ret_addr",
-                   "ty": 9,
-                   "unsupported": true
+                   "ty": 9
                   },
                   {
                    "id": 163,
@@ -2280,8 +2279,7 @@
               {
                "id": 225,
                "tag": "ret_addr",
-               "ty": 9,
-               "unsupported": true
+               "ty": 9
               },
               {
                "id": 226,
@@ -2850,8 +2848,7 @@
             {
              "id": 284,
              "tag": "ret_addr",
-             "ty": 9,
-             "unsupported": true
+             "ty": 9
             },
             {
              "id": 285,
@@ -3272,8 +3269,7 @@
                 {
                  "id": 326,
                  "tag": "ret_addr",
-                 "ty": 9,
-                 "unsupported": true
+                 "ty": 9
                 },
                 {
                  "id": 327,
@@ -3679,8 +3675,7 @@
               {
                "id": 367,
                "tag": "ret_addr",
-               "ty": 9,
-               "unsupported": true
+               "ty": 9
               },
               {
                "id": 368,
