@@ -117,14 +117,17 @@ end Apart
 
 /-! ## Pointer order -/
 
-namespace FTotalTriple
+/- The thread rules are the proofs (they read no byte); the sequential rules are read from them
+(`FTTotalTriple.toFTotalTriple`). -/
+
+namespace FTTotalTriple
 
 variable {P : FAssn} {p q : Ptr} {b b' : BlockId} {A A' : Nat}
 
 /-- **Pointer `<=`** of two pointers into blocks at known addresses: the addresses compared. -/
 theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
     (h' : AddrOf b' A' P) :
-    FTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) := by
+    FTTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) := by
   unfold Zig.ptrLe
   refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
   refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
@@ -135,13 +138,41 @@ theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf 
 /-- **Pointer `<`** of two pointers into blocks at known addresses: the addresses compared. -/
 theorem ptrLt_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
     (h' : AddrOf b' A' P) :
-    FTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) := by
+    FTTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) := by
   unfold Zig.ptrLt
   refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
   refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
   subst hx hy
   exact conseq (ret (Q := fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) _)
     (fun _ hh => sep_lift.mpr ⟨rfl, hh⟩) (fun _ _ h => h)
+
+/-- The model's bounds check of an item `s[i]` in bounds: no effect. -/
+theorem checkIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat < len.toNat) :
+    FTTotalTriple P (checkIndex len i) (fun _ => P) := by
+  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+/-- The bounds check of an item of an operand with a sentinel (`i ≤ len`): no effect. -/
+theorem checkSentinelIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat ≤ len.toNat) :
+    FTTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
+  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+end FTTotalTriple
+
+namespace FTotalTriple
+
+variable {P : FAssn} {p q : Ptr} {b b' : BlockId} {A A' : Nat}
+
+/-- **Pointer `<=`** of two pointers into blocks at known addresses: the addresses compared. -/
+theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
+    (h' : AddrOf b' A' P) :
+    FTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrLe_of hpb hqb h h').toFTotalTriple
+
+/-- **Pointer `<`** of two pointers into blocks at known addresses: the addresses compared. -/
+theorem ptrLt_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
+    (h' : AddrOf b' A' P) :
+    FTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrLt_of hpb hqb h h').toFTotalTriple
 
 end FTotalTriple
 
@@ -154,13 +185,13 @@ namespace FTotalTriple
 variable {P : FAssn} {w : Nat} {len i : BitVec w}
 
 /-- The model's bounds check of an item `s[i]` in bounds: no effect. -/
-@[fsym] theorem checkIndex_of (h : i.toNat < len.toNat) : FTotalTriple P (checkIndex len i) (fun _ => P) := by
-  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+@[fsym] theorem checkIndex_of (h : i.toNat < len.toNat) : FTotalTriple P (checkIndex len i) (fun _ => P) :=
+  (FTTotalTriple.checkIndex_of h).toFTotalTriple
 
 /-- The bounds check of an item of an operand with a sentinel (`i ≤ len`): no effect. -/
 @[fsym] theorem checkSentinelIndex_of (h : i.toNat ≤ len.toNat) :
-    FTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
-  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+    FTotalTriple P (checkSentinelIndex len i) (fun _ => P) :=
+  (FTTotalTriple.checkSentinelIndex_of h).toFTotalTriple
 
 end FTotalTriple
 
@@ -338,6 +369,103 @@ region `d`: the model's checks pass (equal counts; no overlap, by separation). -
   rw [e] at t; exact t
 
 end FTotalTriple
+
+/-! ## Thread rules
+
+The byte operations above in a thread (`docs/sep-threads.md` S2; the pointer order and bounds
+checks are thread rules already): each is its sequential rule with the locality of its
+access (`FTTotalTriple.ofSeq`, the region's owned bytes `OwnsPtr.regionIn_add`). -/
+
+namespace OwnsPtr
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+
+/-- The bytes `[k, k + n)` of a region. -/
+theorem regionIn_add {k n : Nat} (hk : k + n ≤ bs.size) :
+    OwnsPtr (up (regionIn p A S K a bs)) (p.add k) n := by
+  rintro b hb r ⟨⟨-, -, hbt⟩, hk', hg⟩
+  exact bytesAt_add hk b hb r ⟨hbt, hk', hg⟩
+
+/-- The first `n` bytes of a region. -/
+theorem regionIn_start {n : Nat} (hn : n ≤ bs.size) : OwnsPtr (up (regionIn p A S K a bs)) p n := by
+  have t := regionIn_add (p := p) (A := A) (S := S) (K := K) (a := a) (bs := bs) (k := 0) (n := n)
+    (by omega)
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+
+end OwnsPtr
+
+namespace FTTotalTriple
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+
+theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
+    FTTotalTriple (up (regionIn p A S K a bs)) (Zig.memset (α := BitVec 8) 1 p n none)
+      (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) :=
+  ofSeq (FTotalTriple.memsetUndef hn) (ThreadLocal.memset (fun _ h => by cases h)
+    (OwnsPtr.regionIn_start (by rw [Region.enc_size_byte]; omega)))
+
+theorem regionStore {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al : Nat} (v : T)
+    (hpos : 0 < Enc.size T) (ho : Enc.size T * i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
+    (halo : al ∣ Enc.size T * i.toNat) :
+    FTTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.elem (Enc.size T) i) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) :=
+  ofSeq (FTotalTriple.regionStore v hpos ho hal halo)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hpos)
+      (by rw [LawfulEnc.size_encode, Ptr.elem_eq]; exact OwnsPtr.regionIn_add ho))
+
+theorem regionLoadWritten {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al o : Nat} {v : T}
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hoi : Enc.size T * i.toNat = o)
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.elem (Enc.size T) i))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  have hs : (writeBytes bs o (Enc.encode v)).size = bs.size :=
+    writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)
+  refine ofSeq (FTotalTriple.regionLoadWritten hpos ho hoi hal halo) (ThreadLocal.load hpos ?_)
+  rw [Ptr.elem_eq, hoi]; exact OwnsPtr.regionIn_add (by omega)
+
+theorem regionStoreAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al : Nat} (v : T)
+    (hpos : 0 < Enc.size T) (h0 : 0 ≤ k) (ho : k.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
+    (halo : al ∣ k.toNat) :
+    FTTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.add k) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
+  have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
+  refine ofSeq (FTotalTriple.regionStoreAdd v hpos h0 ho hal halo)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hpos) ?_)
+  rw [LawfulEnc.size_encode, e]; exact OwnsPtr.regionIn_add ho
+
+theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : Nat} {v : T}
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hko : k = (o : Int))
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.add k))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  have hs : (writeBytes bs o (Enc.encode v)).size = bs.size :=
+    writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)
+  refine ofSeq (FTotalTriple.regionLoadWrittenAdd hpos ho hko hal halo) (ThreadLocal.load hpos ?_)
+  subst hko; exact OwnsPtr.regionIn_add (by omega)
+
+theorem memcpyRegions {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' sz da sa : Nat}
+    {bd bsrc : Array Byte} {n m : BitVec 64} (hm : n.toNat = m.toNat) (hnd : n.toNat * sz ≤ bd.size)
+    (hns : n.toNat * sz ≤ bsrc.size) (hda : da ∣ a) (hsa : sa ∣ a') :
+    FTTotalTriple (up (regionIn d A S K a bd) ⋆ up (regionIn s A' S' K' a' bsrc))
+      (Zig.memcpy sz da sa d s n m)
+      (fun _ => up (regionIn d A S K a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * sz)))) ⋆
+        up (regionIn s A' S' K' a' bsrc)) :=
+  ofSeq (FTotalTriple.memcpyRegions hm hnd hns hda hsa)
+    (ThreadLocal.memcpy (OwnsPtr.regionIn_start hnd).sepL (OwnsPtr.regionIn_start hns).sepR)
+
+theorem memcpyRegionsAll {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' sz da sa : Nat}
+    {bd bsrc : Array Byte} {n m : BitVec 64} (hm : n.toNat = m.toNat) (hnd : n.toNat * sz = bd.size)
+    (hns : n.toNat * sz = bsrc.size) (hda : da ∣ a) (hsa : sa ∣ a') :
+    FTTotalTriple (up (regionIn d A S K a bd) ⋆ up (regionIn s A' S' K' a' bsrc))
+      (Zig.memcpy sz da sa d s n m)
+      (fun _ => up (regionIn d A S K a bsrc) ⋆ up (regionIn s A' S' K' a' bsrc)) :=
+  ofSeq (FTotalTriple.memcpyRegionsAll hm hnd hns hda hsa)
+    (ThreadLocal.memcpy (OwnsPtr.regionIn_start (by omega)).sepL
+      (OwnsPtr.regionIn_start (by omega)).sepR)
+
+end FTTotalTriple
 
 end Full
 end Zig

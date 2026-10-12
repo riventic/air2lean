@@ -14,7 +14,8 @@ import ZigLean.Sep.Full.Strength
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
   in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array; the
-  facts of an array (`facts_arr`) and its extent for pointer formation `&xs[i]` (`Live.arr`).
+  facts of an array (`facts_arr`) and its extent for pointer formation `&xs[i]` (`Live.arr`); in a
+  thread `FTTotalTriple.arr_load`/`arr_store` (`docs/sep-threads.md` S2).
 -/
 
 namespace Zig
@@ -362,6 +363,22 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
   FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
+
+/-- `FTotalTriple.arr_load` in a thread (`docs/sep-threads.md` S2). -/
+theorem FTTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
+    FTTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) (p.elem (Enc.size T) i))
+      (fun v => ⟪v = vs[i.toNat]⟫ ⋆ up (Zig.arr p vs)) :=
+  FTTotalTriple.ofSeq (FTotalTriple.arr_load hn hs hi) (ThreadLocal.load hn (OwnsPtr.arr_elem hi))
+
+/-- `FTotalTriple.arr_store` in a thread (`docs/sep-threads.md` S2). -/
+theorem FTTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size T)
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
+    FTTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
+      (fun _ => up (Zig.arr p (vs.set i.toNat w))) :=
+  FTTotalTriple.ofSeq (FTotalTriple.arr_store hn hs hi w)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
+      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.arr_elem hi))
 
 /-- An array: the block of its pointer, a nonnegative offset. -/
 @[fsym_facts] theorem Auto.facts_arr : Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
