@@ -268,12 +268,27 @@ proof quantifies
 over; assumptions about external storage are hypotheses on `ext`
 (`tests/roadmap/global-init/GlobalInit/Proofs.lean`). The field type is the contract: the
 external definition must hold a valid encoding of that type (padding bytes undefined) before the
-program starts; external writes during the run are not modelled. Only a named, pointer-free,
-union-free and error-free type qualifies (integers, floats, `bool`, enums, arrays, vectors,
-structs, tuples and optionals of these); an `extern` function, pointer, union or error storage,
-an `extern` with an `init`, and an unnamed `extern` are rejected (`GLOBAL_FAILURE`). A name
-shared by several files must agree on `extern`. Without an `extern` global, `mem0` takes only the
-placement.
+program starts; external writes during the run are not modelled. A named, union-free and
+error-free type qualifies (integers, floats, `bool`, enums, data pointers, slices, arrays,
+vectors, structs, tuples and optionals of these); an `extern` function, function pointer, union
+or error storage, an `extern` with an `init`, and an unnamed `extern` are rejected
+(`GLOBAL_FAILURE`). A name shared by several files must agree on `extern`. Without an `extern`
+global, `mem0` takes only the placement.
+
+**External storage (L12).** A pointer in an `extern` global's initial value is a `Zig.Ptr` field of
+`ext`. What it points to is usually storage that another object defines (C's `environ`, a
+provider's list). If an `extern` global holds a pointer, `ExternInit` also has the field
+`storage : List Zig.ExternBlock`: the external blocks, each its bytes, alignment and whether it
+is writable, which `mem0` adds after the program's globals, so block `gs.length + i` is
+`ext.storage[i]` (`Mem.ofGlobals_extern`). A pointer field may point into one of them, into a
+program global, or nowhere; which, and what the blocks hold, are hypotheses on `ext`
+(`tests/roadmap/lang-long-tail/ProofsExternStorage.lean`: `slotValue` reads the cell
+`ext_slot` points to, for every placement and every external state of that shape). External
+blocks are static storage: never freed, a `const` one read-only. A pointer-bearing `extern` in a
+program with error-bearing globals is rejected: the finite error-storage fragment tracks every
+pointer into those. `tests/roadmap/lang-long-tail` links `extern_storage.zig` natively with
+`provider_extern_storage.c` and runs the translation with the provider's definitions as `ext`
+(`ModelExternStorage.lean`): the outputs agree on Zig 0.14.1 to 0.17.0.
 
 ### Thread-local storage
 

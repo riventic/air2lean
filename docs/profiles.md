@@ -136,21 +136,31 @@ For every width from 1 to 32 bits it proves the following:
   (`errorCodeOfNat_out_of_range`). A numbering larger than the width is rejected
   (`ErrorTable.check_capacity`). `errorLimitBits` is the least width that holds the limit.
 
-The translator still rejects integer/error casts (`@intFromError`, `@errorFromInt`). AIR
-does not export the compilation's numbering, so the model states these casts over an explicit
-`ErrorTable` and does not translate them. `@errorName` is rejected for Zig 0.14.1, whose
-name-table lookup reads out of bounds for a code of at least `2^(bits-1)`
-([upstream note](upstream/zig-0.14.1-error-name-sign-extension.md)).
+Integer/error casts (`@intFromError`, `@errorFromInt` and its `errors_len` check) translate
+over the compilation's numbering, which the patched compiler writes after analysis
+(`error-table.air2lean`, [air-json.md §Error table](air-json.md#error-table)): `errorTable` in
+the generated source, `Zig.intFromErrorIn`/`Zig.errorFromIntIn` (`ZigLean/Mem/ErrWidth.lean`;
+`intFromErrorIn_spec`, `errorFromIntIn_valid` in `ErrWidthLemmas`). Without it they are
+rejected, never guessed. The unchecked `error_from_int` of an invalid code is illegal behaviour;
+a safe build checks the code first (code 0 or above the error count: the `invalid error code`
+panic). With the numbering, `@errorName` finds a name by the error's code, as the compiler's
+name table does. `@errorName` is rejected for Zig 0.14.1, whose name-table lookup reads out of
+bounds for a code of at least `2^(bits-1)`
+([upstream note](upstream/zig-0.14.1-error-name-sign-extension.md)), unless the numbering shows
+every code below that bit. `tests/roadmap/lang-long-tail` (`error_ints`, `error_ints_w8`)
+exports the compilation of its native probe at 16 and 8 bits: codes, names and the round trip
+equal the native program on 0.14.1–0.17.0 (8 bits: 0.15.2–0.17.0; 0.14.1 is rejected there,
+its codes reach the sign bit), with proofs for every code and every numbered error.
 
 | Configuration | `error_set_bits` | Status |
 | --- | --- | --- |
 | Default `--error-limit` (65534) | 16 | Qualified. Native/model observations come from the finite error-storage gate ([error-storage](../tests/roadmap/error-storage/README.md)), plus the width proofs and the hand-written fixtures |
-| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Not qualified as a profile. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1, 0.15.2 and 0.16.0 are executed. Stock-compiler observations on aarch64-macos match the model at 1–32 bits for 0.15.2 and 0.16.0, and at 4–32 bits for 0.14.1, where narrower widths cannot be observed ([error-width](../tests/roadmap/error-width/README.md)) |
+| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Accepted by the translator, the project workflow (`scripts/project.py`) and the ABI probe (`scripts/abi-probe.py`: the `anyerror` and `anyerror!u8` layouts at 8 and 32 bits, observed natively on x86_64-linux-gnu and aarch64-macos-none with 0.16.0 and 0.17.0). The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1–0.17.0 are executed; `error_ints_w8` compares an 8-bit compilation with its native program. Stock-compiler observations on aarch64-macos match the model at 1–32 bits for 0.15.2–0.17.0, and at 4–32 bits for 0.14.1, where narrower widths cannot be observed ([error-width](../tests/roadmap/error-width/README.md)). 0.17.0 writes a `?E` code sign-extended into its padding bits where the width is not a whole number of bytes; the model leaves padding undefined, so this is a documented probe difference, not a model mismatch |
 | `--error-limit 0` | 0 | Rejected (no error storage) |
 
 The project workflow (`scripts/project.py`), golden receipts (`scripts/normalize-generated.py`)
-and ABI probes still require 16 bits. Non-default widths are therefore available only through
-direct translation.
+and ABI probes (`scripts/abi-probe.py`, contracts `tests/roadmap/abi-probes/*-bits8.json` and
+`*-bits32.json`) accept every width from 1 to 32 bits.
 
 ## Regression checks
 
