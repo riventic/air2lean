@@ -6,6 +6,7 @@ import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.Reclaim
 import ZigLean.Range
 
 /-!
@@ -31,44 +32,7 @@ namespace AllocArena.Core
 
 open Zig Zig.Region Zig.Full Zig.Full.FAssn
 
-/-! ## Owned cells -/
-
-/-- `P` owns byte `x` of block `b`, whose cell records address `A` and kind `K` (a cell's size
-is a label: `docs/sep-full-state.md` §Block extents). -/
-def Owns (b x : Nat) (A : Nat) (K : BlockKind) (P : FAssn) : Prop :=
-  ∀ r, P r → ∃ fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A ∧ fc.cell.kind = K
-
-/-- A byte owned by a part (`Within`) is owned. -/
-theorem Owns.within {b x A K} {X P : FAssn} (h : Owns b x A K X) (hw : Within X P) : Owns b x A K P := by
-  intro r hr
-  obtain ⟨R, r₁, r₂, -, rfl, h1, -⟩ := hw r hr
-  obtain ⟨fc, hx, e⟩ := h r₁ h1
-  exact ⟨fc, by show (r₁.heap (b, x)).or _ = _; rw [hx]; rfl, e⟩
-
-/-- Byte `i` of a `regionIn` is owned. -/
-theorem Owns.region {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
-    (hb : p.block = some b) {i : Nat} (hi : i < bs.size) :
-    Owns b (p.off.toNat + i) A K (up (regionIn p A S K a bs)) := by
-  rintro r ⟨⟨-, -, b', hb', -, hl⟩, -⟩
-  rw [hb] at hb'; cases hb'
-  have := hl (b, p.off.toNat + i)
-  simp only [FHeap.erase] at this
-  rw [if_pos (by simp only [true_and]; omega)] at this
-  cases e : r.heap (b, p.off.toNat + i) with
-  | none => rw [e] at this; cases this
-  | some fc =>
-    rw [e] at this
-    simp only [Option.map_some, Option.some.injEq] at this
-    exact ⟨fc, rfl, by rw [this], by rw [this]⟩
-
-/-- An owned byte is a byte of a live block of the memory, at the cell's address, with the
-cell's kind up to `BlockKind.norm` (`Holds.block`). -/
-theorem Owns.block {b x A K} {P : FAssn} (h : Owns b x A K P) {m : Mem} {r rF : Res}
-    (hh : Holds m r rF) (hp : P r) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
-      x < blk.bytes.size ∧ blk.addr = A ∧ blk.kind.norm = K.norm := by
-  obtain ⟨fc, hx, rfl, rfl⟩ := h r hp
-  obtain ⟨blk, hb, hl, hx', -, ha, hk⟩ := hh.block hx
-  exact ⟨blk, hb, hl, hx', ha.symm, hk.symm⟩
+/-! ## Owned cells (`Owns` and its lemmas: `ZigLean/Sep/Full/Reclaim.lean`) -/
 
 /-- Two regions held separately in one block do not overlap. -/
 theorem region_apart {p q : Ptr} {b : BlockId} {A S A₂ S₂ : Nat} {K K₂ : BlockKind} {a a₂ : Nat}
@@ -1951,6 +1915,212 @@ theorem revoke_all {γ e e' : Nat} {M M' : GMap} {t : STag} (he : e < e') :
       sepN N (fun i => rcptOf γ e (M i)))) fun _ h => of_eq (by ac_rfl) h) ?_
     refine EUpd.trans (EUpd.frameL (revoke_all he N)) ?_
     exact EUpd.of_imp fun _ h => of_eq (by ac_rfl) h
+
+/-! ### Claims at a reset
+
+Once the ledger is past epoch `e`, each used node's claim receipt turns back into the child's claim
+on its buffer (`EUpd.prevokeC`) and joins its header's: the whole node's claim, as a free-list node
+holds it (`FreeCl`) and as the child's `free` takes it. The claims of epoch `e` that the first
+node's tail and the clients hold are stale: the tail's is dropped. -/
+
+/-- **A used node's claims after its epoch**: the whole node's claim, tagged like the child's
+grants. -/
+theorem nodeCl_revoke {CI : Child} {γ e e' : Nat} {M : GMap} {N : Ptr} {sz : Nat} (he : e < e')
+    (h24 : 24 ≤ sz) :
+    EUpd (gauthP γ e' M CI.tag ⋆ NodeCl CI γ e N sz)
+      (gauthP γ e' M CI.tag ⋆ pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) := by
+  refine EUpd.trans (EUpd.of_imp (P' := pclaim N N.off.toNat (N.off.toNat + 24) CI.tag ⋆
+    (gauthP γ e' M CI.tag ⋆ pcrcpt N (N.off.toNat + 24) (N.off.toNat + sz) γ e))
+    fun _ h => of_eq (by simp only [NodeCl]; ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frameL (EUpd.prevokeC he)) (EUpd.of_imp fun _ h => of_eq ?_ h)
+  rw [← pclaim_split (p := N) (lo := N.off.toNat) (m := N.off.toNat + 24) (hi := N.off.toNat + sz)
+    (by omega) (by omega)]
+  ac_rfl
+
+/-- The used nodes' claims after their epoch (`nodeCl_revoke`, node by node). -/
+theorem restCl_revoke {CI : Child} {γ e e' : Nat} {M : GMap} (he : e < e') :
+    ∀ ns : List NodeV, (∀ nd ∈ ns, 24 ≤ nd.sz) →
+      EUpd (gauthP γ e' M CI.tag ⋆ RestCl CI γ e ns) (gauthP γ e' M CI.tag ⋆ FreeCl CI ns)
+  | [], _ => EUpd.of_imp fun _ h => h
+  | nd :: ns, h => by
+    simp only [RestCl, FreeCl]
+    refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc' h) ?_
+    refine EUpd.trans (EUpd.frame (nodeCl_revoke he (h nd (List.mem_cons_self ..)))) ?_
+    refine EUpd.trans (EUpd.of_imp (P' := pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag ⋆
+      (gauthP γ e' M CI.tag ⋆ RestCl CI γ e ns)) fun _ h => of_eq (by ac_rfl) h) ?_
+    refine EUpd.trans (EUpd.frameL (restCl_revoke he ns fun x hx => h x (List.mem_cons_of_mem _ hx))) ?_
+    exact EUpd.of_imp fun _ h => of_eq (by ac_rfl) h
+
+/-- **The arena's claims after its epoch**: every used node's whole claim (`FreeCl` of the used
+nodes); the first node's tail claim (of the past epoch) is dropped. -/
+theorem cls_revoke {CI : Child} {γ e e' : Nat} {M : GMap} {w : OV} (he : e < e') (hw : w.Facts)
+    (h24 : ∀ nd ∈ w.rest, 24 ≤ nd.sz) :
+    EUpd (gauthP γ e' M CI.tag ⋆ w.cls CI γ e) (gauthP γ e' M CI.tag ⋆ FreeCl CI w.nodes) := by
+  have hff := hw.2.1
+  cases hf : w.first with
+  | none =>
+    simp only [OV.FirstFacts, hf] at hff
+    simp only [OV.cls, FirstCl, hf, OV.nodes, hff.2.1, RestCl, FreeCl]
+    exact EUpd.of_imp fun _ h => sep_mono_right (fun _ x => of_eq (Full.emp_sep_eq _) x) h
+  | some N =>
+    simp only [OV.FirstFacts, hf] at hff
+    simp only [OV.cls, FirstCl, hf, OV.nodes]
+    refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e' M CI.tag ⋆ RestCl CI γ e (w.node N :: w.rest)) ⋆
+      TailCl γ e N w.ei w.sz) fun _ h => of_eq (by simp only [RestCl, OV.node]; ac_rfl) h) ?_
+    refine EUpd.trans (EUpd.drop fun _ h => pclaim_ghost h) (restCl_revoke he _ fun nd hnd => ?_)
+    rcases List.mem_cons.mp hnd with rfl | hnd
+    · exact hff.1.hdr
+    · exact h24 nd hnd
+
+/-! ### Shares at a reset
+
+After `Upd.bump` every receipt of epoch `e` turns back into a share tagged with the ledger's parent
+(`EUpd.revokeL`), whatever the clients kept. With the per-block accounting of `OV.Facts`
+(`ndLent b = poolOn b + grantsOn b`) these shares, the pool and the nodes' kept parts `qh` regroup
+(`EUpd.regroup`) into each node's whole share `qn`, which the child's `free` takes back with the
+node. Each node's kept part is a source on its block at the node's end, so every node's bound is
+reached. -/
+
+/-- The block of a pointer whose block is known (`0` otherwise). -/
+def blkOf (p : Ptr) : BlockId := p.block.getD 0
+
+/-- The nodes' shares as pieces, with the fraction `sel nd` each, at the nodes' ends. -/
+def nodePieces (sel : NodeV → Frac) (ns : List NodeV) : List Piece :=
+  ns.map fun nd => (blkOf nd.N, sel nd, nd.N.off.toNat + nd.sz)
+
+/-- The nodes' shares (tag `t`), with the fraction `sel nd` each, at the nodes' ends. -/
+def NodeShares (t : STag) (sel : NodeV → Frac) : List NodeV → FAssn
+  | [] => FAssn.emp
+  | nd :: ns => pshare nd.N (sel nd) (nd.N.off.toNat + nd.sz) t ⋆ NodeShares t sel ns
+
+theorem nodeShares_eq {t : STag} {sel : NodeV → Frac} :
+    ∀ {ns : List NodeV}, (∀ nd ∈ ns, nd.N.block ≠ none) →
+      NodeShares t sel ns = sharesL t (nodePieces sel ns)
+  | [], _ => rfl
+  | nd :: ns, h => by
+    obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp (h nd (List.mem_cons_self ..))
+    have e1 : pshare nd.N (sel nd) (nd.N.off.toNat + nd.sz) t =
+        bshare (blkOf nd.N) (sel nd) (nd.N.off.toNat + nd.sz) t := by
+      funext r; apply propext; rw [pshare_iff hc]; simp only [blkOf, hc, Option.getD_some]
+    show (pshare nd.N (sel nd) (nd.N.off.toNat + nd.sz) t ⋆ NodeShares t sel ns) =
+      (bshare (blkOf nd.N) (sel nd) (nd.N.off.toNat + nd.sz) t ⋆ sharesL t (nodePieces sel ns))
+    rw [e1, nodeShares_eq fun x hx => h x (List.mem_cons_of_mem _ hx)]
+
+/-- `ndLent` as the nodes' whole shares minus their kept parts. -/
+theorem ndLent_eq (b : BlockId) : ∀ {ns : List NodeV}, (∀ nd ∈ ns, nd.N.block ≠ none) →
+    ndLent b ns = sumOn b (nodePieces NodeV.qn ns) - sumOn b (nodePieces NodeV.qh ns)
+  | [], _ => by simp only [ndLent, nodePieces, List.map_nil, sumOn]; grind
+  | nd :: ns, h => by
+    have ih := ndLent_eq b (ns := ns) fun x hx => h x (List.mem_cons_of_mem _ hx)
+    obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp (h nd (List.mem_cons_self ..))
+    simp only [nodePieces] at ih
+    simp only [ndLent, nodePieces, List.map_cons, sumOn, blkOf, hc, Option.getD_some, ih,
+      Option.some.injEq]
+    split <;> grind
+
+/-- The pool's pieces as a list. -/
+def poolL (f : Nat → Piece) : Nat → List Piece
+  | 0 => []
+  | n + 1 => f n :: poolL f n
+
+theorem pool_eq {t : STag} (f : Nat → Piece) : ∀ n, Pool t n f = sharesL t (poolL f n)
+  | 0 => rfl
+  | n + 1 => by
+    have ih := pool_eq (t := t) f n
+    simp only [Pool] at ih ⊢
+    simp only [sepN, poolL, ih]
+    generalize f n = x
+    obtain ⟨b, q, k⟩ := x
+    rfl
+
+theorem sumOn_poolL (b : BlockId) (f : Nat → Piece) : ∀ n, sumOn b (poolL f n) = poolOn b n f
+  | 0 => by simp [poolL, sumOn, poolOn, esum]
+  | n + 1 => by
+    have ih := sumOn_poolL b f n
+    simp only [poolOn] at ih
+    simp only [poolL, sumOn, poolOn, esum, ih]
+    grind
+
+/-- The receipts of a grant map as a list of pieces, with the grants' fractions per block. -/
+theorem rcpts_list {γ e : Nat} {M : GMap} : ∀ N {r : Res}, sepN N (fun i => rcptOf γ e (M i)) r →
+    ∃ l, (∀ b, sumOn b l = esum (fun i => grantOn b (M i)) N) ∧ rcptsL γ e l r
+  | 0, _, h => ⟨[], fun b => by simp [sumOn, esum], h⟩
+  | N + 1, _, h => by
+    obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
+    obtain ⟨l, hl, h2⟩ := rcpts_list N h2
+    cases hM : M N with
+    | none =>
+      simp only [hM, rcptOf] at h1
+      exact ⟨l, fun b => by simp only [esum, hM, grantOn, hl b]; grind,
+        of_eq (Full.emp_sep_eq _) ⟨r1, r2, hd, rfl, h1, h2⟩⟩
+    | some g =>
+      obtain ⟨p, n, q, A, K⟩ := g
+      simp only [hM, rcptOf] at h1
+      obtain ⟨b', k, h1⟩ := h1
+      obtain ⟨hb', h1⟩ := sep_lift.mp h1
+      refine ⟨(b', q, k) :: l, fun b => ?_, ⟨r1, r2, hd, rfl, h1, h2⟩⟩
+      simp only [sumOn, esum, hM, grantOn, hb', hl b, Option.some.injEq]
+      grind
+
+theorem esum_stable {f : Nat → Rat} {N : Nat} (h : ∀ j, N ≤ j → f j = 0) :
+    ∀ d, esum f (N + d) = esum f N
+  | 0 => rfl
+  | d + 1 => by
+    rw [← Nat.add_assoc]; simp only [esum]; rw [esum_stable h d, h _ (by omega)]; grind
+
+/-- The grants' fractions do not depend on the bound past the map's support. -/
+theorem grantsOn_bound {M : GMap} {N N' : Nat} (h : ∀ j, N ≤ j → M j = none)
+    (h' : ∀ j, N' ≤ j → M j = none) (b : BlockId) :
+    esum (fun i => grantOn b (M i)) N = grantsOn b M N' := by
+  have e1 := esum_stable (f := fun i => grantOn b (M i)) (N := N)
+    (fun j hj => by simp [h j hj, grantOn]) N'
+  have e2 := esum_stable (f := fun i => grantOn b (M i)) (N := N')
+    (fun j hj => by simp [h' j hj, grantOn]) N
+  rw [grantsOn, ← e1, ← e2, Nat.add_comm]
+
+/-- **The nodes' whole shares at a reset**: past epoch `e`, the grants' receipts (revoked), the
+pool and the nodes' kept parts `qh` regroup into each node's whole share `qn`. -/
+theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf : Nat → Piece}
+    {ns : List NodeV} (he : e < e') (hb : ∀ nd ∈ ns, nd.N.block ≠ none)
+    (hqq : ∀ nd ∈ ns, nd.qh.val ≤ nd.qn.val) (hfin : ∀ i, mN ≤ i → M i = none)
+    (hacct : ∀ b, ndLent b ns = poolOn b pn pf + grantsOn b M mN) :
+    EUpd (gauthP γ e' M' t ⋆ (Rcpts γ e M ⋆ (Pool t pn pf ⋆ NodeShares t NodeV.qh ns)))
+      (gauthP γ e' M' t ⋆ NodeShares t NodeV.qn ns) := by
+  let src := nodePieces NodeV.qh ns ++ poolL pf pn
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun l : List Piece =>
+      ⟪∀ b, sumOn b l = grantsOn b M mN⟫ ⋆ ((gauthP γ e' M' t ⋆ rcptsL γ e l) ⋆ sharesL t src))
+    fun r h => ?_) ?_
+  · have h := of_eq (Q := Rcpts γ e M ⋆ (gauthP γ e' M' t ⋆ sharesL t src))
+      (by simp only [src]; rw [sharesL_append, ← pool_eq, ← nodeShares_eq hb]; ac_rfl) h
+    obtain ⟨N, h⟩ := sep_ex.mp h
+    obtain ⟨hN, h⟩ := sep_lift.mp (sep_assoc h)
+    obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
+    obtain ⟨l, hl, h1⟩ := rcpts_list N h1
+    have h' : (rcptsL γ e l ⋆ (gauthP γ e' M' t ⋆ sharesL t src)) _ := ⟨r1, r2, hd, rfl, h1, h2⟩
+    exact ⟨l, sep_lift.mpr ⟨fun b => by rw [hl b]; exact grantsOn_bound hN hfin b,
+      of_eq (by ac_rfl) h'⟩⟩
+  refine EUpd.exAll fun l => EUpd.lift fun hl => ?_
+  refine EUpd.trans (EUpd.frame (EUpd.revokeL he l)) ?_
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e' M' t ⋆ sharesL t (src ++ l))
+    fun _ h => of_eq (by rw [sharesL_append src l]; ac_rfl) h) ?_
+  refine EUpd.withFact (φ := ∀ x ∈ src ++ l, 0 < x.2.1.val)
+    (fun _ r _ _ h _ => by obtain ⟨_, _, -, -, -, h2⟩ := h; exact sharesL_pos h2) fun hpos => ?_
+  rw [nodeShares_eq hb]
+  refine EUpd.frameL (EUpd.regroup _ _ (fun d hd => ?_) (fun b => ?_) (fun d hd => ?_))
+  · simp only [nodePieces, List.mem_map] at hd
+    obtain ⟨nd, hnd, rfl⟩ := hd
+    have h1 := hpos (blkOf nd.N, nd.qh, nd.N.off.toNat + nd.sz)
+      (List.mem_append_left _ (List.mem_append_left _ (List.mem_map.mpr ⟨nd, hnd, rfl⟩)))
+    have h2 := hqq nd hnd
+    simp only at h1 ⊢
+    grind
+  · simp only [src, sumOn_append, sumOn_poolL, hl b]
+    have := hacct b
+    rw [ndLent_eq b hb] at this
+    grind
+  · simp only [nodePieces, List.mem_map] at hd
+    obtain ⟨nd, hnd, rfl⟩ := hd
+    exact le_maxOn (List.mem_append_left _ (List.mem_append_left _ (List.mem_map.mpr ⟨nd, hnd, rfl⟩)))
 
 /-! ## Proof tactics of the entries
 
