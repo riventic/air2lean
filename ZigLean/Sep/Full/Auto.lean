@@ -936,6 +936,8 @@ def matchCase? (g : MVarId) : MetaM (Option MVarId) := g.withContext do
       let s ← saveState
       try
         let mot := Expr.lam `x (← inferType d) (← kabstract t d) .default
+        -- a dependent `match` (`match h : d with …`) does not abstract over `d`
+        unless ← isTypeCorrect mot do s.restore; continue
         let .reduced t' ← reduceMatcher? (mkApp mot r).headBeta | s.restore; continue
         return some (← g.replaceTargetEq t'.headBeta (← mkCongrArg mot h.toExpr))
       catch _ => s.restore
@@ -2366,14 +2368,19 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let qats := atoms Qi
       -- block facts first (of known pointers: an unknown pointer is the atoms', not the first
       -- of the context in that block); again once the atoms determined pointers
-      let blockFacts : TacticM Unit := do
-        for f in qats.filter (·.isAppOfArity liftN 1) do
-          for φ in ← conjuncts (← instantiateMVars f.appArg!) do
-            if isBlockEq φ && !φ.appFn!.appArg!.hasExprMVar then
-              discard <| solveBlock φ
-      blockFacts
+      let blockFacts (φs : Array Expr) : TacticM (Array Expr) := do
+        let mut later := #[]
+        for φ in φs do
+          let φ ← instantiateMVars φ
+          if φ.appFn!.appArg!.hasExprMVar then later := later.push φ
+          else discard <| solveBlock φ
+        return later
+      let mut φs := #[]
+      for f in qats.filter (·.isAppOfArity liftN 1) do
+        φs := φs ++ (← conjuncts (← instantiateMVars f.appArg!)).filter isBlockEq
+      let later ← blockFacts φs
       preassign st qats
-      blockFacts
+      discard <| blockFacts later
       let Qi1 ← instantiateMVars Qi
       let (Qi2, pQ2) ← instQ Qi1
       let Qi2 ← reduceProjs Qi2
@@ -2913,7 +2920,8 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
       | none => do
         let m ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[Q₀R, Qv])
         pure (m, ← closeEntail m.mvarId!)
-    if left2.any (fun m => (Expr.mvar m) == h2) then
+    -- (the planner leaves an update goal, possibly per case of a split, where it fails)
+    if ← left2.anyM fun m => return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2 then
       trace[fsym] "update {u}: postcondition not reached"
       s.restore; return none
     let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
