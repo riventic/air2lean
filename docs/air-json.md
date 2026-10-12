@@ -321,6 +321,33 @@ writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes 
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
 
+## Error table
+
+`error-table.air2lean`, beside the function files (not a `.json` name: it describes no
+function). The patched compiler writes it once, after analysis (`Compilation.update`,
+`zig-patch/<version>/hook.patch`), if an exported function converts between errors and integers:
+an `int_from_error`/`error_from_int` (0.17.0), a `bitcast` between an error set and an integer
+(earlier versions), the `@errorFromInt` bound check `cmp_lt_errors_len`/`cmp_lte_errors_len`
+(whose operand the exporter writes as `args`), or a 0.14.1 `error_name`.
+
+| Field | Meaning |
+|---|---|
+| `schema` | 12 |
+| `zig_version` | the compiler's version |
+| `error_set_bits` | the error integer's width (`--error-limit`) |
+| `names` | the compilation's global error set in code order: code `i + 1` is `names[i]` |
+
+Codes are assigned when an error is first interned and never change, and analysis has ended, so
+this is the numbering of the compiled program and its error count is the bound that
+`cmp_lt(e)_errors_len` compares with (both tags compare `<=`). The translator reads it beside the
+AIR files, requires its version and width to be the files', and translates the casts over it
+(L10, `docs/profiles.md` §Error-code width); without it every integer/error cast is rejected. The
+numbering is per compilation: a fixture exports the compilation of its native probe
+(`tests/roadmap/lang-long-tail/error_ints.export`).
+
+`vector_store_elem` (0.14.1, 0.15.2): `args` are the vector pointer, the runtime lane index and
+the lane value (`v[i] = x`; 0.16.0 rejects a runtime vector index in Sema).
+
 ## Identity
 
 A fully qualified name (`util.helper`) is the declaration's path inside its module. Two modules

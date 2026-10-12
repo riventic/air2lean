@@ -200,11 +200,21 @@ FIXTURES = [
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
     for bits in (8, 10, 16, 17)
 ] + [
-    # tests/roadmap/lang-long-tail/check.sh: a version's own translation where it differs.
-    (f"tests/roadmap/lang-long-tail/LangLongTail/{ns}{'' if v == '0.16.0' else '-' + v}.lean",
-     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", f"{stem}."], "exact")
-    for stem, ns, versions in (("error_params", "ErrorParams", ("0.16.0",)),
-                               ("vector_casts", "VectorCasts", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")))
+    # tests/roadmap/lang-long-tail/check.sh: the base translation (LangLongTail/<Key>.lean: 0.16.0,
+    # or the newest version that compiles the source) and a version's own where it differs.
+    (f"tests/roadmap/lang-long-tail/LangLongTail/{key}{'' if v == base else '-' + v}.lean",
+     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", prefix], "exact")
+    for stem, ns, key, prefix, base, versions in (
+        ("error_params", "ErrorParams", "ErrorParams", "error_params.", "0.16.0", ("0.16.0",)),
+        ("vector_casts", "VectorCasts", "VectorCasts", "vector_casts.", "0.16.0",
+         ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
+        ("tls_pointers", "TlsPointers", "TlsPointers", "tls_pointers.", "0.16.0", ("0.16.0", "0.15.2")),
+        ("extern_storage", "ExternStorage", "ExternStorage", "extern_storage.", "0.16.0",
+         ("0.16.0", "0.15.2", "0.14.1")),
+        ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
+        ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2")),
+        ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
+        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
     for v in versions
 ]
 
@@ -395,7 +405,9 @@ class Translator:
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
-                for src in (sorted(source.glob("*.json")) if source.is_dir() else [source]):
+                # With the compilation's error numbering (`error-table.air2lean`, L10).
+                for src in (sorted([*source.glob("*.json"), *source.glob("error-table.air2lean")])
+                            if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
             # Schema-11 (legacy) AIR translates only with the explicit legacy profile opt-in

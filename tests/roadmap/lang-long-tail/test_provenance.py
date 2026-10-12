@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import unittest
 
@@ -20,10 +21,16 @@ PROVENANCE = HERE / "provenance.json"
 SOURCES = {
     "error_params": "L10",
     "vector_casts": "L09",
+    "tls_pointers": "L12",
+    "extern_storage": "L12",
+    "error_ints": "L10",
+    "error_ints_w8": "L10",
+    "runtime_lanes": "L09",
+    "float_lanes": "L09",
 }
-COMMAND = ("ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<stem>. <patched zig> build-obj "
-           "-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig "
-           "(export.sh)")
+COMMAND = ("ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<module>. <patched zig> build-obj "
+           "-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig, or "
+           "build-exe of <root_src> with <args> (<stem>.export) (export.sh)")
 
 
 def sha(path):
@@ -34,18 +41,53 @@ def air_files(stem, version):
     return sorted((HERE / "air" / stem / version).glob("*.json"))
 
 
+def export_setting(stem, key, default=""):
+    """A setting of `<stem>.export` (export.sh): `module`, `root_src`, `args`, `only_versions`."""
+    path = HERE / f"{stem}.export"
+    if not path.exists():
+        return default
+    # Read by bash, as export.sh and check.sh source it.
+    value = subprocess.run(["bash", "-c", '. "$0"; printf %s "${!1}"', str(path), key],
+                           capture_output=True, text=True, check=True).stdout
+    return value or default
+
+
+def versions_of(stem):
+    return tuple(export_setting(stem, "only_versions").split()) or VERSIONS
+
+
+def source_of(stem):
+    """The fixture's source: `<stem>.zig`, or the source its `.export` module prefix names."""
+    module = export_setting(stem, "module", f"{stem}.")
+    return module[:-1]
+
+
+def optional_sha(path):
+    return sha(path) if path.exists() else None
+
+
 def current():
     return {
-        "sources": {stem: {"row": row, "source": f"tests/roadmap/lang-long-tail/{stem}.zig",
-                           "source_sha256": sha(HERE / f"{stem}.zig"),
-                           "filter_sha256": sha(HERE / f"{stem}.filter") if (HERE / f"{stem}.filter").exists() else None}
+        "sources": {stem: {"row": row, "source": f"tests/roadmap/lang-long-tail/{source_of(stem)}.zig",
+                           "source_sha256": sha(HERE / f"{source_of(stem)}.zig"),
+                           "filter_sha256": optional_sha(HERE / f"{stem}.filter"),
+                           "export_sha256": optional_sha(HERE / f"{stem}.export"),
+                           # The exported program when it is not <stem>.zig: its compilation
+                           # fixes the error numbering (error-table.air2lean).
+                           **({"root_src_sha256": sha(HERE / export_setting(stem, "root_src"))}
+                              if export_setting(stem, "root_src") else {}),
+                           "versions": list(versions_of(stem))}
                     for stem, row in SOURCES.items()},
         "exporter": "zig-patch/air-json/json.zig",
         "exporter_sha256": sha(ROOT / "zig-patch/air-json/json.zig"),
         "air": {"schema": 12, "target": "x86_64-linux", "cpu": "baseline",
                 "optimization": "ReleaseSafe", "error_tracing": False, "command": COMMAND},
-        "air_sha256": {f"{stem}/{v}/{p.name}": sha(p) for stem in SOURCES for v in VERSIONS
+        "air_sha256": {f"{stem}/{v}/{p.name}": sha(p) for stem in SOURCES for v in versions_of(stem)
                        for p in air_files(stem, v)},
+        # The compilation's error numbering (`error-table.air2lean`, L10), where exported.
+        "error_table_sha256": {f"{stem}/{v}": sha(HERE / "air" / stem / v / "error-table.air2lean")
+                               for stem in SOURCES for v in versions_of(stem)
+                               if (HERE / "air" / stem / v / "error-table.air2lean").exists()},
     }
 
 
@@ -65,7 +107,7 @@ class Provenance(unittest.TestCase):
     def test_record_matches_files(self):
         recorded = json.loads(PROVENANCE.read_text())
         now = current()
-        for key in ("sources", "exporter", "exporter_sha256", "air", "air_sha256"):
+        for key in ("sources", "exporter", "exporter_sha256", "air", "air_sha256", "error_table_sha256"):
             self.assertEqual(recorded[key], now[key], key)
         compilers = recorded["patched_compiler_sha256"]
         self.assertEqual(sorted(compilers), sorted(VERSIONS))
@@ -73,7 +115,7 @@ class Provenance(unittest.TestCase):
 
     def test_every_file_is_this_versions_export(self):
         for stem in SOURCES:
-            for version in VERSIONS:
+            for version in versions_of(stem):
                 files = air_files(stem, version)
                 self.assertTrue(files, f"{stem} {version}")
                 for path in files:
@@ -83,14 +125,22 @@ class Provenance(unittest.TestCase):
                     profile = document["profile"]
                     self.assertEqual((profile["build_mode"], profile["error_tracing"], profile["cpu"]),
                                      ("ReleaseSafe", False, "x86_64"), path.name)
+                    limit = export_setting(stem, "args").split("--error-limit")[1:]
+                    bits = int(limit[0].split()[0]).bit_length() if limit else 16
+                    self.assertEqual(profile["error_set_bits"], bits, path.name)
+                table = HERE / "air" / stem / version / "error-table.air2lean"
+                if table.exists():
+                    document = json.loads(table.read_text())
+                    self.assertEqual((document["zig_version"], document["schema"]), (version, 12), table)
 
     def test_every_exported_function_is_in_the_source(self):
         for stem in SOURCES:
-            text = (HERE / f"{stem}.zig").read_text()
-            for version in VERSIONS:
+            source = source_of(stem)
+            text = (HERE / f"{source}.zig").read_text()
+            for version in versions_of(stem):
                 for path in air_files(stem, version):
                     name = json.loads(path.read_text())["name"]
-                    if not name.startswith(f"{stem}."):
+                    if not name.startswith(f"{source}."):
                         # A std function the fixture calls (`<stem>.filter`).
                         filters = (HERE / f"{stem}.filter").read_text().split()
                         self.assertTrue(any(name.startswith(p) for p in filters), path.name)

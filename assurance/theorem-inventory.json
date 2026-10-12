@@ -1524,6 +1524,45 @@
       "sources": {
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
       }
+    },
+    "0.17.0-linux-aarch64-floatops": {
+      "zig": "0.17.0",
+      "target": "linux-aarch64",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "2cea5bdd7f86d0a68f40b9ed85496a7a656becbc",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-12T11:30:01.598957+00:00",
+      "elapsed_seconds": 10.152,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "ca00b2217b23200c84fbe8628afeeecbe041be6bec66468f5f3c787e2c4b8f8b",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean",
+          "sha256": "4e1b7886a20aca6d4379492d1174c4216bbcf3513e1cbf95dd06d0e0d7c54727"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+      }
     }
   }
 }

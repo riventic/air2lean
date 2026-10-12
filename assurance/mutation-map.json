@@ -59,6 +59,14 @@
         {
           "path": "tests/roadmap/abi-probes/test_probe.py",
           "anchor": "def test_profiles_fail_closed"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_forbidden_outcomes_fail"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_load_buffering_is_a_rejected_shape"
         }
       ],
       "mutants": []
@@ -80,6 +88,10 @@
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
           "anchor": "def test_profile_mode_mismatch"
+        },
+        {
+          "path": "tests/roadmap/build-modes/stage2_rules.py",
+          "anchor": "def test_rejected_on_stage2_accepted_on_llvm"
         },
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
@@ -510,6 +522,14 @@
         {
           "path": "tests/roadmap/lang-long-tail/test_cli.py",
           "anchor": "def vector_casts"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def runtime_lanes"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def float_lanes"
         }
       ],
       "mutants": [
@@ -532,6 +552,16 @@
           "name": "item_cast_lanewise",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "runtime_lane_count",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "f80_lane_stride",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -548,6 +578,10 @@
         {
           "path": "tests/roadmap/lang-long-tail/test_cli.py",
           "anchor": "def error_params"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def error_ints"
         }
       ],
       "mutants": [
@@ -575,6 +609,11 @@
           "name": "error_param_constant",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "forwarding"
+        },
+        {
+          "name": "error_numbering_guessed",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -634,6 +673,14 @@
         {
           "path": "tests/diff/slices/harness.zig",
           "anchor": "\"sentinelArr\""
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def extern_storage"
+        },
+        {
+          "path": "tests/roadmap/global-init/test_cli.py",
+          "anchor": "def fn_pointer"
         }
       ],
       "mutants": [
@@ -646,6 +693,11 @@
           "name": "r",
           "path": "scripts/mutate.sh",
           "category": "layout"
+        },
+        {
+          "name": "extern_storage_dropped",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "other"
         }
       ]
     },

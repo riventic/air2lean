@@ -1,0 +1,7 @@
+sumList 12
+nameLen 8
+slotValue 9
+pushLocal 112
+counter 42
+slotValue 10
+sumList 112
