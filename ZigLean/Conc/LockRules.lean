@@ -2559,7 +2559,8 @@ theorem wp_casWeakLock (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId �
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        ((∃ v, r = some v) ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 :
       CM Tgt σ _).run s) Q G m n := by
   unfold cmpxchgWeakC
