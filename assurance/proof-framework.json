@@ -854,22 +854,10 @@
       "path": "tests/roadmap/proof-tools/ArrayClients.lean"
     },
     {
-      "path": "tests/roadmap/proof-tools/Clients.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Normalize.lean"
-    },
-    {
       "path": "tests/roadmap/proof-tools/Reassemble.lean"
     },
     {
       "path": "tests/roadmap/proof-tools/StepClients.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Steps.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Total.lean"
     },
     {
       "path": "tests/roadmap/resize-remap/Check.lean"
