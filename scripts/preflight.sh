@@ -66,6 +66,7 @@ check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py chec
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate
+check 'requirement register documents' python3 scripts/register.py check
 check 'support matrix' python3 scripts/support-matrix.py check
 check 'declared target matrix' python3 scripts/target-matrix.py check --strict
 check 'theorem premise index' python3 -B scripts/premises.py check

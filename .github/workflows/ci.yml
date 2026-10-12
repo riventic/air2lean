@@ -617,11 +617,13 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: python3 -B tests/roadmap/build-cache/test_cas.py -v
 
-      # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
-      # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
+      # Offline: committed sources only. Fails when ROADMAP.md or remaining-acceptance.md differ
+      # from assurance/register/, when docs/support-matrix.md, README or PLAN regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
+          python3 scripts/register.py check
+          python3 -B tests/roadmap/register/test_register.py -v
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
 

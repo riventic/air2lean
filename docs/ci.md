@@ -431,6 +431,33 @@ repository (the `generated` branch, one commit per main commit, never rewritten:
 recommended ruleset below blocks force pushes and deletion), and anyone can reproduce one with
 `scripts/generated.py regen` on M.
 
+### Requirement register
+
+Every roadmap PR used to edit the same lines of `ROADMAP.md` and `remaining-acceptance.md` (the
+counts line, table rows), so parallel PRs conflicted. The register is now data: one file per
+requirement, `assurance/register/<ID>.md` (header `id`, `title`, `status`, `row`, then `---` and the
+acceptance text; format in `scripts/register.py`). `scripts/register.py generate` renders the
+table, the counts and the acceptance sections into the marked regions of the two documents (the rest
+of both stays hand-written); `check` fails on drift and runs in `scripts/preflight.sh`, in
+`scripts/regen.sh` (step `register`) and in the CI support-matrix step. `support-matrix.py` and
+`mutation-map.py` read the register files, not the markdown. Two PRs that change different
+requirements touch different files and do not conflict; merging `main` never needs hand edits to the
+generated regions (take either side and run `generate`).
+
+A branch that still edits the markdown rows converts after merging `main`:
+
+```
+git merge origin/main     # ROADMAP.md / remaining-acceptance.md conflict: leave them
+scripts/register.py import --from HEAD --base "$(git merge-base HEAD origin/main)"
+git checkout origin/main -- ROADMAP.md remaining-acceptance.md
+scripts/register.py generate && git add -A && git commit
+```
+
+`import` writes only the requirements the branch changed relative to the merge base (new IDs
+included), so it never reverts what `main` changed. `import` with no options reads the working-tree
+markdown and rewrites every register file. Keep the converter until the PRs opened before the
+register have merged.
+
 ## 3. macOS rows
 
 Each macOS row keeps only aarch64-macos evidence: stock-Zig install, ABI probes and T04 ABI
@@ -453,7 +480,7 @@ and the native wide bit-operation differential. What changes:
   build, and every macOS row rebuilt `Proofs`.
 - Patched compilers are cached under a key over exactly the inputs of `zig-patch/build.sh` for
   that version: `air-json/*.zig`, `<version>/hook.patch`, `build.sh`, `lock.sh`, `toml-get.sh`,
-  the version's own `versions.toml` table and the host-Zig pin (`scripts/ci-cache-key.py`). A pin
+  the version's own `versions.toml` table and the host-Zig pin (`scripts/ci-cache.py zig-air-key`). A pin
   change of another version no longer invalidates it. Only `main` builds and saves them.
 - Platform-independent work has no macOS copy left to move: the Linux rows already run every
   version-neutral regression.
