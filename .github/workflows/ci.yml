@@ -2123,11 +2123,17 @@ jobs:
         run: tests/roadmap/claims/check.sh
 
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
+      # Then its strength log (tests/roadmap/strength-log) against the compiled fixture.
       - name: Outcome taxonomy Lean fixture
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
+        run: |
+          lake build ZigLean.Sep.Full.Witness
+          out="$RUNNER_TEMP/outcome-taxonomy"
+          mkdir -p "$out"
+          lake env lean -R tests/roadmap/outcome-taxonomy -o "$out/Taxonomy.olean" tests/roadmap/outcome-taxonomy/Taxonomy.lean
+          LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
       # with its expected error. `lake build Proofs` above built the imported modules. This and
