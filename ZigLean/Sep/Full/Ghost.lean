@@ -94,18 +94,24 @@ end GCell
 
 /-- The ghost state with cell `c` at `γ` and nothing elsewhere. -/
 def Ghost.at (γ : Nat) (c : GCell) : Ghost :=
-  ⟨fun γ' => if γ' = γ then c else GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit⟩
+  ⟨fun γ' => if γ' = γ then c else GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, CCell.unit⟩
+
+@[simp] theorem Ghost.at_cr (γ : Nat) (c : GCell) : (Ghost.at γ c).cr = CCell.unit := rfl
 
 theorem Ghost.at_add (γ : Nat) (c c' : GCell) : (Ghost.at γ c).add (Ghost.at γ c') = Ghost.at γ (c.add c') := by
   ext1
   · funext γ'; simp only [Ghost.add, Ghost.at]; split <;> simp
   · funext b; simp [Ghost.add, Ghost.at]
   · funext b x; simp [Ghost.add, Ghost.at]
+  · simp
 
 @[simp] theorem Ghost.at_cl (γ : Nat) (c : GCell) : (Ghost.at γ c).cl = fun _ _ => ECell.unit := rfl
 
 theorem Ghost.at_add_cl (γ : Nat) (c : GCell) (g : Ghost) : ((Ghost.at γ c).add g).cl = g.cl := by
   funext b x; simp
+
+theorem Ghost.at_add_cr (γ : Nat) (c : GCell) (g : Ghost) : ((Ghost.at γ c).add g).cr = g.cr := by
+  simp
 
 /-- The statuses next to an authority `●(e₀, M₀)` with parent `p₀` at `γ₀`, whose frame `g` holds
 no authority at `γ₀`. -/
@@ -194,7 +200,7 @@ tag outside `Z` of a world that stays active keeps a status as live as before (c
 current, live stays live). A bump (`Upd.bump`: `Z` the future tags) turns the old epoch and every
 tag below it dormant at once; a new ledger (`Upd.alloc`: `Z` also its name) adds an empty tree. -/
 theorem Ghost.valid_led_change {G G' : Ghost} (Z : STag → Prop) (hx : G'.extent = G.extent)
-    (hcl : G'.cl = G.cl) (hv : G.Valid) (hlv : ∀ γ, (G'.led γ).Valid)
+    (hcl : G'.cl = G.cl) (hcr : G'.cr = G.cr) (hv : G.Valid) (hlv : ∀ γ, (G'.led γ).Valid)
     (hZ : ∀ γ e, Z (some (γ, e)) → ∀ b k, ((G.extent b).tsh γ e k).val = 0 ∧ ((G.extent b).rc γ e k).val = 0)
     (hZcl : ∀ γ e, Z (some (γ, e)) → ∀ b x k, ((G.cl b x).tsh γ e k).val = 0 ∧ ((G.cl b x).rc γ e k).val = 0)
     (hZn : ¬ Z none) (hZc : ∀ w γ e e', Z w → G'.ls γ e' w → e ≤ e' → Z (some (γ, e)))
@@ -207,14 +213,14 @@ theorem Ghost.valid_led_change {G G' : Ghost} (Z : STag → Prop) (hx : G'.exten
     · exact absurd ht hZn
     · exact (hZ γ e ht b k).1
   have hu' : G'.ls.Uniq := fun γ e e' p p' ⟨_, h1⟩ ⟨_, h2⟩ => (hlv γ).ls_uniq h1 h2
-  refine ⟨⟨hlv, fun b => ?_, ⟨fun b x => ?_, ?_⟩⟩, fun m ht b => ?_⟩
+  refine ⟨⟨hlv, fun b => ?_, ⟨fun b x => ?_, ?_⟩, by rw [hcr]; exact hv.2.2.2⟩, fun m ht b => ?_⟩
   · rw [hx]
     obtain ⟨hvb, hbal⟩ := hv.2.1 b
     exact ⟨hvb, ECell.tagOk_led_change Z hbal hu' (fun γ e hz k => hZ γ e hz b k) hZn hZc hA hF hC⟩
   · rw [hcl]
-    obtain ⟨hvb, hbal⟩ := hv.2.2.1 b x
+    obtain ⟨hvb, hbal⟩ := hv.2.2.1.1 b x
     exact ⟨hvb, ECell.tagOk_led_change Z hbal hu' (fun γ e hz k => hZcl γ e hz b x k) hZn hZc hA hF hC⟩
-  · rw [hcl]; exact hv.2.2.2
+  · rw [hcl]; exact hv.2.2.1.2
   · obtain ⟨ha, hs⟩ := ht b
     rw [hx]
     refine ⟨ha, fun k hk => hs k ?_⟩
@@ -257,7 +263,8 @@ theorem Ghost.Ok.update {γ : Nat} {c c' : GCell} {g : Ghost}
     · unfold Ghost.ls; rw [hl γ' hne]
   have e : ((Ghost.at γ c').add g).ls = ((Ghost.at γ c).add g).ls :=
     funext fun γ' => funext fun x => funext fun p => propext (hep γ' x p)
-  refine ⟨⟨⟨fun γ' => ?_, fun b => ?_, hv.2.2.congr hcl e⟩, N + γ + 1,
+  refine ⟨⟨⟨fun γ' => ?_, fun b => ?_, hv.2.2.1.congr hcl e,
+      by rw [Ghost.at_add_cr]; simpa using hv.2.2.2⟩, N + γ + 1,
     fun γ' hγ => ⟨?_, ?_, fun γ'' e' M e₀ => ?_⟩⟩, fun m ht => ExtTrue.congr hx e ht⟩
   · by_cases hne : γ' = γ
     · subst hne; simpa [Ghost.add, Ghost.at] using hc.1
@@ -411,7 +418,7 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
   unfold Ghost.Ok at hg
   rw [Ghost.unit_add] at hg
   obtain ⟨hv, N, hN⟩ := hg
-  obtain ⟨NC, hNC⟩ := hv.2.2.2
+  obtain ⟨NC, hNC⟩ := hv.2.2.1.2
   let ν := N + NC + p.name
   have hνN : N ≤ ν := show N ≤ N + NC + p.name by omega
   have hNu := (hN ν hνN).1
@@ -434,7 +441,7 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
   have hnoν : ∀ γ e e₀, ¬ g.ls γ e (some (ν, e₀)) := fun γ e e₀ ⟨M, h⟩ => by
     have := hNp γ e M e₀; omega
   let Z : STag → Prop := fun t => Fut g.ls t ∨ ∃ e, t = some (ν, e)
-  obtain ⟨hv', ht'⟩ := Ghost.valid_led_change (G := g) (G' := G') Z hx hcl hv
+  obtain ⟨hv', ht'⟩ := Ghost.valid_led_change (G := g) (G' := G') Z hx hcl (Ghost.at_add_cr _ _ _) hv
     (fun γ => by
       by_cases h : γ = ν
       · subst h; rw [hlN]
@@ -448,7 +455,7 @@ theorem alloc (p : STag) : Upd emp (FAssn.ex fun γ => gauthP γ 0 GMap.empty p)
       · cases he; exact hNt b e k)
     (fun γ e hz b x k => by
       rcases hz with hz | ⟨e', he⟩
-      · exact (hv.2.2.1 b x).2.2 γ e k hz
+      · exact (hv.2.2.1.1 b x).2.2 γ e k hz
       · cases he; exact hNC ν (show NC ≤ N + NC + p.name by omega) b x e k)
     (fun h => h.elim Fut.not_none fun ⟨_, h⟩ => nomatch h)
     (fun w γ e e' hw hl' hee => by
@@ -571,7 +578,8 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP 
   -- a tag of another ledger has the same status
   have hoth : ∀ γ' x q, γ' ≠ γ → (G'.ls γ' x q ↔ G.ls γ' x q) := fun γ' x q hne => by
     rw [hls, hls']; simp [hne]
-  obtain ⟨hv', ht'⟩ := Ghost.valid_led_change (G := G) (G' := G') (Fut G.ls) hx hcl hv
+  obtain ⟨hv', ht'⟩ := Ghost.valid_led_change (G := G) (G' := G') (Fut G.ls) hx hcl
+    (by simp only [G, G', Ghost.at_add_cr]) hv
     (fun γ' => by
       by_cases h : γ' = γ
       · subst h
@@ -580,7 +588,7 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} : Upd (gauthP γ e M p) (gauthP 
           fun e' i g he => hd3 e' i g (by omega)⟩
       · rw [hl γ' h]; exact hv.1 γ')
     (fun γ' x hz b k => (hv.2.1 b).2.2 γ' x k hz)
-    (fun γ' x hz b y k => (hv.2.2.1 b y).2.2 γ' x k hz)
+    (fun γ' x hz b y k => (hv.2.2.1.1 b y).2.2 γ' x k hz)
     Fut.not_none
     (fun w γ' x x' hw hl' _ => by
       rcases (hls' γ' x' w).mp hl' with ⟨rfl, -, rfl⟩ | ⟨hne, hl'⟩
@@ -685,6 +693,97 @@ theorem mem {γ e i : Nat} {M : GMap} {p : STag} {g : GRegion} {R : FAssn}
   exact ht (gfrag_mem h1 this) m _ rF hh hp hs
 
 end FTriple
+
+/-! ## Credits (`docs/sep-full-state.md` §Credits and room)
+
+`credits n` (`£n`) are fragments of an authoritative supply `creditAuth N` (`●N`): a valid ghost
+state holds at most one authority and at most `N` credits next to it (`CCell.Valid`). No rule
+creates a credit: every judgment quantifies over every frame, among them one that holds `●N` with
+all `N` credits out (`tests/roadmap/sep-full/CreditsCX.lean`). Only the adequacy theorem keeps
+`●N` in the frame and hands `credits N` to the program. Credits own no bytes and no knowledge, so
+`EUpd.drop` drops them. -/
+
+/-- The ghost state with `n` credits and nothing else. -/
+def Ghost.cred (n : Nat) : Ghost := { Ghost.unit with cr := ⟨n, fun _ => 0⟩ }
+
+/-- The ghost state with the credit authority `●N` and nothing else. -/
+def Ghost.credAuth (N : Nat) : Ghost := { Ghost.unit with cr := ⟨0, fun n => if n = N then 1 else 0⟩ }
+
+/-- **`n` credits** (`£n`). -/
+def credits (n : Nat) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.cred n
+
+/-- **The credit supply** `●N`: at most `N` credits exist next to it. Never given to a program. -/
+def creditAuth (N : Nat) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.credAuth N
+
+theorem Ghost.cred_add (a b : Nat) : (Ghost.cred a).add (Ghost.cred b) = Ghost.cred (a + b) := by
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.cred, Ghost.add, Ghost.unit, CCell.add]
+
+@[simp] theorem Ghost.cred_zero : Ghost.cred 0 = Ghost.unit := by
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.cred, Ghost.unit, CCell.unit]
+
+/-- Credits split and join: an equality. -/
+theorem credits_add (a b : Nat) : credits (a + b) = (credits a ⋆ credits b) := by
+  funext r; apply propext; constructor
+  · rintro ⟨h, k, g⟩
+    exact ⟨⟨FHeap.empty, Know.none, Ghost.cred a⟩, ⟨FHeap.empty, Know.none, Ghost.cred b⟩,
+      FHeap.disjoint_empty _, by rw [res_eta r, h, k, g, ← Ghost.cred_add]; simp [Know.union_none],
+      ⟨rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl⟩⟩
+  · rintro ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩⟩
+    exact ⟨by simp [h1, h2], by simp [k1, k2, Know.union_none], by simp [g1, g2, Ghost.cred_add]⟩
+
+theorem credits_zero : credits 0 = emp := by
+  funext r; simp [credits, emp]
+
+/-- **Credits are bounded by the supply**: a resource with `n` credits and a frame with `●N` give
+`n ≤ N`. -/
+theorem Holds.credits_le {m : Mem} {r rF : Res} {R R' : FAssn} {n N : Nat} (hh : Holds m r rF)
+    (hr : (credits n ⋆ R) r) (hF : (creditAuth N ⋆ R') rF) : n ≤ N := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, -⟩ := hr
+  obtain ⟨f₁, f₂, -, rfl, ⟨-, -, g2⟩, -⟩ := hF
+  obtain ⟨-, -, h3⟩ := hh.ghost.1.1.2.2.2
+  have := h3 N (by simp only [Ghost.add_cr, g2, Ghost.credAuth, CCell.add]; simp; omega)
+  simp only [Ghost.add_cr, g1, Ghost.cred, CCell.add] at this
+  omega
+
+/-- A change of the credit cells only keeps `GOk` when the new credits are valid. -/
+theorem GOk.cr_change {m : Mem} {g gF g' gF' : Ghost} (h : GOk m g gF)
+    (hl : (g'.add gF').led = (g.add gF).led) (hx : (g'.add gF').extent = (g.add gF).extent)
+    (hc : (g'.add gF').cl = (g.add gF).cl) (hv : (g'.add gF').cr.Valid) : GOk m g' gF' := by
+  obtain ⟨⟨hV, hF⟩, ht, hcf⟩ := h
+  unfold GOk Ghost.Ok
+  generalize g.add gF = G at hV hF ht hcf hl hx hc
+  generalize g'.add gF' = G' at hl hx hc hv ⊢
+  obtain ⟨l, x, c, cr⟩ := G'
+  subst hl hx hc
+  exact ⟨⟨⟨hV.1, hV.2.1, hV.2.2.1, hv⟩, hF⟩, ht, hcf⟩
+
+/-- **The adequacy step of credits**: a memory that holds `r` with frame `rF`, neither of which
+has credits or a credit authority, holds `r` with `N` credits and the frame with `●N`. Only an
+adequacy theorem uses it: no judgment can (the frame is fixed). -/
+theorem Holds.addCredits {m : Mem} {r rF : Res} (N : Nat) (hh : Holds m r rF)
+    (h0 : (r.gh.add rF.gh).cr = CCell.unit) :
+    Holds m ⟨r.heap, r.know, r.gh.add (Ghost.cred N)⟩ ⟨rF.heap, rF.know, rF.gh.add (Ghost.credAuth N)⟩ := by
+  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
+  refine ⟨hd, hm, hk, hkF, hg.cr_change ?_ ?_ ?_ ?_⟩
+  · funext γ; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.unit]
+  · funext b; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.unit]
+  · have e1 := congrArg CCell.frag h0; have e2 := congrArg CCell.auth h0
+    simp only [Ghost.add_cr, CCell.add, CCell.unit] at e1 e2
+    have ea : ∀ n, ((r.gh.add (Ghost.cred N)).add (rF.gh.add (Ghost.credAuth N))).cr.auth n =
+        if n = N then 1 else 0 := fun n => by
+      have := congrFun e2 n
+      by_cases h : n = N
+      · subst h; simp [Ghost.cred, Ghost.credAuth, Ghost.unit, CCell.add]; omega
+      · simp [Ghost.cred, Ghost.credAuth, Ghost.unit, CCell.add, h]; omega
+    have ef : ((r.gh.add (Ghost.cred N)).add (rF.gh.add (Ghost.credAuth N))).cr.frag = N := by
+      simp [Ghost.cred, Ghost.credAuth, Ghost.unit, CCell.add]; omega
+    refine ⟨fun n => ?_, fun n n' hn hn' => ?_, fun n hn => ?_⟩
+    · rw [ea]; split <;> omega
+    · rw [ea] at hn hn'; split at hn <;> split at hn' <;> simp_all
+    · rw [ea] at hn; rw [ef]; split at hn <;> simp_all
 
 end Full
 end Zig

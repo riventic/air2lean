@@ -909,8 +909,9 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
             rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b = rF.gh.extent b by
               simp [Ghost.add, Ghost.exts, hn]]
             exact hvF b
-        · exact hok.1.2.2.congr (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl])
-            (by rw [hrE, Ghost.ls_exts_add, Ghost.ls_exts_add])
+        · exact ⟨hok.1.2.2.1.congr (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl])
+            (by rw [hrE, Ghost.ls_exts_add, Ghost.ls_exts_add]),
+            by simpa [hrE] using hok.1.2.2.2⟩
         · obtain ⟨N, hN⟩ := hok.2
           refine ⟨N, fun γ hγ => ⟨by have := (hN γ hγ).1; simpa [Ghost.add, Ghost.exts, hrE] using this,
             fun b e k => ?_, fun γ' e' M e => by
@@ -1102,7 +1103,7 @@ theorem ClFresh.unit (m : Mem) : ClFresh m Ghost.unit := fun _ _ _ => rfl
 theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
   ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
       simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _),
-      by simpa using Ghost.CValid.unit⟩,
+      by simpa using Ghost.CValid.unit, by simpa using CCell.valid_unit⟩,
     0, fun _ _ => ⟨rfl, fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
       fun _ _ _ _ => rfl⟩⟩,
     by simpa using ExtTrue.unit m, by simpa using ClFresh.unit m⟩
@@ -1120,6 +1121,7 @@ theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockI
     · subst hx; simp [h]
     · simp [hx]
   · funext x y; simp [Ghost.add, Ghost.atExt, Ghost.exts]
+  · simp
 
 /-- A legacy assertion with the full extent of one block. -/
 theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
@@ -1131,6 +1133,7 @@ theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
   · funext γ; simp [Ghost.atExt, Ghost.exts]
   · funext x; simp only [Ghost.atExt, Ghost.exts]; split <;> simp_all
   · funext x y; simp [Ghost.atExt, Ghost.exts]
+  · simp
 
 /-- A lifted post with a byte of block `b` whose extent it owns: the legacy part, the full extent
 of `b`, and other extents (no bytes, no knowledge). -/
