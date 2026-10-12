@@ -2914,10 +2914,8 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
     let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
       (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
     -- the update's postcondition is the return's (up to the order and `emp`), else the planner
-    let h2 ← (do pure (some (← mkAppM ``atom_eq #[← acEq Q₀R Qv]))) <|> pure none
-    let (h2, left2) ← match h2 with
-      | some h2 => pure (h2, [])
-      | none => do
+    let (h2, left2) ← try pure (← mkAppM ``atom_eq #[← acEq Q₀R Qv], [])
+      catch _ => do
         let m ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[Q₀R, Qv])
         pure (m, ← closeEntail m.mvarId!)
     -- (the planner leaves an update goal, possibly per case of a split, where it fails)
