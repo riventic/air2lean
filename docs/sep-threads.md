@@ -176,16 +176,23 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts.
   Decided (coordinator): the invariant goes into `FConc`, proved preserved by every step.
 
-  **Open: `mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
+  **`mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
   `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a
   recorded access, so the thread owns them only if every recorded access to those offsets
   happened before its clock. The precondition holds the extent (`bext`) and at most the old
-  bytes; the extent is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
-  `S` (its `munmap` of the old tail, concurrent with thread 0) makes the post's ownership false.
-  A thread rule needs ownership of a whole extent (or of the mapping's claim, `Full/Claims`) to
-  cover every recorded access to the block's offsets past its end. Decided (coordinator): a
-  model fix, not a logic patch: bytes that a growth (or any revival) brings to life start with
-  no access history, as the bytes of a new block do (natively `mremap` maps new pages).
+  bytes; the extent is ghost state, not linked to clocks: with the old model a footprint entry of
+  thread 1 at offset `S` (its `munmap` of the old tail, concurrent with thread 0) made the post's
+  ownership false. Fixed in the model (coordinator decision), not in the logic: a revival
+  forgets the recorded accesses to the revived offsets (`Mem.forgetFrom`, in `Mem.mremapGrown`
+  and `Mem.afterByteRemap`; an entry that starts past the old end gets the empty clock, one that
+  crosses it ends there), so they start with no access history, as the bytes of a new block do
+  (natively the growth maps new pages). Every clock then owns the grown bytes
+  (`Mem.OwnsC.forgotten`); regression `tests/roadmap/sep-full/RemapHistoryCX.lean` (the
+  counterexample's write races with the old record and does not after the fix). The thread
+  rules come with S1: the step edits old entries, which `StepIn` (every entry of the result is
+  an old one or a new one of the thread) does not allow, so they need S1's step relation (an
+  entry may also be a narrowing of an old one) and a `ThreadLocal` clause for the revival of
+  history-free bytes.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).

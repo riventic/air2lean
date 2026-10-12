@@ -598,6 +598,49 @@ theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Na
       rw [hbump]
       exact VClock.le_refl _
 
+/-! ### Forgetting the history of dead offsets (`Mem.forgetFrom`) -/
+
+theorem FootprintEntry.forgetFrom_tid (b : BlockId) (S : Nat) (e : FootprintEntry) :
+    (e.forgetFrom b S).tid = e.tid := by
+  unfold FootprintEntry.forgetFrom; split <;> (try split) <;> rfl
+
+theorem FootprintEntry.forgetFrom_block (b : BlockId) (S : Nat) (e : FootprintEntry) :
+    (e.forgetFrom b S).block = e.block := by
+  unfold FootprintEntry.forgetFrom; split <;> (try split) <;> rfl
+
+/-- A clock that covers an entry covers it without its forgotten offsets. -/
+theorem FootprintEntry.forgetFrom_le {b : BlockId} {S : Nat} {e : FootprintEntry} {c : VClock}
+    (h : VClock.le e.clock c = true) : VClock.le (e.forgetFrom b S).clock c = true := by
+  unfold FootprintEntry.forgetFrom
+  split
+  · exact VClock.le_default c
+  · split <;> exact h
+
+/-- **No history past `S`**: after `Mem.forgetFrom b S`, an entry of block `b` either has the empty
+clock (it races with no access, and every clock covers it) or ends at or before `S`. -/
+theorem Mem.forgetFrom_entry {m : Mem} {b : BlockId} {S : Nat} {e : FootprintEntry}
+    (he : e ∈ (m.forgetFrom b S).footprint) (hb : e.block = b) :
+    e.clock = #[] ∨ (e.off < S ∧ e.off + e.len ≤ S) := by
+  obtain ⟨e₀, -, rfl⟩ := Array.mem_map.mp he
+  rw [FootprintEntry.forgetFrom_block] at hb
+  unfold FootprintEntry.forgetFrom
+  by_cases h1 : e₀.block = b ∧ S ≤ e₀.off
+  · rw [if_pos h1]; exact .inl rfl
+  · rw [if_neg h1]
+    simp only [hb, true_and, Nat.not_le] at h1
+    by_cases h2 : e₀.block = b ∧ S < e₀.off + e₀.len
+    · rw [if_pos h2]; exact .inr ⟨h1, by simp only; omega⟩
+    · rw [if_neg h2]
+      simp only [hb, true_and, Nat.not_lt] at h2
+      exact .inr ⟨h1, h2⟩
+
+theorem Mem.SingleThread.forgetFrom {m : Mem} (h : m.SingleThread) (b : BlockId) (S : Nat) :
+    (m.forgetFrom b S).SingleThread := by
+  refine ⟨h.1, fun e he => ?_⟩
+  obtain ⟨e₀, he₀, rfl⟩ := Array.mem_map.mp he
+  obtain ⟨ht, hle⟩ := h.2 e₀ he₀
+  exact ⟨(FootprintEntry.forgetFrom_tid b S e₀).trans ht, FootprintEntry.forgetFrom_le hle⟩
+
 theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n kind) :
     (loadBytes p n a kind).run m =
