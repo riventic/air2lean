@@ -82,7 +82,7 @@ knowledge after `free` (`known`, O1).
 
 | | status | where |
 |---|---|---|
-| O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`); with block extents it also holds the mapping's extent authority with the fraction that the grant's share leaves (`pinnedInv`) | `PageSpec.tok`, `PageSpec.pinned`, `ZigLean/Sep/Full/Pinned.lean` |
+| O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`); with block extents it also holds the mapping's extent authority with the fraction that the grant's share leaves (`PageTok.ptok`), and the claim on the mapping from the grant's end on (byte-range claims) | `PageTok.lean` |
 | `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only; x86_64-linux and aarch64-macos (no `mremap`: `remap` stays in place) | `tests/roadmap/alloc-translated/PageSpec.lean`, `PageSpecMacos.lean` |
 | block extents | each entry collects the mapping's whole extent (the token's authority and the grant's share, `EUpd.unlend`), runs the legacy triple through the pinned bridge (`FTotalTriple.ofTotal`, the mapping's block pinned), reads the new extent back from the post's cells (`upPost_bext`) and lends half of it to the new grant (`pinned_lend`); generic for any allocator whose token pins its grant's block (`pinned_free`, `pinned_resize`, `pinned_remap`). `PageSpec.inv_legacy` (the legacy reading of the invariant, for the removed wrapper contracts) is gone: a legacy grant has no extent share. Legacy-removal track: the wrapper contracts are to be restated over `FAllocSpec` | `ZigLean/Sep/Full/Pinned.lean` |
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
@@ -121,7 +121,7 @@ of the derived address, recovers a pointer (`FTriple.ptrFromAddr`), maps `alignU
 (`FTriple.cmpxchgPtr`) and a `known` taken from owning it. The grant is the whole mapping
 (`PageSpec.regrantIn`). The new mapping's full extent comes from the bridge's post (`mmap_bext`:
 a block that the step created), stays pinned through the legacy steps that read the mapping
-(`CTriple.step_bext`), and half of it is lent to the grant (`final_upd`, `pinned_lend`).
+(`CTriple.step_bext`), and half of it is lent to the grant (`final_upd`).
 
 `alloc` is a concurrent function. The vtable entry is its call in the caller's thread, each
 atomic op's oracle choice `0` (`Sched.soloRun`; `CTriple`, `ZigLean/Sep/Full/Conc.lean`).

@@ -1,4 +1,5 @@
-import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Extent
 
 /-!
 # Byte-range claims (`docs/sep-full-state.md` §Byte-range claims)
@@ -456,14 +457,20 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     · exact absurd hb (Nat.not_lt.mpr (h ▸ hx))
     · rw [ecl, if_neg h]; exact hcf x hx y
 
-/-- **The creator of a block claims its bytes** (any range `[lo, hi)`): a program whose run
-creates block `nb v` (absent before, present after) yields the untagged claim next to its post,
-when the post holds no claim on the new block. -/
-theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → BlockId)
-    (lo hi : Nat) (ht : FTriple P c Q)
-    (hfresh : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m.blocks.size ≤ nb v ∧ nb v < m'.blocks.size)
-    (hQ : ∀ v r, Q v r → ∀ x, r.gh.cl (nb v) x = ECell.unit) :
-    FTriple P c (fun v => Q v ⋆ bclaim (nb v) lo hi) := by
+/-- A claim on `[lo, hi)` of block `b` if there is one (`nb = some b`), nothing otherwise. -/
+def optClaim : Option BlockId → Nat → Nat → FAssn
+  | some b, lo, hi => bclaim b lo hi
+  | none, _, _ => emp
+
+/-- **The creator of a block claims its bytes** (any range `[lo v, hi v)`): a program whose run
+creates block `b` whenever `nb v = some b` (absent before, present after) yields that block's
+untagged claim next to its post, when the post holds no claim on the new block. -/
+theorem FTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → Option BlockId)
+    (lo hi : α → Nat) (ht : FTriple P c Q)
+    (hfresh : ∀ m v m' b, (c.run m).run = some (.ok (v, m')) → nb v = some b →
+      m.blocks.size ≤ b ∧ b < m'.blocks.size)
+    (hQ : ∀ v b r, nb v = some b → Q v r → ∀ x, r.gh.cl b x = ECell.unit) :
+    FTriple P c (fun v => Q v ⋆ optClaim (nb v) (lo v) (hi v)) := by
   intro m r rF hh hp hs
   have h := ht m r rF hh hp hs
   revert h
@@ -475,16 +482,153 @@ theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAss
     | ok p =>
       obtain ⟨v, m'⟩ := p
       rintro ⟨r', hh', hq, hs'⟩
-      obtain ⟨h1, h2⟩ := hfresh m v m' hrun
-      have hz : ∀ y, (r'.gh.cl (nb v) y).add (rF.gh.cl (nb v) y) = ECell.unit := fun y => by
-        rw [hQ v r' hq y, hh.ghost.2.2.frame (nb v) h1 y, ECell.add_unit]
-      refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
-          r'.gh.add (Ghost.atCl (nb v) (ECell.onRange lo hi (ECell.shareT none Frac.one 0)))⟩,
-        ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
-          by rw [Know.union_none]; exact hh'.know, hh'.knowF,
-          GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok lo hi y ls hu)
-            (fun y γ e k => onRange_share_tags lo hi y γ e k)⟩,
-        ⟨r', ⟨FHeap.empty, Know.none, _⟩, FHeap.disjoint_empty _, rfl, hq, rfl, rfl, rfl⟩, hs'⟩
+      cases hnb : nb v with
+      | none =>
+        refine ⟨r', hh', ?_, hs'⟩
+        show (Q v ⋆ optClaim (nb v) (lo v) (hi v)) r'
+        rw [hnb]; exact sep_emp.mpr hq
+      | some b =>
+        obtain ⟨h1, h2⟩ := hfresh m v m' b hrun hnb
+        have hz : ∀ y, (r'.gh.cl b y).add (rF.gh.cl b y) = ECell.unit := fun y => by
+          rw [hQ v b r' hnb hq y, hh.ghost.2.2.frame b h1 y, ECell.add_unit]
+        refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
+            r'.gh.add (Ghost.atCl b (ECell.onRange (lo v) (hi v) (ECell.shareT none Frac.one 0)))⟩,
+          ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
+            by rw [Know.union_none]; exact hh'.know, hh'.knowF,
+            GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok (lo v) (hi v) y ls hu)
+              (fun y γ e k => onRange_share_tags (lo v) (hi v) y γ e k)⟩, ?_, hs'⟩
+        show (Q v ⋆ optClaim (nb v) (lo v) (hi v)) _
+        rw [hnb]
+        exact ⟨r', ⟨FHeap.empty, Know.none, _⟩, FHeap.disjoint_empty _, rfl, hq, rfl, rfl, rfl⟩
+
+/-- **The creator of a block claims its bytes** (any range `[lo, hi)`): a program whose run
+creates block `nb v` (absent before, present after) yields the untagged claim next to its post,
+when the post holds no claim on the new block. -/
+theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → BlockId)
+    (lo hi : Nat) (ht : FTriple P c Q)
+    (hfresh : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m.blocks.size ≤ nb v ∧ nb v < m'.blocks.size)
+    (hQ : ∀ v r, Q v r → ∀ x, r.gh.cl (nb v) x = ECell.unit) :
+    FTriple P c (fun v => Q v ⋆ bclaim (nb v) lo hi) :=
+  FTriple.mintClaimOpt (fun v => some (nb v)) (fun _ => lo) (fun _ => hi) ht
+    (fun m v m' b h e => by cases e; exact hfresh m v m' h) (fun v b r e hq => by cases e; exact hQ v r hq)
+
+/-- `FTriple.mintClaimOpt` for a total triple (the precondition is unchanged). -/
+theorem FTotalTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (nb : α → Option BlockId) (lo hi : α → Nat) (ht : FTotalTriple P c Q)
+    (hfresh : ∀ m v m' b, (c.run m).run = some (.ok (v, m')) → nb v = some b →
+      m.blocks.size ≤ b ∧ b < m'.blocks.size)
+    (hQ : ∀ v b r, nb v = some b → Q v r → ∀ x, r.gh.cl b x = ECell.unit) :
+    FTotalTriple P c (fun v => Q v ⋆ optClaim (nb v) (lo v) (hi v)) :=
+  ⟨FTriple.mintClaimOpt nb lo hi ht.1 hfresh hQ, ht.2⟩
+
+/-- An assertion whose resources hold no byte claim (bytes, knowledge, extents, ledgers). -/
+def NoCl (Q : FAssn) : Prop := ∀ r, Q r → ∀ b x, r.gh.cl b x = ECell.unit
+
+theorem noCl_sep {P Q : FAssn} (hp : NoCl P) (hq : NoCl Q) : NoCl (P ⋆ Q) := by
+  rintro _ ⟨r₁, r₂, -, rfl, h1, h2⟩ b x
+  simp only [Ghost.add_cl, hp _ h1 b x, hq _ h2 b x, ECell.add_unit]
+
+theorem noCl_ex {γ : Type} {P : γ → FAssn} (h : ∀ x, NoCl (P x)) : NoCl (FAssn.ex P) := by
+  rintro _ ⟨y, hy⟩ b x; exact h y _ hy b x
+
+theorem noCl_lift (φ : Prop) : NoCl ⟪φ⟫ := by
+  rintro _ ⟨-, -, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_emp : NoCl emp := by
+  rintro _ ⟨-, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_up (P : Assn) : NoCl (up P) := by
+  rintro _ ⟨-, -, hg⟩ b x; rw [hg]; rfl
+
+theorem noCl_bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : NoCl (bauth b S K q) := by
+  rintro _ ⟨-, -, hg⟩ b' x; rw [hg]; rfl
+
+theorem noCl_bshare (b : BlockId) (q : Frac) (k : Nat) (t : STag) : NoCl (bshare b q k t) := by
+  rintro _ ⟨-, -, -, hg⟩ b' x; rw [hg]; rfl
+
+/-! ## Claims and receipts of a pointer's block -/
+
+/-- A receipt for the claim on the part of `p`'s block from `lo` to `hi`, lent as tagged
+`(γ, e)`. -/
+def pcrcpt (p : Ptr) (lo hi γ e : Nat) : FAssn :=
+  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bcrcpt b lo hi γ e
+
+section PtrClaims
+
+variable {p p' : Ptr} {b : BlockId} {lo m hi γ e : Nat} {t : STag}
+
+theorem pclaim_eq (hb : p.block = some b) : pclaim p lo hi t = bclaim b lo hi t := by
+  funext r; apply propext; constructor
+  · rintro ⟨b', h⟩; obtain ⟨hb', h⟩ := sep_lift.mp h; rw [hb] at hb'; cases hb'; exact h
+  · exact fun h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩
+
+theorem pcrcpt_eq (hb : p.block = some b) : pcrcpt p lo hi γ e = bcrcpt b lo hi γ e := by
+  funext r; apply propext; constructor
+  · rintro ⟨b', h⟩; obtain ⟨hb', h⟩ := sep_lift.mp h; rw [hb] at hb'; cases hb'; exact h
+  · exact fun h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩
+
+/-- A claim names its block, not its pointer. -/
+theorem pclaim_rebase (h : p.block = p'.block) : pclaim p lo hi t = pclaim p' lo hi t := by
+  simp only [pclaim, h]
+
+theorem pcrcpt_rebase (h : p.block = p'.block) : pcrcpt p lo hi γ e = pcrcpt p' lo hi γ e := by
+  simp only [pcrcpt, h]
+
+/-- A claim without a block holds nowhere. -/
+theorem pclaim_none (hb : p.block = none) {r : Res} : ¬ pclaim p lo hi t r := by
+  rintro ⟨b, h⟩; rw [hb] at h; cases (sep_lift.mp h).1
+
+theorem pcrcpt_none (hb : p.block = none) {r : Res} : ¬ pcrcpt p lo hi γ e r := by
+  rintro ⟨b, h⟩; rw [hb] at h; cases (sep_lift.mp h).1
+
+/-- **Split and join** of a pointer's claim (`bclaim_split`). -/
+theorem pclaim_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
+    (pclaim p lo m t ⋆ pclaim p m hi t) = pclaim p lo hi t := by
+  cases hb : p.block with
+  | some b => rw [pclaim_eq hb, pclaim_eq hb, pclaim_eq hb, bclaim_split h1 h2]
+  | none =>
+    funext r; apply propext
+    exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pclaim_none hb h).elim, fun h => (pclaim_none hb h).elim⟩
+
+theorem pcrcpt_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
+    (pcrcpt p lo m γ e ⋆ pcrcpt p m hi γ e) = pcrcpt p lo hi γ e := by
+  cases hb : p.block with
+  | some b => rw [pcrcpt_eq hb, pcrcpt_eq hb, pcrcpt_eq hb, bcrcpt_split h1 h2]
+  | none =>
+    funext r; apply propext
+    exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pcrcpt_none hb h).elim, fun h => (pcrcpt_none hb h).elim⟩
+
+/-- A claim owns no bytes and no knowledge (`EUpd.drop` forgets it). -/
+theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+
+theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+
+end PtrClaims
+
+/-- **Lend a pointer's claim** (`EUpd.lendC`). -/
+theorem EUpd.plendC {γ e lo hi : Nat} {M : GMap} {t : STag} {p : Ptr} :
+    EUpd (gauthP γ e M t ⋆ pclaim p lo hi t)
+      (gauthP γ e M t ⋆ (pclaim p lo hi (some (γ, e)) ⋆ pcrcpt p lo hi γ e)) := by
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => ⟪p.block = some b⟫ ⋆
+    (gauthP γ e M t ⋆ bclaim b lo hi t)) fun r h => ?_) (EUpd.exAll fun b => EUpd.lift fun hb => ?_)
+  · obtain ⟨b, h⟩ := sep_ex.mp (sep_comm h)
+    obtain ⟨hb, h⟩ := sep_lift.mp (sep_assoc h)
+    exact ⟨b, sep_lift.mpr ⟨hb, sep_comm h⟩⟩
+  · refine EUpd.trans EUpd.lendC (EUpd.of_imp fun _ h => ?_)
+    rw [pclaim_eq hb, pcrcpt_eq hb]; exact h
+
+/-- **Revoke a pointer's claim receipt** of a past epoch (`EUpd.revokeC`). -/
+theorem EUpd.prevokeC {γ e e' lo hi : Nat} {M : GMap} {t : STag} {p : Ptr} (he : e < e') :
+    EUpd (gauthP γ e' M t ⋆ pcrcpt p lo hi γ e) (gauthP γ e' M t ⋆ pclaim p lo hi t) := by
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => ⟪p.block = some b⟫ ⋆
+    (gauthP γ e' M t ⋆ bcrcpt b lo hi γ e)) fun r h => ?_) (EUpd.exAll fun b => EUpd.lift fun hb => ?_)
+  · obtain ⟨b, h⟩ := sep_ex.mp (sep_comm h)
+    obtain ⟨hb, h⟩ := sep_lift.mp (sep_assoc h)
+    exact ⟨b, sep_lift.mpr ⟨hb, sep_comm h⟩⟩
+  · refine EUpd.trans (EUpd.revokeC he) (EUpd.of_imp fun _ h => ?_)
+    rw [pclaim_eq hb]; exact h
 
 end Full
 end Zig

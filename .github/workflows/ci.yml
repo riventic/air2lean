@@ -1076,7 +1076,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadOwned 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadOwned 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.

@@ -384,7 +384,7 @@ theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
     (hr : ∀ s k n ra A S K q q' tl, k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
       q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
       CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
-          FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+          I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
         (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
     (hm : ∀ s k n ra bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
       0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.remap ctx s k n ra)
@@ -412,7 +412,7 @@ theorem CAllocSpec.resize (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (
     (q q' : Frac) (tl : Array Byte) (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k)
     (h4 : 0 < s.len.toNat) (h5 : q'.val ≤ q.val) (h6 : n.toNat < s.len.toNat → q' = q) :
     CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
-        FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+        I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl) :=
   fun fuel => (h fuel).resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6
 
