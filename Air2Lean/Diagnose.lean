@@ -219,7 +219,7 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
       found := true
       log := log.add { context with
         message
-        category := if (runtimeTagReason? raw.tag).isSome then .unsupportedSemantics else .validationFailure
+        category := if (stateTagReason? raw.tag).isSome then .unsupportedSemantics else .validationFailure
         anchor := { idSpace := .canonical, instruction := some raw.id }
         firstErrorInUnit := true }
   -- Defensive: never let an unexplained composed failure pass silently.
@@ -276,7 +276,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
   for i in Raw.flatten raw.body do
     if marked i then
       hasMarkers := true
-      let message := match runtimeTagReason? i.tag with
+      let message := match stateTagReason? i.tag with
         | some reason => s!"{raw.name}: inst {i.id}: tag '{i.tag}': {reason}"
         | none => s!"instruction tag '{i.tag}' is explicitly unsupported{markedTagGuidance i.tag}"
       log := log.add { (boundary file name

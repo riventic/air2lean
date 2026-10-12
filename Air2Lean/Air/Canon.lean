@@ -734,12 +734,15 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
         unless isPtr t do throw s!"{f.name}: inst {i.id}: `set_err_return_trace` of a non-pointer"
         st := { st with reg := some (v, t) }
       | "err_return_trace" =>
+        -- Without a current trace, the operation stays for `normalizeOp` to reject with its reason.
+        if st.reg.isNone then out := out.push i; continue
         let (v, t) ← reg "`err_return_trace`"
         let some want := i.ty | throw s!"{f.name}: inst {i.id}: `err_return_trace` without a type"
         match ← asOptional v t want i.id with
         | (some w, _) => out := out.push w
         | (none, v) => st := { st with subst := st.subst.insert i.id v }
       | "save_err_return_trace_index" =>
+        if st.reg.isNone then out := out.push i; continue
         let (v, t) ← reg "`save_err_return_trace_index`"
         let (some ptrTy, some idx, some ty) := (i.ptrTy, i.index, i.ty)
           | throw s!"{f.name}: inst {i.id}: `save_err_return_trace_index` needs `index` and `ptr_ty`"

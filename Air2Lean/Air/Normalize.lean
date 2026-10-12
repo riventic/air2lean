@@ -137,9 +137,22 @@ global, or with the exporter's unsupported marker, it keeps its rejection. -/
 def runtimeNavGlobal? (raw : Raw.RawInst) : Option Nat :=
   if raw.tag == "runtime_nav_ptr" && !raw.unsupported then raw.global else none
 
+/-- The reason for an error-return-trace tag that reaches `normalizeOp`: `Canon.errTraces`
+resolves every one that has a current trace. -/
+def errTraceTagReason : String :=
+  "an error-return-trace operation outside a function with an error return trace (a hidden \
+    `err_trace` parameter or an earlier `set_err_return_trace`), or an older exporter's \
+    `unsupported` marker; export with error tracing by a patched compiler built from this tree \
+    (docs/air-json.md §Error return trace)"
+
+/-- The reason a tag that reaches `normalizeOp` is rejected before decoding, if any. -/
+def stateTagReason? (tag : String) : Option String :=
+  (runtimeTagReason? tag).orElse fun _ =>
+    if (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
+
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
   if (runtimeNavGlobal? raw).isSome then return
-  if let some reason := runtimeTagReason? raw.tag then
+  if let some reason := stateTagReason? raw.tag then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
 
 mutual
