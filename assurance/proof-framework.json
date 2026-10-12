@@ -475,9 +475,6 @@
       "path": "Proofs/Lists/Sep.lean"
     },
     {
-      "path": "Proofs/Slices/Sep.lean"
-    },
-    {
       "path": "Proofs/Sync/Handoff.lean"
     },
     {
@@ -747,6 +744,9 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
+      "path": "tests/roadmap/strength-log/ProofsSlices.lean"
+    },
+    {
       "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
     },
     {
@@ -775,15 +775,6 @@
     },
     {
       "path": "tutorials/memory-safety/Solution.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Main.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Negative.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Solution.lean"
     }
   ]
 }
