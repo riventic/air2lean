@@ -2889,12 +2889,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"errorNameOf {rv a}"); (env, some l)
   | .vectorStoreElem vptr idx v =>
     -- `v[i] = x` with a runtime index (0.14.1/0.15.2, L09): the lane store at bit `i * w`.
-    let (n, e) := match (fc.valTyId? vptr).bind (ptrChild fc.types) |>.bind (fc.types[·]?) with
-      | some (.vector n e) => (n, e)
-      | _ => (0, 0)
-    let w := ((fc.types[e]?).bind laneBits?).getD 0
-    (env, some s!"Zig.storeLaneAt (α := {fc.emitTyOf e}) {n} {(n * w + 7) / 8} {fc.ptrAlign vptr} \
-      {rv vptr} {rv idx} {rv v}")
+    match (fc.valTyId? vptr).bind (ptrChild fc.types) |>.bind (fc.types[·]?) with
+    | some (.vector n e) =>
+      match (fc.types[e]?).bind laneBits? with
+      | some w => (env, some s!"Zig.storeLaneAt (α := {fc.emitTyOf e}) {n} {(n * w + 7) / 8} \
+          {fc.ptrAlign vptr} {rv vptr} {rv idx} {rv v}")
+      | none => (env, some (placeholder "a vector_store_elem lane without a bit width"))
+    | _ => (env, some (placeholder "a vector_store_elem through a non-vector pointer"))
   | .errorsLenLe a =>
     -- `cmp_lt(e)_errors_len`: the code is at most the compilation's error count (L10).
     let (env, l) := bindLet fc env inst.id s!"pure (decide (({rv a}).toNat ≤ errorTable.size))"
@@ -3711,14 +3712,6 @@ def tlsReservedNames (funcs : Array Func) : Array String :=
 /-- Program names reserved for explicit external initial state, only if a global is `extern`. -/
 def externReservedNames (funcs : Array Func) : Array String :=
   if funcs.any (·.globals.any (·.isExtern)) then #[externInitName] else #[]
-
-/-- `id` holds a pointer, at any depth (unknown types count as pointers). -/
-partial def tyHoldsPtr (types : Array Ty) (id : TyId) (fuel : Nat := 256) : Bool :=
-  if fuel == 0 then true else
-  match types[id]? with
-  | some (.ptr ..) => true
-  | some ty => (childTys ty).any fun c => tyHoldsPtr types c (fuel - 1)
-  | none => true
 
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"

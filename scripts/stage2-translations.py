@@ -34,6 +34,9 @@ ROOT = Path(__file__).resolve().parents[1]
 REPRODUCER = 'tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig'
 # Examples that the self-hosted backend cannot compile (no code, nothing to compare).
 COMPILE_ERRORS = ROOT / 'tests/roadmap/build-modes/reproducers/excluded-asm-stage2.json'
+# Diagnostic fragments of the translator's backend rules: `CheckCtx.checkStage2Backend` ("outside
+# the stage2_x86_64 profile") and the LLVM-only layouts ("for the LLVM backend").
+BACKEND_RULES = ('stage2_x86_64', 'LLVM backend')
 
 
 def namespace(ex):
@@ -81,6 +84,11 @@ def translate(ex, version, zig_air, tmp):
                            if d.get('function')]
         except (ValueError, KeyError):
             diagnostics = [done.stderr.strip()[-1000:]]
+        # Only a backend rule excludes the example: any other rejection of the export (a
+        # translator regression, a construct outside the subset) fails the run, never shrinks it.
+        if not any(rule in text for rule in BACKEND_RULES for text in [done.stderr, *diagnostics]):
+            raise RuntimeError(f'{ex}: the stage2_x86_64 export is rejected by no backend rule:\n'
+                               f'{done.stderr[-2000:]}')
         return None, diagnostics
     receipt = tmp / ex / 'report.json'
     for argv in (['scripts/normalize-generated.py', 'report', str(gen), str(air), str(receipt)],
@@ -104,6 +112,11 @@ def main(argv=None):
     zig_air = args.zig_air or run(['scripts/zig-air.sh', args.version]).stdout.strip()
     if not zig_air or not Path(zig_air).is_file():
         print(f'error: no patched compiler for {args.version}', file=sys.stderr)
+        return 1
+    # The translator of this checkout, not a stale .lake/build/bin/air2lean.
+    built = run(['lake', 'build', 'air2lean'])
+    if built.returncode:
+        print(f'error: lake build air2lean failed:\n{built.stdout[-2000:]}{built.stderr[-2000:]}', file=sys.stderr)
         return 1
     compile_errors = {e['example']: e for e in json.loads(COMPILE_ERRORS.read_text(encoding='utf-8'))}
     accepted, excluded = [], []

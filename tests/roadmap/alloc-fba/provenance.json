@@ -16,7 +16,7 @@
     "selection": "call/function-value closure of the exported client.* functions, stopping at debug.FullPanic"
   },
   "patched_compiler": "zig-patch/air-json/json.zig of codex/alloc-milestone1 (the P0 exporter: global initializers and container layouts resolved before writing; schema 12 module identity and instance keys)",
-  "patched_compiler_sha256": "c6f09f3350907161acce91565599a28845994c53f80683c6f509000c457a1a24",
+  "patched_compiler_sha256": "7f9177f5e1ab290e153e501b1beda1acd19bc7cc384da70a6f7ce113ed4206bc",
   "stock_compiler_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
   "air_sha256": {
     "0.16.0/client-linux/client.fba_aligned.json": "9ddaa8cfc698a68a5900fb12cdae69b5663b5f7f278d5dacaec2e73d90cf3fb7",

@@ -40,7 +40,7 @@ for version in "${versions[@]}"; do
   for stem in "${stems[@]}"; do
     out="$work/$stem/$version"
     mkdir -p "$out"
-    # <stem>.export, if present, sets (bash syntax) `root`: the program to export instead of
+    # <stem>.export, if present, sets (bash syntax) `root_src`: the program to export instead of
     # <stem>.zig, as an executable (the error numbering, error-table.air2lean, is per
     # compilation, so a fixture whose model depends on it exports its native probe's
     # compilation); `module`: the name prefix of the fixture's own functions (default <stem>.);

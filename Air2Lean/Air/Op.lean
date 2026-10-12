@@ -97,6 +97,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- `id` holds a pointer, at any depth; unknown types and exhausted fuel count as pointers
+(fail closed). -/
+partial def tyHoldsPtr (types : Array Ty) (id : TyId) (fuel : Nat := 256) : Bool :=
+  if fuel == 0 then true else
+  match types[id]? with
+  | some (.ptr ..) => true
+  | some ty => (childTys ty).any fun c => tyHoldsPtr types c (fuel - 1)
+  | none => true
+
 /-- A type without values (`noreturn`). A union field of this type can never be active: it
 adds no payload bytes, has no constructor in the translation, and every instruction or constant
 that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/

@@ -185,6 +185,30 @@ def extern_storage(binary):
     reject(binary, docs, ES, "the program has error-bearing globals")
 
 
+TP = ["--namespace", "TlsPointers", "--prefix", "tls_pointers."]
+
+
+def tls_pointers(binary):
+    # A pointer-bearing threadlocal is accepted; its initial value may not point into an
+    # error-bearing global (the finite error-storage fragment tracks every such pointer, as for
+    # an ordinary global's initializer).
+    docs = one("tls_pointers", "tls_pointers.currentValue.json")
+    accept(binary, docs, TP)
+    doc = docs["tls_pointers.currentValue.json"]
+    types = doc["types"]
+    types.append({"k": "error_set", "errors": ["Boom"], "abi_size": 2, "abi_align": 2})
+    err_ty = len(types) - 1
+    types.append(dict(next(t for t in types if t.get("k") == "ptr" and t.get("size") == "one"),
+                      child=err_ty, ptr_align=2))
+    ptr_ty = len(types) - 1
+    doc["globals"].append({"name": "tls_pointers.boom", "module": "root", "ty": err_ty, "const": False,
+                           "extern": False, "threadlocal": False, "init": {"ty": err_ty, "err": "Boom"}})
+    current = global_named(doc, "tls_pointers.current")
+    current["ty"] = ptr_ty
+    current["init"] = {"ty": ptr_ty, "ptr": {"global": len(doc["globals"]) - 1, "off": 0}}
+    reject(binary, docs, TP, "retains a pointer into an error-bearing global")
+
+
 def error_ints(binary):
     funcs = fixtures("error_ints")
     numbering = table("error_ints")
@@ -240,6 +264,7 @@ def main():
     error_params(binary)
     vector_casts(binary)
     extern_storage(binary)
+    tls_pointers(binary)
     error_ints(binary)
     runtime_lanes(binary)
     float_lanes(binary)

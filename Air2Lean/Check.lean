@@ -199,11 +199,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.hostSize != 0 then
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
       -- A lane pointer's lane may also be a float (its bits, `Zig.Packed (Float fmt)`, L09).
-      let laneFloat := if l.laneBitPtr then (types[child]?).bind fun
-          | .float bits => some bits
-          | _ => none
-        else none
-      let some bits := packedBits types child <|> laneFloat
+      let some bits := packedBits types child <|>
+          (if l.laneBitPtr then (types[child]?).bind laneBits? else none)
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
             `bool`, an enum or a packed struct (or a float lane of a vector) is outside the subset"
       if l.bitOffset + bits > 8 * l.hostSize then
@@ -600,9 +597,9 @@ def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Na
     | throw s!"{fnName}: {what} needs the compilation's error numbering, which the AIR export \
         lacks (`error-table.air2lean`, written by the patched compiler after analysis; \
         docs/air-json.md §Error table)"
-  unless names.size < 2 ^ bits do
+  unless names.size ≤ Zig.errCapacity bits do
     throw s!"{fnName}: the error numbering has {names.size} errors, more than the \
-      {2 ^ bits - 1} codes of the {bits}-bit error integer"
+      {Zig.errCapacity bits} codes of the {bits}-bit error integer"
 
 /-- The profile's `error_set_bits` (`Dialect.errorSetBits`); 16 in a bare context. -/
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
@@ -2334,12 +2331,7 @@ private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
   | .inst id => (insts.find? (·.id == id)).map (·.ty)
   | _ => v.constTy?
 
-private partial def carriesPointer (f : Func) (ty : TyId) (fuel : Nat := 256) : Bool :=
-  if fuel == 0 then true else
-  match f.types[ty]? with
-  | some (.ptr ..) => true
-  | some ty => (childTys ty).any fun child => carriesPointer f child (fuel - 1)
-  | none => true
+private def carriesPointer (f : Func) (ty : TyId) : Bool := tyHoldsPtr f.types ty
 
 /-- Bounded local expression dependencies, including block result branches and pointer
 initializers. This is not an interprocedural/general pointer provenance analysis. -/
@@ -2602,6 +2594,11 @@ private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Exc
   checkNullConstants f.name f.types f.layouts init
   checkGlobalAliasConstants f init
   checkLlvmPayloadConstants f init
+  -- As for an ordinary global (`checkGlobal`): the finite error-storage fragment tracks every
+  -- pointer into an error-bearing global (`dependsOnErrorGlobal`).
+  if f.globals.any (fun g => hasErrorStorage f.types g.ty) && carriesPointer f g.ty &&
+      dependsOnErrorGlobal f f.allInsts init then
+    fail "its initial value retains a pointer into an error-bearing global"
   checkPointerPresence f init fun k =>
     s!"{f.name}: `threadlocal` global {what}: a pointer constant without a global ({k}) is \
       outside the subset"

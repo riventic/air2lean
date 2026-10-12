@@ -52,7 +52,7 @@
     "0.16.0/aggregate_casts.u64ToPair.json": "4b8d2111e2054366cbd0ed2d6d1346fc2145d1875bc71444e70a9d785e85aee7"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "29d6b1d5a1c36d1ea2019dba9911122352d7e1947adf4824e1e8d0bad0ca8612",
+  "exporter_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
   "patched_compiler_sha256": {
     "0.14.1": "60508a3d000934d3e2ca18730229fcae9052843d27d0dac234b0d803a808f9e6",
     "0.15.2": "476db22912d57dd975d5b0f58ad45107834dc11f997431f874f15b667f5b895e",

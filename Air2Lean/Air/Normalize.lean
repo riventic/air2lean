@@ -527,4 +527,22 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
 
+/-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any.
+Read by the translator and by `--diagnostics-json` alike. -/
+def readErrorTable (dir : System.FilePath) : IO (Option Raw.ErrorTableFile) := do
+  let path := dir / Raw.errorTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseErrorTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- `f` with the compilation's numbering, which must be of its Zig version and error width. -/
+def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
+  | none => pure f
+  | some t => do
+    unless t.zigVersion == toString f.dialect.version && t.errorSetBits == f.dialect.errorSetBits do
+      throw s!"{f.name}: {Raw.errorTableFileName} is of Zig {t.zigVersion} with {t.errorSetBits}-bit \
+        errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
+    pure { f with errorTable := some t.names }
+
 end Air2Lean

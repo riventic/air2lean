@@ -81,6 +81,8 @@ if [ "$backend" = stage2_x86_64 ]; then
   # (examples/asm), is left out and listed in <output-dir>/excluded-examples.json.
   python3 -B scripts/stage2-translations.py --version "$version" --examples "$examples" --out "$snapshot/stage2"
   examples=$(cat "$snapshot/stage2/examples")
+  # An empty AIR2LEAN_EXAMPLES means every example to scripts/diff.sh, the excluded ones too.
+  [ -n "${examples//[[:space:]]/}" ] || { echo "error: every selected example is excluded on stage2_x86_64" >&2; exit 1; }
 fi
 git ls-files -z | while IFS= read -r -d '' path; do
   case "$path" in

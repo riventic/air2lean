@@ -17,10 +17,10 @@
 set -euo pipefail
 [ "$#" = 2 ] || { sed -n 11,17p "$0" >&2; exit 2; }
 seed=$1 summary=$2
-case "$seed" in
-  0x[0-9a-fA-F]*|[0-9]*) ;;
-  *) echo "error: SEED must be a decimal or 0x-hex u64" >&2; exit 2 ;;
-esac
+# The whole word (a case glob's `*` would accept any suffix, which lands in a Zig source file).
+if ! [[ $seed =~ ^(0x[0-9a-fA-F]{1,16}|[0-9]{1,20})$ ]]; then
+  echo "error: SEED must be a decimal or 0x-hex u64" >&2; exit 2
+fi
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
 zig=${AIR2LEAN_ZIG:-zig}

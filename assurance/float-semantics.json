@@ -3282,7 +3282,9 @@
       "correspondence": "model"
     }
   },
-  "non_numerical": {},
+  "non_numerical": {
+    "ZigLean.VecMem::Zig.Packed.float_round": "a float lane's bits read back as the same bits (bit storage, L09); no arithmetic"
+  },
   "checks": {
     "tests/review/Floats.lean": {
       "labels": [

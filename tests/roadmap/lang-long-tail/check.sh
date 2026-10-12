@@ -64,24 +64,25 @@ rejected() { [ -f "$here/$1.reject" ] && grep -q "^$2 " "$here/$1.reject"; }
 # (the native probe that is also the exported program), `args` (compiler flags of both),
 # `native_extra` (more inputs of the native build, a C file and -lc), `only_versions` (the
 # versions that compile the source; default all).
-export_setting() {
-  (root_src="" module="$1." args="" native_extra="" only_versions=""
-   # shellcheck disable=SC1090
-   [ -f "$here/$1.export" ] && . "$here/$1.export"
-   eval "echo \"\$$2\"")
+load_export() {
+  root_src="" module="$1." args="" native_extra="" only_versions=""
+  # shellcheck disable=SC1090
+  [ -f "$here/$1.export" ] && . "$here/$1.export"
+  return 0
 }
+# The version compiles the loaded fixture's source (`only_versions`).
+in_versions() { [ -z "$only_versions" ] || [[ " $only_versions " == *" $1 "* ]]; }
 for entry in "${fixtures[@]}"; do
   read -r stem ns key extra <<< "$entry"
   key=${key:-$ns}
-  prefix=$(export_setting "$stem" module)
-  only=$(export_setting "$stem" only_versions)
+  load_export "$stem"
   for version in "${versions[@]}"; do
-    if [ -n "$only" ] && [[ " $only " != *" $version "* ]]; then continue; fi
+    in_versions "$version" || continue
     if rejected "$stem" "$version"; then
       message=$(grep "^$version " "$here/$stem.reject" | cut -d' ' -f2-)
       # shellcheck disable=SC2086 # extra holds whitespace-separated translator flags
       if "$translator" "$here/air/$stem/$version" -o "$work/rejected.lean" --namespace "$ns" \
-          --prefix "$prefix" $extra 2> "$work/rejected.err"; then
+          --prefix "$module" $extra 2> "$work/rejected.err"; then
         echo "error: $stem $version: the translator accepted an export it must reject" >&2; exit 1
       fi
       grep -qF -- "$message" "$work/rejected.err" || {
@@ -90,7 +91,7 @@ for entry in "${fixtures[@]}"; do
     fi
     # shellcheck disable=SC2086 # extra holds whitespace-separated translator flags
     "$translator" "$here/air/$stem/$version" -o "$work/$key-$version.lean" \
-      --namespace "$ns" --prefix "$prefix" $extra
+      --namespace "$ns" --prefix "$module" $extra
     cmp <(tail -n +2 "$work/$key-$version.lean") <(tail -n +2 "$(retained_of "$key" "$version")")
     path=$(elaborate "$key" "$ns" "$version")
     LEAN_PATH="$path" "${lean_cmd[@]}" --run "$here/Model$ns.lean" "$here/native/$stem-$version.txt"
@@ -99,7 +100,7 @@ for entry in "${fixtures[@]}"; do
   # that compiles the source.
   if [ -f "$here/Proofs$key.lean" ]; then
     proved=0.16.0
-    [ -n "$only" ] && proved=${only%% *}
+    [ -n "$only_versions" ] && proved=${only_versions%% *}
     LEAN_PATH="$work/$key/$proved:$base_path" "${lean_cmd[@]}" "$here/Proofs$key.lean"
   fi
 done
@@ -112,13 +113,10 @@ if [ "${1:-}" = --native ]; then
   for entry in "${fixtures[@]}"; do
     read -r stem ns key _ <<< "$entry"
     key=${key:-$ns}
-    root_src=$(export_setting "$stem" root_src)
-    args=$(export_setting "$stem" args)
-    native_extra=$(export_setting "$stem" native_extra)
-    only=$(export_setting "$stem" only_versions)
+    load_export "$stem"
     ran=0
     for version in "${versions[@]}"; do
-      if [ -n "$only" ] && [[ " $only " != *" $version "* ]]; then continue; fi
+      in_versions "$version" || continue
       var="AIR2LEAN_ZIG_NATIVE_$(echo "$version" | cut -d. -f1-2 | tr . _)"
       zig=${!var:-}
       [ -n "$zig" ] || continue

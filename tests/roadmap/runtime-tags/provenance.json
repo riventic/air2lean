@@ -8,6 +8,7 @@
     "target": "x86_64-linux"
   },
   "air_sha256": {
+    "0.14.1/error-table.air2lean": "6ef0809d957cf7015be024ab1d6554d04ae6fac905a8210a121cdd3c0f09c520",
     "0.14.1/runtime_tags.addOverflow.json": "5b50a8d6826017f3cd17602cb5329450bd977f729ff1bcf19fc963059d6f3287",
     "0.14.1/runtime_tags.advance.json": "77ad18f1b2519388dc78339fed68020468237b7d010c6e0fff009afe47aaed84",
     "0.14.1/runtime_tags.alignSlice.json": "e441b28364bdea14c8e7d62b12dd4e4fb998a5f871ce9fcc37d9d8f223a57a20",
@@ -23,7 +24,7 @@
     "0.14.1/runtime_tags.dispatch.json": "779e17f9629eb19ba44522b46e52e36c03ce6f2402dc99b44ab5b0abd9ba8d8e",
     "0.14.1/runtime_tags.divExact.json": "258f88c507b057a538ff8e1574c5f1aa0b886e1cd12ba24dd7c84ed8e8d2bc7e",
     "0.14.1/runtime_tags.elemPtr.json": "1adbc3981903cb1dfa79d96236ee73ba752a4b996a8201b6be5217f35d233ef5",
-    "0.14.1/runtime_tags.errFromInt.json": "e06b9343d2f18a13ee7da4f49b38adcedc0e74a3081ef6c277e9dce95544be23",
+    "0.14.1/runtime_tags.errFromInt.json": "2b6c29d6578f3150ffd5b64c71951bcbabb39a1ac88547b3cc2462fc33d083c1",
     "0.14.1/runtime_tags.errorName.json": "418a3e7b18b365a1360d677842c056155c3d09bdef5c229d804a404cc6a6e5fe",
     "0.14.1/runtime_tags.fetchAdd.json": "0dfd8266a397633b692e765c39001a53eeed6e304aab275afecf1914f83d4df5",
     "0.14.1/runtime_tags.fieldPtr.json": "fe06d0e4379872674e0bce65ad679c598dd28c4acb8fbdec6ff5a2a589ad86e0",
@@ -74,6 +75,7 @@
     "0.14.1/runtime_tags.unsafeReturn.json": "3e38279cc6d05727441e0b4dedc67708fff57d438b248739467a4ac6ce0bcc06",
     "0.14.1/runtime_tags.widen.json": "a2b9ae129e78a30cf847d3fe7da0a36de3e40da00172adb6e6eb24346dbd1e4a",
     "0.14.1/runtime_tags.xorBits.json": "b35e95880c95128266b6a965384d13e0e9fc7d3503b432c986ff0c4dd6e3f188",
+    "0.15.2/error-table.air2lean": "c6cfd57b7137da35676c33bd603f321e5e63c84a8706a444a4f99fd436c80a23",
     "0.15.2/runtime_tags.addOverflow.json": "e3ec0551678332bb5affa5042091c2e0aedc2fb2c9899dc4a79b8f5ffa1da565",
     "0.15.2/runtime_tags.advance.json": "986e17ea4c500b7fcdece0de5dbc2568a77959b87b2041ece32c5545d5c0f648",
     "0.15.2/runtime_tags.alignSlice.json": "814a9ace81bd2db0b8275d25b456ba11621bf5ff59b62cf1c37cbdaf373a7cef",
@@ -89,7 +91,7 @@
     "0.15.2/runtime_tags.dispatch.json": "71edd74c36ff68cdc8094b0b718ad0fea8ea9e5933878cdfe5b31faf9672921d",
     "0.15.2/runtime_tags.divExact.json": "ee361c25d6224091a256c38857c703a37f83d80e3c866f71c02cf2e727ce5613",
     "0.15.2/runtime_tags.elemPtr.json": "02320171f99612d7d755640d96b5bb2467957b8687974ef7d7659f1b062815fd",
-    "0.15.2/runtime_tags.errFromInt.json": "0ce87118279b4f3c7b3f0b3054aa344252225828e9cee07baaeedd6bc7219d15",
+    "0.15.2/runtime_tags.errFromInt.json": "490e39f676735d163f1b8d90525a9f3f9f20d780ae3b75752172a514c926dece",
     "0.15.2/runtime_tags.errorName.json": "af8cf66c66aaa739c56c55644dab2c17cf046ecf1819f700202920fdd348f55b",
     "0.15.2/runtime_tags.fetchAdd.json": "9e543a55fe9d8e3dafed3ad8c5b18a9ae00d674720cc10d81de28ba083e2d5a6",
     "0.15.2/runtime_tags.fieldPtr.json": "afeaf0e04a61184cf65f641bd562aecd3af67713ef8b7631aa376a41461852ee",
@@ -140,6 +142,7 @@
     "0.15.2/runtime_tags.unsafeReturn.json": "557c8ae4c655755cb83f3a9ea23d12d2e6dfc14aadf8eae4b24fa1c082ba7cd5",
     "0.15.2/runtime_tags.widen.json": "a80ee8b5bb646056ca9506f5289dba48cd3c204f1029d45caa477b14d7f2ce76",
     "0.15.2/runtime_tags.xorBits.json": "67968b7605cab45bd15a9d5301ec18a15cc92bb76529883e4111b09e7bde960c",
+    "0.16.0/error-table.air2lean": "cab20a142ef43886f5089f078be85138d0573b3d54cde02ddcea9b32c1931c44",
     "0.16.0/runtime_tags.addOverflow.json": "ec4b5f8e3b754d954417105f0bfdd5fe8752307b31bcbde5c6e3d2b052b3b384",
     "0.16.0/runtime_tags.advance.json": "94c2e3fab390796727441c3c5dbd43e4d808d82a24ca2ab0b6aa7462e539e331",
     "0.16.0/runtime_tags.alignSlice.json": "4ca97e49412b2c572e0330530ee2a154e53d108793bd73650db4fb462b5eef1a",
@@ -155,7 +158,7 @@
     "0.16.0/runtime_tags.dispatch.json": "d65a9f3d41f0449a039994dd4857ade2df1a61117733b74a45e12b77fb52e12a",
     "0.16.0/runtime_tags.divExact.json": "63fe408c5077e1ce5a538540d26d9e818002c72059f145f2b7da2a9cdc411647",
     "0.16.0/runtime_tags.elemPtr.json": "242f73f887606b8e26e6af7179287dbdda80292ddd3fda488e23f15683a44e27",
-    "0.16.0/runtime_tags.errFromInt.json": "5f13bc19915d3b99beee7b230939adb6290392cfeb909e834c7a0326432a554b",
+    "0.16.0/runtime_tags.errFromInt.json": "62180b72ecca25a31088efb4912e72e1412ffc1c0ca02249ef606c5565874127",
     "0.16.0/runtime_tags.errorName.json": "64fc657fda504db94045f4a1cd196b25d1600a9c6aae4b25e75f598f5e999e3c",
     "0.16.0/runtime_tags.fetchAdd.json": "33c40971b7a6c60fcd6d5eb78a6555c9134509cba6cdb5d18af307fb5d346937",
     "0.16.0/runtime_tags.fieldPtr.json": "ae6d0ac5c63bf281d59fce7a2c5d2d5c0ad9ea0ea8809e66ebdd29b822e8aa3a",
@@ -208,11 +211,11 @@
     "0.16.0/runtime_tags.xorBits.json": "d8f460e5611bd123e8c198c3b4f0e7139fc83190d71633ea20f3180b11ecdfda"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "29d6b1d5a1c36d1ea2019dba9911122352d7e1947adf4824e1e8d0bad0ca8612",
+  "exporter_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
   "patched_compiler_sha256": {
-    "0.14.1": "60508a3d000934d3e2ca18730229fcae9052843d27d0dac234b0d803a808f9e6",
-    "0.15.2": "476db22912d57dd975d5b0f58ad45107834dc11f997431f874f15b667f5b895e",
-    "0.16.0": "3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99"
+    "0.14.1": "a377ade7ec4d68023962947c9361a3c3930295fb3ae31f8160d3405a325da995",
+    "0.15.2": "13d033d127f6537c46491b7876e209b6ec5ae42cdd9815c76b691c57d3bae50c",
+    "0.16.0": "7f9177f5e1ab290e153e501b1beda1acd19bc7cc384da70a6f7ce113ed4206bc"
   },
   "qualification": "Compiler exports of every function in runtime_tags.zig with patched 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter. One lowering per tag, not universal tag semantics; no translation or proof is claimed.",
   "source": "tests/roadmap/runtime-tags/runtime_tags.zig",

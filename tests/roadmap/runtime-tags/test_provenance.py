@@ -33,7 +33,8 @@ def current():
         "air": {"schema": 12, "target": "x86_64-linux", "cpu": "baseline",
                 "optimization": "ReleaseSafe", "error_tracing": False, "command": COMMAND},
         "air_sha256": {f"{v}/{p.name}": sha(p) for v in VERSIONS
-                       for p in sorted((HERE / "air" / v).glob("*.json"))},
+                       for p in sorted([*(HERE / "air" / v).glob("*.json"),
+                                        *(HERE / "air" / v).glob("error-table.air2lean")])},
     }
 
 

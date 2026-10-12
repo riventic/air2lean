@@ -599,14 +599,14 @@ Liveness marks the lane pointer unused, so no code is generated for it. The pass
 `ptr_elem_ptr` and its debug uses only if nothing else reads it; a read one stays, and
 `Check.lean` rejects its type. -/
 def dropDeadRuntimeLanePtrs (f : RawFunc) : RawFunc := Id.run do
+  -- Only 0.14.1/0.15.2 exports have a runtime lane pointer type.
+  unless f.layouts.any (·.runtimeLane) do return f
   let all := flatten f.body
-  let runtimeLanePtr (i : RawInst) : Bool :=
-    i.tag == "ptr_elem_ptr" && (i.ty.bind (f.layouts[·]?)).any (·.runtimeLane)
+  let read : Std.HashSet InstId := all.foldl (init := {}) fun s i =>
+    if isDbgTag i.tag then s else i.uses.foldl (·.insert ·) s
   let dead : Std.HashSet InstId := all.foldl (init := {}) fun d i =>
-    if runtimeLanePtr i then d.insert i.id else d
-  if dead.isEmpty then return f
-  let read (id : InstId) := all.any fun i => !isDbgTag i.tag && i.uses.contains id
-  let dead := dead.fold (init := ({} : Std.HashSet InstId)) fun d id => if read id then d else d.insert id
+    if i.tag == "ptr_elem_ptr" && (i.ty.bind (f.layouts[·]?)).any (·.runtimeLane) && !read.contains i.id
+    then d.insert i.id else d
   if dead.isEmpty then return f
   let body := rewriteBody (body := f.body) fun i =>
     if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i

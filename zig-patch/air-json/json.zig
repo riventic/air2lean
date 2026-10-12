@@ -95,6 +95,10 @@ const Compat = struct {
         if (v16) try file.setLength(pt.zcu.comp.io, 0) else try file.setEndPos(0);
     }
 
+    fn deleteFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !void {
+        if (v16) try dir.deleteFile(pt.zcu.comp.io, name) else try dir.deleteFile(name);
+    }
+
     fn closeFile(pt: Zcu.PerThread, file: File) void {
         if (v16) file.close(pt.zcu.comp.io) else file.close();
     }
@@ -198,6 +202,23 @@ const Compat = struct {
     /// 0.16.0 (both compare `<=` with the error count). A `un_op`.
     fn isErrorsLen(tag: Air.Inst.Tag) bool {
         return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
+    }
+
+    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.0's
+    /// `int_from_error`/`error_from_int`, the errors_len check, and 0.14.1's `error_name`, which
+    /// indexes the name table with the sign-extended code.
+    fn isErrorIntTag(tag: Air.Inst.Tag) bool {
+        return isErrorsLen(tag) or if (v17)
+            tag == .int_from_error or tag == .error_from_int
+        else if (v14)
+            tag == .error_name
+        else
+            false;
+    }
+
+    /// The `bitcast` that before 0.17.0 also lowers `@intFromError`/`@errorFromInt`.
+    fn isBitcast(tag: Air.Inst.Tag) bool {
+        return if (v17) false else tag == .bitcast;
     }
 
     /// `vector_store_elem` (0.14.1, 0.15.2; 0.16.0 rejects a runtime vector index in Sema): a
@@ -564,13 +585,19 @@ const error_table_name = "error-table.air2lean";
 /// converts between errors and integers, write the compilation's global error set in code
 /// order (code `i + 1` is `names[i]`) with the error integer's width, beside the function files.
 pub fn dumpErrorTable(pt: Zcu.PerThread) void {
-    if (!error_ints_used.load(.monotonic)) return;
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
     var dir = Compat.openDir(pt, dir_path) catch |err| {
         std.log.warn("air2lean: cannot open {s}: {s}", .{ dir_path, @errorName(err) });
         return;
     };
     defer Compat.closeDir(pt, &dir);
+    // Without a conversion, a table an earlier compilation left in the directory must not
+    // describe these files.
+    if (!error_ints_used.load(.monotonic)) {
+        Compat.deleteFile(pt, dir, error_table_name) catch |err| if (err != error.FileNotFound)
+            std.log.warn("air2lean: cannot remove a stale error table: {s}", .{@errorName(err)});
+        return;
+    }
     const file = openErrorTable(pt, dir) catch |err| {
         std.log.warn("air2lean: no error table: {s}", .{@errorName(err)});
         return;
@@ -917,12 +944,8 @@ const W = struct {
     /// error count bounds the codes it reads. Tags are compared by name: not every version has
     /// each.
     fn convertsErrorInt(w: *W, tag: Air.Inst.Tag, inst: Air.Inst.Index) bool {
-        const name = @tagName(tag);
-        if (Compat.v14 and tag == .error_name) return true;
-        for ([_][]const u8{ "int_from_error", "error_from_int", "cmp_lt_errors_len", "cmp_lte_errors_len" }) |t| {
-            if (std.mem.eql(u8, name, t)) return true;
-        }
-        if (!std.mem.eql(u8, name, "bitcast")) return false;
+        if (Compat.isErrorIntTag(tag)) return true;
+        if (!Compat.isBitcast(tag)) return false;
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         const result = w.air.typeOfIndex(inst, ip).zigTypeTag(zcu) == .error_set;
@@ -960,7 +983,9 @@ const W = struct {
         try w.j.write(@intFromEnum(inst));
         try w.field("tag");
         try w.j.write(@tagName(tag));
-        if (w.convertsErrorInt(tag, inst)) error_ints_used.store(true, .monotonic);
+        // Once set, the flag stays: skip the type queries for the rest of the compilation.
+        if (!error_ints_used.load(.monotonic) and w.convertsErrorInt(tag, inst))
+            error_ints_used.store(true, .monotonic);
         switch (tag) {
             .inferred_alloc, .inferred_alloc_comptime => {},
             else => {
@@ -1290,6 +1315,7 @@ const W = struct {
             } else if (Compat.isErrorsLen(tag)) {
                 try w.writeArgs(&.{w.data(inst).un_op});
             } else if (!Compat.v16 and Compat.isVectorStoreElem(tag)) {
+                // (`!Compat.v16` is comptime: 0.16.0+ has no `vector_store_elem` data field.)
                 // The vector pointer, the lane index and the lane value.
                 const d = w.data(inst).vector_store_elem;
                 const b = w.air.extraData(Air.Bin, d.payload).data;

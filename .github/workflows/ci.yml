@@ -834,7 +834,7 @@ jobs:
       # L10: the error integer's layouts at 8, 16 and 32 bits (`--error-limit`), against the
       # width-parameterized contract (scripts/abi-probe.py `error_layouts`).
       - name: ABI error-width probe (L10)
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && (matrix.zig == '0.16.0' || matrix.zig == '0.17.0') && !matrix.mutate }}
+        if: ${{ (!env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.zig == '0.16.0' && !matrix.mutate) || (!env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.zig == '0.17.0' && !matrix.mutate) }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |

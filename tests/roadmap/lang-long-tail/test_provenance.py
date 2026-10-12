@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import unittest
 
@@ -43,12 +44,12 @@ def air_files(stem, version):
 def export_setting(stem, key, default=""):
     """A setting of `<stem>.export` (export.sh): `module`, `root_src`, `args`, `only_versions`."""
     path = HERE / f"{stem}.export"
-    if path.exists():
-        for line in path.read_text().splitlines():
-            name, _, value = line.partition("=")
-            if name.strip() == key:
-                return value.strip().strip("'\"")
-    return default
+    if not path.exists():
+        return default
+    # Read by bash, as export.sh and check.sh source it.
+    value = subprocess.run(["bash", "-c", '. "$0"; printf %s "${!1}"', str(path), key],
+                           capture_output=True, text=True, check=True).stdout
+    return value or default
 
 
 def versions_of(stem):
@@ -71,6 +72,10 @@ def current():
                            "source_sha256": sha(HERE / f"{source_of(stem)}.zig"),
                            "filter_sha256": optional_sha(HERE / f"{stem}.filter"),
                            "export_sha256": optional_sha(HERE / f"{stem}.export"),
+                           # The exported program when it is not <stem>.zig: its compilation
+                           # fixes the error numbering (error-table.air2lean).
+                           **({"root_src_sha256": sha(HERE / export_setting(stem, "root_src"))}
+                              if export_setting(stem, "root_src") else {}),
                            "versions": list(versions_of(stem))}
                     for stem, row in SOURCES.items()},
         "exporter": "zig-patch/air-json/json.zig",
