@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Mmap
 
 /-!
 # The page allocator's invariant over full-state resources (both targets)
@@ -17,7 +17,11 @@ token owns
 * the authority over the mapping's extent with the fraction `qa` that the grant's extent share
   `q` leaves (`qa + q = 1`): `free` gets the full extent back and unmaps the whole mapping,
   `resize` cuts the mapping's tail, `remap` moves it (`mremap`),
-* the knowledge of the mapping's address (`known`): `@intFromPtr` of the grant needs no byte.
+* the knowledge of the mapping's address (`known`): `@intFromPtr` of the grant needs no byte,
+* the claim on the mapping's bytes from the grant's end on (`[p.off + n, p.off + 2^64)`; minted with
+  the mapping, `FTotalTriple.mmapC`): a growth in place takes the new bytes' claim from it, a
+  shrink gives the cut bytes' claim back, `remap` hands the whole claim to `mremap`
+  (`FTotalTriple.mremapMoveC`).
 
 `fits n k := n + 2^k + P ≤ 2^64` (the upstream overflows of `PageAllocator.map` and `realloc`,
 `docs/alloc-page.md`).
@@ -33,7 +37,7 @@ def ptok (P : Nat) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (q : Frac) : FAssn
     ⟪p.block = some b ∧ 0 ≤ p.off ∧ K = .mapped p.off.toNat ∧ S = p.off.toNat + alignUp n P ∧
       A % P = 0 ∧ p.off.toNat % P = 0 ∧ tail.size = alignUp n P - n ∧ n + P ≤ 2 ^ 64 ∧
       qa.add q = Frac.one ∧ 0 < q.val⟫ ⋆
-    (up (regionIn (p.add n) A S K 1 tail) ⋆ (bauth b S K qa ⋆ known b A))
+    (up (regionIn (p.add n) A S K 1 tail) ⋆ (bauth b S K qa ⋆ (known b A ⋆ bclaim b (p.off.toNat + n) (p.off.toNat + claimEnd))))
 
 /-- The page allocator's invariant for page size `P` and allocator state `own`. -/
 def pinv (P : Nat) (own : FAssn) : FAllocInv where

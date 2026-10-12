@@ -15,6 +15,11 @@ import Lean
 * `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ`: the pure facts `φ` that an assertion
   `X` implies (the block, offset and alignment of an owned pointer). `fsym` adds the facts of the
   precondition's atoms when it needs more facts (a rule's side goal, an `if`, a panic).
+* `@[fsym_plan]` marks a **planner extension** (a constant of type `Zig.Full.Auto.Planner`): when
+  `fsym` closes an update `EUpd P Q`, after regions and shares, it rearranges the state's atoms of
+  the assertions it plans for `Q`'s atoms (the claims planner, `AutoClaims.lean`).
+* `@[fsym_drop]` marks a **drop lemma** `EUpd (X ⋆ R) R`: an atom `X` of the state that the
+  postcondition does not use is forgotten (knowledge, claims).
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -77,6 +82,32 @@ initialize registerBuiltinAttribute {
   name := `fsym_provider
   descr := "a provider lemma `AddrOf b A X` or `Reaches b k X` of the full-state symbolic executor `fsym`"
   add := fun decl _ kind => fsymProviderExt.add decl kind
+}
+
+/-- The planner extensions (`@[fsym_plan]`), in declaration order. -/
+initialize fsymPlanExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_plan
+  descr := "a planner extension (`Zig.Full.Auto.Planner`) of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => fsymPlanExt.add decl kind
+}
+
+/-- The drop lemmas (`@[fsym_drop]`: `EUpd (X ⋆ R) R`), in declaration order. -/
+initialize fsymDropExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_drop
+  descr := "a drop lemma `EUpd (X ⋆ R) R` of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => fsymDropExt.add decl kind
 }
 
 /-- `c` is an `@[fsym_atom]`. -/

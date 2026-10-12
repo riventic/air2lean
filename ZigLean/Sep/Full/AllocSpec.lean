@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Extent
+import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.AllocSpec
 
 /-!
@@ -65,7 +66,8 @@ variable (I : FAllocInv)
 its block's extent up to the region's end. -/
 def granted (p : Ptr) (k : Nat) (bs : Array Byte) : FAssn :=
   FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q =>
-    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆ pshare p q (p.off.toNat + bs.size) I.tag)
+    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆
+      (pshare p q (p.off.toNat + bs.size) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + bs.size) I.tag))
 
 /-- After `alloc` of `len` bytes (`Zig.allocPost`). -/
 def allocPost (len k : Nat) : Option Ptr → FAssn
@@ -79,19 +81,23 @@ def resizePost (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : Bool → FAssn
 
 /-- What `resize` needs of a grant of `len` bytes besides its bytes: the token and a share `q'`
 of the grant's extent share at the grant's end (any part of it: the holder may have lent the rest
-on, as an arena does with its nodes). -/
+on, as an arena does with its nodes). The grant's claim follows its bytes: the client keeps the
+claim on the bytes it keeps (`relBytes`, `newBytes`). -/
 def held (p : Ptr) (len k A S : Nat) (K : BlockKind) (q q' : Frac) : FAssn :=
   I.tok p len k A S K q ⋆ pshare p q' (p.off.toNat + len) I.tag
 
 /-- The bytes `tl` that a shrink of a grant of `len` bytes at `p` to `n` bytes releases: the
-bytes `[n, len)`, with the cell labels `A S K`; nothing for a growth. -/
+bytes `[n, len)`, with the cell labels `A S K`, and the claim on them; nothing for a growth. -/
 def relBytes (p : Ptr) (A S : Nat) (K : BlockKind) (n len : Nat) (tl : Array Byte) : FAssn :=
-  if n < len then ⟪tl.size = len - n⟫ ⋆ up (regionIn (p.add n) A S K 1 tl) else emp
+  if n < len then ⟪tl.size = len - n⟫ ⋆
+    (up (regionIn (p.add n) A S K 1 tl) ⋆ pclaim p (p.off.toNat + n) (p.off.toNat + len) I.tag)
+  else emp
 
 /-- The bytes `[len, n)` that a growth of a grant at `p` from `len` to `n` bytes adds, any values,
-with the cell labels `A S K`; nothing for a shrink. -/
+with the cell labels `A S K`, and the claim on them; nothing for a shrink. -/
 def newBytes (p : Ptr) (A S : Nat) (K : BlockKind) (len n : Nat) : FAssn :=
-  if len < n then FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆ up (regionIn (p.add len) A S K 1 t)
+  if len < n then FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆
+    (up (regionIn (p.add len) A S K 1 t) ⋆ pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)
   else emp
 
 /-- **The refined `resize`** (`docs/sep-full-state.md` §`FAllocSpec` refined): from a grant of
@@ -102,8 +108,8 @@ released bytes `tl` of a shrink. -/
 def rresizePost (p : Ptr) (k len n A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte) :
     Bool → FAssn
   | true => I.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind => ⟪K'.norm = K.norm⟫ ⋆
-      (I.held p n k A S' K' q q' ⋆ newBytes p A S' K' len n)
-  | false => I.own ⋆ (I.held p len k A S K q q' ⋆ relBytes p A S K n len tl)
+      (I.held p n k A S' K' q q' ⋆ I.newBytes p A S' K' len n)
+  | false => I.own ⋆ (I.held p len k A S K q q' ⋆ I.relBytes p A S K n len tl)
 
 /-- After `remap` of the region `bs` at `p` to `n` bytes (`Zig.remapPost`). -/
 def remapPost (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : Option Ptr → FAssn
@@ -132,7 +138,7 @@ structure FAllocSpec (L : FLogic) (vt : RawVTable) (ctx : Ptr) (I : FAllocInv) :
     (tl : Array Byte), k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
     q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
     L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
-      FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl)
   remap : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte), k < 64 →
     0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
@@ -330,60 +336,82 @@ theorem ac_cast {P Q : FAssn} {r : Res} (h : P r) (e : P = Q) : Q r := e ▸ h
 
 theorem FAllocInv.granted_intro (I : FAllocInv) {p : Ptr} {k A S : Nat} {K : BlockKind} {q : Frac}
     {bs : Array Byte} {r : Res}
-    (h : (up (regionIn p A S K (2 ^ k) bs) ⋆ I.held p bs.size k A S K q q) r) : I.granted p k bs r :=
-  ⟨A, S, K, q, h⟩
+    (h : (up (regionIn p A S K (2 ^ k) bs) ⋆ (I.held p bs.size k A S K q q ⋆
+      pclaim p p.off.toNat (p.off.toNat + bs.size) I.tag)) r) : I.granted p k bs r :=
+  ⟨A, S, K, q, ac_cast h (by simp only [FAllocInv.held]; ac_rfl)⟩
+
+/-- Two adjacent parts of a region and of its claim are one. -/
+theorem region_claim_join {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs bs' : Array Byte}
+    {t : STag} {r : Res} :
+    ((up (regionIn p A S K a bs) ⋆ pclaim p p.off.toNat (p.off.toNat + bs.size) t) ⋆
+      (up (regionIn (p.add bs.size) A S K 1 bs') ⋆
+        pclaim p (p.off.toNat + bs.size) (p.off.toNat + (bs.size + bs'.size)) t)) r →
+    (up (regionIn p A S K a (bs ++ bs')) ⋆
+      pclaim p p.off.toNat (p.off.toNat + (bs ++ bs').size) t) r := fun h => by
+  have h := ac_cast h (Q := (up (regionIn p A S K a bs) ⋆ up (regionIn (p.add bs.size) A S K 1 bs')) ⋆
+    (pclaim p p.off.toNat (p.off.toNat + bs.size) t ⋆
+      pclaim p (p.off.toNat + bs.size) (p.off.toNat + (bs.size + bs'.size)) t)) (by ac_rfl)
+  rw [pclaim_split (by omega) (by omega), Array.size_append] at *
+  exact sep_mono_left (fun _ x => up_imp (fun y hy => Region.regionIn_join hy) (sep_up x)) h
 
 /-- **The whole-region `resize` is a corollary of the refined one**: a client that holds the whole
-grant splits off the bytes a shrink releases, keeps the rest (relabelled to the new token's labels:
-`EUpd.relabel`) and joins the new bytes of a growth to it. -/
+grant splits off the bytes a shrink releases and their claim, keeps the rest (relabelled to the
+new token's labels: `EUpd.relabel`) and joins the new bytes of a growth and their claim to it. -/
 theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {s : Slice}
     {k : Nat} {n : BitVec 64} {bs : Array Byte}
     (hr : ∀ (A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte), q'.val ≤ q.val →
       (n.toNat < s.len.toNat → q' = q) →
       L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
-        FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
+        I.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
         (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
     (hs : s.len.toNat = bs.size) :
     L.T (I.own ⋆ I.granted s.ptr k bs) c (I.resizePost s.ptr k bs n.toNat) := by
   refine L.pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
       FAssn.ex fun q : Frac =>
-        up (regionIn s.ptr A S K (2 ^ k) bs) ⋆ (I.own ⋆ I.held s.ptr bs.size k A S K q q)) ?_ ?_
+        (up (regionIn s.ptr A S K (2 ^ k) bs) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ⋆
+          (I.own ⋆ I.held s.ptr bs.size k A S K q q)) ?_ ?_
   rotate_left
   · intro r hr
     obtain ⟨A, hr⟩ := sep_exR hr; obtain ⟨S, hr⟩ := sep_exR hr
     obtain ⟨K, hr⟩ := sep_exR hr; obtain ⟨q, hr⟩ := sep_exR hr
-    rw [sep_left_comm_eq] at hr
-    exact ⟨A, S, K, q, hr⟩
+    exact ⟨A, S, K, q, ac_cast hr (by simp only [FAllocInv.held]; ac_rfl)⟩
   refine L.ex fun A => L.ex fun S => L.ex fun K => L.ex fun q => ?_
   have hq : q.val ≤ q.val := Rat.le_refl
   by_cases hcut : n.toNat < bs.size
-  · -- a shrink: split off the released bytes
+  · -- a shrink: split off the released bytes and their claim
     have hks : (bs.extract 0 n.toNat).size = n.toNat := by simp; omega
     have hts : (bs.extract n.toNat bs.size).size = bs.size - n.toNat := by simp
     have ht := hr A S K q q (bs.extract n.toNat bs.size) hq (fun _ => rfl)
     rw [hs] at ht
-    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat))) ht)
-      fun r hr => ?_) fun v => ?_
-    · have h1 := sep_mono_left (fun r' hr' => up_sep (up_imp (fun x hx =>
-        Region.regionIn_split hx (k := n.toNat) (a' := 1) (Nat.le_of_lt hcut) (Nat.mod_one _)) hr')) hr
-      have h2 := sep_mono_left (fun r' hr' => sep_mono_right (fun _ x =>
-        (sep_lift.mpr ⟨hts, x⟩ : (⟪(bs.extract n.toNat bs.size).size = bs.size - n.toNat⟫ ⋆ _) _)) hr') h1
+    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+      pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag) ht) fun r hr => ?_) fun v => ?_
+    · rw [← pclaim_split (m := s.ptr.off.toNat + n.toNat) (by omega) (by omega)] at hr
+      have h1 := sep_mono_left (Q := (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+          up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size))) ⋆
+          (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag))
+        (fun r' hr' => sep_mono_left (fun _ x => up_sep (up_imp (fun x hx =>
+        Region.regionIn_split hx (k := n.toNat) (a' := 1) (Nat.le_of_lt hcut) (Nat.mod_one _)) x)) hr') hr
       simp only [FAllocInv.relBytes, if_pos hcut]
-      have e : ∀ (a b c : FAssn), ((a ⋆ b) ⋆ c) = ((c ⋆ b) ⋆ a) := by intros; ac_rfl
-      rw [e] at h2
-      exact sep_mono_left (fun _ x => sep_assoc x) h2
+      refine ac_cast (P := (I.own ⋆ (I.held s.ptr bs.size k A S K q q ⋆ (⟪(bs.extract n.toNat bs.size).size =
+        bs.size - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size)) ⋆
+          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag)))) ⋆
+        (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag))
+        ?_ rfl
+      refine sep_mono_left (fun _ x => sep_mono_right (fun _ y => sep_mono_right
+        (fun _ z => sep_lift.mpr ⟨hts, z⟩) y) x) (ac_cast h1 (by ac_rfl))
     cases v with
     | true =>
       simp only [FAllocInv.rresizePost, FAllocInv.newBytes, if_neg (show ¬ bs.size < n.toNat by omega),
         sep_emp_eq]
       refine EUpd.trans (P' := FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
           ⟪K'.norm = K.norm⟫ ⋆ (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
-            (I.own ⋆ I.held s.ptr n.toNat k A S' K' q q)))
+            (I.own ⋆ (I.held s.ptr n.toNat k A S' K' q q ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag))))
         (EUpd.of_imp fun r hr => ?_) (EUpd.exAll fun S' => EUpd.exAll fun K' =>
         EUpd.lift fun hK => EUpd.trans (EUpd.frame (EUpd.relabel (p := s.ptr) (A := A) (S := S) (S' := S')
           (K := K) (K' := K') (a := 2 ^ k) (bs := bs.extract 0 n.toNat) hK)) (EUpd.of_imp fun r hr => ?_))
       · -- open the token's labels
-        have e : ∀ (a b c : FAssn), ((a ⋆ b) ⋆ c) = (b ⋆ (c ⋆ a)) := by intros; ac_rfl
+        have e : ∀ (a b c d : FAssn), ((a ⋆ b) ⋆ (c ⋆ d)) = (b ⋆ (a ⋆ (c ⋆ d))) := by intros; ac_rfl
         rw [e] at hr
         obtain ⟨S', hr⟩ := sep_ex.mp hr; obtain ⟨K', hr⟩ := sep_ex.mp hr
         obtain ⟨hK, hr⟩ := sep_lift.mp (sep_assoc hr)
@@ -396,33 +424,39 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
     | false =>
       simp only [FAllocInv.rresizePost, FAllocInv.relBytes, if_pos hcut]
       refine EUpd.of_imp fun r hr => ?_
-      have e : ∀ (a b c d f : FAssn), ((a ⋆ (b ⋆ (c ⋆ d))) ⋆ f) = (a ⋆ (c ⋆ ((f ⋆ d) ⋆ b))) := by
-        intros; ac_rfl
-      rw [e] at hr
-      refine sep_mono_right (fun r' hr' => ?_) hr
-      obtain ⟨-, hr'⟩ := sep_lift.mp hr'
-      refine FAllocInv.granted_intro I (sep_mono_left (fun _ x => up_imp (fun y hy => ?_) (sep_up x)) hr')
-      have := Region.regionIn_join (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k) (a' := 1)
-        (bs := bs.extract 0 n.toNat) (bs' := bs.extract n.toNat bs.size) (by rw [hks]; exact hy)
-      rwa [Array.extract_append_extract, Nat.min_def, if_pos (Nat.zero_le _), Nat.max_def,
-        if_pos (Nat.le_of_lt hcut), Array.extract_size] at this
-  · -- a growth (or the same length): the whole region stays with the client
+      obtain ⟨-, hr⟩ := sep_lift.mp (ac_cast hr (Q := ⟪(bs.extract n.toNat bs.size).size = bs.size - n.toNat⟫ ⋆
+        (I.own ⋆ (I.held s.ptr bs.size k A S K q q ⋆
+          ((up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+            pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag) ⋆
+          (up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size)) ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag))))) (by ac_rfl))
+      have hj := fun r => region_claim_join (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
+        (bs := bs.extract 0 n.toNat) (bs' := bs.extract n.toNat bs.size) (t := I.tag) (r := r)
+      rw [hks, show n.toNat + (bs.extract n.toNat bs.size).size = bs.size by simp; omega,
+        Array.extract_append_extract, Nat.min_def, if_pos (Nat.zero_le _), Nat.max_def,
+        if_pos (Nat.le_of_lt hcut), Array.extract_size] at hj
+      exact sep_mono_right (fun _ x => FAllocInv.granted_intro I (A := A) (S := S) (K := K) (q := q)
+        (ac_cast (sep_mono_right (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+          pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) (fun _ y => hj _ y) x)
+          (by ac_rfl))) hr
+  · -- a growth (or the same length): the whole region and its claim stay with the client
     have hle : bs.size ≤ n.toNat := Nat.le_of_not_lt hcut
     have ht := hr A S K q q #[] hq (fun h' => absurd (hs ▸ h') hcut)
     rw [hs] at ht
     simp only [FAllocInv.relBytes, if_neg hcut, sep_emp_eq] at ht
-    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) bs)) ht)
-      fun r hr => sep_comm hr) fun v => ?_
+    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+      pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ht) fun r hr => sep_comm hr) fun v => ?_
     cases v with
     | true =>
       simp only [FAllocInv.rresizePost]
       refine EUpd.trans (P' := FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
           ⟪K'.norm = K.norm⟫ ⋆ (up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
-            (I.own ⋆ (I.held s.ptr n.toNat k A S' K' q q ⋆ FAllocInv.newBytes s.ptr A S' K' bs.size n.toNat))))
+            (I.own ⋆ (I.held s.ptr n.toNat k A S' K' q q ⋆ (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag ⋆
+              I.newBytes s.ptr A S' K' bs.size n.toNat)))))
         (EUpd.of_imp fun r hr => ?_) (EUpd.exAll fun S' => EUpd.exAll fun K' =>
         EUpd.lift fun hK => EUpd.trans (EUpd.frame (EUpd.relabel (p := s.ptr) (A := A) (S := S) (S' := S')
           (K := K) (K' := K') (a := 2 ^ k) (bs := bs) hK)) (EUpd.of_imp fun r hr => ?_))
-      · have e : ∀ (a b c : FAssn), ((a ⋆ b) ⋆ c) = (b ⋆ (c ⋆ a)) := by intros; ac_rfl
+      · have e : ∀ (a b c d : FAssn), ((a ⋆ b) ⋆ (c ⋆ d)) = (b ⋆ (a ⋆ (c ⋆ d))) := by intros; ac_rfl
         rw [e] at hr
         obtain ⟨S', hr⟩ := sep_ex.mp hr; obtain ⟨K', hr⟩ := sep_ex.mp hr
         obtain ⟨hK, hr⟩ := sep_lift.mp (sep_assoc hr)
@@ -431,27 +465,122 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
         refine sep_mono_right (fun r' hr' => ?_) hr
         by_cases hgrow : bs.size < n.toNat
         · simp only [FAllocInv.newBytes, if_pos hgrow] at hr'
-          obtain ⟨t, h4⟩ := sep_exR (sep_assoc' hr')
-          obtain ⟨htz, h5⟩ := sep_lift.mp (ac_cast h4 (Q := ⟪t.size = n.toNat - bs.size⟫ ⋆
-            ((up (regionIn s.ptr A S' K' (2 ^ k) bs) ⋆ up (regionIn (s.ptr.add bs.size) A S' K' 1 t)) ⋆
+          obtain ⟨t, h4⟩ := sep_exR (ac_cast hr' (Q := (up (regionIn s.ptr A S' K' (2 ^ k) bs) ⋆
+            (I.held s.ptr n.toNat k A S' K' q q ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag)) ⋆ _) (by ac_rfl))
+          obtain ⟨htz, h4⟩ := sep_lift.mp (ac_cast h4 (Q := ⟪t.size = n.toNat - bs.size⟫ ⋆
+            (((up (regionIn s.ptr A S' K' (2 ^ k) bs) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ⋆
+              (up (regionIn (s.ptr.add bs.size) A S' K' 1 t) ⋆
+                pclaim s.ptr (s.ptr.off.toNat + bs.size) (s.ptr.off.toNat + n.toNat) I.tag)) ⋆
               I.held s.ptr n.toNat k A S' K' q q)) (by ac_rfl))
+          have h5 := h4
+          rw [show s.ptr.off.toNat + n.toNat = s.ptr.off.toNat + (bs.size + t.size) by omega] at h5
           have hsz : (bs ++ t).size = n.toNat := by simp [htz]; omega
           refine ⟨bs ++ t, sep_lift.mpr ⟨⟨hsz, ?_⟩, FAllocInv.granted_intro I (A := A) (S := S') (K := K') (q := q) ?_⟩⟩
           · show (bs ++ t).extract 0 bs.size = bs.extract 0 (bs ++ t).size
             simp only [Array.size_append]
             rw [Array.extract_append_left, Array.extract_size]
             apply Array.ext <;> simp
-          · rw [hsz]
-            exact sep_mono_left (fun _ x => up_imp (fun y hy => Region.regionIn_join hy) (sep_up x)) h5
+          · have h6 := sep_mono_left (Q := up (regionIn s.ptr A S' K' (2 ^ k) (bs ++ t)) ⋆
+              pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + (bs ++ t).size) I.tag)
+              (fun _ x => region_claim_join x) h5
+            rw [hsz] at h6 ⊢
+            exact ac_cast h6 (by ac_rfl)
         · have hnb : n.toNat = bs.size := by omega
           simp only [FAllocInv.newBytes, if_neg hgrow, sep_emp_eq] at hr'
           refine ⟨bs, sep_lift.mpr ⟨⟨hnb.symm, rfl⟩, FAllocInv.granted_intro I (A := A) (S := S') (K := K') (q := q) ?_⟩⟩
-          rw [← hnb]; exact hr'
+          rw [← hnb]; exact ac_cast hr' (by rw [hnb])
     | false =>
       simp only [FAllocInv.rresizePost, FAllocInv.relBytes, if_neg hcut, sep_emp_eq]
       refine EUpd.of_imp fun r hr => ?_
       rw [sep_assoc_eq] at hr
-      refine sep_mono_right (fun _ x => FAllocInv.granted_intro I (sep_comm x)) hr
+      refine sep_mono_right (fun _ x => FAllocInv.granted_intro I (ac_cast x (by ac_rfl))) hr
+
+/-! ### Claims follow bytes: no client loses
+
+In the refined `resize` the grant's claim follows its bytes: `held` carries no claim, the bytes a
+shrink releases come with their claim (`relBytes`) and the new bytes of a growth with theirs
+(`newBytes`). A client that holds the claim on the whole grant next to the token loses nothing:
+it keeps the claim on the bytes it keeps and gets the claim on the whole new grant back
+(`FAllocInv.resize_whole_of`). Nothing else changes, so the refined form asks less of a client
+than a form whose `held` carries the whole claim, and gives the same claims back. -/
+
+/-- The bytes `[n, len)` a shrink releases, without their claim. -/
+def FAllocInv.relRegion (p : Ptr) (A S : Nat) (K : BlockKind) (n len : Nat) (tl : Array Byte) : FAssn :=
+  if n < len then ⟪tl.size = len - n⟫ ⋆ up (regionIn (p.add n) A S K 1 tl) else emp
+
+/-- The bytes `[len, n)` a growth adds, without their claim. -/
+def FAllocInv.newRegion (p : Ptr) (A S : Nat) (K : BlockKind) (len n : Nat) : FAssn :=
+  if len < n then FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆ up (regionIn (p.add len) A S K 1 t)
+  else emp
+
+/-- `held` with the claim on the whole grant. -/
+def FAllocInv.heldW (I : FAllocInv) (p : Ptr) (len k A S : Nat) (K : BlockKind) (q q' : Frac) : FAssn :=
+  I.held p len k A S K q q' ⋆ pclaim p p.off.toNat (p.off.toNat + len) I.tag
+
+/-- `rresizePost` with the claim on the whole grant in `held`. -/
+def FAllocInv.rresizePostW (I : FAllocInv) (p : Ptr) (k len n A S : Nat) (K : BlockKind) (q q' : Frac)
+    (tl : Array Byte) : Bool → FAssn
+  | true => I.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind => ⟪K'.norm = K.norm⟫ ⋆
+      (I.heldW p n k A S' K' q q' ⋆ FAllocInv.newRegion p A S' K' len n)
+  | false => I.own ⋆ (I.heldW p len k A S K q q' ⋆ FAllocInv.relRegion p A S K n len tl)
+
+/-- **No client loses by claims following bytes**: the refined `resize` (claims in `relBytes` and
+`newBytes`) gives the form in which `held` carries the claim on the whole grant, before and after. -/
+theorem FAllocInv.resize_whole_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {p : Ptr}
+    {k len n A S : Nat} {K : BlockKind} {q q' : Frac} {tl : Array Byte}
+    (hr : L.T (I.own ⋆ (I.held p len k A S K q q' ⋆ I.relBytes p A S K n len tl)) c
+      (I.rresizePost p k len n A S K q q' tl)) :
+    L.T (I.own ⋆ (I.heldW p len k A S K q q' ⋆ FAllocInv.relRegion p A S K n len tl)) c
+      (I.rresizePostW p k len n A S K q q' tl) := by
+  by_cases hcut : n < len
+  · refine L.eupdPost (L.pre (L.frame (R := pclaim p p.off.toNat (p.off.toNat + n) I.tag) hr)
+      fun r hr => ?_) fun v => EUpd.of_imp fun r hr => ?_
+    · simp only [FAllocInv.heldW, FAllocInv.relRegion, FAllocInv.relBytes, if_pos hcut] at hr ⊢
+      rw [← pclaim_split (m := p.off.toNat + n) (by omega) (by omega)] at hr
+      exact ac_cast hr (by ac_rfl)
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.newBytes, FAllocInv.newRegion,
+        if_neg (show ¬ len < n by omega), sep_emp_eq] at hr ⊢
+      refine sep_mono_right (fun _ x => ?_) (sep_assoc hr)
+      obtain ⟨S', x⟩ := sep_ex.mp x; obtain ⟨K', x⟩ := sep_ex.mp x
+      obtain ⟨hK, x⟩ := sep_lift.mp (sep_assoc x)
+      exact ⟨S', K', sep_lift.mpr ⟨hK, x⟩⟩
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.heldW, FAllocInv.relRegion,
+        FAllocInv.relBytes, if_pos hcut] at hr ⊢
+      rw [← pclaim_split (m := p.off.toNat + n) (by omega) (by omega)]
+      exact ac_cast hr (by ac_rfl)
+  · refine L.eupdPost (L.pre (L.frame (R := pclaim p p.off.toNat (p.off.toNat + len) I.tag) hr)
+      fun r hr => ?_) fun v => EUpd.of_imp fun r hr => ?_
+    · simp only [FAllocInv.heldW, FAllocInv.relRegion, FAllocInv.relBytes, if_neg hcut] at hr ⊢
+      exact ac_cast hr (by ac_rfl)
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW] at hr ⊢
+      refine sep_mono_right (fun _ x => ?_) (sep_assoc hr)
+      obtain ⟨S', x⟩ := sep_ex.mp x; obtain ⟨K', x⟩ := sep_ex.mp x
+      obtain ⟨hK, x⟩ := sep_lift.mp (sep_assoc x)
+      refine ⟨S', K', sep_lift.mpr ⟨hK, ?_⟩⟩
+      simp only [FAllocInv.heldW]
+      by_cases hgrow : len < n
+      · simp only [FAllocInv.newBytes, FAllocInv.newRegion, if_pos hgrow] at x ⊢
+        obtain ⟨t, x⟩ := sep_ex.mp (ac_cast x (Q := (FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆
+          (up (regionIn (p.add len) A S' K' 1 t) ⋆ pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)) ⋆
+          (I.held p n k A S' K' q q' ⋆ pclaim p p.off.toNat (p.off.toNat + len) I.tag)) (by ac_rfl))
+        rw [← pclaim_split (m := p.off.toNat + len) (by omega) (by omega)]
+        refine sep_mono_right (fun _ y => ⟨t, y⟩) (ac_cast x (Q := (I.held p n k A S' K' q q' ⋆
+          (pclaim p p.off.toNat (p.off.toNat + len) I.tag ⋆
+            pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)) ⋆
+          (⟪t.size = n - len⟫ ⋆ up (regionIn (p.add len) A S' K' 1 t))) (by ac_rfl))
+      · have hn : n = len := by omega
+        subst hn
+        simp only [FAllocInv.newBytes, FAllocInv.newRegion, if_neg hgrow, sep_emp_eq] at x ⊢
+        exact x
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.heldW, FAllocInv.relRegion,
+        FAllocInv.relBytes, if_neg hcut] at hr ⊢
+      exact ac_cast hr (by ac_rfl)
 
 /-- **The whole-region `resize` of an allocator** (`FAllocInv.resize_granted_of`). -/
 theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
