@@ -384,10 +384,14 @@ and the native wide bit-operation differential. What changes:
 
 ### Current declarations
 
-- Traced and reusable by content, declared `"inputs": ["**"], "tree_names": true` (the whole
-  tree): lean rows of 0.14.1, 0.15.2 and 0.17.0, the three build-mode rows and the five
-  mutation shards. They read about a third of the tree once `git status` is modelled (see
-  above): to be narrowed from their traces.
+- Traced, narrowed to top-level directories from their traces (run 38187552806,
+  `scripts/ci-reuse.py suggest`, then coarsened so that a new file in an already-read directory
+  needs no declaration change), with `"tree_names": true`: the three build-mode rows and the
+  five mutation shards (`Air2Lean`, `Proofs`, `ZigLean`, `assurance`, `examples`, `scripts`,
+  `tests`, `zig-patch` and the Lake files), the lean rows of 0.14.1 (the same without
+  `examples`), 0.15.2 and 0.17.0 (plus `case-studies`, `docs`, `tutorials`). A change confined
+  to other paths (`docs/**`, `tutorials/**`, `qualification/**`, `tools/**`, `.github/**`
+  outside the row's own steps, top-level documents) reuses them: 6-7 of the last 30 merged PRs.
 - `commit_bound` because they read the whole tree: the golden rows of 0.14.1, 0.15.2 and 0.17.0.
   `scripts/check.sh` copies every tracked file into its check tree, so their content key is the
   whole tree and could only match an identical tree; tracing made them 1.4-1.9x slower.

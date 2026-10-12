@@ -43,21 +43,60 @@
     },
     "test/0.16.0/Debug": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/ReleaseFast": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/ReleaseSmall": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.17.0/golden": {
       "commit_bound": true,
@@ -65,9 +104,25 @@
     },
     "test/0.17.0/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "case-studies/**",
+        "docs/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "tutorials/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.15.2/golden": {
       "commit_bound": true,
@@ -75,9 +130,24 @@
     },
     "test/0.15.2/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "case-studies/**",
+        "docs/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "tutorials/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.14.1/golden": {
       "commit_bound": true,
@@ -85,39 +155,116 @@
     },
     "test/0.14.1/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/1": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/2": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/3": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/4": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/5": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "macos/0.17.0": {
       "commit_bound": true,
