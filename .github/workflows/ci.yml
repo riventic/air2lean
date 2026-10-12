@@ -234,8 +234,10 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
-          restore-keys: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: |
+            lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-
+            lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Install elan
         if: steps.restore.outputs.cache-hit != 'true'
@@ -959,15 +961,15 @@ jobs:
           python3 -I -B tests/roadmap/modular-output/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake env lean tests/roadmap/modular-output/Split.lean
 
-      # V01 slice (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, the
-      # committed Proofs/{Basic,Recursion}/AirCert.lean are current and kernel-check, their AIR is
-      # the decoded golden AIR, and a one-operator AIR mutation breaks that function's theorem.
+      # V01/V02 (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, every
+      # committed Proofs/<Ex>/AirCert.lean is current and kernel-checks, its AIR is the decoded
+      # golden AIR, and a one-operator AIR mutation breaks that function's theorem.
       - name: AIR semantics certificates
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
-          lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main
+          lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main
           python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
@@ -1081,6 +1083,20 @@ jobs:
           lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
+      - name: Generic allocator specification
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/alloc-spec"
+          lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
+
+      - name: Full-state separation logic
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sep-full"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+
       - name: Generic sync specifications (futex, mutex, event, wait group, condition)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
@@ -1133,10 +1149,10 @@ jobs:
           fuzz_dir="$RUNNER_TEMP/air-fuzz"
           mkdir -p "$fuzz_dir/tmp"
           export TMPDIR="$fuzz_dir/tmp"
-          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 300 "$fuzz_dir/failures" 2>&1 \
+          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 1000 "$fuzz_dir/failures" 2>&1 \
             | tee "$fuzz_dir/fuzz.log"
 
-      # Q01 heavy differential, capped at 3 seeds: generated Zig is run natively (stock Zig),
+      # Q01 heavy differential, capped at 3 seeds per profile (core and wide): generated Zig is run natively (stock Zig),
       # exported with the patched compiler, translated, and the Lean values must equal native.
       # Larger ranges are a manual job (docs/fuzzing.md).
       - name: Generated Zig differential fuzzing
@@ -1145,7 +1161,11 @@ jobs:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_FUZZ_HEAVY_MAX: "3"
-        run: tests/roadmap/fuzz/check.sh --heavy "$RUNNER_TEMP/zig-fuzz" 0 3
+        run: |
+          set -euo pipefail
+          tests/roadmap/fuzz/check.sh --heavy "$RUNNER_TEMP/zig-fuzz" 0 3 core
+          # The wide profile (u16/u64/i64, arrays, slices, optionals, structs) is a separate seed space.
+          tests/roadmap/fuzz/check.sh --heavy "$RUNNER_TEMP/zig-fuzz" 0 3 wide
 
       # L12: explicit `ExternInit` external initial state, generated-client proofs and
       # rejection of every absent/partly undefined global initializer. Hand-written AIR only.
@@ -1264,6 +1284,32 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/roadmap/illegal-behavior/check.sh
+      # noalias parameters (docs/illegal-behavior.md row 43): overlapping calls are `.illegal`,
+      # disjoint ones return values, an escaping noalias pointer is rejected.
+      - name: noalias parameters
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/noalias/check.sh
+      # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
+      # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
+      - name: Translated allocators
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
+          bash tests/roadmap/alloc-translated/check.sh
+      # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
+      # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
+      - name: Translated FixedBufferAllocator against AllocSpec
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame
+          bash tests/roadmap/alloc-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
@@ -1567,14 +1613,26 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
 
-      # L10: error-code widths. Width-quantified proofs (proof-only module) and the
-      # hand-written 16/8/10/17-bit fixtures; only the default width has native evidence.
+      # L10: error-code widths. Width-quantified proofs (proof-only module), the hand-written
+      # 16/8/10/17-bit fixtures, the recorded native observations against the model, and this
+      # host's stock compiler on the same 22 configurations.
       - name: Error-code widths (--error-limit) proofs, fixtures and rejections
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
           bash tests/roadmap/error-width/check.sh
+
+      # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
+      # separation-logic rules and kernel-checked examples, and the runtime regressions.
+      - name: OS page-mapping model rules and runtime regressions
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Mmap
+          lake env lean tests/roadmap/os-mmap/Check.lean
 
       # OSF/OST/OSY/OSK/OSG/OSM-02: the trusted OS thread primitives (futex, clone/pthread,
       # clocks, interrupts, macOS malloc): proof-only rules with kernel-checked schedules, and
@@ -1621,6 +1679,20 @@ jobs:
           export AIR2LEAN_LEAN=$(lake env which lean)
           export LEAN_PATH=$(lake env printenv LEAN_PATH)
           bash tests/roadmap/aggregate-casts/check.sh --native
+
+      # L-series long tail: error values as parameters (L10), vector casts (L09) on the
+      # committed 0.14.1-0.17.0 exports (retained translations, proofs, native outputs of every
+      # version, negative tests, semantic mutants) and this host's native probes.
+      - name: Language long tail (error parameters, vector casts)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE_0_16: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.VecCast Air2Lean air2lean
+          export AIR2LEAN_LEAN=$(lake env which lean)
+          export LEAN_PATH=$(lake env printenv LEAN_PATH)
+          bash tests/roadmap/lang-long-tail/check.sh --native
 
       # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
       # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
@@ -1675,6 +1747,23 @@ jobs:
           for expected in tests/roadmap/aarch64-abi/expected/0.14.1/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
+      # Zig 0.17.0 aligns f80 (and f128 on macOS) and the f80x2 vector to 8: declared layout
+      # divergences (Model.lean); the f80x2 image is not compared.
+      - name: aarch64 ABI profile proofs (T04, 0.17.0)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.17.0/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt" --skip f80x2
           done
 
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
@@ -1797,7 +1886,7 @@ jobs:
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
-          AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
+          AIR2LEAN_DIFF: ${{ matrix.full && '1' || matrix.zig == '0.14.1' && '1' || '0' }}
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
           AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
@@ -2485,6 +2574,15 @@ jobs:
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
             --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.14.1-ReleaseSafe.txt"
 
+      - name: aarch64-macos ABI qualification (T04, 0.17.0)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.0' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.17.0/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.17.0-ReleaseSafe.txt"
+
       # Zig 0.17.0 (in qualification) contract: tests/roadmap/abi-probes/0.17.0/ (LLVM 22 features).
       - name: macOS ABI target probe (0.17.0)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.0' }}
@@ -2549,8 +2647,10 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
-          restore-keys: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: |
+            lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-
+            lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Restore Lake build (macOS tests/diff package)
         if: ${{ !env.AIR2LEAN_REUSED }}
@@ -2662,12 +2762,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # T04: native aarch64-linux ABI qualification (docs/aarch64-abi.md). Probe and compare only:
-  # aarch64-linux translation stays undeclared, so this job builds no patched compiler, Lean
-  # or proofs (the profile's proofs run in the test job, against the same expected file).
+  # T04: native aarch64-linux ABI qualification (docs/aarch64-abi.md), then the declared
+  # aarch64-linux translation paths (Zig 0.16.0, 0.15.2, 0.14.1; docs/target-matrix.md): fresh
+  # AIR, translation, differential test and proofs on this host. The profile's Model.lean
+  # proofs run in the test job, against the same expected files.
   aarch64-linux:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
+    timeout-minutes: 150
     defaults:
       run:
         shell: bash scripts/ci-trace.sh {0}
@@ -2688,7 +2789,7 @@ jobs:
         run: python3 scripts/ci-reuse.py decide --job aarch64-linux --row "$AIR2LEAN_ROW"
 
       # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
-      - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
+      - name: Install stock zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: |
           set -euo pipefail
@@ -2703,6 +2804,7 @@ jobs:
           0.16.0 ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
           0.15.2 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
           0.14.1 f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+          0.17.0 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
           EOF
 
       - name: aarch64-linux ABI qualification (T04, 0.16.0)
@@ -2732,6 +2834,15 @@ jobs:
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
             --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.14.1-ReleaseSafe.txt"
 
+      - name: aarch64-linux ABI qualification (T04, 0.17.0)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.17.0/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.17.0-ReleaseSafe.txt"
+
       - name: Upload aarch64-linux observation
         if: ${{ !env.AIR2LEAN_REUSED && failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -2739,6 +2850,167 @@ jobs:
           name: abi-aarch64-linux
           path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
+
+      # T04: translation on this host. The patched compilers, Lean and the examples' goldens:
+      # AIR is the x86_64-linux golden set (plus any air-linux-aarch64/ overlay), the translation
+      # is Proofs/<Ex>/Gen.lean unless tests/golden/<version>/<ex>/Gen-linux-aarch64.lean exists.
+      - name: Cache patched zig (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        id: cache-zig-air-arm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            zig-air-0.16.0/
+            zig-air-0.15.2/
+            zig-air-0.14.1/
+          key: zig-air-linux-arm64-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.16.0/hook.patch', 'zig-patch/0.15.2/hook.patch', 'zig-patch/0.14.1/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      - name: Build patched zig (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED && steps.cache-zig-air-arm.outputs.cache-hit != 'true' }}
+        run: |
+          set -euo pipefail
+          for v in 0.16.0 0.15.2 0.14.1; do
+            PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+              || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+          done
+
+      - name: Install elan (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" "$url"
+          echo "$sha256  $RUNNER_TEMP/elan.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (aarch64-linux root package)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-linux-arm64-translate-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (aarch64-linux tests/diff package)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-linux-arm64-translate-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: lake build
+
+      # Fresh native AIR export, compared with the goldens, translated, built and differentially
+      # tested against stock Zig on this host. Never writes a tracked file.
+      - name: aarch64-linux golden AIR, translate, differential test (0.16.0)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.16.0/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux proofs (0.16.0)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          tree=$(cat .lake/check-reports/0.16.0/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      - name: aarch64-linux golden AIR, translate, differential test (0.15.2)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.15.2/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux proofs (0.15.2)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          tree=$(cat .lake/check-reports/0.15.2/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      - name: aarch64-linux golden AIR, translate, differential test (0.14.1)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.14.1/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.14.1
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.14.1/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux loop-switch dispatch native regressions (0.14.1)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_DISPATCH_ZIG_VERSION: "0.14.1"
+          AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-0.14.1/bin/zig
+          AIR2LEAN_DISPATCH_ZIG_STOCK: ${{ runner.temp }}/host-zig-0.14.1/zig
+        run: tests/roadmap/dispatch/check.sh --native-only
+
+      - name: aarch64-linux proofs (0.14.1)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          tree=$(cat .lake/check-reports/0.14.1/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      # Q04/Q05: this host's rows of the accounting table (docs/host-accounting.md), kept even
+      # when a differential gate fails.
+      - name: Upload the aarch64-linux differential summaries
+        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-aarch64-linux
+          path: ${{ runner.temp }}/diff-summary
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Checkout unchanged by verification (aarch64-linux)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+
+      # The aarch64-linux dumps are the source of tests/golden/<version>/<ex>/air-linux-aarch64/.
+      - name: Upload the dumped aarch64-linux AIR
+        if: ${{ !env.AIR2LEAN_REUSED && failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-linux-arm64
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7
 
       # Every workspace path that a traced step observed is inside the part's declared inputs
       # (.github/ci-inputs.json); a record is written only after this passed.
@@ -2774,8 +3046,6 @@ jobs:
 
   # T06: the four optimize modes on LLVM, natively on aarch64-linux hardware, verified against the
   # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
-  # floatops and floatconv are left out (excluded_examples in the records): the translation has no
-  # aarch64-linux float model (tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md).
   # `record --verify` requires exactly the committed counts. In ReleaseFast and ReleaseSmall the ~700 inputs that are illegal behaviour crash the tested call (SIGSEGV/SIGBUS): the
   # hosted image routes core dumps to systemd-coredump and apport, which run for every crash even
   # with RLIMIT_CORE 0 and stall the runner. The harness therefore makes its children
@@ -2831,8 +3101,10 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lake
-          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
-          restore-keys: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: |
+            lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-
+            lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Restore Lake build (tests/diff package)
         if: ${{ !env.AIR2LEAN_REUSED }}
@@ -2849,25 +3121,25 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: lake build
 
+      # This host's translations (scripts/check-tree.py --host-goldens): the committed
+      # tests/golden/0.16.0/<ex>/Gen-linux-aarch64.lean, which the aarch64-linux job compares with a
+      # fresh native export and gen-integrity with the committed AIR.
       - name: Native build-mode differential runs (aarch64-linux, LLVM)
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build-modes"
+          tree="$RUNNER_TEMP/check-tree"
+          python3 scripts/check-tree.py create "$tree" --host-goldens 0.16.0
+          cd "$tree"
           failed=0
-          source scripts/example-selection.sh
-          examples=$(for e in $(air2lean_default_examples . 0.16.0 aarch64); do
-            case "$e" in floatops|floatconv) ;; *) printf '%s ' "$e" ;; esac
-          done)
           for mode in ReleaseSafe Debug ReleaseFast ReleaseSmall; do
             summary="$RUNNER_TEMP/build-modes/$mode.json"
-            AIR2LEAN_EXAMPLES="$examples" AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
               AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
-              --mode "$mode" --backend llvm --explicit-backend \
-              --excluded-examples tests/roadmap/build-modes/reproducers/excluded-float-aarch64-linux.json \
-              || failed=1
+              --mode "$mode" --backend llvm --explicit-backend || failed=1
           done
           [ "$failed" -eq 0 ]
 

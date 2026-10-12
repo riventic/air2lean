@@ -34,6 +34,7 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | patched compiler | `zig/<version>-<key>/prefix` | the files `zig-patch/build.sh` reads for that version (`air-json/*.zig`, the hook patch, `build.sh`, `lock.sh`, `toml-get.sh`) and the version's `versions.toml` table (pinned tarball digest); the bootstrapping host Zig (binary SHA-256 and a digest of its `lib/`); host OS and architecture; `AIR2LEAN_OPTIMIZE`; the macOS `xcrun` shim. `AIR2LEAN_LLVM=1` builds are never cached. |
 | Lean outputs | `lake/` | Lake's own artifact cache (`LAKE_ARTIFACT_CACHE`, `LAKE_CACHE_DIR`). Lake looks a module up by its input hash: the module's source, the traces of all its imports, the toolchain and the build options; outputs (`.olean`, `.ilean`, `.c`, ...) are stored by their content hash. `LAKE_RESTORE_ARTIFACTS` restores every output into `.lake/build` as a read-only hard link, so tools that read `.lake/build` see a normal build. |
 | AIR export | `air/<key>` | the compiler entry's key, the export arguments and `ZIG_AIR_JSON_FILTER`, the host identity (OS, version, architecture, CPU; a native target depends on them) and every file under the root source's directory (a Zig module imports only files below its root). Only a plain `build-obj`/`build-exe`/`build-lib` of one `.zig` root with known flags into an empty output directory is cached; anything else (modules, C sources, libc, `ZIG_LIB_DIR`, a symlink under the module directory) runs uncached. |
+| native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
 
 Lean is not byte-reproducible from run to run: two plain cold builds of the same tree can differ
@@ -47,6 +48,22 @@ receipt never runs with the cache variables; `scripts/regen.sh` removes them for
 step. The hard-linked outputs it finds in `.lake/build` are ordinary up-to-date Lake outputs.
 
 ## Use
+
+A new worktree starts with one command:
+
+    scripts/worktree-init.sh [--zig 0.16.0 ...] [--no-lean] [--no-generated]
+
+It builds what CI's `lake` job builds (ZigLean, Air2Lean, air2lean, Proofs, AssuranceTools, every
+tracked ZigLean module) and the `tests/diff` package through `cas.py run` under build-guard,
+then the requested patched compilers and the whole-tree generated files. With the cache on, a
+module is compiled only if no worktree has built it with the same inputs; the rest are restored
+as hard links. Measured on the dev Mac (2026-10-12, main 9ea4c9b6, fresh `git worktree add`):
+
+| start | root package | whole init |
+| --- | --- | --- |
+| `AIR2LEAN_CAS_DIR` unset (plain Lake build) | 399 s | 435 s |
+| cache from an older `main` (some modules changed since) | 48 s | 66 s |
+| cache already holding this tree's modules | 1 s | 15 s |
 
     AIR2LEAN_ZIG_AIR=$(scripts/zig-air.sh 0.16.0)         # patched compiler for this checkout
     python3 scripts/build-guard.py ... -- python3 -B scripts/cas.py run -- lake build Proofs

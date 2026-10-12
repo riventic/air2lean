@@ -671,7 +671,7 @@ routines the reference target (`x86_64-linux -mcpu=baseline`) actually calls, bi
 most examples never reach the divergence and a proof should not have to know it exists. Groups C
 (f80 invalid encodings), D (f32/f64 mixed-sign-zero `@min`/`@max`) and I (a signaling NaN in
 `@min`/`@max`) throw `.unspecified` in both modes, unconditionally: `docs/floats.md` §f80
-invalid encodings, §+0 and −0 in @min/@max. The profile's target (`FCtx.targetArch`) selects
+invalid encodings, §+0 and −0 in @min/@max. The profile's target (`Dialect.floatRules`) selects
 the aarch64 rules (`FCtx.aarch64Floats`, `docs/floats.md` §Targets) in both modes. -/
 inductive FloatSemantics where
   | ieee
@@ -736,6 +736,10 @@ structure FCtx where
   float ops whose result differs by version (`docs/floats.md` §Per-version differences), the byte
   order of bit-pointer accesses and the architecture of the asm allowlist. -/
   dialect : Dialect
+  /-- `Func.allocatorModel` (`--allocator-model`). -/
+  allocatorModel : AllocatorModel := .std
+  /-- `Func.targetOs`: the trusted OS model's target (`Zig.Os.Target`). -/
+  targetOs : String := ""
   /-- This function uses memory (`Air2Lean/Memory.lean`): it returns `Zig.MemM`, and its body
   runs in `Zig.MM`. -/
   mem : Bool
@@ -777,6 +781,12 @@ structure FCtx where
   by the call graph, so a function that uses memory charges its frame to the stack budget
   (`Zig.enterFrame`, MM-5). -/
   recursive : Bool := false
+  /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
+  of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
+  or why the function is rejected. Each such instruction is followed by its `Zig.naMark`. -/
+  noalias : Option (Except String Noalias.Marks) := none
+  /-- The function has `noalias` parameters: each call opens a scope (`Zig.naEnter`). -/
+  naScope : Bool := false
 
 /-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
 `r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
@@ -877,7 +887,7 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .func .. => .void
   | .undef tid | .optNull tid | .optSome tid _ | .err tid _ | .errUnionErr tid _
   | .errUnionOk tid _ | .enumTag tid _ | .unionVal tid .. | .agg tid _ | .ptrConst tid ..
-  | .ptrNull tid | .ptrOther tid _ | .sliceConst tid .. => fc.tyOfId tid
+  | .ptrNull tid | .ptrOther tid _ | .ptrInt tid _ | .sliceConst tid .. => fc.tyOfId tid
 
 /-- The type ID of `v`; `none` for a constant without a type. -/
 def FCtx.valTyId? (fc : FCtx) (v : Val) : Option TyId :=
@@ -914,11 +924,20 @@ def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.dialect.version.compilerRt == .le
 def FCtx.divRtSuffix (fc : FCtx) : String :=
   if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
 
-/-- The profile targets aarch64 (`docs/floats.md` §Targets): `f80` is soft-float
-(`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on `f16`/`f32`/`f64`
-is the fused instruction. A legacy profile (empty `targetArch`) and x86_64 keep the reference
-x86_64 rules. -/
-def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.targetArch == "aarch64"
+/-- The profile targets aarch64 (`Dialect.floatRules`, `docs/floats.md` §Targets): `f80` is
+soft-float (`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on
+`f32`/`f64` (`f16` with `fullfp16`: `fusedMulAdd`) is the fused instruction. A legacy profile and
+the other targets keep the reference x86_64 rules. -/
+def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.dialect.floatRules matches .aarch64 _
+
+/-- `@mulAdd` on a `fmt`-bit float is the fused instruction: aarch64 `f32`/`f64`, and `f16` when
+the baseline CPU has `fullfp16` (aarch64-macos). aarch64-linux's `generic` CPU promotes an `f16`
+`@mulAdd` to `f32` like x86_64, so the reference rule applies (`Float.fma`'s `f16` case). `f80` and
+`f128` are compiler_rt on every target; `fmaFused` and `fmaRtFused` delegate them. -/
+def FCtx.fusedMulAdd (fc : FCtx) (fmt : Nat) : Bool :=
+  match fc.dialect.floatRules with
+  | .aarch64 fusedF16 => fmt != 16 || fusedF16
+  | .reference => false
 
 /-- Is `v` an `f80` or a vector of `f80`? -/
 def FCtx.isF80Val (fc : FCtx) (v : Val) : Bool :=
@@ -959,10 +978,15 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
   | some (_, t) => fc.tyOfId t
   | none => .void
 
+/-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
+def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
+
 /-- The term of the operand `v`. An `undefined` operand is outside the subset
 (`checkUndefOperands`) and resolves to a `placeholder`, except under `undefFill`: the value of a
 store whose undefined bytes are written separately (`undefByteRanges`), or that no read observes
-(`deadUndefStores`), where `undefined` is filler (`0`, `false`, `default`). -/
+(`deadUndefStores`), where `undefined` is filler (`0`, `false`, `default`), and an `undefined`
+single/many-item pointer operand under `--allocator-model translated`: an arbitrary pointer
+without a block (`Zig.undefPtr`). -/
 partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val)
     (undefFill : Bool := false) : String :=
   let resolve (v : Val) := fc.resolveVal env v undefFill
@@ -980,11 +1004,15 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .bool b => if b then "true" else "false"
   | .void => "()"
   | .undef tid =>
-    if !undefFill then placeholder "an `undefined` operand" else
-    match fc.tyOfId tid with
-    | .int _ b => s!"(0#{b})"
-    | .bool => "false"
-    | _ => "default"
+    match fc.tyOfId tid, undefFill with
+    | .int _ b, true => s!"(0#{b})"
+    | .bool, true => "false"
+    | _, true => "default"
+    -- Admitted only under `--allocator-model translated` (`checkUndefOperands`).
+    | .ptr "one" .., false | .ptr "many" .., false =>
+      if fc.allocatorModel == .translated then s!"(← {fc.callMName} Zig.undefPtr)"
+      else placeholder "an `undefined` operand"
+    | _, false => placeholder "an `undefined` operand"
   | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
   | .optSome _ v => s!"(some {resolve v})"
@@ -1033,6 +1061,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => placeholder "a pointer constant without a global"
+  -- `--allocator-model translated` only (`admitIntPtr`): no block, every access `.illegal`.
+  | .ptrInt _ addr => s!"(⟨none, {addr}⟩ : Zig.Ptr)"
   | .sliceConst _ p len => s!"(⟨{resolve p}, {resolve len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
@@ -1185,7 +1215,14 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
               .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}") fresh
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
-        acc.push (i.id, root, path.push step)
+        -- A tuple is a right-nested `Prod`: field `idx` of `n` is `snd` `idx` times, then
+        -- `fst` unless it is the last (`tupleProjection`).
+        let steps := match base with
+          | .tuple fields =>
+            (Array.replicate idx (PathStep.field "snd")) ++
+              (if idx + 1 < fields.size then #[PathStep.field "fst"] else #[])
+          | _ => #[step]
+        acc.push (i.id, root, path ++ steps)
       | none => acc
     | .fieldParentPtr (.inst b) _ =>
       -- The checker proved the exact terminal struct field and result pointee type.
@@ -1246,9 +1283,6 @@ def FCtx.instLeanTy (fc : FCtx) (id : InstId) : String :=
 /-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
 def FCtx.monad (fc : FCtx) : String :=
   if fc.conc then "Zig.CM Tgt" else if fc.mem then "Zig.MM" else "Zig.M"
-
-/-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
-def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
 
 /-- The lift of a call to a pure function (`Zig.Result`). -/
 def FCtx.callRName (fc : FCtx) : String :=
@@ -1559,6 +1593,21 @@ def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool)
     s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"{fc.widthFn "Zig.readSlice" "Zig.readSliceOf"} ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
   else fc.resolveVal env a
 
+/-- A call of the trusted OS model (`--allocator-model translated`, `checkOsCall`):
+`Zig.Os.<fn> <target> args…`, a packed `prot`/`flags` argument as its bits. -/
+def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args : Array Val) : String :=
+  let rv := fc.resolveVal env
+  let arg (i : Nat) : String := rv (args[i]?.getD .void)
+  let bits (i : Nat) : String := s!"(Zig.Packed.toBits {arg i})"
+  let target := match fc.targetOs with
+    | "macos" => "Zig.Os.Target.macos"
+    | "linux" => "Zig.Os.Target.linux"
+    | os => placeholder s!"an OS model for target OS '{os}'"
+  match fn with
+  | .mmap => s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
+  | .munmap => s!"Zig.Os.munmap {target} {arg 0}"
+  | .mremap => s!"Zig.Os.mremap {target} {arg 0} {arg 1} {arg 2} {bits 3} {arg 4}"
+
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
 def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (args : Array Val)
@@ -1866,7 +1915,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
   | .unreach => #[]
   | .trap => #[]
-  | .line _ => #[]
+  | .line _ | .retAddr => #[]
   | .dbg _ _ => #[]
   -- An lvalue output's `ref` is a pointer, used as `store`'s pointer.
   | .asm _ _ _ outputs inputs =>
@@ -1903,27 +1952,6 @@ def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
   match fc.instUses with
   | some uses => uses.contains id
   | none => fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
-
-/-- A multi-operand `for` loop without safety: Sema still computes each operand's `slice_len`,
-but only the loop's own length bounds the loop (`cmp_lt(bitcast(i), bitcast(bound))`). A
-`slice_len` that nothing reads, followed by such a loop, is an operand whose length must equal
-`bound` (`Zig.forLen`). With safety, Sema's `forLenMismatch` check reads every length. -/
-def FCtx.forLenBound? (fc : FCtx) (id : InstId) : Option Val := do
-  guard (!fc.isReferenced id)
-  let after := fc.allInsts.filter (·.id > id)
-  let cmp ← after.findSome? fun i => match i.op with
-    | .cmp .lt (.inst idx) b => match fc.opOf? (.inst idx), b with
-      | some (.bitcast _), .inst _ => match fc.opOf? b with
-        | some (.bitcast bound) => some bound
-        | _ => none
-      -- A comptime-known first length (an array operand).
-      | some (.bitcast _), .int .. => some b
-      | _, _ => none
-    | _ => none
-  -- The bound must already be in scope at the `slice_len`.
-  let inScope : Bool := match cmp with | .inst b => decide (b < id) | _ => true
-  guard inScope
-  pure cmp
 
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
@@ -2337,6 +2365,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
+    if let some fromArray := (fc.valTyId? a).bind (vectorLaneCast? fc.types · inst.ty) then
+      -- Zig ≤0.16 `[n]T` ↔ `@Vector(n, T)`: lane `i` is item `i` (`Check.lean`, L09).
+      let expr := if fromArray then s!"pure (⟨{rv a}⟩ : {fc.emitTyOf inst.ty})"
+        else s!"pure ({rv a} : {fc.emitValTy a}).lanes"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     if (fc.valTyId? a).any (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
       -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
       -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`).
@@ -2432,8 +2466,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
       else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
-        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`).
-        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {rv a} >>= fun _ => pure {rv a})"
+        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`); a
+        -- slice checks its item pointer.
+        let p := if fc.isSlice a then s!"{rv a}.ptr" else rv a
+        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {p} >>= fun _ => pure {rv a})"
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
@@ -2463,7 +2499,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .mulAdd a b c =>
     -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
     -- aarch64: a fused instruction; its f80 operands are guarded by `softF80Chk` instead.
-    let expr := if fc.aarch64Floats then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
+    let fmt := match fc.valTy a with | .float n => n | _ => 0
+    let expr := if fc.fusedMulAdd fmt then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
       else s!"Zig.Float.fma{fc.rtSuffix}Chk {rv a} {rv b} {rv c}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatConv a =>
@@ -2698,7 +2735,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
     let o := orderTerm order
-    let expr := if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    -- `unordered`: `--allocator-model translated` only (`Check.lean`).
+    let expr := if order == .unordered then
+        if fc.atomicPtr ptr then s!"Zig.atomicLoadUnorderedEncC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
+        else s!"Zig.atomicLoadUnorderedC (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2729,11 +2770,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let len := if fc.mem then s!"{rv s}.len"
-      else s!"({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
-    let expr := match fc.forLenBound? inst.id with
-      | some bound => fc.liftR s!"Zig.forLen {len} {rv bound}"
-      | none => s!"pure {len}"
+    let expr := if fc.mem then s!"pure {rv s}.len"
+      else s!"pure ({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them, after
@@ -2886,9 +2924,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .call callee args =>
     let (isNoreturn, cexpr) := fc.resolveCallee callee
-    let allocFn := match callee with | .func name .. => allocFn? name | _ => none
+    let allocFn := match callee with | .func name .. => allocFn? name fc.allocatorModel | _ => none
     let threadFn := match callee with | .func name .. => threadFn? name | _ => none
-    if let some fn := allocFn then
+    let osFn := match callee with | .func name .. => osFn? name fc.allocatorModel | _ => none
+    if let some fn := osFn then
+      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.osCall env fn args})"
+      (env, some l)
+    else if let some fn := allocFn then
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
       (env, some l)
     else if let some fn := threadFn then
@@ -2927,6 +2969,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
+  | .retAddr =>
+    let (env, l) := bindLet fc env inst.id s!"{fc.callMName} Zig.returnAddress"
+    (env, some l)
   | .asm source _ clobbers outputs inputs =>
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
@@ -3091,6 +3136,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   (emitLaneWise fc env inst).getD (emitScalarGuarded fc env inst)
 
+/-- The `Zig.naMark` that follows instruction `id` (`FCtx.noalias`), or `""`. -/
+def FCtx.naMarkOf (fc : FCtx) (id : InstId) : String :=
+  match fc.noalias with
+  | none => ""
+  | some (.error e) => placeholder e
+  | some (.ok marks) => match marks[id]? with
+    | none => ""
+    | some (r, w) =>
+      let root (x : Option Nat) := match x with | some p => s!"(some {p})" | none => "none"
+      s!"Zig.naMark {root r} {root w}"
+
 mutual
 
 /-- Translate an instruction sequence into a `Zig.M _ Exit` do-block body (as source text,
@@ -3102,6 +3158,9 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
   match insts with
   | [] => placeholder "a body without a terminator"
   | inst :: rest =>
+    -- With `noalias` parameters (or a caller that has them), each instruction that can touch
+    -- memory is followed by the mark of its roots (`Zig.naMark`), which checks its accesses.
+    let mark := fc.naMarkOf inst.id
     if isTerminating inst.op then
       emitTerminator fc env inst
     else
@@ -3168,12 +3227,15 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let expr := match fc.pointeeOf p with
           | .errorUnion _ child => fc.storageExpr child expr
           | _ => expr
+        let expr := if mark.isEmpty then expr
+          else s!"(do let r ← {expr}; {mark}; pure r)"
         s!"match ← {expr} with\n\
           | .error _ => {doBlock errStr}\n\
           | .ok {vname} => {doBlock restStr}"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
+        let restStr := if mark.isEmpty then restStr else s!"{mark}\n{restStr}"
         match lineOpt with
         | some line => s!"{line}\n{restStr}"
         | none => restStr
@@ -3204,9 +3266,11 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     | .void => "pure .ret"
     | _ =>
       let v := if fc.isMemPtr ptr then s!"(← {fc.loadMem ptr (rv ptr)})" else fc.loadPlace ptr
+      let mark := fc.naMarkOf inst.id
+      let (pre, v) := if mark.isEmpty then ("", v) else (s!"let r ← pure {v}\n{mark}\n", "r")
       if fc.rawRet then
-        s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
-      else s!"pure (.ret {v})"
+        s!"{pre}pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
+      else s!"{pre}pure (.ret {v})"
   -- A bare `unreach` (no panic call before it, which would end the body first) is
   -- `unreachable` without a safety check: unchecked illegal behaviour.
   | .unreach => "throw .illegal"
@@ -3352,6 +3416,11 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
       let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
       ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
     else ([], [])
+  -- A function with `noalias` parameters checks the accesses of each call in a scope
+  -- (`ZigLean/Mem/Noalias.lean`).
+  let (enterLines, leaveLines) := if fc.naScope then
+      (enterLines ++ ["  Zig.naEnter"], ["  Zig.naExit"] ++ leaveLines)
+    else (enterLines, leaveLines)
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -3445,7 +3514,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
       retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
-      exitName := mangleField s!"{plain}Exit", floatSemantics, dialect := f.dialect, places := #[],
+      exitName := mangleField s!"{plain}Exit", floatSemantics, dialect := f.dialect,
+      allocatorModel := f.allocatorModel, targetOs := f.targetOs, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
@@ -3470,10 +3540,20 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (deviceContract : Bool := false) : FuncParts :=
+    (recursive : Bool := false) (deviceContract : Bool := false) (naCallee : Bool := false) :
+    FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, deviceContract }.prepareInstUses
+  -- Only a function that uses memory can access memory during the call: a pure one has none,
+  -- and its slice parameters are read by the caller. A function that one with `noalias`
+  -- parameters may call (`naCallee`) marks its accesses for the caller's scope.
+  let fc := if !fc.mem then fc
+    else if !f.noalias.isEmpty then
+      if fc.conc then { fc with noalias := some (.error (Noalias.concurrentMsg f.name)) }
+      else { fc with noalias := some (Noalias.analyze f), naScope := true }
+    else if naCallee && !fc.conc then { fc with noalias := some (.ok (Noalias.calleeMarks f)) }
+    else fc
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -3751,7 +3831,7 @@ def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
 /-- The error names of the program (the names of its error sets), if a function reads one
 (`@errorName`). -/
 def errorNames (funcs : Array Func) : Array String :=
-  if !funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false) then #[]
+  if !funcs.any (·.allInsts.any (·.op.isErrorName)) then #[]
   else
     let names := funcs.flatMap fun f => f.types.flatMap fun t => match t with
       | .errorSet (some ns) => ns
@@ -3777,7 +3857,7 @@ placement `σ` gives them (`Zig.Placement`, MM-1). A theorem from `mem0 σ` hold
 so it cannot depend on where a block is. With an `extern` global, `mem0` also takes the explicit
 external initial state `ext : ExternInit`, one field per `extern` global in block order: a proof
 from `mem0 σ ext` states its assumptions about external storage on `ext`. -/
-def emitMem0 (gs : Array ProgGlobal) : String :=
+def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
   let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
     let source := match g.externField with
@@ -3788,6 +3868,12 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
   let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
   let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals σ {body}" else
     s!"(Zig.Mem.ofGlobals σ {body}).mainTls #[{", ".intercalate keys}]"
+  -- `--allocator-model translated`: `@returnAddress()` and `undefined` pointers read the oracle
+  -- `Mem.arbitrary`; a statement about `mem0` covers every sequence of its words.
+  let (oracleParam, body, oracleDoc) := if translated then
+      (" (arbitrary : Array (BitVec 64) := #[])", s!"\{ {body} with arbitrary }",
+        " The words of `@returnAddress()` and of `undefined` pointers are `arbitrary` (`Mem.arbitrary`).")
+    else ("", body, "")
   let tlsDoc := if keys.isEmpty then "" else
     " The main thread's instance of a `threadlocal` global is its block (its TLS key)."
   let tlsInit := if keys.isEmpty then "" else
@@ -3800,8 +3886,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
   if externs.isEmpty then
-    s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc} -/\n\
-      def mem0 (σ : Zig.Placement) : Zig.Mem := {body}{tlsInit}"
+    s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc}{oracleDoc} -/\n\
+      def mem0 (σ : Zig.Placement){oracleParam} : Zig.Mem := {body}{tlsInit}"
   else
     s!"/-- External initial state: the initial value of each `extern` global, which this program \
       does not define. Fields follow block (initialization) order. Contract: the external \
@@ -3809,8 +3895,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
       other assumption about external storage is a hypothesis on this value. -/\n\
       structure {externInitName} where\n{"\n".intercalate externs}\n\n\
       /-- The memory at program start under the placement `σ`: block `k` is global `k`. Blocks \
-      are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
-      def mem0 (σ : Zig.Placement) (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
+      are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc}{oracleDoc} -/\n\
+      def mem0 (σ : Zig.Placement) (ext : {externInitName}){oracleParam} : Zig.Mem := {body}{tlsInit}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -4237,7 +4323,7 @@ def width64Names : List String :=
    -- The unchecked-illegal-behaviour checks exist for the 64-bit model only: a 32-bit program
    -- that needs one is refused, not translated without the check.
    "Zig.memcpy ", "Zig.checkSliceEnd ",
-   "Zig.checkSentinelByte ", "Zig.forLen ", "Zig.checkAddr ", "Zig.checkAlign ", "Zig.checkParent "]
+   "Zig.checkSentinelByte ", "Zig.checkAddr ", "Zig.checkAlign ", "Zig.checkParent "]
 
 /-- `Zig.Slice` as a whole identifier (not `Zig.Slice32`/`Zig.SliceOf`), or a name of
 `width64Names`, in a 32-bit translation's source. -/
@@ -4248,6 +4334,36 @@ def width64Leak (src : String) : Option String :=
     | some c => !(c.isAlphanum || c == '_')
     | none => true
   if wholeSlice then some "Zig.Slice" else width64Names.find? fun n => (src.splitOn n).length > 1
+
+/-- The shape of one emitted function that an AIR certificate (`Air2Lean/Certificate.lean`)
+restates: its `Locals`/`Exit` types and constructors, and its loop defs. Data only; the
+certificate's kernel check is what makes it trustworthy. -/
+structure CertShape where
+  localsName : String
+  exitName : String
+  /-- Each `alloc`'s `Locals` field. -/
+  fields : Array (InstId × String)
+  escaping : Array InstId
+  byteLocals : Array InstId
+  /-- The `br<k>` and `rep<k>` constructors, and each block's and loop's result type. -/
+  brT : Array InstId
+  repT : Array InstId
+  blockTys : Array (InstId × TyId)
+  /-- Each loop's captured parameters `(id, name)`, in order. -/
+  loops : Array (InstId × Array (InstId × String))
+  /-- Extra `Exit` constructors or `Locals` fields (dispatch loops, raw returns). -/
+  other : Bool
+  deriving Inhabited
+
+/-- The certificate shape of a function's emission context. -/
+def FCtx.certShape (fc : FCtx) : CertShape :=
+  { localsName := fc.localsName, exitName := fc.exitName, fields := fc.allocFields,
+    escaping := fc.escaping, byteLocals := fc.byteLocals, brT := fc.brT, repT := fc.repT,
+    blockTys := fc.blockTys,
+    loops := fc.allInsts.filterMap fun i => match i.op with
+      | .loop _ => some (i.id, (fc.loopParams i).map fun (id, name, _) => (id, name))
+      | _ => none,
+    other := !fc.dispatchTys.isEmpty || fc.rawRet }
 
 /-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
 call groups (`callGroups`) in emission order: each group's member source names, the source
@@ -4266,6 +4382,12 @@ structure EmitParts where
   dispatchTargets : Array String
   /-- Each function's declaration name. -/
   declNames : Array (String × String)
+  /-- The functions emitted in `Zig.MemM` (`memoryFunctions`) and in `Zig.ConcM`
+  (`concFunctions`). -/
+  memFuncs : Array String := #[]
+  concFuncs : Array String := #[]
+  /-- Each function's certificate shape (`CertShape`). -/
+  shapes : Array (String × CertShape) := #[]
 
 /-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
 `prefix_` is stripped from every Zig name (function or struct) before mangling.
@@ -4277,7 +4399,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
-  let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
+  let hasErrorName := funcs.any (·.allInsts.any (·.op.isErrorName))
   let targets := spawnTargets funcs
   let futures := futureTargets funcs
   let extendedCapture := targets.any (fun (_, _, fields) => fields.size != 1) || !futures.isEmpty
@@ -4319,7 +4441,9 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let errDefs := if hasErrorName then [emitErrorNameOf errNames globals.size] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
-  let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
+  let translated := funcs.any (·.allocatorModel == .translated)
+  let globalsStr := if memFuncs.isEmpty then [] else
+    [emitMem0 globals translated] ++ tagDefs.toList ++ errDefs
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
   let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
@@ -4360,12 +4484,19 @@ def emitParts (funcs : Array Func) (prefix_ : String)
         (name, args, kind, complete, classes))
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
-  let groups := (callGroups funcs).map fun (members, recursive) =>
-    let names := members.map (·.name)
-    let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
-    let parts := members.toList.map fun f =>
+  -- Every function that a function with `noalias` parameters may call (`FCtx.noalias`).
+  let naCallees := dedupNames ((funcs.filter (!·.noalias.isEmpty)).flatMap fun f =>
+    reachable funcs allNames refs f.name)
+  let groupParts := (callGroups funcs).map fun (members, recursive) =>
+    (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome
+        (naCallees.contains f.name))
+  let shapes := groupParts.flatMap fun (members, _, parts) =>
+    (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
+  let groups := groupParts.map fun (members, recursive, parts) =>
+    let names := members.map (·.name)
+    let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
@@ -4391,7 +4522,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
     dispatchTargets := if dispatchStr.isEmpty then #[] else
       targets.map (·.1) ++ futures.map (·.1)
-    declNames := ownFuncNames }
+    declNames := ownFuncNames, memFuncs, concFuncs, shapes }
 
 /-- The single-file output: every part in order under one `namespace`. -/
 def EmitParts.render (p : EmitParts) (ns : String) : String :=

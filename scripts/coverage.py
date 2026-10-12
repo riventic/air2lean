@@ -304,8 +304,23 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
+    # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
+    'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits8': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits10': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits16': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits17': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits32': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/fba-macos': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-fba/air/{version}/client-linux': 'tests/roadmap/alloc-fba/provenance.json',
     'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
     'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
+    # L-series long tail: one directory per fixture source (export.sh, provenance.json).
+    'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
@@ -335,6 +350,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
     'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
     'tests/roadmap/illegal-behavior': 'illegal-behaviour fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
+    'tests/roadmap/noalias': 'noalias fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
     'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
     'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
 }
@@ -860,7 +876,7 @@ def generate(version, source, os_name='linux'):
                   'disposition': constant_disposition(name),
                   'qualification': 'writeRef source arm/fallback only; Json.parseVal and Check.lean restrict forms and types.'})
                  for name in universe['intern_keys']]
-    ptr_rejected = re.search(r'ptrOther\? then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
+    ptr_rejected = re.search(r'ptrOther\?[^\n]* then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json', OP_TABLE], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics',

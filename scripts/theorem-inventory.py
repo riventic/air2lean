@@ -38,7 +38,8 @@ INVENTORY = Path('assurance/theorem-inventory.json')
 DOC = Path('docs/theorem-inventory.md')
 BEGIN, END = '<!-- BEGIN theorem-inventory -->', '<!-- END theorem-inventory -->'
 SCOPES = ('single-step', 'single-schedule', 'bounded-schedules', 'all-schedules', 'sequential')
-TARGETS = ('linux', 'darwin')
+# Host keys of the translation files (`Gen-<target>.lean`, as scripts/check.sh selects them).
+TARGETS = ('linux', 'darwin', 'linux-aarch64')
 # Documents whose claims are checked against the scopes. Lean doc comments of listed theorems
 # are checked too.
 CLAIM_DOCS = ('README.md', 'PLAN.md', 'docs/proofs.md', 'docs/vector-proofs.md',

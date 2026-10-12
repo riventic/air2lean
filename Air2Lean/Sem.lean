@@ -12,18 +12,28 @@ about the translation (`docs/air-semantics.md`).
 
 The fragment:
 
-* values: integers of any width with their signedness, `bool`, `void`, and a pointer
-  (`Zig.Ptr`) to a stack local;
+* values: integers of any width with their signedness, `bool`, `void`, and a single or many
+  pointer (`Zig.Ptr`); the SSA environment records each value's AIR type, so an access takes
+  its alignment and pointee from the pointer's type;
 * integer arithmetic (`add`/`sub`/`mul` checked, wrapping and saturating; division and
   remainder; `min`/`max`; bitwise `and`/`or`/`xor`/`not`), comparisons, `bool_and`/`bool_or`,
   `intcast` and `trunc`;
 * control flow: `block`/`br`, `cond_br`, `switch_br` on an integer, `loop`/`repeat`, `ret`,
   `unreach`, `trap`, and a call to a safety-panic handler;
-* locals over ZigLean's byte-level memory (`Zig.Mem`, `Zig.MemM`): `alloc` makes a stack block
-  (`Zig.allocStack`) freed when the function returns, `load`/`store` of an integer or `bool`
-  go through `Zig.load`/`Zig.store` (`store` of `undefined`: `Zig.storeUndef`);
+* memory, ZigLean's byte-level `Zig.Mem` (`Zig.MemM`): `alloc` makes a stack block
+  (`Zig.allocStack`) freed when the function returns; `load`/`store` of an integer, `bool` or
+  pointer go through `Zig.load`/`Zig.store` at the pointer type's alignment (`store` of
+  `undefined`: `Zig.storeUndef`); `struct_field_ptr` of a non-`packed` struct is
+  `Zig.ptrProject` by the field's offset; a pointer `bitcast` keeps the pointer; `==`/`!=` and
+  the order of two pointers compare their addresses (`Zig.ptrEqAddr`, `Zig.ptrLt`, `Zig.ptrLe`);
+* optionals whose payload is not a pointer (`?T`) and error unions as values: `is_null`,
+  `is_non_null`, `optional_payload`, `wrap_optional`, `is_err`, `is_non_err`, the two unwraps, the
+  two wraps, `try`;
 * direct calls through an oracle (`Ctx.call`); `run` ties the oracle to the program;
 * debug instructions have no effect.
+
+`Ctx.view` (none in `execFunc`) is a certificate device for pure-function slices
+(`Air2Lean/SemView.lean`), not part of the meaning of AIR.
 
 Every other instruction, value or shape is *stuck*: it denotes `⊥` (no behaviour, `Option`'s
 `none`). The arithmetic primitives are ZigLean's (`Zig.add`, `Zig.intCast`, …): this file fixes
@@ -43,22 +53,61 @@ inductive Value where
   | int (signed : Bool) (w : Nat) (v : BitVec w)
   | bool (b : Bool)
   | void
-  /-- A pointer, with the alignment its AIR pointer type guarantees (`align(N)`). -/
-  | ptr (p : Zig.Ptr) (align : Nat)
+  /-- A single or many pointer. Its alignment and pointee come from its AIR type (`Env`). -/
+  | ptr (p : Zig.Ptr)
+  /-- The address of a register local (`regAlloc`): only `load` and `store` take it, which read
+  and write the local's cell in the frame. Every other operation on it is stuck. -/
+  | cell (id : InstId)
+  /-- A slice `[]T`: its item pointer and length (`Zig.Slice`). -/
+  | slice (s : Zig.Slice)
+  /-- An optional `?T` of a payload that is not a pointer: `null`, or the payload. -/
+  | optNone
+  | optSome (v : Value)
+  /-- An error union `E!T`: the payload, or an error by name (`Zig.ErrName`). -/
+  | errOk (v : Value)
+  | errErr (name : String)
+  /-- An error of an error set, by name. -/
+  | errName (name : String)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
 (`Zig.Error`): it is `Option`'s `none`, the bottom of `Zig.Result`'s order. -/
 def stuck {α : Type} : Result α := ExceptT.mk none
 
-/-- SSA environment: the value of each instruction that has run. -/
-abbrev Env := InstId → Option Value
+/-- SSA environment: the AIR type and the value of each instruction that has run. -/
+abbrev Env := InstId → Option (TyId × Value)
 
-/-- The stack blocks the running function has allocated, in allocation order. -/
-abbrev Frame := List Zig.Ptr
+/-- The frame of a running function: the stack blocks it has allocated, in allocation order,
+and the contents of its register locals (`none`: undefined). -/
+structure Frame where
+  blocks : List Zig.Ptr := []
+  cells : InstId → Option Value := fun _ => none
 
-def Env.set (env : Env) (id : InstId) (v : Value) : Env :=
-  fun j => if j = id then some v else env j
+def Frame.setCell (fr : Frame) (id : InstId) (v : Option Value) : Frame :=
+  { fr with cells := fun j => if j = id then v else fr.cells j }
+
+theorem Frame.setCell_cells (fr : Frame) (id j : InstId) (v : Option Value) :
+    (fr.setCell id v).cells j = if j = id then v else fr.cells j := rfl
+
+theorem Frame.setCell_blocks (fr : Frame) (id : InstId) (v : Option Value) :
+    (fr.setCell id v).blocks = fr.blocks := rfl
+
+theorem Frame.setCell_setCell (fr : Frame) (id : InstId) (v w : Option Value) :
+    (fr.setCell id v).setCell id w = fr.setCell id w := by
+  cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> rfl
+
+theorem Frame.setCell_eq (fr : Frame) (id : InstId) (v : Option Value) (h : fr.cells id = v) :
+    fr.setCell id v = fr := by
+  subst h; cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> simp_all
+
+/-- Writes to different cells commute; a certificate orders them by id. -/
+theorem Frame.setCell_comm (fr : Frame) (a b : InstId) (v w : Option Value) (h : b < a) :
+    (fr.setCell a v).setCell b w = (fr.setCell b w).setCell a v := by
+  cases fr; simp only [setCell, mk.injEq, true_and]; funext j
+  by_cases hb : j = b <;> by_cases ha : j = a <;> simp_all <;> omega
+
+def Env.set (env : Env) (id : InstId) (t : TyId) (v : Value) : Env :=
+  fun j => if j = id then some (t, v) else env j
 
 /-- How a body ends: `br` to a block (with its value), `repeat` of a loop, or `ret`. -/
 inductive Exit where
@@ -77,6 +126,12 @@ structure Ctx where
   /-- The runtime arguments, in parameter order. -/
   args : List Value
   call : Oracle
+  /-- The *view* of a slice: the items that `slice_elem_val` of the instruction `k` reads, instead
+  of reading memory. `execFunc` has no view (`fun _ => none`), so it is not part of the meaning
+  of AIR; a certificate of a pure function with a slice parameter runs the function with the
+  items the caller read (`execFuncV`), and `Air2Lean.SemView` proves once that this agrees with
+  `execFunc` up to the reads' footprint (`docs/air-semantics.md` §Pure-function slices). -/
+  view : InstId → Option (Array Value) := fun _ => none
 
 def tyOf (f : Func) (t : TyId) : Ty := f.types[t]?.getD .void
 
@@ -97,17 +152,54 @@ theorem litBV_eq_ofInt (w : Nat) (n : Int) : litBV w n = BitVec.ofInt w n := by
     conv => rhs; rw [this]
     rw [BitVec.ofInt_natCast]
 
-/-- An operand's value. -/
-def operand (f : Func) (env : Env) : Val → Result Value
-  | .inst id => match env id with
-    | some v => pure v
-    | none => stuck
+/-- An optional type whose payload is not a pointer (a pointer optional `?*T` is an address,
+outside the fragment). -/
+def plainOpt (f : Func) (t : TyId) : Bool :=
+  match f.types[t]? with
+  | some (.optional c) => !(f.types[c]? matches some (.ptr ..))
+  | _ => false
+
+def isErrorUnion (f : Func) (t : TyId) : Bool := f.types[t]? matches some (.errorUnion ..)
+
+/-- Is `name` an error of the error set `s` (any name for `anyerror` or an inferred set)? -/
+def errIn (f : Func) (s : TyId) (name : String) : Bool :=
+  match f.types[s]? with
+  | some (.errorSet (some names)) => names.contains name
+  | some (.errorSet none) => true
+  | _ => false
+
+/-- Is `name` an error of the error union `t`'s set? -/
+def errUnionIn (f : Func) (t : TyId) (name : String) : Bool :=
+  match f.types[t]? with
+  | some (.errorUnion s _) => errIn f s name
+  | _ => false
+
+/-- The payload of an optional or error-union constant: an integer, `bool` or `void`. -/
+def constVal (f : Func) : Val → Result Value
   | .int t n => match tyOf f t with
     | .int s w => pure (.int s w (litBV w n))
     | _ => stuck
   | .bool b => pure (.bool b)
   | .void => pure .void
   | _ => stuck
+
+/-- An operand's value. -/
+def operand (f : Func) (env : Env) : Val → Result Value
+  | .inst id => match env id with
+    | some (_, v) => pure v
+    | none => stuck
+  | v@(.int ..) | v@(.bool _) | v@.void => constVal f v
+  | .optNull t => if plainOpt f t then pure .optNone else stuck
+  | .optSome t v => if plainOpt f t then do pure (.optSome (← constVal f v)) else stuck
+  | .err t n => if errIn f t n then pure (.errName n) else stuck
+  | .errUnionErr t n => if errUnionIn f t n then pure (.errErr n) else stuck
+  | .errUnionOk t v => if isErrorUnion f t then do pure (.errOk (← constVal f v)) else stuck
+  | _ => stuck
+
+/-- An operand's AIR type: an instruction's from the environment, a constant's own. -/
+def operandTy (env : Env) : Val → Option TyId
+  | .inst id => (env id).map (·.1)
+  | v => v.constTy?
 
 /-- An integer operand of width `w`. -/
 def Value.asInt (w : Nat) : Value → Result (BitVec w)
@@ -116,6 +208,45 @@ def Value.asInt (w : Nat) : Value → Result (BitVec w)
 
 def Value.asBool : Value → Result Bool
   | .bool b => pure b
+  | _ => stuck
+
+/-- An operand of an error-union type. -/
+def errUnionOperand (f : Func) (env : Env) (v : Val) : Result Value :=
+  if isErrorUnion f ((operandTy env v).getD 0) then operand f env v else stuck
+
+/-- `is_non_null` of an optional. -/
+def Value.optIsSome : Value → Result Bool
+  | .optSome _ => pure true
+  | .optNone => pure false
+  | _ => stuck
+
+/-- `optional_payload`: the payload; `null` is illegal behaviour (`Zig.optPayload`). -/
+def Value.optGet : Value → Result Value
+  | .optSome v => pure v
+  | .optNone => throw .illegal
+  | _ => stuck
+
+/-- `is_err` of an error union (`Zig.isErr`). -/
+def Value.errIsErr : Value → Result Bool
+  | .errErr _ => pure true
+  | .errOk _ => pure false
+  | _ => stuck
+
+/-- `unwrap_errunion_payload`: the payload; an error is illegal behaviour (`Zig.unwrapPayload`). -/
+def Value.errGet : Value → Result Value
+  | .errOk v => pure v
+  | .errErr _ => throw .illegal
+  | _ => stuck
+
+/-- `unwrap_errunion_err`: the error; a payload is illegal behaviour (`Zig.unwrapErr`). -/
+def Value.errGetErr : Value → Result Value
+  | .errErr n => pure (.errName n)
+  | .errOk _ => throw .illegal
+  | _ => stuck
+
+/-- `wrap_errunion_err`: an error union holding the error `v`. -/
+def Value.errWrap : Value → Result Value
+  | .errName n => pure (.errErr n)
   | _ => stuck
 
 /-- The integer type of an instruction's result, or `none`. -/
@@ -248,6 +379,29 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
       | .int _ _ x => pure (.int s₂ m (Zig.trunc m x))
       | _ => stuck
     | none => stuck
+  -- Optionals (`?T`, not a pointer optional) and error unions.
+  | .isNonNull a => if plainOpt f ((operandTy env a).getD 0) then do
+      pure (.bool (← (← operand f env a).optIsSome)) else stuck
+  | .isNull a => if plainOpt f ((operandTy env a).getD 0) then do
+      pure (.bool (!(← (← operand f env a).optIsSome))) else stuck
+  | .optPayload a => if plainOpt f ((operandTy env a).getD 0) then do
+      (← operand f env a).optGet else stuck
+  | .wrapOptional a => if plainOpt f i.ty then do pure (.optSome (← operand f env a)) else stuck
+  | .isErr a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      pure (.bool (← (← operand f env a).errIsErr)) else stuck
+  | .isNonErr a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      pure (.bool (!(← (← operand f env a).errIsErr))) else stuck
+  | .errPayload a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      (← operand f env a).errGet else stuck
+  | .errCode a => if isErrorUnion f ((operandTy env a).getD 0) then do
+      (← operand f env a).errGetErr else stuck
+  | .wrapErrPayload a => if isErrorUnion f i.ty then do pure (.errOk (← operand f env a)) else stuck
+  | .wrapErr a => if isErrorUnion f i.ty then do (← operand f env a).errWrap else stuck
+  -- `@bitCast` between integers of one width: the same bits (any other `bitcast` of a value is
+  -- outside the fragment; a pointer `bitcast` is `evalMem`'s).
+  | .bitcast a => match intTy? f i.ty with
+    | some (s, w) => do pure (.int s w (← (← operand f env a).asInt w))
+    | none => stuck
   | _ => stuck
 
 /-- Does the integer `x` select this `switch_br` case (an item equal, or inside a range)? -/
@@ -286,32 +440,288 @@ def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
 /-- The `align(N)` of a pointer type. -/
 def ptrAlignOf (f : Func) (t : TyId) : Option Nat := (f.layouts[t]?).bind (·.ptrAlign)
 
-/-- Load a value of the AIR type `t`. -/
-def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
-  match tyOf f t with
-  | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
-  | .bool => do pure (.bool (← Zig.load Bool align p))
-  | _ => StateT.lift stuck
-
-/-- Store the operand `v` (an integer or `bool`); `undefined` makes the bytes of its type
-undefined. -/
-def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM Unit :=
-  match v with
-  | .undef t => match tyOf f t with
-    | .int _ w => Zig.storeUndef (BitVec w) align p
-    | .bool => Zig.storeUndef Bool align p
-    | _ => StateT.lift stuck
-  | v => do
-    match ← StateT.lift (operand f env v) with
-    | .int _ _ x => Zig.store align p x
-    | .bool b => Zig.store align p b
-    | _ => StateT.lift stuck
-
 /-- The pointee type of a pointer type. -/
 def pointee? (f : Func) (t : TyId) : Option TyId :=
   match tyOf f t with
   | .ptr _ _ c => some c
   | _ => none
+
+/-- The pointer operand `v`, with the alignment of its (plain) pointer type. -/
+def ptrOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Ptr × Nat) := do
+  match operandTy env v with
+  | some t =>
+    match f.plainPtr t, ptrAlignOf f t, ← operand f env v with
+    | true, some a, .ptr p => pure (p, a)
+    | _, _, _ => stuck
+  | none => stuck
+
+/-- The slice operand `v`, with the alignment of its (plain) slice type. -/
+def sliceOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Slice × Nat) := do
+  match operandTy env v with
+  | some t =>
+    match f.plainSlice t, ptrAlignOf f t, ← operand f env v with
+    | true, some a, .slice s => pure (s, a)
+    | _, _, _ => stuck
+  | none => stuck
+
+/-- The item count of a pointer to an array or vector (`*[n]T`, `*@Vector(n, T)`), and whether a
+sentinel follows the items (`*[n:s]T`). A many-item pointer has no length. -/
+def countOf? (f : Func) (t : TyId) : Option (Nat × Bool) :=
+  match f.types[t]? with
+  | some (.ptr size _ c) =>
+    if size == "one" then
+      match f.types[c]? with
+      | some (.array n _ sentinel) => some (n, sentinel)
+      | some (.vector n _) => some (n, false)
+      | _ => none
+    else none
+  | _ => none
+
+/-- The bounds check of an item of a pointer to an array or vector: an index at or past its count
+is illegal behaviour (`Zig.checkIndex`; `Zig.checkSentinelIndex` with a sentinel). -/
+def checkCount (f : Func) (t : TyId) (k : BitVec 64) : MemM Unit :=
+  match countOf? f t with
+  | some (n, sentinel) =>
+    if sentinel then Zig.checkSentinelIndex (BitVec.ofNat 64 n) k else Zig.checkIndex (BitVec.ofNat 64 n) k
+  | none => pure ()
+
+def itemBase (f : Func) (env : Env) (v : Val) (k : BitVec 64) : MemM Zig.Ptr :=
+  match operandTy env v with
+  | some t =>
+    if f.plainSlice t then do
+      let (s, _) ← StateT.lift (sliceOperand f env v)
+      Zig.checkIndex s.len k
+      pure s.ptr
+    else do
+      let (q, _) ← StateT.lift (ptrOperand f env v)
+      checkCount f t k
+      pure q
+  | none => StateT.lift stuck
+
+/-- The size of a type, and the alignment of an item of it behind a pointer of alignment `a`
+(an item of an `align(8)` pointer to `u32` is only 4-aligned). -/
+def itemLayout (f : Func) (t : TyId) (a : Nat) : Option (Nat × Nat) := do
+  let (size, align) ← layoutOf f t
+  pure (size, Nat.min a align)
+
+/-- A `u64` index operand. -/
+def indexOperand (f : Func) (env : Env) (v : Val) : Result (BitVec 64) := do
+  (← operand f env v).asInt 64
+
+/-- Load a value of the AIR type `t`. -/
+def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
+  match tyOf f t with
+  | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
+  | .bool => do pure (.bool (← Zig.load Bool align p))
+  | .ptr .. => if f.plainPtr t then do pure (.ptr (← Zig.load Zig.Ptr align p)) else StateT.lift stuck
+  | _ => StateT.lift stuck
+
+/-- Store the operand `v` (an integer, `bool` or pointer); `undefined` makes the bytes of its
+type undefined. -/
+def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM Unit :=
+  match v with
+  | .undef t => match tyOf f t with
+    | .int _ w => Zig.storeUndef (BitVec w) align p
+    | .bool => Zig.storeUndef Bool align p
+    | .ptr .. => if f.plainPtr t then Zig.storeUndef Zig.Ptr align p else StateT.lift stuck
+    | _ => StateT.lift stuck
+  | v => do
+    match ← StateT.lift (operand f env v) with
+    | .int _ _ x => Zig.store align p x
+    | .bool b => Zig.store align p b
+    | .ptr q => Zig.store align p q
+    | _ => StateT.lift stuck
+
+/-- The value of an instruction that may access memory but has no control flow and makes no
+call: the straight-line operations (`evalPure`), `load`, `store`, `struct_field_ptr`, a pointer
+`bitcast` and pointer comparisons. -/
+def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
+  match i.op with
+  | .load p => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    loadAs f i.ty q a
+  | .store p v => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    storeAs f env q a v
+    pure .void
+  | .fieldPtr base idx => do
+    let (q, _) ← StateT.lift (ptrOperand f env base)
+    match (operandTy env base).bind (f.fieldOffset? · idx), f.plainPtr i.ty with
+    | some off, true => do pure (.ptr (← Zig.ptrProject q (·.add off)))
+    | _, _ => StateT.lift stuck
+  | .bitcast a =>
+    if f.plainPtr i.ty then do
+      let (q, _) ← StateT.lift (ptrOperand f env a)
+      pure (.ptr q)
+    else StateT.lift (evalPure f env i)
+  -- Pointer arithmetic is `getelementptr inbounds` (`Zig.ptrProject`, MM-3) by items of the
+  -- result's pointee.
+  | .ptrAdd sub p n => do
+    let (q, _) ← StateT.lift (ptrOperand f env p)
+    let k ← StateT.lift (indexOperand f env n)
+    match (pointee? f i.ty).bind (layoutOf f), f.plainPtr i.ty with
+    | some (size, _), true =>
+      do pure (.ptr (← Zig.ptrProject q (if sub then (·.elemSub size k) else (·.elem size k))))
+    | _, _ => StateT.lift stuck
+  -- `slice_elem_ptr`: an index at or past the length is illegal behaviour, as for
+  -- `slice_elem_val` (Sema's bounds check is a separate instruction).
+  | .elemPtr p idx => do
+    let k ← StateT.lift (indexOperand f env idx)
+    let base ← itemBase f env p k
+    match (pointee? f i.ty).bind (layoutOf f), f.plainPtr i.ty with
+    | some (size, _), true => do pure (.ptr (← Zig.ptrProject base (·.elem size k)))
+    | _, _ => StateT.lift stuck
+  -- An item load reads the item pointer, without a projection of its own.
+  | .ptrElemVal p idx => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    let k ← StateT.lift (indexOperand f env idx)
+    match itemLayout f i.ty a with
+    | some (size, align) => do
+      checkCount f ((operandTy env p).getD 0) k
+      loadAs f i.ty (q.elem size k) align
+    | none => StateT.lift stuck
+  -- An index at or past the length is illegal behaviour (`Zig.checkIndex`).
+  | .sliceElemVal sv idx => do
+    let (s, a) ← StateT.lift (sliceOperand f env sv)
+    let k ← StateT.lift (indexOperand f env idx)
+    match itemLayout f i.ty a with
+    | some (size, align) => do
+      Zig.checkIndex s.len k
+      loadAs f i.ty (s.ptr.elem size k) align
+    | none => StateT.lift stuck
+  -- `Zig.Slice` is the 64-bit slice: a `slice_len` of another `usize` is outside the fragment.
+  | .sliceLen sv =>
+    if intTy? f i.ty == some (false, 64) then do
+      pure (.int false 64 (← StateT.lift (sliceOperand f env sv)).1.len)
+    else StateT.lift stuck
+  | .slicePtr sv =>
+    if f.plainPtr i.ty then do pure (.ptr (← StateT.lift (sliceOperand f env sv)).1.ptr)
+    else StateT.lift stuck
+  | .cmp op a b => do
+    match ← StateT.lift (operand f env a) with
+    | .ptr _ => do
+      let (p, _) ← StateT.lift (ptrOperand f env a)
+      let (q, _) ← StateT.lift (ptrOperand f env b)
+      match op with
+      | .eq => do pure (.bool (← Zig.ptrEqAddr p q))
+      | .ne => do pure (.bool (!(← Zig.ptrEqAddr p q)))
+      | .lt => do pure (.bool (← Zig.ptrLt p q))
+      | .le => do pure (.bool (← Zig.ptrLe p q))
+      | .gt => do pure (.bool (← Zig.ptrLt q p))
+      | .ge => do pure (.bool (← Zig.ptrLe q p))
+    | _ => StateT.lift (evalPure f env i)
+  | _ => StateT.lift (evalPure f env i)
+
+/-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
+`void`, single and many pointers) have values here. -/
+def valOk (t : Ty) (v : Value) : Bool :=
+  match t, v with
+  | .int s w, .int s' w' _ => s == s' && w == w'
+  | .bool, .bool _ => true
+  | .void, .void => true
+  | .ptr size _ _, .ptr _ => size == "one" || size == "many"
+  | .ptr size _ _, .slice _ => size == "slice"
+  | _, _ => false
+
+/-- `valOk` with the payload types of optionals and error unions: `?T` holds `null` or a `T`;
+`E!T` a `T` or an error of `E` (any name if `E` is `anyerror` or inferred). The fuel bounds the
+nesting (`argsOk`: two levels, `E!?T`); a deeper argument type is outside the fragment (stuck,
+like any out-of-fragment step). Fuel keeps the certificates' `argsOk` a simp normal form; a
+structural version leaves overlap side conditions. -/
+def valOkIn (f : Func) : Nat → TyId → Value → Bool
+  | 0, _, _ => false
+  | n + 1, t, v =>
+    match f.types[t]?, v with
+    | some (.optional c), .optNone => !(f.types[c]? matches some (.ptr ..))
+    | some (.optional c), .optSome w => !(f.types[c]? matches some (.ptr ..)) && valOkIn f n c w
+    | some (.errorUnion _ p), .errOk w => valOkIn f n p w
+    | some (.errorUnion s _), .errErr name => errIn f s name
+    | some (.errorSet _), .errName name => errIn f t name
+    | some ty, w => valOk ty w
+    | none, _ => false
+
+/-! ## Register locals
+
+An `alloc` whose address is never taken — every use is the pointer of a `load` or `store`, or
+debug information — is a *register local*: a cell of the frame, not a memory block (Clight's
+non-addressable temporaries). Its address is unobservable, and a block for it would only shift
+the ids and placement proposals of later blocks (`docs/air-semantics.md` §Locals). The test is
+on the decoded AIR alone and conservative: an operation not listed in `regUse` counts as taking
+the address, so the `alloc` stays a block. -/
+
+/-- `v` does not name the instruction `a`. A composite constant counts as possibly naming it. -/
+def clearOf (a : InstId) : Val → Bool
+  | .inst b => b != a
+  | .int .. | .bool _ | .void | .undef _ | .func .. | .optNull _ | .err .. | .errUnionErr .. => true
+  | .optSome _ v | .errUnionOk _ v => clearOf a v
+  | _ => false
+
+/-- `op` uses `a` (directly, not in its nested bodies) at most as the pointer of `load`/`store`
+or in debug information. -/
+def regUse (a : InstId) : Op → Bool
+  | .arg _ | .alloc | .line _ | .dbg .. | .unreach | .trap | .«repeat» _ | .block _ | .loop _
+  | .load _ => true
+  | .store _ v => clearOf a v
+  | .arith _ _ x y | .div _ x y | .minMax _ x y | .bit _ x y | .cmp _ x y | .boolAnd x y
+  | .boolOr x y => clearOf a x && clearOf a y
+  | .not x | .intCast x | .trunc x | .br _ x | .ret x | .bitcast x | .fieldPtr x _
+  | .condBr x _ _ | .sliceLen x | .slicePtr x | .isNonNull x | .isNull x | .optPayload x
+  | .wrapOptional x | .isErr x | .isNonErr x | .errPayload x | .errCode x | .wrapErrPayload x
+  | .wrapErr x | .«try» x _ => clearOf a x
+  | .ptrAdd _ x y | .elemPtr x y | .ptrElemVal x y | .sliceElemVal x y => clearOf a x && clearOf a y
+  | .call c args => clearOf a c && args.toList.all (clearOf a ·)
+  | .switchBr v cs _ => clearOf a v && cs.toList.all fun sc =>
+      sc.items.toList.all (clearOf a ·) && sc.ranges.toList.all fun (l, h) => clearOf a l && clearOf a h
+  | _ => false
+
+mutual
+
+/-- Every instruction of the body uses `a` only as a register (`regUse`). -/
+def regBody (a : InstId) : List Inst → Bool
+  | [] => true
+  | i :: rest => regInst a i && regBody a rest
+termination_by l => (sizeOf l, 0)
+
+def regInst (a : InstId) (i : Inst) : Bool :=
+  regUse a i.op && match _h : i.op with
+    | .block b | .loop b | .«try» _ b => regBody a b.toList
+    | .condBr _ t e => regBody a t.toList && regBody a e.toList
+    | .switchBr _ cs e => regCases a cs.toList && regBody a e.toList
+    | _ => true
+termination_by (sizeOf i, 1)
+decreasing_by
+  all_goals
+    obtain ⟨id, ty, op⟩ := i
+    simp only at _h
+    subst _h
+    simp_wf
+    try simp only [sizeOf_toList]
+    omega
+
+def regCases (a : InstId) : List SwitchCase → Bool
+  | [] => true
+  | sc :: more => regBody a sc.body.toList && regCases a more
+termination_by l => (sizeOf l, 0)
+decreasing_by
+  all_goals simp_wf
+  all_goals try simp only [sizeOf_toList]
+  all_goals (try have := sizeOf_case_body sc); omega
+
+end
+
+/-- A load of a register local of type `t`: its value; `.unspecified` if it is undefined, as
+undefined bytes read through `Zig.load`. -/
+def cellRead (t : Ty) : Option Value → Result Value
+  | some v => if valOk t v then pure v else stuck
+  | none => throw .unspecified
+
+/-- The new contents of a register local stored `v`: `undefined` makes it undefined. -/
+def cellVal (f : Func) (env : Env) : Val → Result (Option Value)
+  | .undef _ => pure none
+  | v => some <$> operand f env v
+
+/-- The `alloc` `a` of `f` is a register local. -/
+def regAlloc (f : Func) (a : InstId) : Bool := regBody a f.body.toList
 
 mutual
 
@@ -327,16 +737,14 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
   match _h : i.op with
   | .arg index =>
     match c.args[index]? with
-    | some v => execBody c rest (env.set i.id v)
+    | some v => execBody c rest (env.set i.id i.ty v)
     | none => liftR stuck
   | .block body => do
     let e ← execBody c body.toList env
     match e with
-    | .br t v => if t = i.id then execBody c rest (env.set i.id v) else pure e
+    | .br t v => if t = i.id then execBody c rest (env.set i.id i.ty v) else pure e
     | _ => pure e
-  | .loop body =>
-    -- A loop never falls through: it repeats on its own `repeat` and otherwise propagates.
-    Zig.loop (execBody c body.toList env) (Exit.again i.id)
+  | .loop body => execLoop c i.id body env
   | .br t v => do pure (.br t (← liftR (operand c.func env v)))
   | .«repeat» t => pure (.rep t)
   | .ret v => do pure (.ret (← liftR (operand c.func env v)))
@@ -349,37 +757,63 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     match ← liftR (operand c.func env v) with
     | .int s _ x => execSwitch c s x cases.toList el env
     | _ => liftR stuck
-  | .alloc => do
-    match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
-    | some (size, align), some palign => do
-      let p ← liftMem (Zig.allocStack size align)
-      modify (· ++ [p])
-      execBody c rest (env.set i.id (.ptr p palign))
-    | _, _ => liftR stuck
+  | .alloc =>
+    if regAlloc c.func i.id then do
+      -- A register local starts undefined.
+      modify (·.setCell i.id none)
+      execBody c rest (env.set i.id i.ty (.cell i.id))
+    else
+      -- The block's alignment is the pointer type's `align(N)` (MM-1).
+      match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
+      | some (size, _), some align => do
+        let p ← liftMem (Zig.allocStack size align)
+        modify fun fr => { fr with blocks := fr.blocks ++ [p] }
+        execBody c rest (env.set i.id i.ty (.ptr p))
+      | _, _ => liftR stuck
   | .load p => do
-    match ← liftR (operand c.func env p) with
-    | .ptr q align => do
-      let v ← liftMem (loadAs c.func i.ty q align)
-      execBody c rest (env.set i.id v)
-    | _ => liftR stuck
+    let v ← (do
+      match ← liftR (operand c.func env p) with
+      | .cell k => liftR (cellRead (tyOf c.func i.ty) ((← get).cells k))
+      | _ => liftMem (evalMem c.func env i))
+    execBody c rest (env.set i.id i.ty v)
   | .store p v => do
-    match ← liftR (operand c.func env p) with
-    | .ptr q align => do
-      liftMem (storeAs c.func env q align v)
-      execBody c rest env
-    | _ => liftR stuck
+    (do
+      match ← liftR (operand c.func env p) with
+      | .cell k => modify (·.setCell k (← liftR (cellVal c.func env v)))
+      | _ => do let _ ← liftMem (evalMem c.func env i))
+    execBody c rest (env.set i.id i.ty .void)
   | .call (.func name _ _) args => do
     match panicOf? name with
     | some e => liftR (throw e)
     | none => do
       let vs ← liftR (args.toList.mapM (operand c.func env))
       let v ← liftMem (c.call name vs)
-      execBody c rest (env.set i.id v)
+      execBody c rest (env.set i.id i.ty v)
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
+  -- `try`: the payload continues; an error runs the error body (it ends in an exit).
+  | .«try» v errBody => do
+    match ← liftR (errUnionOperand c.func env v) with
+    | .errOk x => execBody c rest (env.set i.id i.ty x)
+    | .errErr _ => execBody c errBody.toList env
+    | _ => liftR stuck
+  | .sliceElemVal (.inst k) idx =>
+    match c.view k with
+    | some items => do
+      -- A viewed slice: the same operand checks as `evalMem`, then the item from the view.
+      let (_, a) ← liftR (sliceOperand c.func env (.inst k))
+      let j ← liftR (indexOperand c.func env idx)
+      match itemLayout c.func i.ty a with
+      | some _ => do
+        let v ← liftR (Zig.index items j)
+        execBody c rest (env.set i.id i.ty v)
+      | none => liftR stuck
+    | none => do
+      let v ← liftMem (evalMem c.func env i)
+      execBody c rest (env.set i.id i.ty v)
   | _ => do
-    let v ← liftR (evalPure c.func env i)
-    execBody c rest (env.set i.id v)
+    let v ← liftMem (evalMem c.func env i)
+    execBody c rest (env.set i.id i.ty v)
 termination_by (sizeOf i + sizeOf rest, 1)
 decreasing_by
   all_goals
@@ -403,21 +837,21 @@ decreasing_by
   all_goals try simp only [sizeOf_toList]
   all_goals (try have := sizeOf_case_body sc); omega
 
+/-- The loop `id`: its body until an exit other than its own `repeat`. A loop never falls
+through. A separate definition, so that a certificate rewrites a whole loop by its own lemma
+instead of unfolding the body. -/
+def execLoop (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) : SM Exit :=
+  Zig.loop (execBody c body.toList env) (Exit.again id)
+termination_by (sizeOf body, 1)
+decreasing_by simp_wf; simp only [sizeOf_toList]; omega
+
 end
 
-/-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
-`void`) have values here. -/
-def valOk (t : Ty) (v : Value) : Bool :=
-  match t, v with
-  | .int s w, .int s' w' _ => s == s' && w == w'
-  | .bool, .bool _ => true
-  | .void, .void => true
-  | _, _ => false
-
-/-- Do the arguments match the parameter types, one for one? -/
+/-- Do the arguments match the parameter types, one for one? (`valOkIn`, through two levels of
+optionals and error unions.) -/
 def argsOk (f : Func) : List TyId → List Value → Bool
   | [], [] => true
-  | t :: ts, v :: vs => valOk (tyOf f t) v && argsOk f ts vs
+  | t :: ts, v :: vs => valOkIn f 3 t v && argsOk f ts vs
   | _, _ => false
 
 /-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
@@ -425,9 +859,9 @@ binds its parameter) and no local cells. A call whose arguments do not match the
 types, and a function that ends other than by `ret`, are stuck. -/
 def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
-    let (e, frame) ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run []
+    let (e, frame) ← (execBody ⟨f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
     -- The stack frame ends at the return (a panic leaves the memory behind).
-    frame.forM Zig.free
+    frame.blocks.forM Zig.free
     match e with
     | .ret v => pure v
     | _ => StateT.lift stuck
@@ -442,12 +876,22 @@ def Value.toBool : Value → Bool
   | .bool b => b
   | _ => false
 
+/-- The slice a `slice` value holds (the empty slice at `Zig.Ptr.null` for any other value). -/
+def Value.toSlice : Value → Zig.Slice
+  | .slice s => s
+  | _ => ⟨Zig.Ptr.null, 0⟩
+
+/-- The pointer a `ptr` value holds (`Zig.Ptr.null` for any other value). -/
+def Value.toPtr : Value → Zig.Ptr
+  | .ptr p => p
+  | _ => Zig.Ptr.null
+
 theorem argsOk_nil {f : Func} {args : List Value} (h : argsOk f [] args = true) : args = [] := by
   cases args <;> simp_all [argsOk]
 
 theorem argsOk_cons {f : Func} {t : TyId} {ts : List TyId} {args : List Value}
     (h : argsOk f (t :: ts) args = true) :
-    ∃ v vs, args = v :: vs ∧ valOk (tyOf f t) v = true ∧ argsOk f ts vs = true := by
+    ∃ v vs, args = v :: vs ∧ valOkIn f 3 t v = true ∧ argsOk f ts vs = true := by
   cases args with
   | nil => simp [argsOk] at h
   | cons v vs => simp only [argsOk, Bool.and_eq_true] at h; exact ⟨v, vs, rfl, h⟩
@@ -462,6 +906,14 @@ theorem valOk_bool {v : Value} (h : valOk .bool v = true) : v = .bool v.toBool :
 
 theorem valOk_void {v : Value} (h : valOk .void v = true) : v = .void := by
   cases v <;> simp_all [valOk]
+
+theorem valOk_ptr {size : String} {c : Bool} {t : TyId} {v : Value}
+    (h : valOk (.ptr size c t) v = true) (hs : size ≠ "slice") : v = .ptr v.toPtr := by
+  cases v <;> simp_all [valOk, Value.toPtr]
+
+theorem valOk_slice {c : Bool} {t : TyId} {v : Value}
+    (h : valOk (.ptr "slice" c t) v = true) : v = .slice v.toSlice := by
+  cases v <;> simp_all [valOk, Value.toSlice]
 
 /-! ## Programs -/
 
@@ -504,46 +956,41 @@ local macro "mono_step" : tactic => `(tactic| first
 
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
-theorem execBody_mono (f : Func) (args : List Value) :
-    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o⟩ l env) := by
-  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck⟩
-    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o⟩ i rest env))
-    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
-  case case1 => intros; simp only [execBody]; exact monotone_const _
-  case case2 => intros; simp only [execBody]; assumption
-  case case23 => intros; simp only [execSwitch]; assumption
-  case case24 => intros; unfold execSwitch; repeat' mono_step
-  case case22 =>
-    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 ih
-    unfold execInst
-    split <;> (try (exfalso; first
-      | exact n1 _ ‹_› | exact n2 _ ‹_› | exact n3 _ ‹_› | exact n4 _ _ ‹_› | exact n5 _ ‹_›
-      | exact n6 _ ‹_› | exact n7 ‹_› | exact n8 ‹_› | exact n9 _ _ _ ‹_› | exact n10 _ _ _ ‹_›
-      | exact n11 ‹_› | exact n12 _ ‹_› | exact n13 _ _ ‹_› | exact n14 _ _ _ _ ‹_›
-      | exact n15 _ ‹_› | exact n16 _ _ ‹_›))
-    apply monotone_bind
-    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
-    · apply monotone_of_monotone_apply; intro v; exact ih v
-  case case19 =>
-    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
-    simp only at *
-    subst_vars
-    simp only [execInst]
-    try simp only [*]
-    apply monotone_bind
-    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
-    · apply monotone_of_monotone_apply; intro vs
-      apply monotone_bind
-      · apply monotone_liftMem
-        exact monotone_apply _ _ (monotone_apply _ _ monotone_id)
-      · apply monotone_of_monotone_apply; intro v; apply_assumption
-  all_goals
-    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
-    simp only at *
-    subst_vars
-    simp only [execInst]
-    try simp only [*]
-    repeat' mono_step
+theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (Array Value)) :
+    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o, view⟩ l env) := by
+  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck, view⟩
+    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
+    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
+    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
+  case case28 => intros; unfold execSwitch; repeat' mono_step
+  all_goals first
+    | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
+    | (intros; simp only [execSwitch]; assumption)
+    | (intros; unfold execSwitch; dsimp only; repeat' mono_step; done)
+    | (intros; simp only [execLoop]; apply monotone_loopMM; assumption)
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst]
+       try simp only [*, ↓reduceIte, Bool.false_eq_true]
+       repeat' mono_step
+       done)
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst]
+       try simp only [*]
+       apply monotone_bind
+       · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
+       · apply monotone_of_monotone_apply; intro vs
+         apply monotone_bind
+         · apply monotone_liftMem
+           exact monotone_apply _ _ (monotone_apply _ _ monotone_id)
+         · apply monotone_of_monotone_apply; intro v; apply_assumption
+       done)
+    | (intros
+       unfold execInst
+       split <;> first | (exfalso; solve_by_elim) | (repeat' mono_step; done))
 
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
@@ -552,8 +999,8 @@ theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : mo
   apply monotone_ite _ _ _ _ (monotone_const _)
   apply monotone_bind
   · exact monotone_compose (g := fun o : Oracle =>
-      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run []) hg
-      (monotone_stateTRun _ (execBody_mono f args _ _) _)
+      (execBody ⟨f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
+      (monotone_stateTRun _ (execBody_mono f args _ _ _) _)
   · exact monotone_const _
 
 end Monotone
@@ -641,6 +1088,415 @@ theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (f : Func) (args : 
 
 end Complete
 
+/-! ## Loops
+
+A certificate relates the semantics' loop (`execLoop`, over `Frame` and `Exit`) to the generated
+`f.loop<n>` (over the function's `Locals` and its own exit type) by an encoding of the exit
+and a map of the state (`docs/air-semantics.md` §Loops). -/
+
+/-- The value an instruction holds in `env` (`.void` if it has not run). -/
+def Env.val (env : Env) (k : InstId) : Value :=
+  match env k with
+  | some (_, v) => v
+  | none => .void
+
+/-- The contents of a register local (`.void` if undefined). -/
+def Frame.cell (fr : Frame) (k : InstId) : Value := (fr.cells k).getD .void
+
+/-- A body's result, its exit encoded and its state mapped. -/
+abbrev mapRes {σ₁ σ₂ ε₁ ε₂ : Type} (enc : ε₂ → ε₁) (F : σ₂ → σ₁) (r : ε₂ × σ₂) : ε₁ × σ₁ :=
+  (enc r.1, F r.2)
+
+section LoopComm
+open Lean.Order
+
+theorem adm_le {α : Type} [CCPO α] (k : α) : admissible (fun x : α => x ⊑ k) :=
+  fun _ hc h => csup_le hc h
+
+/-- Loop commutation: if one run of body `b₁` from a mapped state is the mapped run of `b₂`,
+and the exit encoding commutes with the repeat test, then the loops commute too. Proved by
+fixpoint induction in both directions. -/
+theorem loop_comm {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.MM σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s, b₁.run (F s) = mapRes enc F <$> b₂.run s)
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) :
+    (Zig.loop b₁ a₁).run (F s) = mapRes enc F <$> (Zig.loop b₂ a₂).run s := by
+  apply PartialOrder.rel_antisymm
+  · revert s
+    apply Zig.loop.fixpoint_induct b₁ a₁
+      (motive := fun l => ∀ s, l.run (F s) ⊑ mapRes enc F <$> (Zig.loop b₂ a₂).run s)
+    · apply admissible_pi; intro s
+      exact admissible_apply (fun _ (v : MemM (ε₁ × σ₁)) => v ⊑ mapRes enc F <$> (Zig.loop b₂ a₂).run s)
+        (F s) (adm_le _)
+    · intro l hl s
+      rw [Zig.loop.eq_1 b₂ a₂]
+      show (b₁ >>= fun e => if a₁ e then l else pure e).run (F s) ⊑ _
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _
+      · exact PartialOrder.rel_refl
+  · revert s
+    apply Zig.loop.fixpoint_induct b₂ a₂
+      (motive := fun l => ∀ s, mapRes enc F <$> l.run s ⊑ (Zig.loop b₁ a₁).run (F s))
+    · apply admissible_pi; intro s
+      apply admissible_apply (fun x (v : MemM (ε₂ × σ₂)) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F x)) s
+      have e : (fun v : MemM (ε₂ × σ₂) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F s)) =
+          (fun v => ∀ m, (fun p => (mapRes enc F p.1, p.2)) <$> v m ⊑ (Zig.loop b₁ a₁).run (F s) m) := by
+        funext v
+        apply propext
+        constructor
+        · intro h m
+          have := h m
+          change StateT.run (mapRes enc F <$> v) m ⊑ _ at this
+          rw [StateT.run_map] at this
+          exact this
+        · intro h m
+          have := h m
+          change StateT.run (mapRes enc F <$> v) m ⊑ _
+          rw [StateT.run_map]
+          exact this
+      rw [e]
+      exact admissible_pi_apply _ fun _ => adm_app0 _ _
+    · intro l hl s
+      rw [Zig.loop.eq_1 b₁ a₁]
+      show mapRes enc F <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+        (b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _
+      · exact PartialOrder.rel_refl
+
+/-- `loop_comm` for a generated loop of a function without memory (`Zig.M`): the semantics' loop
+runs over memory, which no iteration changes. -/
+theorem loop_comm_pure {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.M σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s m, (b₁.run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> b₂.run s)
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) (m : Zig.Mem) :
+    ((Zig.loop b₁ a₁).run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> (Zig.loop b₂ a₂).run s := by
+  apply PartialOrder.rel_antisymm
+  · revert s m
+    apply Zig.loop.fixpoint_induct b₁ a₁
+      (motive := fun l => ∀ s m, (l.run (F s)).run m ⊑ (fun r => (mapRes enc F r, m)) <$> (Zig.loop b₂ a₂).run s)
+    · apply admissible_pi; intro s; apply admissible_pi; intro m
+      exact admissible_apply (fun _ (v : MemM (ε₁ × σ₁)) => v m ⊑ _) (F s)
+        (admissible_apply (fun _ (r : Result ((ε₁ × σ₁) × Zig.Mem)) => r ⊑ _) m (adm_le _))
+    · intro l hl s m
+      rw [Zig.loop.eq_1 b₂ a₂]
+      show ((b₁ >>= fun e => if a₁ e then l else pure e).run (F s)).run m ⊑ _
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _ _
+      · exact PartialOrder.rel_refl
+  · revert s m
+    apply Zig.loop.fixpoint_induct b₂ a₂
+      (motive := fun l => ∀ s m, (fun r => (mapRes enc F r, m)) <$> l.run s ⊑ ((Zig.loop b₁ a₁).run (F s)).run m)
+    · apply admissible_pi; intro s; apply admissible_pi; intro m
+      exact admissible_apply (fun _ (r : Result (ε₂ × σ₂)) => (fun r => (mapRes enc F r, m)) <$> r ⊑
+        ((Zig.loop b₁ a₁).run (F s)).run m) s (adm_app0 _ _)
+    · intro l hl s m
+      rw [Zig.loop.eq_1 b₁ a₁]
+      show (fun r => (mapRes enc F r, m)) <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+        ((b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)).run m
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _ _
+      · exact PartialOrder.rel_refl
+
+end LoopComm
+
+/-! ### Exits
+
+In well-formed AIR every `br` targets an enclosing block and every `repeat` an enclosing loop
+(`wfBody`, decided on the decoded function). Then a body exits only to those (`execBody_ok`):
+a loop's result never names one of its own inner blocks. A certificate needs this after a loop,
+where the generated exit type also has the inner blocks' constructors. -/
+
+mutual
+/-- Every `br`/`repeat` of the body targets a block of `bs` or a loop of `ls`, or one that
+encloses it inside the body. -/
+def wfBody (bs ls : List InstId) : List Inst → Bool
+  | [] => true
+  | i :: rest => wfInst bs ls i && wfBody bs ls rest
+termination_by l => (sizeOf l, 0)
+
+def wfInst (bs ls : List InstId) (i : Inst) : Bool :=
+  match _h : i.op with
+  | .block b => wfBody (i.id :: bs) ls b.toList
+  | .loop b => wfBody bs (i.id :: ls) b.toList
+  | .br t _ => bs.contains t
+  | .«repeat» t => ls.contains t
+  | .condBr _ t e => wfBody bs ls t.toList && wfBody bs ls e.toList
+  | .«try» _ b => wfBody bs ls b.toList
+  | .switchBr _ cs e => wfCases bs ls cs.toList && wfBody bs ls e.toList
+  | _ => true
+termination_by (sizeOf i, 1)
+decreasing_by
+  all_goals
+    obtain ⟨id, ty, op⟩ := i
+    simp only at _h
+    subst _h
+    simp_wf
+    try simp only [sizeOf_toList]
+    omega
+
+def wfCases (bs ls : List InstId) : List SwitchCase → Bool
+  | [] => true
+  | sc :: more => wfBody bs ls sc.body.toList && wfCases bs ls more
+termination_by l => (sizeOf l, 0)
+decreasing_by
+  all_goals simp_wf
+  all_goals try simp only [sizeOf_toList]
+  all_goals (try have := sizeOf_case_body sc); omega
+end
+
+/-- An exit to a block of `bs`, a repeat of a loop of `ls`, or a return. -/
+def exitOk (bs ls : List InstId) : Exit → Bool
+  | .br t _ => bs.contains t
+  | .rep t => ls.contains t
+  | .ret _ => true
+
+theorem Result.bind_ok {α β : Type} {x : Result α} {f : α → Result β} {r : β}
+    (h : (x >>= f).run = some (.ok r)) : ∃ a, x.run = some (.ok a) ∧ (f a).run = some (.ok r) := by
+  revert h
+  cases hx : x.run with
+  | none =>
+    intro h
+    have : (x >>= f).run = none := by
+      show (ExceptT.bind x f).run = none
+      simp only [ExceptT.bind, ExceptT.run_mk] at *
+      simp only [ExceptT.run] at hx
+      simp [hx]
+    rw [this] at h; cases h
+  | some e =>
+    cases e with
+    | error err =>
+      intro h
+      have : (x >>= f).run = some (.error err) := by
+        show (ExceptT.bind x f).run = _
+        simp only [ExceptT.bind, ExceptT.run_mk] at *
+        simp only [ExceptT.run] at hx
+        simp [hx, ExceptT.bindCont]
+      rw [this] at h; cases h
+    | ok a =>
+      intro h
+      refine ⟨a, rfl, ?_⟩
+      have : (x >>= f).run = (f a).run := by
+        show (ExceptT.bind x f).run = _
+        simp only [ExceptT.bind, ExceptT.run_mk] at *
+        simp only [ExceptT.run] at hx
+        simp [hx, ExceptT.bindCont]; rfl
+      rwa [this] at h
+
+/-- Every result of `x`, from any state and memory, satisfies `P`. -/
+def Ok {σ α : Type} (P : α → Prop) (x : Zig.MM σ α) : Prop :=
+  ∀ s m r, ((x.run s).run m).run = some (.ok r) → P r.1.1
+
+theorem ok_pure {σ α : Type} {P : α → Prop} {a : α} (h : P a) : Ok (σ := σ) P (pure a) := by
+  intro s m r hr
+  simp only [StateT.run_pure] at hr
+  cases hr
+  exact h
+
+theorem ok_lift {α : Type} {P : α → Prop} {x : Zig.Result α} (h : ∀ a, x.run = some (.ok a) → P a) :
+    Ok P (liftR x) := by
+  intro s m r hr
+  simp only [liftR, StateT.run_lift, StateT.run_bind, StateT.run_pure] at hr
+  obtain ⟨_, hx, hp⟩ := Result.bind_ok hr
+  obtain ⟨a, hx', hp'⟩ := Result.bind_ok hx
+  cases hp'
+  cases hp
+  exact h _ hx'
+
+theorem ok_stuck {α : Type} {P : α → Prop} : Ok P (liftR (stuck : Result α)) :=
+  ok_lift fun _ h => by cases h
+
+theorem ok_throw {α : Type} {P : α → Prop} {e : Zig.Error} : Ok P (liftR (throw e : Result α)) :=
+  ok_lift fun _ h => by cases h
+
+section OkLoop
+open Lean.Order
+
+theorem ok_loop {σ ε : Type} {P : ε → Prop} {b : Zig.MM σ ε} {a : ε → Bool}
+    (h : Ok (fun e => a e = true ∨ P e) b) : Ok (fun e => a e = false ∧ P e) (Zig.loop b a) := by
+  intro s m r
+  revert s m r
+  apply Zig.loop.fixpoint_induct b a (motive := fun l => ∀ s m r,
+    ((l.run s).run m).run = some (.ok r) → a r.1.1 = false ∧ P r.1.1)
+  · apply admissible_pi; intro s
+    apply admissible_pi; intro m
+    apply admissible_apply (fun _ (v : MemM (ε × σ)) => ∀ r, (v m).run = some (.ok r) → a r.1.1 = false ∧ P r.1.1) s
+    apply admissible_apply (fun _ (v : Zig.Result ((ε × σ) × Zig.Mem)) => ∀ r, v.run = some (.ok r) →
+      a r.1.1 = false ∧ P r.1.1) m
+    apply admissible_flatOrder
+    intro r hr
+    cases hr
+  · intro l hl s m r hr
+    change ((StateT.run (StateT.run (b >>= fun e => if a e then l else pure e) s) m).run = _) at hr
+    rw [StateT.run_bind, StateT.run_bind] at hr
+    obtain ⟨p, hx, hp⟩ := Result.bind_ok hr
+    cases ha : a p.1.1
+    · simp only [ha, Bool.false_eq_true, ↓reduceIte, StateT.run_pure] at hp
+      cases hp
+      have := h s m p hx
+      simp only [ha, Bool.false_eq_true, false_or] at this
+      exact ⟨ha, this⟩
+    · simp only [ha, ↓reduceIte] at hp
+      exact hl _ _ _ hp
+
+end OkLoop
+
+theorem ok_bind' {σ α β : Type} {P : β → Prop} {Q : α → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
+    (hx : Ok Q x) (h : ∀ a, Q a → Ok P (f a)) : Ok P (x >>= f) := by
+  intro s m r hr
+  rw [StateT.run_bind, StateT.run_bind] at hr
+  obtain ⟨p, hp, hf⟩ := Result.bind_ok hr
+  exact h _ (hx s m p hp) _ _ _ hf
+
+theorem ok_bind {σ α β : Type} {P : β → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
+    (h : ∀ a, Ok P (f a)) : Ok P (x >>= f) :=
+  ok_bind' (Q := fun _ => True) (fun _ _ _ _ => trivial) fun a _ => h a
+
+theorem ok_ite {σ α : Type} {P : α → Prop} {c : Prop} [Decidable c] {x y : Zig.MM σ α}
+    (hx : Ok P x) (hy : Ok P y) : Ok P (if c then x else y) := by
+  split <;> assumption
+
+theorem ok_mono {σ α : Type} {P Q : α → Prop} {x : Zig.MM σ α} (h : Ok P x) (hpq : ∀ a, P a → Q a) :
+    Ok Q x := fun s m r hr => hpq _ (h s m r hr)
+
+local macro "ok_step" : tactic => `(tactic| first
+  | exact ok_stuck
+  | exact ok_throw
+  | (apply ok_pure; simp_all [exitOk]; done)
+  | (apply_assumption <;> simp_all; done)
+  | (apply ok_bind; intro)
+  | (apply ok_ite)
+  | split)
+
+/-- A well-formed body exits only to the blocks and loops it names (`wfBody`). -/
+theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l = true →
+    Ok (fun e => exitOk bs ls e = true) (execBody c l env) := by
+  apply execBody.induct c
+    (motive2 := fun i rest env => ∀ bs ls, wfInst bs ls i = true → wfBody bs ls rest = true →
+      Ok (fun e => exitOk bs ls e = true) (execInst c i rest env))
+    (motive3 := fun s w x cs el env => ∀ bs ls, wfCases bs ls cs = true → wfBody bs ls el.toList = true →
+      Ok (fun e => exitOk bs ls e = true) (execSwitch c s x cs el env))
+    (motive4 := fun id body env => ∀ bs ls, wfBody bs (id :: ls) body.toList = true →
+      Ok (fun e => exitOk bs ls e = true) (execLoop c id body env))
+  case case1 => intros; simp only [execBody]; exact ok_stuck
+  case case2 =>
+    intro i rest env ih bs ls h
+    simp only [wfBody, Bool.and_eq_true] at h
+    simp only [execBody]
+    exact ih bs ls h.1 h.2
+  case case5 =>
+    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env body hop ihb ihr bs ls hi hr
+    simp only at hop; subst hop
+    simp only [execInst]
+    simp only [wfInst] at hi
+    refine ok_bind' (ihb _ _ hi) ?_
+    intro e he
+    split
+    · rename_i t v
+      split
+      · subst_vars; exact ihr _ _ rfl bs ls hr
+      · apply ok_pure; simp_all [exitOk]
+    · apply ok_pure
+      rename_i hne
+      cases e with
+      | br t v => exact absurd rfl (hne t v)
+      | rep t => simpa [exitOk] using he
+      | ret v => simp [exitOk]
+  case case27 =>
+    intro s w x el env ih bs ls _ hel
+    simp only [execSwitch]
+    exact ih bs ls hel
+  case case28 =>
+    intro s w x sc more el env ihb ihm bs ls hc hel
+    simp only [wfCases, Bool.and_eq_true] at hc
+    unfold execSwitch
+    apply ok_bind; intro b
+    apply ok_ite
+    · exact ihb bs ls hc.1
+    · exact ihm bs ls hc.2 hel
+  case case29 =>
+    intro id body env ih bs ls h
+    simp only [execLoop]
+    refine ok_mono (ok_loop (ok_mono (ih bs (id :: ls) h) (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_)) ?_
+    · intro e he
+      cases e <;> simp_all [exitOk, Exit.again]
+    · intro e he; exact he.2
+  all_goals first
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst, wfInst] at *
+       try simp only [*, ↓reduceIte, Bool.false_eq_true]
+       repeat' ok_step
+       done)
+    | fail "remaining"
+
+/-- A loop of a well-formed body leaves only to an enclosing block or loop, never by its own
+`repeat`. -/
+theorem execLoop_ok (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) (bs ls : List InstId)
+    (h : wfBody bs (id :: ls) body.toList = true) :
+    Ok (fun e => Exit.again id e = false ∧ exitOk bs ls e = true) (execLoop c id body env) := by
+  simp only [execLoop]
+  refine ok_loop (ok_mono (execBody_ok c _ env bs (id :: ls) h) ?_)
+  intro e he
+  cases e <;> simp_all [exitOk, Exit.again]
+
+theorem Result.map_ok {α β : Type} {f : α → β} {x : Result α} {r : α} (h : x.run = some (.ok r)) :
+    (f <$> x).run = some (.ok (f r)) := by
+  show (ExceptT.map f x).run = _
+  simp only [ExceptT.map, ExceptT.run_mk] at *
+  simp only [ExceptT.run] at h
+  simp [h]
+
+/-- What every result of a loop of the semantics satisfies, the generated loop it commutes with
+satisfies for its encoded results. -/
+theorem ok_transfer {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {x₁ : Zig.MM σ₁ ε₁} {x₂ : Zig.MM σ₂ ε₂}
+    {enc : ε₂ → ε₁} {F : σ₂ → σ₁} {s : σ₂} (heq : x₁.run (F s) = mapRes enc F <$> x₂.run s)
+    (hok : Ok P x₁) (m : Zig.Mem) (r : (ε₂ × σ₂) × Zig.Mem) (hr : ((x₂.run s).run m).run = some (.ok r)) :
+    P (enc r.1.1) := by
+  have := hok (F s) m ((mapRes enc F r.1, r.2))
+  apply this
+  rw [heq, StateT.run_map]
+  exact Result.map_ok hr
+
+/-- `ok_transfer` for a generated loop of a function without memory (`loop_comm_pure`). -/
+theorem ok_transfer_pure {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {x₁ : Zig.MM σ₁ ε₁} {x₂ : Zig.M σ₂ ε₂}
+    {enc : ε₂ → ε₁} {F : σ₂ → σ₁} {s : σ₂}
+    (heq : ∀ m, (x₁.run (F s)).run m = (fun r => (mapRes enc F r, m)) <$> x₂.run s)
+    (hok : Ok P x₁) (r : ε₂ × σ₂) (hr : (x₂.run s).run = some (.ok r)) : P (enc r.1) := by
+  have := hok (F s) default ((mapRes enc F r), default)
+  apply this
+  rw [heq]
+  exact Result.map_ok hr
+
+/-- After a generated loop, two continuations need to agree only on the results the loop has. -/
+theorem bind_congr_ok {α β : Type} (x : Result α) (Q : α → Prop) (hx : ∀ r, x.run = some (.ok r) → Q r)
+    {k₁ k₂ : α → Result β} (h : ∀ r, Q r → k₁ r = k₂ r) : x >>= k₁ = x >>= k₂ := by
+  show ExceptT.bind x k₁ = ExceptT.bind x k₂
+  simp only [ExceptT.bind]
+  congr 1
+  cases hxr : x.run with
+  | none => simp only [ExceptT.run] at hxr; simp [hxr]
+  | some e =>
+    cases e with
+    | error err => simp only [ExceptT.run] at hxr; simp [hxr]; rfl
+    | ok a =>
+      simp only [ExceptT.run] at hxr
+      simp only [hxr, Option.bind_eq_bind, Option.bind_some, ExceptT.bindCont]
+      exact congrArg ExceptT.run (h a (hx a (by simp [ExceptT.run, hxr])))
+
 /-- A program as a table of fully qualified names and functions (`progOf`). -/
 abbrev Table := List (String × Func)
 
@@ -671,6 +1527,77 @@ theorem run_le_of_table {t : Table} {G : Oracle} (h : Fixpoint G t) :
       simp only [this] at hp
       exact ih ht hp
 
+/-- An item of the encoded items of an array (a view, `Ctx.view`) is the encoded item. -/
+theorem index_map {α β : Type} (f : α → β) (a : Array α) (j : BitVec 64) :
+    Zig.index (a.map f) j = f <$> Zig.index a j := by
+  unfold Zig.index
+  by_cases h : j.toNat < a.size
+  · rw [dif_pos (by simpa using h), dif_pos h]; simp
+  · rw [dif_neg (by simpa using h), dif_neg h]; rfl
+
+/-- The length of a pure function's array argument, as the slice's length it was read from. -/
+theorem len_of_size {α : Type} {a : Array α} {s : Zig.Slice} (h : a.size = s.len.toNat) :
+    Zig.len a = s.len := by
+  unfold Zig.len; rw [h]; simp
+
+/-- A lifted pure result in memory, run. -/
+theorem lift_map_run {α β : Type} (X : Result α) (g : α → β) (m : Zig.Mem) :
+    (StateT.lift (g <$> X) : MemM β).run m = (fun r => (g r, m)) <$> X := by
+  simp only [StateT.run_lift, bind_pure_comp, Functor.map_map, Function.comp_def]
+
+/-- An optional as a value (the encoding of a generated `Option α`). -/
+def Value.ofOpt {α : Type} (g : α → Value) : Option α → Value
+  | some a => .optSome (g a)
+  | none => .optNone
+
+/-- An error union as a value (the encoding of a generated `Except Zig.ErrName α`). -/
+def Value.ofExcept {α : Type} (g : α → Value) : Except Zig.ErrName α → Value
+  | .ok a => .errOk (g a)
+  | .error n => .errErr n
+
+/-! Optionals and error unions, by constructor (a symbolic encoded value is rewritten by the
+`_ofOpt`/`_ofExcept` lemmas instead). -/
+theorem Value.optIsSome_some (v : Value) : (Value.optSome v).optIsSome = pure true := rfl
+theorem Value.optIsSome_none : Value.optNone.optIsSome = pure false := rfl
+theorem Value.optGet_some (v : Value) : (Value.optSome v).optGet = pure v := rfl
+theorem Value.optGet_none : Value.optNone.optGet = throw .illegal := rfl
+theorem Value.errIsErr_ok (v : Value) : (Value.errOk v).errIsErr = pure false := rfl
+theorem Value.errIsErr_err (n : String) : (Value.errErr n).errIsErr = pure true := rfl
+theorem Value.errGet_ok (v : Value) : (Value.errOk v).errGet = pure v := rfl
+theorem Value.errGet_err (n : String) : (Value.errErr n).errGet = throw .illegal := rfl
+theorem Value.errGetErr_ok (v : Value) : (Value.errOk v).errGetErr = throw .illegal := rfl
+theorem Value.errGetErr_err (n : String) : (Value.errErr n).errGetErr = pure (.errName n) := rfl
+theorem Value.errWrap_name (n : String) : (Value.errName n).errWrap = pure (.errErr n) := rfl
+
+theorem ofOpt_some {α : Type} (g : α → Value) (a : α) : Value.ofOpt g (some a) = .optSome (g a) := rfl
+theorem ofOpt_none {α : Type} (g : α → Value) : Value.ofOpt g none = .optNone := rfl
+theorem ofExcept_ok {α : Type} (g : α → Value) (a : α) : Value.ofExcept g (.ok a) = .errOk (g a) := rfl
+theorem ofExcept_error {α : Type} (g : α → Value) (n : Zig.ErrName) :
+    Value.ofExcept g (.error n) = .errErr n := rfl
+
+theorem optIsSome_ofOpt {α : Type} (g : α → Value) (o : Option α) :
+    (Value.ofOpt g o).optIsSome = pure o.isSome := by cases o <;> rfl
+
+theorem optGet_ofOpt {α : Type} (g : α → Value) (o : Option α) :
+    (Value.ofOpt g o).optGet = g <$> Zig.optPayload o := by cases o <;> rfl
+
+theorem errIsErr_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errIsErr = pure (Zig.isErr e) := by cases e <;> rfl
+
+theorem errGet_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errGet = g <$> Zig.unwrapPayload e := by cases e <;> rfl
+
+theorem errGetErr_ofExcept {α : Type} (g : α → Value) (e : Except Zig.ErrName α) :
+    (Value.ofExcept g e).errGetErr = Value.errName <$> Zig.unwrapErr e := by cases e <;> rfl
+
+/-- A bounds check of an index known in range (a constant index of an array pointer, which the
+translator does not check again). -/
+theorem checkIndex_lt {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    Zig.checkIndex len i = pure () := by simp [Zig.checkIndex, h]
+
+theorem checkSentinelIndex_le {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
+    Zig.checkSentinelIndex len i = pure () := by simp [Zig.checkSentinelIndex, h]
+
 /-! ## Normalization lemmas for certificates -/
 
 namespace Cert
@@ -690,7 +1617,10 @@ theorem run_throwMem {α : Type} (e : Zig.Error) (s : Zig.Mem) :
 theorem map_throw {α β : Type} (e : Zig.Error) (f : α → β) :
     f <$> (throw e : Result α) = throw e := rfl
 
-theorem free_nil : List.forM ([] : Frame) Zig.free = pure () := rfl
+theorem free_nil : List.forM ([] : List Zig.Ptr) Zig.free = pure () := rfl
+
+theorem free_cons (p : Zig.Ptr) (ps : List Zig.Ptr) :
+    List.forM (p :: ps) Zig.free = Zig.free p >>= fun _ => List.forM ps Zig.free := rfl
 
 theorem bind_ite {m : Type → Type} [Monad m] {α β : Type} (c : Prop) [Decidable c]
     (a b : m α) (f : α → m β) : (if c then a else b) >>= f = if c then a >>= f else b >>= f := by
@@ -704,8 +1634,39 @@ theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a 
     (if c then a else b).run s = if c then a.run s else b.run s := by
   split <;> rfl
 
-attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
-  operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
+/-- A zero-offset projection is the pointer itself (no instruction natively). -/
+theorem ptrProject_add_zero (p : Zig.Ptr) : Zig.ptrProject p (·.add 0) = pure p := by
+  have h : p.add 0 = p := by cases p; simp [Zig.Ptr.add]
+  funext m
+  simp only [Zig.ptrProject, h, true_or, ite_true]
+  rfl
+
+/-- An item projection by no bytes is the pointer itself (no instruction natively). -/
+theorem ptrProject_elem_zero (p : Zig.Ptr) (size : Nat) : Zig.ptrProject p (·.elem size 0) = pure p := by
+  have : (fun q : Zig.Ptr => q.elem size 0) = (·.add 0) := by
+    funext q; simp [Zig.Ptr.elem]
+  rw [this, ptrProject_add_zero]
+
+theorem ptrProject_elem_size_zero (p : Zig.Ptr) (k : BitVec 64) :
+    Zig.ptrProject p (·.elem 0 k) = pure p := by
+  have : (fun q : Zig.Ptr => q.elem 0 k) = (·.add 0) := by
+    funext q; simp [Zig.Ptr.elem]
+  rw [this, ptrProject_add_zero]
+
+/-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
+theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
+
+attribute [air_sem] execFunc argsOk valOk valOkIn errIn errUnionIn List.contains_toArray List.contains_cons List.contains_nil execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+  evalMem ptrOperand operandTy Func.plainPtr loadAs storeAs Func.fieldOffset? pointee? ptrAlignOf layoutOf
+  Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
+  Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
+  Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def
+  Option.bind_eq_bind String.reduceBEq String.reduceBNe Nat.reduceBEq Nat.reduceBNe Option.getD_none
+  Bool.false_eq_true Bool.true_eq_false natCast_ofNat Int.natCast_zero
+  operand constVal plainOpt isErrorUnion errUnionOperand Value.optIsSome_some Value.optIsSome_none Value.optGet_some
+  Value.optGet_none Value.errIsErr_ok Value.errIsErr_err Value.errGet_ok Value.errGet_err
+  Value.errGetErr_ok Value.errGetErr_err Value.errWrap_name Env.set Value.asInt Value.asBool ofOpt_some ofOpt_none ofExcept_ok
+  ofExcept_error optIsSome_ofOpt optGet_ofOpt errIsErr_ofExcept errGet_ofExcept errGetErr_ofExcept Zig.isNonErr arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
   List.getElem_cons_zero StateT.run'_eq StateT.run_bind StateT.run_pure StateT.run_map
@@ -717,6 +1678,13 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   List.nil_append List.foldr_cons List.foldr_nil true_and and_true Bool.and_true
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
+  regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
+  Func.plainSlice sliceOperand itemBase checkCount countOf? checkIndex_lt
+  checkSentinelIndex_le BitVec.toNat_ofNat Nat.reducePow Nat.reduceMod Nat.reduceLT Nat.reduceLeDiff itemLayout indexOperand Value.toSlice ptrProject_elem_zero
+  ptrProject_elem_size_zero Nat.min_def ite_self Nat.reduceLeDiff
+  Frame.setCell_blocks Frame.setCell_setCell Frame.setCell_comm Nat.reduceLT
+  free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self
+  index_map
 
 end Cert
 

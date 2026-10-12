@@ -8,7 +8,12 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   function. One source for every supported version: its `Compat` section holds
   the version differences (comptime branches on `builtin.zig_version`).
 - `<version>/hook.patch`: the one-line call in `src/Zcu/PerThread.zig`, after the
-  function body is analysed. The only per-version file of the exporter.
+  function body is analysed, and one `src/Sema.zig` change: with runtime safety off, `zirForLen`
+  still compares the `for` operand lengths and lowers a mismatch to `if (!ok) unreachable`
+  (`air2leanUncheckedIb`), since that illegal behaviour otherwise leaves no trace in the AIR. The
+  exporter then writes `"unchecked_ib": ["for_len"]` (`docs/air-json.md`). This is the only
+  change to what the compiler analyses: a backend may take the `unreachable` as an assumption,
+  which the illegal behaviour already permits. The only per-version file of the exporter.
 - `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
 New dumps include `target_endian` (`little` or `big`) in schema 11. The translator rejects

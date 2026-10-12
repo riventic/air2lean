@@ -297,6 +297,13 @@ class Validator:
         else:
             for n, ty in enumerate(params):
                 self.type_id(f'params[{n}]', ty)
+        if schema == MAX_SCHEMA and 'noalias' not in doc:
+            self.error('noalias', 'schema 12 requires the noalias parameter list')
+        noalias = doc.get('noalias', [])
+        count = len(params) if isinstance(params, list) else 0
+        if not (isinstance(noalias, list) and all(is_nat(i) and i < count for i in noalias)
+                and noalias == sorted(set(noalias))):
+            self.error('noalias', 'not increasing parameter indices')
         self.type_id('ret', doc.get('ret'))
         for n, glob in enumerate(self.globals):
             if not isinstance(glob, dict) or 'ty' not in glob:

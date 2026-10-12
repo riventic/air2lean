@@ -43,87 +43,228 @@
     },
     "test/0.16.0/Debug": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/ReleaseFast": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/ReleaseSmall": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.17.0/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.17.0/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "case-studies/**",
+        "docs/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "tutorials/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.15.2/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.15.2/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "case-studies/**",
+        "docs/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "tutorials/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.14.1/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.14.1/lean": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/1": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/2": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/3": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/4": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "test/0.16.0/mutation/5": {
       "inputs": [
-        "**"
+        "Air2Lean.lean",
+        "Air2Lean/**",
+        "Proofs/**",
+        "ZigLean.lean",
+        "ZigLean/**",
+        "assurance/**",
+        "examples/**",
+        "lake-manifest.json",
+        "lakefile.toml",
+        "lean-toolchain",
+        "scripts/**",
+        "tests/**",
+        "zig-patch/**"
       ],
-      "tree_names": true
+      "tree_names": true,
+      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
     },
     "macos/0.17.0": {
       "commit_bound": true,
@@ -139,182 +280,17 @@
     },
     "aarch64-linux": {
       "inputs": [
-        "scripts/**",
-        "tests/diff/**",
-        "tests/roadmap/aarch64-abi/**",
-        "tests/roadmap/vector-layouts/**"
+        "**"
       ],
-      "listings": [
-        ".",
-        "scripts",
-        "tests",
-        "tests/roadmap",
-        "tests/roadmap/aarch64-abi",
-        "tests/roadmap/aarch64-abi/limits"
-      ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
+      "tree_names": true,
+      "note": "#143 (merge train 1) added the declared aarch64-linux translation paths: patched compilers, Lean build, golden AIR, translation, differential test and proofs read the whole tree, as the test golden rows do"
     },
     "build-modes-aarch64-linux": {
       "inputs": [
-        "Air2Lean.lean",
-        "Air2Lean/**",
-        "Proofs/Asm/**",
-        "Proofs/Atomics/**",
-        "Proofs/Basic/**",
-        "Proofs/Cancel/**",
-        "Proofs/Detach/**",
-        "Proofs/Errors/**",
-        "Proofs/Floatconv/**",
-        "Proofs/Floatops/**",
-        "Proofs/Floats/**",
-        "Proofs/Iogroup/**",
-        "Proofs/Layout/**",
-        "Proofs/Lists/**",
-        "Proofs/Options/**",
-        "Proofs/Pointers/**",
-        "Proofs/Provenance/**",
-        "Proofs/ProvenanceGap/**",
-        "Proofs/Recursion/**",
-        "Proofs/Slices/**",
-        "Proofs/Sync/**",
-        "Proofs/Threads/**",
-        "Proofs/Threadsync/**",
-        "Proofs/Variants/**",
-        "Proofs/Vectors/**",
-        "ZigLean.lean",
-        "ZigLean/**",
-        "assurance/**",
-        "examples/asm/**",
-        "examples/atomics/**",
-        "examples/basic/**",
-        "examples/errors/**",
-        "examples/floatconv/**",
-        "examples/floatops/**",
-        "examples/floats/**",
-        "examples/iogroup/**",
-        "examples/layout/**",
-        "examples/lists/**",
-        "examples/options/**",
-        "examples/pointers/**",
-        "examples/recursion/**",
-        "examples/slices/**",
-        "examples/sync/**",
-        "examples/threads/**",
-        "examples/threadsync/**",
-        "examples/variants/**",
-        "examples/vectors/**",
-        "lake-manifest.json",
-        "lakefile.toml",
-        "lean-toolchain",
-        "scripts/**",
-        "tests/**",
-        "tests/diff/**",
-        "tests/roadmap/build-modes/reproducers/**",
-        "zig-patch/**"
+        "**"
       ],
-      "listings": [
-        ".",
-        "Proofs",
-        "Proofs/Asm",
-        "Proofs/Atomics",
-        "Proofs/Basic",
-        "Proofs/Cancel",
-        "Proofs/Detach",
-        "Proofs/Errors",
-        "Proofs/Floatconv",
-        "Proofs/Floatops",
-        "Proofs/Floats",
-        "Proofs/Iogroup",
-        "Proofs/Layout",
-        "Proofs/Lists",
-        "Proofs/Options",
-        "Proofs/Pointers",
-        "Proofs/Provenance",
-        "Proofs/ProvenanceGap",
-        "Proofs/Recursion",
-        "Proofs/Slices",
-        "Proofs/Sync",
-        "Proofs/Threads",
-        "Proofs/Threadsync",
-        "Proofs/Variants",
-        "Proofs/Vectors",
-        "ZigLean",
-        "ZigLean/Conc",
-        "ZigLean/Conc/Spec",
-        "ZigLean/Env",
-        "ZigLean/External",
-        "ZigLean/Float",
-        "ZigLean/Mem",
-        "ZigLean/Os",
-        "ZigLean/Sep",
-        "ZigLean/Sep/Array",
-        "ZigLean/VC",
-        "ZigLean/Witnesses",
-        "examples",
-        "examples/asm",
-        "examples/atomics",
-        "examples/basic",
-        "examples/errors",
-        "examples/floatconv",
-        "examples/floatops",
-        "examples/floats",
-        "examples/iogroup",
-        "examples/layout",
-        "examples/lists",
-        "examples/options",
-        "examples/pointers",
-        "examples/recursion",
-        "examples/slices",
-        "examples/sync",
-        "examples/threads",
-        "examples/threadsync",
-        "examples/variants",
-        "examples/vectors",
-        "scripts",
-        "tests",
-        "tests/diff",
-        "tests/diff/asm",
-        "tests/diff/asm/inputs",
-        "tests/diff/atomics",
-        "tests/diff/atomics/inputs",
-        "tests/diff/basic",
-        "tests/diff/basic/inputs",
-        "tests/diff/errors",
-        "tests/diff/errors/inputs",
-        "tests/diff/floatconv",
-        "tests/diff/floatconv/inputs",
-        "tests/diff/floatops",
-        "tests/diff/floatops/inputs",
-        "tests/diff/floats",
-        "tests/diff/floats/inputs",
-        "tests/diff/iogroup",
-        "tests/diff/iogroup/inputs",
-        "tests/diff/layout",
-        "tests/diff/layout/inputs",
-        "tests/diff/libm",
-        "tests/diff/lists",
-        "tests/diff/lists/inputs",
-        "tests/diff/options",
-        "tests/diff/options/inputs",
-        "tests/diff/pointers",
-        "tests/diff/pointers/inputs",
-        "tests/diff/recursion",
-        "tests/diff/recursion/inputs",
-        "tests/diff/slices",
-        "tests/diff/slices/inputs",
-        "tests/diff/sync",
-        "tests/diff/sync/inputs",
-        "tests/diff/threads",
-        "tests/diff/threads/inputs",
-        "tests/diff/threadsync",
-        "tests/diff/threadsync/inputs",
-        "tests/diff/variants",
-        "tests/diff/variants/inputs",
-        "tests/diff/vectors",
-        "tests/diff/vectors/inputs"
-      ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)",
-      "tree_names": true
+      "tree_names": true,
+      "note": "#143 (merge train 1): the job tests this host's translations in a scripts/check-tree.py --host-goldens copy of the tree, which reads every tracked file, as the aarch64-linux job does"
     },
     "bitops-native-arm": {
       "inputs": [

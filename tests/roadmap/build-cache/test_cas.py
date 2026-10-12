@@ -163,6 +163,48 @@ class CasTests(unittest.TestCase):
         self.export(stock, self.tmp / 'b4')
         self.assertEqual(self.runs(), 5)
 
+    def native(self, zig, out, *args, store=True):
+        env = dict(os.environ, COUNT=str(self.tmp / 'ncount'))
+        env.pop('AIR2LEAN_CAS_DIR', None)
+        if store:
+            env['AIR2LEAN_CAS_DIR'] = str(self.tmp / 'store')
+        done = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'native', '--', str(zig),
+                               'build-exe', '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={out}', *args,
+                               str(self.tmp / 'mod/m.zig')], env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return out.read_text()
+
+    def test_native_build_hits_only_on_equal_inputs(self):
+        zig = self.tmp / 'stock/zig'
+        (self.tmp / 'stock/lib').mkdir(parents=True)
+        zig.write_text('#!/bin/sh\nn=$(cat "$COUNT" 2>/dev/null || echo 0); echo $((n + 1)) > "$COUNT"\n'
+                       'for a; do case $a in -femit-bin=*) o=${a#-femit-bin=};; esac; done\n'
+                       'echo "built $*" > "$o"; echo note >&2\n')
+        zig.chmod(0o755)
+        (self.tmp / 'mod').mkdir(exist_ok=True)
+        (self.tmp / 'mod/m.zig').write_text('pub fn f() void {}\n')
+
+        def runs():
+            return int((self.tmp / 'ncount').read_text())
+        first = self.native(zig, self.tmp / 'n1')
+        self.assertEqual(self.native(zig, self.tmp / 'n2'), first)             # hit
+        self.assertEqual(runs(), 1)
+        self.native(zig, self.tmp / 'n3', '-target', 'x86_64-linux')            # flags are part of the key
+        (self.tmp / 'mod/helper.zig').write_text('// imported sibling\n')       # so is the module directory
+        self.native(zig, self.tmp / 'n4')
+        self.assertEqual(runs(), 3)
+        (self.tmp / 'mod/embed.zig').write_text('const x = @embedFile("data");\n')  # cannot be keyed: uncached
+        self.native(zig, self.tmp / 'n5')
+        self.native(zig, self.tmp / 'n6')
+        self.assertEqual(runs(), 5)
+        (self.tmp / 'mod/embed.zig').unlink()
+        self.native(zig, self.tmp / 'n5b', '-femit-h=' + str(self.tmp / 'h.h'))   # an extra output: uncached
+        self.native(zig, self.tmp / 'n5c', '-femit-h=' + str(self.tmp / 'h.h'))
+        self.assertEqual(runs(), 7)
+        self.native(zig, self.tmp / 'n7', store=False)                          # no cache directory: plain run
+        self.native(zig, self.tmp / 'n8', store=False)
+        self.assertEqual(runs(), 9)
+
     def test_gc_evicts_least_recently_used_first(self):
         store = cas.Store(self.tmp / 'store')
         for name, age in (('old', 9000), ('new', 7200)):

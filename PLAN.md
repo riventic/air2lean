@@ -145,7 +145,7 @@ Supported: Zig **0.17.0** (in qualification), **0.16.0** (default), **0.15.2** a
 | 0.17.0 (in qualification) | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
 | 0.16.0 (default) | full job (pipeline, diff test, proofs); 5 mutation shards | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
 | 0.15.2 | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `threads`, `threadsync`, `variants`, `vectors` | `iogroup`, `sync` |
-| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`, `errors`, `floatops`, `floats`, `layout`, `options`, `pointers`, `recursion`, `variants` | `asm`, `atomics`, `floatconv`, `iogroup`, `lists`, `slices`, `sync`, `threads`, `threadsync`, `vectors` |
+| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`, `errors`, `floatops`, `floats`, `layout`, `options`, `pointers`, `recursion`, `variants` | `asm`, `atomics`, `floatconv`, `iogroup`, `lists`, `slices`, `sync`, `threads`, `threadsync`, `vectors` |
 
 Full matrix: [docs/support-matrix.md](docs/support-matrix.md).
 <!-- support-matrix:end zig-versions -->

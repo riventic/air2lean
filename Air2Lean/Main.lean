@@ -54,8 +54,8 @@ def runtimeJson : Lean.Json := revisionJson runtime
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--allocator-model std|translated]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table"
 
 def help : String :=
@@ -71,10 +71,13 @@ def help : String :=
   "                               AIR schemas 1-11 need --profile legacy-abi64-le.\n" ++
   "  --allow-unqualified-build-mode  Also translate AIR of a build mode/backend that\n" ++
   "                               docs/build-modes.md does not qualify (recorded in the header).\n" ++
+  "  --assume-no-libc             The program links no libc: admit the f128 ops that call long double\n" ++
+  "                               libm routines where c_longdouble is f128 (recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --device-contract <json>     Model volatile integer accesses as device events; see docs/volatile-effects.md.\n" ++
+  "  --allocator-model <mode>     std (default) or translated; see docs/allocator-model.md.\n" ++
   "  --assume-no-lb               Accept relaxed load-then-store code (premise ORD-02); see docs/std-models.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
@@ -113,6 +116,8 @@ structure Args where
   allowUnqualified : Bool := false
   /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
   assumeNoLb : Bool := false
+  /-- `--assume-no-libc` (`Dialect.noLibc`); recorded in the generated header. -/
+  assumeNoLibc : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -125,6 +130,23 @@ structure Args where
   airCertificate : Option String := none
   /-- `--air-certificate-import`: the Lean module of the `-o` output, for the certificate. -/
   airCertificateImport : Option String := none
+  /-- `--allocator-model` (default `std`; `docs/allocator-model.md`). -/
+  allocatorModel : AllocatorModel := .std
+
+/-- Remove `--allocator-model V` (or `--allocator-model=V`) from `args`; at most once. -/
+private def takeAllocatorModel (args : List String) :
+    Except String (Option AllocatorModel × List String) := do
+  let rec go (args : List String) (seen : Option AllocatorModel) (acc : List String) :
+      Except String (Option AllocatorModel × List String) := do
+    match args with
+    | [] => pure (seen, acc.reverse)
+    | ["--allocator-model"] => throw s!"missing value for --allocator-model\n{usage}"
+    | "--allocator-model" :: v :: rest =>
+      if seen.isSome then throw s!"duplicate --allocator-model\n{usage}"
+      let mode ← (parseAllocatorModel v).mapError (fun message => s!"{message}\n{usage}")
+      go rest (some mode) acc
+    | a :: rest => go rest seen (a :: acc)
+  go (splitAllocatorModelFlag args) none []
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -161,6 +183,9 @@ private partial def parseArgsGo (args : List String)
   | "--assume-no-lb" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeNoLb := true })
+  | "--assume-no-libc" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLibc := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -194,7 +219,9 @@ private partial def parseArgsGo (args : List String)
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
+  let (allocatorModel, args) ← takeAllocatorModel args
   let a ← parseArgsGo args none none none none none none none none false
+  let a := { a with allocatorModel := allocatorModel.getD .std }
   if a.registryTemplate && a.modelRegistry.isSome then
     throw "--model-registry-template cannot be combined with --model-registry"
   if a.registryTemplate && a.spawnSemantics == .fallible then
@@ -320,7 +347,7 @@ private def run (args : List String) : IO UInt32 := do
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           -- Same stage order as `processRaw` (preflight, normalize, check), timed separately.
-          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents
+          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents a.allocatorModel
           times := { times with parse := times.parse + parseNs }
           match parsed with
           | .error e => err := some s!"{path}: {e}"
@@ -334,6 +361,7 @@ private def run (args : List String) : IO UInt32 := do
             match normalized with
             | .error e => err := some s!"{path}: {e}"
             | .ok f =>
+              let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
               match checkedOne with
@@ -377,8 +405,12 @@ private def run (args : List String) : IO UInt32 := do
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             -- An admission opt-in is part of the claim scope: the header records it.
-            let admission := if a.allowUnqualified then
-              [("admission", Lean.Json.str "unqualified-build-mode")] else []
+            let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
+              (if a.assumeNoLibc then ["no-libc"] else [])
+            let admission := if optIns.isEmpty then [] else
+              [("admission", Lean.Json.str (",".intercalate optIns))]
+            let admission := admission ++ if a.allocatorModel == .translated then
+              [("allocator_model", Lean.Json.str "translated")] else []
             let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")] ++ admission)
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
@@ -424,7 +456,8 @@ private def run (args : List String) : IO UInt32 := do
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
             if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
-              let cert := Certificate.emit emissionFuncs a.ns declNames genModule
+              let cert := Certificate.emit emissionFuncs a.ns declNames genModule parts.memFuncs
+                parts.concFuncs parts.shapes
               try IO.FS.writeFile path cert catch e =>
                 throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then
