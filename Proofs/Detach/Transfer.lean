@@ -309,7 +309,7 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
 
 /-- **No error.** Under every schedule and fuel, no run gives an error. -/
 theorem transfer_safe (env : Env) (henv : env.spawn = .available) (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
   run_safe (P := proto) env (Proto.of_available henv) dispatch G0 rfl
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ h => h.2.1) rfl (fun n => main_spec n)

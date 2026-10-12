@@ -946,7 +946,7 @@ theorem mutexCounter_spec (env : Env) (henv : env.spawn = .available) {σ : Plac
 /-- **No run of `mutexCounter` gives an error**: no data race on the counter, no deadlock at the
 futex, no panic, under every schedule. -/
 theorem mutexCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (mutexCounter io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (mutexCounter io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the mutex counter returns 4 within

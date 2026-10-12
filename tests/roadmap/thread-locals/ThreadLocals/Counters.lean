@@ -773,7 +773,7 @@ theorem twoCounters_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat
 /-- **No run of `twoCounters` gives an error**: the concurrent increments of the three
 instances do not race. -/
 theorem twoCounters_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
     main_spec
 

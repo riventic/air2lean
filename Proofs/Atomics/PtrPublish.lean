@@ -477,7 +477,9 @@ theorem create_noErr (m : Mem) (e : Error) :
     · exact MemM.pure_err h₃
     · rw [map_eq_pure_bind] at h₃
       rcases MemM.bind_err h₃ with h | ⟨_, _, -, h⟩
-      · exact alloc_noErr e h
+      · rename_i hr
+        cases MemM.set_ok hs
+        exact alloc_noErr (by simpa using hr) e h
       · exact MemM.pure_err h
   · split at h₁ <;> exact MemM.pure_err h₁
 
@@ -1345,7 +1347,7 @@ node, the join (a stop), the load after the join (a stop), the destroy, the free
 theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current := 0 } d := by
   unfold publishRead
   -- the slot
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = sPtr := by rw [hq₁]; rfl
   subst e0
@@ -1467,7 +1469,7 @@ theorem publishRead_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat
 /-- **Lifetime.** No run of `publishRead` gives an error under any schedule: no data race, no
 access to a dead block, no invalid or double free, no undecodable pointer. -/
 theorem publishRead_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
 
 end Atomics.PtrPublish

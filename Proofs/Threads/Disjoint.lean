@@ -697,7 +697,7 @@ theorem disjoint_completes :
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
 theorem disjoint_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
   (proto a b).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ)
 

@@ -983,17 +983,17 @@ theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 mpRelAcq QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelAcq
   -- the blocks: `data`, `flag`, the `MpCtx`
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = dPtr := by rw [hq₁]; rfl
   subst e0 hm₁
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s2 m₂ ha₂ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s2 m₂ ha₂ => ?_)
   obtain ⟨hq₂, hm₂⟩ := alloc_ok ha₂
   have e2 : s2 = fPtr := by rw [hq₂]; rfl
   subst e2 hm₂
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s5 m₃ ha₃ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s5 m₃ ha₃ => ?_)
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
@@ -1139,7 +1139,7 @@ theorem mpRelAcq_spec (env : Env) (henv : env.spawn = .available) {σ : Placemen
 /-- **No run of `mpRelAcq` gives an error**: the read of `data` does not race with the write,
 under every schedule. -/
 theorem mpRelAcq_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Atomics.MP

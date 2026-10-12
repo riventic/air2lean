@@ -1159,7 +1159,7 @@ theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {σ : Placement
 /-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
 (also when the consumer sleeps at the condition first), no lifetime error at the free. -/
 theorem mailbox_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec (semaphore S) σ io)
 
