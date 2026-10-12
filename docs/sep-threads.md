@@ -154,12 +154,15 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
 
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. `Full/Arr`
-  (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`, `errPayload_*`; not the
-  read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`,
-  `checkSentinelIndex_of`, `FTTotalTriple.ofRegion`, `memsetUndef`, `regionStore*`,
-  `regionLoadWritten*`, `memcpyRegions*`). Next: `Mmap` (`mmap`/`munmap`/`mremap`; their
-  locality must show `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
+  `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
+  `storeBytes_bytesAt`, `store_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
+  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
+  `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
+  `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
+  `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
+  its locality, statements unchanged. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
+  `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
+  an old block alive).
 
   **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
   check passes only if no recorded write to the global is concurrent with the reader. Every
@@ -172,13 +175,14 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts;
   decision pending.
 
-  **Open: `mremap` growth in place (`mremapGrow'`).** The grown bytes `[S, lo + n)` of the old
-  block come alive without a recorded access, so the thread owns them only if every recorded
-  access to those offsets happened before its clock. The precondition holds only the extent
-  (`bext`), which is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
+  **Open: `mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
+  `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a
+  recorded access, so the thread owns them only if every recorded access to those offsets
+  happened before its clock. The precondition holds the extent (`bext`) and at most the old
+  bytes; the extent is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
   `S` (its `munmap` of the old tail, concurrent with thread 0) makes the post's ownership false.
-  A thread rule needs ownership of a whole extent to cover every recorded access to the block
-  (`Mem.Owns` of the extent's offsets); decision pending.
+  A thread rule needs ownership of a whole extent (or of the mapping's claim, `Full/Claims`) to
+  cover every recorded access to the block's offsets past its end; decision pending.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).

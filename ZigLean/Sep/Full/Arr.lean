@@ -14,9 +14,8 @@ import ZigLean.Sep.Full.Strength
   `EUpd.arr_join`, `EUpd.arr_unfocus`, which read the block's labels from the memory (`Res.fix`):
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
-  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array. Each
-  is its thread rule (`FTTotalTriple.arr_load`/`arr_store`, `docs/sep-threads.md` S2) read
-  sequentially.
+  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array; in a
+  thread `FTTotalTriple.arr_load`/`arr_store` (`docs/sep-threads.md` S2).
 -/
 
 namespace Zig
@@ -343,44 +342,43 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
     (EUpd.up_of_heap (SizeFree.sep (SizeFree.arr _ _) (SizeFree.sep (SizeFree.pts _ _ _)
       (SizeFree.arr _ _))) fun _ _ _ hm hp => arr_reassemble hn hk hp hm)
 
-/-- **Load** of an in-bounds item at the type's alignment, in a thread; the array stays whole. -/
-theorem FTTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
-    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
-    FTTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) (p.elem (Enc.size T) i))
-      (fun v => ⟪v = vs[i.toNat]⟫ ⋆ up (Zig.arr p vs)) :=
-  FTTotalTriple.ofSeq (FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
-    FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.load
-      (q := p.add (Enc.size T * i.toNat)) (a := Enc.align T) (v := vs[i.toNat]) hn))
-      fun _ m r rF hh hq hs' => by
-        obtain ⟨hv, hq⟩ := sep_lift.mp (sep_assoc hq)
-        obtain ⟨r', hh', hp'⟩ := EUpd.arr_unfocus (w := vs[i.toNat]) hn hi m r rF hh hq hs'
-        exact ⟨r', hh', sep_lift.mpr ⟨hv, by simpa using hp'⟩⟩)
-    (ThreadLocal.load hn (OwnsPtr.arr_elem hi))
-
-/-- **Store** to an in-bounds item at the type's alignment, in a thread; the array stays whole. -/
-theorem FTTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size T)
-    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
-    FTTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
-      (fun _ => up (Zig.arr p (vs.set i.toNat w))) :=
-  FTTotalTriple.ofSeq (FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
-    FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
-      EUpd.arr_unfocus hn hi)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.arr_elem hi))
-
 /-- **Load** of an in-bounds item at the type's alignment; the array stays whole. -/
 @[fsym] theorem FTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
     FTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) (p.elem (Enc.size T) i))
       (fun v => ⟪v = vs[i.toNat]⟫ ⋆ up (Zig.arr p vs)) :=
-  (FTTotalTriple.arr_load hn hs hi).toFTotalTriple
+  FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
+    FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.load
+      (q := p.add (Enc.size T * i.toNat)) (a := Enc.align T) (v := vs[i.toNat]) hn))
+      fun _ m r rF hh hq hs' => by
+        obtain ⟨hv, hq⟩ := sep_lift.mp (sep_assoc hq)
+        obtain ⟨r', hh', hp'⟩ := EUpd.arr_unfocus (w := vs[i.toNat]) hn hi m r rF hh hq hs'
+        exact ⟨r', hh', sep_lift.mpr ⟨hv, by simpa using hp'⟩⟩
 
 /-- **Store** to an in-bounds item at the type's alignment; the array stays whole. -/
 @[fsym] theorem FTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
     FTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
       (fun _ => up (Zig.arr p (vs.set i.toNat w))) :=
-  (FTTotalTriple.arr_store hn hs hi w).toFTotalTriple
+  FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
+    FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
+      EUpd.arr_unfocus hn hi
+
+/-- `FTotalTriple.arr_load` in a thread (`docs/sep-threads.md` S2). -/
+theorem FTTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
+    FTTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) (p.elem (Enc.size T) i))
+      (fun v => ⟪v = vs[i.toNat]⟫ ⋆ up (Zig.arr p vs)) :=
+  FTTotalTriple.ofSeq (FTotalTriple.arr_load hn hs hi) (ThreadLocal.load hn (OwnsPtr.arr_elem hi))
+
+/-- `FTotalTriple.arr_store` in a thread (`docs/sep-threads.md` S2). -/
+theorem FTTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size T)
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
+    FTTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
+      (fun _ => up (Zig.arr p (vs.set i.toNat w))) :=
+  FTTotalTriple.ofSeq (FTotalTriple.arr_store hn hs hi w)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
+      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.arr_elem hi))
 
 end Rules
 
