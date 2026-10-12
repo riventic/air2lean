@@ -181,4 +181,94 @@ theorem loopMM_partial {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (i
       · simp only [ha, ↓reduceIte] at hstep hrun
         exact ih s₁ m₁ hstep e s' m' hrun
 
+/-! ### Inverting a successful run of a body over memory
+
+What a successful run of `x >>= f`, `get`, `modify` or a lifted `MemM` call in `MM` did: the
+steps of a partial-correctness proof (`loopMM_partial`) walk a generated body with them. -/
+
+namespace MM
+
+variable {σ α β : Type}
+
+theorem run_bind_ok {x : MM σ α} {f : α → MM σ β} {s s'' : σ} {m m'' : Mem} {r : β}
+    (h : (((x >>= f).run s).run m) = pure ((r, s''), m'')) :
+    ∃ a s' m', ((x.run s).run m) = pure ((a, s'), m') ∧
+      (((f a).run s').run m') = pure ((r, s''), m'') := by
+  simp only [StateT.run_bind] at h
+  generalize hx : (x.run s).run m = rx at h
+  match rx, hx, h with
+  | .mk none, _, h => simp [bind, ExceptT.bind, ExceptT.mk] at h; cases h
+  | .mk (some (.error _)), _, h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont] at h; cases h
+  | .mk (some (.ok ((a, s'), m'))), _, h =>
+    exact ⟨a, s', m', rfl, by simpa [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont] using h⟩
+
+theorem run_pure_ok {a r : α} {s s' : σ} {m m' : Mem}
+    (h : (((pure a : MM σ α).run s).run m) = pure ((r, s'), m')) : r = a ∧ s' = s ∧ m' = m := by
+  have h : some (Except.ok ((a, s), m)) = some (Except.ok ((r, s'), m')) := h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  exact ⟨h.1.1.symm, h.1.2.symm, h.2.symm⟩
+
+theorem run_callM_ok {x : MemM α} {a : α} {s s' : σ} {m m' : Mem}
+    (h : (((callM x : MM σ α).run s).run m) = pure ((a, s'), m')) :
+    s' = s ∧ x.run m = pure (a, m') := by
+  simp only [callM, StateT.run_lift] at h
+  rw [StateT.run_bind] at h
+  generalize hx : x.run m = rx at h
+  match rx, hx, h with
+  | .mk none, _, h => cases h
+  | .mk (some (.error _)), _, h => cases h
+  | .mk (some (.ok (a', m₁))), hx, h =>
+    have h : some (Except.ok ((a', s), m₁)) = some (Except.ok ((a, s'), m')) := h
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨⟨rfl, rfl⟩, rfl⟩ := h
+    exact ⟨rfl, rfl⟩
+
+theorem run_get_ok {a s s' : σ} {m m' : Mem}
+    (h : (((get : MM σ σ).run s).run m) = pure ((a, s'), m')) : a = s ∧ s' = s ∧ m' = m := by
+  have h : some (Except.ok ((s, s), m)) = some (Except.ok ((a, s'), m')) := h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  exact ⟨h.1.1.symm, h.1.2.symm, h.2.symm⟩
+
+theorem run_modify_ok {f : σ → σ} {s s' : σ} {m m' : Mem} {u : PUnit}
+    (h : (((modify f : MM σ PUnit).run s).run m) = pure ((u, s'), m')) : s' = f s ∧ m' = m := by
+  have h : some (Except.ok ((PUnit.unit, f s), m)) = some (Except.ok ((u, s'), m')) := h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  exact ⟨h.1.2.symm, h.2.symm⟩
+
+/-- A lifted pure computation (`Zig.Result`, for example an overflow-checked add) leaves the
+locals and the memory alone. -/
+theorem run_liftR_ok {r : Result α} {a : α} {s s' : σ} {m m' : Mem}
+    (h : (((liftM r : MM σ α).run s).run m) = pure ((a, s'), m')) :
+    r = pure a ∧ s' = s ∧ m' = m := by
+  match hr : r, h with
+  | .mk none, h => cases h
+  | .mk (some (.error _)), h => cases h
+  | .mk (some (.ok a')), h =>
+    have h : some (Except.ok ((a', s), m)) = some (Except.ok ((a, s'), m')) := h
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨⟨rfl, rfl⟩, rfl⟩ := h
+    exact ⟨rfl, rfl, rfl⟩
+
+/-- A function body is `body.run' locals`: a successful run had some final locals. -/
+theorem run'_ok {x : MM σ α} {s : σ} {a : α} {m m' : Mem}
+    (h : (x.run' s).run m = pure (a, m')) : ∃ s', ((x.run s).run m) = pure ((a, s'), m') := by
+  simp only [StateT.run'_eq, StateT.run_map] at h
+  generalize hx : (x.run s).run m = rx at h
+  match rx, hx, h with
+  | .mk none, _, h => cases h
+  | .mk (some (.error _)), _, h => cases h
+  | .mk (some (.ok ((a', s'), m₁))), _, h =>
+    have h : some (Except.ok (a', m₁)) = some (Except.ok (a, m')) := h
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨s', rfl⟩
+
+theorem run_lift_ok {x : MemM α} {a : α} {s s' : σ} {m m' : Mem}
+    (h : (((StateT.lift x : MM σ α).run s).run m) = pure ((a, s'), m')) :
+    s' = s ∧ x.run m = pure (a, m') :=
+  run_callM_ok (x := x) h
+
+end MM
+
 end Zig

@@ -130,4 +130,227 @@ theorem evaluate_spec {p ctx : Ptr} {x : BitVec 32} {before after : Mem} {r : Bo
   have h := CallbackContract.call (site_holds p) (cc := visitCallback) trivial run
   exact ⟨h.1, h.2.1, fun b hb => h.2.2 b hb (by simp [visitCallback])⟩
 
+/-! ## The observer loop -/
+
+/-- The frame of a callback-only run, relative to the memory `before`: the context stays live
+and no other block changes. -/
+def Kept (ctx : Ptr) (before m : Mem) : Prop :=
+  (Live before ctx → Live m ctx) ∧ ∀ b, some b ≠ ctx.block → m.blocks[b]? = before.blocks[b]?
+
+theorem Kept.refl (ctx : Ptr) (m : Mem) : Kept ctx m m := ⟨id, fun _ _ => rfl⟩
+
+theorem Kept.trans {ctx : Ptr} {a b c : Mem} (h₁ : Kept ctx a b) (h₂ : Kept ctx b c) :
+    Kept ctx a c :=
+  ⟨fun h => h₂.1 (h₁.1 h), fun x hx => (h₂.2 x hx).trans (h₁.2 x hx)⟩
+
+/-- Recording an access changes no block. -/
+theorem Kept.recordAt (ctx : Ptr) (m : Mem) (b o n : Nat) (k : AccessKind) :
+    Kept ctx m (m.recordAt b o n k) := ⟨id, fun _ _ => rfl⟩
+
+/-- A call through the pointer, as the emitted `if … else throw .illegal` chain in `MM`. -/
+theorem site_mm_eq {σ : Type} (cb ctx : Ptr) (x : BitVec 32) :
+    (if (cb == (⟨some 1, 0⟩ : Ptr)) = true then (callM (air2lean_model_0 ctx x) : MM σ Bool)
+      else if (cb == (⟨some 3, 0⟩ : Ptr)) = true then callM (sumVisit ctx x)
+      else throw .illegal) = callM (dispatch targets cb (ctx, x)) := by
+  by_cases h1 : cb = ⟨some 1, 0⟩
+  · subst h1; simp [dispatch, targets]
+  by_cases h3 : cb = ⟨some 3, 0⟩
+  · subst h3; simp [dispatch, targets]
+  simp [dispatch, targets, h1, h3, callM]
+  rfl
+
+/-- One iteration of the observer loop: the callback runs at most once, through the contract,
+and an iteration that returns keeps the frame and never stops early. -/
+theorem forEach_step (xs : Slice) (ctx cb : Ptr) (n : BitVec 64) (before : Mem) :
+    ∀ (s : forEachLocals) m, Kept ctx before m → ∀ e s' m',
+      ((forEach.loop7 xs ctx cb n).run s).run m = pure ((e, s'), m') →
+      if forEach.again7 e then Kept ctx before m'
+      else Kept ctx before m' ∧ ∀ v, e = .ret v → v = true := by
+  intro s m hk e s' m' h
+  simp only [forEach.loop7, bind_assoc, pure_bind] at h
+  obtain ⟨a, s₁, m₁, hg, hA⟩ := MM.run_bind_ok h
+  obtain ⟨ha, hs₁, hm₁⟩ := MM.run_get_ok hg
+  subst a s₁ m₁
+  obtain ⟨d, s₂, m₂, hI, hB⟩ := MM.run_bind_ok hA
+  -- The inner block: the bounds test, the item load, the callback, the cancellation test.
+  have inner : Kept ctx before m₂ ∧ d ≠ .ret false := by
+    split at hI
+    · obtain ⟨i14, s₃, m₃, hL, hC⟩ := MM.run_bind_ok hI
+      obtain ⟨hs₃, hM⟩ := MM.run_callM_ok hL
+      subst s₃
+      obtain ⟨_, m₃', hci, hld⟩ := Asm.run_bind_ok hM
+      have hm₃' : m₃' = m := by
+        unfold checkIndex at hci
+        split at hci
+        · have hci : some (Except.ok ((), m)) = some (Except.ok ((), m₃')) := hci
+          simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hci
+          exact hci.2.symm
+        · cases hci
+      subst m₃'
+      obtain ⟨b, -, o, -, -, rfl⟩ := load_inv hld
+      have k₃ : Kept ctx before (m.recordAt b o (Enc.size (BitVec 32)) .read) :=
+        hk.trans (Kept.recordAt ctx m b o _ _)
+      obtain ⟨r, s₄, m₄, hD, hE⟩ := MM.run_bind_ok hC
+      rw [site_mm_eq] at hD
+      obtain ⟨hs₄, hV⟩ := MM.run_callM_ok hD
+      subst s₄
+      have hcall := CallbackContract.call (site_holds cb) (cc := visitCallback) trivial hV
+      have k₄ : Kept ctx before m₄ := k₃.trans
+        ⟨hcall.2.1, fun b hb => hcall.2.2 b hb (by simp [visitCallback])⟩
+      have hr : r = true := hcall.1
+      subst hr
+      obtain ⟨d', s₅, m₅, hF, hG⟩ := MM.run_bind_ok hE
+      simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte] at hF
+      obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hF
+      obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hG
+      exact ⟨k₄, fun h => nomatch h⟩
+    · obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hI
+      exact ⟨hk, fun h => nomatch h⟩
+  -- The continuation: `br9` increments the index and repeats; any other exit leaves.
+  match d, inner, hB with
+  | .br9, ⟨k₂, _⟩, hB =>
+    dsimp only at hB
+    obtain ⟨i23, s₆, m₆, hAdd, hB⟩ := MM.run_bind_ok hB
+    obtain ⟨-, hs₆, hm₆⟩ := MM.run_liftR_ok hAdd
+    subst s₆ m₆
+    obtain ⟨_, s₇, m₇, hMod, hB⟩ := MM.run_bind_ok hB
+    obtain ⟨hs₇, hm₇⟩ := MM.run_modify_ok hMod
+    subst s₇ m₇
+    obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hB
+    subst he
+    exact k₂
+  | .ret v, ⟨k₂, hne⟩, hB =>
+    dsimp only at hB
+    obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hB
+    cases v
+    · exact absurd rfl hne
+    · exact ⟨k₂, fun _ h => by cases h; rfl⟩
+  | .br6, ⟨k₂, _⟩, hB =>
+    dsimp only at hB
+    obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hB
+    exact ⟨k₂, fun _ h => nomatch h⟩
+  | .br15, ⟨k₂, _⟩, hB =>
+    dsimp only at hB
+    obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hB
+    exact ⟨k₂, fun _ h => nomatch h⟩
+  | .rep7, ⟨k₂, _⟩, hB =>
+    dsimp only at hB
+    obtain ⟨rfl, rfl, rfl⟩ := MM.run_pure_ok hB
+    exact k₂
+
+/-- The observer, for every function pointer: a run that returns gives `true` (the contract
+never cancels), keeps the context live and changes no other block. -/
+theorem forEach_spec {xs : Slice} {ctx cb : Ptr} {before after : Mem} {r : Bool}
+    (run : forEach xs ctx cb before = some (.ok (r, after))) :
+    r = true ∧ Kept ctx before after := by
+  have run : (forEach xs ctx cb).run before = pure (r, after) := run
+  simp only [forEach] at run
+  obtain ⟨e, m₁, hb, hm⟩ := Asm.run_bind_ok run
+  obtain ⟨s₁, hb⟩ := MM.run'_ok hb
+  obtain ⟨_, s₂, m₂, hMod, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨hs₂, hm₂⟩ := MM.run_modify_ok hMod
+  subst s₂ m₂
+  obtain ⟨n, s₄, m₄, hN, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨hn, hs₄, hm₄⟩ := MM.run_pure_ok hN
+  subst n s₄ m₄
+  obtain ⟨d, s₃, m₃, hL, hb⟩ := MM.run_bind_ok hb
+  have hpost := loopMM_partial _ _ (fun _ m => Kept ctx before m)
+    (fun (e : forEachExit) _ m => Kept ctx before m ∧ ∀ v, e = .ret v → v = true)
+    (forEach_step xs ctx cb xs.len before) _ _ (Kept.refl ctx before) d s₃ m₃ hL
+  match d, hpost, hb with
+  | .br6, ⟨k, _⟩, hb =>
+    obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+    subst he
+    obtain ⟨hr, rfl⟩ : r = true ∧ after = m₁ := by
+      have hm : some (Except.ok (true, m₁)) = some (Except.ok (r, after)) := hm
+      simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
+      exact ⟨hm.1.symm, hm.2.symm⟩
+    exact ⟨hr, k⟩
+  | .ret v, ⟨k, hv⟩, hb =>
+    obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+    subst he
+    have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
+    obtain ⟨rfl, rfl⟩ := hm
+    exact ⟨hv v rfl, k⟩
+  | .br15, _, hb | .br9, _, hb | .rep7, _, hb =>
+    obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+    subst he
+    cases hm
+
+/-- A call through the vtable field `ops.visit`, a pointer loaded from memory: whatever it holds,
+a call that returns meets the contract. -/
+theorem callOps_spec {ops ctx : Ptr} {x : BitVec 32} {before after : Mem} {r : Bool}
+    (run : callOps ops ctx x before = some (.ok (r, after))) :
+    r = true ∧ Kept ctx before after := by
+  have run : (callOps ops ctx x).run before = pure (r, after) := run
+  simp only [callOps] at run
+  obtain ⟨e, m₁, hb, hm⟩ := Asm.run_bind_ok run
+  obtain ⟨s₁, hb⟩ := MM.run'_ok hb
+  obtain ⟨_, s₀, m₀, hP, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨-, hs₀, hm₀⟩ := MM.run_pure_ok hP
+  subst s₀ m₀
+  obtain ⟨q, s₂, m₂, hld, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨b, -, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
+  obtain ⟨hs₂, -⟩ := MM.run_lift_ok hld
+  subst s₂
+  obtain ⟨v, s₃, m₃, hD, hb⟩ := MM.run_bind_ok hb
+  rw [site_mm_eq] at hD
+  obtain ⟨hs₃, hV⟩ := MM.run_callM_ok hD
+  subst s₃
+  have hcall := CallbackContract.call (site_holds q) (cc := visitCallback) trivial hV
+  obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+  subst he
+  have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
+  obtain ⟨rfl, rfl⟩ := hm
+  exact ⟨hcall.1, (Kept.recordAt ctx before b o _ _).trans
+    ⟨hcall.2.1, fun b hb => hcall.2.2 b hb (by simp [visitCallback])⟩⟩
+
+/-- The observer through a vtable loaded from memory. -/
+theorem viaOps_spec {ops : Ptr} {xs : Slice} {ctx : Ptr} {before after : Mem} {r : Bool}
+    (run : viaOps ops xs ctx before = some (.ok (r, after))) :
+    r = true ∧ Kept ctx before after := by
+  have run : (viaOps ops xs ctx).run before = pure (r, after) := run
+  simp only [viaOps] at run
+  obtain ⟨e, m₁, hb, hm⟩ := Asm.run_bind_ok run
+  obtain ⟨s₁, hb⟩ := MM.run'_ok hb
+  obtain ⟨_, s₀, m₀, hP, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨-, hs₀, hm₀⟩ := MM.run_pure_ok hP
+  subst s₀ m₀
+  obtain ⟨q, s₂, m₂, hld, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨b, -, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
+  obtain ⟨hs₂, -⟩ := MM.run_lift_ok hld
+  subst s₂
+  obtain ⟨v, s₃, m₃, hF, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨hs₃, hF'⟩ := MM.run_callM_ok hF
+  subst s₃
+  have hf := forEach_spec hF'
+  obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+  subst he
+  have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
+  obtain ⟨rfl, rfl⟩ := hm
+  exact ⟨hf.1, (Kept.recordAt ctx before b o _ _).trans hf.2⟩
+
+/-- `runExternal` passes the vtable `ext_ops`, whose field is `&ext_visit`: the foreign
+callback runs through its registry contract only. -/
+theorem runExternal_spec {xs : Slice} {ctx : Ptr} {before after : Mem} {r : Bool}
+    (run : runExternal xs ctx before = some (.ok (r, after))) :
+    r = true ∧ Kept ctx before after := by
+  have run : (runExternal xs ctx).run before = pure (r, after) := run
+  simp only [runExternal] at run
+  obtain ⟨e, m₁, hb, hm⟩ := Asm.run_bind_ok run
+  obtain ⟨s₁, hb⟩ := MM.run'_ok hb
+  obtain ⟨v, s₂, m₂, hV, hb⟩ := MM.run_bind_ok hb
+  obtain ⟨hs₂, hV'⟩ := MM.run_callM_ok hV
+  subst s₂
+  have hv := viaOps_spec hV'
+  obtain ⟨he, -, rfl⟩ := MM.run_pure_ok hb
+  subst he
+  have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
+  obtain ⟨rfl, rfl⟩ := hm
+  exact hv
+
 end CallbacksProofs
