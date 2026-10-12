@@ -35,8 +35,8 @@ non-termination): it is a total statement with its own premise, and its conclusi
 
 `sep_step`/`sep_steps` (`ZigLean/Sep/Step.lean`) walk `TotalTripleStk` goals with these rules:
 loads and stores as for `TotalTriple`, `Zig.enterFrame`/`Zig.leaveFrame` by the bracket rules,
-and `using r` for a callee's `TotalTripleStk` (its need must fit) or `TotalTriple` (its command must
-be `StackFree`).
+and `using r` for a callee's `TotalTripleStk` (its need must fit). A callee with a `TotalTriple`
+enters through `using TotalTripleStk.of_total r h` with `h : StackFree c`.
 -/
 
 /-- The side condition of a frame rule: room or held bytes, by `omega` over `frameBase`. -/

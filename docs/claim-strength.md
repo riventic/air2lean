@@ -57,7 +57,10 @@ form `expr`. Other theorems report `bound: null`. The extractor records every na
 argument of a conclusion head this way (`nat: {value, pp}`), and the registry names the bound's
 position (`bound_arg`). `TotalTripleStk` returns only from memories with that room; on an
 unbudgeted memory (every generated `mem0`) it is the `TotalTriple` conclusion and rests on
-STK-01, which the report lists under `premises` (the registry's `premises` of the head). A conjunction is not classified even if its parts would combine into total
+STK-01, which the report lists under `premises` (the registry's `premises` of the head). Its
+`held` argument must be `0` (registry `zero_args`): a triple about a body fragment that releases
+frames it did not charge supports no claim. A symbolic bound is compared by its printed text, so
+an `expr` declaration states the bound in the theorem's own variable names. A conjunction is not classified even if its parts would combine into total
 correctness, since the parts may concern different programs; state `TotalTriple` instead.
 
 ## Witnesses

@@ -82,6 +82,7 @@ def load_heads(path: Path = HEADS_PATH) -> dict:
                  and ('bound' in entry) == ('bound_arg' in entry)
                  and (type(entry.get('bound_arg', 0)) is int and entry.get('bound_arg', 0) >= 0)
                  and isinstance(entry.get('premises', []), list)
+                 and all(type(i) is int and i >= 0 for i in entry.get('zero_args', []))
                  and type(entry['program']) is int and entry['program'] >= 0
                  and isinstance(entry['state'], list) and all(type(i) is int and i >= 0 for i in entry['state']))
         if not valid:
@@ -316,6 +317,14 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
         caps.append('a hypothesis mentions a generated definition or claim head: '
                     + '; '.join(f'{h["hypothesis"]} mentions {", ".join(h["mentions"])}' for h in result['rejected_hypotheses']))
         strength = None
+    # A head argument the registry requires to be 0 (`zero_args`; `TotalTripleStk`'s `held`: a
+    # statement about a whole call, not a fragment that releases frames it did not charge).
+    head_args = _list(statement.get('args'))
+    for index in (entry or {}).get('zero_args', []):
+        arg = head_args[index] if index < len(head_args) and isinstance(head_args[index], dict) else {}
+        if (arg.get('nat') or {}).get('value') != 0:
+            caps.append(f'head argument {index} must be 0 for a whole-call claim')
+            strength = None
     nonvacuous = witnesses['nonvacuity'] in NONVACUOUS
     if strength in FUNCTIONAL and not nonvacuous:
         caps.append(f'non-vacuity witness {witnesses["nonvacuity"]}: the premises may be unsatisfiable '

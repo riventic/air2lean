@@ -239,6 +239,7 @@ def inferMeasure (g : MVarId) (fns : Array Name) : MetaM (Option Expr × Message
   let mut lines : Array MessageData := #[]
   let mut decs : Array (Array Dec) := #[]
   let mut arity? : Option Nat := none
+  let mut incomplete := false
   for f in fns do
     let some eqns ← getEqnsFor? f | throwError "rec_template: {f} has no unfold equation"
     let some eqn := eqns[0]? | throwError "rec_template: {f} has no unfold equation"
@@ -254,6 +255,8 @@ def inferMeasure (g : MVarId) (fns : Array Name) : MetaM (Option Expr × Message
         out := out.push (callee, ds, ← ps.mapM fun p => p.fvarId!.getUserName)
       return (out, true)
     unless ok do
+      -- A call that is not followed could break any decrease: no measure is inferred.
+      incomplete := true
       lines := lines.push m!"{f}: a call whose arguments do not match the parameters; not followed"
       continue
     for (callee, ds, ps) in calls do
@@ -267,7 +270,8 @@ def inferMeasure (g : MVarId) (fns : Array Name) : MetaM (Option Expr × Message
       MessageData.joinSep ((lines.push m!"no recursive call found").toList.map (m!"\n  " ++ ·)) m!"")
   let arity := arity?.getD 0
   -- A position that decreases at every call.
-  let pos? := (List.range arity).find? fun j => decs.all fun ds => (ds[j]?.map Dec.decreases).getD false
+  let pos? := if incomplete then none else
+    (List.range arity).find? fun j => decs.all fun ds => (ds[j]?.map Dec.decreases).getD false
   let measure? ← match pos? with
     | none => pure none
     | some j => do
@@ -277,7 +281,6 @@ def inferMeasure (g : MVarId) (fns : Array Name) : MetaM (Option Expr × Message
         let some app := body.find? fun e => fns.any fun f => e.isAppOfArity f arity
           | return none
         let some i := xs.idxOf? (app.getArg! j) | return none
-        if i ≥ xs.size then return none
         let x := xs[i]!
         let val ← if signed then mkAppM ``Int.toNat #[← mkAppM ``BitVec.toInt #[x]]
           else mkAppM ``BitVec.toNat #[x]
@@ -286,8 +289,8 @@ def inferMeasure (g : MVarId) (fns : Array Name) : MetaM (Option Expr × Message
     | some j, some μ => m!"measure candidate (argument {j + 1}): {μ}"
     | some j, none => m!"argument {j + 1} decreases at every call, but it is not a binder of the \
         goal's call: state the goal over it"
-    | none, _ => m!"measure: not inferred (no argument decreases at every call); supply one, or a \
-        ghost measure for a structure read from memory"
+    | none, _ => m!"measure: not inferred (no argument decreases at every followed call, or a call \
+        was not followed); supply one, or a ghost measure for a structure read from memory"
   return (measure?, m!"rec_template? measure inference (unchecked until `ih` is applied):" ++
     MessageData.joinSep ((lines.push tail).toList.map (m!"\n  " ++ ·)) m!"")
 

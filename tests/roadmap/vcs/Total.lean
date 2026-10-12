@@ -70,38 +70,57 @@ theorem addTo_returns (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
 
 /-! ## A partial callee refuses a total goal -/
 
-/-- A partial contract of `addTo` (it says nothing about divergence). -/
-theorem addTo_partial (p : Ptr) :
-    Triple (Assn.ex fun old : BitVec 64 => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old)
-      (Pointers.addTo p 1) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) :=
-  Triple.ex fun old => Triple.lift fun fits =>
-    (addTo_total p 1 old (by simpa using fits)).toPartial.conseq (fun _ h => h) (fun _ _ h => ⟨_, h⟩)
+/-! ## Callees: total contracts are used, partial ones refuse -/
 
-attribute [vc_contract] addTo_partial
+/-- An unconditional total contract of `addTo p 1`, registered for callers. -/
+@[vc_contract] theorem addOne_total (p : Ptr) :
+    TotalTriple (Assn.ex fun old : BitVec 64 => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old)
+      (Pointers.addTo p 1) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) :=
+  TotalTriple.ex fun old => TotalTriple.lift fun fits =>
+    (addTo_total p 1 old (by simpa using fits)).conseq (fun _ h => h) (fun _ _ h => ⟨_, h⟩)
 
 /-- A caller of `addTo` (in the generated shape). -/
 def bumpOnce (p : Ptr) : MemM Unit := do
   Pointers.addTo p 1
 
-/-- The partial contract gives the caller's partial triple (extraction succeeds). -/
+/-- The callee's total contract makes the caller's total triple a VC (`AllTotal` is closed by
+the registered `TotalTriple`). -/
 example (p : Ptr) (old : BitVec 64) (fits : old.toNat + 1 < 2 ^ 64) :
-    Triple (pts p 8 old) (bumpOnce p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) := by
+    TotalTriple (pts p 8 old) (bumpOnce p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) := by
   vc_gen
   all_goals first | exact ⟨old, sep_lift.mpr ⟨fits, pre⟩⟩ | exact summary1
 
-/-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpOnce`; these calls have none:
-  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1) fun x => ex fun v => pts p 8 v -/
+/-- A callee with only a partial contract (it says nothing about divergence). -/
+def addOne (p : Ptr) : MemM Unit := Pointers.addTo p 1
+
+@[vc_contract] theorem addOne_partial (p : Ptr) :
+    Triple (Assn.ex fun old : BitVec 64 => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old)
+      (addOne p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) :=
+  (addOne_total p).toPartial
+
+/-- Its caller. -/
+def bumpPartial (p : Ptr) : MemM Unit := do
+  addOne p
+
+/-- The partial contract gives the caller's partial triple (extraction succeeds). -/
+example (p : Ptr) (old : BitVec 64) (fits : old.toNat + 1 < 2 ^ 64) :
+    Triple (pts p 8 old) (bumpPartial p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) := by
+  vc_gen
+  all_goals first | exact ⟨old, sep_lift.mpr ⟨fits, pre⟩⟩ | exact summary1
+
+/-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpPartial`; these calls have none:
+  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (addOne p) fun x => ex fun v => pts p 8 v -/
 #guard_msgs in
 /-- It refuses the caller's total triple: `AllTotal` asks the callee's `TotalTriple`, which a
 partial contract does not provide. -/
 example (p : Ptr) (old : BitVec 64) :
-    TotalTriple (pts p 8 old) (bumpOnce p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) := by
+    TotalTriple (pts p 8 old) (bumpPartial p) (fun _ => Assn.ex fun v : BitVec 64 => pts p 8 v) := by
   vc_gen
 
-/-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpOnce`; these calls have none:
-  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1) fun x => ex fun v => pts p 8 v -/
+/-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpPartial`; these calls have none:
+  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (addOne p) fun x => ex fun v => pts p 8 v -/
 #guard_msgs in
-example (p : Ptr) (old : BitVec 64) : Returns (pts p 8 old) (bumpOnce p) := by
+example (p : Ptr) (old : BitVec 64) : Returns (pts p 8 old) (bumpPartial p) := by
   vc_gen
 
 end VcTotal

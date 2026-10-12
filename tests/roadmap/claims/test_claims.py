@@ -355,6 +355,14 @@ class AssessTests(unittest.TestCase):
                 self.assertEqual(goal['status'], 'rejected')
                 self.assertIn(reason, goal['reason'])
 
+    def test_stack_triple_about_a_fragment_supports_no_claim(self):
+        report = copy.deepcopy(FIXTURE)
+        args = theorems_of(report)['ClaimFixture.ret_stk']['statement']['args']
+        args[5]['nat'] = {'value': 16, 'pp': '16'}
+        goal = self.goal('ClaimFixture.ret_stk', 'total_correctness', 'ClaimFixture.ret', 'all', report=report)
+        self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))
+        self.assertIn('must be 0', goal['reason'])
+
     def test_stack_triples_carry_the_stack_premise(self):
         goal = self.goal('ClaimFixture.ret_stk', 'total_correctness', 'ClaimFixture.ret', 'all')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['STK-01']), goal['reason'])

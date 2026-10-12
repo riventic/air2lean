@@ -185,7 +185,7 @@ partial_fixpoint
 /-- error: rec_template? measure inference (unchecked until `ih` is applied):
   call RecTemplateTest.spin → RecTemplateTest.spin:
     argument 1: n unchanged
-  measure: not inferred (no argument decreases at every call); supply one, or a ghost measure for a structure read from memory -/
+  measure: not inferred (no argument decreases at every followed call, or a call was not followed); supply one, or a ghost measure for a structure read from memory -/
 #guard_msgs in
 example : ∀ n : BitVec 32, spin n = pure () := by
   rec_template _ unfolding spin

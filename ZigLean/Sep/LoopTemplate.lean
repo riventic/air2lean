@@ -435,8 +435,9 @@ def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.with
         -- The reset counter's measure is at most `R` (its unsigned bound plus the slack, or
         -- the width's range when it counts down).
         let range ← if c.up then pure bv else do
+          -- `c.f + slack - b0 < 2^w + slack`.
           let some w ← width c.f | pure (mkNatLit 0)
-          pure (mkNatLit (2 ^ w))
+          pure (mkNatLit (2 ^ w + slack))
         mkLambdaFVars #[s] (mkNatAdd (mkNatMul (μ.beta #[s]) (mkNatAdd range (mkNatLit 1))) inner)
       found := true
       lines := lines.push m!"{c.f} steps towards its bound but is also reset; valid if every path \

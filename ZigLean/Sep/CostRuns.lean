@@ -140,8 +140,9 @@ theorem loopEnds_bound (body : MM σ ε) (again : ε → Bool)
         · exact .inr ⟨err, .next hr ha hf, hb⟩
     · exact ⟨1, by omega, .inr ⟨err, .now hr, hbad⟩⟩
 
-/-- The loop from `s` ends (exits with `Q`, or fails with an error in `bad`) within `B` body
-runs from every framed precondition: a bound on the work done, failing runs included. -/
+/-- The loop from `s` fails, with an error in `bad`, within `B` body runs from every framed
+precondition: a bound on the work done before the failure. (`loopEnds_bound` covers loops that
+may either exit or fail.) -/
 def FailsWithin (B : Nat) (P : Assn) (body : MM σ ε) (again : ε → Bool) (s : σ)
     (bad : Error → Prop) : Prop :=
   ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq →

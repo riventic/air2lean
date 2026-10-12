@@ -162,7 +162,10 @@ def contractCall? (e α : Expr) (mem : Bool) : MetaM (Option Expr) := do
       let head := e.getAppFn.constName?.getD .anonymous
       let label := s!"{callKind thm mem}: {head} [{thm}]"
       if mem then
-        unless body.isAppOfArity ``Zig.Triple 4 do return none
+        -- A total contract (`TotalTriple`) is also a memory contract; `vc_gen` on a total goal
+        -- reuses it for `AllTotal` (`closeTotal`).
+        let total := body.isAppOfArity ``Zig.TotalTriple 4
+        unless body.isAppOfArity ``Zig.Triple 4 || total do return none
         unless ← sameHeadDefEq (body.getArg! 2) e do return none
         synthesizeRemaining ms
         -- A memory contract must be an unconditional `Triple`; put conditions into `pre`.
@@ -173,6 +176,7 @@ def contractCall? (e α : Expr) (mem : Bool) : MetaM (Option Expr) := do
         let pre ← instantiateMVars (body.getArg! 1)
         let post ← instantiateMVars (body.getArg! 3)
         let proof ← instantiateMVars (mkAppN c ms)
+        let proof ← if total then mkAppM ``Zig.TotalTriple.toPartial #[proof] else pure proof
         return some (mkAppN (mkConst ``MemProgram.call) #[α, mkStrLit label, e, pre, post, proof])
       else
         unless body.isAppOfArity ``Exists 2 do return none
@@ -696,6 +700,30 @@ def programFor (app : Expr) : MetaM (Expr × Expr × Name) := do
   | .loops requests => throwError m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
   | .refused reason => throwError m!"vc extraction for `{f}` refused: {reason}"
 
+/-- Close what remains of `AllTotal` (conjunctions and `∀` over the callees' `TotalTriple`s)
+with `@[vc_contract]` theorems that are `TotalTriple`s. -/
+partial def closeTotal (g : MVarId) : MetaM Bool := do
+  let g ← (do let (_, g) ← g.intros; pure g)
+  let t ← instantiateMVars (← g.getType)
+  if t.isAppOfArity ``And 2 then
+    match ← observing? (g.apply (mkConst ``And.intro)) with
+    | some gs => return ← gs.allM closeTotal
+    | none => return false
+  unless t.isAppOfArity ``Zig.TotalTriple 4 do return false
+  for thm in ← labelled `vc_contract do
+    let ok ← commitWhen do
+      -- Reducible unification, as for the VC's own contracts: a contract is about its own
+      -- operation, never one that unfolds to it.
+      let some gs ← observing? (withReducible (g.apply (← mkConstWithFreshMVarLevels thm)))
+        | return false
+      gs.allM fun g' => do
+        if ← g'.isAssigned then return true
+        if (← isClass? (← g'.getType)).isSome then
+          if let some inst ← synthInstance? (← g'.getType) then g'.assign inst; return true
+        return false
+    if ok then return true
+  return false
+
 /-- Close `AllTotal` of an extracted program by unfolding it. A memory call whose contract is
 only a partial `Triple` leaves a `TotalTriple` goal: the goal is refused (fail closed). -/
 def allTotal (f : Name) (g : MVarId) : MetaM Unit := do
@@ -709,6 +737,7 @@ def allTotal (f : Name) (g : MVarId) : MetaM Unit := do
     #[← names.foldlM (fun s n => s.addDeclToUnfold n) cleanup])
   let (r, _) ← simpGoal g ctx
   if let some (_, g') := r then
+    if ← closeTotal g' then return
     throwError "vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for \
       every memory call of `{f}`; these calls have none:{indentExpr (← g'.getType)}"
 

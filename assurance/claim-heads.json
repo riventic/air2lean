@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit bound the head states (loop_body_runs, scheduler_turns, stack_bytes) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` is checked against. `premises` lists the premise IDs every claim of the head rests on. A new head is added here with its fingerprint from `scripts/claims.py heads`.",
+  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit bound the head states (loop_body_runs, scheduler_turns, stack_bytes) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` is checked against. `premises` lists the premise IDs every claim of the head rests on; `zero_args` are argument positions that must be 0 (a whole-call statement). A new head is added here with its fingerprint from `scripts/claims.py heads`.",
   "heads": {
     "Zig.Triple": {
       "module": "ZigLean.Sep.Triple",
@@ -47,6 +47,7 @@
       "state": [],
       "bound": "stack_bytes",
       "bound_arg": 4,
+      "zero_args": [5],
       "premises": ["STK-01"]
     },
     "Zig.Conc.Total.EventuallyReturns": {

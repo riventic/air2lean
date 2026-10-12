@@ -113,13 +113,14 @@ VCs give the partial `Triple`.
 `vc_gen` also takes `TotalTriple pre (f xs) post` and `Returns pre (f xs)` goals
 (`ZigLean/VC/Total.lean`). They use the same VC: `MemProgram.sound_total` proves the
 `TotalTriple` from it when every memory call has a total contract (`MemProgram.AllTotal`,
-discharged by unfolding the extracted program). A `Returns` goal is the VC with the
+discharged by unfolding the extracted program and applying `@[vc_contract]` theorems that are
+`TotalTriple`s, matched by reducible unification). A `Returns` goal is the VC with the
 postcondition `True`: its obligations are the result-existence obligations alone (safety,
 memory ownership and sizes, callee preconditions), and the `True` postcondition obligation is
 closed at once. A memory call whose contract is a partial `Triple` refuses both goals with the
 callee's missing `TotalTriple`: a partial contract never yields a total or existence claim.
-`tests/roadmap/vcs/Total.lean` proves `Pointers.addTo` total and returning, and checks the
-refusal for a caller of a partial contract.
+`tests/roadmap/vcs/Total.lean` proves `Pointers.addTo` total and returning, a caller total from
+the callee's registered `TotalTriple`, and checks the refusal for a caller of a partial contract.
 
 `vc_gen?` also logs the obligations with their hypotheses and one
 `vc-report {json}` line. `scripts/vc-report.py` collects those lines:

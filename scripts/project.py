@@ -953,6 +953,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
             binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
             if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
                 binding, reason = 'trivial_conclusion', trivial
+            if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
+                binding, reason = 'bound_mismatch', problem
             row.update(binding=binding, reason=reason)
             if binding == 'trivial_conclusion':
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -962,7 +964,7 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
                            witnesses=found['witnesses'],
-                           premises=claims.premises_of(theorem, found['claims']))
+                           premises=claims.premises_of(theorem, found['claims'], found['entry']))
         goals.append(row)
     return compiled, goals
 
