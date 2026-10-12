@@ -272,42 +272,39 @@ termination under a scheduler) are out of scope. Invariants and measures are not
 memory-backed recursive `Pointers.addDown` is not covered, and no ring-buffer example exists in
 `examples/`.
 
-### Dispatch-loop templates (L03)
+### Dispatch loops (L03)
 
-Import `ZigLean.Sep.DispatchTemplate` for labelled-switch state machines (`continue :sw`).
-The emitter turns one into `Zig.loop (f.loopN ..) f.againN`, with the selector in the locals
-field `dispatchValueN`. `DispatchTemplate body again sel inv μ post` has one premise per
-state: from the state-indexed invariant `inv k s` with `sel s = k`, one body run either
-dispatches to a state whose invariant `inv (sel s') s'` holds at a smaller measure, or exits
-with `post`. The measure `μ : σ → Nat × Nat` is ordered lexicographically (`DispatchLt`;
-`DispatchLt.data` and `DispatchLt.rank` build the two cases), usually as (unread data, state
-rank). `DispatchTemplate.total` proves the loop by well-founded induction. `DispatchSpec` is
-the same template with propositions for loops without memory.
+The emitter turns a labelled-switch state machine (`continue :sw`) into
+`Zig.loop (f.loopN ..) f.againN`, with the selector in the locals field `dispatchValueN`. One
+rule of `ZigLean/Sep/Full/Loop.lean` proves every such loop, `FTotalTriple.loop_dispatch sel inv
+data rank B post step`; a machine supplies:
 
-`dispatch_template inv μ post` applies to a `TotalTriple`, `Triple` or pure
-`∃ r, (Zig.loop body again).run s = pure r ∧ Q r` goal. It derives the selector from the
-generated `f.againN`, and rejects a loop whose locals have no `dispatchValueN` field (such as an
-ordinary loop) or an iterator that is not a generated `againN`. It leaves one goal `step.<state>`
-per constructor of an enum selector. For an integer selector, `states [v₁, …]` leaves
-`step.<vᵢ>` for each listed value and `step.other` for the rest. It also leaves `entry`, and
-`exit` unless `post` is the goal's postcondition. `dispatch_template?` reports these goals.
-`… using tac` runs `tac` on each state premise. If any fail, the error names those states and
-shows their premises, so a wrong invariant or measure is reported at the state where it breaks.
+* the invariant indexed by the selector's state, `inv k s` (one case per state);
+* the consumed data `data s` and the state's rank `rank k`, with a bound `B` above every rank: the
+  measure `B * data + rank` is the lexicographic order of (data, rank), so a transition that
+  consumes nothing must lower the rank. Tag the ranks `attribute [local fsym_arith] rank` so that
+  `fsym` reads their values;
+* the step premise, by a case split on the selector (`cases`) followed by `fsym`, which walks each
+  prong. An integer selector needs no split: `fsym` splits on the selector's tests and the
+  invariant excludes the other values.
 
 `tests/roadmap/dispatch-templates/TokenizerProof.lean` proves `countTokens` from
 `source.zig`, a tokenizer state machine (`start`/`ident`/`number`/`done`). It uses the
-translation of a fresh compiler export. `countTokens_total` shows that over a buffer `arr p xs`,
-the function returns the reference automaton's token count modulo `2 ^ 32` and leaves the buffer
-unchanged. Its measure is (unread bytes, state rank). `Template.lean` covers the per-state report,
-`using`, a wrong invariant (reported at `count`) and a measure without state rank (reported at
-`idle`), integer selectors and the rejected goals. `check.sh` also requires air2lean to reject the
-real exported AIR when one `switch_dispatch` target is changed to a block, an absent ID, or the
-dispatch itself.
+translation of a fresh compiler export. `countTokens_total` shows that over a buffer
+`up (arr p xs)`, the function returns the reference automaton's token count modulo `2 ^ 32` and
+leaves the buffer unchanged; `countTokens_total_legacy` is the legacy total triple through
+`FTotalTriple.toTotal_on`. The byte load is the library rule `FTotalTriple.arr_load`, the index
+check `checkIndex_of`, and the generated classifiers are rules proved against `alpha`/`digit` on
+all 256 bytes. `Template.lean` instantiates the rule for small machines with an enum and an
+integer selector, and shows that a wrong invariant (at `count`) and a rank that does not order the
+states (at `idle`) are not established by the walk, next to positive controls. `check.sh` also requires air2lean to reject
+the real exported AIR when one `switch_dispatch` target is changed to a block, an absent ID, or
+the dispatch itself.
 
-Invariants and measures are still written by hand. A labelled switch has only structured
-`continue :sw` dispatch, so the template implies nothing about unrestricted control flow.
+Invariants and measures are written by hand. A labelled switch has only structured
+`continue :sw` dispatch, so these proofs imply nothing about unrestricted control flow.
 Zig 0.16.0's `translate-c` demotes a C function that uses `goto` to an `extern` declaration
-("TODO goto"), so C goto state machines do not reach this template. The tokenizer proof names
+("TODO goto"), so C goto state machines do not reach this form. The tokenizer proof names
 the 0.16.0 translation's loop identifiers and is qualified only there.
 
 ## Model cost: allocation counts and counted loops (P06)

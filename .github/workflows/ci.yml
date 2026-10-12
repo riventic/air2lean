@@ -2241,8 +2241,8 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
-      - name: Dispatch-loop template regressions
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"
