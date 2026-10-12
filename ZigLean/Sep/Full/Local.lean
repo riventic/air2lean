@@ -7,7 +7,8 @@ import ZigLean.Sep.Full.AutoAttr
 A local whose address escapes is a stack block (`allocStack`): `fsym` holds its bytes and its
 full extent, `up (bytesAt p A S K bs) ⋆ bext b S K`, until `FTotalTriple.free` gives the block
 back. The `@[fsym]` rules here are the stores and loads at the start of such a block:
-`storeBlock`, `loadBlock` and `loadBlock_stored` (a load of what a store wrote). They are the
+`storeBytesBlock` (raw bytes, `storeUndef`), `storeBlock`, `loadBlock`, `loadBlock_stored` (a
+load of what a store wrote) and `loadBlock_u8` (the first item of a `u8` buffer). They are the
 native byte rules of `Full/Ops` (`storeBytes_bytesAt`, `load_bytesAt`, no legacy lifting) at
 byte 0, with the extent framed.
 -/
@@ -21,6 +22,17 @@ section Block
 
 variable {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
   {al : Nat}
+
+/-- **A store of raw bytes at the start of a block's bytes** held with the block's extent
+(`storeUndef` of an escaping local): the bytes become `bs'`, followed by the rest. -/
+@[fsym] theorem FTotalTriple.storeBytesBlock {bs' : Array Byte} (_hpb : p.block = some b)
+    (hn : 0 < bs'.size) (hk : bs'.size ≤ bs.size) (ha : (A + p.off.toNat) % al = 0)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.storeBytes p al bs')
+      (fun _ => up (bytesAt p A S K (writeBytes bs 0 bs')) ⋆ bext b S K) := by
+  have t := (FTotalTriple.storeBytes_bytesAt (q := p) (k := 0) (bs := bs) (A := A) (S := S)
+    (K := K) (al := al) hn (by omega) (by simpa using ha) hK).frame (R := bext b S K)
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
 
 /-- **A store at the start of a block's bytes** held with the block's extent (an escaping local):
 the bytes become the value's, followed by the rest. -/
@@ -57,6 +69,33 @@ decode to `v`. -/
   have e := extract_writeBytes bs 0 (Enc.encode w) (by omega)
   rw [hs, Nat.zero_add] at e
   rw [e]; exact LawfulEnc.decode_encode w
+
+/-- The first byte of a buffer of `u8`s is the encoding of its first item. -/
+theorem u8s_extract {vs : Array (BitVec 8)} (hn : 0 < vs.size) :
+    (vs.map Byte.int).extract 0 (Enc.size (BitVec 8)) = Enc.encode vs[0]! := by
+  have he : Enc.encode vs[0]! = #[Byte.int vs[0]!] := by
+    have hr : Array.range 1 = #[0] := by decide
+    simp [Enc.encode, padTo, intBytes, intSize, intAlign, alignUp, hr]
+    apply BitVec.eq_of_toNat_eq
+    have := vs[0]!.isLt
+    simp only [BitVec.toNat_ofNat]
+    omega
+  rw [show Enc.size (BitVec 8) = 1 from rfl, he]
+  apply Array.ext
+  · simp; omega
+  · intro i _ h2
+    simp at h2
+    subst h2
+    simp [hn]
+
+/-- **A load of the first `u8` of a buffer of `u8`s** (the integer bytes that a `std.Random`
+fill leaves, `randomFillPost`) at the start of a block's bytes. -/
+@[fsym] theorem FTotalTriple.loadBlock_u8 {vs : Array (BitVec 8)} (hpb : p.block = some b)
+    (hn : 0 < vs.size) (ha : (A + p.off.toNat) % al = 0) :
+    FTotalTriple (up (bytesAt p A S K (vs.map Byte.int)) ⋆ bext b S K) (Zig.load (BitVec 8) al p)
+      (fun x => ⟪x = vs[0]!⟫ ⋆ (up (bytesAt p A S K (vs.map Byte.int)) ⋆ bext b S K)) :=
+  FTotalTriple.loadBlock hpb (by decide) (by simp [show Enc.size (BitVec 8) = 1 from rfl]; omega)
+    (by rw [u8s_extract hn]; exact LawfulEnc.decode_encode _) ha
 
 end Block
 

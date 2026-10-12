@@ -259,7 +259,7 @@ simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
   let rhs ← mkAppM ``HMod.hMod #[x, mkNatLit n1]
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 
-attribute [fsym_arith] LawfulEnc.size_encode Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
+attribute [fsym_arith] LawfulEnc.size_encode Array.size_append Array.size_extract Array.size_map BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
 
 attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_fst addWithOverflow_snd
   subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
