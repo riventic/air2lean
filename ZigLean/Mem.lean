@@ -1,4 +1,5 @@
 import ZigLean.Mem.Basic
+import ZigLean.Mem.Run
 import ZigLean.Mem.Null
 import ZigLean.Mem.Enc
 import ZigLean.Mem.ErrWidth

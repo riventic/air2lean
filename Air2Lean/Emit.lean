@@ -790,6 +790,9 @@ structure FCtx where
   rawFuncs : Array String := #[]
   /-- `--device-contract` was given: `air2lean_device` is declared (L13). -/
   deviceContract : Bool := false
+  /-- The device contract (L13): an asm it declares is a device event even when the allowlist
+  makes it an environment read (A01). -/
+  deviceAsms : Option DeviceContract := none
   /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
@@ -2065,6 +2068,10 @@ structure AsmDef where
   /-- The width of each read-write (`+r`, `+m`) output, in output order: the opaque's trailing
   parameters, the old values (A01). Empty for a register-only op. -/
   rwWidths : Array Nat := #[]
+  /-- The regions that the opaque reads (one `Array Zig.Byte` parameter each, after the old
+  values) and writes (one `Array Zig.Byte` result each, after the outputs): A01, ASM-06. -/
+  readRegions : Nat := 0
+  writeRegions : Nat := 0
   deriving BEq
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
@@ -2096,9 +2103,24 @@ the effect contract (`asmIsEffect`: a read-write or memory output, or a registry
 def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String) : String :=
   if asmIsEffect clobbers outputs then s!"airAsmFx_{asmHash key}" else asmDefName key
 
-/-- The widths of the read-write outputs, in output order (`AsmDef.rwWidths`). -/
-def asmRwWidths (outputs : Array AsmOperand) (outputWidths : Array Nat) : Array Nat :=
-  (outputs.zip outputWidths).filterMap fun (o, w) => if o.isReadWrite then some w else none
+/-- The widths of the read-write integer outputs, in output order (`AsmDef.rwWidths`); a
+pointer output (`isPtr`) passes no old value to the opaque. -/
+def asmRwWidths (outputs : Array AsmOperand) (outputWidths : Array Nat) (isPtr : Array Bool) :
+    Array Nat :=
+  (outputs.zip outputWidths).zipIdx.filterMap fun ((o, w), k) =>
+    if o.isReadWrite && !isPtr[k]?.getD false then some w else none
+
+/-- Which operands of an asm op (AIR order: outputs, then inputs) are pointers, each the base of
+an allowlisted memory region (A01, ASM-06; the checker admits no other pointer operand). They
+are not opaque arguments: the wrapper accesses their regions, and a pointer output is its old
+value moved by an opaque offset (`Zig.Asm.movePtr`). -/
+def asmPtrOperands (types : Array Ty) (tyOf : Val → Option TyId)
+    (outputs inputs : Array AsmOperand) : Array Bool :=
+  let isPtr (t : Option TyId) : Bool := match t.bind (types[·]?) with
+    | some (.ptr ..) => true
+    | _ => false
+  outputs.map (fun o => isPtr ((o.ref.bind tyOf).bind (ptrChild types))) ++
+    inputs.map (fun i => isPtr (i.ref.bind tyOf))
 
 /-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
 `Check.lean` accepts only register (so integer) operands. -/
@@ -2112,7 +2134,11 @@ def asmValBits (f : Func) (v : Val) : Nat :=
 `resTy`; an lvalue output has its pointer's child type. -/
 def asmOutputWidths (types : Array Ty) (tyOf : Val → Option TyId) (resTy : TyId)
     (outputs : Array AsmOperand) : Array Nat :=
-  let tyBits (tid : TyId) : Nat := match types[tid]? with | some (.int _ b) => b | _ => 0
+  -- A pointer output (a region base, A01) gets the opaque's 64-bit offset.
+  let tyBits (tid : TyId) : Nat := match types[tid]? with
+    | some (.int _ b) => b
+    | some (.ptr ..) => 64
+    | _ => 0
   outputs.map fun o => match o.ref with
     | none => tyBits resTy
     | some r => ((tyOf r).bind fun p => match types[p]? with
@@ -2126,6 +2152,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   for f in funcs do
     for i in f.allInsts do
       if i.op.isSpinHint || i.op.isDeviceAsm f.dialect.arch then continue
+      if (i.op.asmAllowEntry? f.dialect.arch).any (·.semantics == .envRead) then continue
       if let .asm source _ clobbers outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
@@ -2137,10 +2164,16 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         -- The key omits clobbers, so one key can name both forms (`asm volatile ("")` and the
         -- registry's `"memory"` barrier): deduplicate by name and key.
         let name := asmOpName clobbers outputs key
+        let isPtr := asmPtrOperands f.types tyOf outputs inputs
+        let regions := ((i.op.asmAllowEntry? f.dialect.arch).map (·.regions)).getD []
         if !seen.contains (name ++ "\u0002" ++ key) then
           seen := seen.push (name ++ "\u0002" ++ key)
-          defs := defs.push { name, inputWidths, outputWidths,
-                              rwWidths := asmRwWidths outputs outputWidths }
+          defs := defs.push { name, outputWidths,
+                              inputWidths := (inputWidths.zipIdx.filter fun (_, j) =>
+                                !isPtr[outputs.size + j]?.getD false).map (·.1),
+                              rwWidths := asmRwWidths outputs outputWidths isPtr,
+                              readRegions := (regions.filter (·.access == .read)).length,
+                              writeRegions := (regions.filter (·.access == .write)).length }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
@@ -2148,9 +2181,11 @@ to its output's `BitVec` (`Unit` for no output; a tuple in output order for more
 about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
 doc comment). -/
 def emitAsmDef (d : AsmDef) : String :=
-  let params := ((d.inputWidths ++ d.rwWidths).toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
-  let ret := if d.outputWidths.isEmpty then "Unit"
-    else " × ".intercalate (d.outputWidths.toList.map fun w => s!"BitVec {w}")
+  let params := ((d.inputWidths ++ d.rwWidths).toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})") ++
+    (List.range d.readRegions).map fun k => s!"(r{k} : Array Zig.Byte)"
+  let results := d.outputWidths.toList.map (s!"BitVec {·}") ++
+    List.replicate d.writeRegions "Array Zig.Byte"
+  let ret := if results.isEmpty then "Unit" else " × ".intercalate results
   s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
@@ -3058,10 +3093,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} Zig.returnAddress"
     (env, some l)
   | .asm source _ clobbers outputs inputs =>
+    let entry? := inst.op.asmAllowEntry? fc.targetArch
+    let envRead := entry?.any (·.semantics == .envRead)
+    -- A device contract's declaration of an environment read keeps it a device event (L13).
+    let declared := (fc.deviceAsms.bind (·.asm? source (asmConstraints outputs inputs)
+      clobbers.toList)).isSome
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
       (env, some l)
-    else if inst.op.isDeviceAsm fc.targetArch then
+    else if inst.op.isDeviceAsm fc.targetArch || (envRead && declared) then
       -- L13: a declared device asm (the checker admits no other): one `asm` trace event.
       let ins := "[" ++ ", ".intercalate (inputs.toList.map fun i => s!"({rv i.ref.get!}).toNat") ++ "]"
       let expr := if outputs.isEmpty then s!"Zig.vasmEffect {deviceDefName} {source.quote} {ins}"
@@ -3075,57 +3115,88 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
     let name := asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths)
+    let isPtr := asmPtrOperands fc.types fc.valTyId? outputs inputs
+    let ptrAt (k : Nat) : Bool := isPtr[k]?.getD false
+    let regions := (entry?.map (·.regions)).getD []
     -- The effect contract (A01, `ZigLean/Asm.lean`): the old value of each read-write output is
-    -- read before the call, in output order, and passed after the inputs.
+    -- read before the call, in output order; an integer one is passed after the inputs.
     let rwOuts := outputs.toList.zipIdx.filter (·.1.isReadWrite)
     let rwName (k : Nat) : String := s!"a{inst.id}o{k}"
     let rwReads := rwOuts.filterMap fun (o, k) => o.ref.map fun ptr =>
       if fc.isMemPtr ptr then s!"let {rwName k} ← {fc.loadMem ptr (rv ptr)}"
       else s!"let {rwName k} ← pure ({fc.loadPlace ptr})"
-    -- Two or more locations written through memory pointers: the aliasing guard.
+    -- Operand `k` (AIR order) as a term: an output's old value, or an input.
+    let operand (k : Nat) : String :=
+      if k < outputs.size then rwName k else rv (inputs[k - outputs.size]!.ref.get!)
+    let regionLen (rg : AsmRegion) : String :=
+      let n := s!"({operand rg.len.operand}).toNat"
+      if rg.len.scale == 1 then n else s!"{n} * {rg.len.scale}"
+    -- ASM-06: each read region is read before the call, in entry order.
+    let reads := regions.filter (·.access == .read)
+    let writes := regions.filter (·.access == .write)
+    let readName (k : Nat) : String := s!"a{inst.id}r{k}"
+    let regionReads := reads.zipIdx.map fun (rg, k) =>
+      s!"let {readName k} ← {fc.callMName} (Zig.Asm.readRegion {operand rg.base} ({regionLen rg}))"
+    -- Two or more locations written through memory pointers or regions: the aliasing guard.
     let memWrites := outputs.toList.filterMap fun o => o.ref.filter fc.isMemPtr
-    let guard := if memWrites.length < 2 then [] else
-      let locs := memWrites.map fun ptr =>
-        s!"({rv ptr}, {fc.sizeOf (((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0)})"
-      [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
-    let args := inputs.toList.map (fun i => rv i.ref.get!) ++ rwOuts.map (rwName ·.2)
+    -- A read region in the guard too: a forward copy over overlapping regions depends on the
+    -- distance between them, which the opaque does not see (ASM-06).
+    let locs := memWrites.map (fun ptr =>
+        s!"({rv ptr}, {fc.sizeOf (((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0)})") ++
+      (writes ++ reads).map fun rg => s!"({operand rg.base}, {regionLen rg})"
+    let guard := if locs.length < 2 then [] else [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
+    -- A region guard names the old values, so it follows their reads; the earlier forms keep
+    -- the guard first.
+    let pre := if regions.isEmpty then guard ++ rwReads else rwReads ++ guard
+    let args := (inputs.toList.zipIdx.filter fun (_, j) => !ptrAt (outputs.size + j)).map (fun (i, _) => rv i.ref.get!) ++
+      (rwOuts.filter fun (_, k) => !ptrAt k).map (rwName ·.2) ++ (List.range reads.length).map readName
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
     -- S7: an opaque is total, so the allowlist entry's fault condition guards it
     -- (`Zig.asmTrap`, `Zig.Error.trap`); an entry that never faults keeps `pure`. The checker
     -- admits no other asm here (`Op.isDeviceAsm`), so a missing entry or input index is an
     -- unknown identifier: the generated module does not build.
-    let cond? : Option (Option String) := (inst.op.asmAllowEntry? fc.targetArch).bind fun e =>
+    let cond? : Option (Option String) := entry?.bind fun e =>
       match e.fault with
       | .never => some none
       | f => (f.condition? args).map some
-    let guarded := match cond? with
+    -- ASM-05: an environment read draws each output from the oracle, in output order.
+    let envDraws := outputWidths.toList.zipIdx.foldr (init := s!"pure ({", ".intercalate
+        ((List.range outputs.size).map (s!"e{·}"))})")
+      fun (w, k) acc => s!"Zig.Asm.envWord {w} >>= fun e{k} => {acc}"
+    let guarded := if envRead then s!"{fc.callMName} ({envDraws})" else match cond? with
       | some none => s!"pure ({call})"
       | some (some c) => s!"Zig.asmTrap ({c}) ({call})"
       | none => "air2lean_asm_fault_unknown"
-    if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
+    if outputs.size ≤ 1 && outputs.all (·.ref.isNone) && regions.isEmpty then
       let (env, l) := bindLet fc env inst.id guarded
       (env, some l)
     else
-      -- The tuple of the outputs; output `k` of `n` is `.2.….2.1` (`k` times `.2`), the last one
-      -- without the `.1`. The result output binds the instruction; each lvalue output is a
-      -- store through its pointer, as `store`.
+      -- The tuple of the outputs, then of the written regions' bytes; component `k` of `n` is
+      -- `.2.….2.1` (`k` times `.2`), the last one without the `.1`. The written regions are
+      -- stored first, at their old base pointers; then the result output binds the instruction,
+      -- and each lvalue output is a store through its pointer, as `store` (a pointer output: its
+      -- old value moved by the opaque's offset).
       let t := s!"a{inst.id}"
-      let n := outputs.size
+      let n := outputs.size + writes.length
       let proj (k : Nat) : String :=
         t ++ tupleProjection n k
       let first := match cond? with
-        | some none => s!"let {t} := {call}"
+        | some none => if envRead then s!"let {t} ← {guarded}" else s!"let {t} := {call}"
         | _ => s!"let {t} ← {guarded}"
+      let regionWrites := writes.zipIdx.map fun (rg, k) =>
+        s!"{fc.callMName} (Zig.Asm.writeRegion {operand rg.base} ({regionLen rg}) {proj (outputs.size + k)})"
       let (env, lines) := outputs.toList.zipIdx.foldl
-        (init := (env, guard ++ rwReads ++ [first]))
-        fun (env, ls) (o, k) => match o.ref with
+        (init := (env, pre ++ regionReads ++ [first] ++ regionWrites))
+        fun (env, ls) (o, k) =>
+          let value := if ptrAt k then s!"(Zig.Asm.movePtr {rwName k} {proj k})" else proj k
+          match o.ref with
           | none =>
-            let (env, l) := bindLet fc env inst.id s!"pure {proj k}"
+            let (env, l) := bindLet fc env inst.id s!"pure {value}"
             (env, ls ++ [l])
           | some ptr =>
             if fc.isMemPtr ptr then
-              (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {proj k}"])
-            else (env, ls ++ [fc.storePlace ptr (proj k)])
+              (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {value}"])
+            else (env, ls ++ [fc.storePlace ptr value])
       (env, some ("\n".intercalate lines))
   -- `emitStmts` and `emitTerminator` emit these (`Op.emitRoute`).
   | .block .. | .loop .. | .br .. | .«repeat» .. | .condBr .. | .switchBr .. | .loopSwitchBr ..
@@ -3625,11 +3696,12 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (deviceContract : Bool := false) (naCallee : Bool := false) :
+    (recursive : Bool := false) (device : Option DeviceContract := none) (naCallee : Bool := false) :
     FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
-  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, deviceContract }.prepareInstUses
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive,
+                      deviceContract := device.isSome, deviceAsms := device }.prepareInstUses
   -- Only a function that uses memory can access memory during the call: a pure one has none,
   -- and its slice parameters are read by the caller. A function that one with `noalias`
   -- parameters may call (`naCallee`) marks its accesses for the caller's scope.
@@ -4360,42 +4432,22 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
     names := names.push (f.name, name)
   return (named, names)
 
-/-- Emission needs only the first validated call for each registered symbol. Value-type
-indexes are built lazily, at most once for each function with a selected call. The checker
-continues to validate every matching site through its separate exhaustive index. -/
+/-- Emission needs only the first validated call site of each registered symbol: a direct call
+or, for an address-taken binding (E02), a call through a pointer of its type
+(`ModelRegistry.modelCallIndex`). The checker validates every site. -/
 def firstModelCalls (models : Array ModelBinding) (funcs : Array Func) :
     Std.HashMap String ModelRegistry.CallSite := Id.run do
-  let mut pending := models.foldl (fun names model => names.insert model.symbol) ({} : Std.HashSet String)
+  if models.isEmpty then return {}
+  let index := ModelRegistry.modelCallIndex funcs
   let mut sites : Std.HashMap String ModelRegistry.CallSite := {}
-  for (f, functionIndex) in funcs.zipIdx do
-    if pending.isEmpty then break
-    let insts := f.allInsts
-    let mut values : Option ModelRegistry.ValueTypeIndex := none
-    for i in insts do
-      if let .call (.func name noreturn spawnFn) args := i.op then
-        if pending.contains name then
-          let index := match values with
-            | some index => index
-            | none => ModelRegistry.valueTypeIndex f.types insts
-          values := some index
-          let site : ModelRegistry.CallSite := {
-            functionIndex := functionIndex
-            function := f
-            values := index
-            args := args
-            ret := i.ty
-            noreturn := noreturn
-            spawnFn := spawnFn
-          }
-          sites := sites.insert name site
-          pending := pending.erase name
-          if pending.isEmpty then break
+  for m in models do
+    if let some site := (index.getD m.symbol #[])[0]? then sites := sites.insert m.symbol site
   return sites
 
 /-- Emit a typed implementation adapter plus a complete contract obligation. Imported
 identifiers are rooted so generated names cannot shadow the user's definitions. -/
 def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
-    (structNames : Array (String × String)) : String := Id.run do
+    (structNames : Array (String × String)) (concurrent : Bool := false) : String := Id.run do
   let f := site.function
   let ret := site.ret
   -- Checked call sites use the same first-occurrence type resolver as registry validation.
@@ -4426,12 +4478,18 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
           s!"  reads := {regions fp.reads}\n  writes := {regions fp.writes}"],
         s!"{holds} ∧ {base}_contract.Respects {base}_footprint")
     | none => ([], holds)
+  -- E02, EXT-04: in a concurrent program each declared footprint block is claimed first.
+  let claims := if !concurrent then "" else match m.footprint with
+    | some fp =>
+      String.join ((fp.reads.map (s!"Zig.External.claim p{·} .read *> ") ++
+        fp.writes.map (s!"Zig.External.claim p{·} .write *> ")).toList)
+    | none => ""
   let evidence := match m.proof with
     | some proof => s!"theorem {base}_evidence : {obligation} := _root_.{proof}"
     | none => s!"-- Explicit imported-model assumption; reported in air2lean-models.\naxiom {base}_evidence : {obligation}"
   return String.intercalate "\n\n" ([
     s!"def {base}_contract : Zig.External.Contract ({argsTy}) ({result}) := _root_.{m.contract}",
-    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
+    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := {claims}_root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
@@ -4551,7 +4609,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let asmStr := asmDefs.toList.map emitAsmDef
   let modelStr := (models.mapIdx fun index model =>
     match modelCalls[model.symbol]? with
-    | some site => emitModel model index site structNames
+    | some site => emitModel model index site structNames (!concFuncs.isEmpty)
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
   let rawFuncs := rawFunctions funcs fun f raw =>
@@ -4618,7 +4676,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let groupParts := (callGroups funcs).map fun (members, recursive) =>
     (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device
         (naCallees.contains f.name))
   let shapes := groupParts.flatMap fun (members, _, parts) =>
     (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)

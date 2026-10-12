@@ -98,9 +98,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -752,6 +752,39 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
   [outcome-taxonomy.md](outcome-taxonomy.md).
 
+<a id="asm-05"></a>
+### ASM-05 — Environment-read assembly returns fresh oracle values
+
+- Kind: environment.
+- Statement: An allowlisted asm entry with `envRead` semantics (`rdtsc` combined into `rax`,
+  `rdrand` with or without its `setc` flag) reads state outside the model: each output is a
+  fresh query of the explicit oracle `Mem.arbitrary` (`Zig.Asm.envWord`), cut to the output's
+  width, in output order. The instruction touches no memory and writes only its outputs and
+  clobbers. No relation between reads is claimed (no monotonic counter, no randomness), and a
+  failed `rdrand` returns one of the oracle's values. The entry's fault condition and the CPU's
+  support for the instruction are ASM-04 (`rdtsc` under CR4.TSD, `rdrand` without RDRAND).
+- Derived from: tokens `Asm.envWord`; implies ASM-04.
+- Sources: [volatile-effects.md](volatile-effects.md#inline-asm), `Air2Lean/AsmAllowlist.lean`,
+  `tests/roadmap/asm-effects/AsmEnv/Proofs.lean`.
+
+<a id="asm-06"></a>
+### ASM-06 — Memory-region asm accesses only its declared regions
+
+- Kind: trusted.
+- Statement: An allowlisted asm entry with `regions` (`rep stosb`, `rep movsb`, with a
+  `"memory"` clobber) reads memory only in its declared read regions and writes exactly its
+  declared write regions, each a pointer operand and a byte length from an integer operand. The
+  written bytes and the outputs are functions of the integer inputs, the old integer values and
+  the read bytes (not of addresses); each pointer output is its old value moved by a signed
+  offset, so it keeps its provenance. The direction flag is clear (the ABI's state at every
+  call). The wrapper performs the accesses with the model's checked loads and stores
+  (`Zig.Asm.readRegion`, `writeRegion`, `movePtr`); overlapping accessed regions (and written
+  locations) are `.unspecified` (ASM-03's guard), since an overlapping copy depends on the
+  regions' distance.
+- Derived from: tokens `Asm.readRegion`, `Asm.writeRegion`, `Asm.movePtr`; implies ASM-03.
+- Sources: [generated-code.md](generated-code.md#memory-regions-and-environment-reads-a01),
+  `Air2Lean/AsmAllowlist.lean`, `Proofs/Asm/Effects.lean`.
+
 ## Core runtime semantics
 
 <a id="sem-01"></a>
@@ -920,6 +953,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
   `Air2Lean/Check.lean` `resolveExterns`.
 - Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
+
+<a id="ext-04"></a>
+### EXT-04 — Registry models in concurrent programs
+
+- Kind: trusted.
+- Statement: In a program with sync operations, a registry model call (direct, or through a
+  function pointer such as an asynchronous callback run by a spawned thread) is one scheduler
+  step. Its memory accesses lie in the blocks of its declared footprint parameters, which the
+  generated call claims first (`Zig.External.claim`: one recorded whole-block access, read or
+  write), so an unsynchronized conflicting access of another thread is a race (`.illegal`). A
+  binding without a footprint is rejected in a concurrent program.
+- Derived from: tokens `External.claim`; implies EXT-01 and THR-01.
+- Sources: [external-models.md](external-models.md#callback-contracts-e02),
+  `tests/roadmap/callbacks/Callbacks/AsyncProofs.lean`.
 
 ## OS page mapping
 
@@ -1198,7 +1245,7 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, ORD-06, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05, ORD-06 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04, ORD-06 |
 | Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |
 | Native/WASM correspondence records (`scripts/wasm-correspondence.py`, [research/T05.md](research/T05.md)) | PRF-04, TRU-03 |

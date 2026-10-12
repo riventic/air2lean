@@ -320,6 +320,13 @@ function name has. Before the whole-program checks it binds each extern call
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
    outside the subset. Each call's argument count and result type must be the entry's.
 
+The address of an extern function (`&ext_visit`) is a named global with `"extern": true`, a
+function type and no `init`. Normalization makes it the function block of the callee
+`extern:<symbol>` (E02, `externCodeGlobal`), and `resolveExterns` binds it by the same three
+rules; a call through a pointer of its type then dispatches to the binding. The global records
+no library: an `externs` entry of the symbol (a direct call) gives it, else the binding's
+library is not checked.
+
 ## Global
 
 Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).

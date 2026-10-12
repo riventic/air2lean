@@ -396,6 +396,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
+    # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
+    'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/asm-effects/air-env/{version}': 'tests/roadmap/asm-effects/provenance-env.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
     'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
