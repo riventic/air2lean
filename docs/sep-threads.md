@@ -143,8 +143,8 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
   end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
   as it is has its thread rule directly (`FTTotalTriple.of_read`). Each primitive then has one
-  statement, its thread rule (`FTTotalTriple.ofSeq` of the sequential proof and its locality),
-  and the `@[fsym]` sequential rule is `.toFTotalTriple` of it.
+  proof: its thread rule is `FTTotalTriple.ofSeq` of the sequential rule and its locality (or
+  the sequential rule is `.toFTotalTriple` of a thread rule proved directly).
 
   Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
   `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
