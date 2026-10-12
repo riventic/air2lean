@@ -159,6 +159,20 @@ context (blocks) and the arithmetic solver (sizes). -/
   rw [show q.off.toNat + (x - q.off.toNat) = x by omega] at e2
   rcases hd (b, x) with e | e <;> simp_all
 
+/-- Two owned nonempty regions of one block carry the block's labels: the same address and the
+same kind up to `BlockKind.norm` (`Owns.block`). -/
+@[fsym_facts] theorem facts_regions_labels {q : Ptr} {b : BlockId} {A' S' a' : Nat} {K' : BlockKind}
+    {cs : Array Byte} (hp : p.block = some b) (hq : q.block = some b) (hn : 0 < bs.size)
+    (hn' : 0 < cs.size) :
+    MemFacts (up (regionIn p A S K a bs) ⋆ up (regionIn q A' S' K' a' cs)) (A = A' ∧ K.norm = K'.norm) := by
+  intro m r rF hh hr _
+  obtain ⟨b1, e1, -, -, a1, k1⟩ :=
+    (Owns.within (Owns.region (a := a) (S := S) hp hn) (Within.sepL (Within.refl _))).block hh hr
+  obtain ⟨b2, e2, -, -, a2, k2⟩ :=
+    (Owns.within (Owns.region (a := a') (S := S') hq hn') (Within.sepR (Within.refl _))).block hh hr
+  rw [e1] at e2; cases e2
+  exact ⟨a1.symm.trans a2, k1.symm.trans k2⟩
+
 end Facts
 
 /-! ## Providers from atoms -/
