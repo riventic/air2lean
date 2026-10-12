@@ -61,7 +61,8 @@ theorem constGlobal_ok : result constGlobal = some (.ok 0x7fa00001) := by decide
 
 /-! ## The general statement behind the cases (`ZigLean/EndianLemmas.lean`) -/
 
-example : ∀ v : Zig.F32, v.isNaN = true →
+/-- Every `f32` NaN's stored bytes read as a `u32` are `.unspecified`. -/
+theorem f32_nan_u32 : ∀ v : Zig.F32, v.isNaN = true →
     intOfBytesOf .little 32 ((floatEncOf .little .f32).encode v) false = throw .unspecified :=
   fun _ h => floatEncOf_nan_int .little .f32 h false (by decide) (by decide)
 

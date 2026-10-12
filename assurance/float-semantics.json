@@ -10,6 +10,141 @@
       ],
       "correspondence": "model"
     },
+    "Model::NanBitsModel.arrayCast_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.constGlobal_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.constStore_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.copyBytes_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.f32_nan_u32": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.finiteBits_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.reloadIsNaN_unspecified": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.storeLoad64_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.storeLoad_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.storeLoad_no_value": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.structView_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.sumBits_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.sumBits_no_value": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.unionView_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::NanBitsModel.vectorCast_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::PackedCastsModel.floatField_nan": {
       "semantics": "ieee",
       "targets": [
@@ -1041,6 +1176,15 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.Endian::Zig.Vec.floatEncOf_little": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Endian::Zig.floatEncOf_little": {
       "semantics": "abstract-spec",
       "targets": [
@@ -1050,7 +1194,43 @@
       ],
       "correspondence": "model"
     },
-    "ZigLean.EndianLemmas::Zig.floatEncOf_lawful": {
+    "ZigLean.EndianLemmas::Zig.floatEncOf_decode_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.EndianLemmas::Zig.floatEncOf_decode_encode_nan": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.EndianLemmas::Zig.floatEncOf_encode_nan": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.EndianLemmas::Zig.floatEncOf_nan_int": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.EndianLemmas::Zig.floatEncOf_size_encode": {
       "semantics": "abstract-spec",
       "targets": [
         "aarch64-linux",
@@ -3434,8 +3614,53 @@
       ],
       "correspondence": "model"
     },
-    "ZigLean.VecMem::Zig.Vec.lawfulEnc_float": {
-      "semantics": "ieee",
+    "ZigLean.VecMem::Zig.Float.maskedBytes_of_isNaN": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.Float.maskedBytes_of_not_isNaN": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.FloatFmt.width_mod_eight": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.Vec.float_decode_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.Vec.float_encode_of_not_isNaN": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.Vec.float_size_encode": {
+      "semantics": "abstract-spec",
       "targets": [
         "aarch64-linux",
         "aarch64-macos",
@@ -3466,6 +3691,12 @@
       "correspondence": "model"
     },
     "tests/roadmap/vector-layouts/Model.lean": {
+      "labels": [
+        "ieee"
+      ],
+      "correspondence": "model"
+    },
+    "tests/roadmap/nan-bits/Model.lean": {
       "labels": [
         "ieee"
       ],
