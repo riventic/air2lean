@@ -311,7 +311,8 @@ free list) is not attempted.
   vtable** (`ZigLean/Sep/Full/Dispatch.lean`, generic over the interface): `callIndirect` is the
   generated chain that tests the loaded function pointer against the program's candidates
   (folded by `rfl` lemmas), `CTriple.callIndirect`/`tableCall` read it by the selected arm,
-  `vtR` holds a vtable's entries read-only; for `std.mem.Allocator`, `CAllocSpec.dispatch`: the
+  `vtR` is persistent knowledge of a `const` vtable's entries (below); for `std.mem.Allocator`,
+  `CAllocSpec.dispatch`: the
   dispatch through a vtable meets the specification of the implementation it selects. The
   named-grant ledger
   (`ZigLean/Sep/Full/Ghost.lean`: `Upd.issue`/`retire`/`reassign`/`bump`, `gfrag_mem`);
@@ -322,6 +323,20 @@ free list) is not attempted.
   `CTriple P · Q` is admissible (`CTriple.admissible`, `_fun`, `_run`) and `partial_fixpoint`'s
   generated `fixpoint_induct` reads a recursive group such as `alloc`'s; `CTriple.loop` is the
   invariant rule for `Zig.loop` (partial correctness, no measure).
+
+**The child's vtable is knowledge, not ownership** (`codex/const-global-know`,
+[sep-full-state.md](sep-full-state.md) §Const globals). `own` holds the child's vtable as
+`vtR vtp fns.toList`: persistent knowledge of the `const` global's entries
+(`ZigLean/Sep/Full/Const.lean`), duplicable (`vtR_dup`) and read without being consumed
+(`vtR_load`, `vtR_project`). So a client that holds the arena and another allocator with the same
+child vtable (or the child itself through its own handle) frames both in; the exclusive form
+`up (vtOwn …)` cannot be held twice (`ConstKnow.vtOwn_twice`). The model fact behind it: a `const`
+global is never written (`Mem.accessW`) or freed (`Zig.free` of one is `.illegal`, a model
+correction). No arena, FBA or page statement mentioned `vtR`. `vtR` changed type (it was an
+`Assn` under `up`, it is now an `FAssn`): the old exclusive predicate and its rules are `vtOwn`,
+`vtOwn_load`, `vtOwn_project` with unchanged statements, so a client written against
+`up (vtR …)` switches to `up (vtOwn …)` or to the persistent `vtR` (`vtR_intro`); the arena's
+planned `own ∋ up (vtR …)` becomes the persistent `vtR`.
 
 Not proved yet, in order:
 
@@ -334,7 +349,7 @@ Not proved yet, in order:
   constraints), so the invariant's header words can be any owned words (`wpts`), and the RMW rules
   exist (`FTriple.atomicRmwW`, `atomicRmwAsW`, `atomicStoreAsW`); the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
   call site tests the loaded function pointer against every allocator function of the program;
-  with the child's vtable read-only, as `Dispatch.vtR`, it selects the child's entry),
+  with the child's vtable as persistent knowledge, `vtR`, it selects the child's entry),
   `Upd.issue` under a fresh id for each grant, `defer pushFreeList`. The child's specification
   enters as `CAllocSpec (CVTable.dispatch tables fns) cctx CI` (`Full/Dispatch.lean`).
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);

@@ -597,6 +597,47 @@ The general atomic rules the arena's `alloc` needs are done independently
 (`AtomicRules.lean`: `atomicXchgPtrW`, `cmpxchgWeakPtrW`, `atomicLoadUnorderedW`/`AsW`) and carry
 over to phase 2 unchanged in statement.
 
+### Const globals (persistent knowledge, 2026-10-12)
+
+A `const` global (a vtable, a string literal, any `const` data) is read-only static storage. Before
+this change the only way to read one was to own its bytes (`up (ptsR …)`), exclusively, so a
+second user of the same global could not be framed in: two allocators with the same vtable (an
+arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it (kernel-checked:
+`ConstKnow.vtOwn_twice`).
+
+* **Model fact.** A write to a `.constGlobal` block throws `.illegal` (`Mem.accessW`: stores,
+  atomic stores, RMW, `cmpxchg`); every other step that changes a block is reached only after a
+  kind check (`munmap`/`mremap`: `.mapped`; byte remap: `.heap`; owned remap and reset: `.owned`;
+  an atomic write's message: its `accessW`; each primitive's `KMono` proof checks it) except
+  `Zig.free`, which ended any live block at offset 0. **Model correction**: `Zig.free` of a `const`
+  global throws `.illegal` (native code cannot free static storage; no generated `free` reaches
+  one: it frees stack slots, and `rawFree`/`ownedFree` check the kind first). The legacy free
+  lemmas got the side condition (`free_run_core`, `free_run`, `Triple.free`, `TTriple.free`,
+  `free_whole`, `FTriple.free'`: `K ≠ .constGlobal`, by `decide` for a concrete kind;
+  `free_noErr`: `blk.kind ≠ .constGlobal`). So a live `const` global keeps its bytes, address and
+  life in every later memory.
+* **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`) and
+  `.cbyte b o c`, true in `m` when block `b` is a live `const` global whose byte `o` is `c`
+  (`Mem.kn`). `KMono` (every primitive's `Tame`/`Keeps` step) keeps both: `KMono.set` takes
+  `blk.kind ≠ .constGlobal`, which each primitive gets from the model's guards above.
+* **Assertions** (`ZigLean/Sep/Full/Const.lean`): `cbytesAt p A bs` (the live `const` global at
+  `p`, block address `A`, holds `bs`) and the typed `cpts p a v` (`ptsR` as knowledge). Both are
+  `Persistent` (no bytes, no ghost state): `Persistent.dup` (`P ⊢ P ⋆ P`), `Persistent.drop`
+  (forgotten by an update), `Persistent.absorb`, `cbytesAt_part`.
+* **Introduction**, once: from owned `const` bytes (`cbytesAt_intro`: the owner keeps the bytes
+  and hands out the knowledge), or from the memory itself (`Holds.addKnow`; the initial memory's
+  `const` globals: `Mem.ofGlobals_kn`).
+* **Reading**: the provider `ConstAt` and `FTotalTriple.load_const`; for `fsym`,
+  `FTotalTriple.cload` (`@[fsym]`) and `AddrOf.cbytesAt`, `Reaches.cbytesAt`, `Reaches.cpts`
+  (`@[fsym_provider]`).
+* **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
+  `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
+  owned bytes). The owned form, for a vtable in any block (built at run time), is the old
+  predicate renamed `vtOwn` (an `Assn`, used under `up`) with the old rules (`vtOwn_load`,
+  `vtOwn_project`), same statements. Regression:
+  `tests/roadmap/sep-full/ConstKnow.lean` (two handles whose invariants each hold the vtable, a
+  store to and a free of a `const` global are `.illegal`).
+
 ### Byte-range claims (decision O1, 2026-10-12)
 
 **The problem.** An extent share says that a block is live and long enough, not who may use which

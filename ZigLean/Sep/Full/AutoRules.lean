@@ -593,13 +593,13 @@ theorem known_of_region {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte
   rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at e
   simp only [FHeap.erase, Option.map_eq_some_iff] at e
   obtain ⟨fc, hfc, hfe⟩ := e
-  have hkn : m.kn b A := by
+  have hkn : m.kn (.addr b A) := by
     obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hfc
     exact ⟨blk, hblk, by rw [← ha, hfe]⟩
-  exact ⟨⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩,
-    ⟨hh.disj, hh.heap, hh.know.union fun b' A' h => by obtain ⟨rfl, rfl⟩ := h; exact hkn,
+  exact ⟨⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩,
+    ⟨hh.disj, hh.heap, hh.know.union (Know.sub_single hkn),
       hh.knowF, hh.ghost⟩,
-    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A, Ghost.unit⟩, FHeap.disjoint_empty _,
+    ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩⟩
 
 /-- Knowledge can be forgotten. -/

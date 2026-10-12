@@ -1116,10 +1116,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the mailbox
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₁.2.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
-      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩

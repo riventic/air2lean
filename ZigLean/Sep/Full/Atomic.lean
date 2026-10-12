@@ -556,12 +556,14 @@ theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array 
 theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' ∧ KeepsExt m m' :=
   ⟨KMono.of_blocks h, KeepsExt.of_blocks h⟩
 
-/-- A write inside a block keeps every address and every extent. -/
+/-- A write inside a block that is not a `const` global keeps every address, every `const`
+global and every extent. -/
 theorem kmono_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hb : m.blocks[b]? = some blk)
     (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
-    (hn : o + bs.size ≤ blk.bytes.size) : KMono m m' ∧ KeepsExt m m' :=
-  ⟨KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl h,
+    (hn : o + bs.size ≤ blk.bytes.size) (hc : blk.kind ≠ .constGlobal) :
+    KMono m m' ∧ KeepsExt m m' :=
+  ⟨KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl hc h,
     KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl
       (by simp only; rw [writeBytes_size _ _ _ hn]) rfl h⟩
 
@@ -777,7 +779,7 @@ theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
           rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode w)) hblocks, hwr, henc,
             hsz, hA, hS, hKb])
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-        (kmono_write hblk hblocks (by rw [henc]; omega))
+        (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
       refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode w) (by rw [henc, ← hsz]; exact hab'), ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
       unfold storeM observeM

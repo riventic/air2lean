@@ -175,7 +175,8 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
     (hk : nb.kind.norm = blk.kind.norm) (hlo : nb.kind.mappedLo < nb.bytes.size)
     (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
-    (hX : ∀ h, X h → ∀ l, h l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none)) :
+    (hX : ∀ h, X h → ∀ l, h l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none))
+    (hc : blk.kind ≠ .constGlobal) :
     Holds m' (reblockRes m m' b nb) rF := by
   obtain ⟨hXr, -, hrg⟩ := up_sep_bext hp
   replace hrg : r.gh = Ghost.exts (extOne b S K) := hrg
@@ -193,7 +194,7 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     rwa [Ghost.ls_exts_add] at this
   obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
   refine ⟨hdisj, hmatch, Know.sub_none _,
-    hh.knowF.trans (KMono.set hb ha hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
+    hh.knowF.trans (KMono.set hb ha hc hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
       (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by simp only [reblockRes]; rw [hrg, Ghost.exts_add_cl, Ghost.exts_add_cl])⟩⟩
   · -- no frame claim on `b` (the only block of the new extents)
     have : x = b := Classical.byContradiction fun hne => by simp [extOne, hne] at hx
@@ -268,7 +269,8 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
     (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
     (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
     (hk : nb.kind = blk.kind) (hsz : blk.bytes.size ≤ nb.bytes.size)
-    (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte) :
+    (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
+    (hc : blk.kind ≠ .constGlobal) :
     Holds m' (growRes m m' b nb q) rF := by
   obtain ⟨blk0, hb0, hl0, hS, hK, hlo⟩ := hh.bauth (sep_emp.mpr hp)
   rw [hb] at hb0; cases hb0
@@ -299,7 +301,7 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
     intro c; funext γ e p; simp [Ghost.ls, Ghost.add, Ghost.atExt]
   rw [ecb, els] at hvb
   obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
-  refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hbs), ?_⟩
+  refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hc hbs), ?_⟩
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
   refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.congr (by funext x y; simp) (by rw [els, els])⟩, ?_⟩,
     fun x => ?_, (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by rw [hrg]; funext x y; simp)⟩
@@ -402,7 +404,7 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
   have hb' : m'.blocks[b]? = some nb := by rw [blocks_set_get hb hbs]; simp [nb]
   have hheap := heap_mapped hb hl hK
   have hheap' := heap_mapped hb' hl hnbk
-  refine ⟨Holds.reblock (nb := nb) hh hpre hb hbs hsh hl rfl (by simp [nb])
+  refine ⟨Holds.reblock (nb := nb) (hc := by rw [hK]; nofun) hh hpre hb hbs hsh hl rfl (by simp [nb])
     (by rw [hnbk, hnbs]; simp [BlockKind.mappedLo]; omega)
     (fun o c c' hc hc' => by
       obtain ⟨_, e1, -, ho1, rfl⟩ := Mem.heap_some hc
@@ -518,7 +520,7 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
   have hb' : m'.blocks[b]? = some nb := by rw [blocks_set_get hb rfl]; simp
   have hheap := heap_mapped hb hl hK
   have hheap' := heap_mapped (blk := nb) hb' hl rfl
-  have hh' := Holds.reblock (m' := m') (nb := nb) hh hpre hb rfl rfl hl rfl (by simp [nb, hK, BlockKind.norm])
+  have hh' := Holds.reblock (m' := m') (nb := nb) (hc := by rw [hK]; nofun) hh hpre hb rfl rfl hl rfl (by simp [nb, hK, BlockKind.norm])
     (by simp [nb, BlockKind.mappedLo]; omega)
     (fun o c c' hc hc' => by
       obtain ⟨_, e1, -, ho1, rfl⟩ := Mem.heap_some hc
@@ -556,7 +558,7 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (hh : Holds m r rF) : Holds m' r rF := by
   have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
   have e2 : shapes m' = shapes m := by simp only [shapes, ha]
-  have e3 : m'.kn = m.kn := by funext x A; simp only [Mem.kn, hb]
+  have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
   obtain ⟨hd, hm, hk, hkF, hg, ht, hcf⟩ := hh
   refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx)⟩
   · unfold FMatch; rw [e1, e2]; exact hm
@@ -625,7 +627,7 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
   have hb₂ : m₂.blocks[b]? = some nb := by rw [blocks_set_get hb₁ rfl]; simp [nb, fill]
   have hheap := heap_mapped hb₁ hl hK
   have hheap' := heap_mapped (blk := nb) hb₂ hl hK
-  have hh₂ := Holds.grow (m' := m₂) (nb := nb) hh₁ hpre hb₁ rfl rfl hl rfl rfl
+  have hh₂ := Holds.grow (m' := m₂) (nb := nb) (hc := by rw [hK]; nofun) hh₁ hpre hb₁ rfl rfl hl rfl rfl
     (by simp only [nb, Array.size_append]; omega)
     (fun o c c' hc hc' => by
       obtain ⟨_, e1, -, ho1, rfl⟩ := Mem.heap_some hc

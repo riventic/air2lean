@@ -88,9 +88,10 @@ liveness_witness TTriple.alloc :=
 nonvacuity_witness alloc_next := ⟨emp, 1, 1, by decide, TAdmit.of_empty rfl⟩
 liveness_witness alloc_next := ⟨emp, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
-nonvacuity_witness TTriple.free := ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, TAdmit.mem1 (byte1 .heap)⟩
+nonvacuity_witness TTriple.free :=
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide, TAdmit.mem1 (byte1 .heap)⟩
 liveness_witness TTriple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide,
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
     TLive.mem1 (byte1 .heap) (ok_of_okb (by decide +kernel))⟩
 
 /-! ## Protocol lemmas (`ZigLean/Conc/Lemmas.lean`, `ZigLean/Conc/Logic.lean`, …) -/

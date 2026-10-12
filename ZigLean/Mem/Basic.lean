@@ -660,9 +660,11 @@ def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
     !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
     !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
 
-/-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
-`.illegal`; so does an end of the block that races with an access by another thread
-(`Mem.freeRaces`). It records nothing: a later access to the dead block is `.illegal`. -/
+/-- Free the block that `p` points to the start of. A dead block, an inner pointer or a `const`
+global (read-only static storage, which native code cannot free) throws `.illegal`; so does an
+end of the block that races with an access by another thread (`Mem.freeRaces`). It records
+nothing: a later access to the dead block is `.illegal`. So a `const` global, once live, keeps
+its bytes and stays live in every later memory (`docs/sep-full-state.md` §Const globals). -/
 def free (p : Ptr) : MemM Unit := do
   let m ← get
   match p.block with
@@ -670,7 +672,7 @@ def free (p : Ptr) : MemM Unit := do
   | some b =>
     match m.blocks[b]? with
     | some blk =>
-      if blk.live ∧ p.off = 0 then
+      if blk.live ∧ p.off = 0 ∧ blk.kind ≠ .constGlobal then
         if m.freeRaces b blk.bytes.size then throw .illegal
         else set { m with blocks := m.blocks.set! b { blk with live := false } }
       else throw .illegal
