@@ -263,7 +263,8 @@ def validate_profile(profile):
             or triple[2].split('.')[0] != profile['abi']):
         raise Invalid('profile requires a supported architecture/OS and matching ABI')
     if (profile['name'] != 'abi64-le-v1' or type(profile['pointer_bits']) is not int or profile['pointer_bits'] != 64
-            or profile['endian'] != 'little' or type(profile['error_set_bits']) is not int or profile['error_set_bits'] != 16
+            or profile['endian'] != 'little' or type(profile['error_set_bits']) is not int
+            or not 0 < profile['error_set_bits'] <= 32
             or profile['float_mode'] != 'per-instruction' or profile['error_layout'] != 'type-table'
             or profile['export_stage'] != 'analyzed-air'
             or profile['build_mode'] not in ('Debug', 'ReleaseSafe', 'ReleaseFast', 'ReleaseSmall')):
