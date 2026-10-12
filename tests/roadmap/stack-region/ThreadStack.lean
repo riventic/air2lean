@@ -12,8 +12,10 @@ the fix `clone` ignored its `stack` argument and the mapping stayed a live block
 range, so `@intFromPtr(&child_local)` inside the mapping was provably false for every placement,
 and the `apart` rule claimed each owned byte of a block lies before every other block. Now:
 
-* `child_local_in_mapping`: some placement puts the child's local inside its thread mapping, below
-  a live byte of the mapping (the TLS part) that the old `apart` fact placed it before or after.
+* `child_local_in_mapping`: some placement puts the child's local inside its thread mapping.
+* `old_apart_false`: there the child's live local and a live byte of the mapping (its TLS part)
+  lie neither way round the old `apart` fact (each owned byte before the other block's start);
+  the corrected `Holds.apart` compares with the other block's live bytes.
 * `heap_not_in_stack`, `parent_stack_not_in_child_stack`: only the thread's own stack blocks may
   lie in its native stack; a heap block or another thread's stack block proposed there falls back
   outside the mapping.
@@ -91,6 +93,27 @@ def localInMapping : ConcM Nat Bool := do
 theorem child_local_in_mapping : result nativeLayout kid 20 [] localInMapping = some (.ok true) := by
   decide +kernel
 
+/-- The child, while its local (block 4, address `L`) is live, reads live byte 4096 of the
+mapping (address `M + 4096`) and stores whether the old `apart` fact for these two live bytes
+(`L + 0 < M ∨ M + 4096 < L`, each byte before the other block's start) fails. -/
+def kidApart : Nat → ConcM Nat Unit := fun _ =>
+  Linux.cloneThread (ConcM.liftMem do
+    let p ← allocStack 8 8
+    let L ← ptrAddr p
+    let _ ← load (BitVec 8) 1 (mapP.add 4096)
+    let M ← ptrAddr mapP
+    store 8 slot (if L + 0 < M ∨ M + 4096 < L then (0 : BitVec 64) else 1)
+    free p) ctid
+
+/-- **The old `apart` fact is false** in a reachable memory: two live bytes of two live blocks
+that lie neither way round it (the corrected `Holds.apart` compares with the other block's live
+bytes, which start at `M + 4096`). -/
+theorem old_apart_false : result nativeLayout kidApart 20 [] (do
+    spawn
+    joinLoop 3
+    ConcM.liftMem (load (BitVec 64) 8 slot)) = some (.ok 1) := by
+  decide +kernel
+
 /-- The parent makes block 4, a heap block, right after the `clone`: proposed in the child's
 stack, it falls back outside the mapping. -/
 def heapAfterClone (kind : BlockKind) : ConcM Nat Bool := do
@@ -118,6 +141,7 @@ theorem parent_access_illegal :
   decide +kernel
 
 #print axioms child_local_in_mapping
+#print axioms old_apart_false
 #print axioms heap_not_in_stack
 #print axioms parent_stack_not_in_child_stack
 #print axioms parent_access_illegal

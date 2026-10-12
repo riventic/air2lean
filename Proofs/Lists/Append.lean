@@ -666,7 +666,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         have hH0 : hH (bO, 0) = none := (dHB (bO, 0)).resolve_right (by rw [hB0]; simp)
         rw [hm₂', Heap.union_apply, Heap.union_apply, hH0, hB0]; rfl
       have hlt := hclear _ _ hcell
-      simp only at hlt
+      simp only [BlockKind.mappedLo_heap, Nat.add_zero] at hlt
       have aO1 : (ptrAddr (ptr.elem 4 len)).run m₅ =
           pure ((blkO.addr : Int) + (ptr.elem 4 len).off, m₅) := ptrAddr_run hpO hblkO
       have aO0 : (ptrAddr ptr).run m₅ = pure ((blkO.addr : Int) + ptr.off, m₅) :=

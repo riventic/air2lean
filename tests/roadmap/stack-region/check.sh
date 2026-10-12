@@ -32,7 +32,7 @@ out=$(lake env lean "$here/Regressions.lean" 2>&1) || { echo "$out"; fail 'Regre
 out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'ThreadStack.lean does not check'; }
 out="$out"$'\n'"$out2"
 echo "$out"
-[ "$(grep -c 'depends on axioms' <<<"$out")" = 10 ] || fail 'expected 10 axiom reports'
+[ "$(grep -c 'depends on axioms' <<<"$out")" = 11 ] || fail 'expected 11 axiom reports'
 used=$(grep -o 'axioms: \[[^]]*\]' <<<"$out" | sed 's/axioms: \[//; s/\]//' | tr ',' '\n' | tr -d ' ' | sort -u)
 for a in $used; do
   case "$a" in propext|Quot.sound|Classical.choice) ;; *) fail "nonstandard axiom $a" ;; esac
