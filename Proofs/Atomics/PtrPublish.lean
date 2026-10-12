@@ -1,7 +1,6 @@
 import ZigLean.Conc.PtrAtomic
 import ZigLean.Conc.PtrAtomicLemmas
 import ZigLean.Mem.Alloc
-import ZigLean.Sep.Block
 
 /-!
 # Pointer publication over all schedules (C09)

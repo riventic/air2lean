@@ -33,11 +33,12 @@ rejects the same AIR):
 
 * **Pointer casts over a cyclic error-free type graph.** `Node.allocatedSliceUnsafe`,
   `beginResize`, `loadBuf`, `reset`, `alloc`, `free` and `resize` cast between `*Node` and its
-  bytes, and `Node` points to itself (`next: ?*Node`). The strict capability scan rejects every
-  cycle. `translatedErrorCapability` (`Air2Lean/Check.lean`) falls back to the bounded closed-graph
-  proof that global aliases already use (`closedErrorFreeAliasGraph`): no type reachable from the
-  pointee is an error set or error union. A cycle that reaches an error union stays rejected
-  (`test_cli.py`).
+  bytes, and `Node` points to itself (`next: ?*Node`). The capability scan of a cast's pointee
+  (`castErrorCapability`, `Air2Lean/Check.lean`; every allocator model) counts reachable error
+  storage, so a type met again on the path adds nothing. Where that scan does not finish (the
+  `*anyopaque` fields below), it falls back to the bounded closed-graph proof that global aliases
+  already use (`closedErrorFreeAliasGraph`): no type reachable from the pointee is an error set or
+  error union. A cyclic cast that reaches an error union stays rejected (`test_cli.py`).
 * **`*anyopaque` fields.** The arena state contains `child_allocator.ptr: *anyopaque`, so the
   recovery of `*ArenaAllocator` from `ctx` met an opaque type. In that fallback a `*anyopaque`
   edge is not followed: an opaque pointee is no typed storage, and every recovery of a typed
@@ -129,6 +130,11 @@ another block never matches; a slice of the node's block that ends at `buf_ptr +
 past the header, which `own` holds (`Core.lo_of`). The comparison needs no bytes of the slice:
 the slice's block reaches its end by the grant's extent share (`Core.last_dec`), so the refined
 `resize` (the client gives no bytes for a growth) decides it too. No premise per triple.
+`last_dec` compares only bytes known to be live: the first node's last byte before
+`buf + end_index` lies past its own `next` word, and the slice's last byte lies past the `next`
+word of the node it was granted from (`GrantOk`: a grant starts past its node's header), both
+owned by the arena. A memory model in which the low part of a block is not live (a thread's
+stack mapping below its stack pointer, MM-19) needs exactly that.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,

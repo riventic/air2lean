@@ -200,6 +200,18 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+* **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
+  invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
+  `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
+  `u`'s hypotheses are side goals, and `EUpd (Q₀ ⋆ R) (Q v)` closes the return (`tryUpd`; an
+  update that closes it is preferred, else the first that applies with its arithmetic goals
+  left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
+  arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
+  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
+  a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
+  adds its fields next to it; two owned nonempty regions of one block have the same address and
+  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -217,11 +229,18 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   `(CVTable.dispatch t fns).alloc …` to the generated chain): `CTriple.tableCall`'s reading;
   a loop is `CTriple.loop` with its invariant, whose body `∀ s, CTriple (inv s) (body.run s) …`
   is again `fsym`;
-* a generated indirect call `if f == c₁ then x₁ else … else throw .illegal` is folded into
-  `callIndirect f [(c₁, x₁), …]` at its `if`, before its tests are rewritten (`callIndirect_fold_one`/`cons`)
-  and its arms' common continuation is pulled out (`pullIndirect`), so it is one command; with no
-  rule for it, the arm that the facts select is walked (`C.callIndirect_pos`/`_neg`), else both
-  cases.
+* a generated indirect call `if f == c₁ then x₁ else … else d` (`d` is `throw .illegal`, or the
+  environment's call `callC (extCall …)` of an open interface, `docs/interfaces.md`) is folded
+  into `callIndirect f [(c₁, x₁), …] d` at its `if`, before its tests are rewritten
+  (`callIndirect_fold_one`/`_ext`/`_cons`) and its arms' common continuation is pulled out
+  (`pullIndirect`), so it is one command; with no rule for it, the arm that the facts select is
+  walked (`C.callIndirect_pos`/`_neg`), else both cases, and with no arm left the last arm
+  (`C.callIndirect_nil`);
+* a `CTriple` rule's command is unfolded to the program's head and its projections of structure
+  values are reduced (`(env e).alloc f (c, n, k, ra)` to the generated `Ext.call0 f c n …`), so
+  the program's literal arguments unify as written; a raw natural literal that unification
+  assigns (`BitVec.ofNat 6 ?k =?= 3`) is a numeral again in the rule's pre- and postcondition
+  (`normNatLits`).
 
 Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
 

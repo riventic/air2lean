@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "models": [],
+  "interfaces": [
+    {
+      "interface": "std.Random",
+      "struct": "Random",
+      "contract": "Interfaces.RandomSpec.FillSpec",
+      "premise": "EXT-05"
+    }
+  ]
+}
