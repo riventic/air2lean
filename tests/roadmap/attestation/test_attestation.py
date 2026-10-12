@@ -148,7 +148,7 @@ class Tamper(unittest.TestCase):
         self.rejected(self.verify(forged), 'does not verify')
 
     def test_trust_anchor_is_the_verifiers_not_the_attestations(self):
-        key2, allowed2 = keypair(self.work, 'key2')
+        _, allowed2 = keypair(self.work, 'key2')
         self.rejected(self.verify(None, allowed2), 'does not verify')
         self.rejected(run(ATTEST, 'verify', self.att, '--allowed-signers', self.work / 'missing',
                           '--file', self.subject), 'not found')
@@ -261,7 +261,7 @@ class Fixtures(unittest.TestCase):
 
     def test_provenance_check_reports_authentication(self):
         for fixture in self.NAMES:
-            plain_done, plain = self.check(fixture)
+            _, plain = self.check(fixture)
             self.assertEqual(plain['authentication'], 'not_attested')
             att, _ = self.sign(fixture, 'manifest')
             done, report = self.check(fixture, '--attestation', att, '--allowed-signers', self.allowed,

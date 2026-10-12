@@ -21,6 +21,7 @@ validly signed manifest can still be stale against the tree (`check-manifest` re
 docs/artifact-manifest.md#authentication and premise TRU-05 (docs/premises.md).
 """
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -61,6 +62,7 @@ def file_digest(path):
     return hashlib.sha256(read_file(path, receipt.MAX_FILE)).hexdigest()
 
 
+@functools.cache
 def manifest_module():
     spec = importlib.util.spec_from_file_location('attest_manifest', ROOT / 'scripts/artifact-manifest.py')
     module = importlib.util.module_from_spec(spec)

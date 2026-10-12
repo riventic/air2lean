@@ -312,6 +312,15 @@ class NormalizedGate(unittest.TestCase):
         self.assertEqual(perf.gate(budgets, absent, normalized=True)[0], 1)    # a budgeted hotspot is not silently dropped
         self.assertEqual(perf.gate(budgets, calibrated_measurement(), normalized=True), (0, []))  # no per-module run: nothing to compare
 
+    def test_a_partial_measurement_gates_only_its_workloads(self):
+        budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0})
+        data = calibrated_measurement(modules={"Proofs.Basic.Proofs": 30.0})
+        del data["workloads"]["layout"]
+        self.assertEqual(kinds(perf.gate(budgets, data, normalized=True)[1]), ["missing-workload"])
+        self.assertEqual(perf.gate(budgets, data, normalized=True, only_workloads=["basic"]), (0, []))
+        code, findings = perf.gate(budgets, data, normalized=True, only_workloads=["nope"])
+        self.assertEqual((code, kinds(findings)), (1, ["missing-workload"]))
+
     def test_a_missing_or_foreign_calibration_fails_closed(self):
         budgets = calibrated_budgets()
         none = calibrated_measurement(); del none["calibration"]

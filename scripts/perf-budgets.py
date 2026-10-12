@@ -163,7 +163,8 @@ def validate_budgets(data, root=ROOT):
             if calibration is not None and phase in NORMALIZED_PHASES and "max_ratio" not in limits:
                 errors.append(f"{ident}: phase {phase} has no max_ratio although the budgets are calibrated; "
                               "rebaseline it so the normalized gate cannot skip it")
-        for module, limits in sorted((budget.get("modules") or {}).items()) if isinstance(budget.get("modules", {}), dict) else ():
+        modules = budget.get("modules")
+        for module, limits in sorted(modules.items()) if isinstance(modules, dict) else ():
             if module not in workload.get("proof_modules", []) or not isinstance(limits.get("max_ratio"), (int, float)):
                 errors.append(f"{ident}: module budget {module} must name a proof module and carry max_ratio")
         output = budget.get("output", {})
@@ -179,7 +180,7 @@ def validate_budgets(data, root=ROOT):
 
 
 def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=False,
-         portable=False, only_phases=None, normalized=False):
+         portable=False, only_phases=None, normalized=False, only_workloads=None):
     """Compare one measurement with the budgets.
 
     `portable` checks the generous `portable_*` limits instead of the reference-platform
@@ -237,6 +238,12 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             f"{ {key: measured_platform.get(key) for key in reference} }")
     measured = measurement.get("workloads", {})
     budgeted = {workload["id"]: workload for workload in budgets.get("workloads", [])}
+    if only_workloads:
+        unknown = set(only_workloads) - set(budgeted)
+        if unknown:
+            add("missing-workload", ", ".join(sorted(unknown)), "gated workload is not in the budgets file")
+        budgeted = {ident: workload for ident, workload in budgeted.items() if ident in only_workloads}
+        measured = {ident: result for ident, result in measured.items() if ident in only_workloads}
     for ident in sorted(set(measured) - set(budgeted)):
         add("unbudgeted-workload", ident, "measured workload has no entry in the budgets file")
     for ident, workload in budgeted.items():
@@ -733,6 +740,8 @@ def main(argv=None):
                           "calibration run of the same measurement (any machine; needs `record` with calibration)")
     gat.add_argument("--phase", action="append",
                      help="with --portable/--normalized: restrict to these phases (default: translator and elaborate)")
+    gat.add_argument("--workload", action="append",
+                     help="gate only these workloads (a partial `record --workload` measurement)")
     gat.add_argument("--json", type=Path, help="also write findings as JSON")
     val = sub.add_parser("validate", help="check the budgets file structure")
     val.add_argument("--budgets", type=Path, default=BUDGETS)
@@ -761,7 +770,7 @@ def main(argv=None):
         print(f"wrote {args.budgets} (status {updated['status']})")
         return 0
     code, findings = gate(budgets, measurement, args.allow_pending, args.allow_platform_mismatch,
-                          args.portable, args.phase, args.normalized)
+                          args.portable, args.phase, args.normalized, args.workload)
     if args.json:
         write_json(args.json, {"exit_code": code, "findings": findings})
     print_findings(code, findings)

@@ -923,6 +923,20 @@ jobs:
           python3 -I -B scripts/perf-budgets.py gate --portable --measurement "$RUNNER_TEMP/perf.json" \
             --json "$RUNNER_TEMP/perf-findings.json"
 
+      # Q06: proof time of the hotspot workload on this runner, as a multiple of the calibration run
+      # measured in the same job (docs/perf-budgets.md#proof-time-on-any-machine).
+      - name: Performance budget regression gate (normalized proofs)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          export LEAN_NUM_THREADS=1
+          lake build Proofs.Threadsync.Handoff Proofs.Threadsync.WaitGroup
+          python3 -I -B scripts/perf-budgets.py record --no-build --skip-elaborate --workload threadsync \
+            --per-module --out "$RUNNER_TEMP/perf-proofs.json"
+          python3 -I -B scripts/perf-budgets.py gate --normalized --workload threadsync \
+            --phase proof.cold --phase proof.warm --measurement "$RUNNER_TEMP/perf-proofs.json" \
+            --json "$RUNNER_TEMP/perf-proofs-findings.json"
+
       # docs/architecture-audit/trust-chain.md: every counterexample must stay fixed (schema table
       # and admission, module identity, unchecked memcpy, volatile asm, claim binding, emitter
       # placeholders).

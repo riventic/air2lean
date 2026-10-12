@@ -550,8 +550,9 @@ def run_row(root, request, zig, difftest, timeout):
                                   capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired: return 'timeout', 'native build, native run or Lean run timed out', None, None
         except OSError as error: return 'error', str(error), None, None
-        read = lambda side: (temp/'tests/diff/out'/side/example/f'{function}.jsonl').read_text().splitlines() \
-            if (temp/'tests/diff/out'/side/example/f'{function}.jsonl').is_file() else []
+        def read(side):
+            path = temp/'tests/diff/out'/side/example/f'{function}.jsonl'
+            return path.read_text().splitlines() if path.is_file() else []
         zig_lines, lean_lines = (read('zig') if native.returncode == 0 else []), (read('lean') if lean.returncode == 0 else [])
     if len(zig_lines) != 1 or len(lean_lines) != 1:
         return 'error', f'runners exit {native.returncode}/{lean.returncode} with {len(zig_lines)}/{len(lean_lines)} output lines', None, None
@@ -677,6 +678,9 @@ def schedule_bundle(root, receipt_path, index=None, *, replay=False, binary=None
     return bundle(root, observed=observed, schedule=schedule, replay=replay_info, judgement=judgement, **common)
 
 
+DIFFTEST = 'tests/diff/.lake/build/bin/difftest'
+
+
 def default_zig():
     return os.environ.get('AIR2LEAN_ZIG', 'zig')
 
@@ -690,7 +694,7 @@ def replay_block(request, expected, binary):
 
 def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None,
                 zig_source=None, zig=None, difftest=None):
-    difftest = difftest or root/'tests/diff/.lake/build/bin/difftest'
+    difftest = difftest or root/DIFFTEST
     data = REPORT.read_summary(summary)
     if data.get('complete') is not True: raise Invalid('incomplete differential summary')
     # A replay must run the code that produced the summary, as `schedules.py replay --summary` requires.
@@ -789,7 +793,7 @@ def replay_bundle(root, path, binary, timeout, zig=None, difftest=None):
         if outcome.get('detail'): print(f"counterexample: {outcome['detail']}", file=sys.stderr)
         return REPLAY_EXIT[outcome['status']]
     if replay.get('kind') == 'diff_row':
-        outcome = diff_row_confirm(root, replay, zig or default_zig(), difftest or root/'tests/diff/.lake/build/bin/difftest', timeout)
+        outcome = diff_row_confirm(root, replay, zig or default_zig(), difftest or root/DIFFTEST, timeout)
         observed = outcome.get('observed', {})
         print(f"REPLAY: status={outcome['status']} {data.get('example')}.{data.get('function')}#{data.get('input_index')} diff_row"
               f" native={observed.get('native_line', '-')} model={observed.get('model_line', '-')}")
