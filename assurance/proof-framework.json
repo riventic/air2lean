@@ -91,11 +91,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "LoopTemplate",
-      "module": "ZigLean.Sep.LoopTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "MutexSpec",
       "module": "ZigLean.Conc.Spec.Mutex",
       "status": "legacy-to-retire"
@@ -323,18 +318,6 @@
       "tactic": "gen_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.AllocSpec.Norm",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "loop_template",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.LoopTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "loop_template?",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.LoopTemplate",
       "status": "legacy-to-retire"
     },
     {
@@ -570,9 +553,6 @@
       "path": "ZigLean/Sep/AllocSpec/Region.lean"
     },
     {
-      "path": "ZigLean/Sep/AllocSpec/Toy.lean"
-    },
-    {
       "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
     },
     {
@@ -635,16 +615,8 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ops.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Pinned.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Region.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"
@@ -657,24 +629,10 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Toy.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Try.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Typed.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/LoopTemplate.lean"
     },
     {
       "path": "ZigLean/Sep/Mmap.lean"
