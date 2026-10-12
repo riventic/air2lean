@@ -133,6 +133,24 @@ partial def Val.hasNestedUndef (v : Val) : Bool :=
   | .sliceConst _ p l => undefOrNested p || undefOrNested l
   | _ => false
 
+/-- The type and byte offset of each of the `n` items or fields of a constant of type `tid`: an
+array, a non-`packed` struct or a tuple, from the exporter's sizes and field offsets; `none` for
+any other type or an unknown layout. -/
+def aggParts? (types : Array Ty) (layouts : Array Layout) (tid : TyId) (n : Nat) :
+    Option (Array (TyId × Nat)) :=
+  match types[tid]? with
+  | some (.array _ child _) => do
+    let stride ← (layouts[child]?).bind (·.size)
+    pure ((Array.range n).map fun k => (child, k * stride))
+  | some (.struct _ layout fields) =>
+    let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+    if layout == "packed" || offsets.size != fields.size then none
+    else some ((fields.zip offsets).map fun ((_, t), o) => (t, o))
+  | some (.tuple fields) =>
+    let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+    if offsets.size != fields.size then none else some (fields.zip offsets)
+  | _ => none
+
 /-- The byte ranges `(offset, length)`, from `base`, of the `undefined` parts of the constant
 `v` of type `tid` in memory: the bytes that a store of `v` leaves undefined. Only an `undefined`
 item of an array, or field of a non-`packed` struct or tuple, at any depth, has a range (from
@@ -147,20 +165,7 @@ partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : T
     pure (if size == 0 then #[] else #[(base, size)])
   | .agg _ elems =>
     if !v.hasNestedUndef then return #[]
-    -- The type and byte offset of each item or field.
-    let parts : Array (TyId × Nat) ← match types[tid]? with
-      | some (.array _ child _) =>
-        let stride ← (layouts[child]?).bind (·.size)
-        pure (elems.mapIdx fun k _ => (child, k * stride))
-      | some (.struct _ layout fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if layout == "packed" || offsets.size != fields.size then none
-        pure ((fields.zip offsets).map fun ((_, t), o) => (t, o))
-      | some (.tuple fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if offsets.size != fields.size then none
-        pure (fields.zip offsets)
-      | _ => none
+    let parts ← aggParts? types layouts tid elems.size
     if parts.size != elems.size then none
     (elems.zip parts).foldlM (init := #[]) fun acc (e, t, o) =>
       (acc ++ ·) <$> undefByteRanges types layouts t e (base + o)
@@ -196,18 +201,7 @@ partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (tid : TyI
       | none => #[]
     | _ => #[]
   | .agg _ elems =>
-    let parts : Array (TyId × Nat) := match types[tid]? with
-      | some (.array _ child _) => match (layouts[child]?).bind (·.size) with
-        | some stride => elems.mapIdx fun k _ => (child, k * stride)
-        | none => #[]
-      | some (.struct _ layout fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if layout == "packed" || offsets.size != fields.size then #[]
-        else (fields.zip offsets).map fun ((_, t), o) => (t, o)
-      | some (.tuple fields) =>
-        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
-        if offsets.size != fields.size then #[] else fields.zip offsets
-      | _ => #[]
+    let parts := (aggParts? types layouts tid elems.size).getD #[]
     (elems.zip parts).flatMap fun (e, t, o) => nanConstParts types layouts t e (base + o)
   | _ => #[]
 

@@ -2746,6 +2746,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
       if isRaw then (env, some s!"Zig.storeBytes {rv ptr} {align} {rv v}") else
       let ptrTy? := fc.valTyId? ptr
+      let childTid := (ptrTy?.bind (ptrChild fc.types)).getD 0
       let host := (ptrTy?.map fc.hostSize).getD 0
       let bitOff := (ptrTy?.map fc.bitOffset).getD 0
       match v with
@@ -2765,8 +2766,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
             (undefByteRanges fc.types fc.layouts · v)
           match ranges with
           | some ranges =>
-            let tid := (ptrTy?.bind (ptrChild fc.types)).getD 0
-            let enc := fc.withNaNConsts tid v s!"Zig.Enc.encode ({fc.resolveVal env v (undefFill := true)} : {ty})"
+            let enc := fc.withNaNConsts childTid v s!"Zig.Enc.encode ({fc.resolveVal env v (undefFill := true)} : {ty})"
             let bytes := ranges.foldl (init := enc) fun acc (off, len) =>
               s!"(Zig.writeBytes ({acc}) {off} (Array.replicate {len} .undef))"
             (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
@@ -2778,9 +2778,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else
           -- A constant with a NaN: its bytes, with the NaN constants' exact bits.
-          let tid := (ptrTy?.bind (ptrChild fc.types)).getD 0
           let enc := s!"Zig.Enc.encode ({rv v} : {ty})"
-          let bytes := fc.withNaNConsts tid v enc
+          let bytes := fc.withNaNConsts childTid v enc
           let store := if bytes != enc then s!"Zig.storeBytes {rv ptr} {align} {bytes}"
             else s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"
           (env, some (fc.pointeeStorageExpr ptr store))
