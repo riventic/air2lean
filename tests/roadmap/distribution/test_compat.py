@@ -117,7 +117,11 @@ class Compat(unittest.TestCase):
         self.assertDrift("zig.default '0.17.0' is not a qualified version")
         self.setUp()
         self.meta(lambda d: entry(d, '0.16.0').update(status='in-qualification'))
-        self.assertDrift("zig.ci_once '0.16.0' is not a qualified x86_64-linux version")
+        self.assertDrift("zig.ci_once_pinned '0.16.0' is not a qualified x86_64-linux version")
+        self.setUp()
+        self.meta(lambda d: entry(d, '0.17.0').update(status='in-qualification'))
+        self.meta(lambda d: d['zig'].update(default='0.16.0'))
+        self.assertDrift("zig.ci_once '0.17.0' is not a qualified x86_64-linux version")
 
     def test_translator_constants(self):
         self.edit('Air2Lean/Air/Profile.lean', 'schema ≤ 12 do', 'schema ≤ 13 do')

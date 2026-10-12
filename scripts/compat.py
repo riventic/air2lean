@@ -169,6 +169,13 @@ def check(root):
                                      and e.get('status') == 'qualified'
                                      and 'x86_64-linux' in (e.get('hosts') or []) for e in entries):
         errors.append('zig.ci_once %r is not a qualified x86_64-linux version' % once)
+    # Once-parts whose steps are not yet qualified on ci_once keep running on these versions.
+    pins = get(('zig', 'ci_once_pinned'))
+    for pin in pins if isinstance(pins, list) else [pins]:
+        if pin == once or not any(isinstance(e, dict) and e.get('version') == pin
+                                  and e.get('status') == 'qualified'
+                                  and 'x86_64-linux' in (e.get('hosts') or []) for e in entries):
+            errors.append('zig.ci_once_pinned %r is not a qualified x86_64-linux version other than ci_once' % (pin,))
     dialect = text('Air2Lean/Air/Dialect.lean')
     named = re.search(r'def defaultVersion : ZigVersion := \.v(\d+)_(\d+)_(\d+)\b', dialect)
     expect('zig.default', default, '.'.join(named.groups()) if named else None, 'Air2Lean/Air/Dialect.lean')

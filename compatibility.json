@@ -16,7 +16,8 @@
   },
   "zig": {
     "default": "0.17.0",
-    "ci_once": "0.16.0",
+    "ci_once": "0.17.0",
+    "ci_once_pinned": ["0.16.0"],
     "versions": [
       {
         "version": "0.17.0",

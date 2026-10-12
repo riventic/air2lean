@@ -290,7 +290,7 @@ for step in job['steps']:
             raise ValueError(f"changed tool setup environment/guard: {step['name']}")
 
 for number, row in enumerate(rows):
-    if set(row) - {'zig', 'part', 'examples', 'full', 'mutate', 'shard'}:
+    if set(row) - {'zig', 'part', 'examples', 'full', 'mutate', 'shard', 'once'}:
         raise ValueError('unsupported matrix row fields')
     call(['git', 'restore', '.'])
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
