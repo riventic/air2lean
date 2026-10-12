@@ -15,18 +15,18 @@
     }
   },
   "air_sha256": {
-    "0.14.1/extern_calls.fillSum.json": "bf8c97466015b9ea09de5f1e03c0ecabb26de538ad3239a697f42079b040c7f5",
-    "0.14.1/extern_calls.greetLen.json": "c97334b2bd9a8162f565b07636f52d27fce2746345f8b3072b598e0b519ade70",
-    "0.14.1/libc_ref.memset.json": "8b5f12a7b7f5ef07c64676f49d8be9cc252302511fc03f17faddeeb909ec0b47",
-    "0.14.1/libc_ref.strlen.json": "68fa9e6879e2f36eda059e6048f058aec76f2063894cbef3056ce2753819ccda",
-    "0.15.2/extern_calls.fillSum.json": "5a3f27cddd3a4357ea13c96d2dc7a4c85c62ca0114e38e4a234fd61966c0fea4",
-    "0.15.2/extern_calls.greetLen.json": "935e79a90b4f5cec9c2818515c5275a09d28beac17dbccbf4e25ffabc605e61d",
-    "0.15.2/libc_ref.memset.json": "0dccef427374c98548d1b163884e4521c64e9f46c9d982f315e4289d68b99e28",
-    "0.15.2/libc_ref.strlen.json": "2571dd64d53db8368700cc64891926c614e6e8429f811cddd901cbc5e7f7dcfd",
-    "0.16.0/extern_calls.fillSum.json": "84f84be427b8deb790be116099095537a1e46a95f46f3d63f931604660ba2d35",
-    "0.16.0/extern_calls.greetLen.json": "49545a6763e9f881d503b65a37bb27dcb25d2c85ee8d21702320cc7f3e051718",
-    "0.16.0/libc_ref.memset.json": "f71c112df5c74e63eaa385400c0547b6003d3579fab22a4eea5c149a1e505da2",
-    "0.16.0/libc_ref.strlen.json": "4308dc1fb4ab6ac8d44353e45c0526c95468e43dd9bca85fac9b1e854402c035",
-    "0.16.0-trusted/trusted.absSum.json": "f056f2f1d8cb65695a2eb5ad5a723a7526555b1e4ab69fa8f8af687b4cd7cfd7"
+    "0.14.1/extern_calls.fillSum.json": "37a4ff8a0f45a1fcc3cf6edb593e72b3a92e1169c1f67dc7a49cd7b92b7c804f",
+    "0.14.1/extern_calls.greetLen.json": "c62f1cb9ac4313281ec3e4be5861f737b1349be759d8fa4316534e5cef77a0d8",
+    "0.14.1/libc_ref.memset.json": "85d541948ec236d8e2b05a3c0960375e1eec279f8601741ad2dcc7a71bf22fbb",
+    "0.14.1/libc_ref.strlen.json": "6c3a6a7e6ff2c4e553a658c5b8290c657131a8f72ff7aa328e5f20d37f62bb86",
+    "0.15.2/extern_calls.fillSum.json": "5b8ba91fbf2dc6f8baef3310e98063432081996a20e5f115b2c6cae51c1dcdc5",
+    "0.15.2/extern_calls.greetLen.json": "a479857fec6354b74cc75bb68994b12d99b480feeefa37da4d673c887d2fa7bf",
+    "0.15.2/libc_ref.memset.json": "557ca27a471834d3d118c5fb636edf542aabb042d06c499f668a5592e6db0606",
+    "0.15.2/libc_ref.strlen.json": "d647d5a4f9709674b7ffd3d6d14ea6ee7047e7bc18808aaabf15b65d94ce4ed6",
+    "0.16.0/extern_calls.fillSum.json": "d27e6e45a4d33deecc531aaef3b9eaa73c5a26499dfb58602a7eb27f279aa678",
+    "0.16.0/extern_calls.greetLen.json": "f2a8b193e689aaa8fdc9ebe09f6645a88a29d700a1e3335868eb317c89e554b8",
+    "0.16.0/libc_ref.memset.json": "5294bd265940ff85fdadf7f2d9f624e00f48734ffdbbbcd30b48cab74c1394e9",
+    "0.16.0/libc_ref.strlen.json": "c5de7bd83d8bea856fcb31578407343f49387a9a8458ec23f64cfa6ddc3136b3",
+    "0.16.0-trusted/trusted.absSum.json": "c151e846b87671a6088d2ea53aebd353d5ddbca9932653cfdb54335b7132a22e"
   }
 }

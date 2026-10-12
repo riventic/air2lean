@@ -13,7 +13,7 @@ import unittest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-VERSIONS = ("0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
 PROVENANCE = HERE / "provenance.json"
 COMMAND = ("ZIG_AIR_JSON_DIR=air/<version> ZIG_AIR_JSON_FILTER=runtime_tags. <patched zig> build-obj "
            "-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline runtime_tags.zig "
@@ -33,7 +33,8 @@ def current():
         "air": {"schema": 12, "target": "x86_64-linux", "cpu": "baseline",
                 "optimization": "ReleaseSafe", "error_tracing": False, "command": COMMAND},
         "air_sha256": {f"{v}/{p.name}": sha(p) for v in VERSIONS
-                       for p in sorted((HERE / "air" / v).glob("*.json"))},
+                       for p in sorted([*(HERE / "air" / v).glob("*.json"),
+                                        *(HERE / "air" / v).glob("error-table.air2lean")])},
     }
 
 
@@ -43,7 +44,7 @@ def refresh():
     # bin/zig is the AIR-only lock wrapper (zig-patch/lock.sh), the same file for every version.
     record["patched_compiler_sha256"] = {v: sha(zig_root / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
     record["qualification"] = ("Compiler exports of every function in runtime_tags.zig with patched "
-                               "0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter. One "
+                               "0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter. One "
                                "lowering per tag, not universal tag semantics; no translation or proof is claimed.")
     PROVENANCE.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
 

@@ -4,8 +4,8 @@
   "export": {
     "command": "AIR2LEAN_ZIG_AIR=zig-air-0.17.0/bin/zig tests/roadmap/zig017/divceil/check.sh --export DIR",
     "flags": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline",
-    "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
-    "exporter_json_zig_sha256": "38b83e6a15ac83cb72499107bff5ca8f903e9bc7d41dddf2b8b81083a65f5840",
+    "patched_compiler_sha256": "439daa7fc41d3177334e204ec61561506214e9932332127463b7e3ae75308762",
+    "exporter_json_zig_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
     "export_host": "aarch64-macos",
     "air_shape": "each function: arg, arg, the signed minInt/-1 overflow check (signed types), the divide-by-zero check, div_ceil, ret_safe"
   },

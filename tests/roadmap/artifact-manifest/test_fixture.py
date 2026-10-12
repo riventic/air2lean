@@ -54,7 +54,11 @@ def setUpModule():
         target = TEMPLATE / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target, follow_symlinks=False)
-    for args in (('init', '-q'), ('config', 'gc.auto', '0'), ('add', '-A'),
+    # No detached auto-gc/maintenance (git 2.4x+ repacks after `commit`, also with gc.auto 0): it
+    # would delete the template's loose objects while a test copies it, or write into a copy that
+    # tearDown removes. The copies inherit this config.
+    for args in (('init', '-q'), ('config', 'gc.auto', '0'), ('config', 'maintenance.auto', 'false'),
+                 ('config', 'core.fsmonitor', 'false'), ('add', '-A'),
                  ('-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false',
                   'commit', '-q', '-m', 'copy')):
         subprocess.run(['git', '-C', str(TEMPLATE), *args], check=True, capture_output=True)

@@ -269,8 +269,8 @@ theorem toInt_of_finite {s : Bool} {n : Nat} {safe : Bool} {sn : Bool} {m : Nat}
     Float.toInt s n safe x =
       let mag : Nat := if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat
       let tv : Int := if sn then -(mag : Int) else (mag : Int)
-      let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
-      let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
+      let lo : Int := intLo s n
+      let hi : Int := intHi s n
       if tv < lo || tv > hi then
         if safe then throw .overflow else throw .illegal
       else pure (BitVec.ofInt n tv) := by
@@ -371,8 +371,8 @@ toward zero, then range-check the same way `toInt_of_finite` does. -/
 theorem toInt_of_toRat {s : Bool} {n : Nat} {safe : Bool} {x : Float fmt} {q : Rat}
     (hx : x.toRat? = some q) :
     Float.toInt s n safe x =
-      let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
-      let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
+      let lo : Int := intLo s n
+      let hi : Int := intHi s n
       if truncRat q < lo || truncRat q > hi then
         if safe then throw .overflow else throw .illegal
       else pure (BitVec.ofInt n (truncRat q)) := by
@@ -697,5 +697,12 @@ theorem sqrt_nonneg {fmt : FloatFmt} {x : Float fmt} {q : Rat}
   have hxnan : x.isNaN = false := by unfold Float.isNaN; rw [hc]
   have hxsign : x.signBit = false := (sign_of_classify_finite hc).symm
   exact sqrt_nonneg_of_sign hxnan hxsign
+
+/-! ## Zero-bit targets of `@intFromFloat` -/
+
+/-- `@intFromFloat` of -1.0 (f32) to `i0` is out of range (`i0` holds only 0). -/
+theorem toInt_i0_rejects_neg_one :
+    Float.toInt true 0 true (⟨0xBF800000#32⟩ : Float FloatFmt.f32) = throw .overflow := by
+  rfl
 
 end Zig

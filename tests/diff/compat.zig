@@ -1,4 +1,5 @@
-//! Version compat shim for Zig 0.15.2 vs 0.16.0 (and 0.17.0's type reflection, at the end) —
+//! Version compat shim for Zig 0.15.2 vs 0.16.0 (0.14.1's writers, and 0.17.0's type reflection,
+//! at the end) —
 //! the only file in tests/diff/ and
 //! tests/floatprobe/ with a Zig-version or OS switch; every other file there imports this and
 //! stays version-agnostic. 0.16.0 removed std.posix's process layer (fork/pipe/write/waitpid/
@@ -23,6 +24,10 @@ const system = posix.system;
 /// True from 0.16.0 onward. Comptime-known, so `if (v16) ... else ...` below only ever
 /// semantically analyzes the branch that applies to the Zig compiling this file.
 const v16 = builtin.zig_version.minor >= 16;
+
+/// True from 0.15.0 onward: `std.Io.Writer`, the buffered writer interface. Zig 0.14.1 has the
+/// generic `std.io` writers instead; `Writer` and `Allocating` below give both the same shape.
+const v15 = builtin.zig_version.minor >= 15;
 
 /// 0.16.0's file/dir ops take an explicit `Io` execution context instead of always running
 /// synchronously on the calling thread; this project has no async runtime, so every call site
@@ -173,6 +178,16 @@ pub fn silenceStderr() void {
     } else |_| {}
 }
 
+/// The empty signal mask (`std.posix.sigemptyset()`; 0.14.1: `std.posix.empty_sigset`).
+pub fn emptySigset() posix.sigset_t {
+    return if (v15) posix.sigemptyset() else posix.empty_sigset;
+}
+
+/// The alignment argument of `Allocator.alignedAlloc` for `bytes` (0.14.1: a `u29`).
+pub fn alignment(comptime bytes: usize) if (v15) std.mem.Alignment else u29 {
+    return if (v15) comptime .fromByteUnits(bytes) else bytes;
+}
+
 // -- filesystem (tests/diff/common.zig's forEachLine, tests/diff/gen_inputs.zig) ------------
 
 pub fn makePath(path: []const u8) !void {
@@ -187,6 +202,50 @@ pub fn readFileAlloc(gpa: std.mem.Allocator, path: []const u8, max: usize) ![]u8
 
 const FileT = if (v16) std.Io.File else std.fs.File;
 
+/// The writer that common.zig renders into: `std.Io.Writer`, or on 0.14.1 a type-erased
+/// `std.io.AnyWriter` with the methods common.zig calls.
+pub const Writer = if (v15) std.Io.Writer else struct {
+    any: std.io.AnyWriter,
+
+    pub fn print(self: *@This(), comptime format: []const u8, args: anytype) !void {
+        try self.any.print(format, args);
+    }
+    pub fn writeAll(self: *@This(), bytes: []const u8) !void {
+        try self.any.writeAll(bytes);
+    }
+    pub fn writeByte(self: *@This(), byte: u8) !void {
+        try self.any.writeByte(byte);
+    }
+};
+
+/// A `Writer` into memory (`std.Io.Writer.Allocating`); its writer is `allocatingWriter`.
+pub const Allocating = if (v15) std.Io.Writer.Allocating else struct {
+    list: std.ArrayList(u8),
+    // `AnyWriter` points at its generic writer's context: both live here.
+    gw: std.ArrayList(u8).Writer = undefined,
+    w: Writer = undefined,
+
+    pub fn init(allocator: std.mem.Allocator) @This() {
+        return .{ .list = std.ArrayList(u8).init(allocator) };
+    }
+    pub fn deinit(self: *@This()) void {
+        self.list.deinit();
+    }
+    pub fn written(self: *@This()) []u8 {
+        return self.list.items;
+    }
+};
+
+/// `aw`'s writer; `aw` must stay at a stable address (a `var` local) while it is used.
+pub fn allocatingWriter(aw: *Allocating) *Writer {
+    if (v15) return &aw.writer;
+    aw.gw = aw.list.writer();
+    aw.w = .{ .any = aw.gw.any() };
+    return &aw.w;
+}
+
+const Buffered = if (v15) FileT.Writer else std.io.BufferedWriter(4096, std.fs.File.Writer);
+
 /// A created output file with its own small buffered writer. `open` only sets `file`, so it is
 /// safe to return by value; `writer` then lazily buffers into `self`'s own `buf`, so `self` must
 /// stay at a stable address (a `var` local) from that call onward — the returned pointer, and
@@ -195,20 +254,29 @@ const FileT = if (v16) std.Io.File else std.fs.File;
 pub const OutFile = struct {
     file: FileT,
     buf: [4096]u8 = undefined,
-    w: FileT.Writer = undefined,
+    w: Buffered = undefined,
+    // 0.14.1: the generic writer whose context `any` points at.
+    gw: if (v15) void else Buffered.Writer = undefined,
+    any: Writer = undefined,
 
     pub fn open(path: []const u8) !OutFile {
         if (v16) return .{ .file = try std.Io.Dir.cwd().createFile(ioCtx(), path, .{}) };
         return .{ .file = try std.fs.cwd().createFile(path, .{}) };
     }
 
-    pub fn writer(self: *OutFile) *std.Io.Writer {
+    pub fn writer(self: *OutFile) *Writer {
+        if (!v15) {
+            self.w = .{ .unbuffered_writer = self.file.writer() };
+            self.gw = self.w.writer();
+            self.any = .{ .any = self.gw.any() };
+            return &self.any;
+        }
         self.w = if (v16) self.file.writer(ioCtx(), &self.buf) else self.file.writer(&self.buf);
         return &self.w.interface;
     }
 
     pub fn close(self: *OutFile) void {
-        self.w.interface.flush() catch |err|
+        (if (v15) self.w.interface.flush() else self.w.flush()) catch |err|
             std.debug.panic("compat.OutFile.close: flush failed: {}", .{err});
         if (v16) self.file.close(ioCtx()) else self.file.close();
     }

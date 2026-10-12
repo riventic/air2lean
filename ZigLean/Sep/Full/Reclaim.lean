@@ -347,6 +347,18 @@ theorem junkAt_absorb {X : Assn} {h : Heap} {r : Res} (hx : (up X ⋆ JunkAt h) 
   · show (FHeap.union r₁.heap r₂.heap).erase = _
     rw [← e2]; exact FHeap.erase_union _ _
 
+/-- `junkAt_absorb` next to a frame `R`. -/
+theorem junkAt_absorbR {X : Assn} {h : Heap} {R : FAssn} {r : Res} (hx : ((up X ⋆ JunkAt h) ⋆ R) r) :
+    ∃ h₁, X h₁ ∧ (JunkAt (h₁ ∪ h) ⋆ R) r := by
+  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hx
+  obtain ⟨h₁, hX, -, hj⟩ := junkAt_absorb h1
+  exact ⟨h₁, hX, r₁, r₂, hd, rfl, hj, h2⟩
+
+/-- A byte of `h₂` is a byte of `h₁ ∪ h₂`. -/
+theorem _root_.Zig.Heap.union_ne_none_right {h₁ h₂ : Heap} {l : Loc} (h : h₂ l ≠ none) :
+    (h₁ ∪ h₂) l ≠ none := by
+  simp only [Heap.union_apply]; cases e : h₁ l <;> simp_all
+
 theorem _root_.Zig.Covers.union_left {b : BlockId} {lo hi : Nat} {h₁ h₂ : Heap} (hc : Zig.Covers b lo hi h₁) :
     Zig.Covers b lo hi (h₁ ∪ h₂) := fun i h1 h2 => by
   have := hc i h1 h2; simp only [Heap.union_apply]; cases e : h₁ (b, i) <;> simp_all
@@ -363,6 +375,13 @@ theorem _root_.Zig.Covers.region {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockK
   obtain ⟨-, -, b', hb', -, hl⟩ := hr
   rw [hb] at hb'; cases hb'
   rw [hl]; simp only [true_and]; rw [if_pos ⟨h1, h2⟩]; simp
+
+/-- A byte of a region is a byte of any heap its heap is joined into. -/
+theorem _root_.Zig.Covers.region_union {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {a : Nat}
+    {bs : Array Byte} {h h' : Heap} (hb : p.block = some b) (hr : regionIn p A S K a bs h) {x : Nat}
+    (h1 : p.off.toNat ≤ x) (h2 : x < p.off.toNat + bs.size) : (h ∪ h') (b, x) ≠ none := by
+  have := Zig.Covers.region hb hr x h1 h2
+  simp only [Heap.union_apply]; cases e : h (b, x) <;> simp_all
 
 /-- **Covered junk bytes are a region** with the labels `A`, `K` of an owned byte of their block
 (any size label `S`): every cell of one block records the block's address and kind up to its

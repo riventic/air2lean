@@ -27,7 +27,7 @@ them; `scripts/module-split.py` derives invalidation keys from it.
 namespace Air2Lean.ModuleSplit
 open Lean
 
-def format : String := "air2lean-module-split-v2"
+def format : String := "air2lean-module-split-v3"
 
 /-- First line of every generated part: stale parts carrying it are removed on the next run. -/
 def marker : String := "-- air2lean-split-part"
@@ -123,12 +123,13 @@ def modules (parts : EmitParts) (ns root stem header : String) : Array Module :=
     text := header ++ String.intercalate "\n" (all.toList.map ("import " ++ ·)) ++ "\n" }
   return out
 
-/-- `translator`: the revision object of the source-map sidecar (`lean`, `revision`, `modules`),
-so every module key is bound to the translator that wrote the parts. -/
-def manifest (ns root : String) (metadata translator : Json) (mods : Array Module) : Json :=
+/-- `translator` and `runtime`: the revision objects of the source-map sidecar (`lean`, `revision`,
+`modules`), so every module key is bound to the translator that wrote the parts and to the
+runtime they import. -/
+def manifest (ns root : String) (metadata translator runtime : Json) (mods : Array Module) : Json :=
   let strs (a : Array String) : Json := .arr (a.map Json.str)
   Json.mkObj [("format", .str format), ("namespace", .str ns), ("root", .str root),
-    ("metadata", metadata), ("translator", translator),
+    ("metadata", metadata), ("translator", translator), ("runtime", runtime),
     ("modules", .arr (mods.map fun m => Json.mkObj [("module", .str m.name),
       ("file", .str m.file), ("kind", .str m.kind), ("functions", strs m.functions),
       ("definitions", strs m.definitions), ("imports", strs m.imports)]))]

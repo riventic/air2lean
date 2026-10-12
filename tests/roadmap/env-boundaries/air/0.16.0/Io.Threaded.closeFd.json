@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,9 +39,15 @@
  },
  "name": "Io.Threaded.closeFd",
  "module": "std",
+ "src": {
+  "file": "Io/Threaded.zig",
+  "module": "std",
+  "decl_line": 18890
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -51,13 +60,15 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 50
   },
   {
    "id": 4,
@@ -79,7 +90,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 31
   },
   {
    "id": 6,
@@ -101,7 +113,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 20
   },
   {
    "id": 8,
@@ -131,7 +144,8 @@
          "id": 9,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 10
+         "line": 10,
+         "column": 42
         },
         {
          "id": 10,
@@ -192,7 +206,8 @@
        "id": 13,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 11
+       "line": 11,
+       "column": 41
       },
       {
        "id": 14,

@@ -1,6 +1,6 @@
 # Separation logic over the full state
 
-Status: proof-only modules in `ZigLean/Sep/Full/`: the prototype (`Res`, `Triple`, `Atomic`, `Toy`)
+Status: proof-only modules in `ZigLean/Sep/Full/`: the prototype (`Res`, `Triple`, `Atomic`)
 and migration stages 1 and 2 (`Logic`, `AllocSpec`, `Tame`, see §Migration). `ZigLean.lean` does
 not import them, and no existing rule changes. CI builds them (`Full-state separation logic`). The
 axioms are `propext`, `Classical.choice` and `Quot.sound`. There is no `sorry`, `admit` or
@@ -123,7 +123,7 @@ constraint (`TagSat`). Then:
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
   rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
-  layout over the word (`Toy.apts_layout`, O3: a memory with a 4-byte location at the hint holds
+  layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
 * **Plain bytes.** Constraints can be dropped (`Res.untag`, `FTriple.untag`), so an atomic rule
   applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
@@ -173,35 +173,17 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `AtomicPtr` | `FTriple.atomicLoadUnorderedEnc`, `FTriple.cmpxchgPtr` | pointer-valued `aptsE`: the `unordered` load reads the value; a strong `cmpxchg` with the held value succeeds |
 | `Seq` | `Sched.run_solo`, `Sched.run_eq_seqRun`, `ThreadFreeC.*` | a one-thread scheduler run of a `ThreadFree` concurrent function is its sequential reading |
 | `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, `conc_norm` | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
-| `Toy` | `toyAlloc_spec`, `toyFree_spec`, `cycle_spec` | the hint protocol: alloc, free, alloc from the invariant |
-| `Toy` | `apts_layout`, `inv_no_odd` | **O3**: a memory with a 4-byte location at the hint holds no `inv` |
-| `Toy` | `addrOf_block`, `inv_last_block`, `inv_no_lost` | **O1**: a memory whose remembered pointer's block is missing holds no `inv` |
-| `Toy` | `start_inv`, `cycle_from_start` | nonvacuity: a concrete start memory holds `inv`, so the real alloc–free–alloc run satisfies the post |
+| `Atomic` | `apts_layout` | **O3**: a memory that holds a word as `apts` has no atomic location of another offset or size over it (`docs/alloc-page.md`'s `odd` memory holds no `apts` of the hint) |
 
-The toy (`Toy.lean`) has the shape of `PageAllocator.map`'s hint protocol. It reads the hint
-atomically, then reads the last mapping's pointer from `last` and takes its address (a dangling
-pointer after `free`). It checks that the hint is that address plus a page (a panic otherwise),
-maps a page, publishes the new hint atomically, and stores the mapping in `last`. Its invariant is:
-
-```
-inv hint last := ∃ q a, apts hint (ofInt (a + 4096)) ⋆ (up (pts last 8 q) ⋆ addrOf q a)
-addrOf ⟨some b, off⟩ a := ∃ A, ⟪A + off = a⟫ ⋆ known b A     -- knowledge only
-```
-
-The invariant owns only knowledge of the mapping, so `toyFree_spec` keeps it, and `cycle_spec`
-(alloc, then free, then alloc) goes through. Compare the legacy obstruction theorems:
-`alloc_no_triple_at_start` built a memory `odd` (O3, since resolved in the model: an ordered
-mixed-size access retires the old location), and `alloc_no_triple_after_free` builds
-`hintedLost`, each with the same heap as a good memory. In the full logic both differ from the
-good memory in the resources a precondition can see. `odd` differs in the hint bytes' tag
-(`inv_no_odd`); `hintedLost` lacks the knowledge `known 6 A` (`inv_no_lost`).
-
-The toy keeps the pointer in a plain slot and the hint as a `u64`. The translated
-`PageAllocator` uses the thread model's pointer atomics (`ZigLean/Mem/AtomicPtr.lean`, C09) and
-an `unordered` pointer load (`ZigLean/Conc/AtomicWord.lean`). There the two slots become one
-`apts` with a `Ptr` value. The same `locIdx_post` argument applies: an `unordered` read at choice
-0 reads the newest message. The pointer `cmpxchg` compares identities (`ptrValEq`), so a
-sequential run that compares the value it just read needs no address.
+The prototype toy allocator (`Full/Toy.lean`: the shape of `PageAllocator.map`'s hint protocol,
+with the hint as a `u64` and the last mapping in a plain slot) is retired with the hand-written
+allocator model (D2). The protocol is proved on the translated `PageAllocator` against
+`FAllocSpec` (`tests/roadmap/alloc-translated/PageAlloc.lean`): its invariant owns the hint as a
+pointer-valued `aptsE` (O3) and, for a non-null hint, only the knowledge `known b A` of its
+block's address (O1), so `free` keeps it and the next `alloc` reads the dangling pointer's
+address. The obstruction memories `odd` and `hintedLost`, with the same heap as a good memory,
+differ from it in the resources a precondition can see (`PageObstruction.lean`). The toy's block
+rules (`FTriple.alloc'`, `free'`, `allocC`) moved to `Full/Block`, and `apts_layout` to `Full/Atomic`.
 
 ## Soundness
 
@@ -228,8 +210,8 @@ sequential run that compares the value it just read needs no address.
 * **Layout.** `ShapesWF` is part of `FSeq`, and every atomic rule re-establishes it
   (`locIdx_post`). `tagOf` is the first location covering a byte. Under `ShapesWF` it is the only
   one (`tagOf_of_mem`), so a constraint over owned bytes bounds what `locIdx` finds.
-* **Adequacy.** A client proof starts from a memory that holds its precondition. `start_inv`
-  shows such a memory for the toy, and `cycle_from_start` applies the spec to the real run. A
+* **Adequacy.** A client proof starts from a memory that holds its precondition (the start
+  memory, `Full/Init`: `Mem.init_fseq` and the program-start adequacy theorems). A
   full triple quantifies over fewer memories than `Triple (up P)`: exactly those whose full state
   fits. This is intended, since it is what makes the allocator's `alloc` specifiable.
 
@@ -366,8 +348,7 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
   growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
-* Toy: `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` and `toyFree_spec` take it
-  (`newMap` includes it).
+* Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound
   here (`tests/roadmap/sep-full/BlockExtentsCX.lean`, `no_cell_size`).
@@ -978,10 +959,10 @@ This builds on the FBA branch's O2 shape (`codex/alloc-translated-p4-fba` 02a845
    * `I.own := ∃ h a, apts addr_hint h ⋆ hintKnown h a`. Here `hintKnown` is `addrOf` for the
      hint pointer, plus `⟪h's address ≡ 0 mod page⟫`, which discharges the `@ptrFromInt`
      alignment check.
-   * At program start `addr_hint` is `null` with tag `none` (the analogue of `start_inv`).
+   * At program start `addr_hint` is `null` with tag `none`.
    * `alloc`'s `cmpxchg` keeps `I.own` with the new mapping's `known` (taken by `know_intro`
      from the fresh mapping before it is granted).
-   * `free` keeps `I.own` unchanged (`toyFree_spec`'s argument).
+   * `free` keeps `I.own` unchanged (it owns only knowledge of the mapping).
    * With pointer-valued atomics, `apts` gets a `Ptr` variant.
 4. **PageAllocator (O2).**
    * `tok p n k A S K := ⟪K = .mapped p.off ∧ S = p.off + alignUp n P ∧ P ∣ A⟫ ⋆ up (regionIn (p.add n) A S K 1 tail)`.

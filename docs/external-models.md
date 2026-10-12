@@ -1,11 +1,11 @@
 # User external models and contracts
 
 `--model-registry registry.json` binds selected direct external calls to project-supplied
-Lean models. This first API admits acyclic, fully checked signatures in sequential programs
-and uses `Zig.MemM` for every external model, including models that preserve memory. Unknown
-calls still fail. Indirect callbacks, noreturn calls, comptime worker targets and concurrent
-programs are outside this extension fragment. Callbacks have a separate Lean-level interface,
-described in "Callback contracts (E02)" below. Built-in allocator/thread/clock recognition is
+Lean models. The API admits acyclic, fully checked signatures and uses `Zig.MemM` for every
+external model, including models that preserve memory. Unknown calls still fail. A binding may
+also be reached through a function pointer (`&ext_visit` in a vtable or passed as a callback)
+and from a concurrent program when it declares a footprint; both are described in "Callback
+contracts (E02)" below. Noreturn calls and comptime worker targets stay outside the API. Built-in allocator/thread/clock recognition is
 one typed table, `stdModels` in `Air2Lean/StdModels.lean`: each row is a qualified std name,
 its typed model (or rejection reason), its Zig-version qualification and its semantic
 dependencies (the `ZigLean` declarations its emitted term may use). The checker, emitter,
@@ -218,9 +218,51 @@ included. `resolve table s impl` selects the targets of signature `s` from the p
 callable-address table; `resolve_complete`, `resolve_incompatible` and `resolve_unknown` show
 that every declared target of `s` is reachable and that a target of another signature or an
 unknown address throws `.illegal`. `tests/roadmap/indirect-calls/Bridge.lean` proves that a
-fresh emitted indirect call equals `dispatchIn (resolve …)` for every pointer. The registry still rejects address-taken bindings: a callback contract is a Lean-level
-interface for model clients. It is not a registry entry, and the translator does not bind it to
-an emitted indirect call.
+fresh emitted indirect call equals `dispatchIn (resolve …)` for every pointer.
+
+### Binding call sites to contracts
+
+A translated function-pointer call site binds to registry contracts through the same callable-
+address table, with no per-site annotation:
+
+- The address of an `extern fn` (`&ext_visit`; a named `extern` global of function type in the
+  AIR) becomes the function block of the extern callee `extern:<symbol>`
+  (`Air2Lean/Air/Normalize.lean`'s `externCodeGlobal`). `resolveExterns` binds it exactly as a
+  direct extern call: to the program's `export fn` of that symbol, or to a registry model of
+  that symbol, else the program is rejected (`CALLEE_EXTERN_UNBOUND`, "its address is taken").
+  The AIR global carries no library: an `externs` entry of the same symbol gives it, else the
+  binding's library is not checked.
+- A model at a code address is checked at every call site that can reach it: its direct calls
+  and every call through a pointer of a function type at which the program takes its address
+  (`ModelRegistry.modelCallIndex`). The template (`--model-registry-template`) offers such a
+  symbol with the signature of its first call through a pointer.
+- The emitted call through a pointer of that type has one more arm: the model's block runs the
+  model (`air2lean_model_<i>`), translated targets run themselves, every other pointer throws
+  `.illegal`.
+
+If every target of a signature satisfies one contract, the call site satisfies it at every
+pointer: `Contract.Holds.dispatch` and `CallbackContract.Holds.dispatch` (the unknown-address
+arm is the contract's `.illegal` failure). A client then needs no callback body.
+`tests/roadmap/callbacks` (fresh 0.17.0, 0.16.0, 0.15.2 and 0.14.1 exports of `callbacks.zig`)
+binds the foreign `ext_visit` to an assumed callback contract and proves on the 0.17.0
+translation: `sumVisit_holds` (the translated target meets the same contract), `site_holds`,
+`evaluate_spec` (the evaluator, for every pointer), `callOps_spec` (a vtable field loaded from
+memory), `forEach_spec` (the observer loop: a run that returns gives `true`, keeps the context
+live and changes no other block; `Zig.loopMM_partial`, since the contract lets the callback fail
+or not return) and `runExternal_spec` (the vtable `ext_ops = .{ .visit = &ext_visit }`). The
+contract evidence is the only reported assumption (`scripts/external-contracts.py`).
+
+### Asynchronous callbacks
+
+A binding may be used by a concurrent program, for example a callback that a spawned thread
+calls, only with a declared `footprint` (premise EXT-04). The model call is one scheduler step,
+like a call of a translated function without sync operations, and the generated binding first
+claims the whole block of each footprint parameter (`Zig.External.claim`, a recorded read or
+write access): a conflicting access of another thread without synchronization is then a race,
+`.illegal`, before or after the call, even if the model records no access itself.
+`tests/roadmap/callbacks/air-async` (`async_cb.zig`: a thread and the caller each call the
+callback on their own context) translates on all four versions; `AsyncProofs.lean` proves
+`worker_spec` (in any thread, a call keeps the context live and changes no other block).
 
 `tests/roadmap/models/Callback.lean` proves two clients from the contract alone:
 

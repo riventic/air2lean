@@ -12,7 +12,10 @@ translation depends on the OS (`tests/golden/0.15.2/threadsync/Gen-darwin.lean`)
 
 - **Linux** (`FutexImpl`, the committed `Gen.lean`): `tryLock` is an acquire `or(1)`, `lockSlow` a
   relaxed load and a loop of `xchg(3)` with a futex wait, `unlock` an `xchg(0)` with a release and
-  a wake. The contended value is `3`.
+  a wake. The contended value is `3`. On aarch64-linux
+  (`tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean`) `tryLock` is a weak acquire `cmpxchg`
+  `0 → 1` instead (`lock bts` is x86 only); `tryLock_spec` proves both (`wp_orLock`,
+  `wp_casWeakLock`), and the rest is the same code.
 - **macOS** (`DarwinImpl`): `lock` is `os_unfair_lock_lock`, a model of the C function
   (`Zig.osUnfairLockC`): a loop of an acquire `cmpxchg 0 → 1` with a futex wait while the word is
   `1`. `unlock` is a release `xchg 0` and a wake. The contended value is `1`.
@@ -86,14 +89,22 @@ theorem tryLock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc]
   rw [hp]
-  refine WP.bind (wp_orLock hP hc3 hg hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
-  simp only [StateT.run_pure, pure_bind]
-  refine WP.pure' ?_
-  rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
-  · exact WP.pure' ⟨by omega, hc₁, .inl ⟨by decide, hL, hi₁⟩⟩
-  · rcases hr with rfl | rfl
-    · exact WP.pure' ⟨by omega, hc₁, .inr ⟨by decide, hi₁⟩⟩
-    · exact WP.pure' ⟨by omega, hc₁, .inr ⟨by decide, hi₁⟩⟩
+  first
+  | -- x86 (`lock bts`): an acquire `or(1)`.
+    refine WP.bind (wp_orLock hP hc3 hg hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
+    · exact WP.pure' ⟨by omega, hc₁, .inl ⟨by decide, hL, hi₁⟩⟩
+    · rcases hr with rfl | rfl
+      · exact WP.pure' ⟨by omega, hc₁, .inr ⟨by decide, hi₁⟩⟩
+      · exact WP.pure' ⟨by omega, hc₁, .inr ⟨by decide, hi₁⟩⟩
+  | -- Other architectures (0.15.2 on aarch64-linux): a weak acquire `cmpxchg` `0 → 1`.
+    refine WP.bind (wp_casWeakLock hP hg hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
+    refine WP.pure' ?_
+    rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨⟨v, rfl⟩, hi₁⟩
+    · exact WP.pure' ⟨by omega, hc₁, .inl ⟨rfl, hL, hi₁⟩⟩
+    · exact WP.pure' ⟨by omega, hc₁, .inr ⟨rfl, hi₁⟩⟩
 
 /-- The loop invariant of `lockSlow`: thread `t` is at `spin`. -/
 def lockInv (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)

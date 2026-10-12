@@ -2,6 +2,19 @@
 
 The patched compiler writes one file per function. Safe short names use `$ZIG_AIR_JSON_DIR/<fqn>.json`; long or unsafe names use a reserved SHA-256 basename while JSON retains the complete identity. See [Exported function filenames](export-names.md) for the naming and collision contract. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
+The patched compiler is not purely an exporter. It is also a trusted, minimal Sema hook
+(`zig-patch/<version>/hook.patch`): with runtime safety off, `zirForLen` inserts the `for`
+operand length check that Sema otherwise emits only with safety on, as `if (!ok) unreachable`
+(`unchecked_ib`, [illegal-behavior.md](illegal-behavior.md) row 27). Its failure is illegal
+behaviour already, so the hook only refines the stock program, and the AIR is identical to the
+stock compiler's except for that inserted check. Evidence: the committed goldens of all four
+versions compare equal to fresh patched exports (`scripts/check.sh`), and the nine committed loop
+fixtures outside the goldens (`tests/roadmap/env-boundaries/air/0.15.2/{fs.File.readAll,fs.File.writeAll,posix.read,posix.write}`,
+`env-boundaries/air/0.16.0/posix.read`, `idle-loops/air/progress.idle`,
+`loop-tactics/nested/air/nested.pairs`, `volatile-effects/air/0.16.0/device_effects.{putc,writeAll}`),
+all exported before the hook, were re-exported with it and are identical except for the
+additive `unchecked_ib`, `src` and `dbg_stmt` `column` fields.
+
 ## File
 
 ```json
@@ -48,7 +61,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `module` | the function's module (§Identity): `root` for the main module, `std` for the standard library, else the module's name. Additive (no schema change); older exports omit it. |
 | `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name as the compiler spells it, e.g. `root` or `std`; not the §Identity key) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `instance_key` | a generic instance only (`name` is `<generic>__anon_<n>`): its content-addressed key, 64 hex digits (§Instances). Additive; older exports omit it, and so does an instance whose comptime arguments have no stable identity. |
+| `unchecked_ib` | Additive compiler fact (no schema change): the illegal behaviours that the patched Sema (`zig-patch/<version>/hook.patch`) lowers to `if (!ok) unreachable` where safety is off, so that the AIR carries them. Only `"for_len"`: the operands of a multi-operand `for` must have equal lengths ([illegal-behavior.md](illegal-behavior.md) row 27); the exporter writes it when its Sema declares `air_json_unchecked_ib`. The translator rejects a function with a `loop` in an export without `for_len` (any loop may hide an unchecked length). Golden comparisons keep it: the committed goldens carry it, as the patched compilers export it. |
 | `params` | type ID of each runtime parameter, in order |
+| `noalias` | the indices into `params` of the `noalias` parameters (Sema's `noalias_bits`: only the first 32 parameters can be `noalias`), in increasing order; `[]` for none. Required in schema 12; legacy schemas have none. The translator checks every call of such a function ([illegal-behavior.md](illegal-behavior.md#noalias-parameters)). `scripts/normalize-air.py` treats `[]` like an absent field, so older goldens compare equal |
 | `ret` | type ID of the return type |
 | `export` | `{name, cc}`: present only for a function declared with the `export` keyword. `name` is the linker symbol it defines, `cc` its calling convention's tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`). `@export` aliases are not reported (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
 | `body` | main body (AIR `getMainBody`) |
@@ -77,7 +92,7 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `export`, `externs`, `unchecked_ib`, `err_trace` or `err_trace_unresolved: true` (§Error return trace) |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |
@@ -90,7 +105,7 @@ contract in prose.
 | `other` | `name` | — |
 | struct or tuple field | `ty` | `name`, `offset`, `comptime: true` |
 | union / enum field | `name`, `ty` / `name`, `value` | — |
-| instruction | `id`, `tag`, `ty`, the payload keys of its tag (§Inst) | — |
+| instruction | `id`, `tag`, `ty`, the payload keys of its tag (§Inst) | `call*`: `err_trace` or `err_trace_unresolved: true` |
 | unsupported instruction | `id`, `tag`, `unsupported: true` | `ty` |
 | `Ref` | exactly one form of §Ref with its keys (`ty` for every constant form) | `module`¹, `comptime_fn`, `comptime_fn_module`, `instance_key`, `comptime_fn_instance_key` (`func`), `utag` (`uval`) |
 | pointer constant target | `off` and one of `global`, `null: true`, `unsupported` | `payload_base: true` (with `global`) |
@@ -131,7 +146,9 @@ exports: `scripts/normalize-air.py` treats `"address_space": "generic"` like an 
 [build-modes.md](build-modes.md) qualifies (`ReleaseSafe` with `stage2_llvm`) are translated
 by default. Any other profile needs `--allow-unqualified-build-mode`; the generated header's
 `-- air2lean-profile:` record then carries `"admission": "unqualified-build-mode"`, which the
-check reports and proof receipts copy with the rest of the header.
+check reports and proof receipts copy with the rest of the header. `--assume-no-libc`
+([floats.md](floats.md#targets)) is recorded the same way (`"no-libc"`; both opt-ins:
+`"unqualified-build-mode,no-libc"`).
 
 ## Type
 
@@ -208,6 +225,36 @@ Error-union pointer tags (schema 11), all with `args: [pointer]`: `is_err_ptr`, 
 
 Atomic and thread tags (schema 10, `docs/generated-code.md` § Atomics and threads): `atomic_store_unordered`, `atomic_store_monotonic`, `atomic_store_release`, `atomic_store_seq_cst` are `bin_op` (the pointer, the value); the order is the tag name's suffix, not a separate field. `atomic_load` is `args: [pointer]` plus `order`. `atomic_rmw` is `args: [pointer, operand]` plus `op` and `order` (`Air.AtomicRmw`'s extra struct). `cmpxchg_weak`/`cmpxchg_strong` are `args: [pointer, expected, new]` plus `success_order` and `failure_order` (`Air.Cmpxchg`'s extra struct). `Thread.spawn`/`.join` are ordinary calls (`call*`), not AIR tags — the translator recognizes the callee name (`Air2Lean/StdModels.lean`'s `stdModels`; `docs/std-models.md` §Thread model).
 
+## Error return trace
+
+With error return tracing (`-ferror-tracing`, `profile.error_tracing: true`) Sema adds trace
+operations, and the backends pass the trace to every function of the `auto` calling convention as a
+hidden parameter (`codegen/llvm.zig`: `cc == .auto and comp.config.any_error_tracing`). The
+exporter writes:
+
+| Key or tag | Meaning |
+|---|---|
+| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.0) |
+| call `err_trace: T` | the callee receives the caller's current trace, of type `T` |
+| `err_trace_unresolved: true` | the same, but `StackTrace` was not yet resolved when the function was exported; the translator rejects the file |
+| `err_return_trace` | the current trace; no operands |
+| `set_err_return_trace` | `args: [p]`: `p` (a `*StackTrace`) becomes the current trace |
+| `save_err_return_trace_index` | `index` (the `StackTrace` field) and `ptr_ty` (a pointer to that field at its natural alignment): a load of the field through the current trace |
+| `ret_addr` | `@returnAddress()`; no operands |
+
+An older exporter wrote these tags as `"unsupported": true`. The
+translator (`Air2Lean/Air/Canon.lean`, `errTraces`) makes the trace data flow: the hidden
+parameter is the function's last parameter, `set_err_return_trace` (admitted only in the top-level
+body) replaces the current trace for the instructions after it, a call passes the current trace as
+its last argument, `err_return_trace` is the current trace, and `save_err_return_trace_index`
+becomes `optional_payload`, `struct_field_ptr` and `load`. The trace is ordinary model memory (the
+`StackTrace` and its address buffer that Sema allocates), so `@errorReturnTrace().?.index` is
+modelled exactly. `ret_addr` is a machine address outside the memory model: the translator admits
+it only as the value of a `store` (as in `std.builtin.returnError`), where it writes undefined
+bytes, and rejects any other use. A later read of those bytes is `.unspecified` in the model where
+the native program reads an address: the model never claims a value for a return address. A call with the trace to a std function that the translator models
+instead of translating (allocator, `Thread`) is rejected. Evidence: `tests/roadmap/error-tracing`.
+
 ## Ref
 
 One of:
@@ -227,7 +274,7 @@ One of:
 | `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
 | `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
 | `{"ty": 8, "elems": [Ref, ...]}` | array, vector, struct or tuple constant: its constant items or fields (recursively nested constants only). An array with a sentinel has the sentinel as the last item (schema 6). A vector has no sentinel (schema 9). |
-| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice, an optional or error-union payload, or an array element, at any nesting, is the global and the total offset (`payload_base: true` when a payload was crossed). The translator requires `off` to be at most the global's size, and on a `stage2_llvm` or `stage2_wasm` profile, or a legacy profile with no backend, it rejects offsets at or one past an alignment-1 error-union payload (`tests/roadmap/const-bases`). A pointer without a global has `{"unsupported": "<reason>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `arr_elem`, `field` of a packed struct, or a payload-resolution reason such as `payload_unbacked` (schema 6). |
+| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice, a member of a global union, an optional or error-union payload, or an array element, at any nesting, is the global and the total offset (`payload_base: true` when a payload was crossed). A member of a tagged or bare union is at its payload offset; an `extern` or `packed` union member is the union's address. The translator requires `off` to be at most the global's size, and on a `stage2_llvm` or `stage2_wasm` profile, or a legacy profile with no backend, it rejects offsets at or one past an alignment-1 error-union payload, through every union member (`tests/roadmap/const-bases`, `tests/roadmap/union-bases`). A pointer without a global has `{"unsupported": "<reason>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `arr_elem`, `field` of a packed struct, `union_field` (a union member whose compiler payload offset is not the model's, such as an explicitly aligned member that moves the payload), or a payload-resolution reason such as `payload_unbacked` (schema 6). |
 | `{"ty": 9, "ptr": {"null": true, "off": 0}}` | address-zero scalar C/allowzero pointer constant. `null` must be true, the offset zero, and `global`/`unsupported` absent; the checker validates nullability. This additive schema-11 form needs the updated exporter. |
 | `{"ty": 10, "slice_ptr": Ref, "slice_len": Ref}` | slice constant (schema 6). |
 
@@ -273,6 +320,13 @@ function name has. Before the whole-program checks it binds each extern call
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
    outside the subset. Each call's argument count and result type must be the entry's.
 
+The address of an extern function (`&ext_visit`) is a named global with `"extern": true`, a
+function type and no `init`. Normalization makes it the function block of the callee
+`extern:<symbol>` (E02, `externCodeGlobal`), and `resolveExterns` binds it by the same three
+rules; a call through a pointer of its type then dispatches to the binding. The global records
+no library: an `externs` entry of the symbol (a direct call) gives it, else the binding's
+library is not checked.
+
 ## Global
 
 Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
@@ -296,6 +350,33 @@ writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes 
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
+
+## Error table
+
+`error-table.air2lean`, beside the function files (not a `.json` name: it describes no
+function). The patched compiler writes it once, after analysis (`Compilation.update`,
+`zig-patch/<version>/hook.patch`), if an exported function converts between errors and integers:
+an `int_from_error`/`error_from_int` (0.17.0), a `bitcast` between an error set and an integer
+(earlier versions), the `@errorFromInt` bound check `cmp_lt_errors_len`/`cmp_lte_errors_len`
+(whose operand the exporter writes as `args`), or a 0.14.1 `error_name`.
+
+| Field | Meaning |
+|---|---|
+| `schema` | 12 |
+| `zig_version` | the compiler's version |
+| `error_set_bits` | the error integer's width (`--error-limit`) |
+| `names` | the compilation's global error set in code order: code `i + 1` is `names[i]` |
+
+Codes are assigned when an error is first interned and never change, and analysis has ended, so
+this is the numbering of the compiled program and its error count is the bound that
+`cmp_lt(e)_errors_len` compares with (both tags compare `<=`). The translator reads it beside the
+AIR files, requires its version and width to be the files', and translates the casts over it
+(L10, `docs/profiles.md` §Error-code width); without it every integer/error cast is rejected. The
+numbering is per compilation: a fixture exports the compilation of its native probe
+(`tests/roadmap/lang-long-tail/error_ints.export`).
+
+`vector_store_elem` (0.14.1, 0.15.2): `args` are the vector pointer, the runtime lane index and
+the lane value (`v[i] = x`; 0.16.0 rejects a runtime vector index in Sema).
 
 ## Identity
 

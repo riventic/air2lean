@@ -2,6 +2,8 @@
 import Air2Lean.Sem
 import Proofs.Recursion.Gen
 
+set_option linter.unusedSimpArgs false
+
 namespace Recursion.AirCert
 
 open Air2Lean Air2Lean.Sem
@@ -15,7 +17,7 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `recursion.fact`. -/
 def air_fact : Func :=
-{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.fact",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", os := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified", noLibc := false }, name := "recursion.fact",
   params := #[0], ret := 0,
   types := #[(.int false 32), .void, .bool, .noreturn, (.other "fn (u32) callconv(.c) u32")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
@@ -36,7 +38,7 @@ def air_fact : Func :=
 
 /-- The decoded canonical AIR of `recursion.gcd`. -/
 def air_gcd : Func :=
-{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.gcd",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", os := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified", noLibc := false }, name := "recursion.gcd",
   params := #[0, 0], ret := 0,
   types := #[(.int false 32), .void, .bool, .noreturn, (.other "fn () noreturn"), (.other "fn (u32, u32) callconv(.c) u32")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
@@ -59,7 +61,7 @@ def air_gcd : Func :=
 
 /-- The decoded canonical AIR of `recursion.isEven`. -/
 def air_isEven : Func :=
-{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.isEven",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", os := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified", noLibc := false }, name := "recursion.isEven",
   params := #[0], ret := 1,
   types := #[(.int false 32), .bool, .void, .noreturn, (.other "fn (u32) callconv(.c) bool")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
@@ -78,7 +80,7 @@ def air_isEven : Func :=
 
 /-- The decoded canonical AIR of `recursion.isOdd`. -/
 def air_isOdd : Func :=
-{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.isOdd",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", os := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified", noLibc := false }, name := "recursion.isOdd",
   params := #[0], ret := 1,
   types := #[(.int false 32), .bool, .void, .noreturn, (.other "fn (u32) callconv(.c) bool")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
@@ -94,6 +96,12 @@ def air_isOdd : Func :=
     ⟨7, 1, (.call (.func "recursion.isEven" false none) #[(.inst 6)])⟩,
     ⟨13, 2, (.line 3)⟩,
     ⟨8, 3, (.ret (.inst 7))⟩] }
+
+theorem callee_0 : panicOf? "recursion.fact" = none := rfl
+theorem callee_1 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
+theorem callee_2 : panicOf? "recursion.gcd" = none := rfl
+theorem callee_3 : panicOf? "recursion.isOdd" = none := rfl
+theorem callee_4 : panicOf? "recursion.isEven" = none := rfl
 
 /-- The certified functions, by fully qualified name. -/
 def table : Table := [
@@ -113,12 +121,6 @@ def gen : Oracle
   | "recursion.isOdd", args =>
     StateT.lift ((fun v => (Value.bool v)) <$> Recursion.isOdd ((args.getD 0 .void).toBV 32))
   | _, _ => StateT.lift stuck
-
-theorem callee_0 : panicOf? "recursion.fact" = none := rfl
-theorem callee_1 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
-theorem callee_2 : panicOf? "recursion.gcd" = none := rfl
-theorem callee_3 : panicOf? "recursion.isOdd" = none := rfl
-theorem callee_4 : panicOf? "recursion.isEven" = none := rfl
 
 /-- `recursion.fact`: the AIR semantics of the decoded function, with the generated program answering its calls, equals the generated definition. -/
 theorem fact_step (p0 : BitVec 32) (m : Zig.Mem) :

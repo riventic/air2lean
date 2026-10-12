@@ -1,0 +1,6 @@
+traced 0 1002
+handledTwice 0 16
+traced 1 2002
+handledTwice 1 16
+traced 5 6
+handledTwice 5 12

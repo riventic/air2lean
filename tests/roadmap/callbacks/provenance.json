@@ -1,0 +1,59 @@
+{
+  "source_sha256": {
+    "callbacks.zig": "b1159b6938a659a4e073b2cb4b7a4ed923958dff95d3a695481d2b5ea1bd8590",
+    "async_cb.zig": "1c2d7f0e2283052d7f71b1fc546222d820dc8ccea7922d68e742ac59b1aaaf1e"
+  },
+  "air": {
+    "exporter": "zig-patch/air-json/json.zig of this branch (patched compilers from scripts/zig-air.sh)",
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false,
+    "filters": {
+      "air/<version>": "callbacks.",
+      "air-async/<version>": "async_cb."
+    }
+  },
+  "air_sha256": {
+    "air/0.14.1/callbacks.callOps.json": "18d53b2b77f6968c7067d6642873fe393a9e3c728df5ccc7d1a90ac432312883",
+    "air/0.14.1/callbacks.evaluate.json": "02cc13fd667e483ab84f2a419b3374918797ff7da1f58e04882126052deb40a4",
+    "air/0.14.1/callbacks.forEach.json": "6202698c246efde054616a01c37e25d8ca5e2e0b5d615571c1e77594409c2fce",
+    "air/0.14.1/callbacks.runExternal.json": "5e92471bcb25d4b281fc342a61f799bc82cf0270d3f39f2fc6bd8c9b7726d615",
+    "air/0.14.1/callbacks.runLocal.json": "4892cb4dc0e173b06e9d6d55d4ed28e8c12a340327d3b55256bcbffc4790a910",
+    "air/0.14.1/callbacks.sumVisit.json": "da92567e20120366935b5b0eb1a47af47719a49ba5a70edfc074289fbc7a5703",
+    "air/0.14.1/callbacks.viaOps.json": "aeb91b31e7bdc21b856f4b2fec96e121d134cff3c56ddc10262b0791dba7512b",
+    "air/0.15.2/callbacks.callOps.json": "92e44c9980338eb39599868d5b808ba700d221f29092a8b77fd5edf0ddbf0317",
+    "air/0.15.2/callbacks.evaluate.json": "7919b91db3563f9c4d18cae60029532de6a4e16d99b5c4a7d628632360ed97cb",
+    "air/0.15.2/callbacks.forEach.json": "73ea0835d6d1ca377e7eebf9218b3e24b56a5bd87925092d219ebc18f133e8de",
+    "air/0.15.2/callbacks.runExternal.json": "362081701f58b89db996874fd18cbb042eaf24a8751e1b406d7ec0167061f239",
+    "air/0.15.2/callbacks.runLocal.json": "688aeb0300bbb6b9a5d09385ae8f57e50fc4dfcf8f24b9997b4a6f91bb322b4b",
+    "air/0.15.2/callbacks.sumVisit.json": "e652f0f66c83e1601af8d1b9fc25068959c4c33af5b9f1fd324eeb753787a970",
+    "air/0.15.2/callbacks.viaOps.json": "327b72c4574f2b27d940c2d41fd61cc11bb8b45885e3193aac387d5b3eb21762",
+    "air/0.16.0/callbacks.callOps.json": "54a80dc0b661ecadc2b149a5eeb3620abe35d5c4c338f089f087011508d7c29e",
+    "air/0.16.0/callbacks.evaluate.json": "143913b6464fd85d9b91bdd91c07158b538aff8fbb9c24f0bde8623cb4767901",
+    "air/0.16.0/callbacks.forEach.json": "8af7f0510cb3beb6e99d2d5a23b07942fabeb278a7f32d79e33a5f8907846f53",
+    "air/0.16.0/callbacks.runExternal.json": "970a097dfd8802fc96cdb6c1a70632eaa3d023d06b4bf1e197ddcbc8f108660b",
+    "air/0.16.0/callbacks.runLocal.json": "96a3e18c01b7a29a73a23eee149abd69580fcae7c18be8ce7e9c879a6a959f3d",
+    "air/0.16.0/callbacks.sumVisit.json": "abf250f67e149c5a24dad11cd2befd1dc2c07a50b87f418b2e52e24a20395e0c",
+    "air/0.16.0/callbacks.viaOps.json": "109036abf556322cc61d8398181071c630de282394edc21339eaa7b22c94a0d0",
+    "air/0.17.0/callbacks.callOps.json": "3ed756b97f441066c12a8e90bb2aa01d1df3256e44cb829f9cf9aa7f23ea703f",
+    "air/0.17.0/callbacks.evaluate.json": "9fe81f7635b2c9c63031fdf3bf86b92532b78b5cdcd88d88f9b8ebe6f30fb1c1",
+    "air/0.17.0/callbacks.forEach.json": "2734badb32747bca6555793999c331f3c79abffb54a76563e7766da50a397cfb",
+    "air/0.17.0/callbacks.runExternal.json": "098e0e8d39178458cf2cdc4f469b412579e4071a4964e354477bc8b11d2dff96",
+    "air/0.17.0/callbacks.runLocal.json": "ec5341253c76d657c4490002bd88ef0bda975d5dec7aead716bc3ac2d6534ff7",
+    "air/0.17.0/callbacks.sumVisit.json": "66e826765c55cca4113644fbb012892e38b731eff8b6a1b6b392b0fef9f191ac",
+    "air/0.17.0/callbacks.viaOps.json": "65ec82d31ab98921221434ab88a7837498c1eefb9f8c528d63ba743b410f22f1",
+    "air-async/0.14.1/async_cb.runBoth.json": "6591543bea16ad5157225c20b3a0e320005832bdefae26e70eb3f24bb9dd5023",
+    "air-async/0.14.1/async_cb.runExternal.json": "ebb383073e6a38e1ea5bb53c2bf33035394e4ac0435b8ed5df09b485f5bf7db6",
+    "air-async/0.14.1/async_cb.worker.json": "e842b3fe107a12bfbf9051c0ff6143516f5c970ebd15e0557660b6265012747e",
+    "air-async/0.15.2/async_cb.runBoth.json": "e81fe032321b8a7251a92921fdb32919b844fb80c829798bd8f25e2157913bb1",
+    "air-async/0.15.2/async_cb.runExternal.json": "e55c1f7b95db28af4d9f1c7b8d6761b98b9b6bfda22ee772f3f732ba5db8655d",
+    "air-async/0.15.2/async_cb.worker.json": "dc510a3d4f7b9ca64ff485b337e7dcf436388232cdbb21853d77de5416752703",
+    "air-async/0.16.0/async_cb.runBoth.json": "035d2aea5c0289e6b8a328683c57eb12c33a5eaa6049918f69dcac655591cc04",
+    "air-async/0.16.0/async_cb.runExternal.json": "0ed1158efefefcab122ece7558ab7765a83165ee5730c157ecae01df2861c15a",
+    "air-async/0.16.0/async_cb.worker.json": "28f46fe1db109e7e259cb52a530c846275be0a77f35bb7d1a6781120bb7a94ee",
+    "air-async/0.17.0/async_cb.runBoth.json": "004301bf045a0e1e56264688572f946af0f854a8a2eb7b715c4e4827ccccfd0c",
+    "air-async/0.17.0/async_cb.runExternal.json": "3f04cecbc0b974ff9d68d7bb9a9ca179ae22e9c71ae45c6431f2990a60427acc",
+    "air-async/0.17.0/async_cb.worker.json": "9df395e51ffd1e55bb1dd6b113e33d992151070b80ee27071d69e71010ff253c"
+  }
+}
