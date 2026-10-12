@@ -39,13 +39,14 @@ def main(binary):
         assert any(CYCLIC in d["message"] for d in report["diagnostics"]), flags
 
     # The `Node` graph is cyclic (`next: ?*Node`). With an error set in it, the cast between
-    # `*Node` and its bytes would expose symbolic error storage: rejected.
+    # `*Node` and its bytes would expose symbolic error storage: rejected (the cycle adds
+    # nothing, `castErrorCapability`; the error set does).
     mutated, doc = edit(linux, "heap.ArenaAllocator.Node.allocatedSliceUnsafe.json")
     types = doc["types"]
     types.append({"k": "error_set", "errors": ["Oops"], "abi_size": 2, "abi_align": 2})
     node = next(t for t in types if t.get("name") == "heap.ArenaAllocator.Node")
     next(f for f in node["fields"] if f["name"] == "end_index")["ty"] = len(types) - 1
-    base.reject(binary, mutated, CYCLIC, "arena.")
+    base.reject(binary, mutated, "a pointer cast exposing symbolic error storage", "arena.")
 
     # An `unordered` load of a `bool` (an atomic type, but neither an integer, a packed struct nor
     # a pointer) stays rejected.

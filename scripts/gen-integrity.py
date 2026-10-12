@@ -124,6 +124,18 @@ FIXTURES = [
     ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
      ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
       "tests/roadmap/extern-calls/registry.json"], "exact"),
+    # Open interfaces (docs/interfaces.md): fresh 0.17.0 translations.
+    ("tests/roadmap/interfaces/Interfaces/Lists.lean", "tests/roadmap/interfaces/air/0.17.0/lists",
+     ["--namespace", "Interfaces.Lists", "--prefix", "lists.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
+      "--allocator-model", "translated"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Mix.lean", "tests/roadmap/interfaces/air/0.17.0/mix",
+     ["--namespace", "Interfaces.Mix", "--prefix", "mix.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
+      "--allocator-model", "translated"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.0/rnd",
+     ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
     # E02 callback contracts and A01 environment/region asm: fresh 0.17.0 translations.
     ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.0",
      ["--namespace", "Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
