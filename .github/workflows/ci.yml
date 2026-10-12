@@ -1783,7 +1783,7 @@ jobs:
           AIR2LEAN_ZIG_BACKEND: stage2_x86_64
         run: |
           set -euo pipefail
-          lake build ZigLean Air2Lean air2lean
+          lake build ZigLean Air2Lean air2lean ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Strength
           lake env lean tests/roadmap/global-payload-pointers/ExceptEq.lean
           python3 -m unittest discover -s tests/roadmap/global-payload-pointers -v
           export AIR2LEAN_LEAN=$(lake env which lean)
