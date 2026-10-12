@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = '.github/workflows/ci.yml'
 # Its std cannot build the diff harness: translation and proofs only (README, support matrix).
 RESTRICTED = {'0.14.1'}
-ONCE = ('inputs', 'native', 'audit', 'receipt', 'Debug', 'ReleaseFast', 'ReleaseSmall')
+ONCE = ('inputs', 'docs', 'native', 'audit', 'receipt', 'Debug', 'ReleaseFast', 'ReleaseSmall')
 
 _spec = importlib.util.spec_from_file_location('air2lean_support_matrix', ROOT / 'scripts/support-matrix.py')
 MATRIX = importlib.util.module_from_spec(_spec)

@@ -204,6 +204,29 @@ def git(*args):
                           stderr=subprocess.PIPE, timeout=5).stdout
 
 
+def withheld():
+    """{path: placeholder blob} of the tracked files a restricted CI checkout withholds
+    (scripts/ci-reuse.py restrict; docs/ci.md#restricted-checkout): the paths its state file lists,
+    while HEAD is its restricted commit and they are still skip-worktree. They are recorded as
+    withheld, never read or fingerprinted, and a receipt with any is not a release receipt. A
+    skip-worktree entry set any other way is fingerprinted like every file."""
+    git_dir = Path(git('rev-parse', '--absolute-git-dir').decode().strip())
+    try:
+        state = load(git_dir / 'air2lean-restricted.json')
+    except OSError:
+        return {}
+    if state.get('discover') or state.get('commit') != git('rev-parse', 'HEAD').decode().strip():
+        return {}
+    skipped = {}
+    for item in git('ls-files', '-t', '-s', '-z').decode().split('\0')[:-1]:
+        meta, path = item.split('\t', 1)
+        tag, _mode, oid, _stage = meta.split()
+        if tag == 'S':
+            skipped[path] = oid
+    demand(all(path in skipped for path in state['withheld']), 'restricted checkout state does not match the index')
+    return {path: skipped[path] for path in state['withheld']}
+
+
 def revision():
     return {'head': git('rev-parse', 'HEAD').decode().strip(),
             'tracked_dirty': bool(git('status', '--porcelain', '--untracked-files=no'))}
@@ -229,7 +252,11 @@ def source_target(path, names):
     return target, link
 
 
-def source_fingerprint(path, names, allowance):
+def source_fingerprint(path, names, allowance, hidden=None):
+    rel = Path(os.path.abspath(path)).relative_to(ROOT).as_posix()
+    if hidden and rel in hidden:
+        demand(os.path.lexists(path) and Path(path).lstat().st_mode & 0o777 == 0, 'withheld source is readable: ' + rel)
+        return {'path': str(path), 'kind': 'withheld', 'blob': hidden[rel], 'bytes': 0}
     target, link = source_target(path, names)
     if link is None:
         return dict(fingerprint(target, allowance), kind='regular')
@@ -247,9 +274,10 @@ def source_fingerprint(path, names, allowance):
 def inventory(paths, source_names=None):
     demand(len(paths) <= MAX_FILES, 'file inventory exceeds bound')
     rows, remaining = [], MAX_TOTAL
+    hidden = withheld() if source_names is not None else None
     for path in sorted(paths):
         row = (fingerprint(path, remaining) if source_names is None
-               else source_fingerprint(path, source_names, remaining))
+               else source_fingerprint(path, source_names, remaining, hidden))
         remaining -= row['bytes']
         rows.append(row)
     return rows
@@ -476,7 +504,8 @@ def replay_summary(audit):
 
 
 def tree_state(plan):
-    return dict(plan['revision'], dirty_allowed=plan['allow_dirty'])
+    count = sum(row.get('kind') == 'withheld' for row in plan['sources'])
+    return dict(plan['revision'], dirty_allowed=plan['allow_dirty'], **({'withheld': count} if count else {}))
 
 
 def float_labels(audit):
@@ -540,10 +569,13 @@ def seal(attempt):
 
 
 def release_ready(receipt):
-    """A release consumes only receipts sealed over a clean tree, never under --allow-dirty."""
+    """A release consumes only receipts sealed over a clean, whole tree: never under --allow-dirty,
+    never over a restricted CI checkout that withheld files."""
     tree = mapping(receipt.get('tree'), 'receipt tree state')
     demand(tree.get('dirty_allowed') is False and tree.get('tracked_dirty') is False,
            'receipt was sealed over a dirty tree (tree.dirty_allowed); a release needs a clean-tree receipt')
+    demand(not tree.get('withheld'),
+           'receipt was sealed over a restricted checkout (tree.withheld); a release needs the whole tree')
 
 
 def verify(attempt, release=False):
@@ -574,7 +606,8 @@ def verify(attempt, release=False):
     if release:
         release_ready(receipt)
     return {'status': 'current', 'checking': 'not_rerun', 'authentication': 'not_attested',
-            'tree': 'dirty-allowed' if receipt['tree']['dirty_allowed'] else 'clean'}
+            'tree': 'restricted' if receipt['tree'].get('withheld') else
+            'dirty-allowed' if receipt['tree']['dirty_allowed'] else 'clean'}
 
 
 def main():
