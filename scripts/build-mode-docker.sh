@@ -59,6 +59,7 @@ if [ -z "$examples" ]; then
   # The self-hosted backend cannot encode examples/asm's lzcnt/popcnt at -mcpu=baseline.
   if [ "$backend" = stage2_x86_64 ]; then examples=$(printf '%s\n' $examples | grep -vx asm | tr '\n' ' '); fi
 fi
+[ -n "${examples// /}" ] || { echo "error: no examples selected" >&2; exit 1; }
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-mode.XXXXXX")
 container=
 cleanup() {

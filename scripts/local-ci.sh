@@ -105,17 +105,22 @@ if [ "${1:-}" = --inside ]; then
 fi
 
 usage() {
-  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix | mutations' >&2
+  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | part|discover <test part id> | matrix | mutations' >&2
   exit 2
 }
 mode=${1:-full} version=${2:-0.16.0} examples=${3:-}
 case "$mode" in
   targeted) [ "$#" = 3 ] && [ -n "$examples" ] || usage ;;
   full) [ "$#" -le 2 ] || usage ;;
+  part|discover) [ "$#" = 2 ] || usage ;;
   matrix|mutations) [ "$#" = 1 ] || usage ;;
   *) usage ;;
 esac
-case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
+if [ "$mode" = part ] || [ "$mode" = discover ]; then
+  case "$version" in test/0.17.0/*|test/0.16.0/*|test/0.15.2/*|test/0.14.1/*) ;; *) usage ;; esac
+else
+  case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
+fi
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-ci.XXXXXX")
