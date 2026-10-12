@@ -103,7 +103,7 @@ theorem FLive.of_exts {P : FAssn} {c : MemM α} {m : Mem} {k : Know}
     FLive P c :=
   FLive.of_run (holds_exts (FMatch.fheap m) hk ht) hp hs hr
 
-theorem FLive.admit {P : FAssn} {c : MemM α} (h : FLive P c) : FAdmit P :=
+theorem FLive.toAdmit {P : FAssn} {c : MemM α} (h : FLive P c) : FAdmit P :=
   have ⟨m, r, rF, hh, hp, hs, _⟩ := h
   ⟨m, r, rF, hh, hp, hs, trivial⟩
 
