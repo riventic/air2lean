@@ -496,17 +496,21 @@ def native_plan(zig, argv):
         if arg.startswith('-femit-bin='):
             output = arg.split('=', 1)[1]
             args.append(['emit', Path(output).suffix])
+        elif re.match(r'-f(no-)?emit-', arg) or arg.startswith('--cache-dir'):
+            return None  # Another output (-femit-h, -femit-asm, ...) would be missing on a hit.
         elif (module or not arg.startswith('-')) and Path(source).is_file():
             content = zig_sources(source) if source.endswith('.zig') else sha256_file(source)
             if content is None:
                 return None
-            args.append([module.group(1) if module else None, Path(source).name, content])
+            # The path as given when relative (it can reach the binary as a source location).
+            shown = Path(source).name if Path(source).is_absolute() else Path(source).as_posix()
+            args.append([module.group(1) if module else None, shown, content])
         else:
             args.append(arg)
     if not output:
         return None
     preimage = {'schema': SCHEMA, 'zig': {'sha256': sha256_file(zig), 'lib': tree_stat(lib)}, 'args': args,
-                'host': None if '-target' in argv else host_identity()}
+                'host': host_identity() if '-target' not in argv or any('native' in a for a in argv) else None}
     return digest(preimage), preimage, Path(output)
 
 
