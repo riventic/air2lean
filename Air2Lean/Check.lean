@@ -778,6 +778,50 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
       (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
       width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
+/-- The constructs whose native code under the self-hosted x86_64 backend (`stage2_x86_64`,
+Zig 0.16.0 and 0.17.0) differs from the model on legal inputs (`docs/build-modes.md`
+§stage2_x86_64, `tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig`); on a
+`stage2_x86_64` profile they are outside the subset. Every other backend is unaffected.
+
+* A read of a signed integer field (or a signed enum tag) of a `packed union` whose width is not a
+  register width (8, 16, 32, 64 bits), by `struct_field_val` or through a field pointer: the
+  backend does not sign-extend it (`i4` `-8` reads as `8`, also through `@as(i64, ...)` and
+  `< 0`). Packed struct fields and `@bitCast` are sign-extended correctly.
+* A float `@mod`: the backend computes `r = fmod(a, b)` and adds `b` once when `r` and `b` differ
+  in sign, where the model is the LLVM lowering `rem(rem(a, b) + b, b)`; they differ when
+  `r + b` rounds to `b` (`@mod(-2^-24, 1.0)` in `f16`: `1.0` against `0`). -/
+def CheckCtx.checkStage2Backend (cx : CheckCtx) (line : Nat) (op : Op) :
+    Except String Unit := do
+  unless (cx.dialect.map (·.backend)) == some "stage2_x86_64" do return
+  if let .div .mod a _ := op then
+    let isFloat := match (cx.valTy? a).bind (cx.types[·]?) with
+      | some (.float _) => true
+      | some (.vector _ lane) => match cx.types[lane]? with | some (.float _) => true | _ => false
+      | _ => false
+    if isFloat then
+      cx.fail line "a float `@mod` is outside the stage2_x86_64 profile: the self-hosted x86_64 \
+        backend adds the divisor once to a remainder of the other sign, where the model is the \
+        LLVM lowering `@rem(@rem(a, b) + b, b)`; they differ when that sum rounds to the divisor"
+  let (union?, idx) := match op with
+    | .structFieldVal s idx => (cx.valTy? s, idx)
+    | .fieldPtr b idx => ((cx.valTy? b).bind (ptrChild cx.types), idx)
+    | _ => (none, 0)
+  let some u := union? | return
+  let some (.union name "packed" _ fields) := cx.types[u]? | return
+  let some (field, fty) := fields[idx]? | return
+  let signedBits? : Option Nat := match cx.types[fty]? with
+    | some (.int true bits) => some bits
+    | some (.enum _ tag _ _) => match cx.types[tag]? with
+      | some (.int true bits) => some bits
+      | _ => none
+    | _ => none
+  if let some bits := signedBits? then
+    unless [8, 16, 32, 64].contains bits do
+      cx.fail line s!"a read of the signed {bits}-bit field '{field}' of packed union '{name}' is \
+        outside the stage2_x86_64 profile: the self-hosted x86_64 backend does not sign-extend it \
+        (it reads a negative value as a large positive one); use the LLVM backend or a field of \
+        8, 16, 32 or 64 bits"
+
 /-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
 (`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
 `@floor`/`@ceil`/`@trunc`/`@round` (`floorl`, …), `@min`/`@max` (`fminl`/`fmaxl`) and the
@@ -1171,6 +1215,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkStage2Backend line op
   cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with

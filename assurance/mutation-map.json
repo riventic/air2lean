@@ -90,6 +90,10 @@
           "anchor": "def test_profile_mode_mismatch"
         },
         {
+          "path": "tests/roadmap/build-modes/stage2_rules.py",
+          "anchor": "def test_rejected_on_stage2_accepted_on_llvm"
+        },
+        {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
           "anchor": "def test_profile_backend_mismatch"
         },

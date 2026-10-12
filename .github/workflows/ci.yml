@@ -1232,6 +1232,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/padded-atomics/test_cli.py --self-test
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/padded-atomics/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
+      # T06: the stage2_x86_64 rules (`CheckCtx.checkStage2Backend`) on the patched compilers'
+      # self-hosted exports of the divergence reproducers: rejected there, accepted on LLVM.
+      - name: Reject stage2_x86_64 backend divergences
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/build-modes/stage2_rules.py "$PWD/.lake/build/bin/air2lean"
+
       # Zig's shift-count safety check (`shiftRhsTooBig`) maps to `.overflow`: committed
       # patched-compiler AIR for 0.14.1, 0.15.2 and 0.16.0, no compiler needed.
       - name: Shift-count panic mapping
