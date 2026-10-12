@@ -49,7 +49,7 @@ theorem AddrOf.of_imp {P' : FAssn} (h : AddrOf b A P) (hp : ∀ r, P' r → P r)
   fun m r rF hh h' => h m r rF hh (hp r h')
 
 theorem AddrOf.known : AddrOf b A (known b A) := fun _ _ _ hh hp =>
-  hh.know b A (by rw [hp.2.1]; exact ⟨rfl, rfl⟩)
+  hh.know (.addr b A) (by rw [hp.2.1]; rfl)
 
 /-- An owned cell of block `b` gives its address. -/
 theorem AddrOf.owned (h : ∀ r, P r → ∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A) :

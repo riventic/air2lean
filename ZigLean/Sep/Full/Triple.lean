@@ -402,15 +402,15 @@ theorem FTriple.know_intro {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAs
     (ht : FTriple (P ⋆ known b A) c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
   obtain ⟨x, fc, hx, hA⟩ := hc r hp
-  have hkn : m.kn b A := by
+  have hkn : m.kn (.addr b A) := by
     obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hx
     exact ⟨blk, hblk, by rw [← hA, ha]⟩
-  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ :=
-    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A, Ghost.unit⟩, FHeap.disjoint_empty _,
+  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ :=
+    ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
-  have hk : Know.Sub (r.know.union fun b' A' => b' = b ∧ A' = A) m.kn :=
-    hh.know.union fun b' A' h => by obtain ⟨rfl, rfl⟩ := h; exact hkn
-  exact ht m ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ rF
+  have hk : Know.Sub (r.know.union (Know.single (.addr b A))) m.kn :=
+    hh.know.union (Know.sub_single hkn)
+  exact ht m ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ rF
     ⟨hh.disj, hh.heap, hk, hh.knowF, hh.ghost⟩ hres hs
 
 theorem ptrAddr_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
@@ -423,7 +423,7 @@ address is needed. -/
 theorem FTriple.ptrAddr {b : BlockId} {A : Nat} (off : Int) :
     FTriple (known b A) (Zig.ptrAddr ⟨some b, off⟩) (fun a => ⟪a = (A : Int) + off⟫ ⋆ known b A) :=
   FTriple.of_run fun m r _ hh hp hs => by
-    obtain ⟨blk, hblk, hA⟩ := hh.know b A (by rw [hp.2.1]; exact ⟨rfl, rfl⟩)
+    obtain ⟨blk, hblk, hA⟩ := hh.know (.addr b A) (by rw [hp.2.1]; rfl)
     exact ⟨_, m, r, ptrAddr_run hblk off, hh, sep_lift.mpr ⟨by rw [hA], hp⟩, hs⟩
 
 theorem ptrAddr_none_run (m : Mem) (off : Int) : (Zig.ptrAddr ⟨none, off⟩).run m = pure (off, m) := rfl
@@ -500,9 +500,9 @@ theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
 
 theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
     Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
-  obtain ⟨b, blk, o, hacc, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h
+  obtain ⟨b, blk, o, hacc, hk, -, rfl⟩ := Conc.Proto.storeBytes_ok h
   exact ⟨rfl, KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs })
-    (access_eq hacc).2.1 rfl rfl, LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs })
+    (access_eq hacc).2.1 rfl hk rfl, LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs })
     (access_eq hacc).2.1 id rfl (by
       obtain ⟨-, -, -, h0, hn, -, rfl⟩ := access_eq hacc
       simp only; rw [writeBytes_size _ _ _ (by omega)]; exact Nat.le_refl _) rfl⟩
@@ -527,11 +527,12 @@ theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
   · split at h₁
     · rename_i b _ blk hblk
       split at h₁
-      · split at h₁
+      · rename_i hc
+        split at h₁
         · exact (Conc.Proto.MemM.throw_ok h₁).elim
         · have := Conc.Proto.MemM.set_ok h₁
           subst this
-          exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl,
+          exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl hc.2.2 rfl,
             LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl⟩
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
     · exact (Conc.Proto.MemM.throw_ok h₁).elim

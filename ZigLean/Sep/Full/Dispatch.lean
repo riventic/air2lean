@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Conc
+import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Dispatch
@@ -20,10 +21,15 @@ lemmas are `rfl`; not `@[simp]`, so they neither fire in unrelated goals nor loo
 does the call. A `Table` is the program's candidates for one function type, as functions of the
 call's arguments.
 
-The function pointer comes from a vtable, a `const` global: `vtR vtp fns` holds its entries `fns`
-(at `vtp`, `vtp + 8`, …) read-only (`ptsR`). `vtR_load` and `vtR_project` read entry `i`. This is
-`Dispatch.vtR` of the legacy logic (`ZigLean/Sep/AllocSpec/Dispatch.lean`) for any interface: the
-list has one entry per function of the interface.
+The function pointer comes from a vtable, a `const` global: `vtR vtp fns` is the **persistent
+knowledge** (`ZigLean/Sep/Full/Const.lean`) that its entries are `fns` (at `vtp`, `vtp + 8`, …). It
+owns nothing, so any number of owners hold it at once (`vtR_dup`): two allocator handles with the
+same vtable, an allocator and its client. `vtR_load` and `vtR_project` read entry `i` and keep it.
+`vtOwn vtp fns` owns the entries' bytes instead (`ptsR`, any block kind: a vtable built at run
+time), with the same rules (`vtOwn_load`, `vtOwn_project`); for a `const` global, `vtR_intro`
+turns it into `vtR`. Both are `Dispatch.vtR` of the legacy logic
+(`ZigLean/Sep/AllocSpec/Dispatch.lean`) for any interface: the list has one entry per function of
+the interface.
 
 For `std.mem.Allocator` (`CVTable`, `CAllocSpec`, `CVTable.dispatch`): an allocator whose entries
 are concurrent functions meets `FAllocSpec` in the one-thread reading at every depth
@@ -147,28 +153,29 @@ theorem CTriple.tableCall {β : Type} {P : FAssn} {Q : α → FAssn} {S : β →
     rw [Table.call, callIndirect_bind, List.map_map]; rfl
   rw [e]; exact CTriple.bind h hg
 
-/-! ## The read-only vtable -/
+/-! ## An owned vtable -/
 
 open Assn in
-/-- The vtable at `vtp` holds the function pointers `fns` (read-only: a `const` global). -/
-def vtR (vtp : Ptr) : List Ptr → Assn
+/-- The vtable at `vtp` holds the function pointers `fns`, as owned bytes read only (`ptsR`, any
+block kind). -/
+def vtOwn (vtp : Ptr) : List Ptr → Assn
   | [] => Assn.emp
-  | f :: fns => ptsR vtp 8 f ∗ vtR (vtp.add 8) fns
+  | f :: fns => ptsR vtp 8 f ∗ vtOwn (vtp.add 8) fns
 
 open Assn in
 /-- Entry `i` of the vtable, and the rest. -/
-theorem vtR_split {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) {h : Heap}
-    (hv : vtR vtp fns h) :
+theorem vtOwn_split {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) {h : Heap}
+    (hv : vtOwn vtp fns h) :
     ∃ R : Assn, (ptsR (vtp.add (8 * i)) 8 fns[i] ∗ R) h ∧
-      ∀ h', (ptsR (vtp.add (8 * i)) 8 fns[i] ∗ R) h' → vtR vtp fns h' := by
+      ∀ h', (ptsR (vtp.add (8 * i)) 8 fns[i] ∗ R) h' → vtOwn vtp fns h' := by
   induction fns generalizing vtp i h with
   | nil => cases hi
   | cons f fns ih =>
     cases i with
     | zero =>
-      refine ⟨vtR (vtp.add 8) fns, ?_, fun h' x => ?_⟩
-      · simpa [vtR, Ptr.add] using hv
-      · simpa [vtR, Ptr.add] using x
+      refine ⟨vtOwn (vtp.add 8) fns, ?_, fun h' x => ?_⟩
+      · simpa [vtOwn, Ptr.add] using hv
+      · simpa [vtOwn, Ptr.add] using x
     | succ i =>
       obtain ⟨h₁, h₂, hd, rfl, h1, h2⟩ := hv
       obtain ⟨R, hR, back⟩ := ih (vtp := vtp.add 8) (i := i) (by simp at hi; omega) h2
@@ -184,11 +191,11 @@ theorem vtR_split {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) {
         exact ⟨h₁', h₂', hd', rfl, h1', back _ h2'⟩
 
 /-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
-theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
-    FTriple (up (vtR vtp fns)) (load Ptr 8 (vtp.add (8 * i)))
-      (fun f => ⟪f = fns[i]⟫ ⋆ up (vtR vtp fns)) := by
+theorem vtOwn_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
+    FTriple (up (vtOwn vtp fns)) (load Ptr 8 (vtp.add (8 * i)))
+      (fun f => ⟪f = fns[i]⟫ ⋆ up (vtOwn vtp fns)) := by
   intro m r rF hh hp hs
-  obtain ⟨R, hR, back⟩ := vtR_split hi hp.1
+  obtain ⟨R, hR, back⟩ := vtOwn_split hi hp.1
   have hsf : SizeFree (fun _ => none) (ptsR (vtp.add (8 * i)) 8 fns[i]) := by
     intro h h' hp' hn hE hco
     obtain ⟨A, S, K, bs, hal, hsz, hdec, hb⟩ := hp'
@@ -205,12 +212,12 @@ theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
 
 open Assn in
 /-- The pointer to entry `i` of a vtable that the precondition holds: formed (MM-3), no effect. -/
-theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
+theorem vtOwn_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
     (hv : 0 ≤ vtp.off) :
-    FTriple (up (vtR vtp fns)) (ptrProject vtp (·.add (8 * i)))
-      (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ up (vtR vtp fns)) := by
+    FTriple (up (vtOwn vtp fns)) (ptrProject vtp (·.add (8 * i)))
+      (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ up (vtOwn vtp fns)) := by
   refine FTriple.of_run fun m r rF hh hp hs => ?_
-  obtain ⟨R, hR, -⟩ := vtR_split hi hp.1
+  obtain ⟨R, hR, -⟩ := vtOwn_split hi hp.1
   obtain ⟨h₁, h₂, -, he, ⟨A, S, K, bs, -, hsz, -, b, hqb, h0, hl⟩, -⟩ := hR
   have hs8 : bs.size = 8 := hsz
   -- the entry's last byte is owned: the block reaches past the entry (ownership, `Holds.block`)
@@ -226,6 +233,124 @@ theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
   have hoff : (vtp.add (8 * i)).off = vtp.off + 8 * i := by simp [Ptr.add]
   exact ⟨_, m, r, ptrProject_add_run (inBounds_of hvb hblk hv (by omega))
     (inBounds_of hqb hblk h0 (by omega)), hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩
+
+/-! ## The read-only vtable (persistent) -/
+
+/-- **The vtable at `vtp` holds the function pointers `fns`**: persistent knowledge of a `const`
+global (module doc). -/
+def vtR (vtp : Ptr) : List Ptr → FAssn
+  | [] => FAssn.emp
+  | f :: fns => cpts vtp 8 f ⋆ vtR (vtp.add 8) fns
+
+theorem Persistent.vtR {vtp : Ptr} : ∀ {fns : List Ptr}, Persistent (Zig.Full.vtR vtp fns)
+  | [] => Persistent.emp
+  | _ :: _ => Persistent.cpts.sep Persistent.vtR
+
+/-- **The vtable is duplicable**: any number of owners hold it. -/
+theorem vtR_dup {vtp : Ptr} {fns : List Ptr} {r : Res} (h : vtR vtp fns r) :
+    (vtR vtp fns ⋆ vtR vtp fns) r :=
+  Persistent.vtR.dup h
+
+/-- The vtable can be forgotten. -/
+theorem vtR_drop {vtp : Ptr} {fns : List Ptr} {R : FAssn} : EUpd (vtR vtp fns ⋆ R) R :=
+  Persistent.vtR.drop
+
+/-- Entry `i` of the vtable: `const` bytes that decode to `fns[i]`. -/
+theorem vtR_entry {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
+    ConstAt (vtp.add (8 * i)) (fun A bs => (A + (vtp.add (8 * i)).off.toNat) % 8 = 0 ∧
+      bs.size = Enc.size Ptr ∧ Enc.decode bs = pure fns[i]) (vtR vtp fns) := by
+  induction fns generalizing vtp i with
+  | nil => cases hi
+  | cons f fns ih =>
+    cases i with
+    | zero =>
+      show ConstAt _ _ (cpts vtp 8 f ⋆ vtR (vtp.add 8) fns)
+      simpa using (ConstAt.cpts (p := vtp) (a := 8) (v := f) (by decide)).sepL
+    | succ i =>
+      show ConstAt _ _ (cpts vtp 8 f ⋆ vtR (vtp.add 8) fns)
+      have e : (vtp.add 8).add (8 * i) = vtp.add (8 * (i + 1)) := by
+        simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+      have := (ih (vtp := vtp.add 8) (i := i) (by simp at hi; omega)).sepR (R := cpts vtp 8 f)
+      rw [e] at this
+      simpa using this
+
+/-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
+theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
+    FTotalTriple (vtR vtp fns) (load Ptr 8 (vtp.add (8 * i)))
+      (fun f => ⟪f = fns[i]⟫ ⋆ vtR vtp fns) :=
+  FTotalTriple.load_const (vtR_entry hi) fun _ _ h => h
+
+/-- The pointer to entry `i` of the vtable: formed (MM-3), no effect. -/
+theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
+    {b : BlockId} (hpb : vtp.block = some b) (hv : 0 ≤ vtp.off) :
+    FTotalTriple (vtR vtp fns) (ptrProject vtp (·.add (8 * i)))
+      (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ vtR vtp fns) := by
+  have hr := (vtR_entry (vtp := vtp) hi).reaches (b := b) (by simpa using hpb) fun _ _ h => h.2.1
+  exact FTotalTriple.ptrProject_of hpb hr hv (by simp [Ptr.add]; omega) (by omega)
+    (by simp [Ptr.add, Enc.size]; omega)
+
+/-- The vtable from known `const` bytes `bs` at `vtp` that hold the entries `fns`: its facts are
+facts of `bs`. -/
+theorem vtR_know {b : BlockId} {A : Nat} : ∀ {fns : List Ptr} {vtp : Ptr} {bs : Array Byte},
+    vtp.block = some b → 0 ≤ vtp.off → (A + vtp.off.toNat) % 8 = 0 → bs.size = 8 * fns.length →
+    (∀ i (hi : i < fns.length), Enc.decode (bs.extract (8 * i) (8 * i + 8)) = pure fns[i]) →
+    ∃ k, Know.Sub k (cknow b A vtp.off.toNat bs) ∧ vtR vtp fns ⟨FHeap.empty, k, Ghost.unit⟩
+  | [], _, _, _, _, _, _, _ => ⟨Know.none, Know.sub_none _, rfl, rfl, rfl⟩
+  | f :: fns, vtp, bs, hpb, h0, hal, hs, hd => by
+    simp only [List.length_cons] at hs
+    have hoff : (vtp.add 8).off.toNat = vtp.off.toNat + 8 := by simp [Ptr.add]; omega
+    have hpb' : (vtp.add 8).block = some b := by simpa [Ptr.add] using hpb
+    have h0' : 0 ≤ (vtp.add 8).off := by simp [Ptr.add]; omega
+    have hal' : (A + (vtp.add 8).off.toNat) % 8 = 0 := by rw [hoff]; omega
+    have hs' : (bs.extract 8 bs.size).size = 8 * fns.length := by simp; omega
+    have hd' : ∀ i (hi : i < fns.length),
+        Enc.decode ((bs.extract 8 bs.size).extract (8 * i) (8 * i + 8)) = pure fns[i] := by
+      intro i hi
+      have := hd (i + 1) (by simp only [List.length_cons]; omega)
+      simp only [List.getElem_cons_succ] at this
+      rw [← this, Array.extract_extract, show 8 + 8 * i = 8 * (i + 1) by omega,
+        show (Min.min (8 + (8 * i + 8)) bs.size : Nat) = 8 * (i + 1) + 8 by omega]
+    obtain ⟨k, hk, hv⟩ := vtR_know hpb' h0' hal' hs' hd'
+    let k₀ := cknow b A vtp.off.toNat (bs.extract 0 8)
+    have hv0 : cpts vtp 8 f ⟨FHeap.empty, k₀, Ghost.unit⟩ := by
+      refine ⟨A, bs.extract 0 8, hal, ?_, ?_, rfl, rfl, b, hpb, h0, rfl⟩
+      · simp only [Array.size_extract]; rw [show Enc.size Ptr = 8 from rfl]; omega
+      · have := hd 0 (by simp)
+        simpa only [List.getElem_cons_zero, Nat.mul_zero, Nat.zero_add] using this
+    refine ⟨k₀.union k, Know.Sub.union ?_ ?_, ?_⟩
+    · rintro f (rfl | ⟨i, hi, rfl⟩)
+      · exact .inl rfl
+      · simp only [Array.size_extract] at hi
+        exact .inr ⟨i, by omega, by simp [Array.getElem_extract]⟩
+    · intro f hf
+      rcases hk f hf with rfl | ⟨i, hi, rfl⟩
+      · exact .inl rfl
+      · simp only [Array.size_extract] at hi
+        refine .inr ⟨8 + i, by omega, ?_⟩
+        rw [hoff]; simp [Array.getElem_extract, Nat.add_assoc]
+    · show (cpts vtp 8 f ⋆ vtR (vtp.add 8) fns) _
+      exact ⟨⟨FHeap.empty, k₀, Ghost.unit⟩, ⟨FHeap.empty, k, Ghost.unit⟩, fun _ => .inl rfl,
+        by simp [Ghost.add_unit], hv0, hv⟩
+
+/-- **Known `const` bytes that hold the entries `fns` are the vtable** (the bytes stay known). -/
+theorem vtR_of_cbytesAt {vtp : Ptr} {A : Nat} {fns : List Ptr} {bs : Array Byte} {r : Res}
+    (hal : (A + vtp.off.toNat) % 8 = 0) (hs : bs.size = 8 * fns.length)
+    (hd : ∀ i (hi : i < fns.length), Enc.decode (bs.extract (8 * i) (8 * i + 8)) = pure fns[i])
+    (h : cbytesAt vtp A bs r) : (vtR vtp fns ⋆ cbytesAt vtp A bs) r := by
+  obtain ⟨-, -, b, hpb, h0, hk⟩ := id h
+  obtain ⟨k, hsub, hv⟩ := vtR_know hpb h0 hal hs hd
+  exact Persistent.absorb hv (by rw [hk]; exact hsub) h
+
+/-- **The owner of a `const` global vtable's bytes gives out the persistent vtable** and keeps
+the bytes (e.g. at program start: the global's initial bytes). -/
+theorem vtR_intro {vtp : Ptr} {A S : Nat} {bs : Array Byte} {fns : List Ptr}
+    (hal : (A + vtp.off.toNat) % 8 = 0) (hs : bs.size = 8 * fns.length) (hpos : 0 < fns.length)
+    (hd : ∀ i (hi : i < fns.length), Enc.decode (bs.extract (8 * i) (8 * i + 8)) = pure fns[i]) :
+    EUpd (up (bytesAt vtp A S .constGlobal bs))
+      (up (bytesAt vtp A S .constGlobal bs) ⋆ vtR vtp fns) :=
+  ((cbytesAt_intro (by omega)).trans (EUpd.of_imp fun _ h => by
+    have := sep_mono_right (fun _ hc => sep_comm (vtR_of_cbytesAt hal hs hd hc)) h
+    rwa [sep_left_comm_eq] at this)).trans Persistent.cbytesAt.drop
 
 /-! ## `std.mem.Allocator` -/
 
@@ -347,8 +472,8 @@ theorem CAllocSpec.dispatch {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTa
   · show CTriple _ (t.free.call _ _) _
     rw [Table.call_of_sel hs.free]; exact h.free s k ra bs h1 h2 h3
 
-/-- The four entries of a `std.mem.Allocator.VTable` in field order, for `vtR`. -/
-def VTableFns.toList (fns : VTableFns) : List Ptr := [fns.alloc, fns.resize, fns.remap, fns.free]
+/-- The four entries of a `std.mem.Allocator.VTable` in field order, for `vtR`/`vtOwn`. -/
+def _root_.Zig.VTableFns.toList (fns : VTableFns) : List Ptr := [fns.alloc, fns.resize, fns.remap, fns.free]
 
 end Full
 end Zig

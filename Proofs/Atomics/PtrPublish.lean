@@ -1321,7 +1321,7 @@ theorem destroy_noErr {m : Mem} (hn : NodeAt m) (hnr : ∀ b n, m.freeRaces b n 
   subst ha
   dsimp only at h₂
   rw [if_pos ⟨hk, rfl, hs⟩] at h₂
-  exact free_noErr hb hl (hnr _ _) e h₂
+  exact free_noErr hb hl (hnr _ _) (by rw [hk]; nofun) e h₂
 
 /-- After the join, `main` (0) and the joined A are the only threads. -/
 theorem post_thr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .post) :
@@ -1425,14 +1425,14 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
   refine ⟨by rw [hth₁₁], ?_⟩
   have hja : joinedAll 0 m₁₁ := by
     have := joinedAll_post hi₁₀' hg₅; unfold joinedAll at this ⊢; rw [hth₁₁]; exact this
-  have hb0 : ∃ blk, m₁₁.blocks[0]? = some blk ∧ blk.live = true := by
-    obtain ⟨blk, hb, hl, -⟩ := hi₁₀'.b0
-    exact ⟨blk, by rw [hb₁₁]; exact hb, hl⟩
+  have hb0 : ∃ blk, m₁₁.blocks[0]? = some blk ∧ blk.live = true ∧ blk.kind = .stack := by
+    obtain ⟨blk, hb, hl, -, hk, -⟩ := hi₁₀'.b0
+    exact ⟨blk, by rw [hb₁₁]; exact hb, hl, hk⟩
   dsimp only
   -- the destroy of the node, if the slot held it
   refine WP.bind (WP.mono (Q := fun (p : Unit × Unit) G m _ =>
       joinedAll 0 m ∧ (∀ b n, m.freeRaces b n = false) ∧
-        ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true) ?_ ?_)
+        ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.kind = .stack) ?_ ?_)
   rotate_left
   · rcases hw with rfl | ⟨rfl, hn⟩
     · simp only [StateT.run_pure]
@@ -1445,11 +1445,11 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
       have := hnr₁₁ b n
       unfold Mem.freeRaces at this ⊢
       rw [hth, hcl, hcu, hfp]; exact this
-  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', hnr₁₂, blk, hb, hl⟩
+  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', hnr₁₂, blk, hb, hl, hk⟩
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the slot
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl (hnr₁₂ _ _) e he).elim) fun _ m₁₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl (hnr₁₂ _ _) (by rw [hk]; nofun) e he).elim) fun _ m₁₃ hf => ?_)
   obtain ⟨b, blk', hb', -, rfl⟩ := free_ok hf
   refine ⟨rfl, WP.pure' ⟨hr, ?_⟩⟩
   unfold joinedAll at hja' ⊢
