@@ -19,9 +19,12 @@ what generated code that works on regions needs beyond the step rules of `AutoRu
   placement is needed.
 * **Pointer order** (`@[fsym]`): `ptrLe`/`ptrLt` of two pointers into blocks with known addresses
   (`AddrOf` providers): the addresses compared (`docs/architecture-audit/memory-model.md`, MM-4).
+* **Bounds checks** (`@[fsym]`): the model's item checks `checkIndex`, `checkSentinelIndex` in
+  bounds.
 * **Byte operations on regions** (`@[fsym]`): `@memset(_, undefined)` of a whole region
-  (`memsetUndef`), the store of an item (`regionStore`), the load of an item that a store wrote
-  (`regionLoadWritten`), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
+  (`memsetUndef`), the store of an item (`regionStore`, and `regionStoreAdd` through a pointer
+  that `ptrProject` formed with `Ptr.add`), the load of an item that a store wrote
+  (`regionLoadWritten`, `regionLoadWrittenAdd`), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
   overlap check passes by separation). They lift the region library's total triples
   (`FTotalTriple.ofRegion`); the size label and the kind of a region's cells are labels
   (`EUpd.relabel`).
@@ -159,6 +162,23 @@ end FTotalTriple
 
 attribute [fsym] FTotalTriple.ptrLe_of FTotalTriple.ptrLt_of
 
+/-! ## Bounds checks of item accesses -/
+
+namespace FTotalTriple
+
+variable {P : FAssn} {w : Nat} {len i : BitVec w}
+
+/-- The model's bounds check of an item `s[i]` in bounds: no effect. -/
+@[fsym] theorem checkIndex_of (h : i.toNat < len.toNat) : FTotalTriple P (checkIndex len i) (fun _ => P) := by
+  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+/-- The bounds check of an item of an operand with a sentinel (`i ≤ len`): no effect. -/
+@[fsym] theorem checkSentinelIndex_of (h : i.toNat ≤ len.toNat) :
+    FTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
+  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+end FTotalTriple
+
 /-! ## Lifting the region library -/
 
 /-- A region whose cells carry some size label and some kind of `K`'s normal form: a size-free
@@ -286,6 +306,35 @@ theorem _root_.Zig.Region.loadItemIn {T : Type} [Enc T] {o al : Nat} {v : T} (hp
   have hw := LawfulEnc.size_encode v
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
   rw [Ptr.elem_eq, hoi]
+  refine ofRegion (fun _ _ _ _ => Region.loadItemIn hpos (by omega) hal halo ?_)
+    (Tame.load _ _ _) (Keeps.load _ _ _)
+  have e := extract_writeBytes bs o (Enc.encode v) (by omega)
+  rw [hw] at e
+  rw [e]; exact LawfulEnc.decode_encode v
+
+/-- **Store of an item** `v` at byte offset `k` of a region (a pointer formed by `ptrProject`
+with `Ptr.add`). -/
+@[fsym] theorem regionStoreAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al : Nat} (v : T)
+    (hpos : 0 < Enc.size T) (h0 : 0 ≤ k) (ho : k.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
+    (halo : al ∣ k.toNat) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.add k) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
+  have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
+  rw [e]
+  exact (ofRegion (φ := fun _ => True) (fun _ _ _ _ => TotalTriple.conseq
+      (Region.storeItemIn v hpos ho hal halo) (fun _ x => x) fun _ _ x => Zig.sep_lift.mpr ⟨trivial, x⟩)
+    (Tame.store _ _ _) (Keeps.store _ _ _)).post fun _ _ h => (sep_lift.mp h).2
+
+/-- **Load of an item that a store wrote**, through a pointer formed with `Ptr.add`. -/
+@[fsym] theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : Nat} {v : T}
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hko : k = (o : Int))
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.add k))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  have hw := LawfulEnc.size_encode v
+  have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
+  subst hko
   refine ofRegion (fun _ _ _ _ => Region.loadItemIn hpos (by omega) hal halo ?_)
     (Tame.load _ _ _) (Keeps.load _ _ _)
   have e := extract_writeBytes bs o (Enc.encode v) (by omega)
