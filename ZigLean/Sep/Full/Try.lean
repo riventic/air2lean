@@ -1062,12 +1062,20 @@ theorem FTotalTriple.tryPayloadPtr_of {t : Option ErrName}
     match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2))) with
     | some e => pure (Except.error e : Except ErrName Ptr)
-    | none => pure (.ok (errPayloadPtr α q))) _
+    | none => (Except.ok <$> ptrProject q (errPayloadPtr α) : MemM (Except ErrName Ptr))) _
   refine FTotalTriple.bind (FTotalTriple.loadBytes_of h (by decide) hs) fun x =>
     FTotalTriple.lift fun hx => ?_
   subst hx
   rw [ht, liftM_pure, pure_bind]
-  cases t <;> exact FTotalTriple.pure_read rfl
+  cases t with
+  | some e => exact FTotalTriple.pure_read rfl
+  | none =>
+    -- The code's bytes are readable, so the payload pointer is formed (MM-3).
+    rw [map_eq_pure_bind]
+    refine FTotalTriple.bind (FTotalTriple.of_read fun m r rF hh hp _ => ?_) fun y =>
+      FTotalTriple.lift fun hy => FTotalTriple.pure_read (by subst hy; rfl)
+    obtain ⟨b, blk, hacc, -⟩ := h.access (by decide) hs hh hp
+    exact errPayloadPtr_formed hacc
 
 /-- **The error** from the readable bytes `tb` of an error code that holds one. -/
 theorem FTotalTriple.errCodeAt_of {e : ErrName}
