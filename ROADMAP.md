@@ -63,6 +63,7 @@ The register below counts **44 complete, 35 partial, 1 open and 9 research** (ge
 | [#173](https://github.com/riventic/air2lean/pull/173) | Zig 0.17.0 as the default (one helper, lint against hardcoded versions). |
 | [#174](https://github.com/riventic/air2lean/pull/174) | Soundness: NaN bits observed through memory (Zig up to 0.16). |
 | [#177](https://github.com/riventic/air2lean/pull/177) | Batch I: E02 A01 complete (callback contracts, assembly effects). |
+| [#176](https://github.com/riventic/air2lean/pull/176) | Requirement register as data: one file per requirement under `assurance/register/`, generated tables and counts. |
 
 ### In review (open PRs to main)
 
@@ -70,7 +71,6 @@ The register below counts **44 complete, 35 partial, 1 open and 9 research** (ge
 |---|---|---|
 | [#166](https://github.com/riventic/air2lean/pull/166) | Batch E: P03 P05 P06 E02 A01 | Held: adds proof machinery outside the framework. |
 | [#175](https://github.com/riventic/air2lean/pull/175) | Slicing order for every base | Held: the legacy PageAlloc walk no longer checks; superseded by lazy pointer poison (V01/V02). |
-| [#176](https://github.com/riventic/air2lean/pull/176) | Requirement register as data | One file per requirement under `assurance/register/`, generated tables and counts. |
 
 Zig compiler bugs found on the way are drafted in `docs/upstream/` and tracked in one issue, [#131](https://github.com/riventic/air2lean/issues/131); none is filed upstream.
 
@@ -79,7 +79,6 @@ Zig compiler bugs found on the way are drafted in `docs/upstream/` and tracked i
 | Work | Requirements | State |
 |---|---|---|
 | Arena allocator proof (`codex/alloc-arena-proof`) | M01–M04 groundwork | Translated `ArenaAllocator` against `FAllocSpec` for any child allocator. Done: general symbolic execution `fsym` with a CTriple backend ([#150](https://github.com/riventic/air2lean/pull/150), [#158](https://github.com/riventic/air2lean/pull/158), [#160](https://github.com/riventic/air2lean/pull/160), [#167](https://github.com/riventic/air2lean/pull/167)): FBA and page allocator proofs are invariants plus `fsym` only; every live block lies below the target's address limit; allocation without stack room is `.stackOverflow` (STK-01); globals placement fails closed (`GLOBALS_TOO_LARGE`); `not_fallocSpec_arena` is kernel-checked. Now: byte-range claims in the ghost state (claims follow bytes through resize), then arena reset. |
-| Batch J | P05 P06 | Follow-up to #166: total correctness and cost for concurrent programs. |
 | Windows target (`codex/windows-target`) | T04 | `x86_64-windows-gnu` profile for all four Zig versions: fail-closed checks for OS-backed models, threadlocal and x87 precision; Windows T04 probe records; local Wine differential; design in `docs/windows-target.md` on that branch. |
 
 ### Architecture work (started 2026-10-12)
@@ -93,7 +92,7 @@ Weaknesses found while implementing the register. They come before new features 
 | Const-global bytes are persistent knowledge | Constant globals (allocator vtables) are owned exclusively, so two users of one vtable cannot be framed; this blocks M01–M04 clients of `std.mem.Allocator`. | Writes to const storage are `.illegal`; a duplicable assertion established from the initial memory; dispatch rules read it (`codex/const-global-know`, into the arena branch). |
 | Encode/decode exactness | The NaN-bits bug: the model chose canonical bits on a reload where the compiler keeps others. | Audit every value↔bytes pair (padding, `undefined`, enums/bool out of range, pointer bytes, unions, f80, vectors, error unions; four versions): exact or explicitly unspecified, never a canonical choice; counterexample, native fixture and fix per finding (`codex/enc-exactness`). |
 | Canon out of the trusted base | `Canon.lean` rewrites raw AIR (including reorderings) before the V01/V02 certificates start; the slicing-order bug came from such a rewrite. | General theorems per rewrite over the formal AIR semantics, reorderings first; uncertified rewrites reported as trusted in the certificate report (`codex/canon-cert`). |
-| Requirement register as data | Every batch PR hand-edits the same rows and counts in this file and the acceptance companion, so parallel PRs conflict. | One structured file per requirement; `scripts/register.py` generates the tables and counts; preflight/CI check drift (`codex/register-data`). |
+| Requirement register as data | Every batch PR hand-edits the same rows and counts in this file and the acceptance companion, so parallel PRs conflict. | One structured file per requirement; `scripts/register.py` generates the tables and counts; preflight/CI check drift. Done ([#176](https://github.com/riventic/air2lean/pull/176)). |
 | Smaller exporter patch | Every exporter change rebuilds four patched compilers, refreshes pins and re-exports goldens; parallel exporter PRs conflict. | Minimal per-version hook; serialization in a separately built module; byte-identical exports; after #159 and #172. |
 
 ### Remaining order
