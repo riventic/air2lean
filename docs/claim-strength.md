@@ -107,7 +107,10 @@ strongest claim), `type_strength`, `derived_strength`, `bound`, `subject`, `witn
 `caps` for every audited theorem, and `premises`: what a claim rests on beyond its type (a
 theorem whose closure contains an inline-asm opaque carries [ASM-01](premises.md#asm-01), and a
 no-panic or guaranteed-return claim over one also [ASM-04](premises.md#asm-04), the allowlist
-fault conditions, S7). `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
+fault conditions, S7; a theorem whose closure reaches the scheduler or the atomics model, by the
+audit's per-theorem `runtime_modules`, carries [ORD-06](premises.md#ord-06), the memory-model
+adequacy premise, C12). An audit without `runtime_modules`, or with a runtime module that has no
+premise mapping, leaves `premises` null and rejects the goal. `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
 every project goal (`docs/project-workflow.md`) against its root's generated definition
 `namespace.(function without prefix)`. A goal is rejected (exit 1) when:
 

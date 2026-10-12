@@ -24,8 +24,8 @@ def text(p):
     rows = {'meta': {'arch': p['target_triple'].split('-')[0], 'os': os_tag, 'abi': abi_tag,
                     'endian': 'little', 'backend': p['backend'], 'mode': p['build_mode'],
                     'cpu': p['cpu'], 'zig': p['zig_version'], 'pointer_bits': '64',
-                    'error_set_bits': '16', 'error_tracing': str(p['error_tracing']).lower()},
-            'layout': abi.LAYOUTS, 'offset': abi.OFFSETS, 'value': abi.VALUES,
+                    'error_set_bits': str(p['error_set_bits']), 'error_tracing': str(p['error_tracing']).lower()},
+            'layout': abi.layouts(p['error_set_bits']), 'offset': abi.OFFSETS, 'value': abi.VALUES,
             'feature': {name: 1 for name in p['features']}}
     return '\n'.join(' '.join(map(str, [kind, name, *(value if isinstance(value, list) else [value])]))
                      for kind, values in rows.items() for name, value in values.items())

@@ -59,6 +59,14 @@
         {
           "path": "tests/roadmap/abi-probes/test_probe.py",
           "anchor": "def test_profiles_fail_closed"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_forbidden_outcomes_fail"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_load_buffering_is_a_rejected_shape"
         }
       ],
       "mutants": []
@@ -80,6 +88,10 @@
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
           "anchor": "def test_profile_mode_mismatch"
+        },
+        {
+          "path": "tests/roadmap/build-modes/stage2_rules.py",
+          "anchor": "def test_rejected_on_stage2_accepted_on_llvm"
         },
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
@@ -510,6 +522,14 @@
         {
           "path": "tests/roadmap/lang-long-tail/test_cli.py",
           "anchor": "def vector_casts"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def runtime_lanes"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def float_lanes"
         }
       ],
       "mutants": [
@@ -532,6 +552,16 @@
           "name": "item_cast_lanewise",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "runtime_lane_count",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "f80_lane_stride",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -548,6 +578,10 @@
         {
           "path": "tests/roadmap/lang-long-tail/test_cli.py",
           "anchor": "def error_params"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def error_ints"
         }
       ],
       "mutants": [
@@ -575,6 +609,11 @@
           "name": "error_param_constant",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "forwarding"
+        },
+        {
+          "name": "error_numbering_guessed",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -634,6 +673,14 @@
         {
           "path": "tests/diff/slices/harness.zig",
           "anchor": "\"sentinelArr\""
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def extern_storage"
+        },
+        {
+          "path": "tests/roadmap/global-init/test_cli.py",
+          "anchor": "def fn_pointer"
         }
       ],
       "mutants": [
@@ -646,6 +693,11 @@
           "name": "r",
           "path": "scripts/mutate.sh",
           "category": "layout"
+        },
+        {
+          "name": "extern_storage_dropped",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "other"
         }
       ]
     },
@@ -665,7 +717,7 @@
         },
         {
           "path": "tests/roadmap/volatile-effects/check-device.sh",
-          "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"
+          "anchor": "Only the output-less asm: rdtsc and rdrand are A01"
         },
         {
           "path": "tests/roadmap/volatile-effects/test_cli.py",
@@ -1042,6 +1094,14 @@
       ],
       "negative_tests": [
         {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_concurrency_claim_lists_memory_model_premise"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_concurrency_theorem_without_adequacy_premise_fails"
+        },
+        {
           "path": "Proofs/Atomics/Proofs.lean",
           "anchor": "theorem mp_sees_data"
         },
@@ -1059,6 +1119,11 @@
         }
       ],
       "mutants": [
+        {
+          "name": "claims-memory-model-premise-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
         {
           "name": "k",
           "path": "scripts/mutate.sh",
@@ -1432,6 +1497,18 @@
         {
           "path": "tests/roadmap/asm-effects/test_cli.py",
           "anchor": "writes through a const pointer"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "writes through a const pointer"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "64-bit integer operand"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "nor an allowlist entry declares its memory regions"
         }
       ],
       "mutants": [
@@ -1458,6 +1535,21 @@
         {
           "name": "local_store_dropped",
           "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "other"
+        },
+        {
+          "name": "env_read_constant",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "region_write_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "region_guard_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
           "category": "other"
         }
       ],
@@ -1546,9 +1638,40 @@
       "note": "Registry footprint/contract rejections are Lean-side (tests/roadmap/models, scripts/model-contracts.sh) without a designated mutant; the mutant covers the assumption report."
     },
     "E02": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "forwarding"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "CALLEE_EXTERN_UNBOUND"
+        },
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "incompatible signature"
+        },
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "needs a declared 'footprint'"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "model_arm_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "unknown_admitted",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "E03": {
       "categories": [],
@@ -2012,6 +2135,14 @@
         {
           "path": "tests/roadmap/proof-receipts/test_receipt.py",
           "anchor": "def test_dirty_tree_receipt_needs_recorded_permission"
+        },
+        {
+          "path": "tests/roadmap/attestation/test_attestation.py",
+          "anchor": "def test_signature_of_another_key"
+        },
+        {
+          "path": "tests/roadmap/attestation/test_attestation.py",
+          "anchor": "def test_tampered_manifest_or_receipt_is_not_the_attested_artifact"
         }
       ],
       "mutants": [

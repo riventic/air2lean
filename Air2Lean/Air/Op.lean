@@ -97,6 +97,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- `id` holds a pointer, at any depth; unknown types and exhausted fuel count as pointers
+(fail closed). -/
+partial def tyHoldsPtr (types : Array Ty) (id : TyId) (fuel : Nat := 256) : Bool :=
+  if fuel == 0 then true else
+  match types[id]? with
+  | some (.ptr ..) => true
+  | some ty => (childTys ty).any fun c => tyHoldsPtr types c (fuel - 1)
+  | none => true
+
 /-- A type without values (`noreturn`). A union field of this type can never be active: it
 adds no payload bytes, has no constructor in the translation, and every instruction or constant
 that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/
@@ -238,9 +247,11 @@ def Layout.laneBitPtr (l : Layout) : Bool :=
 def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
   (layouts[ty]?.map (·.laneBitPtr)).getD false
 
-/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+/-- The bit width of a lane that a lane pointer may address: an integer's or a float's bits (a
+float lane is its bits, `Zig.Packed (Float fmt)`), 1 for `bool`. -/
 def laneBits? : Ty → Option Nat
   | .int _ bits => some bits
+  | .float bits => some bits
   | .bool => some 1
   | _ => none
 
@@ -376,7 +387,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
   | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
-  | some "unexpectedErrorCode" | some "loadUninstantiableType" => some ".panic"
+  | some "unexpectedErrorCode" | some "loadUninstantiableType" | some "invalidErrorCode" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -615,6 +626,13 @@ inductive Op where
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/
   | errorName (a : Val)
+  /-- `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0), the check before `@errorFromInt`:
+  the code `a` is at most the compilation's error count (both tags compare `<=`, L10). Needs
+  the compilation's numbering (`Func.errorTable`). -/
+  | errorsLenLe (a : Val)
+  /-- `vector_store_elem` (Zig 0.14.1/0.15.2): `v[idx] = val` through the vector pointer `vptr`
+  with a runtime lane index (L09; `Zig.storeLaneAt`). -/
+  | vectorStoreElem (vptr idx val : Val)
   | structFieldVal (s : Val) (index : Nat)
   | aggregateInit (elems : Array Val)
   | call (callee : Val) (args : Array Val)
@@ -736,6 +754,10 @@ structure Func where
   /-- The OS component of the profile's target triple (`linux`, `macos`); empty for a legacy
   profile. Selects the trusted OS model's ABI (`Zig.Os.Target`). -/
   targetOs : String := ""
+  /-- The compilation's error numbering, code `i + 1` = `errorTable[i]`, from the exporter's
+  `error-table.air2lean` beside the AIR files (`docs/air-json.md` §Error table, L10); `none`
+  without one. Integer/error casts translate only with it. -/
+  errorTable : Option (Array String) := none
 
 /-- A single or many pointer type through which an access is an ordinary memory access: not a
 slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and

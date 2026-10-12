@@ -290,6 +290,13 @@ function name has. Before the whole-program checks it binds each extern call
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
    outside the subset. Each call's argument count and result type must be the entry's.
 
+The address of an extern function (`&ext_visit`) is a named global with `"extern": true`, a
+function type and no `init`. Normalization makes it the function block of the callee
+`extern:<symbol>` (E02, `externCodeGlobal`), and `resolveExterns` binds it by the same three
+rules; a call through a pointer of its type then dispatches to the binding. The global records
+no library: an `externs` entry of the symbol (a direct call) gives it, else the binding's
+library is not checked.
+
 ## Global
 
 Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
@@ -313,6 +320,33 @@ writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes 
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
+
+## Error table
+
+`error-table.air2lean`, beside the function files (not a `.json` name: it describes no
+function). The patched compiler writes it once, after analysis (`Compilation.update`,
+`zig-patch/<version>/hook.patch`), if an exported function converts between errors and integers:
+an `int_from_error`/`error_from_int` (0.17.0), a `bitcast` between an error set and an integer
+(earlier versions), the `@errorFromInt` bound check `cmp_lt_errors_len`/`cmp_lte_errors_len`
+(whose operand the exporter writes as `args`), or a 0.14.1 `error_name`.
+
+| Field | Meaning |
+|---|---|
+| `schema` | 12 |
+| `zig_version` | the compiler's version |
+| `error_set_bits` | the error integer's width (`--error-limit`) |
+| `names` | the compilation's global error set in code order: code `i + 1` is `names[i]` |
+
+Codes are assigned when an error is first interned and never change, and analysis has ended, so
+this is the numbering of the compiled program and its error count is the bound that
+`cmp_lt(e)_errors_len` compares with (both tags compare `<=`). The translator reads it beside the
+AIR files, requires its version and width to be the files', and translates the casts over it
+(L10, `docs/profiles.md` §Error-code width); without it every integer/error cast is rejected. The
+numbering is per compilation: a fixture exports the compilation of its native probe
+(`tests/roadmap/lang-long-tail/error_ints.export`).
+
+`vector_store_elem` (0.14.1, 0.15.2): `args` are the vector pointer, the runtime lane index and
+the lane value (`v[i] = x`; 0.16.0 rejects a runtime vector index in Sema).
 
 ## Identity
 

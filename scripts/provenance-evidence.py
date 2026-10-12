@@ -64,7 +64,8 @@ for _fx in FIXTURES.values():
     _fx['path'] = ROOT / _fx['dir']
 
 
-def check(fx, strict, native_binary=None, native_compiler=None):
+def check(fx, strict, native_binary=None, native_compiler=None, attestation=None, allowed_signers=None,
+          require_attestation=False, pin=None):
     pins = json.loads((fx['path'] / 'pins.json').read_text())
     expect = ['zig_version=' + pins['zig_version'], 'profile=' + pins['profile_sha256'],
               'source=' + pins['source_sha256'], 'native=' + pins['native_sha256']]
@@ -73,7 +74,8 @@ def check(fx, strict, native_binary=None, native_compiler=None):
     if manifest.get('manifest_sha256') != pins['manifest_sha256']:
         problems.append('manifest_sha256 differs from the reviewer pin in pins.json')
     report = am.check_manifest(ROOT, fx['path'] / 'manifest.json', expect, False, False, native_binary, native_compiler,
-                               native_binary is not None)
+                               native_binary is not None, attestation=attestation, allowed_signers=allowed_signers,
+                               require_attestation=require_attestation, pin=pin)
     aged = [n for n in report['stale_links'] if n in GLOBAL_LINKS]
     local = [n for n in report['stale_links'] if n not in GLOBAL_LINKS]
     problems += report['problems']
@@ -389,6 +391,10 @@ def main(argv):
     c.add_argument('--strict', action='store_true', help='also fail on drift of repository-wide links')
     c.add_argument('--native-binary', type=Path)
     c.add_argument('--native-compiler', type=Path)
+    c.add_argument('--attestation', type=Path, help="scripts/attest.py attestation of the fixture's manifest.json")
+    c.add_argument('--allowed-signers', type=Path, help="the verifier's trust anchor (ssh allowed_signers)")
+    c.add_argument('--require-attestation', action='store_true', help='fail unless --attestation authenticates the manifest')
+    c.add_argument('--pin-fingerprint', help='require this signing key (SHA256:...)')
     y = sub.add_parser('replay', help="offline replay of the committed receipt against the tree (no revision needed)")
     y.add_argument('--strict', action='store_true', help='also fail on drift of shared Lean/toolchain closure files')
     y.add_argument('--rerun', metavar='WORKDIR', help='also rerun the guarded proof receipt and compare audits (needs Lean, lock)')
@@ -421,7 +427,10 @@ def main(argv):
             return record(FIXTURES[names[0]], a)
         if a.action == 'replay':
             return replay_main(names, a)
-        reports = {n: check(FIXTURES[n], a.strict, a.native_binary, a.native_compiler) for n in names}
+        if a.attestation is not None or a.require_attestation:
+            am.demand(len(names) == 1, 'an attestation names one fixture manifest: pass one --fixture')
+        reports = {n: check(FIXTURES[n], a.strict, a.native_binary, a.native_compiler, a.attestation,
+                            a.allowed_signers, a.require_attestation, a.pin_fingerprint) for n in names}
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print('provenance evidence unavailable: ' + str(error), file=sys.stderr)
         return 2

@@ -81,6 +81,10 @@
     "Asm.airAsm_3653072158",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Lemmas"
+   ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.mk",
@@ -299,6 +303,7 @@
     "OfNat.ofNat"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [],
    "extern_dependencies": [
     "Nat.add",
     "Nat.beq",
@@ -418,6 +423,10 @@
    "opaque_dependencies": [
     "Asm.airAsm_3653072158",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Lemmas"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -641,6 +650,9 @@
     "Zig.Result"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic"
+   ],
    "extern_dependencies": [
     "Int.add",
     "Int.decLe",
@@ -813,6 +825,9 @@
     "Zig.Result"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic"
+   ],
    "extern_dependencies": [
     "Int.add",
     "Int.decLe",
@@ -1010,6 +1025,9 @@
     "Zig.Result"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic"
+   ],
    "extern_dependencies": [
     "Int.add",
     "Int.decLe",
@@ -1137,7 +1155,8 @@
    "name": "AuditClaims.root_in_post",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext"
+    "propext",
+    "Quot.sound"
    ],
    "conclusion": {
     "head": "Zig.TotalTriple"
@@ -1192,7 +1211,18 @@
     "Zig.Assn.emp",
     "Zig.Assn.lift"
    ],
-   "opaque_dependencies": [],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1204,10 +1234,16 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
     "Int.add",
+    "Int.decEq",
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
     "Int.natAbs",
     "Int.neg",
     "Int.negSucc",
@@ -1220,6 +1256,8 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1228,18 +1266,24 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
+    "String.Internal.append",
     "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat"
+    "UInt8.ofNat",
+    "panicCore"
    ],
    "compiler_redirections": [
     "Array.anyM",
     "Lean.Name.anonymous",
     "Lean.Name.num",
-    "Lean.Name.str"
+    "Lean.Name.str",
+    "Nat.repr"
    ],
    "violations": [],
    "allowed": true,
@@ -1331,7 +1375,8 @@
    "name": "AuditClaims.spin_partial",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext"
+    "propext",
+    "Quot.sound"
    ],
    "conclusion": {
     "head": "Zig.Triple"
@@ -1352,7 +1397,18 @@
     "Zig.Triple",
     "Zig.Assn.emp"
    ],
-   "opaque_dependencies": [],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Triple"
+   ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1364,8 +1420,21 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
+    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1373,6 +1442,8 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1381,18 +1452,24 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
+    "String.Internal.append",
     "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat"
+    "UInt8.ofNat",
+    "panicCore"
    ],
    "compiler_redirections": [
     "Array.anyM",
     "Lean.Name.anonymous",
     "Lean.Name.num",
-    "Lean.Name.str"
+    "Lean.Name.str",
+    "Nat.repr"
    ],
    "violations": [],
    "allowed": true,
@@ -1445,7 +1522,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
+     "fingerprint": "c6c5472570166be24da2d010bd33478d",
      "kind": "definition",
      "module": "ZigLean.Sep.Triple",
      "name": "Zig.Triple"
@@ -1498,7 +1575,18 @@
     "Zig.Mem.Seq",
     "Zig.Mem.heap"
    ],
-   "opaque_dependencies": [],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1511,8 +1599,20 @@
     "ByteArray.mk",
     "ByteArray.push",
     "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
+    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1520,6 +1620,8 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1528,20 +1630,24 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
+    "String.Internal.append",
     "String.ofByteArray",
+    "String.ofList",
     "String.toByteArray",
     "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat"
+    "UInt8.ofNat",
+    "panicCore"
    ],
    "compiler_redirections": [
     "Array.anyM",
     "Lean.Name.anonymous",
     "Lean.Name.num",
-    "Lean.Name.str"
+    "Lean.Name.str",
+    "Nat.repr"
    ],
    "violations": [],
    "allowed": true,
@@ -1593,7 +1699,8 @@
    "name": "AuditClaims.total_false_pre",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext"
+    "propext",
+    "Quot.sound"
    ],
    "conclusion": {
     "head": "Zig.TotalTriple"
@@ -1613,7 +1720,18 @@
     "Zig.Heap",
     "Zig.TotalTriple"
    ],
-   "opaque_dependencies": [],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1625,8 +1743,21 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
+    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1634,6 +1765,8 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1642,18 +1775,24 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
+    "String.Internal.append",
     "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat"
+    "UInt8.ofNat",
+    "panicCore"
    ],
    "compiler_redirections": [
     "Array.anyM",
     "Lean.Name.anonymous",
     "Lean.Name.num",
-    "Lean.Name.str"
+    "Lean.Name.str",
+    "Nat.repr"
    ],
    "violations": [],
    "allowed": true,
@@ -1789,6 +1928,9 @@
     "Zig.Result"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic"
+   ],
    "extern_dependencies": [
     "Int.add",
     "Int.decLe",
@@ -1963,6 +2105,9 @@
     "Zig.Result"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic"
+   ],
    "extern_dependencies": [
     "Int.add",
     "Int.decLe",
@@ -2162,6 +2307,9 @@
    ],
    "opaque_dependencies": [
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -2363,6 +2511,7 @@
     "ExceptT.bindCont.match_1"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [],
    "extern_dependencies": [],
    "compiler_redirections": [],
    "violations": [],
@@ -2565,6 +2714,7 @@
     "ExceptT.bindCont.match_1"
    ],
    "opaque_dependencies": [],
+   "runtime_modules": [],
    "extern_dependencies": [],
    "compiler_redirections": [],
    "violations": [],

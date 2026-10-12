@@ -22,9 +22,10 @@ const std = @import("std");
 const compat = @import("compat.zig");
 
 const N = 300;
-/// Fixed seed: reused across runs, and generator functions run in a fixed order below, so
-/// output is deterministic.
-const seed: u64 = 0xA17_1EA0_5EED_0001;
+/// Fixed seed (tests/diff/input_seed.zig): reused across runs, and generator functions run in a
+/// fixed order below, so output is deterministic. scripts/fresh-inputs.sh replaces the file in a
+/// check tree to test other inputs.
+const seed: u64 = @import("input_seed.zig").seed;
 
 const Job = struct { duration: u32, due: u32, weight: u8 };
 

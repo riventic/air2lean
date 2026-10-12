@@ -317,8 +317,14 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
+    # T06: self-hosted (stage2_x86_64) exports of the backend-divergence reproducers.
+    'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
+    # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
+    'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/asm-effects/air-env/{version}': 'tests/roadmap/asm-effects/provenance-env.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
     'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
@@ -340,6 +346,12 @@ COMPILER_FIXTURE_ROOTS = {
     # L-series long tail: one directory per fixture source (export.sh, provenance.json).
     'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/tls_pointers/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/extern_storage/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/error_ints/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/error_ints_w8/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/runtime_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/float_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',

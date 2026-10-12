@@ -213,7 +213,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     -- A lane pointer's host is the vector's integer bytes (`Zig.loadLane`), of any count.
     if l.hostSize != 0 then
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
-      let some bits := packedBits types child
+      -- A lane pointer's lane may also be a float (its bits, `Zig.Packed (Float fmt)`, L09).
+      let some bits := packedBits types child <|>
+          (if l.laneBitPtr then (types[child]?).bind laneBits? else none)
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
             `bool`, a float, an enum, a packed struct, a packed union or a vector of these is \
             outside the subset"
@@ -630,6 +632,20 @@ structure CheckCtx where
   sentinelChecked : Array InstId := #[]
   /-- `Func.allocatorModel` (`--allocator-model`). -/
   allocatorModel : AllocatorModel := .std
+  /-- `Func.errorTable`: the compilation's error numbering, if the exporter wrote one. -/
+  errorTable : Option (Array String) := none
+
+/-- The compilation's error numbering is present and fits the `bits`-bit error integer: every
+integer/error cast and errors_len check needs it (L10, `docs/air-json.md` §Error table). -/
+def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Nat) (what : String) :
+    Except String Unit := do
+  let some names := table
+    | throw s!"{fnName}: {what} needs the compilation's error numbering, which the AIR export \
+        lacks (`error-table.air2lean`, written by the patched compiler after analysis; \
+        docs/air-json.md §Error table)"
+  unless names.size ≤ Zig.errCapacity bits do
+    throw s!"{fnName}: the error numbering has {names.size} errors, more than the \
+      {Zig.errCapacity bits} codes of the {bits}-bit error integer"
 
 /-- The profile's `error_set_bits` (`Dialect.errorSetBits`); 16 in a bare context. -/
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
@@ -828,6 +844,50 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
     cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
       (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
       width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+
+/-- The constructs whose native code under the self-hosted x86_64 backend (`stage2_x86_64`,
+Zig 0.16.0 and 0.17.0) differs from the model on legal inputs (`docs/build-modes.md`
+§stage2_x86_64, `tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig`); on a
+`stage2_x86_64` profile they are outside the subset. Every other backend is unaffected.
+
+* A read of a signed integer field (or a signed enum tag) of a `packed union` whose width is not a
+  register width (8, 16, 32, 64 bits), by `struct_field_val` or through a field pointer: the
+  backend does not sign-extend it (`i4` `-8` reads as `8`, also through `@as(i64, ...)` and
+  `< 0`). Packed struct fields and `@bitCast` are sign-extended correctly.
+* A float `@mod`: the backend computes `r = fmod(a, b)` and adds `b` once when `r` and `b` differ
+  in sign, where the model is the LLVM lowering `rem(rem(a, b) + b, b)`; they differ when
+  `r + b` rounds to `b` (`@mod(-2^-24, 1.0)` in `f16`: `1.0` against `0`). -/
+def CheckCtx.checkStage2Backend (cx : CheckCtx) (line : Nat) (op : Op) :
+    Except String Unit := do
+  unless (cx.dialect.map (·.backend)) == some "stage2_x86_64" do return
+  if let .div .mod a _ := op then
+    let isFloat := match (cx.valTy? a).bind (cx.types[·]?) with
+      | some (.float _) => true
+      | some (.vector _ lane) => match cx.types[lane]? with | some (.float _) => true | _ => false
+      | _ => false
+    if isFloat then
+      cx.fail line "a float `@mod` is outside the stage2_x86_64 profile: the self-hosted x86_64 \
+        backend adds the divisor once to a remainder of the other sign, where the model is the \
+        LLVM lowering `@rem(@rem(a, b) + b, b)`; they differ when that sum rounds to the divisor"
+  let (union?, idx) := match op with
+    | .structFieldVal s idx => (cx.valTy? s, idx)
+    | .fieldPtr b idx => ((cx.valTy? b).bind (ptrChild cx.types), idx)
+    | _ => (none, 0)
+  let some u := union? | return
+  let some (.union name "packed" _ fields) := cx.types[u]? | return
+  let some (field, fty) := fields[idx]? | return
+  let signedBits? : Option Nat := match cx.types[fty]? with
+    | some (.int true bits) => some bits
+    | some (.enum _ tag _ _) => match cx.types[tag]? with
+      | some (.int true bits) => some bits
+      | _ => none
+    | _ => none
+  if let some bits := signedBits? then
+    unless [8, 16, 32, 64].contains bits do
+      cx.fail line s!"a read of the signed {bits}-bit field '{field}' of packed union '{name}' is \
+        outside the stage2_x86_64 profile: the self-hosted x86_64 backend does not sign-extend it \
+        (it reads a negative value as a large positive one); use the LLVM backend or a field of \
+        8, 16, 32 or 64 bits"
 
 /-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
 (`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
@@ -1067,10 +1127,12 @@ checked by `checkOp` (M21). -/
 def CheckCtx.checkAsmEffect (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
   let .asm source isVolatile clobbers outputs inputs := op | return
   let constraints := asmConstraints outputs inputs
+  -- A device contract's declaration of an environment read keeps it a device event (L13).
+  let declared := (cx.device.bind (·.asm? source constraints clobbers.toList)).isSome
   if let some entry := op.asmAllowEntry? cx.targetArch then
     if entry.semantics == .spinHint && !op.isSpinHint then
       cx.fail line s!"asm {source.quote} is allowlisted as a spin hint, which has no operands"
-    return
+    unless entry.semantics == .envRead && declared do return
   -- A spin hint off its target's list stays rejected: the emitter would make it a hint, not an event.
   if op.isSpinHint then
     cx.fail line s!"spin hint {source.quote} is not allowlisted for target \
@@ -1227,6 +1289,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkStage2Backend line op
   cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with
@@ -1293,7 +1356,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let sourceTy := cx.valTy? a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
-      cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
+      -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
+      -- compilation's numbering, which the exporter writes after analysis.
+      let intSide := if isError (cx.types[ty]?) then sourceTy.bind (cx.types[·]?) else cx.types[ty]?
+      unless intSide == some (.int false cx.errBits) do
+        cx.fail line s!"an integer/error cast to or from a type other than the error integer \
+          u{cx.errBits} is outside the subset"
+      checkErrorTable cx.fnName cx.errorTable cx.errBits "an integer/error cast"
+      return line
     if let some aty := sourceTy then
       let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
       -- Duplicate finite error-union IDs preserve the same symbolic decoder only
@@ -1714,15 +1784,25 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
     -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
-    if clobbers.contains "memory" &&
+    -- A01 memory-region contract (ASM-06): the allowlist entry declares every region that the
+    -- block accesses through a pointer operand. Only a region's base may be a pointer operand.
+    let regions := ((op.asmAllowEntry? cx.targetArch).map (·.regions)).getD []
+    let regionBase (k : Nat) : Bool := regions.any (·.base == k)
+    -- A single (not slice) non-volatile, non-allowzero pointer: its value is a model `Ptr`.
+    let regionPtrTy (tid : TyId) : Bool := match cx.types[tid]? with
+      | some (.ptr size _ _) =>
+        size != "slice" && !((cx.layouts[tid]?.map fun l => l.isVolatile || l.allowzero).getD true)
+      | _ => false
+    if clobbers.contains "memory" && regions.isEmpty &&
         (asmPureEntry? source isVolatile clobbers outputs inputs).isNone then
       throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21): \
-        it may write any memory, and no reviewed registry entry declares this block pure \
-        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`)"
+        it may write any memory, and neither a reviewed registry entry declares this block pure \
+        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`) nor an allowlist entry declares its \
+        memory regions (`Air2Lean/AsmAllowlist.lean`, A01)"
     -- One output can be the expression's own result (`-> T`, no `ref`); every other output
     -- is a store through its pointer `ref` (an lvalue output).
     let mut parsed : Array AsmOutput := #[]
-    for o in outputs do
+    for (o, k) in outputs.zipIdx do
       let some po := parseAsmOutput o.constraint
         | throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
           register, read-write or memory output constraint (M21, A01)"
@@ -1745,8 +1825,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             cx.fail line s!"asm output '{o.name}' writes through a const pointer"
           cx.memAccess line r
           pure c
-      if !isIntTy outTy then
-        throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+      -- A region's base pointer (ASM-06) is a read-write register output: the instructions
+      -- move it, they cannot make a pointer from nothing.
+      let ptrOut := regionBase k && regionPtrTy outTy && po.readWrite && !po.memory
+      if !isIntTy outTy && !ptrOut then
+        throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21), \
+          nor a read-write pointer that an allowlisted memory region uses (A01)"
       if po.memory then
         match cx.types[outTy]? with
         | some (.int _ b) =>
@@ -1793,24 +1877,43 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     if inPins.any busyPins.contains then
       throw s!"{fnName}: near line {line}: an asm input pins the register of an early-clobber \
         or read-write output (A01)"
-    for i in inputs do
+    for (i, j) in inputs.zipIdx do
       let tied := match i.constraint.toNat? with
         | some k => (parsed[k]?).map fun po => !po.readWrite && !po.memory && !po.earlyClobber
         | none => none
       if tied == some false then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' ties to a \
           read-write, memory or early-clobber output (A01)"
+      -- An `m` input of an integer is its value: the compiler spills it to a private stack
+      -- slot (`codegen/llvm/FuncGen.zig` `airAssembly`), so the instructions read a copy (A01).
+      let memInput := i.constraint == "m"
       if !((!i.constraint.startsWith "=" && isRegisterConstraint i.constraint) ||
-          isMatchingConstraint outputs.size i.constraint) then
+          isMatchingConstraint outputs.size i.constraint || memInput) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
-          register or matching constraint (M21)"
+          register, matching or memory-value constraint (M21, A01)"
       let some r := i.ref
         | cx.fail line s!"asm input '{i.name}' has no operand (malformed input in the AIR file)"
       let some rty := cx.valTy? r
         | cx.fail line s!"asm input '{i.name}': operand has no known type"
-      if !isIntTy rty then
+      let ptrIn := regionBase (outputs.size + j) && regionPtrTy rty && !memInput
+      if !isIntTy rty && !ptrIn then
         throw s!"{fnName}: near line {line}: asm input '{i.name}' is not an integer register \
-          value (M21)"
+          value (M21), nor a pointer that an allowlisted memory region uses (A01)"
+    -- Each region's length is an integer operand (the entry is reviewed; the operand types are
+    -- the program's).
+    let operandTy (k : Nat) : Option TyId :=
+      if k < outputs.size then (outputs[k]!.ref.bind cx.valTy?).bind (ptrChild cx.types)
+      else (inputs[k - outputs.size]?.bind (·.ref)).bind cx.valTy?
+    -- The count register is read whole: a narrower operand leaves its upper bits undefined.
+    let isWordTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int _ 64) => true | _ => false
+    let constPtr (tid : TyId) : Bool := match cx.types[tid]? with | some (.ptr _ c _) => c | _ => true
+    for rg in regions do
+      unless (operandTy rg.len.operand).any isWordTy && (operandTy rg.base).any regionPtrTy do
+        throw s!"{fnName}: near line {line}: an asm memory region's base is not a pointer \
+          operand or its length is not a 64-bit integer operand (A01)"
+      if rg.access == .write && (operandTy rg.base).any constPtr then
+        throw s!"{fnName}: near line {line}: an asm memory region writes through a const \
+          pointer (A01)"
     pure line
   -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
   -- arithmetic on integer and float lanes); the result is one lane.
@@ -1840,6 +1943,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless blen.any (fun n => idx < n) do
           cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
       | _ => pure ()
+    pure line
+  | .vectorStoreElem vptr idx v =>
+    -- Zig 0.14.1/0.15.2 `v[i] = x` with a runtime index (L09): the lane store at bit `i * w` of
+    -- the bit-packed vector (`Zig.storeLaneAt`), with the comptime lane pointers' evidence.
+    unless cx.dialect.any (·.lanePtrBitPtrs) do
+      cx.fail line s!"a runtime-index vector lane store is outside the subset, except into the \
+        bit-packed vector of a schema-12 profile of Zig \
+        {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
+    cx.memAccess line vptr
+    let pty ← cx.memPtrTy line vptr
+    let some (.vector _ e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+      | cx.fail line "`vector_store_elem` through a pointer that does not point to a vector"
+    unless (ptrChild cx.types pty).any fun vec => (cx.layouts[vec]?.map (·.packedLanes)).getD false do
+      cx.fail line "`vector_store_elem` into a vector without the bit-packed layout"
+    if ((cx.types[e]?).bind laneBits?).isNone then
+      cx.fail line "`vector_store_elem` into a vector of lanes other than integers, floats or `bool`"
+    unless (cx.valTy? idx).bind (cx.types[·]?) == some (.int false 64) do
+      cx.fail line "`vector_store_elem` with an index other than `usize`"
+    if v matches .undef _ then
+      cx.fail line "a store of `undefined` to a vector lane is outside the subset"
+    pure line
+  | .errorsLenLe a =>
+    unless (cx.valTy? a).bind (cx.types[·]?) == some (.int false cx.errBits) do
+      cx.fail line s!"the errors_len check of an operand other than the error integer u{cx.errBits}"
+    checkErrorTable fnName cx.errorTable cx.errBits "the `@errorFromInt` errors_len check"
     pure line
   | .unionInit idx _ =>
     let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
@@ -1938,10 +2067,15 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
       slice, vector or packed struct"
 
 /-- A shared budget proves absence of embedded pointer capabilities, including
-inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
-private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
+inactive optional payload types. Unknown types, cycles and exhausted work fail closed.
+`dataPtrs`: a pointer to data (not a function, whose value must be an address-taken function,
+M20) counts as a leaf, its bytes a `Zig.Ptr` (`extern` storage, `checkExternGlobal`). -/
+private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) (dataPtrs := false) :
+    Option Nat := do
   if fuel == 0 then none
   let ty ← f.types[root]?
+  if let .ptr _ _ child := ty then
+    return ← if dataPtrs && !(f.types[child]?.map isFnTy).getD true then some (fuel - 1) else none
   let count ← match ty with
     | .int .. | .float .. | .bool | .void | .errorSet (some _) => some 0
     | .array .. | .vector .. | .optional .. | .enum .. => some 1
@@ -1953,7 +2087,7 @@ private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Op
   if count > remaining then none
   let children := childTys ty
   for child in children do
-    remaining ← pointerFreeInitializerType f child remaining
+    remaining ← pointerFreeInitializerType f child remaining dataPtrs
   return remaining
 
 /-- Complete constructor values whose typed encoding contains no `errFrag`.
@@ -2298,12 +2432,7 @@ private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
   | .inst id => (insts.find? (·.id == id)).map (·.ty)
   | _ => v.constTy?
 
-private partial def carriesPointer (f : Func) (ty : TyId) (fuel : Nat := 256) : Bool :=
-  if fuel == 0 then true else
-  match f.types[ty]? with
-  | some (.ptr ..) => true
-  | some ty => (childTys ty).any fun child => carriesPointer f child (fuel - 1)
-  | none => true
+private def carriesPointer (f : Func) (ty : TyId) : Bool := tyHoldsPtr f.types ty
 
 /-- Bounded local expression dependencies, including block result branches and pointer
 initializers. This is not an interprocedural/general pointer provenance analysis. -/
@@ -2520,42 +2649,62 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     if pa > ga then throw (alignment pa ga)
 
 /-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
-field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
-error-free type whose bytes the model encodes qualifies. -/
+field of `ExternInit` (`docs/generated-code.md` §Globals). A named, error-free, union-free
+type whose bytes the model encodes qualifies. It may hold data pointers (L12): their initial
+values are `Zig.Ptr`s of `ext`, which can point into the external blocks `ext.storage` that
+`mem0` adds after the program's globals, into a program global, or nowhere. A function pointer
+is rejected (an indirect call dispatches on the address-taken functions of the program, M20),
+and so is a pointer-bearing `extern` in a program with error-bearing globals: the finite
+error-storage fragment tracks every pointer into those (`dependsOnErrorGlobal`). -/
 private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `extern` global {what}: {why}; external initial state is an explicit \
-      `ExternInit` parameter of `mem0` only for named, pointer-free, error-free storage"
+      `ExternInit` parameter of `mem0` only for named, error-free, union-free storage"
   if g.name.isNone then fail "it has no name"
   if g.init.isSome then fail "the AIR file gives it an initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  if (pointerFreeInitializerType f g.ty 1024 (dataPtrs := true)).isNone then
+    fail "its type can hold a function pointer, a union or an unresolved type"
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  if carriesPointer f g.ty && f.globals.any (fun g => hasErrorStorage f.types g.ty) then
+    fail "it holds a pointer, and the program has error-bearing globals"
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- A `threadlocal var` (`docs/generated-code.md` §Thread-local storage): one instance per
-thread, initialized from the global's initial value. Only a named, non-`extern` `var` with a
-resolved, wholly defined or wholly `undefined` initial value of a pointer-free, error-free type
-that the model encodes qualifies. -/
+thread, initialized from the global's initial value. A named, non-`extern` `var` with a
+resolved, wholly defined or wholly `undefined` initial value of an error-free type that the
+model encodes qualifies. Its type may hold pointers (`Io.Threaded`'s `Thread.current: ?*Thread`,
+L12): every thread's instance starts with the same initial bytes, so a pointer in the initial
+value must name storage that is the same in every thread, an ordinary global or a function, as
+for any global initializer (`checkGlobal`); a pointer into a `threadlocal` global is rejected
+by `checkNoThreadlocalConstant`. -/
 private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
-      only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
-      storage"
+      only for a named, non-`extern` `var` with an initial value in error-free storage"
   if g.name.isNone then fail "it has no name"
   if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
   if g.isConst then fail "it is `const`"
   let some init := g.init | fail "the AIR file has no initial value"
   if init.hasNestedUndef then fail "a partly `undefined` initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  -- The finite error-storage fragment tracks error-bearing storage per global block; a
+  -- thread-local instance is a block per thread.
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
   checkNullConstants f.name f.types f.layouts init
+  checkGlobalAliasConstants f init
+  checkLlvmPayloadConstants f init
+  -- As for an ordinary global (`checkGlobal`): the finite error-storage fragment tracks every
+  -- pointer into an error-bearing global (`dependsOnErrorGlobal`).
+  if f.globals.any (fun g => hasErrorStorage f.types g.ty) && carriesPointer f g.ty &&
+      dependsOnErrorGlobal f f.allInsts init then
+    fail "its initial value retains a pointer into an error-bearing global"
+  checkPointerPresence f init fun k =>
+    s!"{f.name}: `threadlocal` global {what}: a pointer constant without a global ({k}) is \
+      outside the subset"
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- The globals that the pointer constants of `v` point into, at any depth. -/
 partial def Val.ptrGlobals (v : Val) : Array Nat :=
@@ -2831,12 +2980,15 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
   -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
   -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
-  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
-  -- does not export the compilation's error count, so no code is known to stay below that bit.
-  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) then
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). The
+  -- export bounds the codes only with the compilation's error numbering
+  -- (`error-table.air2lean`, L10): every code is below that bit when the error count is.
+  let codesBelowSignBit := f.errorTable.any (·.size < 2 ^ (f.errorSetBits - 1))
+  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) && !codesBelowSignBit then
     throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
       error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
-      compilation's error codes; use Zig 0.15.2 or later"
+      compilation's error codes below it (no error-table.air2lean, or too many errors); use Zig \
+      0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2886,7 +3038,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
                          device, sentinelChecked := sentinelCheckedSlices insts,
-                         allocatorModel := f.allocatorModel }
+                         allocatorModel := f.allocatorModel, errorTable := f.errorTable }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -3901,12 +4053,19 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   let mut unbound : Array (String × String) := #[]
   let mut out : Array Func := #[]
   for f in funcs do
-    -- Without an `externs` table a function has no extern call (`checkProgram` rejects one).
-    if f.externs.isEmpty then
+    -- E02: the address of an `extern fn` (`externCodeGlobal`) binds like a call, by symbol. The
+    -- AIR global records no library, so a declared `externs` entry, if any, gives it.
+    let codeRefs := f.globals.filterMap fun g => match g.init with
+      | some (.func callee ..) => (externSymbol? callee).map (callee, ·)
+      | _ => none
+    -- Without an `externs` table or an extern address a function has no extern callee
+    -- (`checkProgram` rejects one).
+    if f.externs.isEmpty && codeRefs.isEmpty then
       out := out.push f
       continue
-    let mut renames : Std.HashMap String String := {}
-    let mut seen : Std.HashSet String := {}
+    -- Each extern callee once: its direct calls (each checked against the declaration), then
+    -- the addresses taken (`codeRefs`), which have a declaration only if a call has one.
+    let mut callees : Array (String × String × Option String) := #[]
     for i in f.allInsts do
       let .call (.func callee ..) args := i.op | continue
       let some symbol := externSymbol? callee | continue
@@ -3915,9 +4074,18 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       -- The declaration must describe each call (a variadic one is rejected below).
       unless e.varargs || (args.size == e.params.size && i.ty == e.ret) do
         throw s!"{f.name}: inst {i.id}: the call of extern '{symbol}' does not match its 'externs' entry"
-      if seen.contains callee then continue
-      seen := seen.insert callee
-      let reject (why : String) := unbound.push (f.name, externUnbound f.name e why)
+      unless callees.any (·.1 == callee) do callees := callees.push (callee, symbol, none)
+    for (callee, symbol) in codeRefs do
+      unless callees.any (·.1 == callee) do
+        callees := callees.push (callee, symbol, some "(its address is taken) ")
+    let mut renames : Std.HashMap String String := {}
+    for (callee, symbol, note) in callees do
+      -- The AIR global of an address records no library or convention: only a declared
+      -- `externs` entry fixes them.
+      let declared := f.externs.find? (·.name == symbol)
+      let e : ExternDecl := declared.getD
+        { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
+      let reject (why : String) := unbound.push (f.name, externUnbound f.name e (note.getD "" ++ why))
       let definitions := exports.getD symbol #[]
       let names := ", ".intercalate (definitions.map (·.name)).toList
       if e.varargs then
@@ -3930,18 +4098,24 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         -- The linker would resolve the symbol to the program's own definition, not the model's.
         if let some target := definitions[0]? then
           unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
-        else unless binding.library == e.library do
+        else unless declared.isNone || binding.library == e.library do
           unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
       else if let some target := definitions[0]? then
         let cc := (target.exportDecl.map (·.cc)).getD ""
-        if cc == e.cc then renames := renames.insert callee target.name
+        if declared.isNone || cc == e.cc then renames := renames.insert callee target.name
         else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
           definition '{target.name}' has '{cc}'")
       else
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
           registry model '{callee}' (--model-registry, docs/external-models.md)"
+    let rename (n : String) := renames.getD n n
     out := out.push (if renames.isEmpty then f
-      else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
+      else { f with body := f.body.map (renameCallees rename),
+                    globals := f.globals.map fun g => match g.init with
+                      | some (.func callee noreturn spawnFn) =>
+                        { g with name := g.name.map rename,
+                                 init := some (.func (rename callee) noreturn spawnFn) }
+                      | _ => g })
   return (out, unbound)
 
 /-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
@@ -4044,7 +4218,10 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         | some tn =>
           for callee in targets.getD tn #[] do
             match lookupFunction callee with
-            | none => issues := issues.push (issue .indirectTarget s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file")
+            -- E02: a registry model at a code address; `ModelRegistry.check` validated this
+            -- call site's signature against the binding.
+            | none => unless modelSymbols.contains callee do
+                issues := issues.push (issue .indirectTarget s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file")
             | some (targetIndex, target) =>
               match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
               | .ok cache => signatures := cache
@@ -4101,8 +4278,15 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
-  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
+  -- A01: the `noalias` analysis does not see the regions of a memory-region asm (ASM-06), so
+  -- a program with `noalias` parameters admits none (fail closed).
   if funcs.any (!·.noalias.isEmpty) then
+    for f in funcs do
+      if f.allInsts.any fun i => (i.op.asmAllowEntry? f.dialect.arch).any (!·.regions.isEmpty) then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          s!"{f.name}: an asm memory region (A01) in a program with `noalias` parameters is \
+            outside the subset: the noalias analysis does not see the region accesses" }
+    -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
     let conc := concFunctions funcs
     for f in funcs do
       if !f.noalias.isEmpty && conc.contains f.name then
@@ -4297,7 +4481,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     localPaths := localPlacePaths f.types f.layouts insts
     device
     sentinelChecked := sentinelCheckedSlices insts
-    allocatorModel := f.allocatorModel }
+    allocatorModel := f.allocatorModel
+    errorTable := f.errorTable }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

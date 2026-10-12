@@ -89,8 +89,8 @@ cmp "$work/base/DeviceEffects/Gen.lean" "$dir/DeviceEffects/Gen.lean"
 translate_tsc "$dir/air-asm/0.16.0" "$work/base/DeviceAsm/Gen.lean"
 cmp "$work/base/DeviceAsm/Gen.lean" "$dir/DeviceAsm/Gen.lean"
 
-# Without a contract the default rejects every device access and every off-allowlist asm, and
-# ordinary translation writes nothing.
+# Without a contract the default rejects every device access and every off-allowlist asm (the
+# output-less `fence`), and ordinary translation writes nothing.
 for air in air air-asm; do
   status=0
   "$translator" --diagnostics-json "$dir/$air/0.16.0" > "$work/default-$air.json" || status=$?
@@ -115,16 +115,15 @@ uart = codes("default-air.json")
 for name in ("putc", "statusTwice", "clearStatus", "sendThenStatus"):
     assert uart[(f"device_effects.{name}", "VOLATILE_ACCESS")], (name, uart)
 assert uart[("device_effects.writeAll", "CALLEE_BLOCKED")], uart
-# rdtsc twice, rdrand, output-less asm and non-volatile rdtsc; `barrier` is A01's allowlisted
-# empty memory-clobber block.
+# Only the output-less asm: rdtsc and rdrand are A01's environment reads (ASM-05) and
+# `barrier` is A01's allowlisted empty memory-clobber block.
 asm = codes("default-air-asm.json")
-expected = {"elapsed": 2, "random": 1, "fence": 1, "ticksPlain": 1}
-assert asm == collections.Counter({(f"device_asm.{n}", "ASM_VOLATILE_EFFECT"): k
-                                   for n, k in expected.items()}), asm
-# The contract declares only the volatile rdtsc: the rest stays rejected.
+assert asm == collections.Counter({("device_asm.fence", "ASM_VOLATILE_EFFECT"): 1}), asm
+# The contract declares the rdtsc template: its uses are device events, so the non-volatile one
+# is rejected; rdrand stays an environment read.
 device = codes("device-air-asm.json")
 assert device == collections.Counter({(f"device_asm.{n}", "ASM_VOLATILE_EFFECT"): 1
-                                      for n in ("random", "fence", "ticksPlain")}), device
+                                      for n in ("fence", "ticksPlain")}), device
 PY
 
 lake build ZigLean ZigLean.Mem.Lemmas
