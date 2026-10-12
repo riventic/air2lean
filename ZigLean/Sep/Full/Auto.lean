@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.AutoConc
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
@@ -120,22 +120,50 @@ partial def unfoldAtom (e : Expr) : MetaM Expr := do
   | some e' => if e'.consumeMData.isLambda then return e else unfoldAtom e'
   | none => return e
 
-/-- A goal `L.T P c Q`: `(L, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals are restated. -/
-def view (g : MVarId) : MetaM (MVarId × Expr × Expr × Expr × Expr × Expr) := do
+/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), or the
+concurrent `CTriple` (`conc`; `L` is the target type `Tgt`). -/
+structure Bk where
+  conc : Bool
+  L : Expr
+  deriving Inhabited
+
+/-- Partial correctness: partial (`FTriple`) rules apply too. -/
+def Bk.part (B : Bk) : Bool := B.conc || B.L.isConstOf ``FLogic.partial
+
+/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, with
+the same arguments). -/
+def Bk.nm (B : Bk) (n : Name) : Name :=
+  if B.conc then .str (.str n.getPrefix "C") n.lastComponentAsString else n
+
+/-- A goal `L.T P c Q` or `CTriple P c Q`: `(B, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals
+are restated as `L.T`. -/
+def view (g : MVarId) : MetaM (MVarId × Bk × Expr × Expr × Expr × Expr) := do
   let t ← instantiateMVars (← g.getType)
   let t := t.consumeMData
   if t.isAppOfArity ``FLogic.T 5 then
     let a := t.getAppArgs
-    return (g, a[0]!, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+    return (g, ⟨false, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+  if t.isAppOfArity ``CTriple 5 then
+    let a := t.getAppArgs
+    return (g, ⟨true, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
   for (k, L) in [(``FTotalTriple, ``FLogic.total), (``FTriple, ``FLogic.partial)] do
     if t.isAppOfArity k 4 then
       let a := t.getAppArgs
       let L := mkConst L
       let g' ← g.replaceTargetDefEq (mkAppN (mkConst ``FLogic.T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
-      return (g', L, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
-  throwError "fsym: expected an FTotalTriple, FTriple or FLogic.T goal{indentExpr t}"
+      return (g', ⟨false, L⟩, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
+  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T or CTriple goal{indentExpr t}"
 
-def mkT (L α P c Q : Expr) : Expr := mkAppN (mkConst ``FLogic.T) #[L, α, P, c, Q]
+def mkT (B : Bk) (α P c Q : Expr) : Expr :=
+  mkAppN (mkConst (if B.conc then ``CTriple else ``FLogic.T)) #[B.L, α, P, c, Q]
+
+/-- The kind of a rule's conclusion: a total (`FTotalTriple`) or partial (`FTriple`) triple of a
+`MemM` command, or a `CTriple` of a concurrent one; `(kind, command)`. -/
+def ruleConcl? (concl : Expr) : Option (Name × Expr) :=
+  if concl.isAppOfArity ``FTotalTriple 4 then some (``FTotalTriple, concl.getArg! 2)
+  else if concl.isAppOfArity ``FTriple 4 then some (``FTriple, concl.getArg! 2)
+  else if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
+  else none
 
 /-- The head of a command or an atom, through `StateT.lift` and `up`: a cheap filter before
 unification (which may unfold definitions). -/
@@ -990,7 +1018,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let P' := (mkApp f br).headBeta
     let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
-    g.assign (← mkAppOptM ``pre_eq #[L, α, P, P', Q, c, e, g2])
+    g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, P', Q, c, e, g2])
     return ← normPre g2.mvarId! (fuel - 1)
   let isFact (a : Expr) := a.isAppOfArity liftN 1 || a.isAppOfArity exN 2
   let facts := ats.filter isFact
@@ -1002,13 +1030,13 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
   let g ← if P2 == P then pure g else do
     let e ← acEq Pu P2
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P2 c Q)
-    let pf ← mkAppOptM ``pre_eq #[L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
+    let pf ← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
     g.assign pf
     pure g2.mvarId!
   if facts.isEmpty then return ← unifyBlocks g
   let a := facts[0]!
   if a.isAppOfArity liftN 1 then
-    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.lift_sep _ fun h => ?_)) g
+    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``lift_sep)) _ fun h => ?_)) g
       | throwError "fsym: lift"
     let lctx ← g'.withContext getLCtx
     let g' ← match lctx.lastDecl with
@@ -1017,7 +1045,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     normPre g' (fuel - 1)
   else
     let n := match a.appArg!.consumeMData with | .lam n .. => n | _ => `x
-    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.ex_sep _ fun x => ?_)) g
+    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``ex_sep)) _ fun x => ?_)) g
       | throwError "fsym: ex"
     let lctx ← g'.withContext getLCtx
     let g' ← match lctx.lastDecl with
@@ -1943,7 +1971,22 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
 
 /-! ## Rules -/
 
-/-- Try a rule on the command `x` of `x >>= f`. Returns the continuation goal and side goals. -/
+/-- The command of `x` that sequential rules are about: `c` of a `ConcM.liftMem c`. -/
+def memCmd? (x : Expr) : Option Expr :=
+  if x.isAppOfArity ``ConcM.liftMem 3 then some x.appArg! else none
+
+/-- Unfold the command `cmd` of a `CTriple` rule until its head is that of the program's command
+`x` (a table call `t.call f a` or `(CVTable.dispatch t fns).alloc …` is an indirect call). -/
+partial def unfoldToHead (cmd x : Expr) (fuel : Nat := 6) : MetaM Expr := do
+  if fuel == 0 || headKey cmd == headKey x then return cmd
+  match ← unfold1 cmd with
+  | some c' => unfoldToHead c' x (fuel - 1)
+  | none => return cmd
+
+/-- Try a rule on the command `x` of `x >>= f`. Returns the continuation goal and side goals.
+A sequential rule is total (`FTotalTriple`, every backend) or partial (`FTriple`, the partial
+backends); in the concurrent backend it executes a `ConcM.liftMem c` command (about `c`), and a
+`CTriple` rule a concurrent command. -/
 def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId × List MVarId)) :=
   g.withContext do
   let s ← saveState
@@ -1951,10 +1994,22 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let (_, L, α, P, _, Q) ← view g
     let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
-    unless concl.isAppOfArity ``FTotalTriple 4 do s.restore; return none
+    let some (kind, cmd) := ruleConcl? concl | s.restore; return none
     let ca := concl.getAppArgs
-    let (β, P₀, cmd, Q₀) := (ca[0]!, ca[1]!, ca[2]!, ca[3]!)
-    unless ← unifyKeyed cmd x do s.restore; return none
+    let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
+    -- the command the rule is about, and whether the rule applies in this backend
+    let target? : Option Expr :=
+      if kind == ``CTriple then (if L.conc && (memCmd? x).isNone then some x else none)
+      else if L.conc then memCmd? x
+      else if kind == ``FTriple && !L.part then none
+      else some x
+    let some tx := target? | s.restore; return none
+    if kind == ``CTriple then
+      let cmd ← unfoldToHead (← instantiateMVars cmd) tx
+      unless headKey cmd == headKey tx do s.restore; return none
+      unless ← isDefEq cmd tx do s.restore; return none
+    else
+      unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
     let P₀i ← instantiateMVars P₀
     let whole := P₀i.isMVar
@@ -2012,24 +2067,36 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         unless ← isProp (← inferType a) do
           trace[fsym] "rule {rule}: undetermined {a}"
           s.restore; return none
-    let r ← instantiateMVars (mkAppN rule args)
+    let mut r ← instantiateMVars (mkAppN rule args)
     let Q₀ ← instantiateMVars Q₀
     let P₀ ← instantiateMVars P₀
+    -- the rule in the backend's kind: `FTotalTriple` (sequential, total), `FTriple` (`P.step`,
+    -- `C.step`) or `CTriple` (`C.stepC`)
+    let mut kind := kind
+    if L.conc && kind == ``FTotalTriple then
+      r ← mkAppM ``FTotalTriple.toPartial #[r]; kind := ``FTriple
+    let (stepN, stepAllN) :=
+      if kind == ``CTriple then (``C.stepC, ``C.stepAllC)
+      else if L.conc then (``C.step, ``C.stepAll)
+      else if kind == ``FTriple then (``P.step, ``P.stepAll)
+      else (``step, ``stepAll)
     let kTy ← withLocalDeclD `v β fun v => do
       let pre := if whole then mkApp Q₀ v |>.headBeta else mkSep (mkApp Q₀ v |>.headBeta) R
       mkForallFVars #[v] (mkT L α pre (mkApp f v).headBeta Q)
     let k ← mkFreshExprSyntheticOpaqueMVar kTy
     if let some hE := planned then
       let Q₀R ← withLocalDeclD `v β fun v => do mkLambdaFVars #[v] (mkSep (mkApp Q₀ v).headBeta R)
-      let r' ← mkAppM ``FTotalTriple.eupd #[hE, ← mkAppOptM ``FTotalTriple.frame #[none, P₀, R, Q₀, x, r]]
-      g.assign (← mkAppOptM ``stepAll #[L, β, α, P, Q, x, f, Q₀R, r', k])
+      let fr ← if kind == ``CTriple then mkAppOptM ``CTriple.frame #[none, none, P₀, R, Q₀, tx, r]
+        else mkAppOptM (kind ++ `frame) #[none, P₀, R, Q₀, tx, r]
+      let r' ← mkAppM (kind ++ `eupd) #[hE, fr]
+      g.assign (← mkAppOptM stepAllN #[L.L, β, α, P, Q, tx, f, Q₀R, r', k])
     else if whole then
-      g.assign (← mkAppOptM ``stepAll #[L, β, α, P, Q, x, f, Q₀, r, k])
+      g.assign (← mkAppOptM stepAllN #[L.L, β, α, P, Q, tx, f, Q₀, r, k])
     else
       let e ← acEq P (mkSep P₀ R)
       let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep P₀ R) (← mkAppM ``Bind.bind #[x, f]) Q)
-      g.assign (← mkAppOptM ``pre_eq #[L, α, P, mkSep P₀ R, Q, none, e, g2])
-      g2.mvarId!.assign (← mkAppOptM ``step #[L, β, α, P₀, R, Q, x, f, Q₀, r, k])
+      g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, mkSep P₀ R, Q, none, e, g2])
+      g2.mvarId!.assign (← mkAppOptM stepN #[L.L, β, α, P₀, R, Q, tx, f, Q₀, r, k])
     let n := match f.consumeMData with | .lam n .. => n | _ => `v
     let (_, k') ← k.mvarId!.intro n
     return some (k', left)
