@@ -1,4 +1,5 @@
 import ZigLean.VC
+import ZigLean.Sep.Full.Strength
 import Proofs.Basic.Gen
 import Proofs.Pointers.Gen
 import Proofs.Errors.Gen
@@ -6,9 +7,11 @@ import Proofs.Errors.Gen
 /-!
 Automatic VC extraction (P02) on committed generated code: `Proofs/Basic/Gen.lean`,
 `Proofs/Pointers/Gen.lean` and `Proofs/Errors/Gen.lean`, generated from `examples/`.
-Every program below is reflected from the generated body by `#vc_extract`/`vc_gen`; none is
-written by hand. The source equalities are kernel-checked; they link the VC AST to those
-translated functions only and do not prove Zig/AIR/compiler preservation.
+Every `Result` program below is reflected from the generated body by `#vc_extract`/`vc_gen`;
+none is written by hand. The source equalities are kernel-checked; they link the VC AST to those
+translated functions only and do not prove Zig/AIR/compiler preservation. A memory contract is
+a full-state triple, and its obligations are what the walk of `fsym` over the generated body
+leaves.
 -/
 
 namespace VCExtract
@@ -157,42 +160,87 @@ theorem digitOrZero_contract (c : BitVec 8) :
   case result_1 => by_cases h : c.toNat < 48 ∨ 57 < c.toNat <;> simp_all <;> omega
   case result_2 => by_cases h : c.toNat < 48 ∨ 57 < c.toNat <;> simp_all [Zig.isNonErr, Zig.isErr]
 
-/-! ## Memory effects: generated loads and stores -/
+/-! ## Memory effects: the walk of `fsym`
+
+A memory contract is a full-state triple (`docs/sep-full-state.md`). `vc_gen` walks the generated
+body with the rules of `fsym` and the `@[vc_contract]` contracts; the goals the walk leaves are
+the obligations (`tests/roadmap/vcs/Memory.lean` shows them). Here the walk discharges every one:
+overflow from `fits`, ownership and the heap postcondition by the planner.
+
+Each contract is followed by its strength example (`ZigLean/Sep/Full/Strength.lean`): the
+legacy statement that it replaces, on every `Mem.FSeq` memory (the memories a run reaches,
+`Mem.init_fseq`), and total instead of partial. -/
+
+section Memory
+
+open Zig.Full FAssn
 
 theorem addTo_contract (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
     (fits : old.toNat + (delta.setWidth 64).toNat < 2 ^ 64) :
-    Triple (pts p 8 old) (Pointers.addTo p delta)
-      (fun _ => pts p 8 (old + delta.setWidth 64)) := by
+    FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
+      (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
   vc_gen?
-  case memory_1 => decide
-  case safety_1 => decide
-  case safety_2 => exact fits
-  case memory_2 => decide
-  case memory_4 => exact stored1
 
--- The unchanged frame rule preserves a separate client resource.
-example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) (R : Assn)
+example (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
     (fits : old.toNat + (delta.setWidth 64).toNat < 2 ^ 64) :
-    Triple (pts p 8 old ∗ R) (Pointers.addTo p delta)
-      (fun _ => pts p 8 (old + delta.setWidth 64) ∗ R) :=
+    TotalTripleIn Mem.FSeq (pts p 8 old) (Pointers.addTo p delta)
+      (fun _ => pts p 8 (old + delta.setWidth 64)) :=
+  FTotalTriple.toTotal_on (addTo_contract p delta old fits) fun _ => SizeFree.pts _ _ _
+
+-- The frame rule preserves a separate client resource.
+example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) (R : FAssn)
+    (fits : old.toNat + (delta.setWidth 64).toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 old) ⋆ R) (Pointers.addTo p delta)
+      (fun _ => up (pts p 8 (old + delta.setWidth 64)) ⋆ R) :=
   (addTo_contract p delta old fits).frame
+
+-- Two cells: the planner splits the heap, so `swap p q` needs no separate ownership proof.
+theorem swap_contract (p q : Ptr) (x y : BitVec 32) :
+    FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (Pointers.swap p q)
+      (fun _ => up (pts p 4 y) ⋆ up (pts q 4 x)) := by
+  vc_gen
+
+example (p q : Ptr) (x y : BitVec 32) :
+    TotalTripleIn Mem.FSeq (pts p 4 x ∗ pts q 4 y) (Pointers.swap p q)
+      (fun _ => pts p 4 y ∗ pts q 4 x) :=
+  FTotalTriple.toTotal_on (((swap_contract p q x y).pre fun _ h => up_sep h).post
+      fun _ _ h => sep_up h)
+    fun _ => SizeFree.sep (SizeFree.pts _ _ _) (SizeFree.pts _ _ _)
+
+-- The same function on one cell (`Proofs/Pointers/Sep.lean` proves it with explicit memories).
+theorem swapSelf_contract (p : Ptr) (old : BitVec 32) :
+    FTotalTriple (up (pts p 4 old)) (Pointers.swap p p) (fun _ => up (pts p 4 old)) := by
+  vc_gen
+
+example (p : Ptr) (old : BitVec 32) :
+    TotalTripleIn Mem.FSeq (pts p 4 old) (Pointers.swap p p) (fun _ => pts p 4 old) :=
+  FTotalTriple.toTotal_on (swapSelf_contract p old) fun _ => SizeFree.pts _ _ _
 
 -- `ensures` separates a functional result from the heap effect. Pointer `==` compares
 -- addresses (`ptrEqAddr_raw`): two provenance-free pointers are equal iff their addresses are.
 theorem same_contract (p q : Ptr) :
-    Triple ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
+    FTotalTriple ⟪p.block = none ∧ q.block = none⟫ (Pointers.same p q)
       (ensures (fun r => r = decide (p.off = q.off)) (fun _ => emp)) := by
   vc_gen
-  case memory_1 => exact pre
-  case result_1 => exact summary1.1
-  case memory_2 => exact summary1.2
+
+-- The legacy `ensures result heap` was `fun v h => result v ∧ heap v h`.
+example (p q : Ptr) :
+    TotalTripleIn Mem.FSeq ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
+      (fun r h => r = decide (p.off = q.off) ∧ Assn.emp h) :=
+  FTotalTriple.toTotal_on (((same_contract p q).pre fun _ h =>
+      ⟨h.1.1, up_emp.mp ⟨h.1.2, h.2⟩⟩).post fun _ _ h =>
+        have e := up_emp.mpr (sep_lift.mp h).2
+        ⟨⟨(sep_lift.mp h).1, e.1⟩, e.2⟩)
+    fun _ => SizeFree.lift
+
+end Memory
 
 /-! ## Loops request explicit invariants and variants; recursion is refused -/
 
 /--
 error: vc extraction for `Basic.sum`:
   invariant + variant required for loop `Basic.sum.loop7` at AIR instruction %7
-VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `loop_template inv post` (goals `step`, `entry`, `exit`; `inv s n` carries the variant `n`) or `MemProgram.annotatedLoop`; for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
+VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `FTotalTriple.loop_ghost inv post` (the measure carried by `inv s n`) or `FTriple.loop inv post` (`ZigLean/Sep/Full/Loop.lean`); for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
 vc-report {"function":"Basic.sum","requests":[{"instruction":7,"loop":"Basic.sum.loop7","request":"invariant + variant"}],"status":"loop-request"}
 -/
 #guard_msgs in
@@ -201,7 +249,7 @@ vc-report {"function":"Basic.sum","requests":[{"instruction":7,"loop":"Basic.sum
 /--
 error: vc extraction for `Pointers.sumTo`:
   invariant + variant required for loop `Pointers.sumTo.loop6` at AIR instruction %6
-VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `loop_template inv post` (goals `step`, `entry`, `exit`; `inv s n` carries the variant `n`) or `MemProgram.annotatedLoop`; for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
+VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `FTotalTriple.loop_ghost inv post` (the measure carried by `inv s n`) or `FTriple.loop inv post` (`ZigLean/Sep/Full/Loop.lean`); for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
 vc-report {"function":"Pointers.sumTo","requests":[{"instruction":6,"loop":"Pointers.sumTo.loop6","request":"invariant + variant"}],"status":"loop-request"}
 -/
 #guard_msgs in
@@ -211,7 +259,7 @@ vc-report {"function":"Pointers.sumTo","requests":[{"instruction":6,"loop":"Poin
 /--
 error: vc extraction for `Basic.sum`:
   invariant + variant required for loop `Basic.sum.loop7` at AIR instruction %7
-VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `loop_template inv post` (goals `step`, `entry`, `exit`; `inv s n` carries the variant `n`) or `MemProgram.annotatedLoop`; for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
+VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` with `FTotalTriple.loop_ghost inv post` (the measure carried by `inv s n`) or `FTriple.loop inv post` (`ZigLean/Sep/Full/Loop.lean`); for a `Result` loop use `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it.
 vc-report {"function":"Basic.sum","requests":[{"instruction":7,"loop":"Basic.sum.loop7","request":"invariant + variant"}],"status":"loop-request"}
 -/
 #guard_msgs in

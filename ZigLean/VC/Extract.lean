@@ -678,14 +678,14 @@ def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
     let ty₀ ← m₀.withContext do Core.betaReduce (← instantiateMVars (← m₀.getType))
     let m ← m₀.replaceTargetDefEq ty₀
     let own := if m == m₀ then own else own.insert m (own.getD m₀ {})
-    let ty ← m.withContext (whnfR ty₀)
+    -- a triple the walk stopped at: not through `whnfR`, which would unfold the projection `FLogic.T`
+    let ty := ty₀.consumeMData
     if ty.isAppOfArity ``Zig.Full.FLogic.T 5 then
       let c := (ty.getArg! 3).consumeMData
       if Zig.Full.Auto.isThrow c then
-        let h ← m.withContext (mkFreshExprSyntheticOpaqueMVar (mkConst ``False))
-        m.assign (← m.withContext (mkAppOptM ``Zig.Full.Auto.of_false
-          #[ty.getArg! 0, none, none, none, none, h]))
-        out := out.push { goal := h.mvarId!, kind := .safety, label := "panic/throw is unreachable" }
+        let [h] ← m.apply (← mkConstWithFreshMVarLevels ``Zig.Full.Auto.of_false)
+          | throwError "vc_gen: `of_false` does not apply to the reachable panic"
+        out := out.push { goal := h, kind := .safety, label := "panic/throw is unreachable" }
         continue
       let x := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
       throwError "vc_gen: no `@[fsym]` rule or `@[vc_contract]` theorem for the command{indentExpr x}"
@@ -693,6 +693,14 @@ def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
       out := out.push { goal := m, kind := .memory, label := "heap postcondition" }
       continue
     let o := own.getD m {}
+    -- the walk splits on a side condition `φ` it cannot decide and walks both cases; in the
+    -- case `hc : ¬φ` the goal is `φ`, which is equivalent to `φ` without `hc` (`(¬φ → φ) ↔ φ`)
+    let m ← m.withContext do
+      let some d := (← getLCtx).findDecl? fun d =>
+          if !d.isImplementationDetail && d.type.consumeMData.isAppOfArity ``Not 1 &&
+            d.type.consumeMData.appArg! == ty then some d else none
+        | pure m
+      try m.clear d.fvarId catch _ => pure m
     if o.fact then
       let k ← match o.ret with | some v => valueKind v | none => pure .result
       let label := if k == .error then "error return" else "functional result"
@@ -785,8 +793,10 @@ def runVcGen (report : Bool) : TacticM Unit := do
 
 end Zig.VC.Extract
 
-/-- Replace a contract goal about a loop-free generated function by its tagged VC obligations. -/
-elab "vc_gen" : tactic => Zig.VC.Extract.runVcGen false
+/-- `vc_gen`: replace a contract goal about a loop-free generated function by its tagged VC
+obligations (for a full-state triple, the goals that the walk of `fsym` leaves). `vc_gen?` also
+logs the obligation report. -/
+syntax (name := vcGen) ("vc_gen" <|> "vc_gen?") : tactic
 
-/-- `vc_gen`, also logging the obligation report. -/
-elab "vc_gen?" : tactic => Zig.VC.Extract.runVcGen true
+@[tactic vcGen] def Zig.VC.Extract.evalVcGen : Tactic := fun stx =>
+  Zig.VC.Extract.runVcGen (stx.find? (·.isToken "vc_gen?")).isSome
