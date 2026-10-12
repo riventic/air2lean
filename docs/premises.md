@@ -839,7 +839,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   as it reads a run that does not terminate; a total-correctness statement excludes it, so one
   that allocates shows room (`TotalTripleIn`). Regressions:
   `tests/roadmap/memory-hardening/NoRoom.lean`, `tests/roadmap/outcome-accounting`.
-- Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
+- Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
   `tests/roadmap/memory-hardening/README.md`.
 
