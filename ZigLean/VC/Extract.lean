@@ -753,9 +753,11 @@ def runVcGen (report : Bool) : TacticM Unit := do
   let mut open_ := #[]
   let mut lines := #[]
   let mut items := #[]
-  -- A `True` goal (the postcondition of a result-existence goal) is closed at once.
+  -- The postcondition of a result-existence goal is `True`: it is closed at once.
+  let existence := ty.isAppOfArity ``Zig.Returns 3
   obls ← obls.mapM fun o => do
-    if o.closedBy.isNone && (← instantiateMVars (← o.goal.getType)).isConstOf ``True then
+    if existence && o.closedBy.isNone && o.label == "postcondition" &&
+        (← instantiateMVars (← o.goal.getType)).isConstOf ``True then
       o.goal.assign (mkConst ``True.intro)
       return { o with closedBy := some "trivial" }
     return o
