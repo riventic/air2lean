@@ -99,9 +99,9 @@ def main (args : List String) : IO Unit := do
   writeCase dir "cZero" (file "cZero" (types) #[] 2 #[inst 0 "ret" 4 #[nullVal 2]])
     "example : value Nullable.cZero = some Zig.Ptr.null := by native_decide"
   writeCase dir "cCast" (pointerInput "cCast" "bitcast" 5)
-    "example : failure (Nullable.cCast Zig.Ptr.null) .panic = true := by native_decide\nexample : value (Nullable.cCast ⟨none, 123⟩) = some ⟨none, 123⟩ := by native_decide"
+    "example : failure (Nullable.cCast Zig.Ptr.null) .illegal = true := by native_decide\nexample : value (Nullable.cCast ⟨none, 123⟩) = some ⟨none, 123⟩ := by native_decide"
   writeCase dir "cUnwrap" (pointerInput "cUnwrap" "optional_payload" 2)
-    "example : failure (Nullable.cUnwrap Zig.Ptr.null) .panic = true := by native_decide\nexample : value (Nullable.cUnwrap ⟨none, 7⟩) = some ⟨none, 7⟩ := by native_decide"
+    "example : failure (Nullable.cUnwrap Zig.Ptr.null) .illegal = true := by native_decide\nexample : value (Nullable.cUnwrap ⟨none, 7⟩) = some ⟨none, 7⟩ := by native_decide"
   writeCase dir "cLoad" (pointerInput "cLoad" "load" 1)
     "example : failure (Nullable.cLoad Zig.Ptr.null) .illegal = true := by native_decide\nexample : failure (Nullable.cLoad ⟨none, 123⟩) .illegal = true := by native_decide\nprivate def liveRead : Zig.MemM (BitVec 8) := do\n  let p ← Zig.alloc .heap 1 1\n  Zig.store 1 p (42#8)\n  Nullable.cLoad p\nexample : value liveRead = some 42#8 := by native_decide\nprivate def deadRead : Zig.MemM (BitVec 8) := do\n  let p ← Zig.alloc .heap 1 1\n  Zig.free p\n  Nullable.cLoad p\nexample : failure deadRead .illegal = true := by native_decide"
   writeCase dir "cEqual" (file "cEqual" (types) #[2, 2] 3

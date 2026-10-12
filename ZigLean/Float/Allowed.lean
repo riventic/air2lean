@@ -13,7 +13,7 @@ proof needs to show that a property holds for every one of them (`docs/floats.md
   only `r = x`, bit for bit (incl. an f80 pseudo-denormal's encoding and the sign of a zero).
   `x` NaN: any NaN — sign, payload and, for f80, encoding (incl. unnormals and pseudo-NaNs)
   are unconstrained.
-* `Float.MinAllowed`/`Float.MaxAllowed`: f32/f64 `@min`/`@max` of `+0` and `−0` (group D)
+* `Float.MinAllowed`/`Float.MaxAllowed`: `@min`/`@max` of `+0` and `−0` (group D, every format)
   may give either zero; a signaling NaN and a non-NaN (group I) may give the non-NaN operand
   or a NaN; otherwise `Float.Allowed` of the model's result.
 * `Float.AllowedSpec c P`: `c` succeeds, and `P` holds for every allowed result.
@@ -125,17 +125,14 @@ theorem Float.toInt_allowed (s : Bool) (n : Nat) (safe : Bool) {x r : Float fmt}
     (h : Float.Allowed x r) : Float.toInt s n safe r = Float.toInt s n safe x := by
   unfold Float.toInt; rw [h.classify_eq]
 
-/-! ## Signed zero of f32/f64 `@min`/`@max` (group D) -/
+/-! ## Signed zero of `@min`/`@max` (group D) -/
 
-/-- The operands are `+0` and `−0` (either order) in a format whose `@min`/`@max` returns a
-target-dependent zero (f32/f64, `docs/floats.md` §+0 and −0). Exactly where `Float.minChk`
-and `Float.maxChk` throw `.unspecified`. -/
+/-- The operands are `+0` and `−0` (either order): `@min`/`@max` may return either zero, in
+every format (`docs/floats.md` §+0 and −0). Exactly where `Float.minChk` and `Float.maxChk`
+throw `.unspecified`. -/
 def Float.zeroSignVaries (a b : Float fmt) : Bool :=
   match a.classify, b.classify with
-  | .finite sa 0 _, .finite sb 0 _ =>
-    match fmt with
-    | .f32 | .f64 => sa != sb
-    | .f16 | .f80 | .f128 => false
+  | .finite sa 0 _, .finite sb 0 _ => sa != sb
   | _, _ => false
 
 /-- The results the target may give for `@min(a, b)`: either zero in the group D case; in the

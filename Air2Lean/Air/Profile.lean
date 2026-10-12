@@ -4,7 +4,7 @@ import Air2Lean.Air.Dialect
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
 Admitted: the targets of `Target.qualified` (`Air2Lean/Air/Dialect.lean`): the little-endian
-memory model with 64-bit pointers (x86_64-linux, aarch64-macos) or 32-bit pointers
+memory model with 64-bit pointers (x86_64-linux, aarch64-macos, aarch64-linux) or 32-bit pointers
 (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit big-endian model
 (s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11 retain
 the explicitly named, unverified legacy 64-bit little-endian profile. A validated profile
@@ -53,6 +53,13 @@ def isBigEndian (p : BuildProfile) : Bool := Endian.ofString? p.endian == some .
 
 /-- The profile's Zig version, if supported. -/
 def version? (p : BuildProfile) : Option ZigVersion := ZigVersion.ofString? p.zigVersion
+
+/-- The OS name of a Zig `arch-os-abi` triple without its version suffix (`linux`, `macos`);
+empty unless the triple has exactly three components (a legacy profile). -/
+def tripleOs (triple : String) : String :=
+  match triple.splitOn "-" with
+  | [_, os, _] => (os.splitOn ".").head!
+  | _ => ""
 
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
@@ -121,19 +128,31 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
     unless (Endian.ofString? endian).isSome do
       report s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← take? (strField p "abi")
-  -- The qualified target's byte order, which names the profile (`nameOf`).
-  let mut targetEndian : Option Endian := none
+  -- The qualified target: its byte order names the profile (`nameOf`), and the fields parsed
+  -- below (`features`) are checked against it.
+  let mut qualifiedTarget : Option Target := none
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
     match triple.splitOn "-" with
     | [arch, os, tripleAbi] =>
+      let osName := (os.splitOn ".").head!
+      let abiName := (tripleAbi.splitOn ".").head!
       if let some abi := abi then
-        unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
+        unless !arch.isEmpty && !os.isEmpty && abiName == abi do
           report "profile.target_triple: empty component or ABI differs from profile.abi"
-      match Target.find? arch (os.splitOn ".").head! with
+      match Target.find? arch osName with
       | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
       | some target =>
-        targetEndian := some target.endian
+        qualifiedTarget := some target
+        let name := s!"{arch}-{osName}"
+        unless target.abis.isEmpty || target.abis.contains abiName do
+          report s!"profile.target_triple: the {name} model is qualified for the \
+            {", ".intercalate target.abis} ABI only"
+        if let some version := ZigVersion.ofString? zigVersion then
+          unless target.versions.contains version do
+            report s!"profile.target_triple: the {name} model is qualified for Zig \
+              {", ".intercalate (target.versions.map toString)} only (no native probe record \
+              for {version}; docs/aarch64-abi.md)"
         if let some pointerBits := pointerBits then
           unless pointerBits == target.pointerBits do
             report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
@@ -148,7 +167,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   -- The exporter names the profile by its target's byte order (`nameOf`); without a qualified
   -- target, by the declared one. A conflicting `endian` was reported above.
   if let some name := name then
-    let want := nameOf (((targetEndian <|> endian.bind Endian.ofString?)).getD .little)
+    let want := nameOf ((qualifiedTarget.map (·.endian) <|> endian.bind Endian.ofString?).getD .little)
     unless name == want do report s!"unsupported profile '{name}' (want '{want}')"
   if let some profileVersion ← take? (strField p "zig_version") then
     unless profileVersion == zigVersion do
@@ -167,6 +186,13 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   for f in features.getD #[] do
     unless !f.isEmpty && !seen.contains f do report "profile.features: empty or duplicate feature"
     seen := seen.insert f
+  -- The float rules are those of the target's baseline CPU (`FloatRules`): without `fullfp16`
+  -- (aarch64-linux `generic`) an `f16` `@mulAdd` rounds through `f32`. A CPU with `fullfp16`
+  -- fuses it, which those rules do not state (fail closed).
+  if let (some t, some fs) := (qualifiedTarget, features) then
+    if t.floatRules == .aarch64 (fusedF16 := false) && fs.contains "fullfp16" then
+      report s!"profile.features: fullfp16 is outside the {t.arch}-{t.os} float rules (baseline \
+        CPU without fullfp16: an f16 @mulAdd rounds through f32; docs/floats.md §Targets)"
   let buildMode ← take? (do canonicalBuildMode zigVersion (← strField p "build_mode"))
   let floatMode ← take? (strField p "float_mode")
   if let some floatMode := floatMode then
@@ -284,8 +310,10 @@ invalid one (its violations already reported), whose recorded facts are kept as 
 profile (`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
 model. -/
 def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
+  let parts := if p.targetTriple == "unverified" then [] else p.targetTriple.splitOn "-"
   { version
-    arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
+    arch := parts.headD ""
+    os := ((parts.getD 1 "").splitOn ".").headD ""
     ptrBytes := p.pointerBits / 8
     endian := (Endian.ofString? p.endian).getD .little
     errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }

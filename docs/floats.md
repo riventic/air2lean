@@ -50,7 +50,7 @@ The reference target uses compiler_rt software routines for f128 arithmetic and 
 Three more divergences hold in **both modes, always** — the possible results disagree on *which* value is correct, not just on rounding, so the model throws `.unspecified` instead of picking one:
 
 - **Group C — result-class changes and f80 invalid encodings** (§f80 below): compiler_rt's software `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` read an unnormal/pseudo-infinity/pseudo-NaN operand's raw bits directly and diverge from x87 hardware on them. `@mulAdd` also checks a pseudo-denormal operand: its f128 extension ignores the explicit integer bit, changing its value — `Float.isPseudoDenormalF80` (`ZigLean/Float/Ops.lean`), checked by `fmaChk`/`fmaRtChk` and the cast wrappers below. Pseudo-denormal floor/ceil and remainder differences are modeled by groups G/H in compiler-rt mode. Trunc/round underflow these tiny values to the same signed zero and need no extra guard.
-- **Group D — f32/f64 `@min`/`@max` of `+0` and `−0`** (see the table below): order- and sign-dependent on real SSE hardware.
+- **Group D — `@min`/`@max` of `+0` and `−0`**, every format (§+0 and −0 below): the sign of the zero is target- and version-dependent.
 - **Group I — `@min`/`@max` (and `@reduce(.Min)`/`.Max`) of a signaling NaN and a non-NaN**, every format and target (`Float.snanVaries`): Zig says that a NaN operand loses, but the lowering (`llvm.minnum`/`maxnum`, LLVM 21 LangRef) returns a quiet NaN for a signaling one, and LLVM may also treat a signaling NaN as quiet. aarch64 `fminnm` returns the NaN; x86_64's `minss` sequence and compiler_rt's `fmin` return the other operand. Both results are permitted (`Float.MinAllowed`). A signaling NaN is a NaN encoding whose quiet bit (the top fraction bit) is clear; for f80 only one with the integer bit set (`Float.isSignalingNaN`).
 
 Group C also covers three direct `@floatCast` cases through `Float.convChk` and
@@ -65,12 +65,7 @@ returns infinity. Other NaN conversions retain the usual unspecified sign/payloa
 
 ### +0 and −0 in `@min` / `@max`
 
-| Format | `@min(+0, −0)`, `@min(−0, +0)` | `@max(+0, −0)`, `@max(−0, +0)` |
-|---|---|---|
-| f32, f64 | `.unspecified` (group D) | `.unspecified` (group D) |
-| f16, f80, f128 | −0 | +0 |
-
-f32/f64 use SSE `minss`/`maxss` sequences: real hardware gives an order- and sign-dependent result for both `@min` and `@max`, confirmed against the reference target. f16/f80/f128 use compiler_rt `fmin`/`fmax`, which order the zeros explicitly and so stay deterministic in both modes.
+`@min` and `@max` of `+0` and `−0`, in either order, are `.unspecified` (group D) in every format, on every target and in both modes (`Float.minChk`, `Float.maxChk`). Zig lowers them to `llvm.minnum`/`llvm.maxnum`, whose LangRef leaves the sign of a zero result open, and the targets do differ: x86_64 `f32`/`f64` use SSE `minss`/`maxss` sequences, whose result depends on the operand order (confirmed on the reference target); aarch64 `fminnm`/`fmaxnm` order `−0 < +0`; the compiler_rt `fmin`/`fmax` that `f16`/`f80`/`f128` call order the zeros from Zig 0.15.2 on, but Zig 0.14.1's `generic_fmax` returns its first operand unless it is less than the second, so 0.14.1 gives `@max(−0, +0) = −0` and `@min(−0, +0) = +0` (stock 0.14.1 on aarch64-linux, `tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md`). A proof covers both zeros through `Float.MinAllowed`/`Float.MaxAllowed`; `Float.min`/`Float.max` keep a zero only as a total-function default.
 
 ### NaN
 
@@ -87,7 +82,7 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 | Relation | The target may return |
 |---|---|
 | `Float.Allowed x r` (`x` = the model's result) | `x` not NaN: exactly `x`, bit for bit (incl. the sign of a zero and an f80 pseudo-denormal's encoding). `x` NaN: any NaN — sign, payload and, for f80, encoding (incl. unnormals and pseudo-NaNs) unconstrained |
-| `Float.MinAllowed a b r`, `Float.MaxAllowed a b r` | group D (`Float.zeroSignVaries a b`: f32/f64, `+0` and `−0`): `+0` or `−0`. Group I (`Float.snanVaries a b`): the non-NaN operand or any NaN. Otherwise `Float.Allowed` of `Float.min a b` / `Float.max a b` |
+| `Float.MinAllowed a b r`, `Float.MaxAllowed a b r` | group D (`Float.zeroSignVaries a b`: `+0` and `−0`): `+0` or `−0`. Group I (`Float.snanVaries a b`): the non-NaN operand or any NaN. Otherwise `Float.Allowed` of `Float.min a b` / `Float.max a b` |
 
 `Float.AllowedSpec c P`: `c` succeeds and `P r` holds for every `r` with `Float.Allowed x r`, where `x` is the model's result. Proof tools:
 
@@ -112,18 +107,18 @@ the model otherwise decodes its value as shown above.
 
 ## Targets
 
-The translator accepts the x86_64-linux and aarch64-macos profiles (`Air2Lean/Air/Profile.lean`); a legacy profile is x86_64. Where the targets lower a float op differently, the emitter picks the rule of the profile's `target_triple` (`FCtx.aarch64Floats` in `Air2Lean/Emit.lean`), in both `--float-semantics` modes, so the generated code states that target's rule. The rules differ only here (Zig 0.16.0 `src/codegen/llvm.zig`: `backendSupportsF80`, `intrinsicsAllowed`; aarch64-macos's baseline CPU is `apple_m1`):
+The translator accepts the x86_64-linux, aarch64-macos and aarch64-linux profiles (`Air2Lean/Air/Profile.lean`); a legacy profile is x86_64. Each target's row in `Target.qualified` (`Air2Lean/Air/Dialect.lean`) names its float rules (`FloatRules`); where the targets lower a float op differently, the emitter picks the rule of the profile's target (`FCtx.aarch64Floats`, `FCtx.fusedMulAdd` in `Air2Lean/Emit.lean`), in both `--float-semantics` modes, so the generated code states that target's rule. The rules are those of the target's baseline CPU (`-mcpu=baseline`, the CPU of the native differential test): aarch64-macos `apple_m1`, aarch64-linux `generic`. They differ only here (Zig 0.16.0 `src/codegen/llvm.zig`: `backendSupportsF80`; `src/codegen/llvm/FuncGen.zig`: `intrinsicsAllowed`):
 
-| Op | x86_64-linux | aarch64-macos |
+| Op | x86_64-linux | aarch64-macos and aarch64-linux |
 |---|---|---|
 | every `f80` op except `-x`, `@abs`, `@bitCast` | x87 instructions (§f80: an invalid encoding reads as a NaN) | compiler_rt soft-float routines (`__addxf3`, `__ltxf2`, `__truncxfdf2`, …), which read an operand's raw bits. An unnormal, pseudo-infinity, pseudo-NaN or pseudo-denormal operand is `.unspecified` (`Zig.Float.softF80Chk`; Zig defines no value for these encodings) |
 | `f80` `/`, `@divTrunc`, `@divFloor`, `@divExact`, `compiler-rt` mode | `Float.div` (x87 `fdiv`) | `__divxf3`, ported bit for bit (`Zig.Float.divXf3`): not correctly rounded (`0x7ffeffffffffffffffff / 1.0` = `0x7ffefffffffffffffffe`), and a quotient below the normal range, also one that rounds up to the smallest normal, is a signed zero. Equal to compiled Zig on 40,000 random and 232 edge-case divisions. `ieee` mode: `Float.div` |
 | `f80` `@sqrt`, before 0.16.0 | `Float.sqrt` (x87 `fsqrt`) | `__sqrtx` is `sqrtq` of the `f128` extension, which rounds through `f64`: `Zig.Float.sqrtF80ViaF64` |
-| `@mulAdd` on `f16`, `f32`, `f64` | no FMA instruction: compiler_rt (group B), `Float.fmaRtChk`; `ieee` mode `Float.fmaChk` (`f16` through `f32`) | the fused `fmadd` instruction (`f16` with `fullfp16`): one rounding to the format, `Float.fmaFused` in both modes (`compiler-rt` mode `Float.fmaRtFused`, which keeps compiler_rt for `f80`/`f128`) |
+| `@mulAdd` on `f16`, `f32`, `f64` | no FMA instruction: compiler_rt (group B), `Float.fmaRtChk`; `ieee` mode `Float.fmaChk` (`f16` through `f32`) | the fused `fmadd` instruction: one rounding to the format, `Float.fmaFused` in both modes (`compiler-rt` mode `Float.fmaRtFused`, which keeps compiler_rt for `f80`/`f128`). `f16` only with `fullfp16` (aarch64-macos); aarch64-linux's `generic` CPU has none, and LLVM promotes an `f16` `@mulAdd` to an `f32` `fmadd` rounded back to `f16` (`fcvt`, `fmadd s`, `fcvt`), x86_64's rule: `Float.fmaChk`/`Float.fmaRtChk`. An aarch64-linux profile with `fullfp16` is rejected, and `scripts/check.sh` exports aarch64-linux AIR with `-mcpu=baseline` |
 
-Everything else is the same on both targets: `f128` is compiler_rt on both (`long double` is 64-bit on aarch64-macos), `f16` `+ - * / @sqrt` round correctly on both (x86_64 through `f32`), and groups D and I apply to both (aarch64 `fminnm` orders `−0 < +0`, but the model keeps group D target-independent). The diff test's harness tests a float for NaN with `v != v`; on aarch64 an `f80` `!=` is `__nexf2`, which reads an unnormal or pseudo-denormal as a number, so `tests/diff/Diff.lean` renders those by their bits there (`renderedNaN`).
+Everything else is the same on the three targets: `f128` is compiler_rt on all of them (`long double` is 64-bit on aarch64-macos; on aarch64-linux it is `f128`, so LLVM lowers `f128` `@sqrt`, `@mulAdd`, `@floor`, … to the `long double` libcalls `sqrtl`, `fmal`, `floorl`, which compiler_rt defines as its `f128` routines; a program linked with libc gets glibc's instead. The AIR profile records no `link_libc` fact, so the checker rejects these `f128` ops (`@sqrt`, `@mulAdd`, `@floor`/`@ceil`/`@trunc`/`@round`, `@min`/`@max`, and the division family other than `/`) on every target whose `c_longdouble` is `f128` (aarch64-linux, s390x, wasm32; `CheckCtx.checkLongDoubleCall`) unless `--assume-no-libc` states that the program links no libc. The generated header records that opt-in (`"admission": "no-libc"`); `examples/floatops/translate.args` passes it, as its harness links no libc. Recording `link_libc` in the exporter's profile is a follow-up), `f16` `+ - * / @sqrt` round correctly on both (x86_64 through `f32`), and groups D and I apply to all of them. The diff test's harness tests a float for NaN with `v != v`; on aarch64 an `f80` `!=` is `__nexf2`, which reads an unnormal or pseudo-denormal as a number, so `tests/diff/Diff.lean` renders those by their bits there (`renderedNaN`).
 
-A proof about a translation states the target when the rule differs: `Proofs/Floatops/Proofs.lean` reads it off `Gen.lean` (`floatopsTarget`), states `opN_spec` for both (`@mulAdd`: `FloatTarget.fmaRt`), and has one `f80` theorem per target (`op80_spec` with premise `floatopsTarget = .x86_64`, `op80_spec_aarch64` with `.aarch64`). Every float-semantics label lists the targets it holds for (`docs/float-semantics.md`).
+A proof about a translation states the target when the rule differs: `Proofs/Floatops/Proofs.lean` reads it off `Gen.lean` (`floatopsTarget`: `.x86_64`, `.aarch64` or `.aarch64Generic`), states `opN_spec` for each (`@mulAdd`: `FloatTarget.fmaRt`), and has one `f80` theorem per `f80` lowering (`op80_spec` with premise `floatopsTarget = .x86_64`, `op80_spec_aarch64` with `floatopsTarget ≠ .x86_64`, both aarch64 targets). Every float-semantics label lists the targets it holds for (`docs/float-semantics.md`).
 
 ## Per-version differences
 

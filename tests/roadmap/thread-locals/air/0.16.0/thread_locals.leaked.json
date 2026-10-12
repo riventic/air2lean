@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,14 +39,21 @@
  },
  "name": "thread_locals.leaked",
  "module": "root",
+ "src": {
+  "file": "thread_locals.zig",
+  "module": "thread_locals",
+  "decl_line": 36
+ },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -79,7 +89,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 31
   },
   {
    "id": 6,
@@ -95,7 +106,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 31
   },
   {
    "id": 9,
@@ -105,6 +117,7 @@
     "ty": 6,
     "func": "Thread.spawn__anon_487",
     "module": "std",
+    "instance_key": "fc7946fc8221cd42edc10d138c9ece7e7182eb187c4ad004cef102cd772beac1",
     "noreturn": false,
     "comptime_fn": "thread_locals.leak",
     "comptime_fn_module": "root"
@@ -152,7 +165,8 @@
      "id": 11,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 3
+     "line": 3,
+     "column": 15
     },
     {
      "id": 12,
@@ -229,7 +243,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 11
   },
   {
    "id": 21,
@@ -245,7 +260,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 11
   },
   {
    "id": 23,
@@ -267,7 +283,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 25,
@@ -293,7 +310,8 @@
    "id": 27,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 28,

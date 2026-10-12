@@ -233,7 +233,7 @@ class HostRules(unittest.TestCase):
     def test_linux_only_version(self):
         ok, check = self.selection('aarch64-macos', '0.14.1')
         self.assertFalse(ok)
-        self.assertIn('x86_64-linux only', check['message'])
+        self.assertIn('x86_64-linux, aarch64-linux only', check['message'])
         self.assertIn('0.16.0', check['hint'])
         self.assertTrue(self.selection('x86_64-linux', '0.14.1')[0])
         self.assertTrue(self.selection('aarch64-macos', '0.15.2')[0])

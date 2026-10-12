@@ -184,9 +184,9 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(root['level'], 'compiled')
         self.assertNotFunctional(root)
 
-    def use_statement_fixture(self, *goals):
+    def use_statement_fixture(self, *goals, root='root', **options):
         """Bind goals against real extracted theorems; the fixture's root stands in for generated code."""
-        self.nodes = [{'name': 'StatementFixture.root', 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []}]
+        self.nodes = [{'name': 'StatementFixture.' + root, 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []}]
         for theorem in STATEMENT_FIXTURE['theorems']:
             self.nodes.append({'name': theorem['name'], 'module': 'contract', 'kind': 'theorem',
                                'dependencies': theorem['dependencies']})
@@ -195,17 +195,19 @@ class CoverageTests(unittest.TestCase):
             self.structures[theorem['name']] = theorem['statement']
         self.write_receipt()
         self.manifest['roots'][0]['namespace'] = 'StatementFixture'
+        self.manifest['roots'][0]['function'] = 'example.' + root
+        (self.base / 'air.json').write_text(json.dumps({'schema': 11, 'name': 'example.' + root, 'zig_version': '0.16.0', 'body': []}))
         self.manifest['roots'][0]['goals'] = [{'theorem': g, 'strength': 'total_correctness', 'domain': 'all'} for g in goals]
         self.save()
         self.rebuild_artifact()
-        return self.run_coverage()
+        return self.run_coverage(**options)
 
     def test_only_statements_about_the_root_bind(self):
         names = ['wrapper_spec', 'trivial_spec', 'premise_only', 'root_spec']
         # Every fixture proof term mentions the root, so declaration edges alone would bind all four.
-        self.assertTrue(all('StatementFixture.root' in t['dependencies'] for t in STATEMENT_FIXTURE['theorems']))
+        self.assertTrue(all('StatementFixture.root' in t['dependencies'] for t in STATEMENT_FIXTURE['theorems'] if 'root2' not in t['name']))
         self.assertEqual(sorted(t['name'] for t in STATEMENT_FIXTURE['theorems']),
-                         sorted('StatementFixture.' + n for n in names))
+                         sorted('StatementFixture.' + n for n in names + ['root2_comm', 'root2_refl']))
         root = self.use_statement_fixture(*names)
         self.assertEqual([g['binding'] for g in root['goals']], ['wrapper_or_unrelated'] * 3 + ['direct'])
         self.assertEqual(root['stages']['proved']['status'], 'partial')
@@ -230,6 +232,57 @@ class CoverageTests(unittest.TestCase):
         self.write_receipt()
         root = self.run_coverage()
         self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+
+    def test_real_extracted_relational_property_is_interpreted_not_credited(self):
+        # The committed real extraction of `root2 x y = root2 y x` (tests/roadmap/assurance/StatementBinding.lean).
+        root = self.use_statement_fixture('root2_comm', root='root2', diff=False)
+        goal = root['goals'][0]
+        self.assertEqual((goal['binding'], goal['relation']['kind']), ('relational_property', 'commutative'))
+        self.assertEqual(root['theorem_strength']['direct'], [])
+        self.assertNotFunctional(root)
+        goal = self.use_statement_fixture('root2_refl', root='root2', diff=False)['goals'][0]
+        self.assertEqual((goal['binding'], 'relation' in goal), ('trivial_conclusion', False))
+
+    def test_relational_properties_are_interpreted_and_never_credited(self):
+        # `root a b = root b a`, `root (root x) = root x`: both sides apply the root. The statement
+        # records both sides, so the relation is read off the arguments and reported; the goal is
+        # never direct and the root never reaches a functional level.
+        a, b = {'bvar': 0}, {'bvar': 1}
+        nested = {'open': 'Example.root', 'bvars': [0]}
+        cases = [('commutative', [a, b], [b, a]), ('commutative', [a, a, b], [a, b, a]),  # two arguments swapped
+                 ('argument_permutation', [a, b, {'bvar': 2}], [b, {'bvar': 2}, a]),
+                 ('self_composition', [nested], [a]), ('other_arguments', [a], [b])]
+        for kind, left, right in cases:
+            with self.subTest(kind=kind, left=left):
+                rhs = computation('Example.root', right)
+                shape = structure(computation('Example.root', left), head='Eq', nonvacuity='trivial')
+                shape['args'][2] = rhs
+                self.conclusions['Example.root_spec'] = {'head': 'Eq', 'args': [{'head': 'Example.root'}]}
+                self.structures['Example.root_spec'] = shape
+                self.write_receipt()
+                for strength in ('total_correctness', 'safety'):
+                    self.manifest['roots'][0]['goals'][0]['strength'] = strength
+                    self.save()
+                    self.rebuild_artifact()
+                    root = self.run_coverage()
+                    goal = root['goals'][0]
+                    self.assertEqual((goal['binding'], goal['relation']['kind']), ('relational_property', kind))
+                    self.assertIn('relational property', goal['reason'])
+                    self.assertEqual(root['theorem_strength']['direct'], [])
+                    self.assertNotFunctional(root)
+                    self.assertEqual(root['stages']['proved']['status'], 'failed')
+                    self.assertTrue(any('relational_property' in blocker for blocker in root['blockers']), root['blockers'])
+                    self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
+                                     {'no-panic': 'not_proved', 'guaranteed-return': 'not_proved'})
+        # Identical arguments stay a trivial_conclusion, not a relation.
+        shape = structure(computation('Example.root', [a, b]), head='Eq', nonvacuity='trivial')
+        shape['args'][2] = computation('Example.root', [a, b])
+        self.structures['Example.root_spec'] = shape
+        self.write_receipt()
+        self.rebuild_artifact()
+        goal = self.run_coverage()['goals'][0]
+        self.assertEqual(goal['binding'], 'trivial_conclusion')
+        self.assertNotIn('relation', goal)
 
     def test_trivial_conclusion_cannot_reach_functional_levels(self):
         # `Example.root x = Example.root x`: the conclusion names the root, so statement binding passes,
@@ -541,6 +594,64 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')  # unknown statuses fail closed
         self.diff.write_text(json.dumps({'schema': 1, 'complete': False}))
         self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')
+
+    def diff_row(self, status, model_kind):
+        return {'schema': 1, 'example': 'example', 'function': 'root', 'status': status, 'model_kind': model_kind}
+
+    def test_goal_outcome_contracts(self):
+        goal = self.manifest['roots'][0]['goals'][0]
+        # Default contract: values and error returns; clean evidence refutes nothing and proves nothing.
+        contract = self.run_coverage()['goals'][0]['outcome_contract']
+        self.assertEqual((contract['status'], contract['source']), ('not_refuted', 'default for total_correctness'))
+        self.assertEqual(contract['admits'], ['error_return', 'nondeterministic_valid', 'valid'])
+        self.assertEqual(self.run_coverage(diff=False)['goals'][0]['outcome_contract']['status'], 'no_evidence')
+        # An error return is an admitted outcome of its own, never a model failure.
+        self.write_diff([self.diff_row('error_return_match', 'error_return')])
+        root = self.run_coverage()
+        self.assertEqual(root['goals'][0]['outcome_contract']['status'], 'not_refuted')
+        self.assertEqual(root['level'], 'functionally_verified_total')
+        # An observed panic is outside the default contract: refuted, and it blocks the functional level.
+        self.write_diff([self.diff_row('panic_match', 'model_panic')])
+        root = self.run_coverage()
+        contract = root['goals'][0]['outcome_contract']
+        self.assertEqual((contract['status'], contract['violations']), ('refuted', {'panic': 1}))
+        self.assertTrue(any('outcome contract refuted' in b for b in root['blockers']), root['blockers'])
+        self.assertNotFunctional(root)
+        # A contract documenting the panic admits it, but not under a strength that rules it out.
+        for strength, level_ok in (('resource_bound', True), ('safety', False)):
+            goal.update(strength=strength, outcomes={'admits': ['valid', 'error_return', 'panic']})
+            self.save()
+            if level_ok:
+                self.rebuild_artifact()
+                contract = self.run_coverage()['goals'][0]['outcome_contract']
+                self.assertEqual((contract['status'], contract['source']), ('not_refuted', 'declared'))
+            else:
+                with self.assertRaises(project.Invalid):
+                    project.load_manifest(self.path)
+        # A narrowed contract is refuted by an error return it does not admit.
+        goal.update(strength='total_correctness', outcomes={'admits': ['valid']})
+        self.save()
+        self.rebuild_artifact()
+        self.write_diff([self.diff_row('error_return_match', 'error_return')])
+        root = self.run_coverage()
+        self.assertEqual(root['goals'][0]['outcome_contract']['violations'], {'error_return': 1})
+        self.assertNotFunctional(root)
+        # Capped, fuel-bounded, unsupported and unspecified evidence leave the contract unassessed.
+        for kind, status in (('search_cap', 'search_cap'), ('unspecified_timer', 'unspecified_timer_exclusion'),
+                             ('bounded_no_result', 'bounded_no_result')):
+            self.write_diff([self.diff_row('value_match', 'value'), self.diff_row(status, kind)])
+            self.assertEqual(self.run_coverage()['goals'][0]['outcome_contract']['status'], 'unassessed', kind)
+
+    def test_invalid_outcome_contract_declarations_are_refused(self):
+        goal = self.manifest['roots'][0]['goals'][0]
+        for declared in ({'admits': []}, {'admits': ['nope']}, {'admits': ['valid', 'valid']}, {'admits': ['search_cap']},
+                         {'admits': ['unsupported_semantics']}, {'admits': ['unspecified_timer']}, {'admits': ['deadlock']},
+                         {'admits': 'valid'}, {}, {'admits': ['valid'], 'extra': 1}):
+            with self.subTest(declared=declared):
+                goal['outcomes'] = declared
+                self.save()
+                with self.assertRaises(project.Invalid):
+                    project.load_manifest(self.path)
 
     def test_absence_claims_from_outcome_taxonomy(self):
         root = self.run_coverage()

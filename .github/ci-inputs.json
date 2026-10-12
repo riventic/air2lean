@@ -391,72 +391,27 @@
     },
     "aarch64-linux": {
       "inputs": [
-        "scripts/**",
-        "tests/diff/**",
-        "tests/roadmap/aarch64-abi/**",
-        "tests/roadmap/vector-layouts/**"
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
       ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 under the former tracer"
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "#143 (merge train 1): the aarch64-linux translation paths (patched compilers, Lean build, golden AIR, translation, differential test, proofs) read every tracked file except, as the golden rows, the prose documentation"
     },
     "build-modes-aarch64-linux": {
       "inputs": [
-        "Air2Lean.lean",
-        "Air2Lean/**",
-        "Proofs/Asm/**",
-        "Proofs/Atomics/**",
-        "Proofs/Basic/**",
-        "Proofs/Cancel/**",
-        "Proofs/Detach/**",
-        "Proofs/Errors/**",
-        "Proofs/Floatconv/**",
-        "Proofs/Floatops/**",
-        "Proofs/Floats/**",
-        "Proofs/Iogroup/**",
-        "Proofs/Layout/**",
-        "Proofs/Lists/**",
-        "Proofs/Options/**",
-        "Proofs/Pointers/**",
-        "Proofs/Provenance/**",
-        "Proofs/ProvenanceGap/**",
-        "Proofs/Recursion/**",
-        "Proofs/Slices/**",
-        "Proofs/Sync/**",
-        "Proofs/Threads/**",
-        "Proofs/Threadsync/**",
-        "Proofs/Variants/**",
-        "Proofs/Vectors/**",
-        "ZigLean.lean",
-        "ZigLean/**",
-        "assurance/**",
-        "examples/asm/**",
-        "examples/atomics/**",
-        "examples/basic/**",
-        "examples/errors/**",
-        "examples/floatconv/**",
-        "examples/floatops/**",
-        "examples/floats/**",
-        "examples/iogroup/**",
-        "examples/layout/**",
-        "examples/lists/**",
-        "examples/options/**",
-        "examples/pointers/**",
-        "examples/recursion/**",
-        "examples/slices/**",
-        "examples/sync/**",
-        "examples/threads/**",
-        "examples/threadsync/**",
-        "examples/variants/**",
-        "examples/vectors/**",
-        "lake-manifest.json",
-        "lakefile.toml",
-        "lean-toolchain",
-        "scripts/**",
-        "tests/**",
-        "tests/diff/**",
-        "tests/roadmap/build-modes/reproducers/**",
-        "zig-patch/**"
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
       ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 under the former tracer"
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "#143 (merge train 1): the job tests this host's translations in a scripts/check-tree.py --host-goldens copy of the tree read every tracked file except, as the golden rows, the prose documentation"
     },
     "bitops-native-arm": {
       "inputs": [
