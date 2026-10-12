@@ -30,6 +30,8 @@ to match the extracted declarations.
 
 | Conclusion head | Claims | Type-derived strength |
 |---|---|---|
+| `Zig.Full.FTriple`, `Zig.Full.CTriple`, `Zig.Full.FTTriple` | no-panic, correct-if-returned | `partial_correctness` |
+| `Zig.Full.FTotalTriple`, `Zig.Full.FTTotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Triple`, `Zig.TTriple` | no-panic, correct-if-returned | `partial_correctness` |
 | `Zig.Returns` | no-panic, guaranteed-return | `safety` |
 | `Zig.TotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
@@ -60,7 +62,12 @@ A theorem `T : ∀ xs, H xs → C xs` is vacuous when its premises cannot be met
 triple says nothing about a program that never returns. `ZigLean/Witness.lean` computes two
 companion statements from `T`'s kernel type; the premise telescope is `T`'s binders followed by
 the binders of its conclusion head unfolded once (for a triple: `m`, `hP`, `hF`, disjointness,
-the heap split, `P hP`, `m.Seq`):
+the heap split, `P hP`, `m.Seq`). When the unfolded head is itself a judgment (a definition that
+unfolds to a `∀`), or a conjunction whose left half is one, its binders follow too: a total
+full-state triple `FTotalTriple P c Q = FTriple P c Q ∧ FReturns P c` and a concurrent one
+`CTriple P x Q = ∀ n, FTriple P (soloRun n x) Q` have the full-state triple's premises (`m`, `r`,
+`rF`, `Holds m r rF`, `P r`, `m.FSeq`), so an unsatisfiable precondition is not trivially
+inhabited. A total head's other half states the return, so it has no liveness obligation:
 
 * `nonvacuity_witness T := proof` adds `T.nonvacuous : ∃ telescope, True`;
 * `liveness_witness T := proof` adds `T.returns : ∃ telescope, ∃ r, d = some (.ok r)`, where
@@ -75,7 +82,10 @@ provides an admissible memory (`{}` with `Mem.seq_default`, `Mem.heap_default_sp
 The companions of the shipped theorems are concrete: arguments, a memory that satisfies the
 precondition (`Witness.mem1 bs`, one block holding `bs`, and `Witness.mem2`, in
 `ZigLean/Mem/Witness.lean`; `Witness.Admit`/`Witness.Live` and their thread-triple versions
-`TAdmit`/`TLive` in `ZigLean/Sep/Witness.lean` and `ZigLean/Conc/Witness.lean`), and for a
+`TAdmit`/`TLive` in `ZigLean/Sep/Witness.lean` and `ZigLean/Conc/Witness.lean`; for the
+full-state heads `FAdmit`/`FLive`, `CAdmit`/`CLive` and `FTTAdmit`/`FTTLive` in
+`ZigLean/Sep/Full/Witness.lean`, over `Mem.FSeq` memories such as `fseq_default` and
+`mem1_fseq`), and for a
 partial triple a run that the kernel evaluates (`ok_of_okb (by decide +kernel)`) or that a
 total triple of the same program gives (`Live.of_total`). `Zig.loop` is a `partial_fixpoint`,
 which the kernel does not unfold, so a loop's run comes from a total triple or an input that
@@ -145,7 +155,7 @@ refutes every bound for a loop that never exits, and `stuck_not_total` refutes
 `EventuallyReturns` for a concurrent program that never returns. `stuck_under_false` proves
 `EventuallyReturnsUnder` with an unsatisfiable premise for that same program, and the check
 rejects every goal for it.
-`tests/roadmap/proof-tools/Total.lean` also rejects panics. An unsatisfiable precondition or
+`tests/roadmap/sep-auto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
 hypothesis has no non-vacuity witness, so it caps the claim at `safety`.
 
 ## Scope

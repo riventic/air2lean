@@ -227,3 +227,62 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
 * `.owned a` blocks and allocator identities (ALC-07) model arenas and fixed buffers by hand;
   with `AllocSpec` a foreign free is a missing token (a permission violation), and arena reset
   invalidation is a consequence of the translated arena's invariant.
+
+## Retired claims
+
+The hand-written allocator model's proof layer (`ZigLean/Sep/{Alloc, Owned, RawAlloc, Remap,
+Sentinel, SentinelRealloc, OsMalloc, ArenaClient, AddrReuse, Cost}.lean`, the legacy `AllocSpec`
+with `Wrap`, `Wrappers`, `Dispatch`, `Toy`) is retired (CLAUDE.md, "Trusted base"; Plan A, D2).
+Every claim it makes is either **replaced** by a statement over translated allocators and
+`FAllocSpec` in the full-state logic, or **retired** with the reason below. Retired claims are
+about the hand-written model itself. The executable checks of the `std` allocator model
+(`tests/roadmap/{allocation-policy, allocator-identity, byte-sentinel, sentinel-realloc,
+resize-remap}`: kernel runs of `Zig.Allocator` and `ZigLean/Mem/Owned.lean`) test the semantics
+that `--allocator-model std` still emits. They are **legacy std allocator model checks**: they
+stay, importing `ZigLean/Mem/*` only, and retire with `--allocator-model std`
+([allocator-model.md](allocator-model.md), step 3 onwards). No new evidence is built on them.
+
+**The wrapper contracts are stated on the generated wrapper code** (decision of the D2 lane). The
+translated `std.mem.Allocator` wrappers dispatch through the vtable, so a contract on the
+generated function is generic in the allocator: it holds for every invariant `I` whose vtable
+entries satisfy their `FAllocSpec` triples (the entries are the rules of the vtable calls that
+`fsym` walks to). `Wrap.*`, the hand-written step semantics of the wrappers, is not used: it is a
+hand-written model of a std module (CLAUDE.md, "Trusted base"), and its bridge to the generated
+code was a manual equality per program. A program-independent normal form would only be added
+with an automatic bridge (one rule set per Zig version, applied by `fsym`); none is needed. Below,
+`Full/Wrappers` is the library part (postconditions over `FAllocInv`, step rules for
+`@returnAddress`, `@memset(_, undefined)` and the constants of the wrappers) and the contracts
+themselves are proved over the generated wrappers of `tests/roadmap/alloc-fba`.
+
+| Legacy claim | Where | Status | Replacement or reason |
+| --- | --- | --- | --- |
+| `allocBytes_spec`, `allocItems_spec`, `allocAdvanced_spec`, `allocSlice_spec` (`alloc`, `alignedAlloc`) | `AllocSpec/Wrappers` | replaced | contracts of the generated `alloc`/`alignedAlloc` wrappers for every allocator invariant with the `FAllocSpec` entry triples (`Full/Wrappers`, `tests/roadmap/alloc-fba`) |
+| `create_spec`, `destroy_spec`, `freeBytes_spec`, `free_spec`, `freeSentinel_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` |
+| `copyChecked_spec`, `dupe_spec` (`GrantSep`, `SrcSep`) | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec`; the address disjointness of two grants follows from their extent shares and claims instead of the premise `GrantSep` where the allocator's token pins the block |
+| `reallocAdvanced_spec`, `realloc_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` (remap in place or moved, else alloc, copy, free) |
+| `allocSentinel_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` |
+| `sep_from`, `tame_prim` (tactics), `sep_ex_right`, `sep_lift_right`, `Logic.of_pure`, `granted_ex*`, `ret_eq`, `sep_part` | `AllocSpec/Wrappers` | retired | proof glue of the legacy logic; `fsym` walks the wrappers |
+| `AllocSpec`, `AllocInv`, `granted`, `Logic` (`partial`, `total`, `Sound`), `AllocSpec.toPartial`, `AllocSpec.congr` | `AllocSpec` | replaced | `FAllocSpec`, `FAllocInv`, `FAllocInv.granted`, `FLogic`, `FAllocSpec.toPartial`, `FAllocSpec.congr` (`Full/AllocSpec`, `Full/Logic`); `RawVTable`, `keepsPrefix` move to `Full/AllocSpec` |
+| `dispatch_allocSpec`, `vtR`, `AllocInv.withVTable`, `load_dispatch*` | `AllocSpec/Dispatch` | replaced | `CAllocSpec.dispatch` and the persistent vtable knowledge `vtR` (`Full/Dispatch`, `Full/Const`); `VTableFns`, `dispatch` move to `Full/Dispatch` |
+| `Bump.allocSpec` (a bump allocator satisfies the spec) | `AllocSpec/Toy` | retired | a hand-written allocator; satisfiability is witnessed by translated allocators (`FBA.fallocSpec`, `PageAlloc.fallocSpec`, the arena) |
+| `Static.not_allocSpec` (no double issue), `trapFree_alloc_none` (free is not vacuous) | `AllocSpec/Toy` | replaced | the same negative checks over `FAllocSpec` (`tests/roadmap/sep-full`) |
+| `FBA.allocSpec` (legacy, with the pin byte), `Bridge` (`Wrap.*` = generated wrappers), `Client.client_spec` | `tests/roadmap/alloc-fba` | replaced | `FBA.fallocSpec` (`Full.lean`, no pin byte); the client proved over `FAllocSpec` through the generated wrappers |
+| `Triple.create`, `Triple.destroy`, `Triple.freeSentinel`, `create_run`, `rawAlloc_run`, `rawFree_run`, `poisonFree_run`, `heapBlock_access` | `Sep/Alloc` | replaced | `create_spec`, `destroy_spec`, `freeSentinel_spec` of the generated wrappers for every translated allocator; the `std` heap's rules are not restated (no rule for a hand-written allocator) |
+| `rawAlloc_eq`, `Mem.allocDenied`, `AllocPolicy.asOracle` (failure oracle, budget, cap: M03) | `Sep/Alloc` | retired | failure decision of the hand-written heap; for translated allocators a failure is the `null` that `FAllocSpec.alloc` always allows (every client contract quantifies over it), and the OS-level decision is `Mem.mapDenied` of `mmap`/`mremap` (`Full/Mmap`, OSM-01) |
+| `releaseAttempt_run`, `releaseAttempts_run` (one outcome per request, everything freed, every policy) | `Sep/Alloc` | replaced | the wrapper contracts (`allocSlice_spec`, `free_spec`): every `OutOfMemory` and success outcome, for every allocator; `releaseAttempts` (the differential client of M03) moves into `tests/roadmap/allocation-policy` |
+| `newSentinel`, `Triple.allocSentinel`, `allocSentinel_overflow`, `sentinelBytes_*` (M04) | `Sep/Sentinel` | replaced | `allocSentinel_spec` (generated wrapper): `n + 1` items, the last the sentinel, `OutOfMemory` without change; the `n + 1` overflow panics in the wrapper |
+| `realloc_run`, `remapByteBuffer_owned`, `Triple.reallocSentinel`, `sentinelReallocBytes_*`, `Triple.appendSentinel`, `Triple.freeSentinelBuf` (M04: the sentinel invariant on success and failure) | `Sep/SentinelRealloc` | replaced | `realloc_spec` and `allocSentinel_spec` over `FAllocSpec`: a sentinel reallocation is a `realloc` of `n + 1` items and a store, its invariant is restated from them for every allocator |
+| `vtableAlloc_illegal`, `vtableResize_illegal`, `vtableRemap_illegal`, `vtableFree_illegal`, `rawAlignOk_*` (M04: power-of-two alignment, nonzero length are checked) | `Sep/RawAlloc` | retired | checks of the hand-written vtable (ALC-06). In translated code the alignment is a `mem.Alignment` (a `u6` log2, so a non-power-of-two alignment is not representable) and `FAllocSpec`'s entries require `0 < len` and `k < 64`: a call outside them has no triple |
+| `Triple.vtableAlloc`, `vtableFree_run`, `vtableResize_run`, `vtableRemap_run`, `rawInPlace_owned` (M04: raw vtable contracts) | `Sep/RawAlloc` | replaced | the four fields of `FAllocSpec`, proved for each translated allocator (`FBA.fallocSpec`, `PageSpec`, `PageSpecMacos`, `PageAlloc`, the arena) instead of assumed |
+| `remapBytes_*`, `remapByteBuffer_inPlace_owned`, `remapByteBuffer_move_owned`, `afterByteRemap_*` (M02: in-place, moved, failed remap) | `Sep/Remap` | replaced | `FAllocSpec.remap`/`resize` proved from code: the page allocator's `mremap` grows in place, moves or fails (`PageSpec`, `TotalTriple.mremapGrow`/`mremapShrink`), the fixed buffer's last allocation grows and shrinks (`FBA.fallocSpec`); `keepsPrefix` states the preserved bytes |
+| `AllocRef.free_foreign`, `destroy_foreign`, `remap_foreign` (M01: cross-allocator frees are `.illegal`) | `Sep/Owned` | replaced | a free through another allocator needs that allocator's `granted` token, so no triple admits it; the translated arena panics on a foreign free (`ArenaObstruction.foreign_free_panics`, kernel run) |
+| `Mem.heap_resetOwned`, `resetOwned_*`, `Owned.reset_spec`, `Arena.deinit_spec` (M01: a reset ends exactly its blocks) | `Sep/Owned` | replaced (pending) | the translated arena's `reset` revokes exactly its epoch's grants (epoch-tagged shares and claims, `docs/sep-full-state.md`); its proof is on `codex/alloc-arena-proof` (task 2). Until it lands the `std`-mode check `allocator-identity` keeps the M01 evidence |
+| `ownedRawAlloc_arena_run`, `ownedRawAlloc_fixedBuffer_run`, `Arena.init_run`, `ownedState_*`, `access_cases`, `access_block`, `wholeBlock_foreign` | `Sep/Owned` | retired | run lemmas of the hand-written arena and fixed buffer (ALC-07); `access_cases` (also used by `ZigLean/Env/Linux.lean`, `tests/roadmap/models/Fill.lean`) moves to `ZigLean/Mem` |
+| `session_spec`, `session_restores`, `handleRequest_spec`, `dupeBytes_spec` & co. (M01: a production-style client) | `Sep/ArenaClient` | replaced | the fixed-buffer client over `FAllocSpec` through the translated wrappers (`tests/roadmap/alloc-fba`), and the translated arena's clients; the hand-written session is retired with the arena model |
+| `Triple.malloc`, `Triple.mfree`, `Triple.mfreeNull` (OSM-02) | `Sep/OsMalloc` | replaced | the same rules in the full-state logic (`Full/Malloc`): `malloc` and `free` are OS primitives of the trusted base, not an allocator model |
+| `Os.Darwin.free_dead`, `free_inner`, `malloc_eq`, `heapBlockAt_of`, the kernel examples | `Sep/OsMalloc` | replaced | moved unchanged to `Full/Malloc` (facts of the OS model) |
+| `afterAlloc_old`, `alloc_new_id`, `access_dead_block`, `access_stale`, `free_stale`, `reuse_witness`, `fresh_witness`, `reuse_stale_load`, `stale_int_*` (M05) | `Sep/AddrReuse` | replaced | moved unchanged to `ZigLean/Mem/Reuse.lean`: facts of the block primitives `alloc`/`free` and the placement, not of an allocator model |
+| `rawFree_stale` | `Sep/AddrReuse` | retired | `rawFree` of the hand-written heap; `free_stale` and the arena's/page allocator's `free` triples cover it |
+| `Triple.withPlacement`, `TotalTriple.withPlacement` (M05: every triple holds under every placement) | `Sep/AddrReuse` | replaced | `FTriple.withPlacement`, `FTotalTriple.withPlacement` (`Full/Strength`): a full-state triple quantifies over every `FSeq` memory, whatever its placement |
+| `Mem.liveHeap`, `create_cost`, `destroy_cost`, `Block.retained` (retained `.heap` blocks) | `Sep/Cost` | retired | counts of the hand-written heap (`Mem.allocs`, `.heap` blocks). With translated allocators "no leak" is a postcondition that owns no grant (every grant is an `FAllocInv.granted` atom) |
+| `store_cost`, `load_cost`, `storeBytes_cost`, `LoopRuns`, `loopRuns_exact`, `loopRuns_bound` (P06 counted loops) | `Sep/Cost` | replaced (pending) | loop counts by `FTotalTriple.loop_measure` (`Full/Loop`) and the cost resource of `Full/Bounded` (credits); retired with the last user (`Proofs/Lists/{Cost,Bounded}`, `Sep/Bounded`, `ZigLean/Witnesses/Sep.lean`, `tests/roadmap/claims/Fixture.lean`) |
