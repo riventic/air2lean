@@ -4282,7 +4282,7 @@ def firstModelCalls (models : Array ModelBinding) (funcs : Array Func) :
 /-- Emit a typed implementation adapter plus a complete contract obligation. Imported
 identifiers are rooted so generated names cannot shadow the user's definitions. -/
 def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
-    (structNames : Array (String × String)) : String := Id.run do
+    (structNames : Array (String × String)) (concurrent : Bool := false) : String := Id.run do
   let f := site.function
   let ret := site.ret
   -- Checked call sites use the same first-occurrence type resolver as registry validation.
@@ -4313,12 +4313,18 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
           s!"  reads := {regions fp.reads}\n  writes := {regions fp.writes}"],
         s!"{holds} ∧ {base}_contract.Respects {base}_footprint")
     | none => ([], holds)
+  -- E02, EXT-04: in a concurrent program each declared footprint block is claimed first.
+  let claims := if !concurrent then "" else match m.footprint with
+    | some fp =>
+      String.join ((fp.reads.map (s!"Zig.External.claim p{·} .read *> ") ++
+        fp.writes.map (s!"Zig.External.claim p{·} .write *> ")).toList)
+    | none => ""
   let evidence := match m.proof with
     | some proof => s!"theorem {base}_evidence : {obligation} := _root_.{proof}"
     | none => s!"-- Explicit imported-model assumption; reported in air2lean-models.\naxiom {base}_evidence : {obligation}"
   return String.intercalate "\n\n" ([
     s!"def {base}_contract : Zig.External.Contract ({argsTy}) ({result}) := _root_.{m.contract}",
-    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
+    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := {claims}_root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
@@ -4436,7 +4442,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let asmStr := asmDefs.toList.map emitAsmDef
   let modelStr := (models.mapIdx fun index model =>
     match modelCalls[model.symbol]? with
-    | some site => emitModel model index site structNames
+    | some site => emitModel model index site structNames (!concFuncs.isEmpty)
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
   let rawFuncs := rawFunctions funcs fun f raw =>

@@ -474,8 +474,14 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
             !((m.footprint.map (·.writes.contains index)).getD false) then
           throw s!"model '{m.symbol}': volatile pointer parameter {index} must be listed in footprint.writes (VOLATILE_ACCESS: a device access is an observable effect, not a pure repeatable read)"
   checkDependencies models
+  -- E02 (premise EXT-04): in a concurrent program a model call is one scheduler step, and the
+  -- emitted call claims each declared footprint block first, so a conflicting access of another
+  -- thread is a race. That needs the footprint.
   unless (concFunctions funcs).isEmpty do
-    throw "external model bindings currently require a sequential program"
+    for m in models do
+      if m.footprint.isNone then
+        throw s!"model '{m.symbol}': a model in a concurrent program needs a declared 'footprint' \
+          (its blocks are claimed for race detection before each call, premise EXT-04)"
 
 /-- Authoring template: missing implementation/contract/policy fields intentionally make
 this invalid as a registry until the project supplies and reviews its own declarations. -/
