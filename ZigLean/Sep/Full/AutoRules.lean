@@ -64,6 +64,45 @@ theorem of_false (h : False) : L.T P c Q := h.elim
 
 end Steps
 
+/-! ## Facts of atoms -/
+
+/-- The assertion `X` implies the fact `φ` (a facts lemma, `@[fsym_facts]`). -/
+def AtomFacts (X : FAssn) (φ : Prop) : Prop := ∀ r, X r → φ
+
+theorem AtomFacts.sepL {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) {r : Res} (hr : (X ⋆ R) r) : φ := by
+  obtain ⟨r₁, -, -, -, h1, -⟩ := hr; exact h r₁ h1
+
+/-- A fact of a part `X` of the precondition, in the context. -/
+theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
+    (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
+  L.pre (L.lift t) fun _ h => sep_lift.mpr ⟨hX.sepL h, h⟩
+
+section Facts
+
+variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
+
+/-- An owned region: the block of its pointer, a nonnegative offset, its alignment. -/
+@[fsym_facts] theorem facts_region :
+    AtomFacts (up (regionIn p A S K a bs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off ∧ (A + p.off.toNat) % a = 0) := by
+  rintro r ⟨⟨ha, -, b, hb, h0, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0, ha⟩
+
+/-- Owned bytes: the block of their pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_bytes :
+    AtomFacts (up (bytesAt p A S K bs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨⟨b, hb, h0, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-- A typed value: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_pts {T : Type} [Enc T] {v : T} :
+    AtomFacts (up (pts p a v)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-- An atomic word: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_apts {v : BitVec 64} :
+    AtomFacts (apts p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+end Facts
+
 /-! ## Providers from atoms -/
 
 section Providers
@@ -116,6 +155,8 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
   AddrOf.bytes hpb fun _ hr => ⟨S, K, bs, hpos, hr.2.2⟩
 
 end Providers
+
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.pts Reaches.region
 
 /-! ## The fields of a stored slice -/
 
@@ -231,6 +272,19 @@ subtraction, which `omega` would case-split on). -/
   rw [e]
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
     fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+
+/-- The payload of an optional that is not null (`.?`, `orelse unreachable`): some `v` with
+`o = some v`. -/
+@[fsym] theorem optPayload_step {α : Type} {o : Option α} (h : o.isSome = true) :
+    FTotalTriple P (StateT.lift (optPayload o) : MemM α) (fun v => ⟪o = some v⟫ ⋆ P) := by
+  obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
+  exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
+/-- A slice's end check (`s[start..][0..len]`) within the source's length. -/
+@[fsym] theorem checkSliceEnd_of {srcLen start len : BitVec 64} {extra : Nat}
+    (h : start.toNat + len.toNat + extra ≤ srcLen.toNat) :
+    FTotalTriple P (checkSliceEnd srcLen start len extra) (fun _ => P) := by
+  unfold checkSliceEnd; rw [if_pos h]; exact FTotalTriple.ret (Q := fun _ => P) ()
 
 /-- A checked unsigned `%` by a nonzero divisor. -/
 @[fsym] theorem rem_step {a b : BitVec w} (h : b ≠ 0) :
@@ -606,7 +660,7 @@ theorem result_throw_bind {α β : Type} (e : Error) (f : α → Result β) : (t
   rfl
 
 attribute [fsym_norm] run_ite' run_throw' result_throw_bind lift_bind lift_ite lift_optPayload_some Option.elim_none Option.elim_some
-  Zig.call StateT.run_monadLift StateT.run_lift liftM monadLift MonadLift.monadLift
+  Zig.call StateT.run_monadLift StateT.run_lift liftM monadLift MonadLift.monadLift StateT.run_get StateT.run_modify
 
 /-- The payload and the error of an error union whose tag is known. -/
 theorem unwrapPayload_ok {α : Type} (v : α) : Zig.unwrapPayload (.ok v : Except ErrName α) = pure v := rfl
@@ -652,7 +706,7 @@ simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
   let rhs ← mkAppM ``HMod.hMod #[x, mkNatLit n1]
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 
-attribute [fsym_arith] Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
+attribute [fsym_arith] LawfulEnc.size_encode Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
 
 attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_fst addWithOverflow_snd
   subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
@@ -695,6 +749,15 @@ def reduceLitArithCore (op lem : Name) : Simproc := fun e => do
 simproc [fsym_norm] reduceLitAdd (Zig.add false _ _) := reduceLitArithCore ``Zig.add ``add_lit
 simproc [fsym_norm] reduceLitSub (Zig.sub false _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
 simproc [fsym_norm] reduceLitMul (Zig.mul false _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
+
+open Lean Meta Simp in
+/-- The size `Enc.size T` of a closed type's encoding, as a literal (with `LawfulEnc.size_encode`:
+the size of an encoded value, `(Enc.encode v).size`). -/
+dsimproc [fsym_arith] reduceEncSize (Enc.size _) := fun e => do
+  unless e.isAppOfArity ``Enc.size 2 && !e.hasFVar && !e.hasMVar do return .continue
+  let v ← whnfD e
+  let some n := v.nat? <|> v.rawNatLit? | return .continue
+  return .done (mkNatLit n)
 
 open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`

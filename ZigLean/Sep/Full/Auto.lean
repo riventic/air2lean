@@ -13,8 +13,11 @@ import ZigLean.Sep.Full.AutoConc
   variable are substituted, user definitions of facts are unfolded). Atoms are what is left: the
   library's assertions (`up`, `known`, `bshare`, …), `@[fsym_atom]`s and opaque terms.
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code, binds,
-  trivial results). A call of a generated function (or of a pure generated helper under
-  `StateT.lift`) is inlined; a projection of a vtable is reduced.
+  trivial results) at the head only (`lazyMethods`: a continuation is normalized once it is the
+  head). A call of a generated function (or of a pure generated helper under `StateT.lift`) is
+  inlined; a projection of a vtable is reduced.
+* **Facts of atoms** (`@[fsym_facts]`): when a step needs more facts, the block, offset and
+  alignment of the pointers that the precondition owns memory at are added (`addFacts`).
 * **Commands** are executed by the first `@[fsym]` rule (or rule given to `fsym [...]`) whose
   command unifies. A rule about a part of the precondition is framed (the part is found by
   unification, the rest is the frame, the reordering is proved by `ac_rfl`); a rule about any
@@ -289,11 +292,13 @@ structure RunCaches where
   rules : IO.Ref (Option (Array (Name × Name)))
   /-- The simp context that folds generated indirect calls (concurrent bodies). -/
   fold : IO.Ref (Option Simp.Context)
+  /-- The facts lemmas (`@[fsym_facts]`) with the head of their assertion (`headKey`). -/
+  factLemmas : IO.Ref (Option (Array (Name × Name)))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
-           rules := ← IO.mkRef none, fold := ← IO.mkRef none }
+           rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -387,6 +392,53 @@ def isLinearProp (t : Expr) : Bool :=
   !t.isArrow && !(t.find? fun e => isSplitTerm e || e.isAppOfArity ``Or 2 || e.isAppOfArity ``Iff 2 ||
     e.isAppOfArity ``Not 1).isSome
 
+/-- The arithmetic operations and relations (with the number of trailing arguments that are
+operands): `arithAtoms` looks through them. -/
+def arithOps : Std.HashMap Name Nat := Std.HashMap.ofList [
+  (``HAdd.hAdd, 2), (``HSub.hSub, 2), (``HMul.hMul, 2), (``HDiv.hDiv, 2), (``HMod.hMod, 2),
+  (``HPow.hPow, 2), (``LE.le, 2), (``LT.lt, 2), (``GE.ge, 2), (``GT.gt, 2), (``Dvd.dvd, 2),
+  (``Eq, 2), (``Ne, 2), (``Min.min, 2), (``Max.max, 2), (``And, 2), (``Or, 2), (``Iff, 2),
+  (``Not, 1), (``Neg.neg, 1), (``Nat.cast, 1), (``Int.ofNat, 1), (``Int.toNat, 1), (``Nat.succ, 1),
+  (``OfNat.ofNat, 0), (``subAtom, 2), (``minAtom, 2), (``maxAtom, 2), (``toNatAtom, 1),
+  (``HShiftLeft.hShiftLeft, 2), (``HShiftRight.hShiftRight, 2), (``HAnd.hAnd, 2), (``HOr.hOr, 2),
+  (``HXor.hXor, 2), (``Int.natAbs, 1), (``Int.subNatNat, 2), (``Int.negSucc, 1), (``Int.emod, 2),
+  (``Int.ediv, 2), (``Nat.sub, 2), (``Nat.add, 2), (``Nat.mul, 2), (``Nat.div, 2), (``Nat.mod, 2)]
+
+/-- The atoms of an arithmetic proposition or term: its maximal subterms that are not arithmetic
+operations or literals (`omega`'s variables). -/
+partial def arithAtoms (e : Expr) (acc : Std.HashSet Expr := {}) : Std.HashSet Expr :=
+  let e := e.consumeMData
+  match e with
+  | .lit _ => acc
+  | .forallE _ d b _ => if b.hasLooseBVars then acc.insert e else arithAtoms b (arithAtoms d acc)
+  | _ =>
+    match e.getAppFn with
+    | .const c _ =>
+      if e.isConstOf ``True || e.isConstOf ``False then acc
+      else match arithOps.get? c with
+        | some k => (e.getAppArgs.extract (e.getAppNumArgs - k) e.getAppNumArgs).foldl
+            (fun a x => arithAtoms x a) acc
+        | none => acc.insert e
+    | _ => acc.insert e
+
+/-- The facts relevant to `ty`: those connected to it by shared atoms (transitively), and those
+without atoms. All facts for a goal without atoms (`False`: a refutation of the context, which is
+how an unreachable branch is closed; a side goal on an unreachable path whose contradiction does
+not touch its atoms is left to that refutation). -/
+def relevantFacts (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Expr) := Id.run do
+  let mut seen := arithAtoms ty
+  if seen.isEmpty then return facts
+  let fa := facts.map fun (_, t) => (arithAtoms t).toArray
+  let mut used := Array.replicate facts.size false
+  let mut changed := true
+  while changed do
+    changed := false
+    for i in [0:facts.size] do
+      if used[i]! || !(fa[i]!.isEmpty || fa[i]!.any seen.contains) then continue
+      used := used.set! i true; changed := true
+      seen := fa[i]!.foldl (·.insert ·) seen
+  return (facts.zip used).filterMap fun (f, u) => if u then some f else none
+
 /-- `omega` proves `ty` from `facts`: only arithmetic facts; the split terms whose case the
 linear facts decide become opaque atoms with linear defining facts (`subAtom`, `toNatAtom`,
 `minAtom`, `maxAtom`): `omega` explores no case split for them. -/
@@ -396,6 +448,7 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
     let t ← instantiateMVars (← inferType f)
     if ← isArithProp t then arith := arith.push (f, t)
   let ty ← instantiateMVars ty
+  arith := relevantFacts arith ty
   let hasSplit := (arith.any fun (_, t) => (t.find? isSplitTerm).isSome) || (ty.find? isSplitTerm).isSome
   unless hasSplit do return ← omegaRaw (arith.map (·.1)) ty
   -- the linear facts, and the facts that the atoms make linear
@@ -918,9 +971,10 @@ def proveBy (n : Name) (ty : Expr) : TacticM Expr := do
     else unless ← arith a.mvarId! do throwError "fsym: side condition {t}"
   instantiateMVars (mkAppN f args)
 
-/-- Provider lemmas: `AddrOf` and `Reaches` of one atom. -/
-def addrLemmas : List Name := [``AddrOf.known, ``AddrOf.region]
-def reachLemmas : List Name := [``Reaches.share, ``Reaches.pts, ``Reaches.region]
+/-- The provider lemmas (`@[fsym_provider]`) whose conclusion is an application of `k`. -/
+def providerLemmas (k : Name) : MetaM (Array Name) := do
+  (fsymProviderExt.getState (← getEnv)).filterM fun n => do
+    return (← getConstInfo n).type.getForallBody.isAppOf k
 
 /-- Candidates for a provider goal `AddrOf b A P` or `Reaches b K P`: proofs that assign `A`/`K`. -/
 def providerCands (t : Expr) : TacticM (Array (TacticM Expr)) := do
@@ -932,7 +986,7 @@ def providerCands (t : Expr) : TacticM (Array (TacticM Expr)) := do
   for i in [0:ats.size] do
     let a := ats[i]!
     let rest := sepOf (ats.eraseIdx! i)
-    for n in (if isAddr then addrLemmas else reachLemmas) do
+    for n in ← providerLemmas (if isAddr then ``AddrOf else ``Reaches) do
       out := out.push do
         let ty := mkApp3 t.getAppFn t.getAppArgs[0]! t.getAppArgs[1]! a
         let h ← proveBy n ty
@@ -977,6 +1031,52 @@ partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) := do
 
 /-! ## Preconditions -/
 
+/-- The inductive type `tn` if it has several constructors (a type to split by cases). -/
+def caseInduct? (tn : Name) : MetaM (Option InductiveVal) := do
+  let some (.inductInfo ii) := (← getEnv).find? tn | return none
+  return if ii.ctors.length ≥ 2 then some ii else none
+
+/-- `e` is an application of a constructor of an inductive type with several constructors other
+than `Bool` and `Nat` (an optional, an error union, an enumeration): `Bool` tests go through `if`,
+and `Nat` constructors are arithmetic (literals, `n + 1`), which `fsym_arith` reads. -/
+def isCaseCtorApp (e : Expr) : MetaM Bool := do
+  let .const c _ := e.getAppFn | return false
+  let some (.ctorInfo ci) := (← getEnv).find? c | return false
+  if ci.induct == ``Bool || ci.induct == ``Nat then return false
+  return (← caseInduct? ci.induct).isSome
+
+mutual
+/-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
+and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
+which are split again, so a `match` on `t` (in the precondition, in a fact) reduces. `none` if
+there is nothing to do or the goal does not abstract over `t`. -/
+partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarId) := g.withContext do
+  let (t, symm) ← if (← isCaseCtorApp r) && !(← isCaseCtorApp l) then pure (l, false)
+    else if (← isCaseCtorApp l) && !(← isCaseCtorApp r) then pure (r, true)
+    else return none
+  -- a field of the locals or of a witness; not a library term (`p.block = some b` is a block fact)
+  if let .const c _ := t.getAppFn then
+    if ← isLibrary c then return none
+  let has (e : Expr) : MetaM Bool := do return ((← instantiateMVars e).find? (· == t)).isSome
+  let mut fs := #[]
+  for d in ← getLCtx do
+    if d.isImplementationDetail || d.fvarId == h then continue
+    if (← isProp d.type) && (← has d.type) then fs := fs.push d.fvarId
+  if fs.isEmpty && !(← has (← g.getType)) then return none
+  let s ← saveState
+  try
+    let (rev, g1) ← g.revert fs (preserveOrder := true)
+    let res ← g1.rewrite (← g1.getType) (mkFVar h) symm
+    let g2 ← g1.replaceTargetEq res.eNew res.eqProof
+    let (xs, g3) ← g2.introNP rev.size
+    let mut g := g3
+    for x in xs do
+      if (← g.withContext x.findDecl?).isSome then g ← destruct g x
+    return some g
+  catch ex =>
+    trace[fsym] "substCtor {t}: {ex.toMessageData}"
+    s.restore; return none
+
 /-- Split, unfold and substitute a fact in the context. -/
 partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext do
   let ty ← whnfR (← instantiateMVars (← h.getType))
@@ -996,6 +1096,7 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
       if let some g' ← observing? (subst g h) then return g'
+    if let some g' ← substCtor g h l r then return g'
     return g
   -- a user definition of a fact
   if let .const c _ := ty.getAppFn then
@@ -1006,9 +1107,19 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         if ty''.isAppOfArity ``And 2 || ty''.isAppOfArity ``Exists 2 then return ← destruct g' h
         return g'
   return g
+end
+
+/-- The pointer that `p` is derived from by `Ptr.add`/`elem`/`elemSub`/`elemOf`/`elemSubOf`
+(same block, `block_add`). -/
+partial def ptrBase (p : Expr) : Expr :=
+  let p := p.consumeMData
+  if p.isAppOfArity ``Zig.Ptr.add 2 || p.isAppOfArity ``Zig.Ptr.elem 3 || p.isAppOfArity ``Zig.Ptr.elemSub 3 ||
+      p.isAppOfArity `Zig.Ptr.elemOf 4 || p.isAppOfArity `Zig.Ptr.elemSubOf 4 then
+    ptrBase (p.getArg! 0) else p
 
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
-`x.block = y.block` (definitionally or by a fact), `b₂` is replaced by `b₁`. -/
+`x.block = y.block` (definitionally, also through `Ptr.add`/`Ptr.elem`, or by a fact), `b₂` is
+replaced by `b₁`. -/
 partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
   let hyps := (← getLCtx).foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
   let mut someEqs := #[]
@@ -1027,6 +1138,8 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       -- `l1 = l2`
       let link? : Option Expr ← do
         if ← withReducible (isDefEq l1 l2) then pure (some (← mkEqRefl l1))
+        else if ptrBase l1.appArg! == ptrBase l2.appArg! then
+          pure (some (← mkExpectedTypeHint (← mkEqRefl l1) (← mkEq l1 l2)))
         else
           let mut found := none
           for d in blkEqs do
@@ -1121,7 +1234,61 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
 
 /-! ## Programs -/
 
-/-- Simplify the program with `fsym_norm` and the caller's lemmas. -/
+/-- `(f, c)` of the condition `(f == c) = true` of pointers (a generated indirect call's test). -/
+def ptrBeq? (cond : Expr) : Option (Expr × Expr) := do
+  let cond := cond.consumeMData
+  guard (cond.isAppOfArity ``Eq 3 && (cond.getArg! 2).isConstOf ``Bool.true)
+  let b := cond.getArg! 1
+  guard (b.isAppOfArity ``BEq.beq 4 && (b.getArg! 0).isConstOf ``Zig.Ptr)
+  return (b.getArg! 2, b.getArg! 3)
+
+/-- Simp methods that normalize only the **head** of a program, so that a step costs the same on
+a large generated body as on a small one. At `x >>= f` only `x` is simplified and the node is
+rewritten (`bind_assoc`, `pure_bind`, `ite_bind`, …); the continuation `f` is left as it is (it is
+normalized once it is the head: `pure_bind` makes it the head of the result, which simp visits).
+`fold?` (concurrent bodies): a generated indirect call `if f == c₁ then x₁ else …` is folded into
+`callIndirect` (`callIndirect_fold_one`/`cons`) at its `if`, before simp rewrites its tests. -/
+def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context) : Simp.Methods :=
+  let m := Simp.mkDefaultMethodsCore procs
+  let mFold := Simp.mkDefaultMethodsCore #[]
+  /- The node `r₀.expr` rewritten at its root (`post`), else done. -/
+  let finish (r₀ : Simp.Result) : Simp.SimpM Simp.Step := do
+    match ← m.post r₀.expr with
+    | .done r => return .done (← r₀.mkEqTrans r)
+    | .visit r | .continue (some r) =>
+      if r.expr == r₀.expr then return .done r₀ else return .visit (← r₀.mkEqTrans r)
+    | .continue none => return .done r₀
+  { m with pre := fun e => do
+      let isIte := e.isAppOfArity ``ite 5
+      unless isIte || e.isAppOfArity ``Bind.bind 6 do return ← m.pre e
+      if isIte then
+        if let some fold := fold? then
+          if (ptrBeq? (e.getArg! 1)).isSome then
+            let (r, _) ← Simp.main e fold (methods := mFold)
+            if r.expr != e then return .visit r
+      match ← m.pre e with
+      | .continue none => pure ()
+      | s => return s
+      let args := e.getAppArgs
+      if isIte then
+        -- only the condition: the walk takes a branch, normalized at the next step
+        let rc ← Simp.simp args[1]!
+        if rc.expr == args[1]! then return ← finish { expr := e }
+        try
+          let pf ← mkAppM ``ite_congr #[← rc.getProof, ← mkConstFun rc.expr args[3]!,
+            ← mkConstFun (mkNot rc.expr) args[4]!]
+          finish { expr := (← inferType pf).appArg!, proof? := some pf }
+        catch _ => m.pre e
+      else
+        -- only the command: the continuation is normalized once it is the head
+        let rx ← Simp.simp args[4]!
+        finish (← Simp.mkCongrFun (← Simp.mkCongrArg (mkAppN e.getAppFn args[:4]) rx) args[5]!) }
+where
+  /-- `fun _ : p => rfl : ∀ _ : p, x = x`. -/
+  mkConstFun (p x : Expr) : MetaM Expr := do
+    withLocalDeclD `h p fun h => do mkLambdaFVars #[h] (← mkEqRefl x)
+
+/-- Simplify the head of the program (`lazyMethods`) with `fsym_norm` and the caller's lemmas. -/
 def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let (ctx, procs) ← match ← (← caches).prog.get with
@@ -1143,26 +1310,14 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
       if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
       (← caches).prog.set (some (ctx, procs))
       pure (ctx, procs)
-  -- a concurrent body: generated indirect calls (tests `f == cᵢ` of pointers) are folded first
-  -- (`callIndirect_fold_one`/`cons`, which match the chain before `simp` rewrites its conditions)
-  let c0 := c
-  let (c, pre?) ← if L.conc && (c.find? fun e =>
-      e.isAppOfArity ``BEq.beq 4 && (e.getArg! 0).isConstOf ``Zig.Ptr).isSome then do
-      let fold ← match ← (← caches).fold.get with
-        | some f => pure f
-        | none => do
-          let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
-          let thms ← thms.addConst ``Full.callIndirect_fold_cons
-          let f ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
-          (← caches).fold.set (some f); pure f
-      let (r, _) ← simp c fold
-      pure (r.expr, if r.expr == c then none else some r)
-    else pure (c, none)
-  let (r, _) ← simp c ctx (simprocs := procs)
-  let r ← match pre? with
-    | some r0 => r0.mkEqTrans r
-    | none => pure r
-  let c := c0
+  let foldCtx : MetaM Simp.Context := do
+    if let some f ← (← caches).fold.get then return f
+    let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
+    let thms ← thms.addConst ``Full.callIndirect_fold_cons
+    let f ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+    (← caches).fold.set (some f); return f
+  let fold? ← if L.conc then some <$> foldCtx else pure none
+  let (r, _) ← Simp.main c ctx (methods := lazyMethods procs fold?)
   if r.expr == c then return g
   let newT := mkT L α P r.expr Q
   match r.proof? with
@@ -2054,6 +2209,76 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     s.restore
     return [g]
 
+/-! ## Facts of atoms -/
+
+/-- The facts lemmas (`@[fsym_facts]`) about the atom `a`: `(proof of AtomFacts a φ, φ)`. -/
+def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
+  -- the lemmas by the head of their assertion, once per run
+  let keyed ← match ← (← caches).factLemmas.get with
+    | some k => pure k
+    | none => do
+      let k ← (fsymFactsExt.getState (← getEnv)).filterMapM fun n => withNewMCtxDepth do
+        let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
+        return if concl.isAppOfArity ``AtomFacts 2 then some (headKey (concl.getArg! 0), n) else none
+      (← caches).factLemmas.set (some k)
+      pure k
+  let mut out := #[]
+  for (key, n) in keyed do
+    unless key == headKey a do continue
+    let s ← saveState
+    let f ← mkConstWithFreshMVarLevels n
+    let (args, _, concl) ← forallMetaTelescope (← inferType f)
+    unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) a) do s.restore; continue
+    for x in args do
+      unless ← x.mvarId!.isAssigned do
+        if (← isClass? (← inferType x)).isSome then
+          if let some i ← (try some <$> synthInstance (← inferType x) catch _ => pure none) then
+            discard <| isDefEq x i
+    let pf ← instantiateMVars (mkAppN f args)
+    let φ ← instantiateMVars (concl.getArg! 1)
+    s.restore
+    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ)
+  return out
+
+/-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
+def knownFact (ψ : Expr) : MetaM Bool := do
+  let s ← saveState
+  let r ← do
+    if ψ.isAppOfArity ``Exists 2 then
+      if let .lam _ _ body _ := ψ.appArg! then
+        if let some (_, l, _) := body.eq? then
+          if l.isAppOfArity ``Zig.Ptr.block 1 && !l.appArg!.hasLooseBVars then
+            return (← blockOf l.appArg!).isSome
+    (← getLCtx).anyM fun d => do
+      if d.isImplementationDetail then return false
+      withReducibleAndInstances (isDefEq d.type ψ)
+  s.restore
+  return r
+
+/-- Add the facts of the precondition's atoms (`@[fsym_facts]`: the block, offset and alignment
+of an owned pointer) that the context lacks, when the walk needs more facts (a rule's side goal,
+an undecided `if`, a reachable panic, a return). `none` if there was none to add. -/
+partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option MVarId) := g.withContext do
+  let (g, L, α, P, c, Q) ← view g
+  let ats := atoms P
+  for i in [0:ats.size] do
+    let a := ats[i]!
+    if done.contains a then continue
+    for (hX, φ) in ← atomFacts a do
+      if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
+      trace[fsym] "facts of {a}: {φ}"
+      let R := sepOf (ats.eraseIdx! i)
+      let g1 ← if P == mkSep a R then pure g else do
+        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep a R) c Q)
+        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep a R, Q, c, ← acEq P (mkSep a R), g2])
+        pure g2.mvarId!
+      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep a R) c Q))
+      g1.assign (← mkAppM' (← mkAppOptM (L.nm ``pre_fact) #[L.L]) #[hX, k])
+      let (h, g2) ← k.mvarId!.intro `hf
+      let g2 ← destruct g2 h
+      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push a)
+  return if done.isEmpty then none else some g
+
 /-! ## Rules -/
 
 /-- The command of `x` that sequential rules are about: `c` of a `ConcM.liftMem c`. -/
@@ -2293,12 +2518,23 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let c := c.consumeMData
+  -- the step again with more facts of the atoms (`addFacts`), if there are any
+  let moreFacts : TacticM (Option (List MVarId)) := do
+    (← addFacts g).mapM (walk · user extra (fuel - 1))
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
+    let s ← saveState
     let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, (mkApp Q v).headBeta])
     g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
-    return ← closeEntail h.mvarId!
+    let left ← closeEntail h.mvarId!
+    if left.isEmpty then return []
+    -- more facts (of the atoms) may close it
+    let s1 ← saveState
+    s.restore
+    if let some r ← moreFacts then return r
+    s1.restore
+    return left
   -- panic: the branch must be unreachable
   if isThrow c then
     let s ← saveState
@@ -2308,6 +2544,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if ← arithCore g' then return []
       s.restore
     catch _ => s.restore
+    if let some r ← moreFacts then return r
     trace[fsym] "reachable panic"
     return [g]
   -- branches
@@ -2324,6 +2561,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let hn ← mkFreshExprMVar (mkNot cond)
     if ← arith hn.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
+    if let some r ← moreFacts then return r
     -- a condition that matches on a variable (an error union's tag): split the variable
     let mut found : Option Expr := none
     let cond' ← instantiateMVars cond
@@ -2337,8 +2575,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       for d in (Lean.collectFVars {} cond').fvarIds do
         unless Pi.containsFVar d do continue
         let .const tn _ := (← whnfD (← d.getType)).getAppFn | continue
-        let some (.inductInfo ii) := (← getEnv).find? tn | continue
-        if ii.ctors.length ≥ 2 && !ii.isRec then found := some (.fvar d); break
+        let some ii ← caseInduct? tn | continue
+        unless ii.isRec do found := some (.fvar d); break
     trace[fsym] "branch on {cond'}: split variable {found}"
     if let some d := found then
       return ← casesWalk g d user extra fuel
@@ -2348,14 +2586,22 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let gp ← destruct gp sp.fvarId
     let gn ← destruct gn sn.fvarId
     return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
-  -- cases on a variable
+  -- cases on a variable; a term (a field of the locals) is generalized first, with its equation
+  -- (`substCtor` then replaces it in the facts)
   let discr? : Option Expr ←
     if c.isAppOfArity ``Option.elim 5 then pure (some c.getAppArgs[2]!)
     else match ← matchMatcherApp? c with
-      | some m => pure (m.discrs.find? (·.isFVar))
+      | some m => pure (m.discrs.find? (·.isFVar) <|> m.discrs[0]?)
       | none => pure none
   if let some d := discr? then
     if d.isFVar then return ← casesWalk g d user extra fuel
+    if !d.hasLooseBVars && !(← isCaseCtorApp d) then
+      if let .const tn _ := (← whnfD (← inferType d)).getAppFn then
+        if let some ii ← caseInduct? tn then
+          unless ii.isRec do
+            -- a goal that does not abstract over `d` (a dependent match): no split
+            if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
+              return ← casesWalk g' (.fvar xs[0]!) user extra fuel
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
@@ -2381,6 +2627,10 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       trace[fsym] "rule {r}: side goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
       if partial?.isNone then partial? := some (← saveState, k, left)
       s.restore
+  -- more facts (of the atoms) for the rules' side goals
+  let unfolded? ← if partial?.isSome then pure none else unfoldCmd x
+  if partial?.isSome || unfolded?.isNone then
+    if let some r ← moreFacts then return r
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, _, left) := partial? then
     let s1 ← saveState
@@ -2400,7 +2650,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- an indirect call that no rule covers: the arm that the function pointer selects
   if L.conc && x.isAppOfArity ``Full.callIndirect 5 then
     return ← indirectWalk g L α P c Q x user extra fuel
-  if let some x' ← unfoldCmd x then
+  if let some x' := unfolded? then
     let c' ← mkAppM ``Bind.bind #[x', f]
     let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
     return ← walk g' user extra (fuel - 1)

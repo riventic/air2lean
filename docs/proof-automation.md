@@ -66,12 +66,27 @@ many successful calls with 20 to 30 facts.
 * **Preconditions** are a flat list of atoms. Definitions that build assertions from `⋆`, `⟪φ⟫`
   and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are unfolded;
   existentials and facts move into the context (conjunctions split, equations of a variable
-  substituted, user definitions of facts unfolded). An assertion-level `if c then X else Y`
+  substituted, user definitions of facts unfolded; a term `t` that is not a variable, such as a
+  field of the locals, equated to a constructor application `C …` is replaced by it in the goal
+  and the facts, so a `match` on `t` reduces: `substCtor`). An assertion-level `if c then X else Y`
   (`relBytes`, `newBytes`) takes the branch the facts decide; an undecided one stays an atom and
   is split at the next return.
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code,
-  binds, trivial results, field accessors of structure values). A call of a generated function
-  is inlined; a vtable projection is reduced.
+  binds, trivial results, field accessors of structure values), **at the head only**
+  (`lazyMethods`): at `x >>= f` only `x` is simplified and the node rewritten (`bind_assoc`,
+  `pure_bind`, `ite_bind`), the continuation `f` is not visited; at an `if` only the condition. A
+  continuation is normalized once it is the head, so a step costs the same on a 900-line
+  generated body as on a small one (normalizing the whole body pushes every continuation into
+  both branches of each `if` before it). A call of a generated function is inlined; a vtable
+  projection is reduced.
+* **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
+  implies the pointer's block, a nonnegative offset and, for a region, its alignment
+  (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
+  more facts (a rule whose side goals fail, an undecided `if`, a reachable panic, a return the
+  planner cannot close), the facts of the precondition's atoms that the context lacks are added
+  (`pre_fact`) and the step is retried; so a pointer whose block the context does not know
+  (a field of a node, an argument) gets one from what the precondition owns at it. Block
+  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`).
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
@@ -90,7 +105,8 @@ many successful calls with 20 to 30 facts.
   proved is taken; a side condition that the facts decide neither way is split on (the cases of
   `mremap`: shrink or grow).
 * **A condition that matches on a variable** (an error union's tag) splits the variable; a
-  `match` on a constructor in the precondition reduces.
+  `match` on a constructor in the precondition reduces. A `match`/`Option.elim` on a term (a
+  field of the locals) generalizes the term with its equation and splits it.
 * **Returns** `pure v`: the goal becomes the update `EUpd P (Q v)`, which the planner closes:
   `Q`'s existentials become metavariables, assigned by unification; regions are matched exactly,
   or carved out of a state region (split at the start with `Q`'s alignment and at the end by a
@@ -126,7 +142,7 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   a loop is `CTriple.loop` with its invariant, whose body `∀ s, CTriple (inv s) (body.run s) …`
   is again `fsym`;
 * a generated indirect call `if f == c₁ then x₁ else … else throw .illegal` is folded into
-  `callIndirect f [(c₁, x₁), …]` before the body is normalized (`callIndirect_fold_one`/`cons`)
+  `callIndirect f [(c₁, x₁), …]` at its `if`, before its tests are rewritten (`callIndirect_fold_one`/`cons`)
   and its arms' common continuation is pulled out (`pullIndirect`), so it is one command; with no
   rule for it, the arm that the facts select is walked (`C.callIndirect_pos`/`_neg`), else both
   cases.
@@ -154,6 +170,11 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `minAtom`, `maxAtom`), so no split is explored for it;
 5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
 
+`omega` is given only the facts **relevant** to the target: those connected to it by shared
+atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
+without atoms (`False`: a refutation) gets all facts. Irrelevant facts (another object's
+alignment `% 8`) cost `omega` case splits on a problem that fails.
+
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
 where its free variables are in scope. The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
@@ -163,7 +184,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
-* A new opaque assertion: `attribute [fsym_atom] myPred`.
+* A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
+  pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`.
+* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
 * Normalization: `attribute [fsym_norm] …` for programs, `attribute [fsym_arith] …` for
   arithmetic. A simp lemma must match the child-normalized form of terms (`0#1`, not the literal
   `(0 : BitVec 1)`).
@@ -184,6 +207,10 @@ joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
   `omegaFacts` turn determined split terms into atoms.
 * Normalize each hypothesis once; never re-simplify the whole context per call.
+* Never normalize the whole program per step (`lazyMethods`).
+* A generated helper with heavy arithmetic (`alignForward` of masks modulo `2 ^ 64`) is inlined
+  and its failing `omega` probes dominate (one problem can take 90k heartbeats; `omega` has no
+  heartbeat checkpoints): prove a rule for the helper once and pass it as `fsym [rule]`.
 
 ## Limits and next steps
 
