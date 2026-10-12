@@ -293,6 +293,13 @@ def GrantOk (ns : List NodeV) : GRegion → Prop
 theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat} {K : BlockKind}
     (h : GrantOk ns (p, n, q, A, K)) : GrantOk ns (p, n', q, A, K) := h
 
+/-- A grant with a kind label of the same normal form, and any length, is as good. -/
+theorem GrantOk.relabel {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat}
+    {K K' : BlockKind} (h : GrantOk ns (p, n, q, A, K)) (hK : K'.norm = K.norm) :
+    GrantOk ns (p, n', q, A, K') := by
+  obtain ⟨h0, nd, hnd, hb, hA, hKn, hoff⟩ := h
+  exact ⟨h0, nd, hnd, hb, hA, hK.trans hKn, hoff⟩
+
 /-- The facts of the first node: none means no grant. -/
 def OV.FirstFacts (w : OV) : Prop :=
   match w.first with
@@ -735,7 +742,7 @@ agree (`chain_owns`, `Owns.block`). -/
 theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : v.L CI γ e ctx s G r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
   obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
-  obtain ⟨-, nd, hnd, hblk, hA, hK⟩ := hgr _ _ hMi
+  obtain ⟨-, nd, hnd, hblk, hA, hK, -⟩ := hgr _ _ hMi
   simp only [OV.nodes, hfirst] at hnd
   rcases List.mem_cons.mp hnd with rfl | hm
   · exact ⟨hA, hK⟩
@@ -1518,7 +1525,7 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
         · exact OV.avail_tail hfirst hb1 (by dsimp only; omega) h2)
   refine rpost_true (facts_repoint (n' := n) (K' := v.w.K) (ei := v.w.ei + (n - s.len.toNat))
     (tail := v.w.tail.extract (n - s.len.toNat) v.w.tail.size) hw hMi
-    ⟨hp0, v.w.node v.N, by simp [OV.nodes, hfirst], hpN, hA, rfl⟩ ?_ hcov) hK.symm (S' := v.w.S) (i := v.i)
+    (GrantOk.relabel (hw.2.2.1 _ _ hMi) hK.symm) ?_ hcov) hK.symm (S' := v.w.S) (i := v.i)
     (X := up (regionIn (s.ptr.add s.len.toNat) v.w.A v.w.S v.w.K 1 (v.w.tail.extract 0 (n - s.len.toNat))) ⋆
       pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n) (some (γ, e)))
     (fun r hr => ?_) (of_eq ?_ h)
@@ -1557,9 +1564,10 @@ theorem GrantOk.mono {ns ns' : List NodeV}
     (h : ∀ nd ∈ ns, ∃ nd' ∈ ns', nd'.N = nd.N ∧ nd'.A = nd.A ∧ nd'.K.norm = nd.K.norm) {g : GRegion}
     (hg : GrantOk ns g) : GrantOk ns' g := by
   obtain ⟨p, n, q, A, K⟩ := g
-  obtain ⟨h0, nd, hnd, hb, hA, hK⟩ := hg
+  obtain ⟨h0, nd, hnd, hb, hA, hK, hoff⟩ := hg
   obtain ⟨nd', hnd', e1, e2, e3⟩ := h nd hnd
-  exact ⟨h0, nd', hnd', by rw [e1]; exact hb, by rw [e2]; exact hA, by rw [e3]; exact hK⟩
+  exact ⟨h0, nd', hnd', by rw [e1]; exact hb, by rw [e2]; exact hA, by rw [e3]; exact hK,
+    by rw [e1]; exact hoff⟩
 
 /-- **A grant's ghost part**: half of the node's kept share `qh` (at the node's end `kN`) is lent at
 the grant's end against a receipt, and the grant is issued under the unused id `i`. -/
@@ -1758,7 +1766,7 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
       · subst hj'
         simp only [GMap.set_same, Option.some.injEq] at hj; subst hj
         exact ⟨by simp only [Ptr.add]; omega, ({ w with qh := w.qh.half } : OV).node N,
-          by simp [OV.nodes, hfirst, OV.node], rfl, rfl, rfl⟩
+          by simp [OV.nodes, hfirst, OV.node], rfl, rfl, rfl, by simp only [OV.node, Ptr.add]; omega⟩
       · exact GrantOk.mono hmem (hgr j g (by simpa [GMap.set_ne _ _ hj'] using hj))
     · show ndLent b ({ w with qh := w.qh.half } : OV).nodes = poolOn b w.pn w.pf +
         esum (fun i => grantOn b (w.M.set w.mN (some (N.add (24 + ai), n, w.qh.half, w.A, w.K)) i)) (w.mN + 1)
