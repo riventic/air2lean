@@ -1,14 +1,14 @@
 import ZigLean.Sep.Full.Init
 
 /-!
-# Strength of the full-state logic against the legacy one (`docs/one-logic.md`, decision D1a)
+# Strength of the full-state logic against the legacy one (`docs/proof-framework.md`, Plan A decision D1a)
 
 A theorem migrated from the legacy logic (`Triple`, `TotalTriple`) to the full-state logic
 (`FTriple`, `FTotalTriple`) must not be weaker. `FTriple.toTriple_on` and
 `FTotalTriple.toTotal_on` give the legacy statement back from the full one, on every `Mem.FSeq`
 memory (`Mem.FSeq` holds of the start memory, `Mem.init_fseq`, and every rule keeps it):
 
-    FTriple (up P) c (fun v => up (Q v))  ⟹  TripleIn Mem.FSeq P c Q
+    FTriple (up P) c (fun v => up (Q v))  ⟹  `Triple P c Q`'s statement on every FSeq memory
 
 when each `Q v` is size-free (`SizeFree`: it does not read the size labels of its cells, which a
 full-state postcondition cannot pin without the block's extent; `region`, `pts` and every
@@ -27,15 +27,6 @@ namespace Full
 open FAssn Assn
 
 variable {α : Type}
-
-/-- The legacy partial triple on the memories `R` (`TotalTripleIn`'s partial form). -/
-def TripleIn (R : Mem → Prop) (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
-  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → R m →
-    match (c.run m).run with
-    | none => True
-    | some (.error e) => e = .stackOverflow
-    | some (.ok (v, m')) =>
-      ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
 
 /-- A legacy heap as a full heap, each byte with its tag in the layout `sh`. -/
 def FHeap.ofHeap (sh : List Shape) (h : Heap) : FHeap := fun l =>
@@ -167,7 +158,12 @@ theorem SizeFree.sep {E : BlockId → Option (Nat × BlockKind)} {P Q : Assn} (h
 every `Mem.FSeq` memory, for a size-free postcondition. -/
 theorem FTriple.toTriple_on {c : MemM α} {P : Assn} {Q : α → Assn}
     (ht : FTriple (up P) c (fun v => up (Q v))) (hQ : ∀ v, SizeFree (fun _ => none) (Q v)) :
-    TripleIn Mem.FSeq P c Q := by
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) =>
+        ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq := by
   intro m hP hF hd hm hp _ hs
   have hh := holds_ofHeap hd hm
   have := ht m _ _ hh ⟨by simpa using hp, rfl, rfl⟩ hs
