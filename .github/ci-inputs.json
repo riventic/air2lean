@@ -108,15 +108,9 @@
     },
     "test/0.16.0/receipt": {
       "inputs": [
-        "**",
-        "docs/allocation-policy-report.json",
-        "docs/premises.md"
+        "**"
       ],
-      "exclude": [
-        "docs/**",
-        "*.md"
-      ],
-      "note": "every tracked file except the prose documentation; the proof receipt records withheld files as withheld without reading or fingerprinting them (scripts/proof-receipt.py), and such a receipt is no release receipt"
+      "note": "the whole tree: its gates treat the receipt as release-grade (the coverage report's exported stage, artifact manifests), and a receipt over a restricted checkout is never one (scripts/proof-receipt.py tree.withheld; run 38259152870)"
     },
     "test/0.16.0/Debug": {
       "inputs": [

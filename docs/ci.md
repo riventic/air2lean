@@ -305,8 +305,8 @@ commit is on `main`, and only through the restricted-checkout key, which does no
 observing what a part reads. Before, docs-only PR #149 took 29.5 min in the queue (`merge_group`
 run 38220406483, 07:54-08:24Z 2026-10-12, 286 runner-minutes): all 35 jobs executed, the longest
 `mutation/3` 18.1, macOS 0.15.2 20.2, `audit` 17.0, `receipt` 16.4 min. With this design such
-a change keeps the key of every reusable part except `test/0.16.0/docs`, whose gates read the
-documentation (see "Current declarations"); `generated`, `provenance` (`"reuse": false`: their
+a change keeps the key of every reusable part except `test/0.16.0/docs` (its gates read the
+documentation) and `test/0.16.0/receipt` (see "Current declarations"); `generated`, `provenance` (`"reuse": false`: their
 artifacts are this commit's `generated` branch entry) and the support jobs run too. The measured round is in "After the
 restricted checkout" below.
 
@@ -481,14 +481,17 @@ and the native wide bit-operation differential. What changes:
   host-accounting claims of the golden rows; `docs/premises.md` for `audit` and `receipt`;
   `docs/c-frontend.md`, `docs/env-boundaries.md`, `docs/premises.md`, `docs/std-models.md` and
   `docs/trust-report.md` for `inputs`. These are the 0.16.0 `golden`, `lean`, `inputs`,
-  `native`, `receipt` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.0, and the
-  macOS rows. They were commit-bound (their gates read `HEAD`) or `"reuse": false` (`audit`:
-  under the former tracer it exceeded the job limit); in the restricted checkout `HEAD` is a
-  function of the key. The proof receipt of `receipt` fingerprints every tracked file except
-  the withheld ones, which it records as withheld without reading them (`tree.withheld`: the
-  receipt does not pin their content); `proof-receipt.py verify --release` and
-  `artifact-manifest.py` refuse such a receipt, so release receipts come from the unrestricted
-  `provenance` job.
+  `native` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.0, the macOS rows and
+  the aarch64-linux jobs. They were commit-bound (their gates read `HEAD`) or `"reuse": false`
+  (`audit`: under the former tracer it exceeded the job limit); in the restricted checkout
+  `HEAD` is a function of the key.
+- The whole tree: `test/0.16.0/receipt`. A proof receipt over a restricted checkout records the
+  withheld files as withheld without reading them (`tree.withheld`) and is never a release
+  receipt (`proof-receipt.py verify --release` and `artifact-manifest.py` refuse it); the
+  receipt row's gates use its receipt as a release-grade one (the coverage report's exported
+  stage), so it keeps the whole tree and a documentation change executes it (about 16 min).
+  Binding receipts to the build inputs only would change what a receipt attests: a separate
+  decision.
 - The whole tree: `test/0.16.0/docs`, the gates that read the prose documentation (support
   matrix, theorem inventory, mutation map, build-mode records, host accounting: `README.md`,
   `PLAN.md`, `ROADMAP.md` and every `docs/*.md`), split out of `inputs` so that a documentation
