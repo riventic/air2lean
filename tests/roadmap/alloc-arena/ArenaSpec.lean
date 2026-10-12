@@ -30,7 +30,7 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
 With no first node, `M` is empty. Every byte of a used node's buffer is in the junk's heap `jh`,
 in a grant, or in the first node's unused tail (`OV.Cov`), which `reset` needs to give each node
 back whole. Every grant lies in the block of a used node, with that node's
-address and kind labels, at a nonnegative offset (`GrantOk`). A token for the slice `(p, n)` with
+address and kind labels, at a nonnegative offset past that node's header (`GrantOk`). A token for the slice `(p, n)` with
 cell labels `A`, `K` is `gfrag γ e i (p, n, q, A, K)` for some grant id `i`, with the fraction `q`
 of the grant's extent share (tagged `(γ, e)`): it names exactly that region, so a token of the
 current epoch shows `M i = some (p, n, q, A, K)` (`gfrag_mem`), hence a first node: **O-A is excluded by ghost state**, not by a premise, and a `free` of a slice

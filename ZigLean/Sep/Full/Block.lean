@@ -14,9 +14,10 @@ Step rules for `fsym` about making and ending blocks:
   leaves nothing (total).
 * `FTriple.alloc`, `FTriple.allocStack`: a new block of `size > 0` bytes: its bytes (undefined),
   its full extent and an aligned address. These are partial: `alloc` throws `.stackOverflow`
-  when the address space has no room (`Mem.roomFor`, premise STK-01), which a partial triple
-  counts as no result. A total rule needs the room as a resource of the precondition: that
-  resource does not exist yet (docs/proof-framework.md: "stack room").
+  when there is no room (`Mem.allocOk`: the address space, and for a stack block of a thread
+  with a budget its reserve; premise STK-01), which a partial triple counts as no result. A
+  total rule needs the room as a resource of the precondition: that resource does not exist yet
+  (docs/proof-framework.md: "stack room").
 
 The rules are proved on `Holds` directly (no legacy lifting): `Holds.alloc` (the memory after a
 new block holds its bytes and full extent, `newBlockRes`, with the same frame) and `Holds.free`
@@ -36,7 +37,7 @@ open FAssn
 theorem afterAlloc_heap (m : Mem) (kind : BlockKind) (size align : Nat) (l : Loc) :
     (m.afterAlloc kind size align).heap l =
       if l.1 = m.blocks.size ∧ l.2 < size ∧ kind.mappedLo ≤ l.2 then
-        some ⟨.undef, m.newAddr size align, size, kind⟩
+        some ⟨.undef, m.allocAddr kind size align, size, kind⟩
       else m.heap l := by
   obtain ⟨x, y⟩ := l
   by_cases hx : x = m.blocks.size
@@ -61,12 +62,13 @@ no byte of the block and no claim on it: it did not exist. -/
 theorem Holds.alloc {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {kind : BlockKind}
     {size align : Nat} (hpos : 0 < size) (hk : kind.mappedLo = 0) :
     Holds (m.afterAlloc kind size align)
-      (newBlockRes m.blocks.size (m.newAddr size align) size kind) rF := by
+      (newBlockRes m.blocks.size (m.allocAddr kind size align) size kind) rF := by
   obtain ⟨hr0, -, hrg⟩ := hr
   obtain ⟨b, hbe⟩ : ∃ b, b = m.blocks.size := ⟨_, rfl⟩
   rw [← hbe]
   let nb : Block :=
-    { bytes := Array.replicate size .undef, align, kind, live := true, addr := m.newAddr size align }
+    { bytes := Array.replicate size .undef, align, kind, live := true,
+      addr := m.allocAddr kind size align }
   have hget : ∀ x, (m.afterAlloc kind size align).blocks[x]? =
       if x = b then some nb else m.blocks[x]? := fun x => by
     simp only [Mem.afterAlloc, Array.getElem?_push]; by_cases hx : x = b <;> simp [hx, hbe, nb]
@@ -151,13 +153,14 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
   intro m r rF hh hp hs
-  cases hroom : m.roomFor size align
+  cases hroom : m.allocOk kind size align
   · rw [alloc_run_noRoom m hroom]
   rw [alloc_run_eq m hroom]
-  refine ⟨_, hh.alloc hp hpos hk, ⟨m.newAddr size align, m.blocks.size,
-    sep_lift.mpr ⟨⟨rfl, rfl, Mem.newAddr_mod m size align ha⟩, ?_⟩⟩,
+  refine ⟨_, hh.alloc hp hpos hk, ⟨m.allocAddr kind size align, m.blocks.size,
+    sep_lift.mpr ⟨⟨rfl, rfl, m.allocAddr_mod kind size align ha⟩, ?_⟩⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
-  refine ⟨⟨(newBlockRes m.blocks.size (m.newAddr size align) size kind).heap, Know.none, Ghost.unit⟩,
+  refine ⟨⟨(newBlockRes m.blocks.size (m.allocAddr kind size align) size kind).heap, Know.none,
+      Ghost.unit⟩,
     ⟨FHeap.empty, Know.none, Ghost.atExt m.blocks.size (ECell.auth1 size kind Frac.one)⟩,
     FHeap.disjoint_empty _, ?_, ⟨⟨m.blocks.size, rfl, by simp, fun l => ?_⟩, rfl, rfl⟩,
     rfl, rfl, rfl⟩
@@ -182,7 +185,7 @@ nothing to own (an extent needs a live byte: `Holds.bauth`). -/
 theorem FTriple.allocZero (kind : BlockKind) (align : Nat) :
     FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
   intro m r rF hh hp hs
-  cases hroom : m.roomFor 0 align
+  cases hroom : m.allocOk kind 0 align
   · rw [alloc_run_noRoom m hroom]
   rw [alloc_run_eq m hroom]
   exact ⟨r, hh.allocZero kind align, ⟨⟨rfl, rfl⟩, hp⟩,
