@@ -202,7 +202,8 @@ without an entry is accepted only as `"unsupported": true`, which `Normalize` re
 def instPayload (tag : String) : Option (List Key) :=
   let args := req "args" .arr
   if binTags.contains tag || unTags.contains tag || tyOpTags.contains tag ||
-      extraBinTags.contains tag || ["select", "mul_add", "aggregate_init"].contains tag then
+      extraBinTags.contains tag || ternaryTags.contains tag ||
+      ["select", "mul_add", "aggregate_init"].contains tag then
     some [args]
   else match tag with
   | "atomic_load" => some [args, req "order" .str]
@@ -250,7 +251,9 @@ where
   unTags : List String := ["is_null", "is_non_null", "is_err", "is_non_err", "ret", "ret_safe",
     "ret_load", "neg", "is_named_enum_value", "is_null_ptr", "is_non_null_ptr", "tag_name",
     "error_name", "is_err_ptr", "is_non_err_ptr", "sqrt", "sin", "cos", "tan", "exp", "exp2",
-    "log", "log2", "log10", "floor", "ceil", "round", "trunc_float"]
+    "log", "log2", "log10", "floor", "ceil", "round", "trunc_float",
+    -- The `@errorFromInt` bound check (`Compat.isErrorsLen`; renamed in 0.16.0).
+    "cmp_lt_errors_len", "cmp_lte_errors_len"]
   tyOpTags : List String := ["not", "bitcast", "load", "intcast", "intcast_safe", "trunc",
     "slice_ptr", "slice_len", "array_to_slice", "clz", "ctz", "popcount", "byte_swap",
     "bit_reverse", "abs", "optional_payload", "wrap_optional", "unwrap_errunion_payload",
@@ -264,6 +267,9 @@ where
     "bit_cast", "bit_cast_safe", "int_cast", "int_cast_safe", "ptr_cast", "ptr_from_int",
     "int_from_ptr", "error_cast", "error_from_int", "int_from_error", "union_from_enum",
     "array_to_vector"]
+  /-- 0.14.1/0.15.2's runtime-index lane store (`Compat.isVectorStoreElem`): vector pointer,
+  index, lane value. -/
+  ternaryTags : List String := ["vector_store_elem"]
   extraBinTags : List String := ["add_with_overflow", "sub_with_overflow", "mul_with_overflow",
     "shl_with_overflow", "slice_elem_ptr", "ptr_elem_ptr", "ptr_add", "ptr_sub", "slice"]
 

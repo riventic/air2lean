@@ -240,7 +240,8 @@ def proof_lemma_records(body, sources):
         base = proof_api_base(source)
         loops = record.get("loops", [])
         expected_loops = [dict(body=f"{base}_loop{k}_body", again=f"{base}_loop{k}_again",
-                               body_unfold=f"{base}_loop{k}_body_unfold", step=f"{base}_loop{k}_step")
+                               body_unfold=f"{base}_loop{k}_body_unfold", step=f"{base}_loop{k}_step",
+                               spec=f"{base}_loop{k}_spec")
                           for k in range(len(loops))] if isinstance(loops, list) else None
         if (record["model"] != base + "_model" or record["unfold"] != base + "_unfold" or
                 not isinstance(loops, list) or loops != expected_loops or

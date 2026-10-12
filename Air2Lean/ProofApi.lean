@@ -3,7 +3,8 @@ import Lean.Data.Json
 
 /-! Opt-in proof interfaces (`--proof-api`, `docs/generated-code.md`).
 Every emitted function receives a stable model abbreviation and unfolding lemma, and each
-of its loops a body/again abbreviation, a body unfolding lemma and a step lemma. Their names
+of its loops a body/again abbreviation, a body unfolding lemma, a step lemma and the loop
+specification rule instantiated at the loop (`Zig.loop_spec`, `Zig.loop_spec_mm`, `Zig.Conc.Proto.WP.loop`). Their names
 derive from the function's source identity (after generic-instance renumbering) and the
 loop's pre-order position, never from AIR instruction IDs. Checked, straight-line scalar
 functions additionally carry a normalized-IR index. These are unfolding boundaries, not
@@ -22,26 +23,26 @@ def proofLoops (f : Func) : Array Inst :=
   f.allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false
 
 /-- The stable names of loop `k` of the function with lemma base `base`:
-`(body, again, body_unfold, step)`. -/
-def proofLoopNames (base : String) (k : Nat) : String × String × String × String :=
+`(body, again, body_unfold, step, spec)`. -/
+def proofLoopNames (base : String) (k : Nat) : String × String × String × String × String :=
   let loop := s!"{base}_loop{k}"
-  (loop ++ "_body", loop ++ "_again", loop ++ "_body_unfold", loop ++ "_step")
+  (loop ++ "_body", loop ++ "_again", loop ++ "_body_unfold", loop ++ "_step", loop ++ "_spec")
 
 /-- Every declaration name `--proof-api` emits for `f`, reserved before ordinary
 declaration allocation. -/
 def proofLemmaNames (f : Func) : Array String :=
   let base := proofApiName f.name
   #[base ++ "_model", base ++ "_unfold"] ++ ((Array.range (proofLoops f).size).flatMap fun k =>
-    let (body, again, bodyUnfold, step) := proofLoopNames base k
-    #[body, again, bodyUnfold, step])
+    let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
+    #[body, again, bodyUnfold, step, spec])
 
 /-- The lemma names of `f` as JSON fields: `model`, `unfold` and, if `f` has loops, `loops`. -/
 def proofLemmaFields (f : Func) : List (String × Json) :=
   let base := proofApiName f.name
   let loops := (Array.range (proofLoops f).size).map fun k =>
-    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
     Json.mkObj [("body", .str body), ("again", .str again), ("body_unfold", .str bodyUnfold),
-      ("step", .str step)]
+      ("step", .str step), ("spec", .str spec)]
   [("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold"))] ++
     if loops.isEmpty then [] else [("loops", .arr loops)]
 

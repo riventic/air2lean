@@ -1,0 +1,11 @@
+code Alpha 166 Alpha true true
+code Beta 167 Beta true true
+code Gamma 168 Gamma true true
+nameOf 1 PermissionDenied
+nameOf 2 SystemResources
+nameOf 3 Unsupported
+nameOf 4 Unexpected
+nameOf 5 DiskQuota
+nameOf 6 FileTooBig
+nameOf 7 InputOutput
+nameOf 8 NoSpaceLeft

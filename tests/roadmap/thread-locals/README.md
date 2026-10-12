@@ -24,7 +24,7 @@ mutants: one instance shared by all threads (the run no longer returns 90908) an
 that outlive their thread (the leaked read succeeds with 7). `test_cli.py` checks the retained
 translation of both exports and the rejections: the old exporter's marker, a missing or
 out-of-range `global`, a `runtime_nav_ptr` of a non-`threadlocal` global, `extern threadlocal`,
-a missing initial value, pointer-holding storage, a wrong pointee type, over-alignment,
+a missing initial value, error storage, a wrong pointee type, over-alignment,
 `volatile`, and a constant pointer into a `threadlocal` global (0.14.1's form).
 
 ```sh

@@ -3,7 +3,8 @@
 
 A separate, explicitly versioned format (`air2lean-artifact-manifest-v1`); proof receipt schema 1
 is unchanged. `check-manifest` recomputes every link and names exactly which one is stale. It never
-runs Zig, Lake or Lean and does not authenticate anything. Also reachable as
+runs Zig, Lake or Lean. It authenticates only through an attestation (`scripts/attest.py`,
+`--attestation`; otherwise `authentication` is `not_attested`). Also reachable as
 `scripts/proof-receipt.py manifest|check-manifest`.
 """
 import argparse
@@ -432,8 +433,24 @@ def compare_link(name, recorded, current):
     return result
 
 
+def attest_module():
+    spec = importlib.util.spec_from_file_location('manifest_attest', ROOT / 'scripts/attest.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def authenticate(path, attestation, allowed_signers, principal=None, pin=None, verify_time=None):
+    """`attest.py verify` of `path` (an I07 attestation of this manifest). Returns the report; raises on failure."""
+    demand(allowed_signers is not None, '--attestation needs --allowed-signers (the verifier\'s trust anchor)')
+    return attest_module().verify(attestation, allowed_signers, manifests=[path], principal=principal, pin=pin,
+                                  verify_time=verify_time)
+
+
 def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=False, native_binary=None,
-                   native_compiler=None, require_native_binary=False, allow_native_mismatch=False):
+                   native_compiler=None, require_native_binary=False, allow_native_mismatch=False,
+                   attestation=None, allowed_signers=None, require_attestation=False, principal=None, pin=None,
+                   verify_time=None):
     report = {'format': MANIFEST_FORMAT, 'manifest': str(path), 'checking': 'not_rerun',
               'authentication': 'not_attested', 'problems': [], 'stale_links': []}
     manifest = load(path)
@@ -442,6 +459,14 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
     except (ValueError, KeyError, TypeError) as error:
         return dict(report, status='invalid', problems=[str(error)])
     report['manifest_sha256'] = manifest['manifest_sha256']
+    if attestation is not None:
+        try:
+            report['authentication'] = authenticate(path, attestation, allowed_signers, principal, pin, verify_time)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+            report['authentication'] = 'rejected'
+            report['problems'].append('attestation rejected: %s' % error)
+    elif require_attestation:
+        report['problems'].append('attestation required: pass --attestation and --allowed-signers')
     links = manifest['links']
     for item in expect:
         name, _, wanted = item.partition('=')
@@ -536,6 +561,13 @@ def manifest_main(argv):
                         help='accept a native build whose target/mode/Zig version differs from the proved profile')
     parser.add_argument('--verify-receipt', action='store_true',
                         help='also rerun proof-receipt verify on the chained attempt (needs its toolchain)')
+    parser.add_argument('--attestation', type=Path, help='check: scripts/attest.py attestation of this manifest')
+    parser.add_argument('--allowed-signers', type=Path, help='check: the verifier\'s trust anchor (ssh allowed_signers)')
+    parser.add_argument('--require-attestation', action='store_true',
+                        help='check: fail unless the manifest is authenticated by --attestation')
+    parser.add_argument('--attest-principal', help='check: required signer principal')
+    parser.add_argument('--pin-fingerprint', help='check: required signing key (SHA256:...)')
+    parser.add_argument('--verify-time', help='check: YYYYMMDD[HHMM[SS]][Z] for valid-after/valid-before')
     a = parser.parse_args(argv)
     root = Path(os.path.abspath(ROOT))
     path = Path(os.path.abspath(a.path))
@@ -558,7 +590,9 @@ def manifest_main(argv):
                               'provenance': manifest['provenance']['status']}))
             return 0
         report = check_manifest(root, path, a.expect, a.allow_dirty, a.verify_receipt, a.native_binary,
-                                a.native_compiler, a.require_native_binary, a.allow_native_mismatch)
+                                a.native_compiler, a.require_native_binary, a.allow_native_mismatch,
+                                a.attestation, a.allowed_signers, a.require_attestation, a.attest_principal,
+                                a.pin_fingerprint, a.verify_time)
         print(json.dumps(report, indent=2, sort_keys=True))
         if report['status'] != 'current':
             print('artifact manifest %s: stale links %s; problems %s'

@@ -81,6 +81,7 @@
     "ZigLean.VecCast": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLemmas": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
+    "ZigLean.ResultRun": ["SEM-01"],
     "ZigLean.Range": ["SEM-01"],
     "ZigLean.Loop": ["SEM-03"],
     "ZigLean.RecTemplate": ["SEM-03"],
@@ -302,7 +303,7 @@
     "THR-09": ["THR-01"],
     "THR-10": ["THR-02"],
     "THR-08": ["THR-01"],
-    "ORD-01": ["ORD-02"],
+    "ORD-01": ["ORD-02", "ORD-06"],
     "ORD-03": ["ORD-01"],
     "ORD-04": ["ORD-01"],
     "ORD-05": ["ORD-01"],
@@ -317,7 +318,7 @@
     "SEM-02": ["SEM-01", "SEM-07"],
     "SEM-03": ["SEM-01"],
     "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
-    "THR-01": ["SEM-02"],
+    "THR-01": ["SEM-02", "ORD-06"],
     "TRU-02": ["TRU-03", "SEM-01"],
     "OSF-01": ["THR-01", "ORD-01"],
     "OSF-02": ["THR-01"],
@@ -327,5 +328,46 @@
     "OSK-02": ["THR-01"],
     "OSG-01": ["THR-01"],
     "OSM-02": ["SEM-02", "ALC-02"]
+  },
+  "memory_model": {
+    "premise": "ORD-06",
+    "concurrency": [
+      "THR-01",
+      "ORD-01"
+    ],
+    "note": "C12 (docs/research/C12.md): every theorem or report whose premises contain a concurrency premise (closed under implies) lists the memory-model adequacy premise; scripts/premises.py check and compiled, and scripts/claims.py, fail or list it. targets: the qualification record per target that accepts atomics and threads; unqualified: targets whose translation rejects them.",
+    "targets": {
+      "x86_64-linux": {
+        "hardware": "x86-TSO",
+        "argument": "Plain accesses: a race between plain accesses is .illegal in every schedule, so a theorem is about race-free executions, where LLVM's C++11 model gives sequential consistency (DRF-SC; LLVM LangRef 'Memory Model for Concurrent Operations'). Atomics: LLVM's x86 lowering is the standard C11-to-TSO mapping, proved sound for RC11 (Lahav et al., PLDI 2017; Podkopaev et al., POPL 2019, IMM); ORD-01 admits every RC11 outcome; RC11's no-load-buffering axiom is ORD-02 (x86-TSO forbids load buffering, but LLVM's optimizer does not promise it). Not proved for LLVM's optimizer.",
+        "evidence": [
+          "tests/roadmap/weak-cas/native.zig",
+          "tests/roadmap/architecture-audit/concurrency/native_litmus.zig",
+          "tests/diff/atomics",
+          "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json"
+        ]
+      },
+      "aarch64-macos": {
+        "hardware": "ARMv8 (other-multi-copy-atomic)",
+        "argument": "As x86_64-linux for plain accesses. Atomics: LLVM's AArch64 lowering (ldar/stlr, ldaxr/stlxr or LSE, dmb) is the C11-to-ARMv8 mapping proved sound for RC11 through IMM (Podkopaev et al., POPL 2019). ARMv8 allows load buffering architecturally: ORD-02 is an assumption on this target (0 in 10M runs on Apple cores, docs/architecture-audit/concurrency.md finding 4).",
+        "evidence": [
+          "tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt",
+          "tests/roadmap/architecture-audit/concurrency/native_litmus.zig",
+          "tests/roadmap/weak-cas/native.zig"
+        ]
+      },
+      "aarch64-linux": {
+        "hardware": "ARMv8 (other-multi-copy-atomic)",
+        "argument": "As aarch64-macos. Load buffering is architecturally allowed and has been observed on some Arm implementations: ORD-02 is an assumption here.",
+        "evidence": [
+          "tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt"
+        ]
+      }
+    },
+    "unqualified": {
+      "wasm32-freestanding": "The translator rejects atomics, threads and futexes on wasm32 (T02, docs/profiles.md); no theorem carries a concurrency premise for it.",
+      "wasm32-wasi": "As wasm32-freestanding.",
+      "s390x-linux": "The translator rejects atomics on the big-endian profile (T03, PRF-05)."
+    }
   }
 }

@@ -69,6 +69,9 @@ pub fn main() !void {
     }
     inline for (.{ u9, u24, u40, u128 }) |T| try layout(out, @typeName(T), T);
     try layout(out, "pointer", *const u32);
+    // L10: the error integer and an error union at the compilation's `--error-limit` width.
+    try layout(out, "anyerror", anyerror);
+    try layout(out, "error_union_u8", anyerror!u8);
     try layout(out, "packed32", Packed);
     try layout(out, "vector4", @Vector(4, u32));
     try layout(out, "vector_u9x4", @Vector(4, u9));

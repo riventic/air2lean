@@ -42,12 +42,12 @@ cp "$case_dir/RunCommon.lean" "$work/ErrorWidthRun.lean"
 "${lean_cmd[@]}" -R "$work" --run "$case_dir/Runtime.lean"
 python3 "$case_dir/negatives.py" "$translator"
 
-# Compiler exports (air-fresh): the patched 0.16.0, 0.15.2 and 0.14.1 at six widths each are
+# Compiler exports (air-fresh): the patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 at six widths each are
 # translated, elaborated and executed with the same checks as the hand-written fixtures.
 python3 "$case_dir/test_provenance.py"
 export_imports=
 export_runs=
-for version in 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   tag=V$(echo "$version" | cut -d. -f2)
   for bits in 2 8 10 16 17 32; do
     ns="EwExport${tag}B$bits"
@@ -66,7 +66,7 @@ done
   echo 'open Zig ErrorWidthRun'
   echo 'def main : IO Unit := do'
   printf '%s' "$export_runs"
-  echo '  IO.println "compiler exports: 3 versions x 6 error widths executed"'
+  echo '  IO.println "compiler exports: 4 versions x 6 error widths executed"'
 } > "$work/RuntimeExport.lean"
 "${lean_cmd[@]}" -R "$work" --run "$work/RuntimeExport.lean"
 
@@ -78,7 +78,7 @@ expected_mismatches() {
   local file="$case_dir/native/expected-mismatches-$1.txt"
   if [ -f "$file" ]; then echo "$file"; fi
 }
-for version in 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   "${lean_cmd[@]}" -R "$work" --run "$case_dir/Model.lean" "$case_dir/native/aarch64-macos-$version.txt" \
     $(expected_mismatches "$version")
 done

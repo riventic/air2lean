@@ -302,6 +302,21 @@ class Outcomes(unittest.TestCase):
             self.assertEqual(data['legacy_counts'],{'unspecified':1})
             self.assertEqual(data['mutation_eligible'],0)
 
+    def test_fresh_inputs_exclude_without_pins_and_still_fail_mismatches(self):
+        """T06 fresh inputs (scripts/fresh-inputs.sh): the pins name the committed inputs, so a
+        model exclusion on an unpinned fresh input is an exclusion, never a match or a pin
+        violation; a value disagreement is still a mismatch, and the seed is recorded."""
+        for kind,name,status in [(K.ILLEGAL,'illegal','illegal_exclusion'),(K.UNSPECIFIED,'unspecified','unspecified_exclusion')]:
+            self.seed({'ok':1},{'fail':'Zig.Error.'+name},K.VALUE,kind)
+            self.assertEqual(self.compare()[0],1)  # unpinned: a mismatch on committed inputs
+            code,data=REPORT.compare_summary(self.root,['basic'],'0.16.0','Linux-x86_64',self.summary,fresh_seed='0x5eed')
+            self.assertEqual(code,0)
+            self.assertEqual(data['counts'],{status:1})
+            self.assertEqual((data['pin_violations'],data['fresh_input_seed'],data['exact_matches']),([],'0x5eed',0))
+        self.seed({'ok':1},{'ok':2})
+        code,data=REPORT.compare_summary(self.root,['basic'],'0.16.0','Linux-x86_64',self.summary,fresh_seed='0x5eed')
+        self.assertEqual((code,data['counts']),(1,{'mismatch':1}))
+
     def test_native_unknown_cannot_hide_behind_illegal(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
         code,data=self.compare()

@@ -1935,7 +1935,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sliceFieldPtr _ p => if fc.isMemPtr p then #[p] else #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy _ a b => #[a, b]
-  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
+  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a | .errorsLenLe a => #[a]
+  | .vectorStoreElem p i v => #[p, i, v]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
@@ -2405,6 +2406,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .bitcast a =>
     if fc.isPlace a then (env, none) else
+    let isErr (t : Ty) : Bool := match t with | .errorSet _ => true | _ => false
+    if isErr (fc.valTy a) != isErr (fc.tyOfId inst.ty) then
+      -- `@intFromError`/`@errorFromInt` over the compilation's numbering (`errorTable`, L10).
+      let expr := if isErr (fc.valTy a) then
+          s!"Zig.intFromErrorIn {fc.dialect.errorSetBits} errorTable {rv a}"
+        else s!"Zig.errorFromIntIn errorTable {rv a}"
+      let (env, l) := bindLet fc env inst.id (fc.liftR expr); (env, some l)
+    else
     if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
@@ -2941,6 +2950,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .errorName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"errorNameOf {rv a}"); (env, some l)
+  | .vectorStoreElem vptr idx v =>
+    -- `v[i] = x` with a runtime index (0.14.1/0.15.2, L09): the lane store at bit `i * w`.
+    match (fc.valTyId? vptr).bind (ptrChild fc.types) |>.bind (fc.types[·]?) with
+    | some (.vector n e) =>
+      match (fc.types[e]?).bind laneBits? with
+      | some w => (env, some s!"Zig.storeLaneAt (α := {fc.emitTyOf e}) {n} {(n * w + 7) / 8} \
+          {fc.ptrAlign vptr} {rv vptr} {rv idx} {rv v}")
+      | none => (env, some (placeholder "a vector_store_elem lane without a bit width"))
+    | _ => (env, some (placeholder "a vector_store_elem through a non-vector pointer"))
+  | .errorsLenLe a =>
+    -- `cmp_lt(e)_errors_len`: the code is at most the compilation's error count (L10).
+    let (env, l) := bindLet fc env inst.id s!"pure (decide (({rv a}).toNat ≤ errorTable.size))"
+    (env, some l)
   | .structFieldVal s index =>
     let rawField : Option (TyId × Nat) := match s with
       | .inst x =>
@@ -3648,6 +3670,40 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     body := functionBody
     ctx := fc }
 
+/-- The loop specification rule at one loop (`docs/generated-code.md`): the library rule of the
+function's monad (`Zig.loop_spec`, `Zig.loop_spec_mm`, `Zig.Conc.Proto.WP.loop`) with the
+loop's body and repeat test fixed. The client supplies the invariant, the measure and the
+post-condition, and proves one iteration; the statement is the library's, not a new rule. -/
+def loopSpecLemma (fc : FCtx) (spec : String) (binders : Array (String × String) → String)
+    (caps : Array (String × String)) (call again : String) : String :=
+  let locals := fc.localsName
+  let exit := fc.exitName
+  let loop := s!"(Zig.loop ({call}) {again} : {fc.monad} {locals} {exit})"
+  if fc.conc then
+    s!"theorem {spec}{binders caps} \{γ : Type} \{P : Zig.Conc.Proto Tgt γ} \{t : Zig.ThreadId}\n" ++
+    s!"    (inv : {locals} → (Zig.ThreadId → γ) → Zig.Mem → Nat → Prop) (meas : {locals} → Nat)\n" ++
+    s!"    (post : {exit} × {locals} → (Zig.ThreadId → γ) → Zig.Mem → Nat → Prop)\n" ++
+    s!"    (step : ∀ s G m n, inv s G m n → P.WP t (({call}).run s) (fun r G' m' d =>\n" ++
+    s!"      if {again} r.1 then inv r.2 G' m' d ∧ (d < n ∨ d = n ∧ meas r.2 < meas s)\n" ++
+    s!"      else post r G' m' d) G m n) :\n" ++
+    s!"    ∀ s G m n, inv s G m n → P.WP t ({loop}.run s) post G m n :=\n" ++
+    s!"  Zig.Conc.Proto.WP.loop _ _ inv meas post step"
+  else if fc.mem then
+    s!"theorem {spec}{binders caps}\n" ++
+    s!"    (inv : {locals} → Zig.Mem → Prop) (meas : {locals} → Zig.Mem → Nat)\n" ++
+    s!"    (post : {exit} → {locals} → Zig.Mem → Prop)\n" ++
+    s!"    (step : ∀ s m, inv s m → ∃ e s' m', (({call}).run s).run m = pure ((e, s'), m') ∧\n" ++
+    s!"      (if {again} e then inv s' m' ∧ meas s' m' < meas s m else post e s' m')) :\n" ++
+    s!"    ∀ s m, inv s m → ∃ e s' m', ({loop}.run s).run m = pure ((e, s'), m') ∧ post e s' m' :=\n" ++
+    s!"  Zig.loop_spec_mm _ _ inv meas post step"
+  else
+    s!"theorem {spec}{binders caps}\n" ++
+    s!"    (inv : {locals} → Prop) (meas : {locals} → Nat) (post : {exit} × {locals} → Prop)\n" ++
+    s!"    (step : ∀ s, inv s → ∃ e s', ({call}).run s = pure (e, s') ∧\n" ++
+    s!"      (if {again} e then inv s' ∧ meas s' < meas s else post (e, s'))) :\n" ++
+    s!"    ∀ s, inv s → ∃ r, {loop}.run s = pure r ∧ post r :=\n" ++
+    s!"  Zig.loop_spec _ _ inv meas post step"
+
 /-- `--proof-api` lemmas of one emitted function (`docs/generated-code.md`): a model
 abbreviation and its unfolding lemma, and per loop (pre-order index `k`) body/again
 abbreviations, the body's unfolding lemma and the `Zig.loop` step lemma. Every equality
@@ -3680,7 +3736,7 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
      s!"  {proof fc.fnName params}"])
   let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
   let loops := (proofLoops f).toList.zipIdx.map fun (inst, k) =>
-    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
     let defn := s!"{fc.fnName}.loop{inst.id}"
     let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
     let call := applied body caps
@@ -3690,7 +3746,8 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
       s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
       s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
         s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
-        "  Zig.loop.eq_1 _ _"]
+        "  Zig.loop.eq_1 _ _",
+      loopSpecLemma fc spec binders caps call again]
   String.intercalate "\n\n" (function :: loops)
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
@@ -3736,6 +3793,9 @@ structure ProgGlobal where
   isVar : Bool := false
   /-- An `extern` global: its `ExternInit` field and Lean type; `bytes` encode that field. -/
   externField : Option (String × String) := none
+  /-- An `extern` global whose type holds a data pointer: `ExternInit` then also has the
+  external blocks it can point into (`emitMem0`). -/
+  externPtr : Bool := false
   /-- A `threadlocal` global: the block is the main thread's instance, and its index is the
   global's TLS key (§Thread-local storage). -/
   tls : Bool := false
@@ -3820,6 +3880,7 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
     out := out.push { label := n, bytes := fc.globalBytes g externField,
                       align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
                       externField := externField.map (·, emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId g.ty)),
+                      externPtr := g.isExtern && tyHoldsPtr f.types g.ty,
                       tls := g.threadlocal }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
@@ -3858,10 +3919,24 @@ def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
             out := out.push (name, lean, fields, exhaustive, bits)
   return out
 
+/-- The compilation's error numbering, if the export has one (L10): the exporter writes it when
+a function converts between errors and integers (`@intFromError`, `@errorFromInt`,
+`cmp_lt(e)_errors_len`), which `Check.lean` admits only with it. Every function of one export
+directory has the same table. -/
+def errorTableOf (funcs : Array Func) : Option (Array String) :=
+  funcs.findSome? (·.errorTable)
+
+/-- `errorTable`: code `i + 1` is `errorTable[i]` (`Zig.intFromErrorIn`, `Zig.errorFromIntIn`). -/
+def emitErrorTable (names : Array String) : String :=
+  s!"/-- The compilation's error numbering (the exporter's `error-table.air2lean`): code `i + 1` \
+    is `errorTable[i]`. -/\ndef errorTable : Array Zig.ErrName := #[{", ".intercalate (names.toList.map String.quote)}]"
+
 /-- The error names of the program (the names of its error sets), if a function reads one
-(`@errorName`). -/
+(`@errorName`). With the compilation's numbering (L10) they are its names in code order:
+`@errorFromInt` reaches errors that no error set of the program names. -/
 def errorNames (funcs : Array Func) : Array String :=
   if !funcs.any (·.allInsts.any (·.op.isErrorName)) then #[]
+  else if let some table := errorTableOf funcs then table
   else
     let names := funcs.flatMap fun f => f.types.flatMap fun t => match t with
       | .errorSet (some ns) => ns
@@ -3869,8 +3944,16 @@ def errorNames (funcs : Array Func) : Array String :=
     (names.foldl (fun acc n => if acc.contains n then acc else acc.push n) #[]).qsort (· < ·)
 
 /-- `errorNameOf`: the name of each error of the program (`@errorName`), in the blocks from
-`first` on. An error that no error set of the program names throws `.unspecified`. -/
-def emitErrorNameOf (names : Array String) (first : Nat) : String :=
+`first` on. An error that no error set of the program names throws `.unspecified`. With the
+compilation's numbering (`numbered`), the blocks are in code order and the name is found by the
+error's position in `errorTable`, as the compiler's name table is indexed by the code. -/
+def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool := false) : String :=
+  if numbered then
+    String.intercalate "\n" ["def errorNameOf (e : Zig.ErrName) : Zig.Result Zig.Slice :=",
+      "  match errorTable.idxOf? e with",
+      s!"  | some k => pure ⟨⟨some ({first} + k), 0⟩, BitVec.ofNat 64 e.utf8ByteSize⟩",
+      "  | none => throw .unspecified"]
+  else
   let arms := names.toList.zipIdx.map fun (n, k) =>
     s!"  if e = {n.quote} then pure ⟨⟨some {first + k}, 0⟩, {n.toUTF8.size}⟩ else"
   String.intercalate "\n"
@@ -3886,7 +3969,9 @@ def nameBytes (s : String) : String :=
 placement `σ` gives them (`Zig.Placement`, MM-1). A theorem from `mem0 σ` holds for every `σ`,
 so it cannot depend on where a block is. With an `extern` global, `mem0` also takes the explicit
 external initial state `ext : ExternInit`, one field per `extern` global in block order: a proof
-from `mem0 σ ext` states its assumptions about external storage on `ext`. -/
+from `mem0 σ ext` states its assumptions about external storage on `ext`. If an `extern` global
+holds a pointer, `ExternInit` also lists the external blocks (`Zig.ExternBlock`) that `mem0`
+adds after the program's globals, which such a pointer can point into (L12). -/
 def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
   let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
@@ -3895,6 +3980,11 @@ def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
       | none => if g.tls then " (threadlocal: the main thread's instance)" else ""
     s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
+  let externNames := gs.filterMap (·.externField.map (·.1))
+  let storage := if gs.any (·.externPtr) then some (freshName "storage" externNames) else none
+  let body := match storage with
+    | some field => s!"({body} ++ ext.{field}.map Zig.ExternBlock.global)"
+    | none => body
   let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
   let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals σ {body}" else
     s!"(Zig.Mem.ofGlobals σ {body}).mainTls #[{", ".intercalate keys}]"
@@ -3915,6 +4005,11 @@ def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
   let externs := gs.toList.zipIdx.filterMap fun (g, k) => g.externField.map fun (field, ty) =>
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
+  let externs := match storage with
+    | some field => externs ++ [s!"  /-- External storage: block {gs.size} + `i` is `{field}[i]`, after the \
+        program's globals. A pointer field may point into it, into a program global or nowhere; \
+        any assumption about where is a hypothesis on this value. -/\n  {field} : List Zig.ExternBlock"]
+    | none => externs
   if externs.isEmpty then
     s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc}{oracleDoc} -/\n\
       def mem0 (σ : Zig.Placement){oracleParam} : Zig.Mem := {body}{tlsInit}"
@@ -4430,6 +4525,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any (·.op.isErrorName))
+  let errorTable := errorTableOf funcs
   let targets := spawnTargets funcs
   let futures := futureTargets funcs
   let extendedCapture := targets.any (fun (_, _, fields) => fields.size != 1) || !futures.isEmpty
@@ -4444,7 +4540,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs ++ tlsReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
-    (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name) ++
+    (if hasErrorName then #["errorNameOf"] else #[]) ++
+    (if errorTable.isSome then #["errorTable"] else #[]) ++ asmDefs.map (·.name) ++
     (if device.isSome then #[deviceDefName] else #[])
   let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
     (targets ++ futures.map fun (nm, f, fields, _) => (nm, f, fields)) extendedCapture
@@ -4468,7 +4565,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
         gs.push { label := s!"the name of {lean}.{f}", bytes := nameBytes f, align := 1 }) gs
       (gs, defs.push d)
   let errNames := errorNames funcs
-  let errDefs := if hasErrorName then [emitErrorNameOf errNames globals.size] else []
+  let errDefs := if hasErrorName then
+    [emitErrorNameOf errNames globals.size (numbered := errorTable.isSome)] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let translated := funcs.any (·.allocatorModel == .translated)
@@ -4546,7 +4644,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     -- A big-endian profile: the big-endian encodings (`ZigLean/Endian.lean`, T03).
     opens := wasm32Open funcs ++ (if funcs.any (·.dialect.bigEndian) then ["open scoped Zig.BigEndian"] else [])
     preamble := structsStr ++ asmStr ++ modelStr ++ (device.map DeviceContract.emitDef).toList ++
-      globalsStr ++ tgtStr
+      (errorTable.map emitErrorTable).toList ++ globalsStr ++ tgtStr
     groups
     dispatch := dispatchStr
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
