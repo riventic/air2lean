@@ -214,6 +214,24 @@ theorem fdiverge_partial (P : FAssn) : FTriple P diverge (fun _ _ => False) :=
 
 nonvacuity_witness fdiverge_partial := ⟨fun _ => True, FAdmit.of_mem trivial fseq_default⟩
 
+/-- Vacuity guard: with any admissible input, divergence has no total triple. -/
+theorem fdiverge_not_total (P : FAssn) (Q : Unit → FAssn) (h : FAdmit P) :
+    ¬ FTotalTriple P diverge Q := by
+  intro ht
+  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+  obtain ⟨v, m', hr⟩ := ht.2 m r rF hh hp hs
+  cases hr
+
+/-- Definitions are not unfolded: a wrapper does not inherit total strength. -/
+def FWrapped (P : FAssn) (c : MemM Nat) : Prop := FTotalTriple P c (fun _ => P)
+
+theorem fwrapped_total (P : FAssn) (v : Nat) : FWrapped P (ret v) := fret_total P v
+
+/-- A conjunction is not classified, even when its parts would establish total correctness. -/
+theorem fpartial_and_returns (P : FAssn) (v : Nat) :
+    FTriple P (ret v) (fun _ => P) ∧ FReturns P (ret v) :=
+  ⟨fret_partial P v, (fret_total P v).2⟩
+
 /-- Vacuity guard: an unsatisfiable precondition makes even divergence totally correct. The
 premises (`False`) have no non-vacuity witness, so the claim is capped at `safety`. -/
 theorem ffalse_total (Q : Unit → FAssn) : FTotalTriple (fun _ => False) diverge Q :=
