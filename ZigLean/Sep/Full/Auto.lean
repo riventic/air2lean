@@ -872,10 +872,12 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
     return some pf
   catch _ => s.restore; return none
 
-/-- Close a goal that is not arithmetic by a hypothesis equal to it up to arithmetic in the
-arguments (`I.fits (n + 1) 0` for `I.fits x.toNat 0` with `x.toNat = n + 1`, `congrEq`), or up to
-projections of structure values and unfolding (`{ names := ns, .. }.names.contains e = true` by
-`Option.all domain.names.contains (some e) = true`). -/
+/-- Close a goal that is not arithmetic by a hypothesis that is not arithmetic either, equal to
+it up to arithmetic in the arguments (`I.fits (n + 1) 0` for `I.fits x.toNat 0` with
+`x.toNat = n + 1`, `congrEq`), or up to projections of structure values and unfolding in one
+argument, the others equal (`{ names := ns, .. }.names.contains e = true` by
+`Option.all domain.names.contains (some e) = true`; unfolding only there: a byte lookup against
+a size would unfold the bytes). -/
 def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
   let t ← instantiateMVars (← g.getType)
   if ← isArithProp t then return false
@@ -883,15 +885,20 @@ def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
   for d in ← getLCtx do
     if d.isImplementationDetail then continue
     let dt ← instantiateMVars d.type
-    unless headKey dt == headKey t' do continue
+    unless headKey dt == headKey t' && dt.getAppNumArgs == t'.getAppNumArgs do continue
     unless ← isProp dt do continue
+    if ← isArithProp dt then continue
     let dt' ← reduceProjs dt
     let s ← saveState
     if let some e ← congrEq dt' t' then
       g.assign (← mkExpectedTypeHint (← mkEqMP e (← mkExpectedTypeHint d.toExpr dt')) t)
       return true
     s.restore
-    if !t'.hasExprMVar && (← withDefault (isDefEq dt' t')) then
+    if t'.hasExprMVar then continue
+    let pairs := dt'.getAppArgs.zip t'.getAppArgs
+    let differ ← pairs.filterM fun (a, b) => return !(← withReducibleAndInstances (isDefEq a b))
+    let [(a, b)] := differ.toList | s.restore; continue
+    if ← withDefault (isDefEq a b) then
       g.assign (← mkExpectedTypeHint d.toExpr t); return true
     s.restore
   return false
