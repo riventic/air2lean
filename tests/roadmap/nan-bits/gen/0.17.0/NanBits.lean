@@ -124,8 +124,8 @@ def copyBytes (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 32) := do
       let i23 ← Zig.load (BitVec 32) 4 i6
       pure (.ret i23))
     | e => pure e) : Zig.MM copyBytesLocals copyBytesExit).run' { (default : copyBytesLocals) with i := s6, local3 := s3 }
-  Zig.free s6
   Zig.free s3
+  Zig.free s6
   match e with
   | .ret v => pure v
   | _ => throw .panic

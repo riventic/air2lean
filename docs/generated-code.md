@@ -438,23 +438,26 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   match e with ...
 ```
 
-**Stack budget (MM-5).** A function of a recursive call group (`callGroups`) that uses memory
-charges its frame to the stack budget: `Zig.enterFrame b` first and `Zig.leaveFrame b` after
-the frees, where `b` is the bytes of its escaping locals, each rounded up to its alignment, and
-`Zig.enterFrame` adds `Zig.frameBase` (16) for the return address and frame pointer. Under a
-budget (`Mem.stackLimit = some n`) a frame that does not fit throws `.stackOverflow`; the
-generated `mem0` has none, and its statements carry premise
-[STK-01](premises.md#stk-01). Non-recursive and pure functions charge nothing (their depth is
-bounded by the call graph, or they have no memory state); STK-01 covers them too. AIR has no
-frame size, so the charge is an estimate, not the native frame:
+The stack blocks are freed in reverse order of their allocation, so every free is of the top of
+the thread's stack (MM-18).
+
+**Stack budget (MM-5, MM-18).** A function of a recursive call group (`callGroups`) that uses
+memory charges its frame to the current thread's stack budget: `Zig.enterFrame` first
+(`Zig.frameBase`, 16 bytes, for the return address and frame pointer) and `Zig.leaveFrame` after
+the frees; its escaping locals are charged by their own stack blocks (`size + align` each). Under
+a budget (`Mem.withStack`) a frame or a stack block that does not fit throws `.stackOverflow`;
+the generated `mem0` has none, and its statements carry premise [STK-01](premises.md#stk-01).
+Non-recursive and pure functions charge no frame (their depth is bounded by the call graph, or
+they have no memory state); STK-01 covers them too. AIR has no frame size, so the charge is an
+estimate, not the native frame:
 
 ```lean
 def depth (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
-  Zig.enterFrame 64
+  Zig.enterFrame
   let s1 ← Zig.allocStack 64 1
   ...
   Zig.free s1
-  Zig.leaveFrame 64
+  Zig.leaveFrame
   match e with ...
 ```
 

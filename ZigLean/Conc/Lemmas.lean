@@ -1824,16 +1824,17 @@ theorem join_eq {m m' : Mem} {tid : ThreadId}
         ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
         throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
 
-/-- An allocation gives no error but `.stackOverflow`: no room in the address space (STK-01). -/
+/-- An allocation gives no error but `.stackOverflow`: no room in the address space or the
+stack budget (STK-01). -/
 theorem alloc_err {m : Mem} {kind : BlockKind} {size align : Nat} {e : Error}
     (h : ((alloc kind size align).run m).run = some (.error e)) : e = .stackOverflow := by
-  cases hroom : m.roomFor size align
+  cases hroom : m.allocOk kind size align
   · rw [alloc_run_noRoom m hroom] at h; cases h; rfl
   · rw [alloc_run_eq m hroom] at h; cases h
 
-/-- An allocation with room (`Mem.roomFor`) gives no error. -/
+/-- An allocation with room (`Mem.allocOk`) gives no error. -/
 theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat}
-    (hroom : m.roomFor size align = true) (e : Error) :
+    (hroom : m.allocOk kind size align = true) (e : Error) :
     ((alloc kind size align).run m).run ≠ some (.error e) := by
   rw [alloc_run_eq m hroom]; intro h; cases h
 
@@ -2095,12 +2096,12 @@ theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb :
   unfold BlkAt; rw [h]; exact hb
 
 /-- A new stack block is `BlkAt` its id, at an address aligned to its alignment: all that holds
-for every placement (`Mem.newAddr_mod`). -/
+for every placement (`Mem.allocAddr_mod`). -/
 theorem BlkAt.alloc (m : Mem) (size a : Nat) (ha : 0 < a) :
     BlkAt (m.afterAlloc .stack size a) m.blocks.size size a :=
   ⟨{ bytes := Array.replicate size .undef, align := a, kind := .stack, live := true,
-      addr := m.newAddr size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
-    m.newAddr_mod size a ha⟩
+      addr := m.allocAddr .stack size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
+    m.allocAddr_mod .stack size a ha⟩
 
 /-- An allocation keeps `BlkAt` of every existing block. -/
 theorem BlkAt.afterAlloc {m : Mem} {b sz a : Nat} (h : BlkAt m b sz a) (kind : BlockKind)

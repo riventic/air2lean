@@ -37,6 +37,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -211,10 +212,7 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
+        "closed": "List.toArray"
        },
        {
         "closed": "List.toArray"
@@ -236,7 +234,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
@@ -419,6 +416,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -568,10 +566,7 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
+        "closed": "List.toArray"
        },
        {
         "closed": "List.toArray"
@@ -593,7 +588,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
@@ -711,6 +705,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -863,10 +858,7 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
+        "closed": "List.toArray"
        },
        {
         "closed": "List.toArray"
@@ -888,7 +880,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
@@ -1013,6 +1004,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -1173,10 +1165,7 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
+        "closed": "List.toArray"
        },
        {
         "closed": "List.toArray"
@@ -1198,7 +1187,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
@@ -1512,7 +1500,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
@@ -1610,7 +1598,7 @@
     "ZigLean.Sep.Full.Conc",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Seq",
     "ZigLean.Sep.Full.Strength",
@@ -2631,7 +2619,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
@@ -2938,7 +2926,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
@@ -3027,7 +3015,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
@@ -3228,7 +3216,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
@@ -5759,6 +5747,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -5902,6 +5891,7 @@
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
+    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -6066,10 +6056,7 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
+        "closed": "List.toArray"
        },
        {
         "closed": "List.toArray"
@@ -6091,7 +6078,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
@@ -6369,7 +6355,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
@@ -6464,7 +6450,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
@@ -6672,7 +6658,7 @@
     "ZigLean.Mem.Lemmas",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
-    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
