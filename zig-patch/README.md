@@ -8,7 +8,11 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   function. One source for every supported version: its `Compat` section holds
   the version differences (comptime branches on `builtin.zig_version`).
 - `<version>/hook.patch`: the one-line call in `src/Zcu/PerThread.zig`, after the
-  function body is analysed. The only per-version file of the exporter.
+  function body is analysed. The only per-version file of the exporter. For 0.15.2 and 0.14.1
+  it also makes `Compilation.addLinkLib` return when there is no binary (`-fno-emit-bin`):
+  those versions queue a DLL import library for every `extern "kernel32"`/`"ntdll"` function of a
+  Windows target, which an AIR-only compiler (no LLVM) cannot build, so their Windows exports
+  failed (docs/windows-target.md). 0.16.0 and 0.17.0 build import libraries without LLVM.
 - `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
 New dumps include `target_endian` (`little` or `big`) in schema 11. The translator rejects

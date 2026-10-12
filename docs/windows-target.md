@@ -18,7 +18,7 @@ premises, as on Linux and macOS ([CLAUDE.md](../CLAUDE.md) §Trusted base).
 | `Target.qualified` row `x86_64`/`windows`, ABI `gnu`, Zig 0.17.0/0.16.0/0.15.2/0.14.1 | done |
 | Fail closed: OS-backed std models, `threadlocal`, Windows OS calls, `f80` x87 precision | done |
 | `--assume-x87-extended` admission (header `x87-extended`) | done; its premise awaits approval (§Premises) |
-| `scripts/check.sh` cross-target mode (`AIR2LEAN_TARGET`), `air-windows/` overlays, `Gen-windows.lean` | done |
+| `scripts/check.sh` cross-target mode (`AIR2LEAN_TARGET`), `air-windows/` overlays, `Gen-windows.lean` | done: §Goldens |
 | Diff harness on Windows (case child with restart, `tests/diff/common.zig`) | done |
 | T04 probe for `x86_64-windows-gnu`, expected files for four versions, `Model.lean` table | done (recorded under Wine) |
 | Native confirmation on a Windows host (CI `windows` job) | open: §Native evidence |
@@ -94,6 +94,30 @@ control. The `floatops` example's Windows translation passes the admission
 The long-term fix is in the OS layer: when Windows threads are translated (Phase 3), the model
 gets the per-thread precision control as thread state, set by the startup code and by
 `NtCreateThreadEx`, and the `f80` ops read it, so no admission is needed.
+
+## Goldens
+
+`scripts/check.sh` with `AIR2LEAN_TARGET=x86_64-windows-gnu` exports each example for the target
+(`-target x86_64-windows-gnu -mcpu=baseline`, cross-compiled from any host), compares the AIR
+with the golden stack (shared, version, then `air-windows/` and `air-windows-x86_64/`), translates
+it (with `examples/<ex>/translate-windows.args`) and compares the translation with
+`Gen-windows-x86_64.lean`, `Gen-windows.lean`, the version's `Gen.lean` or `Proofs/<Ex>/Gen.lean`.
+
+For the nine pure examples (`basic`, `recursion`, `options`, `floatops`, `floats`, `errors`,
+`variants`, `pointers`, `layout`) and all four Zig versions, the Windows AIR is the x86_64-linux
+AIR, except that 0.17.0 `floatops` needs Linux's two `f80`-aligned files
+(`tests/golden/0.17.0/floatops/air-windows/`; the version's shared files are aarch64's 8-aligned
+`f80`), and every translation equals the committed one: no `Gen-windows.lean` exists. `c_long`
+does not occur in them; the windows-target gate covers it.
+
+Zig 0.14.1 and 0.15.2 queue a DLL import library for every `extern "kernel32"`/`"ntdll"` function of
+a Windows compilation, also without a binary, and the AIR-only compiler (no LLVM) cannot build one;
+their `hook.patch` makes `addLinkLib` skip it when there is no binary ([zig-patch/README.md](../zig-patch/README.md)).
+
+`tests/roadmap/windows-target/check.sh` translates recorded 0.17.0 Windows exports of small
+sources and checks each rule: pure code with a 32-bit `c_long` and an `f80` `neg` is accepted; an
+`f80` division is rejected, and accepted with `--assume-x87-extended` (header admission); a
+`threadlocal` global, a `std.Thread.spawn` and a `kernel32` call are rejected with their reasons.
 
 ## std paths that change
 
