@@ -161,9 +161,16 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
   `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
   its locality, statements unchanged; the pointer order and bounds checks read no byte, so their
-  thread rules are the proofs and the sequential rules are read from them. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
-  `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
-  an old block alive).
+  thread rules are the proofs and the sequential rules are read from them. `Full/Mmap`
+  (`mmap'`, `mmapC`, `munmapTail'`, `munmapPrefix'`, `munmapWhole'`, `munmapTailR`,
+  `mremapShrink'`, `mremapShrinkR`): `ThreadLocal.mmap` (every precondition: no record read, a
+  new block), `ThreadLocal.munmap` and `ThreadLocal.mremapShrink` (the removed bytes are the
+  precondition's; `Mem.NoRevive.setBlock`: a block keeps or loses live bytes, never gains one).
+  The shrink's thread rules ask for a nonempty cut (`lo + n < S`, the sequential rule allows
+  `≤`): an empty cut records a zero-length write at the mapping's end, and the race check counts
+  a zero-length access at an offset strictly inside an entry (`raceAt`), so a stale entry of a
+  concurrent thread across the end (from before an earlier shrink) makes it `.illegal`; the
+  extent alone does not order that entry.
 
   **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
   check passes only if no recorded write to the global is concurrent with the reader. Every
