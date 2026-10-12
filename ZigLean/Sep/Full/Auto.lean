@@ -122,6 +122,15 @@ def reduceProjs (e : Expr) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
+/-- Raw natural-number literals as numerals (`OfNat.ofNat n`): unification can assign a rule's
+argument a raw literal (`BitVec.ofNat 6 ?k =?= 3`, an interface's alignment), which the
+precondition's atoms (`2 ^ ?k`) must match as the state writes them. Equal up to `instOfNatNat`. -/
+def normNatLits (e : Expr) : MetaM Expr :=
+  Meta.transform e (pre := fun x => do
+    if x.isAppOfArity ``OfNat.ofNat 3 then return .done x
+    if let .lit (.natVal n) := x then return .done (mkNatLit n)
+    return .continue)
+
 /-- Unfold an assertion atom while it unfolds to a combination of assertions (not to a raw
 predicate `fun r => …`). -/
 partial def unfoldAtom (e : Expr) : MetaM Expr := do
@@ -920,24 +929,55 @@ def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
     s.restore
   return false
 
+/-- A goal `match d with …` (on a term, not a variable) where a hypothesis `d = c` names the
+constructor application `c`: the goal of `c`'s case. -/
+def matchCase? (g : MVarId) : MetaM (Option MVarId) := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let some m ← matchMatcherApp? t | return none
+  for d in m.discrs do
+    if d.isFVar then continue
+    for h in ← getLCtx do
+      if h.isImplementationDetail then continue
+      let some (_, l, r) := (← instantiateMVars h.type).eq? | continue
+      unless l == d do continue
+      let .const c _ := r.getAppFn | continue
+      let some (.ctorInfo _) := (← getEnv).find? c | continue
+      let s ← saveState
+      try
+        let mot := Expr.lam `x (← inferType d) (← kabstract t d) .default
+        -- a dependent `match` (`match h : d with …`) does not abstract over `d`
+        unless ← isTypeCorrect mot do s.restore; continue
+        let .reduced t' ← reduceMatcher? (mkApp mot r).headBeta | s.restore; continue
+        return some (← g.replaceTargetEq t'.headBeta (← mkCongrArg mot h.toExpr))
+      catch _ => s.restore
+  return none
+
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
 goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts, no
 hypotheses up to arithmetic). -/
 partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
   if ← g.isAssigned then return []
   let t ← instantiateMVars (← g.getType)
-  let t' ← whnfR t
-  let t' ← if t'.isAppOfArity ``And 2 then pure t' else
+  let t0 ← whnfR t
+  let t' ← if t0.isAppOfArity ``And 2 then pure t0 else
     match t.getAppFn with
-    | .const c _ => if ← isLibrary c then pure t' else
+    | .const c _ => if ← isLibrary c then pure t0 else
         match ← unfold1 t with
         | some u => whnfR u
-        | none => pure t'
-    | _ => pure t'
+        | none => pure t0
+    | _ => pure t0
   if t'.isAppOfArity ``And 2 then
     let g ← g.replaceTargetDefEq t'
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
     return (← arithGoals g1 quick) ++ (← arithGoals g2 quick)
+  -- a user definition (`w.FirstFacts`): its unfolding, a `match` by the case a hypothesis selects,
+  -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
+  if t' != t0 then
+    let s ← saveState
+    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    if let some g'' ← matchCase? g' then return ← arithGoals g'' quick
+    if ← assumptionR g' then return []
+    s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
   if let some (_, x, y) := t.eq? then
@@ -1299,6 +1339,19 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
       if let some g' ← observing? (subst g h) then return g'
     if let some g' ← substCtor g h l r then return g'
     return g
+  -- a fact of a user structure (`NodeFacts N A sz`): its fields next to it (the fact stays, as
+  -- the hypothesis of a lemma), each once
+  if let .const c _ := ty.getAppFn then
+    let env ← getEnv
+    if isStructure env c && (← isProp ty) && !(← isLibrary c) && (← isClass? ty).isNone then
+      let mut g := g
+      for fn in getStructureFields env c do
+        let pf ← g.withContext (mkProjection (mkFVar h) fn)
+        let fty ← instantiateMVars (← g.withContext (inferType pf))
+        if ← g.withContext ((← getLCtx).anyM fun d => return d.type == fty) then continue
+        let (h', g') ← (← g.assert fn fty pf).intro1
+        g ← destruct g' h'
+      return g
   -- a user definition of a fact
   if let .const c _ := ty.getAppFn then
     unless ← isLibrary c do
@@ -1448,7 +1501,7 @@ a large generated body as on a small one. At `x >>= f` only `x` is simplified an
 rewritten (`bind_assoc`, `pure_bind`, `ite_bind`, …); the continuation `f` is left as it is (it is
 normalized once it is the head: `pure_bind` makes it the head of the result, which simp visits).
 `fold?` (concurrent bodies): a generated indirect call `if f == c₁ then x₁ else …` is folded into
-`callIndirect` (`callIndirect_fold_one`/`cons`) at its `if`, before simp rewrites its tests. -/
+`callIndirect` (`callIndirect_fold_one`/`ext`/`cons`) at its `if`, before simp rewrites its tests. -/
 def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context) : Simp.Methods :=
   let m := Simp.mkDefaultMethodsCore procs
   let mFold := Simp.mkDefaultMethodsCore #[]
@@ -1514,6 +1567,7 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
   let foldCtx : MetaM Simp.Context := do
     if let some f ← (← caches).fold.get then return f
     let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
+    let thms ← thms.addConst ``Full.callIndirect_fold_ext
     let thms ← thms.addConst ``Full.callIndirect_fold_cons
     let f ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
     (← caches).fold.set (some f); return f
@@ -2055,6 +2109,8 @@ def planShares (st : St) (qshares0 : Array (Array Expr)) : TacticM St := do
   -- a share of a block of which the state has no share: lent by the block's authority
   for q in qshares0 do
     let q ← q.mapM instantiateMVars
+    -- (a share of an unknown block is matched below, by its fraction and tag)
+    if q[0]!.hasExprMVar then continue
     let mut has := false
     for x in st.ats do
       if let some y := shareArgs? x then
@@ -2320,12 +2376,21 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
             s'.restore
     for _ in [0:3] do
       let qats := atoms Qi
-      -- block facts first
+      -- block facts first (of known pointers: an unknown pointer is the atoms', not the first
+      -- of the context in that block); again once the atoms determined pointers
+      let blockFacts (φs : Array Expr) : TacticM (Array Expr) := do
+        let mut later := #[]
+        for φ in φs do
+          let φ ← instantiateMVars φ
+          if φ.appFn!.appArg!.hasExprMVar then later := later.push φ
+          else discard <| solveBlock φ
+        return later
+      let mut φs := #[]
       for f in qats.filter (·.isAppOfArity liftN 1) do
-        for φ in ← conjuncts (← instantiateMVars f.appArg!) do
-          if isBlockEq φ then
-            discard <| solveBlock φ
+        φs := φs ++ (← conjuncts (← instantiateMVars f.appArg!)).filter isBlockEq
+      let later ← blockFacts φs
       preassign st qats
+      discard <| blockFacts later
       let Qi1 ← instantiateMVars Qi
       let (Qi2, pQ2) ← instQ Qi1
       let Qi2 ← reduceProjs Qi2
@@ -2605,10 +2670,13 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
     unless pf.hasMVar || φ.hasMVar do out := out.push (n, pf, φ, concl.isAppOfArity ``MemFacts 2)
   return out
 
-/-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
+/-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis;
+or it is an equation of equal terms (two regions with the same labels). -/
 def knownFact (ψ : Expr) : MetaM Bool := do
   let s ← saveState
   let r ← do
+    if let some (_, l, r) := ψ.eq? then
+      if ← withReducible (isDefEq l r) then return true
     if ψ.isAppOfArity ``Exists 2 then
       if let .lam _ _ body _ := ψ.appArg! then
         if let some (_, l, _) := body.eq? then
@@ -2691,7 +2759,9 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else some x
     let some tx := target? | s.restore; return none
     if kind == ``CTriple then
-      let cmd ← unfoldToHead (← instantiateMVars cmd) tx
+      -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
+      -- reduced first, so that a literal argument unifies as written, not in its unfolded form
+      let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
       unless headKey cmd == headKey tx do s.restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
@@ -2699,7 +2769,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     else
       unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
-    let P₀i ← instantiateMVars P₀
+    let P₀i ← normNatLits (← instantiateMVars P₀)
     let whole := P₀i.isMVar
     let mut R := mkConst empN
     -- `EUpd P (P₀ ⋆ R)` by the planner, when the rule's precondition is not literally there
@@ -2756,8 +2826,8 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
           trace[fsym] "rule {rule}: undetermined {a}"
           s.restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
-    let Q₀ ← instantiateMVars Q₀
-    let P₀ ← instantiateMVars P₀
+    let Q₀ ← normNatLits (← instantiateMVars Q₀)
+    let P₀ ← normNatLits (← instantiateMVars P₀)
     -- the rule in the backend's kind: `FTotalTriple` (sequential, total), `FTriple` (`P.step`,
     -- `C.step`) or `CTriple` (`C.stepC`)
     let mut kind := kind
@@ -2792,6 +2862,84 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
     s.restore; return none
 
+/-! ## Updates of the caller -/
+
+/-- An update lemma `∀ …, EUpd P Q` (an argument of `fsym [u]`, a planner step at returns). A
+local hypothesis that a substitution replaced is none (its rule no longer applies either). -/
+def isUpd (e : Expr) : MetaM Bool := do
+  try return (← instantiateMVars (← inferType e)).getForallBody.isAppOfArity ``EUpd 2
+  catch _ => return false
+
+/-- An unknown of a structure type that no local has (a bundle of the lemma's variables, such
+as `v : FV` of a precondition `v.L`) becomes its constructor applied to fresh unknowns, so that
+its projections (`v.N`) unify field by field. An unknown of a type that a local has unifies with
+it through its projections (`?s.ptr` with `s.ptr`) and stays. -/
+def etaStructArgs (args : Array Expr) : MetaM Unit := do
+  let env ← getEnv
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← whnfD (← inferType a)
+    let .const n us := ty.getAppFn | continue
+    unless isStructure env n do continue
+    if (← isClass? ty).isSome || (← isProp ty) then continue
+    if ← (← getLCtx).anyM fun d => do
+        return !d.isImplementationDetail && (← withNewMCtxDepth (isDefEq (← whnfD d.type) ty)) then
+      continue
+    let ctor := mkAppN (mkConst (getStructureCtor env n).name us) ty.getAppArgs
+    let (fs, _, _) ← forallMetaTelescope (← inferType ctor)
+    discard <| isDefEq a (mkAppN ctor fs)
+
+/-- Apply the caller's update `u : EUpd P₀ Q₀` at a return of `v` into `Q v`: plan
+`EUpd P (P₀ ⋆ R)` (the frame `R`; `P₀`'s unknowns from the state, its hypotheses as side goals),
+then `EUpd (Q₀ ⋆ R) (Q v)`. Returns the proof of `EUpd P (Q v)` with the goals left, or `none`
+if the update does not apply. -/
+def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
+  let s ← saveState
+  try
+    let (args, _, concl) ← forallMetaTelescope (← inferType u)
+    let concl ← whnfR concl
+    unless concl.isAppOfArity ``EUpd 2 do s.restore; return none
+    etaStructArgs args
+    -- the precondition unfolded, so that the plan's proof does not mention unknowns that only
+    -- the update's hypotheses determine (fields of an expanded structure)
+    let P₀ ← reduceProjs (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
+    let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
+    let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀ fr])
+    unless (← closeEntail hE.mvarId!).isEmpty do
+      trace[fsym] "update {u}: no plan for its precondition"
+      s.restore; return none
+    -- the hypotheses, with the projections of expanded structures reduced
+    let sides ← (← args.filterM fun a => do
+      if ← a.mvarId!.isAssigned then return false
+      isProp (← inferType a)).toList.mapM fun a => do
+        a.mvarId!.replaceTargetDefEq (← reduceProjs (← instantiateMVars (← inferType a)))
+    let some left ← solveSides sides | do
+      trace[fsym] "update {u}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
+      s.restore; return none
+    for a in args do
+      let a ← instantiateMVars a
+      if a.hasExprMVar && !(← isProp (← inferType a)) then
+        trace[fsym] "update {u}: undetermined {a}; left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
+        s.restore; return none
+    let R ← instantiateMVars fr
+    let Q₀R := mkSep (← instantiateMVars concl.appArg!) R
+    let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
+      (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
+    -- the update's postcondition is the return's (up to the order and `emp`), else the planner
+    let (h2, left2) ← try pure (← mkAppM ``atom_eq #[← acEq Q₀R Qv], [])
+      catch _ => do
+        let m ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[Q₀R, Qv])
+        pure (m, ← closeEntail m.mvarId!)
+    -- (the planner leaves an update goal, possibly per case of a split, where it fails)
+    if ← left2.anyM fun m => return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2 then
+      trace[fsym] "update {u}: postcondition not reached"
+      s.restore; return none
+    let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
+    return some (pf, left ++ left2)
+  catch ex =>
+    trace[fsym] "update {u} failed: {ex.toMessageData}"
+    s.restore; return none
+
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
   -- the registered rules by the head of their command, once per run
@@ -2811,7 +2959,7 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
       (← caches).rules.set (some k)
       pure k
   let kx := headKey ((memCmd? x).getD x)
-  let mut out := user
+  let mut out ← user.filterM fun u => return !(← isUpd u)
   for (key, n) in keyed do
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
       out := out.push (← mkConstWithFreshMVarLevels n)
@@ -2829,15 +2977,16 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
 mutual
-/-- An indirect call `callIndirect f ((p, y) :: arms)` that no rule covers: `y` if the facts show
-`f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is `throw .illegal`, which
-must be unreachable. -/
+/-- An indirect call `callIndirect f ((p, y) :: arms) d` that no rule covers: `y` if the facts
+show `f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is the last arm `d`:
+`throw .illegal` (closed: must be unreachable) or the environment's call (open, by its
+contract). -/
 partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array Expr)
     (extra : Array Syntax) (fuel : Nat) : TacticM (List MVarId) := g.withContext do
   let a := x.getAppArgs
-  let (β, fp, arms) := (a[0]!, a[3]!, a[4]!)
+  let (β, fp, arms, d) := (a[0]!, a[2]!, a[3]!, a[4]!)
   if arms.isAppOfArity ``List.nil 1 then
-    let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp]
+    let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp, d]
     let g' ← rewriteCmd g L α P Q c x (← inferType e).appArg! e
     return ← walk g' user extra (fuel - 1)
   unless arms.isAppOfArity ``List.cons 3 do return [g]
@@ -2845,20 +2994,20 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
   let rest := arms.getArg! 2
   let (p, y) := (hd.getArg! 2, hd.getArg! 3)
   if let some h ← proveEq fp p then
-    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, h]
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, d, rest, h]
     return ← walk (← rewriteCmd g L α P Q c x y e) user extra (fuel - 1)
   let eqT ← mkEq fp p
   -- `f ≠ p` (a pointer literal of another function, or by the facts)
   let hn ← mkFreshExprMVar (mkNot eqT)
   if ← arith hn.mvarId! (quick := true) <||> closeWith hn.mvarId! (← `(tactic| decide)) then
-    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, ← instantiateMVars hn]
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, d, rest, ← instantiateMVars hn]
     return ← walk (← rewriteCmd g L α P Q c x (← inferType e).appArg! e) user extra (fuel - 1)
   let (sp, sn) ← g.byCases eqT `hf
   let gp ← sp.mvarId.withContext do
-    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, Expr.fvar sp.fvarId]
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, d, rest, Expr.fvar sp.fvarId]
     rewriteCmd sp.mvarId L α P Q c x y e
   let gn ← sn.mvarId.withContext do
-    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, Expr.fvar sn.fvarId]
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, d, rest, Expr.fvar sn.fvarId]
     rewriteCmd sn.mvarId L α P Q c x (← inferType e).appArg! e
   let gp ← destruct gp sp.fvarId
   return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
@@ -2899,15 +3048,27 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
+    let Qv := (mkApp Q v).headBeta
     let s ← saveState
-    let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, (mkApp Q v).headBeta])
+    let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
     g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
     let left ← closeEntail h.mvarId!
     if left.isEmpty then return []
-    -- more facts (of the atoms) may close it
     let s1 ← saveState
+    -- an update of the caller's (`fsym [u]`): one that closes it, else the first that applies
+    let mut part? : Option (Tactic.SavedState × List MVarId) := none
+    for u in user do
+      unless ← isUpd u do continue
+      s.restore
+      let some (pf, left) ← tryUpd u P Qv | continue
+      g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, pf])
+      if left.isEmpty then return []
+      trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
+      if part?.isNone then part? := some (← saveState, left)
+    -- more facts (of the atoms) may close it
     s.restore
     if let some r ← moreFacts then return r
+    if let some (s2, left) := part? then s2.restore; return left
     s1.restore
     return left
   -- panic: the branch must be unreachable
@@ -3056,7 +3217,9 @@ elab "fsym_entail" : tactic => do
     replaceMainGoal (← closeEntail g)
 
 /-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
-(triples, tried before the library's) or simp lemmas for the program. -/
+(triples, tried before the library's), updates `EUpd P Q` (at a return the planner does not
+close: `P` planned out of the state, `Q` into the postcondition; `tryUpd`) or simp lemmas for the
+program. -/
 syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
 
 @[tactic fsymTac] def evalFsym : Tactic := fun stx => do
@@ -3065,11 +3228,17 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   let mut user := #[]
   let mut extra := #[]
   for a in args do
+    -- an update lemma by name keeps its implicit arguments (fresh at each return)
+    let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
+        try some <$> mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload a) catch _ => pure none
+      else pure none
+    if let some c := c? then
+      if ← isUpd c then user := user.push c; continue
     let e ← elabTerm a none
     let ty ← instantiateMVars (← inferType e)
     -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
     let (_, _, concl) ← forallMetaTelescope ty
-    if (ruleConcl? (← whnfR concl)).isSome then user := user.push e
+    if (ruleConcl? (← whnfR concl)).isSome || (← isUpd e) then user := user.push e
     else extra := extra.push a
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
