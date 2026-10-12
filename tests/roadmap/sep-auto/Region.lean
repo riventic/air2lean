@@ -30,6 +30,20 @@ theorem sentinel_total (n : BitVec 64) (bs : Array Byte) (h : n.toNat < bs.size)
   unfold sentinel
   fsym
 
+/-- The same through a formed pointer, as generated code does it (bounds check, `ptrProject`). -/
+def sentinelAt (n len : BitVec 64) : MemM (BitVec 8) := do
+  let q ← Zig.checkIndex len n >>= fun _ => Zig.ptrProject p (·.elem 1 n)
+  Zig.store 1 q (7 : BitVec 8)
+  Zig.checkSentinelIndex len n
+  Zig.load (BitVec 8) 1 q
+
+theorem sentinelAt_total (n len : BitVec 64) (bs : Array Byte) (h : n.toNat < len.toNat)
+    (hl : len.toNat = bs.size) :
+    FTotalTriple (up (regionIn p A S K 1 bs)) (sentinelAt p n len)
+      (fun r => ⟪r = 7#8⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs n.toNat (Enc.encode 7#8)))) := by
+  unfold sentinelAt
+  fsym
+
 /-- Every byte of a region becomes undefined. -/
 theorem memsetUndef_total (n : BitVec 64) (bs : Array Byte) (h : n.toNat = bs.size) :
     FTotalTriple (up (regionIn p A S K 1 bs)) (Zig.memset (α := BitVec 8) 1 p n none)
