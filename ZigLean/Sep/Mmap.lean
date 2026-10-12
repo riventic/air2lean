@@ -732,7 +732,7 @@ theorem TotalTriple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
     have hm' : (({ m with allocs := m.allocs + 1 } : Mem).mremapGrown os.pageSize b blk lo n).heap =
         liveCells b nb ∪ hF := heap_replace hm hlt rfl hFb hh
     refine ⟨_, _, liveCells b nb, rfl, liveCells_disjoint hFb, hm', ⟨rfl, A, lo, rfl, by simp; omega,
-      hA0, hlo0, ?_⟩, ⟨hst.single⟩⟩
+      hA0, hlo0, ?_⟩, ⟨Mem.SingleThread.forgetFrom (m := { m with allocs := m.allocs + 1 }) hst.single _ _⟩⟩
     · have hc := liveCells_bytesAt (b := b) (nb := nb) hl hK (by rw [hnbs]; omega)
       rw [show nb.bytes.extract lo nb.bytes.size = bs ++ mremapFill os.pageSize bs.size n by
           rw [show nb.bytes = blk.bytes ++ fill from rfl, extract_append_live (by omega) hx', hfill],

@@ -92,6 +92,24 @@ theorem Mem.OwnsC.frame (hs : StepIn hF m m') (ho : m.OwnsC c h) (hsub : ∀ l, 
     · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ hnt
     · exact absurd hb' (Nat.not_le.mpr hb)
 
+/-- **Revived bytes are owned by every clock**: after `Mem.forgetFrom b S` (an in-place growth),
+no recorded access to an offset `≥ S` of block `b` is concurrent with anything, so every clock
+owns those bytes, given that it covers the recorded accesses to blocks that do not exist yet
+(`hnew`). -/
+theorem Mem.OwnsC.forgotten {b : BlockId} {S : Nat} (hfp : m'.footprint = (m.forgetFrom b S).footprint)
+    (hh : ∀ l, h l ≠ none → l.1 = b ∧ S ≤ l.2)
+    (hnew : ∀ e ∈ m'.footprint, m'.blocks.size ≤ e.block → VClock.le e.clock c = true) :
+    m'.OwnsC c h := by
+  intro e he ht
+  rcases ht with ⟨x, h1, h2, h3⟩ | hb
+  · obtain ⟨hb, hS⟩ := hh _ h3
+    rcases Mem.forgetFrom_entry (hfp ▸ he) hb with hc | ⟨hlt, hend⟩
+    · rw [hc]; exact VClock.le_default c
+    · exfalso
+      have hS' : S ≤ x := hS
+      omega
+  · exact hnew e he hb
+
 /-- Another thread keeps what it owns over a `StepIn hF` when that is a part of `hF`. -/
 theorem Mem.Owns.frame {u : ThreadId} (hs : StepIn hF m m') (hu : u ≠ m.current) (ho : m.Owns u h)
     (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns u h := by

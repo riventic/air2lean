@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# MM-16 (docs/architecture-audit/memory-model.md): per-thread stack regions.
+# MM-18, MM-19 (docs/architecture-audit/memory-model.md): per-thread stack regions.
 #
-#   tests/roadmap/stack-region/check.sh                  # kernel regressions (Regressions.lean)
+#   tests/roadmap/stack-region/check.sh                  # kernel regressions (Regressions.lean,
+#                                                        # ThreadStack.lean: MM-19)
 #   AIR2LEAN_STACK_ZIG=$HOME/.cache/air2lean/host-0.17.0/zig \
 #     tests/roadmap/stack-region/check.sh [--docker-linux] # + the native fixture (evidence.zig)
 #
@@ -25,10 +26,13 @@ for arg in "$@"; do
 done
 fail() { echo "stack-region: $1" >&2; exit 1; }
 
-lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc
+lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc ZigLean.Os ZigLean.Os.Mmap ZigLean.Conc.Sched
 out=$(lake env lean "$here/Regressions.lean" 2>&1) || { echo "$out"; fail 'Regressions.lean does not check'; }
+# MM-19: a thread's locals in the stack part of its thread mapping.
+out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'ThreadStack.lean does not check'; }
+out="$out"$'\n'"$out2"
 echo "$out"
-[ "$(grep -c 'depends on axioms' <<<"$out")" = 6 ] || fail 'expected 6 axiom reports'
+[ "$(grep -c 'depends on axioms' <<<"$out")" = 11 ] || fail 'expected 11 axiom reports'
 used=$(grep -o 'axioms: \[[^]]*\]' <<<"$out" | sed 's/axioms: \[//; s/\]//' | tr ',' '\n' | tr -d ' ' | sort -u)
 for a in $used; do
   case "$a" in propext|Quot.sound|Classical.choice) ;; *) fail "nonstandard axiom $a" ;; esac
