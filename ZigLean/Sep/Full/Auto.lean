@@ -1052,6 +1052,11 @@ where
 
 /-! ## Updates into a postcondition: the planner -/
 
+/-- `∀ r, x r → y r`. -/
+def mkImp' (x y : Expr) : MetaM Expr :=
+  withLocalDeclD `r (mkConst ``Zig.Full.Res) fun r => do
+    mkForallFVars #[r] (← mkArrow (mkApp x r) (mkApp y r))
+
 /-- Prove `x = y`: pointers by block and offset, numbers by arithmetic, applications of one
 function by congruence (one level at a time). -/
 partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : TacticM Bool := g.withContext do
@@ -1623,33 +1628,45 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let P := t.appFn!.appArg!
     let Q ← reduceProjs t.appArg!
     let (Qi, pQ) ← instQ Q
-    let Qi ← reduceProjs Qi
+    let mut Qi ← reduceProjs Qi
+    let mut pQ := pQ
+    let mut st ← St.init P
+    -- pre-assign by the atoms that unify outright; an atom that unfolds once its witnesses are
+    -- assigned (a `match` on an existential) is opened again
+    let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
+      for a in qats do
+        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
+          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
+        for x in st.ats do
+          let s' ← saveState
+          if ← unifyAtom a x then break
+          s'.restore
+      for a in qats do
+        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
+          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
+        if (← instantiateMVars a).hasExprMVar then
+          for x in st.ats do
+            if headKey a != headKey x then continue
+            let s' ← saveState
+            if ← matchArgs a x then
+              if (← proveEq x (← instantiateMVars a)).isSome then break
+            s'.restore
+    for _ in [0:3] do
+      let qats := atoms Qi
+      -- block facts first
+      for f in qats.filter (·.isAppOfArity liftN 1) do
+        let φ ← instantiateMVars f.appArg!
+        if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+          discard <| solveBlock φ
+      preassign st qats
+      let Qi1 ← instantiateMVars Qi
+      let (Qi2, pQ2) ← instQ Qi1
+      let Qi2 ← reduceProjs Qi2
+      if Qi2 == Qi1 then break
+      pQ ← mkAppM ``imp_trans #[← mkExpectedTypeHint pQ2 (← mkImp' Qi2 Qi1), pQ]
+      Qi := Qi2
     let qats := atoms Qi
     let facts := qats.filter (·.isAppOfArity liftN 1)
-    -- block facts first
-    for f in facts do
-      let φ ← instantiateMVars f.appArg!
-      if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
-        discard <| solveBlock φ
-    let mut st ← St.init P
-    -- pre-assign by the atoms that unify outright
-    for a in qats do
-      if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-        (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
-      for x in st.ats do
-        let s' ← saveState
-        if ← unifyAtom a x then break
-        s'.restore
-    for a in qats do
-      if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-        (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
-      if (← instantiateMVars a).hasExprMVar then
-        for x in st.ats do
-          if headKey a != headKey x then continue
-          let s' ← saveState
-          if ← matchArgs a x then
-            if (← proveEq x (← instantiateMVars a)).isSome then break
-          s'.restore
     -- the labels of an authority (its block's size and kind) from the state's
     for a in qats do
       let a ← instantiateMVars a
@@ -1739,16 +1756,20 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
         (← mkEq st2.ats[0]! a)])
       st := st2
     trace[fsym] "plan: authorities done"
-    -- knowledge of a block's address from an owned region of it (`known_of_region`)
+    -- knowledge of a block's address from an owned region of it (`known_of_region`), for each
+    -- `known` of the postcondition that the state's knowledge does not cover
+    let mut knowUsed : Array Nat := #[]
     for a in qats do
       let a ← instantiateMVars a
       unless a.isAppOfArity ``Zig.Full.known 2 do continue
-      let have_ ← st.ats.anyM fun x => do
+      let mut have_ := none
+      for i in [0:st.ats.size] do
+        if knowUsed.contains i || !st.ats[i]!.isAppOfArity ``Zig.Full.known 2 then continue
         let s' ← saveState
-        let ok ← unifyAtom a x
+        let ok ← unifyAtom a st.ats[i]!
         s'.restore
-        return ok
-      if have_ then continue
+        if ok then have_ := some i; break
+      if let some i := have_ then knowUsed := knowUsed.push i; continue
       for i in [0:st.ats.size] do
         let some r := regionArgs? st.ats[i]! | continue
         let s' ← saveState
@@ -1759,6 +1780,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
           | s'.restore; continue
         let h ← mkAppOptM ``known_of_region #[b, r[0]!, r[1]!, r[2]!, r[4]!, r[3]!, r[5]!, hb, hpos]
         st ← st.step #[i] #[st.ats[i]!, mkAppN (mkConst ``Zig.Full.known) #[b, r[1]!]] h
+        knowUsed := (knowUsed.map fun k => if k < i then k + 2 else k + 1) |>.push 1
         break
     -- a frame (an undetermined atom of the postcondition) takes what is left
     let frame? := (← qats.mapM instantiateMVars).find? (·.isMVar)
@@ -1845,16 +1867,12 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     for f in facts.reverse do
       let φ ← instantiateMVars f.appArg!
       let hφ ← mkFreshExprMVar φ
-      trace[fsym] "plan: fact {φ}"
       left := (← arithGoals hφ.mvarId!) ++ left
       body ← mkAppM ``imp_lift #[hφ, body]
       T := mkSep f T
-    trace[fsym] "plan: facts done"
     let T' ← instantiateMVars T
-    let Qi ← instantiateMVars Qi
-    trace[fsym] "plan: T' {T'}"
-    trace[fsym] "plan: Qi {Qi}"
-    let eT ← acEq T' Qi
+    let Qf ← instantiateMVars Qi
+    let eT ← acEq T' Qf
     let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[body, ← mkAppM ``imp_eq #[eT]], pQ]
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
@@ -2114,6 +2132,14 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   return [g]
 
 end
+
+/-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with
+the planner of `fsym`; facts of `Q` it cannot prove are left as goals. -/
+elab "fsym_entail" : tactic => do
+  let g ← getMainGoal
+  withRunCaches do
+    discard <| arithSimpCtx
+    replaceMainGoal (← closeEntail g)
 
 /-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
 (triples, tried before the library's) or simp lemmas for the program. -/
