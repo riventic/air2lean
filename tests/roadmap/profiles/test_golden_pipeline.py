@@ -395,7 +395,7 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         self.assertEqual(tree, (self.repo / ".lake/check-tree/0.16.0").resolve())
         self.assertEqual((tree / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, version_body))
         self.assertIn("build Proofs.Basic.Gen", (tree / "calls.log").read_text())
-        self.assertNotIn("build", (self.repo / "calls.log").read_text())
+        self.assertNotIn("build Proofs", (self.repo / "calls.log").read_text())  # only the translator is built here
         # A golden that is not this translation fails, still without writing.
         golden.write_bytes(BODY.replace(b"42", b"39"))
         self.commit("stale golden")
