@@ -122,6 +122,19 @@ def fixture_pause():
         self.assertIn("sha256", report["tools"][0])
         self.assertEqual(report["profile"], "mock")
         self.assertLess(len(json.dumps(report)), 128 * 1024)
+        self.assertEqual(report["environment_overrides"]["AIR2LEAN_JOBS"], "1")
+
+    def test_jobs_and_lean_threads_are_explicit_and_recorded(self):
+        source = ('import os; print(os.environ["LEAN_NUM_THREADS"], os.environ["AIR2LEAN_JOBS"], '
+                  'os.environ["AIR2LEAN_MEM_MIB"])')
+        result, report, log = self.run_guard(source, "--jobs", "3", "--lean-threads", "2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log.read_text(), "2 3 32\n")
+        self.assertEqual((report["budget"]["jobs"], report["budget"]["lean_threads"]), (3, 2))
+        self.assertEqual(report["environment_overrides"]["LEAN_NUM_THREADS"], "2")
+        for bad in (("--jobs", "0"), ("--lean-threads", "0"), ("--jobs", "257")):
+            with self.assertRaises(SystemExit):
+                guard.parse_args([*bad, "--report", "r.json", "--log", "l.log", "--", "true"])
 
     def test_child_failure_and_spawn_failure(self):
         result, report, _ = self.run_guard("raise SystemExit(9)")
@@ -294,6 +307,10 @@ else:
         self.assertFalse(guard.parallel_zig(rows, {1, 2}, names))
         rows[3] = {"parent": 1, "name": "zig"}
         self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, names))
+        self.assertFalse(guard.parallel_zig(rows, {1, 2, 3}, names, jobs=2))
+        rows[4] = {"parent": 1, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3, 4}, names, jobs=2))
+        del rows[4]
         alias = "zig-very-long-configured-alias"
         rows[2]["name"] = rows[3]["name"] = alias[:15]
         self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, {alias}))

@@ -114,9 +114,10 @@ class Tree:
         return owned
 
 
-def parallel_zig(rows, owned, names):
-    # Linux comm truncates to 15 bytes. Prefix collisions are intentionally
-    # conservative: refusing ambiguous parallel work is safer than missing it.
+def parallel_zig(rows, owned, names, jobs=1):
+    # More than `jobs` leaf Zig compilers. Linux comm truncates to 15 bytes. Prefix
+    # collisions are intentionally conservative: refusing ambiguous parallel work is
+    # safer than missing it.
     observed_names = names | {name.encode()[:15].decode(errors="replace") for name in names}
     zig = {pid for pid in owned if rows[pid]["name"] in observed_names}
     # A zig build driver supervising one compiler is sequential. Count leaf Zig
@@ -129,7 +130,7 @@ def parallel_zig(rows, owned, names):
             visited.add(parent)
             ancestors.add(parent)
             parent = rows[parent]["parent"]
-    return len(zig - ancestors) > 1
+    return len(zig - ancestors) > jobs
 
 
 def signal_groups(groups, sig):
@@ -219,6 +220,9 @@ def parse_args(argv):
     p.add_argument("--rss-mib", type=positive, default=8192)
     p.add_argument("--interval", type=positive, default=0.25)
     p.add_argument("--grace", type=positive, default=2)
+    p.add_argument("--jobs", type=int, default=1,
+                   help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
+    p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
     p.add_argument("--lock-wait", type=float, default=0)
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
@@ -234,6 +238,8 @@ def parse_args(argv):
         a.command = a.command[1:]
     if not a.command:
         p.error("a command is required after --")
+    if not 1 <= a.jobs <= 256 or not 1 <= a.lean_threads <= 256:
+        p.error("--jobs and --lean-threads must be between 1 and 256")
     if not 0 <= a.lock_wait < float("inf") or not 0 <= a.log_bytes <= 16 * 1024 * 1024:
         p.error("invalid lock wait or log size (maximum 16 MiB)")
     if len(json.dumps(a.command).encode()) > 32 * 1024 or len(a.profile) > 128:
@@ -342,7 +348,8 @@ def run(a):
               "phase": a.phase, "cache_label": a.cache,
               "host": {"system": platform.system(), "machine": platform.machine()},
               "budget": {"timeout_seconds": a.timeout, "rss_mib": a.rss_mib,
-                         "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace},
+                         "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace,
+                         "jobs": a.jobs, "lean_threads": a.lean_threads},
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
               "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0,
               "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
@@ -384,7 +391,9 @@ def run(a):
             return report
         a.log.parent.mkdir(parents=True, exist_ok=True)
         with a.log.open("wb") as output:
-            overrides = {"LEAN_NUM_THREADS": "1", "ELAN_NO_OVERRIDE_NOTICE": "1"}
+            # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
+            overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
+                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib))}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:
@@ -416,7 +425,7 @@ def run(a):
                     next_sample = now + a.interval
                     if not reason and rss > a.rss_mib * 1024:
                         reason, code = "rss_limit", 125
-                    if not reason and parallel_zig(rows, owned, names):
+                    if not reason and parallel_zig(rows, owned, names, a.jobs):
                         reason, code = "parallel_zig", 126
                 status = peek_status(child)
                 if reason:
