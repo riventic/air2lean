@@ -110,11 +110,13 @@ python3 "$here/mutants.py" "$work/mutants"
 # x86_64-linux with the export's flags (the error numbering is per compilation and target, so
 # this needs an x86_64-linux host), run it and compare its output with the model.
 if [ "${1:-}" = --native ]; then
+  # A fixture whose versions have no stock compiler set is skipped (`runtime_lanes` exists for
+  # 0.14.1/0.15.2 only); at least one probe must run.
+  ran=0
   for entry in "${fixtures[@]}"; do
     read -r stem ns key _ <<< "$entry"
     key=${key:-$ns}
     load_export "$stem"
-    ran=0
     for version in "${versions[@]}"; do
       in_versions "$version" || continue
       var="AIR2LEAN_ZIG_NATIVE_$(echo "$version" | cut -d. -f1-2 | tr . _)"
@@ -130,7 +132,7 @@ if [ "${1:-}" = --native ]; then
         "$work/$stem-$version.txt"
       ran=1
     done
-    [ "$ran" = 1 ] || { echo "error: --native needs AIR2LEAN_ZIG_NATIVE_<major>_<minor> for at least one version" >&2; exit 1; }
   done
+  [ "$ran" = 1 ] || { echo "error: --native needs AIR2LEAN_ZIG_NATIVE_<major>_<minor> for at least one version" >&2; exit 1; }
 fi
 echo "lang-long-tail: ok"
