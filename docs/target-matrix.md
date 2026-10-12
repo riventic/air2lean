@@ -71,7 +71,9 @@ so its output came from the same build run under `qemu-x86_64` and was checked a
 contract. CI runs both modes on a native `ubuntu-24.04` runner.
 
 Not declared: `wasm32-wasi` (needs T02 pointer-width parameterization and T05
-native/WASM correspondence) and `aarch64-linux` (translation stays guarded).
+native/WASM correspondence; the bounded relation of [research/T05.md](research/T05.md) relates
+wasm32-freestanding builds to x86_64-linux and aarch64-macos ones) and `aarch64-linux`
+(translation stays guarded).
 WASM execution joins this matrix only when `compatibility.json` declares it, and the
 checker then requires its native-execution, probe and proof steps like any other path.
 
