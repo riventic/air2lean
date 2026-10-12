@@ -394,6 +394,14 @@ attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
   FTotalTriple.checkAlign_of FTotalTriple.ptrEqAddr_of FTotalTriple.ptrProject_elem_of
   FTotalTriple.ptrProject_of
 
+/-- The size of written bytes, for the arithmetic solver (a region written after its
+allocation, or twice). -/
+@[fsym_arith] theorem _root_.Zig.Full.size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
+  simp [writeBytes]; omega
+
+attribute [fsym_arith] Array.size_replicate
+
 /-! ## Overflow-checked arithmetic -/
 
 section Arith

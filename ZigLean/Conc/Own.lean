@@ -324,7 +324,7 @@ theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
   fun m hP hF hd hm hp hc ho => by
     have hP0 : hP = Heap.empty := hp
     subst hP0
-    cases hroom : m.roomFor size align
+    cases hroom : m.allocOk kind size align
     · rw [alloc_run_noRoom m hroom]; try trivial
     obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, -, hA, hb⟩ :=
       alloc_run_core hd hm kind size align ha hroom hk

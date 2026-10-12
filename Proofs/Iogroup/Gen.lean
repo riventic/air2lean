@@ -435,8 +435,8 @@ def groupConcurrent (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32
       let i35 ← pure ((.ok i34) : Except Zig.ErrName (BitVec 32))
       pure (.ret i35))
     | e => pure e) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit).run' { (default : groupConcurrentLocals) with c := s1, g := s8 }
-  Zig.free s1
   Zig.free s8
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -505,8 +505,8 @@ def groupCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
         let i34 ← pure ((.ok i33) : Except Zig.ErrName (BitVec 32))
         pure (.ret i34)))
     | e => pure e) : Zig.CM Tgt groupCounterLocals groupCounterExit).run' { (default : groupCounterLocals) with c := s1, g := s8 }
-  Zig.free s1
   Zig.free s8
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic

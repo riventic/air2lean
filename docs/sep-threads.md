@@ -237,7 +237,14 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
 * **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
-  shared.
+  shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an instance is a
+  `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`); the thread
+  start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with the record
+  update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
+  `tlsPtr` reads only the thread records, which are protocol facts, not resources: it is resolved
+  against the current memory inside a `MemM` step (`WP.liftMem_tlsPtr_bind`), so no thread triple
+  needs the records (the legacy `TTripleIn` has no counterpart). `main`'s instances are start
+  globals in its part (`FOwned.one`, `initRes_holds`).
 * **Witnesses / Unroll** (`Witness.lean`, `Unroll.lean`): no heap assertions of their own; they
   follow the parts' type.
 

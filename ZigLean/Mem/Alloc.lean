@@ -149,12 +149,14 @@ def remapBytes (bs : Array Byte) (n : Nat) : Array Byte :=
   padTo n (bs.extract 0 n)
 
 /-- Block `b` (`blk`) can grow in place to `n` bytes: the grown range `[blk.addr, blk.addr + n)`
-stays below 2^64 and is disjoint from every other live block (`docs/address-placement.md`). The
-only constraint is disjointness, as for a new block (`Mem.addrFree`): whether the space is free
-follows from the placement of the other blocks, not from an allocation order. -/
+stays below 2^64 and is disjoint from every other live block (`docs/address-placement.md`) and
+from every stack reserve (`Mem.reservesFree`, MM-18). The only constraint is disjointness, as for
+a new block (`Mem.placeOk`): whether the space is free follows from the placement of the other
+blocks, not from an allocation order. -/
 def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
   decide (blk.addr + n ≤ 2 ^ 64) &&
-    Nat.allTR m.blocks.size (fun j _ => j == b || m.blocks[j].clearOf blk.addr n)
+    Nat.allTR m.blocks.size (fun j _ => j == b || m.blocks[j].clearOf blk.addr n) &&
+    m.reservesFree blk.addr n
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
 that the grown range is free (`Mem.growFree`) before applying it. Thread bookkeeping is retained verbatim. -/
