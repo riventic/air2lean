@@ -3648,6 +3648,40 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     body := functionBody
     ctx := fc }
 
+/-- The loop specification rule at one loop (`docs/generated-code.md`): the library rule of the
+function's monad (`Zig.loop_spec`, `Zig.loop_spec_mm`, `Zig.Conc.Proto.WP.loop`) with the
+loop's body and repeat test fixed. The client supplies the invariant, the measure and the
+post-condition, and proves one iteration; the statement is the library's, not a new rule. -/
+def loopSpecLemma (fc : FCtx) (spec : String) (binders : Array (String × String) → String)
+    (caps : Array (String × String)) (call again : String) : String :=
+  let locals := fc.localsName
+  let exit := fc.exitName
+  let loop := s!"(Zig.loop ({call}) {again} : {fc.monad} {locals} {exit})"
+  if fc.conc then
+    s!"theorem {spec}{binders caps} \{γ : Type} \{P : Zig.Conc.Proto Tgt γ} \{t : Zig.ThreadId}\n" ++
+    s!"    (inv : {locals} → (Zig.ThreadId → γ) → Zig.Mem → Nat → Prop) (meas : {locals} → Nat)\n" ++
+    s!"    (post : {exit} × {locals} → (Zig.ThreadId → γ) → Zig.Mem → Nat → Prop)\n" ++
+    s!"    (step : ∀ s G m n, inv s G m n → P.WP t (({call}).run s) (fun r G' m' d =>\n" ++
+    s!"      if {again} r.1 then inv r.2 G' m' d ∧ (d < n ∨ d = n ∧ meas r.2 < meas s)\n" ++
+    s!"      else post r G' m' d) G m n) :\n" ++
+    s!"    ∀ s G m n, inv s G m n → P.WP t ({loop}.run s) post G m n :=\n" ++
+    s!"  Zig.Conc.Proto.WP.loop _ _ inv meas post step"
+  else if fc.mem then
+    s!"theorem {spec}{binders caps}\n" ++
+    s!"    (inv : {locals} → Zig.Mem → Prop) (meas : {locals} → Zig.Mem → Nat)\n" ++
+    s!"    (post : {exit} → {locals} → Zig.Mem → Prop)\n" ++
+    s!"    (step : ∀ s m, inv s m → ∃ e s' m', (({call}).run s).run m = pure ((e, s'), m') ∧\n" ++
+    s!"      (if {again} e then inv s' m' ∧ meas s' m' < meas s m else post e s' m')) :\n" ++
+    s!"    ∀ s m, inv s m → ∃ e s' m', ({loop}.run s).run m = pure ((e, s'), m') ∧ post e s' m' :=\n" ++
+    s!"  Zig.loop_spec_mm _ _ inv meas post step"
+  else
+    s!"theorem {spec}{binders caps}\n" ++
+    s!"    (inv : {locals} → Prop) (meas : {locals} → Nat) (post : {exit} × {locals} → Prop)\n" ++
+    s!"    (step : ∀ s, inv s → ∃ e s', ({call}).run s = pure (e, s') ∧\n" ++
+    s!"      (if {again} e then inv s' ∧ meas s' < meas s else post (e, s'))) :\n" ++
+    s!"    ∀ s, inv s → ∃ r, {loop}.run s = pure r ∧ post r :=\n" ++
+    s!"  Zig.loop_spec _ _ inv meas post step"
+
 /-- `--proof-api` lemmas of one emitted function (`docs/generated-code.md`): a model
 abbreviation and its unfolding lemma, and per loop (pre-order index `k`) body/again
 abbreviations, the body's unfolding lemma and the `Zig.loop` step lemma. Every equality
@@ -3680,7 +3714,7 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
      s!"  {proof fc.fnName params}"])
   let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
   let loops := (proofLoops f).toList.zipIdx.map fun (inst, k) =>
-    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
     let defn := s!"{fc.fnName}.loop{inst.id}"
     let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
     let call := applied body caps
@@ -3690,7 +3724,8 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
       s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
       s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
         s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
-        "  Zig.loop.eq_1 _ _"]
+        "  Zig.loop.eq_1 _ _",
+      loopSpecLemma fc spec binders caps call again]
   String.intercalate "\n\n" (function :: loops)
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
