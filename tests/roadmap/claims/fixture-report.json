@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "status": "pass",
- "theorem_count": 35,
+ "theorem_count": 51,
  "theorems": [
   {
    "conclusion": {
@@ -1220,6 +1220,291 @@
   },
   {
    "conclusion": {
+    "head": "Zig.Full.CTriple"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "Unit",
+    "Applicative.toPure",
+    "Monad.toApplicative",
+    "Pure.pure",
+    "Zig.ConcM",
+    "Zig.ConcM.instMonad",
+    "Zig.Full.CTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.cret_partial",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Zig.ConcM"
+       },
+       {
+        "closed": "Applicative.toPure"
+       },
+       {
+        "closed": "Nat"
+       },
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "Pure.pure"
+      },
+      "extra": [],
+      "fn": "Pure.pure",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "implicit",
+       "inst_implicit",
+       "implicit",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "79c35eaea3860ab36fab4c485d9b1884",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Conc",
+     "name": "Zig.Full.CTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "verified",
+      "theorem": "ClaimFixture.cret_partial.returns"
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.cret_partial.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "Nat",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.cret_partial.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Eq",
+    "Except",
+    "Exists",
+    "Nat",
+    "Option",
+    "Prod",
+    "Unit",
+    "Applicative.toPure",
+    "Except.ok",
+    "ExceptT.run",
+    "Monad.toApplicative",
+    "Option.some",
+    "Pure.pure",
+    "StateT.run",
+    "Zig.ConcM",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.Result",
+    "Zig.ConcM.instMonad",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq",
+    "Zig.Sched.soloRun"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.cret_partial.returns",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
     "head": "Not"
    },
    "conclusion_dependencies": [
@@ -1986,6 +2271,686 @@
     }
    },
    "opaque_dependencies": [],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTriple"
+   },
+   "conclusion_dependencies": [
+    "False",
+    "Unit",
+    "ClaimFixture.diverge",
+    "Zig.Full.FTriple",
+    "Zig.Full.Res"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fdiverge_partial",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "ClaimFixture.diverge"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.diverge",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Triple",
+     "name": "Zig.Full.FTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "absent",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.fdiverge_partial.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fdiverge_partial.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTotalTriple"
+   },
+   "conclusion_dependencies": [
+    "False",
+    "Unit",
+    "ClaimFixture.diverge",
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.Res"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.ffalse_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "ClaimFixture.diverge"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.diverge",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Unit",
+       "Zig.Full.FAssn"
+      ],
+      "name": "Q",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "absent",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTriple"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "ClaimFixture.ret",
+    "Zig.Full.FTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fret_partial",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Triple",
+     "name": "Zig.Full.FTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "verified",
+      "theorem": "ClaimFixture.fret_partial.returns"
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.fret_partial.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "Nat",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fret_partial.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Eq",
+    "Except",
+    "Exists",
+    "Nat",
+    "Option",
+    "Prod",
+    "ClaimFixture.ret",
+    "Except.ok",
+    "ExceptT.run",
+    "Option.some",
+    "StateT.run",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.Result",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fret_partial.returns",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTotalTriple"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "ClaimFixture.ret",
+    "Zig.Full.FTotalTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fret_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.fret_total.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "Nat",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fret_total.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
    "allowed": true
   },
   {
@@ -4745,6 +5710,445 @@
   },
   {
    "conclusion": {
+    "head": "Zig.Full.FTTriple"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "ClaimFixture.ret",
+    "Zig.Full.FTTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.tret_partial",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "f82a7ead14d9ff2f0d7ca8cc8c5d66c5",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Thread",
+     "name": "Zig.Full.FTTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "verified",
+      "theorem": "ClaimFixture.tret_partial.returns"
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.tret_partial.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "Nat",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FConc",
+    "Zig.Mem.Owns",
+    "Zig.Mem.current",
+    "Zig.Full.FHeap.erase",
+    "Zig.Full.Res.heap"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.tret_partial.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Eq",
+    "Except",
+    "Exists",
+    "Nat",
+    "Option",
+    "Prod",
+    "ClaimFixture.ret",
+    "Except.ok",
+    "ExceptT.run",
+    "Option.some",
+    "StateT.run",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.Result",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FConc",
+    "Zig.Mem.Owns",
+    "Zig.Mem.current",
+    "Zig.Full.FHeap.erase",
+    "Zig.Full.Res.heap"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.tret_partial.returns",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTTotalTriple"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "ClaimFixture.ret",
+    "Zig.Full.FTTotalTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.tret_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "a160fcc9319842db3ea3d21cc9682f5e",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Thread",
+     "name": "Zig.Full.FTTotalTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.tret_total.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Exists",
+    "Nat",
+    "True",
+    "Zig.Mem",
+    "Zig.Full.FAssn",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FConc",
+    "Zig.Mem.Owns",
+    "Zig.Mem.current",
+    "Zig.Full.FHeap.erase",
+    "Zig.Full.Res.heap"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.tret_total.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Full.FAssn"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FAssn",
+      "fn_module": "ZigLean.Sep.Full.Res",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
     "head": "ClaimFixture.Wrapped"
    },
    "conclusion_dependencies": [
@@ -4817,7 +6221,7 @@
       "theorem": null
      },
      "nonvacuity": {
-      "status": "trivial",
+      "status": "absent",
       "theorem": null
      }
     }
@@ -4863,6 +6267,21 @@
    "kind": "theorem"
   },
   {
+   "name": "ClaimFixture.cret_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.cret_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.cret_partial.returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.diverge",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
@@ -4904,6 +6323,46 @@
   },
   {
    "name": "ClaimFixture.exit_within_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fdiverge_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fdiverge_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ffalse_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fret_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fret_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fret_partial.returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fret_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fret_total.nonvacuous",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },
@@ -5024,6 +6483,31 @@
   },
   {
    "name": "ClaimFixture.stuck_under_false",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.tret_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.tret_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.tret_partial.returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.tret_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.tret_total.nonvacuous",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },
