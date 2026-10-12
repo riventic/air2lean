@@ -1328,6 +1328,17 @@ jobs:
           lake build ZigLean ZigLean.External.Callback ZigLean.Sep.Loop Proofs.Asm.Effects
           bash tests/roadmap/callbacks/check.sh
 
+      # Open interfaces (docs/interfaces.md): a std.mem.Allocator or std.Random parameter's calls
+      # go to the environment's implementation (Ext, premise EXT-05), on every Zig version.
+      - name: Open interfaces
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto \
+            ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim ZigLean.Sep.Full.Typed \
+            ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
+          bash tests/roadmap/interfaces/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |

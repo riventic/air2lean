@@ -775,6 +775,9 @@ structure FCtx where
   conc : Bool := false
   /-- The names of the concurrent functions. -/
   concFuncs : Array String := #[]
+  /-- `Func.openFnTys`: the program's open function types (`docs/interfaces.md`). Nonempty: the
+  module declares `Ext`, and every concurrent definition takes `[Ext]`. -/
+  openFnTys : Array String := #[]
   layouts : Array Layout
   /-- The `alloc`s whose address escapes: stack blocks, not places. -/
   escaping : Array InstId
@@ -1334,6 +1337,11 @@ def FCtx.instLeanTy (fc : FCtx) (id : InstId) : String :=
 /-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
 def FCtx.monad (fc : FCtx) : String :=
   if fc.conc then "Zig.CM Tgt" else if fc.mem then "Zig.MM" else "Zig.M"
+
+/-- The environment binder of a concurrent definition in a module with open interfaces
+(`docs/interfaces.md`), with a trailing space; else empty. -/
+def FCtx.extBinder (fc : FCtx) : String :=
+  if fc.conc && !fc.openFnTys.isEmpty then "[Ext] " else ""
 
 /-- The lift of a call to a pure function (`Zig.Result`). -/
 def FCtx.callRName (fc : FCtx) : String :=
@@ -3097,7 +3105,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
         let call := fc.callOf nm term memCallee
         s!"if {rv callee} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
-      let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
+      -- An open interface's type (`docs/interfaces.md`): any other pointer calls the
+      -- environment's implementation (`Ext.call<i>`, premise EXT-05).
+      let last := match fc.openFnTys.idxOf? tn with
+        | some i => s!"Zig.callC (Zig.extCall (Ext.call{i} {rv callee} {String.intercalate " " (args.map (fc.callArg env true)).toList}))"
+        | none => "throw .illegal"
+      let (env, l) := bindLet fc env inst.id s!"({String.join arms}{last})"
       (env, some l)
     else
       let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
@@ -3541,7 +3554,7 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
   | .loop _ | .loopSwitchBr .. =>
     let paramsStr := String.intercalate " "
       (((fc.loopParams loopInst).map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := " ++
+    s!"def {fc.fnName}.loop{loopInst.id} {fc.extBinder}{paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := " ++
       emitLoopBody fc loopInst
   | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
 
@@ -3665,7 +3678,7 @@ def emitFunctionHeader (fc : FCtx) (leanName : String) (paramTys : Array TyId)
     ((paramTys.mapIdx fun i pt => s!"(p{i} : {fc.emitTyOf pt})").toList)
   let retStr := if fc.rawRet then s!"Zig.Bytes ({fc.emitTyOf retTy})" else fc.emitTyOf retTy
   let resultTy := if fc.conc then "Zig.ConcM Tgt" else if fc.mem then "Zig.MemM" else "Zig.Result"
-  s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := "
+  s!"def {leanName} {fc.extBinder}{paramsStr} : {resultTy} ({retStr}) := "
 
 def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
     (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
@@ -3701,7 +3714,7 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       exitName := mangleField s!"{plain}Exit", floatSemantics, dialect := f.dialect,
       allocatorModel := f.allocatorModel, targetOs := f.targetOs, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
-      conc := concFuncs.contains f.name, concFuncs,
+      conc := concFuncs.contains f.name, concFuncs, openFnTys := f.openFnTys,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
       rawRet := rawFuncs.contains f.name,
       exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts }
@@ -4342,7 +4355,7 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
     (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
     (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false)
     (futures : Array (String × Array (String × Option (String × Nat × Option String)) × Nat ×
-      String × Array CaptureClass) := #[]) :
+      String × Array CaptureClass) := #[]) (ext : Bool := false) :
     List String × List String :=
   let tupleTy (args : Array (String × Option (String × Nat × Option String))) :=
     if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
@@ -4378,11 +4391,36 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let arms := arms ++ futureArms
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
-    s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
+    s!"def dispatch {if ext then "[Ext] " else ""}: Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
     (n, captureClasses[i]?.getD (args.map fun _ => .other)))
     (futures.map fun (n, _, _, _, classes) => (n, classes))
   ([tgt] ++ (if extendedCapture then [obligation, captures] else []), [dispatch])
+
+/-- The environment of a program with open interfaces (`docs/interfaces.md`): `class Ext`, one
+field `call<i>` per open function type (`Func.openFnTys`), typed by the first call through a
+pointer of that type, and `Ext.closed`, the closed program's environment. Empty without open
+types. -/
+def emitExt (structNames : Array (String × String)) (funcs : Array Func) (openTys : Array String) :
+    List String := Id.run do
+  if openTys.isEmpty then return []
+  let mut fields : Array String := #[]
+  let mut closed : Array String := #[]
+  for (tn, i) in openTys.zipIdx do
+    let site := funcs.findSome? fun f => f.allInsts.findSome? fun inst => match inst.op with
+      | .call v args => if f.calleeValFnTy? v == some tn then some (f, args, inst.ty) else none
+      | _ => none
+    let some (f, args, ret) := site | return [placeholder s!"an open function type without a call: {tn}"]
+    let some ids := (ModelRegistry.argumentTypeIds (ModelRegistry.valueTypeIndex f.types f.allInsts)
+      args).toOption | return [placeholder s!"untyped arguments of an open call: {tn}"]
+    let tys := ids.map fun id => s!"({emitTy structNames f.types f.types[id]!}) → "
+    fields := fields.push s!"  /-- `{tn}` -/\n  call{i} : Zig.Ptr → {String.join tys.toList}Zig.ConcM Tgt ({emitTy structNames f.types f.types[ret]!})"
+    closed := closed.push s!"  call{i} {String.join (List.replicate (ids.size + 1) "_ ")}:= throw .illegal"
+  return [String.intercalate "\n" (["/-- The environment's implementations of the open interfaces (`docs/interfaces.md`,",
+      "premise EXT-05): `call<i> f args` runs the environment's function at `f`, a pointer that is no",
+      "function of the program. -/", "class Ext where"] ++ fields.toList),
+    String.intercalate "\n" (["/-- The closed program's environment: no function besides the program's. -/",
+      "@[reducible] def Ext.closed : Ext where"] ++ closed.toList)]
 
 /-- Preserve the public helper for callers whose captures need ordinary dictionaries. -/
 def emitTgt (structNames : Array (String × String)) (extendedCapture : Bool)
@@ -4609,6 +4647,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (device : Option DeviceContract := none) : EmitParts :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
+  let openTys := (funcs[0]?.map (·.openFnTys)).getD #[]
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any (·.op.isErrorName))
   let errorTable := errorTableOf funcs
@@ -4625,6 +4664,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
     (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs ++ tlsReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
+    (if openTys.isEmpty then #[] else #["Ext"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++
     (if errorTable.isSome then #["errorTable"] else #[]) ++ asmDefs.map (·.name) ++
@@ -4695,7 +4735,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
       (targets.map fun (_, f, fields) => fields.map (captureClass f.types)) (globals.any (·.tls))
       (futureDescriptions.map fun (_, name, args, kind, complete, classes) =>
-        (name, args, kind, complete, classes))
+        (name, args, kind, complete, classes)) (!openTys.isEmpty)
+  let tgtStr := tgtStr ++ emitExt structNames funcs openTys
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
   -- Every function that a function with `noalias` parameters may call (`FCtx.noalias`).
