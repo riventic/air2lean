@@ -836,7 +836,8 @@ What it is for: an allocator that **takes a part of the token with each grant an
 with the grant** learns from the whole token that it has no outstanding grant. The arena's
 `reset` needs exactly that (`docs/alloc-arena.md`, reset: every node goes back to the child,
 whose `free` takes the node's whole region, so no client may still own bytes in one). The part
-travels as the allocator's fee (`FAllocInv.fee`, step 2 of the arena's reset). A counted or
+travels as the allocator's fee (`FAllocInv.fee`, the next step of the arena's reset; not yet in
+`FAllocSpec`). A counted or
 non-fractional token would not do: a whole token held by the allocator for each grant is
 vacuous (the client cannot produce `epTok e 1` at reset while the allocator holds a part), and a
 part the client can detach from its grant lets a client drop a grant and still show the whole

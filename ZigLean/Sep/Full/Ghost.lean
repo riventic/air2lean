@@ -165,6 +165,14 @@ theorem Ghost.ls_at_add {γ₀ e₀ : Nat} {M₀ : GMap} {p₀ : STag} {g : Ghos
     rw [GCell.ls_auth1_add]; simp [h0]
   · simp [Ghost.ls, Ghost.add, Ghost.at, hγ]
 
+/-- `Ghost.ls_at_add` with an epoch token next to the authority (a new ledger or epoch). -/
+theorem Ghost.ls_at_ep_add' {γ₀ e₀ e₁ : Nat} {M₀ : GMap} {p₀ : STag} {q : Frac} {g : Ghost}
+    (h0 : ∀ x, (g.led γ₀).auth x = 0) {γ e : Nat} {p : STag} :
+    ((Ghost.at γ₀ ((GCell.auth1 e₀ M₀ p₀).add (GCell.ep1 e₁ q))).add g).ls γ e p ↔
+      (γ = γ₀ ∧ e = e₀ ∧ p = p₀) ∨ (γ ≠ γ₀ ∧ g.ls γ e p) := by
+  rw [← Ghost.at_add, Ghost.add_assoc,
+    Ghost.ls_at_add (fun x => by simp [Ghost.add, Ghost.at, GCell.add, GCell.ep1, h0 x]), Ghost.ls_at_ep_add]
+
 /-! ## Changes of the ledgers -/
 
 /-- **A change of the ledger statuses** from `ls` to `ls'` keeps one cell balanced (the per-cell
@@ -389,7 +397,7 @@ parts split and join (`epTok_add`). Next to the ledger's authority of epoch `e`,
 epoch `e'`'s token held anywhere add up to at most one, and to nothing for `e' > e`
 (`GCell.EpOk`): so whoever holds the whole token knows that nobody else holds a part of it
 (`gauth_epTok_le`). An allocator that takes a part of the token with each grant and gives it back
-with the grant (an arena's fee, `FAllocInv.fee`) learns from the whole token that no grant is
+with the grant (an arena's fee, planned as `FAllocInv.fee`) learns from the whole token that no grant is
 outstanding. -/
 
 /-- The part `q` of ledger `γ`'s token of epoch `e`. Owns no bytes, no knowledge. -/
@@ -540,11 +548,8 @@ theorem alloc (p : STag) :
   have hl : ∀ γ', γ' ≠ ν → G'.led γ' = g.led γ' := fun γ' hne => by
     simp [G', Ghost.add, Ghost.at, hne]
   have hlN : G'.led ν = c' := by simp [G', Ghost.add, Ghost.at, hNu]
-  have hls : ∀ γ e q, G'.ls γ e q ↔ (γ = ν ∧ e = 0 ∧ q = p) ∨ (γ ≠ ν ∧ g.ls γ e q) := fun γ e q => by
-    have hG' : G' = (Ghost.at ν (GCell.auth1 0 GMap.empty p)).add ((Ghost.at ν (GCell.ep1 0 Frac.one)).add g) := by
-      simp only [G', c', ← Ghost.add_assoc, Ghost.at_add]
-    rw [hG', Ghost.ls_at_add (fun x => by simp [Ghost.add, Ghost.at, GCell.add, GCell.ep1, h0ν x]),
-      Ghost.ls_at_ep_add]
+  have hls : ∀ γ e q, G'.ls γ e q ↔ (γ = ν ∧ e = 0 ∧ q = p) ∨ (γ ≠ ν ∧ g.ls γ e q) :=
+    fun γ e q => Ghost.ls_at_ep_add' h0ν
   -- no ledger names `ν` as its parent
   have hnoν : ∀ γ e e₀, ¬ g.ls γ e (some (ν, e₀)) := fun γ e e₀ ⟨M, h⟩ => by
     have := hNp γ e M e₀; omega
@@ -686,13 +691,8 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} :
     simp [G, G', Ghost.add, Ghost.at, hne]
   have hls : ∀ γ' x q, G.ls γ' x q ↔ (γ' = γ ∧ x = e ∧ q = p) ∨ (γ' ≠ γ ∧ g.ls γ' x q) :=
     fun γ' x q => Ghost.ls_at_add hd1
-  have hG' : G' = (Ghost.at γ (GCell.auth1 (e + 1) GMap.empty p)).add
-      ((Ghost.at γ (GCell.ep1 (e + 1) Frac.one)).add g) := by
-    simp only [G', c', ← Ghost.add_assoc, Ghost.at_add]
   have hls' : ∀ γ' x q, G'.ls γ' x q ↔ (γ' = γ ∧ x = e + 1 ∧ q = p) ∨ (γ' ≠ γ ∧ g.ls γ' x q) :=
-    fun γ' x q => by
-      rw [hG', Ghost.ls_at_add (fun x => by simp [Ghost.add, Ghost.at, GCell.add, GCell.ep1, hd1 x]),
-        Ghost.ls_at_ep_add]
+    fun γ' x q => Ghost.ls_at_ep_add' hd1
   have hG : G.ls γ e p := (hls γ e p).mpr (.inl ⟨rfl, rfl, rfl⟩)
   -- a tag of another ledger has the same status
   have hoth : ∀ γ' x q, γ' ≠ γ → (G'.ls γ' x q ↔ G.ls γ' x q) := fun γ' x q hne => by
