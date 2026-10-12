@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoAttr
+import ZigLean.Sep.Full.ThreadStep
 import ZigLean.Mem.AllocLemmas
 
 /-!
@@ -16,6 +17,10 @@ Step rules for `fsym` about making and ending blocks:
   when the address space has no room (`Mem.roomFor`, premise STK-01), which a partial triple
   counts as no result. A total rule needs the room as a resource of the precondition: that
   resource does not exist yet (docs/proof-framework.md: "stack room").
+
+Each rule is a thread rule first (`FTTriple.alloc`, `FTTriple.allocZero`, `FTTotalTriple.free`:
+the sequential triple and the step's locality, `ZigLean/Sep/Full/ThreadStep.lean`), and the
+sequential rule is the thread rule read sequentially (`toFTriple`, `toFTotalTriple`).
 -/
 
 namespace Zig
@@ -25,12 +30,13 @@ open FAssn
 
 /-! ## The block rules, lifted from the legacy logic (`FTriple.ofTriple`) -/
 
-/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent. -/
-theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent. -/
+theorem FTTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
-    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    FTTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
+  refine FTTriple.ofSeq ?_ (ThreadLocal.alloc kind size align)
   refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
   refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
     (Triple.alloc kind size align ha hk) (Tame.alloc kind size align)
@@ -51,11 +57,20 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
   exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
 
-/-- `alloc` of no bytes: a pointer to offset 0 of a new block. The block has no byte, so there is
-nothing to own (an extent needs a live byte: `Holds.bauth`). -/
-theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
+/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent. -/
+theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
-    FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
+    FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
+  (FTTriple.alloc kind size align ha hpos hk).toFTriple
+
+/-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block. The block has no byte,
+so there is nothing to own (an extent needs a live byte: `Holds.bauth`). -/
+theorem FTTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTTriple emp (Zig.alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
+  refine FTTriple.ofSeq ?_ (ThreadLocal.alloc kind 0 align)
   refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty) ?_ (fun _ _ h => h)
   refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
     (Triple.alloc kind 0 align ha hk) (Tame.alloc kind 0 align)
@@ -72,6 +87,12 @@ theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
     simp only [FHeap.erase, Option.map_eq_none_iff] at this
     exact this
   exact sep_lift.mpr ⟨⟨by simp [hpb], h0⟩, hemp⟩
+
+/-- `alloc` of no bytes: a pointer to offset 0 of a new block. -/
+theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) :=
+  (FTTriple.allocZero kind align ha hk).toFTriple
 
 /-- A run of `alloc` creates the block it returns. -/
 theorem alloc_fresh {kind : BlockKind} {size align : Nat} {m m' : Mem} {p : Ptr} {b : BlockId}
@@ -161,13 +182,25 @@ theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
     (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj)) hS h0 hpos hs.1 hK
   exact ⟨(), m', hr⟩
 
+/-- **`free` of a whole block in a thread** (total): its bytes and its full extent go. The thread
+owns every byte of the block, so no access to it races with its end. -/
+theorem FTTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
+  FTTotalTriple.ofSeq ⟨FTriple.free' hpb hS h0 hpos hK, FReturns.free hpb hS h0 hpos hK⟩
+    (ThreadLocal.free hpb fun m r _ hh hp blk hb x hx => by
+      obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth (sep_comm hp)
+      rw [hb] at hb'; cases hb'
+      exact (OwnsAt.bytesAt hpb).sepL r hp x (by simp [h0]) (by simp [h0]; omega))
+
 /-- **`free` of a whole block** (total): its bytes and its full extent go. A `const` global is
 never freed (`free` of one is illegal). -/
 @[fsym] theorem FTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
     (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
-  ⟨FTriple.free' hpb hS h0 hpos hK, FReturns.free hpb hS h0 hpos hK⟩
+  (FTTotalTriple.free hpb hS h0 hpos hK).toFTotalTriple
 
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/

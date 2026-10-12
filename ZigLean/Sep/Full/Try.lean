@@ -312,7 +312,7 @@ theorem FTotalTriple.region_ptrProject {k : Int} (hpos : 0 < bs.size) (hk0 : 0 �
   FTotalTriple.of_read fun m r rF hh hp _ => by
     obtain ⟨⟨A, S, K, hr⟩, hk', hg⟩ := hp
     obtain ⟨b, hpb, h0, -⟩ := hr.2.2
-    obtain ⟨blk, hblk, -, hK⟩ := Live.region (a := a) hpb hpos m r rF hh ⟨hr, hk', hg⟩
+    obtain ⟨blk, hblk, hK⟩ := Reaches.of_live (Live.region (a := a) hpb hpos) m r rF hh ⟨hr, hk', hg⟩
     exact ptrProject_add_run (inBounds_of hpb hblk h0 (by omega))
       (inBounds_of (p := q.add k) hpb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
 
