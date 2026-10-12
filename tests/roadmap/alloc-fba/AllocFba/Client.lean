@@ -102,15 +102,16 @@ end Steps
 
 /-! ## Entry and exit -/
 
-/-- The stack block of `fba`: a fresh block, so not the buffer's. -/
+/-- The stack block of `fba`: a fresh block, so not the buffer's. It needs room in the address
+space (`Mem.roomFor`, SEM-07). -/
 theorem alloc_fresh {P : Assn} (hP0 : ∀ h, P h → ∃ o c, h (0, o) = some c) :
-    TotalTriple P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
+    TotalTripleIn (·.roomFor 24 8) P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
       (P ∗ Assn.ex fun Ac => ⌜Ac % 8 = 0⌝ ∗ bytesAt p Ac 24 .stack (Array.replicate 24 .undef))) := by
-  intro m hP hF hd hm hp hst
+  intro m hP hF hd hm hp hst hroom
   obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', -, A, hA, hb, -⟩ :=
-    alloc_run hd hm .stack 24 8 (by decide) hst
+    alloc_run hd hm .stack 24 8 (by decide) hroom hst
   have hpe : p = ⟨some m.blocks.size, 0⟩ := by
-    have e := hr.symm.trans (alloc_run_eq m .stack 24 8)
+    have e := hr.symm.trans (alloc_run_eq m hroom)
     simp only [pure, ExceptT.pure, ExceptT.mk] at e
     exact (Prod.mk.inj (Except.ok.inj (Option.some.inj e))).1
   obtain ⟨o, c, hc⟩ := hP0 hP hp
@@ -440,12 +441,12 @@ set_option maxHeartbeats 4000000 in
 /-- **The client theorem.** -/
 theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size = 16)
     (hA : A₀ + 16 ≤ 2 ^ 64) :
-    TotalTriple (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
+    TotalTripleIn (·.roomFor 24 8) (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
       (fun r => ⌜Res v r⌝ ∗ junk) := by
   simp only [fba_client, heap_FixedBufferAllocator_init, heap_FixedBufferAllocator_allocator,
     alloc_eq, realloc_eq, free_eq]
   gen_norm
-  refine TotalTriple.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
+  refine TotalTripleIn.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
   · obtain ⟨h₁, -, -, rfl, ⟨-, -, b, hb, -, hl⟩, -⟩ := hp
     cases hb
     exact ⟨0, ⟨bs[0]!, A₀, 16, .global⟩, by simp [hl, hs]⟩

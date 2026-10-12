@@ -79,7 +79,7 @@ lake env lean tutorials/external-contracts/Negative.lean   # must fail
 
 ## Assumptions and remaining obligations
 
-[`docs/premise-index.md`](../../docs/premise-index.md) derives these premises for `Main.lean`
+[`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives these premises for `Main.lean`
 (definitions in [`docs/premises.md`](../../docs/premises.md)):
 
 - [EXT-01](../../docs/premises.md#ext-01): a registered call runs the project-supplied model.

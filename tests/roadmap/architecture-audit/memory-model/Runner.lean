@@ -4,7 +4,7 @@
 -- fixture's stack blocks where a native build can put them (MM-1): `adjacent` places block 1
 -- right after block 0 (as the native frame does for two `[8]u8` locals), `misaligned` places
 -- block 0 at an address that is not 4096-aligned, `high` moves block 0 up.
-def placeAt (as : List (Nat × Nat)) : Zig.Placement := ⟨fun b => (as.find? (·.1 == b)).map (·.2)⟩
+def placeAt (as : List (Nat × Nat)) : Zig.Placement := { propose := fun b => (as.find? (·.1 == b)).map (·.2) }
 
 private def report (name : String) (σ : Zig.Placement) (x : Zig.MemM α) (f : α → String) :
     IO Unit :=

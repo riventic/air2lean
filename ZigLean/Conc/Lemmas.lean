@@ -347,6 +347,8 @@ theorem alloc_ok {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
   unfold alloc at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  split at h₁
+  case isFalse => cases h₁
   obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
   have := MemM.set_ok hs
   subst this
@@ -1796,9 +1798,11 @@ theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) 
   rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
   · exact MemM.get_err h₀
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
-  · exact MemM.set_err h₂
-  · exact MemM.pure_err h₃
+  split at h₁
+  · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
+    · exact MemM.set_err h₂
+    · exact MemM.pure_err h₃
+  · cases h₁
 
 /-- A free of a live block whose end races with no access (`Mem.freeRaces`) gives no error. -/
 theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)

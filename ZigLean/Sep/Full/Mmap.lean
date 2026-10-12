@@ -466,7 +466,7 @@ theorem FTotalTriple.munmapTail' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S
     (Nat.min (p.off.toNat + alignUp len.toNat os.pageSize) blk.bytes.size - p.off.toNat) .write with
       blocks := m.blocks.set! b (Os.Unmap.apply blk (.tail (lo + k))) })
     (hi := lo + k) hh hpre hb hl hsz hK hpb hoff (by omega) (by omega) (by omega) rfl rfl
-  exact ⟨(), _, _, hrun, hh', hpost, ⟨Mem.Seq.replace (singleThread_recordAt hs.1.single _ _ _ _),
+  exact ⟨(), _, _, hrun, hh', hpost, ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩,
     hs.2.1, hld hs.2.2⟩⟩
 
 /-! ## `munmap` of a page prefix -/
@@ -542,7 +542,7 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
   have hpost := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨by omega, this.2⟩
   rw [show nb.bytes.size = S from hsz] at hpost
-  exact ⟨(), m', _, hrun, hh', hpost, ⟨Mem.Seq.replace (singleThread_recordAt hs.1.single _ _ _ _),
+  exact ⟨(), m', _, hrun, hh', hpost, ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩,
     hs.2.1, LDMono.set (nb := nb) hb (fun _ => hl) rfl (Nat.le_refl _) rfl hs.2.2⟩⟩
 
 /-! ## `mremap` growth in place -/
@@ -599,18 +599,18 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
   have hrun := (Os.mremap_eq (m := m) (oldLen := oldLen) (newLen := newLen) os hhas (.inl rfl) hb hl
     hK (by omega) hold).trans (Os.mremapLive_grow os _ b blk lo newLen 0 hn hs.1.single)
   have hmv : ¬ ((0 : BitVec 32) = Os.mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n = true ∨
-      m.mappingRoom b blk lo (alignUp n os.pageSize) = false)) := fun h => by
+      m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false)) := fun h => by
     have := h.1; simp [Os.mremapMayMove] at this
   rw [if_neg hmv] at hrun
   by_cases hd : m.mapDenied n
   · rw [if_pos hd] at hrun
     exact ⟨_, m₁, r, hrun, hh₁, sep_lift.mpr ⟨rfl, hpre⟩, hs₁⟩
   rw [if_neg hd] at hrun
-  by_cases ht : m.mappingRoom b blk lo (alignUp n os.pageSize) = false
+  by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
   · rw [if_pos ht] at hrun
     exact ⟨_, m₁, r, hrun, hh₁, sep_lift.mpr ⟨rfl, hpre⟩, hs₁⟩
   rw [if_neg ht] at hrun
-  have hroom : m.mappingRoom b blk lo (alignUp n os.pageSize) = true := by simpa using ht
+  have hroom : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = true := by simpa using ht
   -- in place
   let fill := mremapFill os.pageSize (blk.bytes.size - lo) n
   have hfs : fill.size = n - (blk.bytes.size - lo) := mremapFill_size _ _ _
@@ -628,10 +628,11 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
       obtain ⟨_, e2, -, ho2, rfl⟩ := Mem.heap_some hc'
       rw [hb₁] at e1; cases e1; rw [hb₂] at e2; cases e2
       simp [nb, Array.getElem_append_left ho1])
-  refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩, ⟨Mem.Seq.replace hs.1.single,
+  refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩, ⟨⟨hs.1.single⟩,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
       (by rw [hnbs]; have := le_alignUp n os.pageSize; omega)
-      (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho) rfl hs₁.2.2⟩⟩
+      (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho)
+      (Nat.le_trans (Mem.mappingRoom_le hroom) os.addrLimit_le) rfl hs₁.2.2⟩⟩
   have hup := growRes_up (m := m₁) (m' := m₂) (b := b) (nb := nb) (q := q)
     (P := bytesAt ⟨some b, (blk.bytes.size : Int)⟩ blk.addr (lo + n) (.mapped lo) fill) ?_
   · rw [hnbs, show nb.kind = .mapped lo from hK] at hup; exact hup
@@ -690,7 +691,7 @@ theorem FTotalTriple.mremapShrink' (os : Os.Target) (hhas : os.hasMremap = true)
     (hi := lo + newLen.toNat) hh hpre hb hl hsz hK rfl (by show ((lo + newLen.toNat : Nat) : Int).toNat = _; omega)
     (by omega) hn hcut rfl rfl
   exact ⟨_, _, _, hrun, hh', sep_lift.mpr ⟨rfl, hpost⟩,
-    ⟨Mem.Seq.replace (singleThread_recordAt hs.1.single _ _ _ _), hs.2.1, hld hs.2.2⟩⟩
+    ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hld hs.2.2⟩⟩
 
 /-! ## Whole mappings: `mmap` of a fresh block, `munmap` of a whole block
 

@@ -152,7 +152,8 @@ def main():
         return executable
 
     try:
-        report["git_revision"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        # The inputs are identified by content (source_hashes below), not by a commit id: the
+        # report holds for any tree with these bytes, and the CI part stays reusable by content.
         report["git_dirty"] = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True)
         paths = {ROOT / "lean-toolchain", ROOT / "lakefile.toml", ROOT / "lake-manifest.json",
                  ROOT / "ZigLean.lean", ROOT / "Air2Lean.lean", ROOT / "scripts/progress-hints.sh"}

@@ -239,15 +239,20 @@ theorem Arena.init_run (m : Mem) :
 theorem ownedRawAlloc_arena_run {m : Mem} {a : AllocId} {st : OwnedAlloc}
     (hs : m.allocators[a]? = some st) (hl : st.live) (hp : st.policy = .arena) (n : Nat) :
     (ownedRawAlloc a n 1).run m =
-      if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
+      if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures ∨
+        m.roomFor n 1 = false
       then pure (none, { m with allocs := m.allocs + 1 })
       else pure (some ⟨some m.blocks.size, 0⟩,
         ({ m with allocs := m.allocs + 1 } : Mem).afterAlloc (.owned a) n 1) := by
   have h := ownedState_run hs hl
-  have hA := alloc_run_eq ({ m with allocs := m.allocs + 1 } : Mem) (.owned a) n 1
-  simp only [StateT.run] at h hA
-  split <;> rename_i hc <;>
-    simp [ownedRawAlloc, h, hp, hc, zig_unfold, set, StateT.set, MonadStateOf.set, hA]
+  simp only [StateT.run] at h
+  split <;> rename_i hc
+  · simp [ownedRawAlloc, h, hp, hc, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · have hr : m.roomFor n 1 = true := by simpa using (not_or.mp (not_or.mp (not_or.mp hc).2).2).2
+    have hA := alloc_run_eq ({ m with allocs := m.allocs + 1 } : Mem) (kind := .owned a) hr
+    simp only [StateT.run] at hA
+    simp only [hr, Bool.true_eq_false, or_false] at hc
+    simp [ownedRawAlloc, h, hp, hc, hr, zig_unfold, set, StateT.set, MonadStateOf.set, hA]
 
 /-! ## Fixed buffers -/
 
@@ -257,16 +262,20 @@ theorem ownedRawAlloc_fixedBuffer_run {m : Mem} {a : AllocId} {st : OwnedAlloc} 
     (hs : m.allocators[a]? = some st) (hl : st.live) (hp : st.policy = .fixedBuffer base cap)
     (n align : Nat) :
     (ownedRawAlloc a n align).run m =
-      if cap < (fixedBufferNext base st.used align n).2 then pure (none, m)
+      if cap < (fixedBufferNext base st.used align n).2 ∨ m.roomFor n align = false then pure (none, m)
       else pure (some ⟨some m.blocks.size, 0⟩,
         { m.afterAlloc (.owned a) n align with
           allocators := m.allocators.set! a { st with
             used := (fixedBufferNext base st.used align n).2,
             starts := (m.blocks.size, (fixedBufferNext base st.used align n).1) :: st.starts } }) := by
   have h := ownedState_run hs hl
-  have hA := alloc_run_eq m (.owned a) n align
-  simp only [StateT.run] at h hA
-  split <;> rename_i hc <;>
-    simp [ownedRawAlloc, h, hp, hc, zig_unfold, hA, setOwned, Mem.afterAlloc]
+  simp only [StateT.run] at h
+  split <;> rename_i hc
+  · simp [ownedRawAlloc, h, hp, hc, zig_unfold]
+  · have hr : m.roomFor n align = true := by simpa using (not_or.mp hc).2
+    have hA := alloc_run_eq m (kind := .owned a) hr
+    simp only [StateT.run] at hA
+    simp only [hr, Bool.true_eq_false, or_false] at hc
+    simp [ownedRawAlloc, h, hp, hc, hr, zig_unfold, hA, setOwned, Mem.afterAlloc]
 
 end Zig

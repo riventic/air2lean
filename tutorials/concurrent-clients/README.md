@@ -65,7 +65,7 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 
 ## Assumptions and remaining obligations
 
-[`docs/premise-index.md`](../../docs/premise-index.md) derives these premises for `Main.lean`
+[`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives these premises for `Main.lean`
 (definitions in [`docs/premises.md`](../../docs/premises.md)):
 
 - [PRF-02](../../docs/premises.md#prf-02): the recorded `abi64-le-v1` profile in the first line

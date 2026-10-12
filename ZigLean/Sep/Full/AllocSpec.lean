@@ -250,6 +250,21 @@ theorem sepN_extend {n n' : Nat} {f : Nat → FAssn} (hle : n ≤ n')
     · simp only [sepN]
       rw [h n' (by omega) (by omega), emp_sep_eq, ih (by omega) fun j h1 h2 => h j h1 (by omega)]
 
+/-- `esum` only reads the summands below its bound. -/
+theorem esum_congr {f g : Nat → Rat} : ∀ {N : Nat}, (∀ j, j < N → f j = g j) → esum f N = esum g N
+  | 0, _ => rfl
+  | N + 1, h => by simp only [esum]; rw [esum_congr fun j hj => h j (by omega), h N (by omega)]
+
+/-- **Change one summand** of `esum`: the sum moves by the difference. -/
+theorem esum_update {f g : Nat → Rat} {i : Nat} (hfg : ∀ j, j ≠ i → g j = f j) :
+    ∀ {N : Nat}, i < N → esum g N + f i = esum f N + g i
+  | 0, h => absurd h (Nat.not_lt_zero _)
+  | N + 1, h => by
+    simp only [esum]
+    by_cases hi : i = N
+    · subst hi; rw [esum_congr fun j hj => hfg j (by omega)]; grind
+    · have := esum_update hfg (N := N) (by omega); rw [hfg N (Ne.symm hi)]; grind
+
 /-- **Pick one conjunct** of `sepN`: `f i` and the others. -/
 theorem sepN_pick {n i : Nat} {f : Nat → FAssn} (hi : i < n) :
     sepN n f = (f i ⋆ sepN n (fun j => if j = i then emp else f j)) := by

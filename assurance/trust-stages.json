@@ -25,10 +25,10 @@
           "ci": ["python3 -B scripts/validate-air.py", "tests/roadmap/export-validation/test_validate_air.py"]
         },
         {
-          "what": "compiler-derived AIR tag/type inventory against checksum-pinned compiler sources",
+          "what": "compiler-derived AIR tag/type inventory generated twice, identically, from checksum-pinned compiler sources on the tested tree (scripts/generated.py; docs/ci.md#whole-tree-generated-files)",
           "checker": "scripts/coverage.py",
           "test": "tests/roadmap/inventory/test_inventory.py",
-          "ci": ["scripts/coverage.py check", "tests/roadmap/inventory/test_inventory.py"]
+          "ci": ["scripts/generated.py produce --group coverage", "tests/roadmap/inventory/test_inventory.py"]
         },
         {
           "what": "exported filename identity, re-export and collision contract",

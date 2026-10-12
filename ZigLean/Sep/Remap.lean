@@ -179,7 +179,7 @@ theorem remapByteBuffer_move_owned {m : Mem} {s : Slice} {b : BlockId} {blk : Bl
     (hmode : m.allocPolicy.byteRemap = .move)
     (hacc : m.access s.ptr s.len.toNat 1 = pure (b, blk, 0))
     (hkind : blk.kind = .heap) (hsize : blk.bytes.size = s.len.toNat) (halign : blk.align = 1)
-    (hpos : 0 < n) (hcap : n ≤ m.allocPolicy.maxBytes) :
+    (hpos : 0 < n) (hcap : n ≤ m.allocPolicy.maxBytes) (hroom : m.roomFor n 1 = true) :
     ∃ p m' h' A', (remapByteBuffer s n).run m = pure (some ⟨p, BitVec.ofNat 64 n⟩, m') ∧
       Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ m'.Seq ∧ p.off = 0 ∧
       bytesAt p A' n .heap (remapBytes blk.bytes n) h' := by
@@ -191,7 +191,7 @@ theorem remapByteBuffer_move_owned {m : Mem} {s : Slice} {b : BlockId} {blk : Bl
     exact congrFun hm l
   have hstr : recorded.Seq := hst.recordAt _ _ _ _
   obtain ⟨p, allocated, hNew, ha, hp0, hdf, hma, hdn, hsta, -, A', -, hnew, -⟩ :=
-    alloc_run hd hmr .heap n 1 (by omega) hstr
+    alloc_run hd hmr .heap n 1 (by omega) hroom hstr
   have hnewSize : (Array.replicate n Byte.undef).size = n := by simp
   have hcopySize : copied.size = n := remapBytes_size _ _
   have hma' : allocated.heap = hNew ∪ (h ∪ hF) := by
@@ -223,7 +223,7 @@ theorem remapByteBuffer_move_owned {m : Mem} {s : Slice} {b : BlockId} {blk : Bl
       simp [hkind, hsize]
     have haligned : ¬ (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) := by
       simp [halign, hn, hc]
-    simp [remapByteBuffer, hmode, hacc, hwhole, haligned,
+    simp [remapByteBuffer, hmode, hacc, hwhole, haligned, hroom,
       zig_unfold, hread, ha, hw, hf, copied, ExceptT.bindCont]
   · simpa using hmf
 

@@ -33,9 +33,6 @@ def regionIn (p : Ptr) (A S : Nat) (K : BlockKind) (a : Nat) (bs : Array Byte) :
 def region (p : Ptr) (a : Nat) (bs : Array Byte) : Assn := fun h =>
   ∃ A S K, regionIn p A S K a bs h
 
-/-- Every cell of `h` is a cell of `H`. -/
-def Heap.Sub (h H : Heap) : Prop := ∀ l c, h l = some c → H l = some c
-
 namespace Region
 
 theorem Heap.sub_refl (h : Heap) : Heap.Sub h h := fun _ _ e => e

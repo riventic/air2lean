@@ -22,11 +22,13 @@ def Mem.allocDenied (m : Mem) (n : Nat) : Prop :=
   (m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures) ∨
     m.oracleDenies n = true
 
-/-- `rawAlloc` counts the attempt, then fails without changing the heap or allocates a block. -/
+/-- `rawAlloc` counts the attempt, then fails without changing the heap (by the failure
+decision, or for want of room in the address space: `Mem.roomFor`) or allocates a block. -/
 theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
     (rawAlloc n align).run m =
       if m.allocDenied n then pure (none, { m with allocs := m.allocs + 1 })
-      else (some <$> alloc .heap n align).run { m with allocs := m.allocs + 1 } := by
+      else if m.roomFor n align then (some <$> alloc .heap n align).run { m with allocs := m.allocs + 1 }
+      else pure (none, { m with allocs := m.allocs + 1 }) := by
   by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
   · simp only [show m.allocDenied n from .inl hc, ↓reduceIte]
     simp [rawAlloc, hc, zig_unfold, set, StateT.set, MonadStateOf.set]
@@ -36,7 +38,8 @@ theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
     simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set]
   · simp only [show ¬ m.allocDenied n from fun h => h.elim hc ho, ↓reduceIte]
     simp only [not_or] at hc
-    simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set]
+    cases hr : m.roomFor n align <;>
+      simp [rawAlloc, hc, ho, hr, zig_unfold, set, StateT.set, MonadStateOf.set]
 
 /-- `rawAlloc` gives `none` and changes no byte, or a new heap block, as `alloc_run`. -/
 theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
@@ -55,11 +58,13 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
   rw [rawAlloc_eq]
   by_cases hdn : m.allocDenied n
   · exact ⟨none, m₁, by simp only [hdn, ↓reduceIte]; rfl, hst₁, Nat.le_refl _, hm₁⟩
+  cases hroom : m.roomFor n align
+  · exact ⟨none, m₁, by simp only [hdn, hroom, ↓reduceIte]; rfl, hst₁, Nat.le_refl _, hm₁⟩
   · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
-      alloc_run hd hm₁ .heap n align ha hst₁
+      alloc_run hd hm₁ .heap n align ha hroom hst₁
     refine ⟨some p, m', ?_, hst', by rw [hsz]; exact Nat.le_succ _, h0, h', hd', hm', hdd, A, hA, hb,
       hab⟩
-    simp only [hdn, ↓reduceIte]
+    simp only [hdn, hroom, ↓reduceIte]
     simp only [StateT.run] at hr ⊢
     simp [zig_unfold, hr, m₁]
 
@@ -102,7 +107,16 @@ theorem rawAlloc_asOracle (m : Mem) (n align : Nat) (hn : n < unboundedAllocByte
   rw [rawAlloc_eq, rawAlloc_eq]
   by_cases hd : m.allocDenied n
   · simp only [hd, (allocDenied_asOracle m n hn).mpr hd, ↓reduceIte]; rfl
-  · simp only [hd, mt (allocDenied_asOracle m n hn).mp hd, ↓reduceIte]; rfl
+  · simp only [hd, mt (allocDenied_asOracle m n hn).mp hd, ↓reduceIte]
+    have e : ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).roomFor n align =
+        m.roomFor n align := rfl
+    rw [e]
+    cases hr : m.roomFor n align
+    · rfl
+    · simp only [↓reduceIte, StateT.run_map]
+      rw [alloc_run_eq ({ m with allocs := m.allocs + 1 } : Mem) hr,
+        alloc_run_eq ({ m with allocPolicy := m.allocPolicy.asOracle, allocs := m.allocs + 1 } : Mem) hr]
+      rfl
 
 /-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
 theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}

@@ -7,7 +7,7 @@
 
 /-- The placement that puts block `b` at `a` for each `(b, a)`, every other block fresh. -/
 def placeAtK (as : List (Nat × Nat)) : Zig.Placement :=
-  ⟨fun b => (as.find? (·.1 == b)).map (·.2)⟩
+  { propose := fun b => (as.find? (·.1 == b)).map (·.2) }
 
 /-- The result of `x` from `mem0 σ`, if it returns. -/
 def okAt (σ : Zig.Placement) (x : Zig.MemM α) : Option (Except Zig.Error α) :=

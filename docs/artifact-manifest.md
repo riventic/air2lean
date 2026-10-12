@@ -51,8 +51,11 @@ the AIR profile, a missing pin, or any unreadable link. Schema < 12 AIR records 
 
 `provenance` records `HEAD`, whether any tracked file is dirty, `modified_link_paths` (any path
 under a link's named inputs that differs from `HEAD`, staged or not, including deletions),
-`untracked_link_paths` (hashed link files not in the index) and `external_link_paths` (outside the
-repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
+`untracked_link_paths` (hashed link files not in the index), `generated_link_paths` (whole-tree
+generated files of `assurance/generated.json` that `scripts/generated.py` has just produced from
+`HEAD` and records with `AIR2LEAN_GENERATING=1`; they do not make a manifest dirty, while any
+other untracked copy of such a file does) and
+`external_link_paths` (outside the repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
 reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given. For
 the same reason it rejects a chained proof receipt sealed over a dirty tree
 (`tree.dirty_allowed`, [proof-receipts.md](proof-receipts.md)) unless `--allow-dirty` is given.
@@ -117,7 +120,7 @@ python3 tests/roadmap/artifact-manifest/test_manifest.py
 
 ## Committed receipt-chained fixtures
 
-Two fixtures are committed, each a genuine fresh run chaining every link including the `native` build:
+Two fixtures, each a genuine fresh run chaining every link including the `native` build:
 
 | `--fixture` | Directory | Source | Target | Proofs |
 | --- | --- | --- | --- | --- |
@@ -129,6 +132,18 @@ Each holds schema-12 AIR from the patched 0.16.0 AIR-only compiler (`air/`), the
 proofs, a schema-3 proof receipt (`receipt/`, without `after.json`), `manifest.json` and
 `pins.json` (reviewer pins). The two differ in target, ABI, CPU features and theorem shapes, so
 neither a profile nor a theorem set is special-cased.
+
+The source, AIR, profile, `Gen.lean` and proofs are committed. The receipt, `manifest.json` and
+`pins.json` chain the translator, runtime and toolchain too, so they describe the whole tree: they
+are whole-tree generated files (`assurance/generated.json`, [ci.md](ci.md#whole-tree-generated-files)),
+not committed. Every CI run's `provenance` job regenerates both fixtures twice on the tested tree
+(`scripts/generated.py produce --group provenance --group provenance-gap`: `regenerate --refresh`,
+`install`, `record`), requires the two runs to agree up to the receipt's own run record (its
+build-guard report and log digests, whether the audit rebuilt its extractor, and the manifest and
+pin digests that chain those files), then
+runs the strict `check` and `replay` below on them. The `merge_group` run's files are published on
+the `generated` branch for that main commit; `scripts/generated.py fetch --group provenance
+--group provenance-gap [--rev SHA]` writes them into a checkout, `regen` regenerates them locally.
 
 ```sh
 python3 scripts/provenance-evidence.py [--fixture NAME|all] check [--strict] [--native-binary BIN]   # offline, CI
@@ -142,16 +157,12 @@ AIR2LEAN_BUILD_LOCK=... python3 scripts/provenance-evidence.py --fixture NAME re
 (compiler patch, translator, runtime, toolchain) is reported as `aged` and fails only with `--strict`.
 `regenerate` builds the translator, re-exports with the fixture's target, translates, rebuilds the
 native binary and a guarded receipt, requires byte-identical AIR, Gen.lean and (for the same stock
-compiler) binary, then strictly checks a fresh manifest. To refresh a fixture after an intentional
-change: commit the example/Gen/proofs (and new AIR), run `regenerate WORKDIR --refresh` on the
-clean, committed tree (`--refresh` skips the comparison with the committed audit and manifest; a
-new fixture needs it), then
+compiler) binary, then strictly checks a fresh manifest. `--refresh` skips the comparison with an
+existing audit and manifest; `scripts/generated.py` always passes it and then runs
 
 ```sh
 python3 scripts/provenance-evidence.py --fixture NAME install WORKDIR                        # path-redacted receipt copy
-# commit the receipt
 python3 scripts/provenance-evidence.py --fixture NAME record WORKDIR --stock-zig STOCK_ZIG   # manifest + pins.json
-# commit the manifest
 ```
 
 `install` verifies the sealed receipt against the whole tracked tree, so commit everything before
@@ -164,8 +175,9 @@ are those of the unredacted files of the run (the copy's own bytes are what the 
 ### Receipt replay and staleness
 
 `manifest.json` hashes the translator, the runtime and the toolchain pins, so it goes stale whenever
-ZigLean, Air2Lean, the translation scripts or the pins change: record both manifests last on a branch
-and again after merges that touch those paths (`check` reports this as `aged`, not as a failure).
+ZigLean, Air2Lean, the translation scripts or the pins change. That is why it is generated by CI
+for each tree rather than committed: the copy on the `generated` branch for a main commit was
+produced on exactly that commit, so its strict `check` passes there.
 
 A committed receipt is replayed by `replay` without its revision (a pushed integration commit that
 history rewrites or squash merges can remove) and without its attempt directory:
