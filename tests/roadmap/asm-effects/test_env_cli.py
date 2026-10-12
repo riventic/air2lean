@@ -117,6 +117,34 @@ def main(binary):
     assert result.returncode == 0, result.stderr
     assert "Zig.vasm air2lean_device" in text and "Zig.Asm.envWord" not in text, text
     checks += 1
+    # The CPU feature of an entry comes from the profile (premise ASM-09): without `rdrnd`
+    # in `profile.features` the block is rejected, `--assume-asm-cpu-features` admits it and the
+    # header records the admission.
+    for name in ("asm_env.random.json", "asm_env.rand64.json"):
+        bare = json.loads(json.dumps(docs[name]))
+        bare["profile"]["features"].remove("rdrnd")
+        result, text = run(binary, {name: bare})
+        assert result.returncode == 1 and text == "sentinel\n", (name, result.stderr)
+        assert "needs the CPU feature(s) [rdrnd]" in result.stderr and "ASM-09" in result.stderr, result.stderr
+        result, text = run(binary, {name: bare}, ("--assume-asm-cpu-features",))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(text.splitlines()[0].split("-- air2lean-profile: ", 1)[1])["admission"] == "asm-cpu-features"
+        checks += 1
+    # `lzcnt` at the baseline CPU runs as `bsr` (lzcnt(1) = 63, bsr(1) = 0): rejected, and
+    # admitted only by the flag. The legacy profile lists no features at all.
+    with tempfile.TemporaryDirectory(prefix="air2lean-asm-lzcnt-") as d:
+        air = Path(d) / "air"
+        air.mkdir()
+        (air / "asm.lzcnt64.json").write_bytes((HERE.parent.parent / "golden/asm/air/asm.lzcnt64.json").read_bytes())
+        base = [str(binary), str(air), "-o", str(Path(d) / "Gen.lean"), "--namespace", "L", "--prefix", "asm.",
+                "--profile", "legacy-abi64-le"]
+        result = subprocess.run(base, text=True, capture_output=True, check=False, timeout=60)
+        assert result.returncode == 1 and "needs the CPU feature(s) [lzcnt]" in result.stderr, result.stderr
+        result = subprocess.run([*base, "--assume-asm-cpu-features"], text=True, capture_output=True,
+                                check=False, timeout=60)
+        assert result.returncode == 0, result.stderr
+        assert '"admission":"asm-cpu-features"' in (Path(d) / "Gen.lean").read_text().splitlines()[0]
+        checks += 1
     print(f"{checks} asm environment/region CLI checks passed")
 
 

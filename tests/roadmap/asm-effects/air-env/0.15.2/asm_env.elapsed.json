@@ -23,6 +23,7 @@
    "macrofusion",
    "mmx",
    "nopl",
+   "rdrnd",
    "slow_3ops_lea",
    "slow_incdec",
    "sse",

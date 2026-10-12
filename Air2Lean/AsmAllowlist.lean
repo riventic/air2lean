@@ -9,7 +9,8 @@ inputs, whether or not the asm is `volatile` (a non-volatile asm is not a promis
 determinism: LLVM *may* merge two of them, but need not, so a native run can still observe two
 different `rdtsc` values). Every asm the checker accepts therefore matches one entry exactly:
 the template, the ordered constraint list (outputs, then inputs), the clobbers and the target
-architecture. A legacy profile without a target (`legacy-abi64-le`) is the x86_64 reference
+architecture, and the profile lists every CPU feature that the entry requires
+(`checkAsmCpuFeatures`; premise ASM-09 admits the rest). A legacy profile without a target (`legacy-abi64-le`) is the x86_64 reference
 model (premise PRF-01). Any other asm is `ASM_VOLATILE_EFFECT`, unless the device contract
 declares it as a device event (`Zig.vasm`).
 
@@ -85,6 +86,10 @@ structure AsmAllowEntry where
   entry with a region declares every memory access of the block: only such an entry may have a
   pointer operand or a `"memory"` clobber (besides `asmPureRegistry`'s barrier). -/
   regions : List AsmRegion := []
+  /-- The CPU features (LLVM names, as in `profile.features`) that the instruction needs beyond
+  the target's baseline. `checkAsmCpuFeatures` rejects the block when the profile lacks one,
+  unless `--assume-asm-cpu-features` (premise ASM-09). -/
+  features : List String := []
   reason : String
   reviewerNote : String
   deriving Repr
@@ -103,16 +108,16 @@ def asmAllowlist : List AsmAllowEntry := [
       (input 1) being zero is the only fault",
     reviewerNote := "examples/asm divmod (tests/golden/asm/air/asm.divmod.json); non-volatile" },
   { template := "lzcnt %[x], %[ret]", constraints := ["=r", "r"], clobbers := ["cc"],
-    target := "x86_64", semantics := .opaque, fault := .never,
+    target := "x86_64", semantics := .opaque, fault := .never, features := ["lzcnt"],
     reason := "leading-zero count: a function of the input; it only clobbers flags and faults \
       on no input (a zero input gives the operand size). On a CPU without LZCNT the encoding \
-      runs as bsr: a target-CPU premise (ASM-04), not an input condition",
+      runs as bsr, so the entry requires the `lzcnt` feature (`features`, ASM-09)",
     reviewerNote := "examples/asm lzcnt64 (tests/golden/asm/air/asm.lzcnt64.json); volatile in \
       the source, but input-determined" },
   { template := "popcnt %[x], %[ret]", constraints := ["=r", "r"], clobbers := [],
-    target := "x86_64", semantics := .opaque, fault := .never,
+    target := "x86_64", semantics := .opaque, fault := .never, features := ["popcnt"],
     reason := "population count: a function of the input; it faults on no input on a CPU \
-      with POPCNT (on one without it every execution is #UD: a target-CPU premise, ASM-04)",
+      with POPCNT (on one without it every execution is #UD), so the entry requires the `popcnt` feature (`features`, ASM-09)",
     reviewerNote := "examples/asm popcnt64 (tests/golden/asm/air/asm.popcnt64.json); non-volatile" },
   -- A01's effect-contract forms (`Air2Lean/AsmContract.lean`, premise ASM-03): the new value of
   -- each read-write or memory output is a function of the register inputs and the old values.
@@ -168,14 +173,14 @@ def asmAllowlist : List AsmAllowEntry := [
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.ticks.json; L13 \
       device_asm.elapsed/ticksPlain (a device contract that declares it keeps it a device event)" },
   { template := "rdrand %[ret]", constraints := ["=r"], clobbers := ["cc"], target := "x86_64",
-    semantics := .envRead, fault := .never,
+    semantics := .envRead, fault := .never, features := ["rdrnd"],
     reason := "hardware random number: an environment read. A failed rdrand (CF = 0) writes 0, \
-      which is one of the oracle's values; only the flags are clobbered. #UD without RDRAND: a \
-      target-CPU premise (ASM-04)",
+      which is one of the oracle's values; only the flags are clobbered. #UD without RDRAND, so the \
+      entry requires the `rdrnd` feature (`features`, ASM-09)",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.random.json; L13 \
       device_asm.random" },
   { template := "rdrand %[v]\n\tsetc %[ok]", constraints := ["=r", "=r"], clobbers := ["cc"],
-    target := "x86_64", semantics := .envRead, fault := .never,
+    target := "x86_64", semantics := .envRead, fault := .never, features := ["rdrnd"],
     reason := "rdrand with its success flag: both outputs are environment reads (the flag is any \
       byte in the model, a superset of setc's 0 or 1); only the flags are clobbered",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.rand64.json; two lvalue outputs" },
