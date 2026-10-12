@@ -93,24 +93,92 @@ namespace Linux
 SETTLS}`: the flags of `LinuxThreadImpl.spawn`, the only set in the model. -/
 def stdCloneFlags : BitVec 32 := 0x7d0f00
 
+/-- The native stack below the stack top `top` (MM-19): the live part `[lo, top - addr)` of the
+live OS mapping that holds the bytes just below `top`. Its bytes pass to the new thread: a write
+for the race check (an earlier access by a thread that the new one does not see races with its
+stack). A `top` that is not inside a live mapping above its first live offset is outside the
+model (std's `spawn` passes the end of the stack part of its mapping): `.unspecified`. -/
+def stackBelow (top : BitVec 64) : MemM NativeStack := do
+  let m ← get
+  let T := top.toNat
+  let hit := m.blocks.zipIdx.findSome? fun (blk, b) =>
+    match blk.kind with
+    | .mapped lo =>
+      if blk.live ∧ blk.addr + lo < T ∧ T ≤ blk.addr + blk.bytes.size then
+        some ({ host := b, lo, hi := T - blk.addr, start := blk.addr + lo } : NativeStack)
+      else none
+    | _ => none
+  let some ns := hit | throw .unspecified
+  recordAccess ns.host ns.lo (ns.hi - ns.lo) .write
+  pure ns
+
+/-- Thread `t` runs on the native stack `ns` (MM-19): the mapping's first live offset moves up to
+`ns.hi`, so the mapping no longer occupies the stack and nobody accesses it through the mapping;
+`t`'s stack blocks may lie there (`Mem.homeOk`). A mapping that changed since `stackBelow` (another
+thread unmapped or remapped it) leaves the new thread without a stack: `.illegal`. -/
+def giveStack (t : ThreadId) (ns : NativeStack) : MemM Unit := do
+  let m ← get
+  match m.blocks[ns.host]? with
+  | some blk =>
+    if blk.live ∧ blk.kind = .mapped ns.lo ∧ blk.addr + ns.lo = ns.start ∧ ns.hi ≤ blk.bytes.size then
+      set { m with
+        blocks := m.blocks.set! ns.host { blk with kind := .mapped ns.hi }
+        stacks := setStackAt m.stacks t { m.stackOf t with native := some ns } }
+    else throw .illegal
+  | none => throw .illegal
+
+/-- The end of the current thread's native stack (MM-19), at its exit: its stack blocks there end
+(as `free`, so an unordered access by another thread races), and the mapping gets the range back
+with undefined bytes (the thread's stack garbage), written by the thread. A mapping that changed
+meanwhile (unmapped or remapped by another thread) keeps it unmapped: conservative. -/
+def releaseStack : MemM Unit := do
+  let m ← get
+  let s := m.stackOf m.current
+  let some ns := s.native | pure ()
+  for b in List.range m.blocks.size do
+    match (← get).blocks[b]? with
+    | some blk =>
+      if blk.live ∧ blk.kind = .stack ∧ 0 < blk.bytes.size ∧ ns.holds blk.addr blk.bytes.size then
+        free ⟨some b, 0⟩
+    | none => pure ()
+  let m ← get
+  match m.blocks[ns.host]? with
+  | some blk =>
+    if blk.live ∧ blk.kind = .mapped ns.hi ∧ blk.addr + ns.lo = ns.start then
+      recordAccess ns.host ns.lo (ns.hi - ns.lo) .write
+      let m ← get
+      set { m with
+        blocks := m.blocks.set! ns.host
+          { blk with kind := .mapped ns.lo
+                     bytes := writeBytes blk.bytes ns.lo (Array.replicate (ns.hi - ns.lo) .undef) } }
+  | none => pure ()
+  modify fun m => { m with stacks := setStackAt m.stacks m.current { m.stackOf m.current with native := none } }
+
 /-- `os.linux.clone(func, stack: usize, flags: u32, arg: usize, ptid: ?*i32, tp: usize,
 ctid: ?*i32) usize` (module doc). `t` is the spawn target of `(func, arg, ctid)`; its dispatcher
-must be `cloneThread`. `stack` and `tp` are not used (the model's thread has its own frames; its
-TLS instances are C02's). Returns the child's id, `-EAGAIN` or `-ENOMEM`. -/
-def clone (env : Env) (t : Tgt) (_stack : BitVec 64) (flags : BitVec 32) (ptid : Option Ptr)
+must be `cloneThread`. `stack` is the top of the child's native stack, the end of the stack part
+of the mapping that std's `spawn` made (`stackBelow`, `giveStack`, MM-19); `tp` is not used (the
+child's TLS instances are C02's). Returns the child's id, `-EAGAIN` or `-ENOMEM`. -/
+def clone (env : Env) (t : Tgt) (stack : BitVec 64) (flags : BitVec 32) (ptid : Option Ptr)
     (_tp : BitVec 64) (ctid : Option Ptr) : ConcM Tgt (BitVec 64) := do
   if flags ≠ stdCloneFlags ∨ ctid = none then throw .unspecified
   let some ptid := ptid | throw .unspecified
+  let ns ← ConcM.liftMem (stackBelow stack)
   match ← ConcM.sync (.spawn t) with
   | .ok child =>
-    ConcM.liftMem (store 4 ptid (env.tid child))
+    ConcM.liftMem do
+      giveStack child ns
+      store 4 ptid (env.tid child)
     return (env.tid child).setWidth 64
   | .error e => return negErrno (spawnErrno e)
 
-/-- The kernel's `CHILD_CLEARTID` when a `clone` thread exits (module doc): one turn. -/
+/-- The kernel's `CHILD_CLEARTID` when a `clone` thread exits (module doc): one turn. The
+thread's native stack goes back to its mapping first (`releaseStack`), so the release store
+orders it before the joiner's `munmap`. -/
 def cloneExit (ctid : Ptr) : ConcM Tgt Unit := do
   let c ← pick (storeCount 32 .release 4 ctid)
   ConcM.liftMem do
+    releaseStack
     atomicStoreAt c .release 4 ctid (0 : BitVec 32)
     wakeAll ctid
     markExited
