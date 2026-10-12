@@ -15,7 +15,7 @@ their generated code, with the allocator's `FAllocSpec` fields as the rules of t
 This module is what such a proof needs beyond the step rules of `AutoRules`:
 
 * the postconditions of the contracts, over an `FAllocInv` (`owned`, `allocResult`,
-  `sliceResult`);
+  `sliceResult`, `bytesResult`);
 * the step rule (`@[fsym]`) of `@returnAddress()` (`returnAddress`); the byte operations on
   regions (`@memset`, item loads and stores, `@memcpy`, the pointer order of its aliasing check)
   are the region library's (`Full/Region`).
@@ -47,6 +47,13 @@ def allocResult (k n : Nat) : Except ErrName Ptr → FAssn
 def sliceResult (k : Nat) (len : BitVec 64) (n : Nat) : Except ErrName Slice → FAssn
   | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr (Array.replicate n .undef)
   | .error e => ⟪e = "OutOfMemory"⟫
+
+/-- The result of an allocation that returns a slice of `len` items with the bytes `bs`: a copy
+(`dupe`), or undefined items and a sentinel (`allocSentinel`). -/
+def bytesResult (k : Nat) (len : BitVec 64) (bs : Array Byte) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr bs
+  | .error e => ⟪e = "OutOfMemory"⟫
+
 theorem owned_zero {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) : I.owned k p bs = emp := by
   simp [owned, h]
 
