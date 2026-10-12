@@ -513,6 +513,7 @@ class Record(unittest.TestCase):
             # Same platform as the committed baseline, so only the reference check can refuse.
             committed = perf.load_json(perf.BUDGETS)
             committed["reference_platform"] = data["platform"]
+            committed.pop("calibration", None)  # this measurement is translator-only, uncalibrated
             with self.assertRaisesRegex(ValueError, "differ from"):
                 perf.derive(committed, data, only=["basic"], allow_dirty=True)
             self.assertEqual(data["lean_num_threads"], "1")
