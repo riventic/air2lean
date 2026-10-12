@@ -119,8 +119,7 @@
   {
    "id": 11,
    "tag": "ret_addr",
-   "ty": 2,
-   "unsupported": true
+   "ty": 2
   },
   {
    "id": 13,

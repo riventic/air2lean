@@ -12,10 +12,12 @@ private def illegal (x : Zig.MemM α) : IO Bool :=
   | _ => pure false
 
 private def addr (p : Zig.Ptr) : Zig.MemM Nat := do pure (← Zig.ptrAddr p).toNat
-/-- The address of a field pointer of address zero, or `illegal` where the compiler types it as a
-nonnullable pointer (Zig ≤0.15, `Zig.ptrProjectNonnull`; check.sh expects that only there). -/
-private def addrOrIllegal (x : Zig.MemM Zig.Ptr) : IO String := do
-  if ← illegal x then pure "illegal" else pure (toString (← observed (do addr (← x))))
+/-- The value, or the model's error (`illegal`, `panic`, ...). -/
+private def outcome (x : Zig.MemM Nat) : IO String :=
+  match (x.run {}).run with
+  | some (.ok (v, _)) => pure (toString v)
+  | some (.error e) => pure ((reprStr e).replace "Zig.Error." "")
+  | none => pure "divergence"
 private def bit (b : Bool) : Nat := if b then 1 else 0
 /-- A two-byte heap block holding 7, 9 (the native `byte2`). -/
 private def live2 : Zig.MemM Zig.Ptr := do
@@ -102,17 +104,15 @@ def main : IO Unit := do
     let live ← live2
     pure ((← NullableNative.cElem live 0).toNat, (← NullableNative.cElem live 1).toNat))
   IO.println s!"cElem {a} {b}"
-  let a ← addrOrIllegal (NullableNative.nextPtr Zig.Ptr.null)
   let b ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
     pure ((← addr (← NullableNative.nextPtr node)) - (← addr node)))
-  IO.println s!"nextPtr {a} {b}"
+  IO.println s!"nextPtr {b}"
   let a ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
     pure ((← addr (← NullableNative.valPtr node)) - (← addr node)))
   IO.println s!"valPtr {a}"
-  let a ← addrOrIllegal (NullableNative.allowzeroNextPtr Zig.Ptr.null)
-  IO.println s!"allowzeroNextPtr {a}"
+  IO.println s!"allowzeroNextPtr {← outcome (do addr (← NullableNative.allowzeroNextPtr Zig.Ptr.null))}"
   let (a, b) ← observed (do
     let live ← live2
     pure (← addr (← NullableNative.allowzeroAdd Zig.Ptr.null 0), (← addr (← NullableNative.allowzeroAdd live 1)) - (← addr live)))
@@ -128,8 +128,12 @@ def main : IO Unit := do
   let zeroOffset ← observed (NullableNative.addIsNull Zig.Ptr.null 0)
   let nonzero ← illegal (NullableNative.addIsNull Zig.Ptr.null 1)
   IO.println s!"addIsNull {bit zeroOffset} {if nonzero then "illegal" else "address"}"
-  -- Nonzero offsets from address zero that native code never executes (LLVM poison).
+  IO.println s!"nullNextPtr {← outcome (do addr (← NullableNative.nextPtr Zig.Ptr.null))}"
+  -- Model only: nonzero offsets from address zero that native code never executes (LLVM poison;
+  -- Zig 0.17.0 checks the field pointer of a null C pointer first and panics).
+  let mut line := "model nonzeroFromNull"
   for (name, x) in [("cAdd", NullableNative.cAdd Zig.Ptr.null 1), ("cSub", NullableNative.cSub Zig.Ptr.null 1),
       ("cIndex", NullableNative.cIndex Zig.Ptr.null 3), ("valPtr", NullableNative.valPtr Zig.Ptr.null),
       ("allowzeroAdd", NullableNative.allowzeroAdd Zig.Ptr.null 1)] do
-    unless ← illegal x do throw (IO.userError s!"{name}: nonzero offset from address zero is not illegal")
+    line := line ++ s!" {name} {← outcome (do addr (← x))}"
+  IO.println line

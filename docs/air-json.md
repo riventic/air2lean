@@ -92,7 +92,7 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `unchecked_ib` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `export`, `externs`, `unchecked_ib`, `err_trace` or `err_trace_unresolved: true` (§Error return trace) |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |
@@ -105,7 +105,7 @@ contract in prose.
 | `other` | `name` | — |
 | struct or tuple field | `ty` | `name`, `offset`, `comptime: true` |
 | union / enum field | `name`, `ty` / `name`, `value` | — |
-| instruction | `id`, `tag`, `ty`, the payload keys of its tag (§Inst) | — |
+| instruction | `id`, `tag`, `ty`, the payload keys of its tag (§Inst) | `call*`: `err_trace` or `err_trace_unresolved: true` |
 | unsupported instruction | `id`, `tag`, `unsupported: true` | `ty` |
 | `Ref` | exactly one form of §Ref with its keys (`ty` for every constant form) | `module`¹, `comptime_fn`, `comptime_fn_module`, `instance_key`, `comptime_fn_instance_key` (`func`), `utag` (`uval`) |
 | pointer constant target | `off` and one of `global`, `null: true`, `unsupported` | `payload_base: true` (with `global`) |
@@ -225,6 +225,36 @@ Error-union pointer tags (schema 11), all with `args: [pointer]`: `is_err_ptr`, 
 
 Atomic and thread tags (schema 10, `docs/generated-code.md` § Atomics and threads): `atomic_store_unordered`, `atomic_store_monotonic`, `atomic_store_release`, `atomic_store_seq_cst` are `bin_op` (the pointer, the value); the order is the tag name's suffix, not a separate field. `atomic_load` is `args: [pointer]` plus `order`. `atomic_rmw` is `args: [pointer, operand]` plus `op` and `order` (`Air.AtomicRmw`'s extra struct). `cmpxchg_weak`/`cmpxchg_strong` are `args: [pointer, expected, new]` plus `success_order` and `failure_order` (`Air.Cmpxchg`'s extra struct). `Thread.spawn`/`.join` are ordinary calls (`call*`), not AIR tags — the translator recognizes the callee name (`Air2Lean/StdModels.lean`'s `stdModels`; `docs/std-models.md` §Thread model).
 
+## Error return trace
+
+With error return tracing (`-ferror-tracing`, `profile.error_tracing: true`) Sema adds trace
+operations, and the backends pass the trace to every function of the `auto` calling convention as a
+hidden parameter (`codegen/llvm.zig`: `cc == .auto and comp.config.any_error_tracing`). The
+exporter writes:
+
+| Key or tag | Meaning |
+|---|---|
+| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.0) |
+| call `err_trace: T` | the callee receives the caller's current trace, of type `T` |
+| `err_trace_unresolved: true` | the same, but `StackTrace` was not yet resolved when the function was exported; the translator rejects the file |
+| `err_return_trace` | the current trace; no operands |
+| `set_err_return_trace` | `args: [p]`: `p` (a `*StackTrace`) becomes the current trace |
+| `save_err_return_trace_index` | `index` (the `StackTrace` field) and `ptr_ty` (a pointer to that field at its natural alignment): a load of the field through the current trace |
+| `ret_addr` | `@returnAddress()`; no operands |
+
+An older exporter wrote these tags as `"unsupported": true`. The
+translator (`Air2Lean/Air/Canon.lean`, `errTraces`) makes the trace data flow: the hidden
+parameter is the function's last parameter, `set_err_return_trace` (admitted only in the top-level
+body) replaces the current trace for the instructions after it, a call passes the current trace as
+its last argument, `err_return_trace` is the current trace, and `save_err_return_trace_index`
+becomes `optional_payload`, `struct_field_ptr` and `load`. The trace is ordinary model memory (the
+`StackTrace` and its address buffer that Sema allocates), so `@errorReturnTrace().?.index` is
+modelled exactly. `ret_addr` is a machine address outside the memory model: the translator admits
+it only as the value of a `store` (as in `std.builtin.returnError`), where it writes undefined
+bytes, and rejects any other use. A later read of those bytes is `.unspecified` in the model where
+the native program reads an address: the model never claims a value for a return address. A call with the trace to a std function that the translator models
+instead of translating (allocator, `Thread`) is rejected. Evidence: `tests/roadmap/error-tracing`.
+
 ## Ref
 
 One of:
@@ -244,7 +274,7 @@ One of:
 | `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
 | `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
 | `{"ty": 8, "elems": [Ref, ...]}` | array, vector, struct or tuple constant: its constant items or fields (recursively nested constants only). An array with a sentinel has the sentinel as the last item (schema 6). A vector has no sentinel (schema 9). |
-| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice, an optional or error-union payload, or an array element, at any nesting, is the global and the total offset (`payload_base: true` when a payload was crossed). The translator requires `off` to be at most the global's size, and on a `stage2_llvm` or `stage2_wasm` profile, or a legacy profile with no backend, it rejects offsets at or one past an alignment-1 error-union payload (`tests/roadmap/const-bases`). A pointer without a global has `{"unsupported": "<reason>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `arr_elem`, `field` of a packed struct, or a payload-resolution reason such as `payload_unbacked` (schema 6). |
+| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice, a member of a global union, an optional or error-union payload, or an array element, at any nesting, is the global and the total offset (`payload_base: true` when a payload was crossed). A member of a tagged or bare union is at its payload offset; an `extern` or `packed` union member is the union's address. The translator requires `off` to be at most the global's size, and on a `stage2_llvm` or `stage2_wasm` profile, or a legacy profile with no backend, it rejects offsets at or one past an alignment-1 error-union payload, through every union member (`tests/roadmap/const-bases`, `tests/roadmap/union-bases`). A pointer without a global has `{"unsupported": "<reason>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `arr_elem`, `field` of a packed struct, `union_field` (a union member whose compiler payload offset is not the model's, such as an explicitly aligned member that moves the payload), or a payload-resolution reason such as `payload_unbacked` (schema 6). |
 | `{"ty": 9, "ptr": {"null": true, "off": 0}}` | address-zero scalar C/allowzero pointer constant. `null` must be true, the offset zero, and `global`/`unsupported` absent; the checker validates nullability. This additive schema-11 form needs the updated exporter. |
 | `{"ty": 10, "slice_ptr": Ref, "slice_len": Ref}` | slice constant (schema 6). |
 

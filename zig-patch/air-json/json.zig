@@ -128,6 +128,15 @@ const Compat = struct {
         }
     };
 
+    /// `std.builtin.StackTrace` (`std.lang` in 0.17.0), or null while it is not resolved.
+    fn stackTraceType(zcu: *Zcu) ?Type {
+        const index = if (v17)
+            zcu.std_lang_decl_values.get(.StackTrace)
+        else
+            zcu.builtin_decl_values.get(.StackTrace);
+        return if (index == .none) null else Type.fromInterned(index);
+    }
+
     /// `Air.extra` is a slice in 0.14.1 and an array list in 0.15.2+.
     fn extra(air: *const Air) []const u32 {
         return if (v14) air.extra else air.extra.items;
@@ -863,6 +872,8 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
+        // The hidden error-return-trace parameter (§Error return trace).
+        if (w.takesErrTrace(fn_ty)) try w.writeErrTrace();
         // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
         // program can resolve to (docs/air-json.md §Extern calls).
         if (w.exportedName(owner_nav)) |symbol| {
@@ -899,6 +910,29 @@ const W = struct {
         }
         try w.j.endArray();
         try w.j.endObject();
+    }
+
+    /// Whether a function of type `fn_ty` (or a pointer to one) takes the error return trace as a
+    /// hidden parameter: the backends' rule (`codegen/llvm.zig`, `fn_info.cc == .auto and
+    /// comp.config.any_error_tracing`), not the per-module `error_tracing` flag.
+    fn takesErrTrace(w: *W, fn_ty: Type) bool {
+        const zcu = w.pt.zcu;
+        const ty = if (fn_ty.zigTypeTag(zcu) == .pointer) fn_ty.childType(zcu) else fn_ty;
+        const info = zcu.typeToFunc(ty) orelse return false;
+        return info.cc == .auto and zcu.comp.config.any_error_tracing;
+    }
+
+    /// The type `?*StackTrace` of the hidden error-return-trace parameter as `err_trace`, or the
+    /// `err_trace_unresolved` marker while `StackTrace` is not resolved.
+    fn writeErrTrace(w: *W) Error!void {
+        const stack_trace = Compat.stackTraceType(w.pt.zcu) orelse {
+            try w.field("err_trace_unresolved");
+            try w.j.write(true);
+            return;
+        };
+        const ptr = try w.pt.singleMutPtrType(stack_trace);
+        try w.field("err_trace");
+        try w.writeTypeRef(try w.pt.optionalType(ptr.toIntern()));
     }
 
     /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
@@ -1200,6 +1234,22 @@ const W = struct {
                 try w.field("callee");
                 try w.writeRef(pl_op.operand);
                 try w.writeArgs(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.args_len]));
+                // The callee also receives the caller's error return trace (§Error return trace).
+                if (w.takesErrTrace(w.air.typeOf(pl_op.operand, ip))) try w.writeErrTrace();
+            },
+            // Error return tracing (`docs/air-json.md` §Error return trace): the current trace,
+            // its replacement, a load of one of its fields, and the return address.
+            .err_return_trace, .ret_addr => {},
+            .set_err_return_trace => try w.writeArgs(&.{w.data(inst).un_op}),
+            .save_err_return_trace_index => {
+                const ty_pl = w.data(inst).ty_pl;
+                const struct_ty = Compat.tyPlType(ty_pl);
+                try w.field("index");
+                try w.j.write(ty_pl.payload);
+                // The pointer to that field that the backends load through
+                // (`airSaveErrReturnTraceIndex`): the field at its natural alignment.
+                try w.field("ptr_ty");
+                try w.writeTypeRef(try w.pt.singleMutPtrType(struct_ty.fieldType(ty_pl.payload, zcu)));
             },
             .dbg_var_ptr, .dbg_var_val, .dbg_arg_inline => {
                 const pl_op = w.data(inst).pl_op;
@@ -1684,6 +1734,36 @@ const W = struct {
         return ty.abiSize(zcu) != 0;
     }
 
+    /// The payload offset of field `index` of the `auto` union `agg`, when the compiler's
+    /// (`Type.structFieldOffset`, also `lowerPtr`'s) equals the model's (`unionLayout` in
+    /// `Air2Lean/Check.lean`): the exported tag or safety tag and the natural size and alignment
+    /// of every field that is not `noreturn`, the one with the larger alignment first, the tag if
+    /// equal. Otherwise (explicit field alignment, an untagged `auto` union) `null`.
+    fn unionPayloadOffset(w: *W, agg: Type, field_index: u64) ?u64 {
+        const zcu = w.pt.zcu;
+        if (agg.containerLayout(zcu) != .auto or !sizedLayout(zcu, agg)) return null;
+        const names_ty = agg.unionTagTypeHypothetical(zcu);
+        if (field_index >= names_ty.enumFieldCount(zcu)) return null;
+        const index: usize = @intCast(field_index);
+        if (agg.unionFieldTypeByIndex(index, zcu).isNoReturn(zcu)) return null;
+        const tag = agg.unionTagType(zcu) orelse Compat.unionSafetyTag(zcu, agg) orelse return null;
+        var payload_align: u64 = 1;
+        for (0..names_ty.enumFieldCount(zcu)) |i| {
+            const fty = agg.unionFieldTypeByIndex(i, zcu);
+            if (fty.isNoReturn(zcu)) continue;
+            if (!Compat.hasLayout(zcu, fty) or fty.comptimeOnly(zcu)) return null;
+            payload_align = @max(payload_align, fty.abiAlignment(zcu).toByteUnits() orelse return null);
+        }
+        const tag_size = tag.abiSize(zcu);
+        const tag_align = tag.abiAlignment(zcu).toByteUnits() orelse return null;
+        const model: u64 = if (tag_align >= payload_align)
+            std.mem.alignForward(u64, tag_size, payload_align)
+        else
+            0;
+        const compiler = agg.structFieldOffset(index, zcu);
+        return if (compiler == model) compiler else null;
+    }
+
     /// Resolve addresses only; this does not read or initialize an optional/error payload.
     /// Canonical parent pointers are const/volatile/allowzero align(1) in InternPool in
     /// every supported version. Their volatile bit is address metadata, not an access.
@@ -1757,6 +1837,11 @@ const W = struct {
                                 return .{ .unsupported = "field" };
                             break :blk agg.structFieldOffset(@intCast(f.index), zcu);
                         },
+                        // Sema's `ptrField` keeps an `extern`/`packed` union's field pointer as
+                        // its parent pointer, so only an `auto` (tagged or bare) union is a
+                        // `field` base: its payload offset.
+                        .@"union" => w.unionPayloadOffset(agg, f.index) orelse
+                            return .{ .unsupported = "union_field" },
                         else => return .{ .unsupported = "field" },
                     },
                     .opt_payload => blk: {

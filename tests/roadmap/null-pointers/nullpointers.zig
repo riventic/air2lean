@@ -93,7 +93,7 @@ pub fn main() void {
     std.debug.print("cSub {d} {d}\n", .{ addr(cSub(nul, 0)), addr(live) - addr(cSub(live + 1, 1)) });
     std.debug.print("cIndex {d} {d}\n", .{ addr(cIndex(nul, 0)), addr(cIndex(live, 1)) - addr(live) });
     std.debug.print("cElem {d} {d}\n", .{ cElem(live, 0), cElem(live, 1) });
-    std.debug.print("nextPtr {d} {d}\n", .{ addr(nextPtr(nul_node)), addr(nextPtr(&node)) - addr(&node) });
+    std.debug.print("nextPtr {d}\n", .{addr(nextPtr(&node)) - addr(&node)});
     std.debug.print("valPtr {d}\n", .{addr(valPtr(&node)) - addr(&node)});
     std.debug.print("allowzeroNextPtr {d}\n", .{addr(allowzeroNextPtr(@ptrFromInt(0)))});
     std.debug.print("allowzeroAdd {d} {d}\n", .{ addr(allowzeroAdd(@ptrFromInt(0), 0)), addr(allowzeroAdd(@ptrCast(live), 1)) - addr(live) });
@@ -101,4 +101,6 @@ pub fn main() void {
     std.debug.print("fromOptional {d} {d}\n", .{ addr(fromOptional(null)), @intFromBool(fromOptional(@ptrCast(live)) == live) });
     // Address arithmetic says `null + 1` is nonnull; an observed `true` contradicts it.
     std.debug.print("addIsNull {d} {s}\n", .{ @intFromBool(addIsNull(nul, 0)), if (addIsNull(nul, one)) "illegal" else "address" });
+    // Last: Zig 0.17.0 checks `&n.*.next` of a null `[*c]Node` and panics here.
+    std.debug.print("nullNextPtr {d}\n", .{addr(nextPtr(nul_node))});
 }

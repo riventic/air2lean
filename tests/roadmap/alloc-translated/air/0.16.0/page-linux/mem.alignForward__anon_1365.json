@@ -77,7 +77,7 @@
    "ty": 2,
    "callee": {
     "ty": 3,
-    "func": "mem.isValidAlignGeneric__anon_1858",
+    "func": "mem.isValidAlignGeneric__anon_1711",
     "module": "std",
     "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
     "noreturn": false
@@ -165,7 +165,7 @@
    "ty": 0,
    "callee": {
     "ty": 5,
-    "func": "mem.alignBackward__anon_1861",
+    "func": "mem.alignBackward__anon_1714",
     "module": "std",
     "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
     "noreturn": false

@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
-# Serial source/export/check/emission/proof/native-diff/mutation gate for L05's fragment.
-# The root validation queue supplies one matching toolchain pair at a time.
+# L05 gate: offline AIR/checker/emitter cases and a mutant (Generate.lean), then the committed
+# compiler exports of every supported version (air/<version>, provenance.json): each translates,
+# its model run on the native `main`'s inputs prints expected/<version>.txt, and the compiler
+# rejection roots (air-reject/<version>) stay rejected.
+#   check.sh                 the gate above (needs `lake`; no compiler)
+#   check.sh --export [V..]  export.sh --check: a fresh export equals the committed one
+#                            (AIR2LEAN_ZIG_AIR: directory of zig-air-<version> compilers)
+#   check.sh --native ZIG    run nullpointers.zig with a stock Zig on this host and compare its
+#                            transcript (native-transcript.py) with expected/<version>.txt
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-zig_air=${AIR2LEAN_NULL_ZIG_AIR:?set matching patched AIR compiler}
-zig_native=${AIR2LEAN_NULL_ZIG_NATIVE:?set matching shipping native compiler}
-version=${AIR2LEAN_NULL_ZIG_VERSION:?set expected Zig version}
-translator=${AIR2LEAN_NULL_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
-case "$zig_air" in /*) ;; *) zig_air="$repo_root/$zig_air" ;; esac
-case "$zig_native" in /*) ;; *) zig_native=$(command -v "$zig_native");; esac
-[ "$("$zig_air" version)" = "$version" ] || { echo 'AIR compiler version mismatch' >&2; exit 1; }
-[ "$("$zig_native" version)" = "$version" ] || { echo 'native compiler version mismatch' >&2; exit 1; }
-work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-null-pointers.XXXXXX")
+here=tests/roadmap/null-pointers
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+case "${1:-}" in
+  --export) shift; exec bash "$here/export.sh" --check "$@" ;;
+  --native)
+    zig=${2:?usage: check.sh --native ZIG}
+    version=$("$zig" version)
+    [ -f "$here/expected/$version.txt" ] || { echo "no expected/$version.txt: a release Zig of a supported version is required" >&2; exit 1; }
+    cp "$here/nullpointers.zig" "$work/"
+    "$zig" build-exe -OReleaseSafe -fno-error-tracing "$work/nullpointers.zig" -femit-bin="$work/native" \
+      --cache-dir "$work/cache" --global-cache-dir "$work/global-cache"
+    code=0
+    "$work/native" > "$work/native.stdout" 2> "$work/native.txt" || code=$?
+    [ ! -s "$work/native.stdout" ] || { echo 'unexpected native stdout' >&2; exit 1; }
+    python3 "$here/native-transcript.py" "$version" "$code" "$work/native.txt" > "$work/transcript.txt"
+    grep -v '^model ' "$here/expected/$version.txt" | diff -u - "$work/transcript.txt"
+    echo "nullable pointer native: Zig $version, $(wc -l < "$work/transcript.txt") lines match"
+    exit 0 ;;
+esac
+translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 lake build ZigLean air2lean ZigLean.Mem.NullLemmas
 # Imported theorem definitions are kernel checked with the runtime build above; the
 # proof-only storage/projection rules (outside the ZigLean umbrella) are built explicitly.
@@ -37,54 +55,20 @@ mutation_status=0
 lake env lean "$work/mutant.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 python3 tests/roadmap/null-pointers/classify_mutant.py "$mutation_status" \
   "$work/mutation.log" "$work/mutant.lean" "$work/generated/cNull.lean"
-cp tests/roadmap/null-pointers/nullpointers.zig "$work/nullpointers.zig"
-# Every exported root of nullpointers.zig (Runner.lean prints the same lines as its main).
-native_roots="cNull allowzeroAddress allowzeroManyAddress castChecked cRead cZero storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeVal nodeRoundTrip arrayItem cAdd cSub cIndex cElem nextPtr valPtr allowzeroNextPtr allowzeroAdd toOptional fromOptional addIsNull"
-native_filter=$(printf 'nullpointers.%s,' $native_roots); native_filter=${native_filter%,}
-mkdir "$work/air"
-ZIG_AIR_JSON_DIR="$work/air" \
-ZIG_AIR_JSON_FILTER="$native_filter" \
-  "$zig_air" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "$work/nullpointers.zig" --cache-dir "$work/air-cache"
-python3 - "$work/air" "$version" $native_roots <<'PY'
-import json,sys
-from pathlib import Path
-files = [json.loads(p.read_text()) for p in Path(sys.argv[1]).glob('*.json')]
-assert {f['name'] for f in files} == {'nullpointers.'+n for n in sys.argv[3:]}
-assert all(f['zig_version'] == sys.argv[2] for f in files)
-PY
-"$translator" "$work/air" -o "$work/Gen.lean" --namespace NullableNative --prefix 'nullpointers.'
-cat tests/roadmap/null-pointers/Runner.lean >> "$work/Gen.lean"
-lake env lean --run "$work/Gen.lean" > "$work/lean.txt"
-"$zig_native" build-exe -OReleaseSafe -fno-error-tracing "$work/nullpointers.zig" -femit-bin="$work/native" --cache-dir "$work/native-cache"
-"$work/native" > "$work/native.stdout" 2> "$work/native.txt"
-[ ! -s "$work/native.stdout" ] || { echo 'unexpected native stdout' >&2; exit 1; }
-# Zig 0.14.1/0.15.2 type a field pointer of a C/allowzero base as a nonnullable `*T`; the model
-# keeps address zero out of it (`Zig.ptrProjectNonnull`, conservative), where 0.16.0 keeps
-# `allowzero` and the model yields the native address zero. Only those two observations differ.
-case "$version" in
-  0.14.*|0.15.*) sed -e 's/^nextPtr 0 /nextPtr illegal /' -e 's/^allowzeroNextPtr 0$/allowzeroNextPtr illegal/' \
-    "$work/native.txt" > "$work/native-expected.txt" ;;
-  *) cp "$work/native.txt" "$work/native-expected.txt" ;;
-esac
-diff -u "$work/native-expected.txt" "$work/lean.txt"
-[ "$(wc -l < "$work/lean.txt")" -eq 25 ] || { echo 'expected 25 observation lines' >&2; exit 1; }
-cp tests/roadmap/null-pointers/reject.zig "$work/reject.zig"
-mkdir "$work/rejected-air"
-ZIG_AIR_JSON_DIR="$work/rejected-air" ZIG_AIR_JSON_FILTER='reject.' \
-  "$zig_air" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "$work/reject.zig" --cache-dir "$work/reject-cache"
-for name in optional fixed; do
-  mkdir "$work/reject-$name"
-  [ -f "$work/rejected-air/reject.$name.json" ] || { echo "missing compiler rejection fixture $name" >&2; exit 1; }
-  cp "$work/rejected-air/reject.$name.json" "$work/reject-$name/"
-  if "$translator" "$work/reject-$name" -o "$work/reject-$name.lean" --namespace Rejected > "$work/reject-$name.log" 2>&1; then
-    echo "accepted compiler rejection fixture $name" >&2; exit 1
-  fi
-  python3 - "$work/reject-$name.log" "$name" <<'PY'
-from pathlib import Path
-import sys
-message = Path(sys.argv[1]).read_text()
-expected = 'separate null flag' if sys.argv[2] == 'optional' else 'pointer constant without a global'
-assert expected in message, 'wrong rejection: '+message
-PY
+for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+  "$translator" "$here/air/$version" -o "$work/Gen-$version.lean" --namespace NullableNative --prefix 'nullpointers.'
+  cat "$here/Runner.lean" >> "$work/Gen-$version.lean"
+  lake env lean --run "$work/Gen-$version.lean" > "$work/lean-$version.txt"
+  diff -u "$here/expected/$version.txt" "$work/lean-$version.txt"
+  for name in optional fixed; do
+    mkdir -p "$work/reject-$version-$name"
+    cp "$here/air-reject/$version/reject.$name.json" "$work/reject-$version-$name/"
+    if "$translator" "$work/reject-$version-$name" -o "$work/reject.lean" --namespace Rejected > "$work/reject.log" 2>&1; then
+      echo "accepted compiler rejection fixture $version $name" >&2; exit 1
+    fi
+    expected=$([ "$name" = optional ] && echo 'separate null flag' || echo 'pointer constant without a global')
+    grep -q "$expected" "$work/reject.log" || { echo "wrong rejection: $(cat "$work/reject.log")" >&2; exit 1; }
+  done
 done
-echo "nullable pointer gate passed: Zig $version; 27 semantic cases, 1 killed mutant, 25 native observation lines from 24 exported roots, 2 compiler rejection roots"
+python3 -B "$here/test_provenance.py"
+echo "nullable pointer gate passed: 27 semantic cases, 1 killed mutant, 4 versions x 27 model lines (expected/<version>.txt), 2 compiler rejection roots per version"
