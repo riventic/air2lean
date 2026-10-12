@@ -1,7 +1,7 @@
 import Callbacks.Gen
 import CallbackModel
 import ZigLean.External.Callback
-import ZigLean.Sep.Loop
+import ZigLean.Mem.Run
 import Proofs.Asm.Effects
 
 /-!
