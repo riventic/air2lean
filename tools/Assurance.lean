@@ -287,8 +287,11 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
       let isNat ← try pure ((← whnfR (← inferType a)).isConstOf ``Nat) catch _ => pure false
       unless isNat do return j
       let value ← if a.hasFVar || a.hasMVar then pure none else evalNat a
-      return j.setObjVal! "nat" (Json.mkObj [("value", toJson value),
-        ("pp", toJson (toString (← ppExpr a)))])
+      let pp ← match value with
+        | some v => pure (toString v)
+        | none => return j.setObjVal! "nat" (Json.mkObj [("value", Json.null),
+            ("pp", toJson (toString (← ppExpr a)))])
+      return j.setObjVal! "nat" (Json.mkObj [("value", toJson value), ("pp", toJson pp)])
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),

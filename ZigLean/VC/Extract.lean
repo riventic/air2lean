@@ -702,8 +702,11 @@ def allTotal (f : Name) (g : MVarId) : MetaM Unit := do
   let (vcName, _, _) := vcNames f
   let names := if (← getEnv).contains vcName then #[``MemProgram.AllTotal, vcName]
     else #[``MemProgram.AllTotal]
-  let ctx ← Simp.mkContext (simpTheorems := #[← names.foldlM (fun s n => s.addDeclToUnfold n) {},
-    ← getSimpTheorems])
+  -- Only the unfoldings and the cleanup of `True` conjuncts: no default simp set.
+  let cleanup ← [``true_and, ``and_true, ``and_self, ``implies_true, ``forall_const].foldlM
+    (fun s n => s.addConst n) ({} : SimpTheorems)
+  let ctx ← Simp.mkContext (simpTheorems :=
+    #[← names.foldlM (fun s n => s.addDeclToUnfold n) cleanup])
   let (r, _) ← simpGoal g ctx
   if let some (_, g') := r then
     throwError "vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for \
@@ -754,9 +757,9 @@ def runVcGen (report : Bool) : TacticM Unit := do
   let mut lines := #[]
   let mut items := #[]
   -- The postcondition of a result-existence goal is `True`: it is closed at once.
-  let existence := ty.isAppOfArity ``Zig.Returns 3
-  obls ← obls.mapM fun o => do
-    if existence && o.closedBy.isNone && o.label == "postcondition" &&
+  if ty.isAppOfArity ``Zig.Returns 3 then
+   obls ← obls.mapM fun o => do
+    if o.closedBy.isNone && o.label == "postcondition" &&
         (← instantiateMVars (← o.goal.getType)).isConstOf ``True then
       o.goal.assign (mkConst ``True.intro)
       return { o with closedBy := some "trivial" }

@@ -1,4 +1,5 @@
 import ZigLean.Sep.Total
+import ZigLean.RecTemplate
 import Lean
 
 /-!
@@ -210,15 +211,6 @@ def bindLocal (n : Name) (ty : Expr) (src : Src) (k : Expr → InferM Unit) : In
                                vals := st.vals.insert x.fvarId! src }
     k x
 
-/-- A natural-number literal. -/
-def litNat? (e : Expr) : Option Nat :=
-  let e := e.consumeMData
-  if e.isAppOfArity ``OfNat.ofNat 3 then
-    match e.getArg! 1 |>.consumeMData with
-    | .lit (.natVal k) => some k
-    | _ => none
-  else none
-
 /-- Classify a value of the body. -/
 partial def classify (structName : Name) (e : Expr) : InferM Src := do
   let e := e.consumeMData.headBeta
@@ -233,7 +225,7 @@ partial def classify (structName : Name) (e : Expr) : InferM Src := do
     if c == ``MonadState.get || c == ``MonadStateOf.get || c == ``StateT.get || c == ``getThe then
       return .state
     if (c == ``Zig.add || c == ``Zig.sub) && args.size == 4 then
-      if let some k := litNat? args[3]! then
+      if let some k := Zig.RecTemplate.litNat? args[3]! then
         if k > 0 then
           if let .field f ← classify structName args[2]! then return .step f (c == ``Zig.add) k
     if c == ``Zig.load && args.size == 4 then return .loaded

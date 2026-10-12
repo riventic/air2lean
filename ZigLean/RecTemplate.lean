@@ -154,7 +154,7 @@ def Dec.describe (p : MessageData) : Dec → MessageData
   | .same => m!"{p} unchanged"
   | .other => m!"no decrease recognized"
 
-/-- A positive natural-number literal. -/
+/-- A natural-number literal (`OfNat.ofNat` of a raw literal). -/
 def litNat? (e : Expr) : Option Nat :=
   let e := e.consumeMData
   if e.isAppOfArity ``OfNat.ofNat 3 then
@@ -190,9 +190,12 @@ partial def callsIn (fns : Array Name) (e : Expr) : StateRefT (Array (Name × Ar
     let args := e.getAppArgs
     if fn.isConstOf ``Bind.bind && args.size == 6 then
       callsIn fns args[4]!
-      if let .lam n ty b _ := args[5]!.consumeMData then
-        return ← withLocalDeclD n ty fun x =>
+      match args[5]!.consumeMData with
+      | .lam n ty b _ =>
+        withLocalDeclD n ty fun x =>
           withReader (·.insert x.fvarId! args[4]!) (callsIn fns (b.instantiate1 x))
+      | k => callsIn fns k
+      return
     if let .const c _ := fn then
       if fns.contains c then
         let env ← read
@@ -201,7 +204,7 @@ partial def callsIn (fns : Array Name) (e : Expr) : StateRefT (Array (Name × Ar
           | .fvar x => (env[x]?.map stripLift).getD (.fvar x)
           | a => a
         modify (·.push (c, args.map resolve))
-    callsIn fns fn
+    unless fn.isConst do callsIn fns fn
     for a in args do callsIn fns a
   | .proj _ _ x => callsIn fns x
   | _ => pure ()

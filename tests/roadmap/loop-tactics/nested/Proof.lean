@@ -165,7 +165,8 @@ example (p : Ptr) (i0 : BitVec 32) (base : Nat) (s : pairsLocals) :
   unchanged locals: i
   measure candidate: fun s => s.i.toNat - s.j.toNat
   bound invariant candidate: fun s => s.j.toNat ≤ s.i.toNat
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  side premise of the step j + 1: discharged by the guard (no overflow)
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 -- Inner loop: `j` steps up towards the unchanged `i`; `innerInv` uses this measure and bound
 -- (with `s.i = i0`), plus the accumulator and the overflow premise, which are not inferred.
@@ -180,9 +181,10 @@ example (p : Ptr) (i0 : BitVec 32) (base : Nat) (s : pairsLocals) :
   unchanged locals: (none)
   measure candidate: fun s => n.toNat - s.i.toNat
   bound invariant candidate: fun s => s.i.toNat ≤ n.toNat
+  side premise of the step i + 1: discharged by the guard (no overflow)
   postcondition with n replaced by i: fun e x => ⌜e = pairsExit.br4⌝ ∗ acc p (v + cnt x.i.toNat)
   nested loop pairs.loop14 p: not followed; give it its own template (LoopTemplate.run)
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 -- Outer loop: the suggested measure, bound and generalized postcondition are the parts of
 -- `outerInv`; its overflow premise and the exit tag are not inferred. The inner loop is

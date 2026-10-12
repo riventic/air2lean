@@ -161,8 +161,6 @@ theorem pre {c : MemM β} (hp : ∀ h, P h → P' h) (t : Fails P' c e) : Fails 
 theorem of_bind_pure {c : MemM β} (t : Fails P (c >>= pure) e) : Fails P c e := by
   simpa only [bind_pure] using t
 
-theorem throw_ (e : Error) : Fails P (throw e : MemM α) e := fun _ _ _ _ _ _ _ => rfl
-
 /-- The walk ends at the `throw`. -/
 theorem throw_bind (e : Error) {f : α → MemM β} : Fails P (throw e >>= f) e :=
   fun _ _ _ _ _ _ _ => rfl

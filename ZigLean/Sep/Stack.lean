@@ -18,7 +18,7 @@ after `enterFrame b`, the body must release `frameBase + b`). The budget is unto
 
 * `of_total`: a command that never touches the stack (`StackFree`) and has a `TotalTriple` needs
   no room. `StackFree` holds for loads, stores, pointer projection, lifted pure results
-  (arithmetic) and their binds (`stack_free`).
+  (arithmetic) and their binds (`StackFree.bind`).
 * `enterFrame_bind` / `leaveFrame_bind`: the frame bracket of a generated recursive function:
   entering takes `frameBase + b` bytes of the room and opens them; leaving releases them.
 * `spec_bind`: a call whose own triple needs `n ≤ need` bytes (an induction hypothesis of
@@ -38,6 +38,9 @@ loads and stores as for `TotalTriple`, `Zig.enterFrame`/`Zig.leaveFrame` by the 
 and `using r` for a callee's `TotalTripleStk` (its need must fit) or `TotalTriple` (its command must
 be `StackFree`).
 -/
+
+/-- The side condition of a frame rule: room or held bytes, by `omega` over `frameBase`. -/
+macro "stk_side" : tactic => `(tactic| first | rfl | omega | (simp only [Zig.frameBase] at *; omega))
 
 namespace Zig
 
@@ -215,7 +218,7 @@ theorem ret (v : β) : TotalTripleStk (Q v) (pure v) Q need 0 := by
   exact ⟨v, m, hP, rfl, hd, hm, hq, hs, rfl, rfl⟩
 
 theorem ret_of {v : β} (h : ∀ h, P h → Q v h)
-    (ho : held = 0 := by first | rfl | omega | (simp only [Zig.frameBase] at *; omega)) :
+    (ho : held = 0 := by stk_side) :
     TotalTripleStk P (pure v) Q need held := by
   subst ho; exact conseq (ret (Q := Q) v) h fun _ _ hq => hq
 
@@ -255,14 +258,14 @@ theorem ex_sep {γ : Type} {F : γ → Assn} {c : MemM β}
 `R`; the continuation gets the rule's result. -/
 theorem spec_bind {P₀ : Assn} {Q₀ : α → Assn} {c : MemM α} {f : α → MemM β} {n : Nat}
     (rule : TotalTripleStk P₀ c Q₀ n 0) (k : ∀ r, TotalTripleStk (Q₀ r ∗ R) (f r) Q need held)
-    (hn : n ≤ need := by first | omega | (simp only [Zig.frameBase] at *; omega)) :
+    (hn : n ≤ need := by stk_side) :
     TotalTripleStk (P₀ ∗ R) (c >>= f) Q need held :=
   bind (frame (mono rule hn)) k
 
 theorem spec_bind_eq {P₀ P₁ : Assn} {c : MemM α} {v : α} {f : α → MemM β} {n : Nat}
     (rule : TotalTripleStk P₀ c (fun r => ⌜r = v⌝ ∗ P₁) n 0)
     (k : TotalTripleStk (P₁ ∗ R) (f v) Q need held)
-    (hn : n ≤ need := by first | omega | (simp only [Zig.frameBase] at *; omega)) :
+    (hn : n ≤ need := by stk_side) :
     TotalTripleStk (P₀ ∗ R) (c >>= f) Q need held :=
   spec_bind rule (fun _ => conseq (lift (P := P₁ ∗ R) fun hr => hr ▸ k)
     (fun _ hp => sep_assoc hp) fun _ _ hq => hq) hn
@@ -273,7 +276,7 @@ theorem spec_bind_eq {P₀ P₁ : Assn} {c : MemM α} {v : α} {f : α → MemM 
 the body. -/
 theorem enterFrame_bind {b : Nat} {f : Unit → MemM β}
     (k : TotalTripleStk P (f ()) Q (need - (frameBase + b)) (held + (frameBase + b)))
-    (hle : frameBase + b ≤ need := by first | omega | (simp only [Zig.frameBase] at *; omega)) :
+    (hle : frameBase + b ≤ need := by stk_side) :
     TotalTripleStk P (enterFrame b >>= f) Q need held := by
   intro m hP hF hd hm hp hs hroom ho
   have hrun : (enterFrame b).run m =
@@ -292,7 +295,7 @@ theorem enterFrame_bind {b : Nat} {f : Unit → MemM β}
 /-- `leaveFrame b` releases `frameBase + b` of the held bytes and gives them back to the room. -/
 theorem leaveFrame_bind {b : Nat} {f : Unit → MemM β}
     (k : TotalTripleStk P (f ()) Q (need + (frameBase + b)) (held - (frameBase + b)))
-    (hle : frameBase + b ≤ held := by first | omega | (simp only [Zig.frameBase] at *; omega)) :
+    (hle : frameBase + b ≤ held := by stk_side) :
     TotalTripleStk P (leaveFrame b >>= f) Q need held := by
   intro m hP hF hd hm hp hs hroom ho
   let m₁ : Mem := { m with stackUsed := m.stackUsed - (frameBase + b) }

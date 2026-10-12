@@ -280,7 +280,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     found = claims_of(theorem, heads, nodes)
     result = {'head': name, 'head_problem': problem, 'claims': [c for c in REGISTRY_CLAIMS if c in found],
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
-              'bound': bound_of(entry, statement_of(theorem)),
+              'bound': bound_of(entry, statement_of(theorem)), 'entry': entry,
               'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
               'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
     statement = statement_of(theorem)
@@ -379,8 +379,7 @@ def classify(report: dict, heads: dict | None = None) -> dict:
                          'type_strength': found['type_strength'], 'bound': found['bound'],
                          'witnesses': found['witnesses'], 'caps': found['caps'],
                          'caller_obligations': obligations.get(theorem['name'], []),
-                         'premises': premises_of(theorem, found['claims'],
-                                                 head_entry(theorem, heads, nodes)[1]),
+                         'premises': premises_of(theorem, found['claims'], found['entry']),
                          'allowed': theorem.get('allowed') is True})
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
@@ -411,10 +410,9 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
-    heads = load_heads() if heads is None else heads
-    found = assess(theorem, heads, definition, generated=generated,
+    found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
                    allowed=allowed, audited=theorems, nodes=nodes)
-    premises = premises_of(theorem, found['claims'], head_entry(theorem, heads, nodes)[1])
+    premises = premises_of(theorem, found['claims'], found['entry'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
                   derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
     if theorem.get('allowed') is not True:

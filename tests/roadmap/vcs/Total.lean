@@ -90,8 +90,7 @@ example (p : Ptr) (old : BitVec 64) (fits : old.toNat + 1 < 2 ^ 64) :
   all_goals first | exact ⟨old, sep_lift.mpr ⟨fits, pre⟩⟩ | exact summary1
 
 /-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpOnce`; these calls have none:
-  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1#32) fun x =>
-    ex fun v => pts p 8 v -/
+  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1) fun x => ex fun v => pts p 8 v -/
 #guard_msgs in
 /-- It refuses the caller's total triple: `AllTotal` asks the callee's `TotalTriple`, which a
 partial contract does not provide. -/
@@ -100,8 +99,7 @@ example (p : Ptr) (old : BitVec 64) :
   vc_gen
 
 /-- error: vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for every memory call of `VcTotal.bumpOnce`; these calls have none:
-  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1#32) fun x =>
-    ex fun v => pts p 8 v -/
+  TotalTriple (ex fun old => ⌜old.toNat + 1 < 2 ^ 64⌝ ∗ pts p 8 old) (Pointers.addTo p 1) fun x => ex fun v => pts p 8 v -/
 #guard_msgs in
 example (p : Ptr) (old : BitVec 64) : Returns (pts p 8 old) (bumpOnce p) := by
   vc_gen
