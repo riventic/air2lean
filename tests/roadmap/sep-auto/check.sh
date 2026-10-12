@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The general symbolic executor `fsym` (ZigLean/Sep/Full/Auto.lean, docs/proof-automation.md) on
-# small library-only examples: the arithmetic solver and walks/returns. Its large user is the
+# small library-only examples: the arithmetic solver, walks/returns, the concurrent backend,
+# variable pointers (Facts) and a large generated body (Large). Its large user is the
 # FixedBufferAllocator (tests/roadmap/alloc-fba/AllocFba/Full.lean). Needs
 # `lake build ZigLean.Sep.Full.Auto`; runs no compiler.
 set -euo pipefail
@@ -11,7 +12,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc; do
+for m in Arith Walk Conc Facts Large; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }

@@ -92,6 +92,33 @@ theorem mod_pow_of_le {z x c M : Nat} (hM : M = 2 ^ c) (h : x ≤ c) : z % 2 ^ x
 theorem optPtrAddr_some (p : Ptr) : optPtrAddr (some p) = ptrAddr p := rfl
 theorem optPtrAddr_none : optPtrAddr none = pure 0 := rfl
 
+/-- Owned atomic bytes: their block reaches their end. -/
+theorem Reaches.abytes {b : BlockId} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    Reaches b (p.off.toNat + bs.size) (abytesAt p A S K bs tg) := by
+  have e : p.off.toNat + bs.size = p.off.toNat + bs.size - 1 + 1 := by omega
+  rw [e]
+  refine Reaches.owned fun r ⟨_, _, b', hb', _, hl⟩ => ?_
+  rw [hpb] at hb'; cases hb'
+  rw [hl]; exact ⟨_, if_pos ⟨rfl, by omega, by omega⟩⟩
+
+/-- An atomic word owns its 8 bytes: its block reaches its end. -/
+theorem Reaches.apts {b : BlockId} {p : Ptr} {v : BitVec 64} (hpb : p.block = some b) :
+    Reaches b (p.off.toNat + 8) (apts p v) := fun m r rF hh ⟨_, _, _, bs, _, _, hs, _, hab⟩ =>
+  hs ▸ Reaches.abytes hpb (by omega) m r rF hh hab
+
+/-- An atomic value owns its 8 bytes: its block reaches its end. -/
+theorem Reaches.aptsE {α : Type} [Enc α] {b : BlockId} {p : Ptr} {v : α} (hpb : p.block = some b) :
+    Reaches b (p.off.toNat + 8) (aptsE p v) := fun m r rF hh ⟨_, _, _, bs, _, _, hs, _, hab⟩ =>
+  hs ▸ Reaches.abytes hpb (by omega) m r rF hh hab
+
+attribute [fsym_provider] Reaches.apts Reaches.aptsE
+
+/-- An atomic value: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_aptsE {α : Type} [Enc α] {p : Ptr} {v : α} :
+    AtomFacts (aptsE p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
 end Seq
 
 attribute [fsym_norm] optPtrAddr_some optPtrAddr_none
@@ -162,6 +189,11 @@ theorem ex_sep {F : γ → FAssn} (t : ∀ x, CTriple (F x ⋆ R) c Q) : CTriple
 theorem lift_sep {φ : Prop} (t : φ → CTriple R c Q) : CTriple (⟪φ⟫ ⋆ R) c Q := CTriple.lift t
 
 theorem of_false (h : False) : CTriple P c Q := h.elim
+
+/-- A fact of a part `X` of the precondition, in the context. -/
+theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
+    CTriple (X ⋆ R) c Q :=
+  CTriple.pre (CTriple.lift t) fun _ h => sep_lift.mpr ⟨hX.sepL h, h⟩
 
 /-- **An atomic op's oracle choice**: `0` in one thread. -/
 theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :
@@ -255,7 +287,8 @@ simproc [fsym_norm] pullIndirect (Full.callIndirect _ _) := fun e => do
 /-! ## Atomic rules (partial: the concurrent backend and `FLogic.partial`) -/
 
 attribute [fsym] FTriple.atomicLoadUnorderedEnc FTriple.cmpxchgPtr FTriple.atomicLoadPtr
-  FTriple.cmpxchgHit FTriple.atomicLoadAs FTriple.atomicLoad FTriple.atomicStore
+  FTriple.cmpxchgHit FTriple.atomicLoadAs FTriple.atomicRmwAs FTriple.atomicLoad FTriple.atomicStore
   FTriple.atomicXchgPtrW FTriple.cmpxchgWeakPtrW FTriple.atomicRmwW FTriple.atomicLoadUnorderedW
+  FTriple.atomicRmw FTriple.atomicXchgPtr FTriple.cmpxchgWeakPtr FTriple.atomicLoadUnordered
 
 end Zig.Full.Auto

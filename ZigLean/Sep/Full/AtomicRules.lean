@@ -459,6 +459,12 @@ theorem FTriple.atomicRmwAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64
   rw [e]
   exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
+theorem FTriple.atomicRmwAs {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
+    (ord : AtomicOrder) (v : α) (hw : Packed.valid (α := α) w = true) :
+    FTriple (apts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
+      (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) :=
+  (FTriple.atomicRmwAsW p w op ord v hw).pre fun _ => apts_wpts
+
 /-- **Typed atomic store** to an owned word (`atomicStoreAs`; `Node.endResize`): the integer
 store of the bits. -/
 theorem FTriple.atomicStoreAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (ord : AtomicOrder)
@@ -947,6 +953,27 @@ theorem FTriple.atomicLoadUnorderedAsW {α : Type} [Packed α 64] (p : Ptr) (v :
     simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
   rw [e]
   exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+
+/-! ## The rules on `wpts`/`wptsE` (any tag constraint) read from an `apts`/`aptsE` -/
+
+theorem FTriple.atomicRmw (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool) (ord : AtomicOrder) :
+    FTriple (apts p v) (atomicRmwAt 0 op signed ord 8 p x)
+      (fun r => ⟪r = v⟫ ⋆ apts p (op.apply signed v x)) :=
+  (FTriple.atomicRmwW p v x op signed ord).pre fun _ => apts_wpts
+
+theorem FTriple.atomicXchgPtr {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) (p : Ptr)
+    (v new : α) (ord : AtomicOrder) :
+    FTriple (aptsE p v) (atomicXchgPtrAt 0 ord 8 p new) (fun r => ⟪r = v⟫ ⋆ aptsE p new) :=
+  (FTriple.atomicXchgPtrW hα p v new ord).pre fun _ => aptsE_wptsE
+
+theorem FTriple.cmpxchgWeakPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
+    (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
+    FTriple (aptsE p v) (cmpxchgWeakPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) :=
+  (FTriple.cmpxchgWeakPtrW hα p v new succ fail).pre fun _ => aptsE_wptsE
+
+theorem FTriple.atomicLoadUnordered (p : Ptr) (v : BitVec 64) :
+    FTriple (apts p v) (atomicLoadUnorderedAt (n := 64) 0 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
+  (FTriple.atomicLoadUnorderedW p v).pre fun _ => apts_wpts
 
 end Full
 end Zig
