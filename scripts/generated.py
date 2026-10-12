@@ -25,10 +25,13 @@ argument. This is the one helper that produces, publishes and supplies them:
                                                 local tools and preflight: regenerate the cheap groups,
                                                 fetch (or regenerate, or skip) the heavy ones; offline the
                                                 cheap groups still regenerate
-  generated.py publish --repo OWNER/NAME [--push]
+  generated.py publish --repo OWNER/NAME [--push] [--dispatch]
                                                 CI on main: append one `generated` commit per main
                                                 commit that has none, from the files its merge_group (or
-                                                workflow_dispatch) run produced; nothing is regenerated
+                                                workflow_dispatch) run produced; nothing is regenerated.
+                                                --dispatch (with --push): start a full workflow_dispatch CI
+                                                run on each such commit that has no run that tested it
+                                                (it reached main by admin bypass)
   generated.py freshness [--minutes N] [--repo OWNER/NAME]
                                                 fail when a main commit older than N minutes has no entry
 
@@ -59,6 +62,7 @@ MANIFEST = 'generated-manifest.json'
 WORKFLOW = '.github/workflows/ci.yml'
 EVIDENCE_EVENTS = ('merge_group', 'workflow_dispatch')
 REMOTE_REF = 'refs/remotes/origin/generated'
+EVIDENCE_BRANCH = 'ci-evidence/'
 
 
 class Error(Exception):
@@ -358,12 +362,51 @@ def pending(root: Path, published: dict, head: str = 'origin/main') -> list[str]
     return found[::-1]
 
 
-def evidence_run(repo: str, commit: str) -> dict | None:
-    """The newest successful CI run of an evidence event (merge_group, workflow_dispatch) for `commit`."""
-    runs = api('repos/%s/actions/runs?head_sha=%s&status=success&per_page=100' % (repo, commit))['workflow_runs']
-    runs = [r for r in runs if r['path'].split('@')[0] == WORKFLOW and r['event'] in EVIDENCE_EVENTS
+def evidence_runs(repo: str, commit: str) -> list[dict]:
+    """Every CI run of an evidence event (merge_group, workflow_dispatch) for `commit`, any status."""
+    runs = api('repos/%s/actions/runs?head_sha=%s&per_page=100' % (repo, commit))['workflow_runs']
+    return [r for r in runs if r['path'].split('@')[0] == WORKFLOW and r['event'] in EVIDENCE_EVENTS
             and r['head_sha'] == commit and (r.get('head_repository') or {}).get('full_name') == repo]
-    return max(runs, key=lambda r: r['run_started_at'], default=None)
+
+
+def evidence_run(runs: list[dict]) -> dict | None:
+    """The newest successful run of `runs`."""
+    return max((r for r in runs if r['conclusion'] == 'success'), key=lambda r: r['run_started_at'], default=None)
+
+
+# Conclusions of a run that never tested the commit: it is dispatched again. A failure or a
+# timeout may be a real regression and needs a human (`gh run rerun`).
+NOT_TESTED = ('cancelled', 'skipped', 'stale', 'startup_failure')
+
+
+def dispatch_evidence(repo: str, commits: list[str], root: Path = ROOT):
+    """A full CI run on each of `commits`, main commits that reached main outside the queue:
+    workflow_dispatch needs a branch, so `ci-evidence/<commit>` points at each until it is
+    published. Waits until every dispatched run is visible in the API (a few seconds), so the
+    next publish does not dispatch it again."""
+    for commit in commits:
+        run('git', 'push', '--quiet', 'origin', '%s:refs/heads/%s%s' % (commit, EVIDENCE_BRANCH, commit), cwd=root)
+        run('gh', 'workflow', 'run', Path(WORKFLOW).name, '--repo', repo, '--ref', EVIDENCE_BRANCH + commit)
+        print('main %s: no merge_group run; dispatched CI on %s%s' % (commit, EVIDENCE_BRANCH, commit))
+    for _ in range(24):
+        time.sleep(5)
+        unseen = [c for c in commits if untested(evidence_runs(repo, c))]
+        if not unseen:
+            return
+    raise Error('dispatched CI on %s, but no run appeared' % ', '.join(unseen))
+
+
+def untested(runs: list[dict]) -> bool:
+    """Whether no run of `runs` is queued, running or concluded after testing the commit."""
+    return all(r['conclusion'] in NOT_TESTED for r in runs)
+
+
+def drop_evidence_branches(commits: list[str], root: Path = ROOT):
+    """Delete the `ci-evidence/<commit>` branches of `commits` (just published)."""
+    refs = ['refs/heads/%s%s' % (EVIDENCE_BRANCH, c) for c in commits]
+    found = [line.split()[1] for line in git('ls-remote', 'origin', *refs, cwd=root).splitlines()]
+    if found:
+        run('git', 'push', '--quiet', 'origin', '--delete', *found, cwd=root)
 
 
 def entry_commit(data: dict, directories, commit: str, tree: str, run_: dict, parent: str | None,
@@ -390,16 +433,16 @@ def entry_commit(data: dict, directories, commit: str, tree: str, run_: dict, pa
     return git('commit-tree', entry_tree, *parents, cwd=root, env=env, input=message.encode())
 
 
-def publish(data: dict, repo: str, push: bool, root: Path = ROOT):
+def publish(data: dict, repo: str, push: bool, dispatch: bool, root: Path = ROOT):
+    if dispatch and not push:
+        raise Error('--dispatch pushes branches and starts CI runs: it needs --push')
     fetch_branch(data, root)
     published = entries(root)
     todo = pending(root, published)
-    if not todo:
-        print('every main commit since %s exists has its %s entry' % (REGISTRY, data['branch']))
-        return 0
     tip = git('rev-parse', '--verify', '--quiet', REMOTE_REF, cwd=root, check=False)
+    new = []
     for commit in todo:
-        run_ = evidence_run(repo, commit)
+        run_ = evidence_run(evidence_runs(repo, commit))
         if run_ is None:
             # Entries stay in main's order; the freshness check reports a gap that persists.
             print('main %s: no successful merge_group/workflow_dispatch CI run yet; not published' % commit,
@@ -413,9 +456,18 @@ def publish(data: dict, repo: str, push: bool, root: Path = ROOT):
                 run('gh', 'run', 'download', run_['id'], '--repo', repo, '--name', name, '--dir', target)
                 directories.append(target)
             tip = entry_commit(data, directories, commit, tree, run_, tip, root)
+        new.append(commit)
         print('main %s -> %s %s (run %s)' % (commit[:12], data['branch'], tip[:12], run_['id']))
-    if tip and push:
-        run('git', 'push', 'origin', '%s:refs/heads/%s' % (tip, data['branch']))
+    if not todo:
+        print('every main commit since %s exists has its %s entry' % (REGISTRY, data['branch']))
+    if push and new:
+        run('git', 'push', 'origin', '%s:refs/heads/%s' % (tip, data['branch']), cwd=root)
+        drop_evidence_branches(new, root)
+    if dispatch:
+        # A commit that reached main outside the queue (admin bypass) has no merge_group run.
+        missing = [commit for commit in todo[len(new):] if untested(evidence_runs(repo, commit))]
+        if missing:
+            dispatch_evidence(repo, missing, root)
     return 0
 
 
@@ -472,6 +524,7 @@ def main(argv=None) -> int:
     p = sub.add_parser('publish')
     p.add_argument('--repo', required=True)
     p.add_argument('--push', action='store_true')
+    p.add_argument('--dispatch', action='store_true')
     p = sub.add_parser('freshness')
     p.add_argument('--minutes', type=int)
     p.add_argument('--repo')
@@ -491,7 +544,7 @@ def main(argv=None) -> int:
         elif args.command == 'materialize':
             materialize(data, args.heavy)
         elif args.command == 'publish':
-            return publish(data, args.repo, args.push)
+            return publish(data, args.repo, args.push, args.dispatch)
         elif args.command == 'freshness':
             return freshness(data, args.minutes or data['freshness_minutes'], args.repo)
     except (Error, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:

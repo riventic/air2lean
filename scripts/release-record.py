@@ -2,7 +2,8 @@
 """Revision-bound release record: CI gates, their evidence, unavailable checks and the review ledger.
 
   release-record.py plan   [--root DIR] [--json]          list the release gates of HEAD's workflow
-  release-record.py record [--root DIR] [--github-run F]... [--local-ci DIR]...
+  release-record.py record [--root DIR] [--github-run F]... [--reuse-references DIR --reference-run F]...
+                           [--local-ci DIR]...
                            [--unavailable 'JOB[::STEP]=REASON']... [--out F]
   release-record.py verify RECORD [--root DIR]            re-check a published record against its revision
   release-record.py ledger [--root DIR] [--allow-unfetched | --revisions]
@@ -36,7 +37,9 @@ LEDGER = 'REVIEW_COVERAGE.tsv'
 LEDGER_HEADER = ['path', 'reviewer', 'method', 'baseline_sha256', 'reviewed_revision']
 SHA1 = re.compile(r'[0-9a-f]{40}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
-GATE_STATUSES = ('passed', 'failed', 'missing', 'unavailable')
+GATE_STATUSES = ('passed', 'failed', 'by-reference', 'missing', 'unavailable')
+# scripts/ci-reuse.py's schema: its records and the reuse references (`ci-reuse-ref-<key>`).
+REUSE_SCHEMA = 'air2lean-ci-reuse/2'
 # A gate that seals a proof receipt over uncommitted changes (scripts/proof-receipt.py).
 DIRTY_RECEIPT = re.compile(r'AIR2LEAN_RECEIPT_ALLOW_DIRTY\s*[=:]\s*["\']?1|proof-receipt\.py\b[^\n]*--allow-dirty')
 
@@ -338,7 +341,21 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def github_evidence(path, revision, plan):
+def referenced_job(ref, runs, name, gates):
+    """The reference's producing job when the supplied run JSON shows it passed every gate."""
+    run = runs.get(str(ref['run_id']))
+    if not run or run.get('workflowName') != 'CI' or run.get('status') != 'completed' or run.get('event') not in (
+            'pull_request', 'merge_group', 'workflow_dispatch'):
+        return None
+    for job in run.get('jobs') or []:
+        if job.get('name') == name and str(job.get('databaseId', ref['job_id'])) == str(ref['job_id']):
+            steps = {step.get('name'): step.get('conclusion') for step in job.get('steps') or []}
+            if job.get('conclusion') == 'success' and all(steps.get(step) == 'success' for step in gates):
+                return job
+    return None
+
+
+def github_evidence(path, revision, plan, references=None, reference_runs=None):
     raw = Path(path).read_bytes()
     try:
         data = json.loads(raw)
@@ -350,9 +367,10 @@ def github_evidence(path, revision, plan):
     if data['headSha'] != revision:
         raise ReleaseError('%s: run %s is for %s, not the recorded revision %s'
                            % (path, data['databaseId'], data['headSha'], revision))
-    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group'):
+    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule'):
         # pull_request runs test a PR head or GitHub's merge with the base branch; a merge_group
-        # run tests exactly the commit that the merge queue then fast-forwards main to.
+        # run tests exactly the commit that the merge queue then fast-forwards main to; a
+        # schedule run tests main's head.
         raise ReleaseError('%s: run %s is a %s run; it did not test %s itself'
                            % (path, data['databaseId'], data['event'], revision))
     if data['status'] != 'completed':
@@ -379,13 +397,22 @@ def github_evidence(path, revision, plan):
                 raise ReleaseError('%s: job %r ran step %r whose condition is false at %s; '
                                    'the run used another workflow' % (path, name, step, revision))
         # A reused part (docs/ci.md): the decision step passed, nothing failed and every gate was
-        # skipped. Its run executed none of them, so it is evidence for none: the gates stay
-        # missing unless the run that executed them is passed too. Any other skip is a failure.
+        # skipped. Its run executed none of them: with the reuse reference this run uploaded
+        # (`ci-reuse-ref-<key>`: the run and job that passed on a tree with the same input key)
+        # its gates are passed by reference, else they stay missing unless the run that executed
+        # them is passed too. Any other skip is a failure.
         gates = by_name[name]['gates']
         if (conclusions.get(REUSE_STEP) == 'success' and gates
                 and all(conclusions.get(step) == 'skipped' for step in gates)
                 and not {'failure', 'cancelled'} & set(conclusions.values())):
             reused.append(name)
+            ref = (references or {}).get((str(data['databaseId']), name))
+            # Passed by reference only with the producing run's JSON showing every gate passed,
+            # and a reference made for this revision; else the gates stay missing.
+            if ref and ref.get('tested_commit') == revision and referenced_job(ref, reference_runs or {}, name, gates):
+                for step in gates:
+                    results[(name, step)] = ('by-reference', 'passed by reference: run %s job %s, input key %s'
+                                             % (ref['run_id'], ref['job_id'], ref['key']))
             continue
         for step in gates:
             if step in conclusions:
@@ -395,6 +422,8 @@ def github_evidence(path, revision, plan):
     source = {'kind': 'github-actions', 'run_id': data['databaseId'], 'url': data.get('url'),
               'head_sha': data['headSha'], 'head_branch': data.get('headBranch'), 'event': data.get('event'),
               'conclusion': data.get('conclusion'), 'jobs': sorted(seen), 'reused_jobs': sorted(reused),
+              'references': [dict(references[(str(data['databaseId']), name)], job=name) for name in sorted(reused)
+                             if (name, by_name[name]['gates'][0]) in results],
               'file_sha256': sha256_bytes(raw)}
     return source, results
 
@@ -492,7 +521,7 @@ def combine(plan, evidence, declared):
             statuses = {status for _, status, _ in entries}
             gate = {'job': job['name'], 'step': step, 'evidence': [index for index, _, _ in entries],
                     'details': [detail for _, _, detail in entries]}
-            gate['status'] = 'failed' if 'failed' in statuses else 'passed' if statuses else 'missing'
+            gate['status'] = next((s for s in ('failed', 'passed', 'by-reference') if s in statuses), 'missing')
             # A step-level declaration must not contradict evidence; a job-level one covers
             # only that job's gates without evidence. Failures are never hidden.
             for_step = [reason for name, target, reason in declared if name == job['name'] and target == step]
@@ -603,11 +632,35 @@ def summarize(gates):
     return summary
 
 
-def build_record(root, github_runs=(), local_runs=(), unavailable=()):
+def read_references(directories):
+    """{(consuming run id, job name): reference} from downloaded `ci-reuse-ref-<key>` artifacts."""
+    found = {}
+    for directory in directories:
+        for path in sorted(Path(directory).rglob('*.json')):
+            try:
+                ref = json.loads(path.read_text())
+            except ValueError as error:
+                raise ReleaseError('%s: invalid reuse reference: %s' % (path, error))
+            if not isinstance(ref, dict) or ref.get('schema') != REUSE_SCHEMA or not all(
+                    ref.get(k) for k in ('reused_in_run', 'job_name', 'run_id', 'job_id', 'key')):
+                raise ReleaseError('%s: not a reuse reference (scripts/ci-reuse.py)' % path)
+            found[(str(ref['reused_in_run']), ref['job_name'])] = ref
+    return found
+
+
+def build_record(root, github_runs=(), local_runs=(), unavailable=(), reference_dirs=(), reference_runs=()):
     revision = clean_head(root)
     plan = build_plan(root, revision)
     declared = parse_unavailable(unavailable, plan)
-    evidence = [github_evidence(path, revision, plan) for path in github_runs]
+    references = read_references(reference_dirs)
+    producing = {}
+    for path in reference_runs:
+        try:
+            data = json.loads(Path(path).read_text())
+        except (OSError, ValueError) as error:
+            raise ReleaseError('%s: invalid run JSON: %s' % (path, error))
+        producing[str(data.get('databaseId'))] = data
+    evidence = [github_evidence(path, revision, plan, references, producing) for path in github_runs]
     evidence += [local_ci_evidence(path, revision, plan) for path in local_runs]
     gates = combine(plan, evidence, declared)
     summary = summarize(gates)
@@ -655,13 +708,16 @@ def verify_record(root, record):
             continue
         if any(not isinstance(ref, int) or not 0 <= ref < len(evidence) for ref in refs):
             problems.append('%s: references unknown evidence' % label)
-        elif status in ('passed', 'failed') and not refs:
+        elif status in ('passed', 'failed', 'by-reference') and not refs:
             problems.append('%s: %s without evidence for %s' % (label, status, revision))
         elif status in ('missing', 'unavailable') and refs:
             problems.append('%s: %s but cites evidence' % (label, status))
         if status == 'unavailable' and not str(gate.get('reason') or '').strip():
             problems.append('%s: unavailable without a reason' % label)
-        if status == 'passed' and any(evidence[ref].get('jobs') is not None and gate.get('job') not in evidence[ref]['jobs']
+        if status == 'by-reference' and not any(gate.get('job') in [r.get('job') for r in evidence[ref].get('references') or []]
+                                                for ref in refs if isinstance(ref, int) and 0 <= ref < len(evidence)):
+            problems.append('%s: by-reference without a reference for this job' % label)
+        if status in ('passed', 'by-reference') and any(evidence[ref].get('jobs') is not None and gate.get('job') not in evidence[ref]['jobs']
                                       for ref in refs if isinstance(ref, int) and 0 <= ref < len(evidence)):
             problems.append('%s: cited evidence does not cover this job' % label)
     summary = summarize([g for g in gates if g.get('status') in GATE_STATUSES])
@@ -682,6 +738,10 @@ def main(argv=None):
     sub.choices['plan'].add_argument('--json', action='store_true')
     sub.choices['plan'].add_argument('--revision', default='HEAD')
     sub.choices['record'].add_argument('--github-run', action='append', default=[], metavar='RUN_JSON')
+    sub.choices['record'].add_argument('--reuse-references', action='append', default=[], metavar='DIR',
+                                       help='downloaded ci-reuse-ref-<key> artifacts of the --github-run runs')
+    sub.choices['record'].add_argument('--reference-run', action='append', default=[], metavar='RUN_JSON',
+                                       help='run JSON of a run a reuse reference names (any revision)')
     sub.choices['record'].add_argument('--local-ci', action='append', default=[], metavar='RESULTS_DIR')
     sub.choices['record'].add_argument('--unavailable', action='append', default=[], metavar='JOB[::STEP]=REASON')
     sub.choices['record'].add_argument('--out')
@@ -702,7 +762,8 @@ def main(argv=None):
                           % (job['name'], len(job['gates']), len(job['not_applicable']), job['reproduce']))
             return 0
         if args.command == 'record':
-            record = build_record(root, args.github_run, args.local_ci, args.unavailable)
+            record = build_record(root, args.github_run, args.local_ci, args.unavailable, args.reuse_references,
+                                  args.reference_run)
             text = json.dumps(record, indent=2) + '\n'
             if args.out:
                 Path(args.out).write_text(text)

@@ -88,17 +88,17 @@ The memory model uses little-endian, 64-bit pointers (big endian only for the qu
 
 ## Set up translation
 
-Translation additionally needs a stock Zig **0.16.0** on `PATH` to bootstrap the patched compiler. Install that exact supported version; the bootstrap host version must match the version being built. See [Zig compiler setup](../zig-patch/README.md) for platform and memory requirements, alternative supported versions, and the optional LLVM build.
+Translation additionally needs a stock Zig **0.17.0** on `PATH` to bootstrap the patched compiler. Install that exact supported version; the bootstrap host version must match the version being built. See [Zig compiler setup](../zig-patch/README.md) for platform and memory requirements, alternative supported versions, and the optional LLVM build.
 
 Check the prerequisites and follow any reported setup hints:
 
 ```sh
 scripts/doctor.sh
-zig-patch/build.sh 0.16.0
+zig-patch/build.sh 0.17.0
 scripts/doctor.sh
 ```
 
-The patched compiler is installed in `zig-air-0.16.0/`. Its default build is locked to AIR export with no emitted binary; the doctor reports this lock state for every installed version. `scripts/clean-env.sh --translate` runs this setup and the translation below in a fresh container. Use a stock Zig compiler to build or run Zig programs. The translation command below builds the runtime library and translator before exporting AIR.
+The patched compiler is installed in `zig-air-0.17.0/`. Its default build is locked to AIR export with no emitted binary; the doctor reports this lock state for every installed version. `scripts/clean-env.sh --translate` runs this setup and the translation below in a fresh container. Use a stock Zig compiler to build or run Zig programs. The translation command below builds the runtime library and translator before exporting AIR.
 
 ## Translate your own file
 

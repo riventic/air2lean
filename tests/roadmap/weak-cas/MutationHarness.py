@@ -18,7 +18,8 @@ class MutationHarnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="weak-cas-mutation-mock-") as temporary:
             work = Path(temporary) / "repo"
             work.mkdir()
-            for relative in [*SOURCE_PATHS, "scripts/mutate.sh", "scripts/mutation-shards.txt"]:
+            for relative in [*SOURCE_PATHS, "scripts/mutate.sh", "scripts/zig-default.sh", "scripts/compat.py",
+                             "compatibility.json", "scripts/mutation-shards.txt"]:
                 dest = work / relative
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / relative, dest)

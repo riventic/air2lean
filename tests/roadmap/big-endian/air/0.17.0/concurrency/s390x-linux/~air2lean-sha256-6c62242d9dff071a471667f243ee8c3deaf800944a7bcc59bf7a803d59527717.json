@@ -1,0 +1,180 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-be-v1",
+  "target_triple": "s390x-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "big",
+  "abi": "musl",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "arch11",
+  "features": [
+   "dfp_packed_conversion",
+   "dfp_zoned_conversion",
+   "distinct_ops",
+   "enhanced_dat_2",
+   "execution_hint",
+   "fast_serialization",
+   "fp_extension",
+   "high_word",
+   "interlocked_access1",
+   "load_and_trap",
+   "load_and_zero_rightmost_byte",
+   "load_store_on_cond",
+   "load_store_on_cond_2",
+   "message_security_assist_extension3",
+   "message_security_assist_extension4",
+   "message_security_assist_extension5",
+   "miscellaneous_extensions",
+   "population_count",
+   "processor_assist",
+   "reset_reference_bits_multiple",
+   "transactional_execution",
+   "vector"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "atomic.Value(u32).init",
+ "module": "std",
+ "src": {
+  "file": "atomic.zig",
+  "module": "std",
+  "decl_line": 16
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 13
+  },
+  {
+   "id": 2,
+   "tag": "ret_ptr",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 13
+  },
+  {
+   "id": 6,
+   "tag": "ret_load",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 0,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

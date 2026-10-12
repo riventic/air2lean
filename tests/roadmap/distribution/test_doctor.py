@@ -16,10 +16,11 @@ FILES = ('scripts/doctor.sh', 'scripts/doctor.py', 'scripts/compat.py', 'scripts
          'scripts/translate.sh', 'scripts/local-ci.sh', 'scripts/clean-env.sh', 'compatibility.json',
          'lean-toolchain', 'tests/diff/lean-toolchain', 'lakefile.toml', 'lake-manifest.json',
          'zig-patch/versions.toml', 'zig-patch/lock.sh', '.github/workflows/ci.yml',
-         'Air2Lean/Air/Profile.lean', 'Dockerfile.clean-env', 'tutorials/first-proof/Main.lean')
+         'Air2Lean/Air/Profile.lean', 'Air2Lean/Air/Dialect.lean', 'Dockerfile.clean-env', 'tutorials/first-proof/Main.lean')
 # Every listed version's hook, copied when present (another track may add a version's hook later).
 FILES += tuple('zig-patch/' + e['hook'] for e in
                json.loads((ROOT / 'compatibility.json').read_text())['zig']['versions'])
+DEFAULT = json.loads((ROOT / 'compatibility.json').read_text())['zig']['default']
 TOOLCHAIN = (ROOT / 'lean-toolchain').read_text().strip()
 FAKE = r'''#!/usr/bin/env python3
 import os, pathlib, sys
@@ -35,13 +36,13 @@ elif name == 'docker':
 else:
     assert args == ['version'], args
     marker = pathlib.Path(sys.argv[0]).with_suffix('.version')
-    print(marker.read_text().strip() if marker.exists() else '0.16.0')
+    print(marker.read_text().strip() if marker.exists() else '@DEFAULT@')
 '''
 
 
 def write_tool(path, version=None):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(FAKE)
+    path.write_text(FAKE.replace('@DEFAULT@', DEFAULT))
     path.chmod(0o755)
     if version:
         path.with_suffix('.version').write_text(version)
@@ -66,7 +67,7 @@ class Doctor(unittest.TestCase):
                     'AIR2LEAN_PYTHON': sys.executable, 'AIR2LEAN_ZIG': str(self.bin / 'stock-zig'),
                     'AIR2LEAN_DOCKER': str(self.bin / 'docker'), 'MOCK_TOOLCHAINS': TOOLCHAIN + ' (default)'}
 
-    def patched(self, version='0.16.0', lock=True, reported=None):
+    def patched(self, version=DEFAULT, lock=True, reported=None):
         """A fake patched compiler installed like build.sh: locked by the real lock.sh."""
         prefix = self.repo / ('zig-air-' + version)
         write_tool(prefix / 'bin/zig', reported or version)
@@ -99,7 +100,7 @@ class Doctor(unittest.TestCase):
         self.patched()
         report = self.doctor(expected=0)
         self.assertEqual(report['ready'], {'proofs': True, 'translate': True})
-        self.assertEqual(self.check(report, 'patched-zig-0.16.0')['details']['lock'], 'locked')
+        self.assertEqual(self.check(report, 'patched-zig-' + DEFAULT)['details']['lock'], 'locked')
         self.assertEqual(self.check(report, 'metadata')['status'], 'ok')
         self.assertEqual(self.check(report, 'stock-zig')['status'], 'ok')
         self.assertEqual(self.check(report, 'docker')['status'], 'ok')
@@ -112,9 +113,9 @@ class Doctor(unittest.TestCase):
         os.unlink(self.bin / 'stock-zig')
         report = self.doctor('--require', 'proofs', expected=0)
         self.assertEqual(report['ready'], {'proofs': True, 'translate': False})
-        missing = self.check(report, 'patched-zig-0.16.0')
+        missing = self.check(report, 'patched-zig-' + DEFAULT)
         self.assertEqual(missing['status'], 'fail')
-        self.assertIn('zig-patch/build.sh 0.16.0', missing['hint'])
+        self.assertIn('zig-patch/build.sh ' + DEFAULT, missing['hint'])
         self.assertEqual(self.check(report, 'stock-zig')['status'], 'note')
         self.assertEqual(self.doctor(expected=1)['ready']['translate'], False)
 
@@ -139,31 +140,31 @@ class Doctor(unittest.TestCase):
         prefix = self.patched()
         wrapper = prefix / 'bin/zig'
         wrapper.write_text(wrapper.read_text().replace('help |', 'help | build |'))
-        stale = self.check(self.doctor(expected=0), 'patched-zig-0.16.0')
+        stale = self.check(self.doctor(expected=0), 'patched-zig-' + DEFAULT)
         self.assertEqual(stale['details']['lock'], 'stale-lock')
         self.assertIn('zig-patch/lock.sh', stale['hint'])
-        write_tool(wrapper, '0.16.0')  # an unwrapped compiler next to zig-unlocked: lock was removed
-        broken = self.check(self.doctor(expected=1), 'patched-zig-0.16.0')
+        write_tool(wrapper, DEFAULT)  # an unwrapped compiler next to zig-unlocked: lock was removed
+        broken = self.check(self.doctor(expected=1), 'patched-zig-' + DEFAULT)
         self.assertEqual((broken['status'], broken['details']['lock']), ('fail', 'broken-lock'))
         os.unlink(prefix / 'bin/zig-unlocked')
-        llvm = self.check(self.doctor(expected=0), 'patched-zig-0.16.0')
+        llvm = self.check(self.doctor(expected=0), 'patched-zig-' + DEFAULT)
         self.assertEqual((llvm['status'], llvm['details']['lock']), ('warn', 'llvm-or-unlocked'))
         self.assertIn('AIR2LEAN_LLVM=1', llvm['message'])
 
     def test_rejects_unlocked_path_wrong_version_and_unsupported(self):
         prefix = self.patched()
         report = self.doctor('--zig-air', str(prefix / 'bin/zig-unlocked'), expected=1)
-        self.assertIn('safety lock', self.check(report, 'patched-zig-0.16.0')['message'])
+        self.assertIn('safety lock', self.check(report, 'patched-zig-' + DEFAULT)['message'])
         self.patched(reported='0.15.2')
         report = self.doctor(expected=1)
-        self.assertIn("expected '0.16.0'", self.check(report, 'patched-zig-0.16.0')['message'])
+        self.assertIn("expected '" + DEFAULT + "'", self.check(report, 'patched-zig-' + DEFAULT)['message'])
         report = self.doctor('--zig-version', 'latest', expected=1)
-        self.assertIn('0.16.0', self.check(report, 'zig-version')['hint'])
+        self.assertIn(DEFAULT, self.check(report, 'zig-version')['hint'])
 
     def test_relative_zig_air_and_other_versions(self):
         self.patched()
         self.patched('0.15.2', lock=False)
-        report = self.doctor('--zig-air', 'repo/zig-air-0.16.0/bin/zig', expected=0)
+        report = self.doctor('--zig-air', 'repo/zig-air-' + DEFAULT + '/bin/zig', expected=0)
         other = self.check(report, 'patched-zig-0.15.2')
         self.assertEqual((other['status'], other['details']['lock']), ('warn', 'llvm-or-unlocked'))
 
@@ -204,7 +205,7 @@ class Doctor(unittest.TestCase):
         result = run([])
         self.assertEqual(result.returncode, 1)
         self.assertIn('Ready for committed proofs', result.stdout)
-        self.assertIn('hint: from the repository, run zig-patch/build.sh 0.16.0', result.stdout)
+        self.assertIn('hint: from the repository, run zig-patch/build.sh ' + DEFAULT, result.stdout)
         self.assertIn('Ready for proofs only', result.stdout)
         for args, code in ((['--help'], 0), (['--typo'], 2), (['--require', 'all'], 2), (['--zig-air'], 2)):
             result = run(args)
@@ -223,10 +224,12 @@ class HostRules(unittest.TestCase):
         self.mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.mod)
 
-    def selection(self, host, version):
+    def selection(self, host, version, status=None):
         args = self.mod.parse(['--zig-version', version], {})
         doctor = self.mod.Doctor(ROOT, ROOT, args, {})
         self.assertTrue(doctor.metadata())
+        if status:
+            doctor.versions[version]['status'] = status
         doctor.host_id = host
         return doctor.zig_selection(), doctor.checks[-1]
 
@@ -234,15 +237,18 @@ class HostRules(unittest.TestCase):
         ok, check = self.selection('aarch64-macos', '0.14.1')
         self.assertFalse(ok)
         self.assertIn('x86_64-linux, aarch64-linux only', check['message'])
-        self.assertIn('0.16.0', check['hint'])
+        self.assertIn(DEFAULT, check['hint'])
         self.assertTrue(self.selection('x86_64-linux', '0.14.1')[0])
         self.assertTrue(self.selection('aarch64-macos', '0.15.2')[0])
 
     def test_in_qualification_version_is_noted(self):
-        ok, check = self.selection('x86_64-linux', '0.17.0')
+        ok, check = self.selection('x86_64-linux', '0.17.0', status='in-qualification')
         self.assertTrue(ok)
         self.assertEqual((check['id'], check['status']), ('zig-version-status', 'note'))
-        self.assertIn('0.16.0', check['hint'])
+        self.assertIn(DEFAULT, check['hint'])
+        # No pinned version is in qualification now: 0.17.0 (qualified) gets no note.
+        ok, check = self.selection('x86_64-linux', '0.17.0')
+        self.assertEqual((check['id'], check['status']), ('zig-version', 'ok'))
         ok, check = self.selection('x86_64-linux', '0.16.0')
         self.assertEqual(check['id'], 'zig-version')
 

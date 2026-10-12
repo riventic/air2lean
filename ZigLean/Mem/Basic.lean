@@ -63,7 +63,7 @@ inductive Byte where
   /-- The bits set in `d` are defined, with the values of `b`; the others are undefined (`b`'s
   bits there are 0). Only for a mask that is not all, none or the low bits (`.int`, `.undef`,
   `.part`): a bit-pointer store of a field or of `undefined` next to undefined bits
-  (`Byte.ofDefBits`, `ZigLean/Packed.lean`). A read that needs a bit outside `d` throws
+  (`Byte.ofDefBits`, `ZigLean/Mem/Enc.lean`). A read that needs a bit outside `d` throws
   `.unspecified` (`intOfBytes`). -/
   | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited

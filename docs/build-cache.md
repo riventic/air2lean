@@ -23,6 +23,7 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_CAS_MAX_GIB` | size cap for `cas.py gc` (default 60) |
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
 | `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lane and lock wait (seconds) of the heavy steps |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 24576) |
 
 ## What is cached, and why a hit is always right
 
