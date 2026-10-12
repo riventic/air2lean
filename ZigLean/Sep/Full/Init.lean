@@ -2,7 +2,7 @@ import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Mmap
 
 /-!
-# The memory at program start in the full-state logic (`docs/one-logic.md`, decision D1b)
+# The memory at program start in the full-state logic (`docs/proof-framework.md`, Plan A decision D1b)
 
 A full-state triple quantifies over `Mem.FSeq` memories that hold its precondition. This module
 shows that the memory at program start (`Mem.ofGlobals σ gs`, under every placement `σ`) is one
