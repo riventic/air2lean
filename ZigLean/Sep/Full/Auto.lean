@@ -711,7 +711,8 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.toNat_add_nat, ``Nat.add_zero, ``Nat.zero_add, ``Int.add_zero, ``Int.zero_add, ``Int.one_mul,
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
-      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self] do
+      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
+      ``and_true] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -960,64 +961,109 @@ def blockOf (p : Expr) : MetaM (Option (Expr × Expr)) := do
   let some pf ← solveBlock t | return none
   return some (← instantiateMVars b, pf)
 
-/-- Prove `ty` by the lemma `n`: its conclusion is unified with `ty`, its hypotheses are proved
-from the context (blocks) or by arithmetic. -/
-def proveBy (n : Name) (ty : Expr) : TacticM Expr := do
-  let f ← mkConstWithFreshMVarLevels n
-  let (args, _, concl) ← forallMetaTelescope (← inferType f)
-  unless ← isDefEq concl ty do throwError "fsym: {n} does not apply"
-  for a in args do
-    let a ← instantiateMVars a
-    unless a.isMVar do continue
-    let t ← instantiateMVars (← inferType a)
-    unless ← isProp t do continue
-    if (t.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
-      let some pf ← solveBlock t | throwError "fsym: block of {t}"
-      a.mvarId!.assign pf
-    else unless ← arith a.mvarId! do throwError "fsym: side condition {t}"
-  instantiateMVars (mkAppN f args)
-
-/-- The provider lemmas (`@[fsym_provider]`) whose conclusion is an application of `k`. -/
-def providerLemmas (k : Name) : MetaM (Array Name) := do
-  (fsymProviderExt.getState (← getEnv)).filterM fun n => do
-    return (← getConstInfo n).type.getForallBody.isAppOf k
-
-/-- Candidates for a provider goal `AddrOf b A P` or `Reaches b K P`: proofs that assign `A`/`K`. -/
-def providerCands (t : Expr) : TacticM (Array (TacticM Expr)) := do
-  let t ← instantiateMVars t
-  let isAddr := t.isAppOfArity ``AddrOf 3
-  let P := t.appArg!
-  let ats := atoms P
-  let mut out := #[]
-  for i in [0:ats.size] do
-    let a := ats[i]!
-    let rest := sepOf (ats.eraseIdx! i)
-    for n in ← providerLemmas (if isAddr then ``AddrOf else ``Reaches) do
-      out := out.push do
-        let ty := mkApp3 t.getAppFn t.getAppArgs[0]! t.getAppArgs[1]! a
-        let h ← proveBy n ty
-        let e ← acEq P (mkSep a rest)
-        let pf ← mkAppM (if isAddr then ``AddrOf.of_atom else ``Reaches.of_atom) #[h, e]
-        unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
-        return pf
+/-- The parts of a `⋆`-tree `P` (`emp` dropped), each with a map from `Within X part` to
+`Within X P`. With `unfold`, the parts of a part's unfolding (one definition or `match` at a
+time, while it is not a raw predicate `fun r => …`) follow it (`P` as a user states it, not yet
+flattened by the walk). -/
+partial def withinParts (P : Expr) (unfold := false) : MetaM (Array (Expr × (Expr → MetaM Expr))) := do
+  let P := P.consumeMData.headBeta
+  if P.isAppOfArity sepN 2 then
+    let A := P.appFn!.appArg!
+    let B := P.appArg!
+    let pa := (← withinParts A unfold).map fun (x, k) =>
+      (x, fun h : Expr => do mkAppOptM ``Within.sepL #[none, some A, some B, some (← k h)])
+    let pb := (← withinParts B unfold).map fun (x, k) =>
+      (x, fun h : Expr => do mkAppOptM ``Within.sepR #[none, some B, some A, some (← k h)])
+    return pa ++ pb
+  if P.isConstOf empN then return #[]
+  let mut out := #[(P, pure)]
+  if unfold then
+    let P' ← match ← reduceMatcher? P with
+      | .reduced e => pure (some e.headBeta)
+      | _ => unfold1 P
+    if let some P' := P' then
+      unless P'.consumeMData.isLambda do out := out ++ (← withinParts P' unfold)
   return out
 
-/-- Solve the side goals of a rule, in order; providers backtrack over their candidates.
-Returns the arithmetic goals left unproved, or `none` if a block or provider goal fails. -/
-partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) := do
-  match gs with
+/-- Proofs of `Within X P`, one for each part of `P` that unifies with `X` (`unifyAtom`). -/
+def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := do
+  return (← withinParts P unfold).map fun (part, k) => do
+    unless ← unifyAtom X part do throwError "fsym: not a part"
+    k (← mkAppM ``Within.refl #[part])
+
+/-- The provider kind of a goal `K … P`: a constant `K` with a lemma `K.of_within`
+(`AutoRules.lean` §Providers over the whole precondition). -/
+def providerKind? (t : Expr) : MetaM (Option Name) := do
+  let .const k _ := t.getAppFn | return none
+  return if (← getEnv).contains (k ++ `of_within) then some k else none
+
+/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`: those about an atom (the conclusion's
+assertion is an application; with its `headKey`), and those about the whole precondition (a
+variable). -/
+def providerLemmas (k : Name) : MetaM (Array (Name × Name) × Array Name) := do
+  let mut atomL := #[]
+  let mut wholeL := #[]
+  for n in fsymProviderExt.getState (← getEnv) do
+    let body := (← getConstInfo n).type.getForallBody
+    unless body.isAppOf k do continue
+    if body.appArg!.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey body.appArg!)
+  return (atomL, wholeL)
+
+/-- The depth of nested provider goals (a provider whose hypotheses are providers). -/
+def providerDepth : Nat := 6
+
+/-- Candidates for a provider goal `t` (a `Within X P`, or a provider kind `K … P`): each assigns
+`t`'s unknowns and returns a proof with the goals it leaves (hypotheses of the lemma used). -/
+def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × List MVarId))) := do
+  let t ← instantiateMVars t
+  let P := t.appArg!
+  if t.isAppOfArity ``Within 2 then
+    return (← withinCands t.appFn!.appArg! P).map fun (c : MetaM Expr) => return (← c, [])
+  let some k ← providerKind? t | return #[]
+  let (atomL, wholeL) ← providerLemmas k
+  -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
+  let lemmaGoals (n : Name) (concl : Expr) : TacticM (Expr × List MVarId) := do
+    let f ← mkConstWithFreshMVarLevels n
+    let (args, _, c) ← forallMetaTelescope (← inferType f)
+    unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
+    let gs ← args.filterM fun a => do
+      if ← a.mvarId!.isAssigned then return false
+      isProp (← inferType a)
+    return (mkAppN f args, gs.toList.map (·.mvarId!))
+  let mut out := #[]
+  for (part, k') in ← withinParts P do
+    for (n, key) in atomL do
+      unless key == .anonymous || key == headKey part do continue
+      out := out.push do
+        let (h, gs) ← lemmaGoals n (mkApp t.appFn! part)
+        let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
+        unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
+        return (pf, gs)
+  if depth < providerDepth then
+    for n in wholeL do
+      out := out.push (lemmaGoals n t)
+  return out
+
+/-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
+goals a candidate leaves are solved before the rest (`strict`: all of them, or the candidate
+fails). Returns the arithmetic goals of the rule left unproved, or `none` if a block, provider or
+strict goal fails. -/
+partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) :=
+  go (gs.map (·, false, 0))
+where
+  go : List (MVarId × Bool × Nat) → TacticM (Option (List MVarId))
   | [] => return some []
-  | g :: rest =>
-    if ← g.isAssigned then return ← solveSides rest
+  | (g, strict, depth) :: rest => do
+    if ← g.isAssigned then return ← go rest
     let t ← instantiateMVars (← g.getType)
-    if t.isAppOfArity ``AddrOf 3 || t.isAppOfArity ``Reaches 3 then
+    if t.isAppOfArity ``Within 2 || (← providerKind? t).isSome then
       let mut first? : Option (Tactic.SavedState × List MVarId) := none
-      for cand in ← providerCands t do
+      for cand in ← g.withContext (providerCands t depth) do
         let s ← saveState
         try
-          let pf ← cand
+          let (pf, sub) ← g.withContext cand
           g.assign pf
-          match ← solveSides rest with
+          match ← go (sub.map (·, true, depth + 1) ++ rest) with
           | some [] => return some []
           | some left => if first?.isNone then first? := some (← saveState, left)
           | none => pure ()
@@ -1029,10 +1075,11 @@ partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) := do
     else if (t.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
       let some pf ← g.withContext (solveBlock t) | return none
       g.assign pf
-      solveSides rest
+      go rest
     else
       let ok ← arith g
-      let some left ← solveSides rest | return none
+      if strict && !ok then return none
+      let some left ← go rest | return none
       return some (if ok then left else g :: left)
 
 /-! ## Preconditions -/
@@ -1082,6 +1129,23 @@ def optTest? (ty : Expr) : Option (Name × Expr) := do
     | _, _, _ => none
   return (lem, l.appArg!)
 
+/-- A fact `e = true`, `e = false` or `¬e = true` of a Boolean combination `e` of `decide`s. -/
+def isBoolTest (ty : Expr) : Bool :=
+  let e := if ty.isAppOfArity ``Not 1 then ty.appArg! else ty
+  match e.eq? with
+  | some (t, l, r) => t.isConstOf ``Bool && (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) &&
+      [``Decidable.decide, ``not, ``and, ``or].any l.isAppOf
+  | none => false
+
+/-- The simp context that turns a Boolean test (`isBoolTest`) into a proposition. -/
+def boolFactCtx : MetaM Simp.Context := do
+  let mut thms : SimpTheorems := {}
+  for n in [``Bool.not_eq_true', ``Bool.not_eq_false', ``Bool.not_eq_true, ``Bool.not_eq_false,
+      ``decide_eq_true_eq, ``decide_eq_false_iff_not, ``Bool.and_eq_true, ``Bool.or_eq_true,
+      ``Decidable.not_not] do
+    thms ← thms.addConst n
+  Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
 and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
@@ -1130,6 +1194,12 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
       return g
     return ← destruct g fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
+  -- a Boolean test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`): as a proposition
+  if isBoolTest ty then
+    let (r, _) ← simp ty (← boolFactCtx)
+    if r.expr != ty && !r.expr.isFalse then
+      if let some (h', g') ← applySimpResultToLocalDecl g h r false then
+        return ← destruct g' h'
   -- a test of an optional that is not a constructor: its constructor equation (`opt_*`), next
   -- to the test
   if let some (lem, o) := optTest? ty then
@@ -2387,8 +2457,10 @@ def factSubjects (X : Expr) : Array Expr :=
   if X.isAppOfArity sepN 2 then #[X.appFn!.appArg!, X.appArg!] else #[X]
 
 /-- The facts lemmas (`@[fsym_facts]`) about the atoms `as` (one atom, or an ordered pair):
-`(proof of AtomFacts X φ or MemFacts X φ for X the atom or `as[0] ⋆ as[1]`, φ, memory fact)`. -/
-def atomFacts (as : Array Expr) : MetaM (Array (Expr × Expr × Bool)) := do
+`(lemma, proof of AtomFacts X φ or MemFacts X φ for X the atom or `as[0] ⋆ as[1]`, φ, memory
+fact)`. A lemma's premises are instances, blocks of pointers (from the context) and arithmetic
+(the solver's probe). -/
+def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool)) := do
   -- the lemmas by the heads of their atoms, once per run
   let keyed ← match ← (← caches).factLemmas.get with
     | some k => pure k
@@ -2408,15 +2480,21 @@ def atomFacts (as : Array Expr) : MetaM (Array (Expr × Expr × Bool)) := do
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, concl) ← forallMetaTelescope (← inferType f)
     unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) X) do s.restore; continue
+    -- instances, blocks of pointers from the context (`p.block = some b`), arithmetic
     for x in args do
       unless ← x.mvarId!.isAssigned do
-        if (← isClass? (← inferType x)).isSome then
-          if let some i ← (try some <$> synthInstance (← inferType x) catch _ => pure none) then
+        let ty ← instantiateMVars (← inferType x)
+        if (← isClass? ty).isSome then
+          if let some i ← (try some <$> synthInstance ty catch _ => pure none) then
             discard <| isDefEq x i
+        else if (ty.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+          if let some pf ← solveBlock ty then discard <| isDefEq x pf
+        else if !ty.hasExprMVar && (← isProp ty) then
+          discard <| arith x.mvarId! (quick := true)
     let pf ← instantiateMVars (mkAppN f args)
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
-    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ, concl.isAppOfArity ``MemFacts 2)
+    unless pf.hasMVar || φ.hasMVar do out := out.push (n, pf, φ, concl.isAppOfArity ``MemFacts 2)
   return out
 
 /-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
@@ -2437,7 +2515,8 @@ def knownFact (ψ : Expr) : MetaM Bool := do
 /-- Add the facts of the precondition's atoms and ordered pairs of atoms (`@[fsym_facts]`: the
 block, offset and alignment of an owned pointer; a token's grant in its authority's map; two
 owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
-an undecided `if`, a reachable panic, a return). `none` if there was none to add. -/
+an undecided `if`, a reachable panic, a return). `none` if there was none to add. A lemma gives
+one fact per unordered pair (a symmetric lemma, such as two regions apart, matches both orders). -/
 partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option MVarId) := g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let ats := atoms P
@@ -2449,7 +2528,8 @@ partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option M
     let as := idx.map (ats[·]!)
     let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
     if done.contains X then continue
-    for (hX, φ, mem) in ← atomFacts as do
+    for (lem, hX, φ, mem) in ← atomFacts as do
+      if as.size == 2 && done.contains (mkApp2 (mkConst lem) as[1]! as[0]!) then continue
       if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
       trace[fsym] "facts of {X}: {φ}"
       let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
@@ -2461,6 +2541,7 @@ partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option M
       g1.assign (← mkAppM' (← mkAppOptM (L.nm (if mem then ``pre_mfact else ``pre_fact)) #[L.L]) #[hX, k])
       let (h, g2) ← k.mvarId!.intro `hf
       let g2 ← destruct g2 h
+      let done := if as.size == 2 then done.push (mkApp2 (mkConst lem) as[0]! as[1]!) else done
       return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X)
   return if done.isEmpty then none else some g
 
@@ -2558,11 +2639,11 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
       s.restore; return none
-    -- every argument must be determined
+    -- every argument must be determined (a proof by a provider too)
     for a in args do
       let a ← instantiateMVars a
       if a.hasExprMVar && !(left.any fun m => a == .mvar m) then
-        unless ← isProp (← inferType a) do
+        unless (← isProp (← inferType a)) && (a.collectMVars {}).result.all (left.contains ·) do
           trace[fsym] "rule {rule}: undetermined {a}"
           s.restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
@@ -2845,9 +2926,22 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
 end
 
 /-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with
-the planner of `fsym`; facts of `Q` it cannot prove are left as goals. -/
+the planner of `fsym`; facts of `Q` it cannot prove are left as goals. A goal `Within X P` (`X`
+is one of the separated parts of `P`, through definitions of `P` that unfold to `⋆`) is closed by
+finding `X`. -/
 elab "fsym_entail" : tactic => do
   let g ← getMainGoal
+  let t ← whnfR (← instantiateMVars (← g.getType))
+  if t.isAppOfArity ``Within 2 then
+    for c in ← withinCands t.appFn!.appArg! t.appArg! (unfold := true) do
+      let s ← saveState
+      try
+        let pf ← c
+        if ← isDefEq (← g.getType) (← inferType pf) then
+          g.assign pf; replaceMainGoal []; return
+      catch _ => pure ()
+      s.restore
+    throwError "fsym_entail: {t.appFn!.appArg!} is not a part of{indentExpr t.appArg!}"
   withRunCaches do
     discard <| arithSimpCtx
     replaceMainGoal (← closeEntail g)
