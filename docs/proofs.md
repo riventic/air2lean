@@ -50,16 +50,15 @@ A proof about generated code does not apply the rules one by one. It unfolds the
 ## A spec
 
 ```lean
+import ZigLean.Sep.Full.AutoAll
+
 theorem swap_sep (p q : Ptr) (x y : BitVec 32) :
-    Triple (pts p 4 x ∗ pts q 4 y) (swap p q) (fun _ => pts p 4 y ∗ pts q 4 x) := by
-  apply Triple.of_run
-  rintro m _ hF hd hm ⟨h₁, h₂, h₁₂, rfl, hp, hq⟩
-  -- `p` with the frame `h₂ ∪ hF`, `q` with the frame `h₁ ∪ hF`
-  ...
-  simp [swap, zig_unfold, lx, ly, s₁, s₂]
+    FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (swap p q)
+      (fun _ => up (pts p 4 y) ⋆ up (pts q 4 x)) := by
+  fsym
 ```
 
-`Triple.of_run` turns the goal into: for a memory `m` with `m.heap = hP ∪ hF` and `P hP`, find the result, the memory after, and the new owned heap. To read `p` in `pts p 4 x ∗ pts q 4 y`, use the frame `h₂ ∪ hF` (`Heap.union_assoc`, `Heap.union_left_comm`).
+`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The rest of this page describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework").
 
 Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b).toNat` is `(a.toNat + b.toNat) % 2 ^ w` with the power as a number. State the facts that `simp` needs in that form (`Proofs/Slices/Sep.lean`, `copyWithin_spec`).
 
@@ -177,7 +176,7 @@ budget is premise [STK-01](premises.md#stk-01), read as non-termination.
 
 | File | Theorems |
 |---|---|
-| `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
+| `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value), total, in the full-state logic |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
 | `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error but `.stackOverflow`, STK-01) |
 | `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |

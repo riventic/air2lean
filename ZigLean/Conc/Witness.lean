@@ -23,9 +23,6 @@ def TLive {α : Type} (P : Assn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (hP hF : Heap) (_ : Heap.Disjoint hP hF) (_ : m.heap = hP ∪ hF) (_ : P hP)
     (_ : m.current < m.clocks.size) (_ : m.Owns m.current hP), ∃ r, (c.run m).run = some (.ok r)
 
-theorem owns_of_footprint {m : Mem} (hf : m.footprint = #[]) (t : ThreadId) (h : Heap) :
-    m.Owns t h := fun e he => by rw [hf] at he; cases he; contradiction
-
 theorem TAdmit.of_heap {P : Assn} {m : Mem} (hp : P m.heap) (hc : m.current < m.clocks.size)
     (hf : m.footprint = #[]) : TAdmit P :=
   ⟨m, m.heap, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty _).symm, hp, hc,
