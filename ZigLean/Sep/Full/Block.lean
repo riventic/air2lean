@@ -187,17 +187,6 @@ extent of the new block and an aligned address. -/
 
 /-! ## Heap blocks: `rawAlloc` and `poisonFree` (`ZigLean/Mem/Alloc.lean`) -/
 
-/-- A step that runs as `c'` from a memory `m'` that holds the same resources (for example the
-memory after a bookkeeping step that changes no block) has the triple of `c'`. -/
-theorem FTotalTriple.of_runEq {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
-    (h : ∀ m r rF, Holds m r rF → P r → m.FSeq →
-      ∃ (c' : MemM α) (m' : Mem), c.run m = c'.run m' ∧ Holds m' r rF ∧ m'.FSeq ∧ FTotalTriple P c' Q) :
-    FTotalTriple P c Q := by
-  refine ⟨fun m r rF hh hp hs => ?_, fun m r rF hh hp hs => ?_⟩ <;>
-    obtain ⟨c', m', e, hh', hs', ht⟩ := h m r rF hh hp hs <;> rw [e]
-  · exact ht.1 m' r rF hh' hp hs'
-  · exact ht.2 m' r rF hh' hp hs'
-
 /-- What `rawAlloc n align` returns: `null` and nothing, or a new heap block of `n` undefined
 bytes with its full extent at an `align`-aligned address. -/
 def rawAllocPost (n align : Nat) : Option Ptr → FAssn
