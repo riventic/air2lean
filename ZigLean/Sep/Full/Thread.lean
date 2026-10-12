@@ -161,24 +161,18 @@ keeps owning the frame's bytes. -/
 theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   intro m r rF hh hpr hc ho
   obtain ⟨rP, rR, hd, rfl, hp, hr⟩ := hpr
-  obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
-  obtain ⟨hPF, hRF⟩ := FHeap.disjoint_union_left.mp hdisj
+  have hRF := (FHeap.disjoint_union_left.mp hh.disj).2
   have ho2 : m.Owns m.current (rP.heap.erase ∪ rR.heap.erase) := by simpa using ho
-  have hoP : m.Owns m.current rP.heap.erase := Mem.OwnsC.left ho2
   have hoR : m.Owns m.current rR.heap.erase := Mem.OwnsC.right ho2
-  have := ht m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩
-    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [← FHeap.union_assoc]; exact hheap, hk.left,
-      hk.right.union hkF, GOk.assoc.mp hg⟩ hp hc hoP
+  have := ht m rP _ (Holds.split hd hh) hp hc (Mem.OwnsC.left ho2)
   split at this
   · trivial
   · exact this
-  · obtain ⟨r', ⟨hd', hh', hk', hkF', hg'⟩, hq, hc', ho', hst⟩ := this
-    obtain ⟨hQR, hQF⟩ := FHeap.disjoint_union_right.mp hd'
+  · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
+    have hQR := (FHeap.disjoint_union_right.mp hh'.disj).1
     have hsubR : ∀ l, rR.heap.erase l ≠ none → (rR.heap ∪ rF.heap).erase l ≠ none := fun l hl => by
       simp only [FHeap.erase_union, Heap.union_apply]; cases e : rR.heap.erase l <;> simp_all
-    refine ⟨⟨r'.heap ∪ rR.heap, r'.know.union rR.know, r'.gh.add rR.gh⟩,
-      ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [FHeap.union_assoc]; exact hh',
-        hk'.union hkF'.left, hkF'.right, GOk.assoc.mpr hg'⟩, ⟨r', rR, hQR, rfl, hq, hr⟩, hc', ?_,
+    refine ⟨_, Holds.join hQR hRF hh', ⟨r', rR, hQR, rfl, hq, hr⟩, hc', ?_,
       hst.weaken fun l hl => ?_⟩
     · show Mem.OwnsC _ _ _
       rw [FHeap.erase_union]; exact Mem.OwnsC.union ho' (Mem.Owns.frameSelf hst hoR hsubR)
@@ -307,12 +301,8 @@ theorem conseq (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) (hq : ∀ v
 theorem frame (ht : FTTotalTriple P c Q) : FTTotalTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   refine ⟨ht.1.frame, fun m r rF hh hpr hc ho => ?_⟩
   obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr
-  obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
-  obtain ⟨hPF, -⟩ := FHeap.disjoint_union_left.mp hdisj
   have ho2 : m.Owns m.current (rP.heap.erase ∪ rR.heap.erase) := by simpa using ho
-  exact ht.2 m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩
-    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [← FHeap.union_assoc]; exact hheap, hk.left,
-      hk.right.union hkF, GOk.assoc.mp hg⟩ hp hc (Mem.OwnsC.left ho2)
+  exact ht.2 m rP _ (Holds.split hd hh) hp hc (Mem.OwnsC.left ho2)
 
 theorem ret (v : α) : FTTotalTriple (Q v) (pure v : MemM α) Q :=
   ⟨FTTriple.ret v, fun m _ _ _ _ _ _ => ⟨v, m, rfl⟩⟩

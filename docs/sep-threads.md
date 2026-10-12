@@ -86,6 +86,24 @@ which a sequential triple does not say. So:
   short today (the client steps are single primitives under `WP.liftM_owned`), so the backend is
   not on the critical path of the migration.
 
+### Decision: `CTriple` is derived from `FTTriple` (one concurrent judgment pair)
+
+The concurrent judgment pair is `FTTriple` / `FTTotalTriple`. `CTriple` does not survive as a
+judgment of its own: it becomes the thread triple of a concurrent function's in-thread reading,
+
+```
+CTriple P x Q := ∀ n, FTTriple P (Sched.soloRun n x) Q          (after migration step T-ctriple)
+```
+
+and today's definition (`∀ n, FTriple P (soloRun n x) Q`) follows from it by `toFTriple`, so the
+statements of its clients (`PageAlloc`'s `alloc`, the arena) are kept or strengthened. Migration
+step **T-ctriple**: restate `Full/Conc.lean`'s rules (`bind`, `liftMem` from an `FTTriple`,
+`pick_bind`, `loop`, `admissible*`, `step`, `readStep`, `upd`) over `FTTriple`; port the
+`FTriple` atomic rules on owned words (`Atomic`, `AtomicPtr`, `AtomicRules`) to thread rules (an
+atomic access by the owner of the word does not race); switch `fsym`'s concurrent backend to
+`TLogic` (below); re-check the page allocator and the arena. Until T-ctriple, `CTriple` is the
+sequential `FTriple` of a `MemM` program (`soloRun`), not a concurrent judgment.
+
 ### Relation to `CTriple` (one concurrent logic)
 
 `CTriple P x Q` (`Full/Conc.lean`) is `FTriple` of the in-thread reading `Sched.soloRun` of a
@@ -143,6 +161,40 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 * **Witnesses / Unroll** (`Witness.lean`, `Unroll.lean`): no heap assertions of their own; they
   follow the parts' type.
 
+## Termination and turn cost: credits, not a second judgment
+
+Coordinator decision (2026-10-12, #178 on hold): termination of concurrent code is the **total
+variant of the one concurrent judgment**, with turn budgets as a ghost resource (credits), proved
+by `fsym` rules. There is no separate `Stops`/`Turns` judgment and no `stops`/`halts` tactic.
+
+* **A step** (`MemM`): `FTTotalTriple P c Q := FTTriple P c Q ∧ FTTReturns P c` (this branch,
+  `Full/Thread.lean`): from every memory where the thread owns `P`, `c` returns a value.
+  `toFTotalTriple` makes it an `FTotalTriple`, so the sequential total rules and `fsym`'s
+  `FTotalTriple` backend are the termination proofs of steps. It replaces `MemM.Halts` (which says
+  only "a value or an error", unconditionally) and the `halts` tactic.
+* **Credits** `£ n`: a ghost component of `Res` (`cr : Nat`, composed by addition, always valid,
+  owning no byte; `£ (a + b) = £ a ⋆ £ b`; requested from the owner of `Full/Res.lean`). Like every
+  other resource it lives in a thread's part or in the protocol's rest (`FOwned`), moves with
+  spawn and join (`FOwned.fork`/`join`), and is framed by the frame rule.
+* **The total concurrent judgment** `WPT` is `Proto.WP` whose sync nodes each consume `£ 1` from
+  the current thread's part (`opCost`: a yield, pick, join, wake, choose; a spawn of a target with
+  budget `k` moves `£ k` to the child's part and costs `£ 2`). A futex wait and a deferred task
+  have no rule (fail closed, as `opCost = none` on #178), so fairness-dependent clients stay
+  unproved (C13). The parts are read from the ghost values (`Proto.parts : (ThreadId → γ) →
+  ThreadId → Res`), so a protocol needs nothing beyond its `FOwned` invariant.
+* **The theorem** (`Proto.returnsWithin`, re-proved): the potential is the sum of the credits of
+  all parts and of `rO`; each turn of a thread consumes one, a spawn moves `k` and consumes two, so
+  every schedule returns within the initial credits `B`, for every oracle. This is #178's
+  potential argument (`Returns.lean`: `bsum`, `settle_budget`, `fork_blocks`, `join_blocks`) with
+  the budget read from the resources instead of a `Turns` tree; those lemmas move into the
+  library as they are.
+* **In-thread reading** (`CTriple`): its total variant counts the same credits at the oracle
+  picks of a solo reading (`C.pick` consumes `£ 1`), so `fsym` charges a pick or an atomic op one
+  credit by an `@[fsym]` rule; a loop needs a credit invariant (`£ (c * k)` for `k` iterations).
+* **Re-expressed #178 theorems** (next phase): `Proofs/Threads/Termination` (`disjoint` returns
+  `a + b` within 6 turns; 6 is tight) and `Proofs/Atomics/Termination` (`publishRead`) as `WPT`
+  proofs: `main` starts with `£ 6`, each spawn gives the kid `£ 0` and costs 2, each join 1.
+
 ## Transitional bridge
 
 `FTTriple.ofTTriple : TTriple P c Q → Tame c → SizeFree P → Keeps c → FTTriple (up P) c (up ∘ Q)`
@@ -179,4 +231,5 @@ size, a full-state one does not), so it would not cover `bytesAt`; the coordinat
 | T4 | `Transfer`, `SpawnLemmas`, `Detach`, `TlsLemmas` restated; `spawn-failure`, `thread-locals`, `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
 | T6 | native primitive thread rules (no bridge); `TLogic` `fsym` backend (engine change) | next |
+| T-term | credits in `Res` (request), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |
