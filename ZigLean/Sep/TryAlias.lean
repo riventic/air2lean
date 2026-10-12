@@ -45,10 +45,6 @@ theorem errUnion_decode_write [LawfulEnc α] {bs : Array Byte} {x : α}
   simp [errTagOf, bind, pure, hp, LawfulEnc.decode_encode, Functor.map, ExceptT.bind,
     ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map]
 
-private theorem dvd_add_off {A o k b a : Nat} (ha : (A + o) % a = 0) (hb : b ∣ a) (hk : b ∣ k) :
-    (A + o + k) % b = 0 :=
-  Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hb (Nat.dvd_of_mod_eq_zero ha)) hk)
-
 /-- The tag of an owned typed union: the access is aligned and in bounds, and the read
 bytes decode to the union's tag. Payload bytes are not accessed. -/
 private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : Mem} {h hF : Heap}
@@ -65,7 +61,7 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
   obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
     (p := p) (q := p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (k := (errUnionOffsets (Enc.size α) (Enc.align α)).1) (n := 2) (a := Nat.min a 2) hb hm rfl
-    (by decide) (by rw [hsz]; exact h1) (dvd_add_off ha ht heo)
+    (by decide) (by rw [hsz]; exact h1) (mod_add_dvd ha ht heo)
   have hl := loadBytes_run hacc (noRace_of_singleThread hs.single block
     (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read)
   rw [hx] at hl
@@ -119,7 +115,7 @@ theorem pts_payload_load_run {p : Ptr} {a b : Nat} {x : α} {m : Mem} {h hF : He
   obtain ⟨-, hpay⟩ := errUnion_decode_tag hdec
   obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
     (p := p) (q := errPayloadPtr α p) (k := (errUnionOffsets (Enc.size α) (Enc.align α)).2)
-    (n := Enc.size α) (a := b) hbs hm rfl hn (by rw [hsz]; exact h2) (dvd_add_off ha hb hpo)
+    (n := Enc.size α) (a := b) hbs hm rfl hn (by rw [hsz]; exact h2) (mod_add_dvd ha hb hpo)
   refine ⟨_, load_run hacc (by rw [hx]; exact hpay x rfl)
     (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.recordAt _ _ _ _⟩
   funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
@@ -139,7 +135,7 @@ theorem pts_payload_store_run [LawfulEnc α] {p : Ptr} {a b : Nat} {x : α} {m :
   obtain ⟨m', hrun, hs', h', hd', hm', hb'⟩ := bytesAt_store
     (q := errPayloadPtr α p) (k := (errUnionOffsets (Enc.size α) (Enc.align α)).2) (a := b)
     (bs' := Enc.encode y) hbs hm hd rfl (by omega) (by rw [hy, hsz]; exact h2)
-    (dvd_add_off ha hb hpo) hs hK
+    (mod_add_dvd ha hb hpo) hs hK
   refine ⟨m', hrun, hs', h', hd', hm', A, S, K, _, ha, ?_, ?_, hb', hK⟩
   · rw [writeBytes_size _ _ _ (by rw [hy, hsz]; exact h2)]; exact hsz
   · exact errUnion_decode_write hsz hdec y

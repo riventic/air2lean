@@ -47,12 +47,21 @@ def writeView {α : Type} (y : α) : Except ErrName α → Except ErrName α
   | .ok _ => .ok y
   | .error e => .error e
 
+/-- Membership in a literal array (a declared error set) element by element. -/
+theorem contains_toArray_cons {β : Type} [BEq β] (a b : β) (l : List β) :
+    (b :: l).toArray.contains a = if a == b then true else l.toArray.contains a := by
+  simp only [List.contains_toArray, List.contains_cons]
+  cases a == b <;> rfl
+
+theorem contains_toArray_nil {β : Type} [BEq β] (a : β) :
+    (([] : List β).toArray).contains a = false := by
+  simp only [List.contains_toArray, List.contains_nil]
+
 -- `fsym` reduces the views of a known union in programs (a `match` on a `try`'s result) and in
 -- side goals (the error domain check of `errTagOf u`); a declared error set is a literal array,
--- whose membership the simprocs decide (`String.reduceEq`).
+-- whose membership `String.reduceBEq` decides name by name.
 attribute [fsym_norm, fsym_arith] tryView errTagOf writeView
-attribute [fsym_arith] Option.all_none Option.all_some Array.contains_eq_mem List.mem_toArray
-  List.mem_cons List.not_mem_nil or_false or_true or_self decide_true
+attribute [fsym_arith] Option.all_none Option.all_some contains_toArray_cons contains_toArray_nil
 
 /-- The bytes of an error union `u`: the error code reads `u`'s tag, and on success the payload
 bytes decode to the payload. -/
@@ -325,17 +334,11 @@ theorem FTotalTriple.pts_read {c : MemM β} {v : β}
     obtain ⟨e, hr⟩ := sep_lift.mp hx
     exact sep_lift.mpr ⟨e, up_pts_of_region hs hd hr⟩
 
-/-- An unused load reads the bytes and drops them. -/
-theorem loadDiscardBytes_eq (n al : Nat) (p : Ptr) :
-    Zig.loadDiscardBytes n al p = (Zig.loadBytes p n al >>= fun _ => pure ()) := by
-  unfold Zig.loadDiscardBytes Zig.loadBytes
-  simp only [bind_assoc, pure_bind]
-
 /-- **An unused load** (`loadDiscardBytes`) of the first `n` bytes of an owned typed value. -/
 @[fsym] theorem FTotalTriple.loadDiscard {n al : Nat} (hn : 0 < n) (hfit : n ≤ Enc.size T)
     (hb : al ∣ a) :
     FTotalTriple (up (pts q a s)) (Zig.loadDiscardBytes n al q) (fun _ => up (pts q a s)) := by
-  rw [loadDiscardBytes_eq]
+  rw [Zig.loadDiscardBytes_eq]
   refine FTotalTriple.pts_bytes fun bs hs hd => ?_
   have t := FTotalTriple.region_loadBytes (q := q) (o := 0) (bs := bs) hn hb (Nat.dvd_zero _)
     (by omega)
