@@ -29,9 +29,9 @@ def runtime_tag_cases():
     """Actual enum membership; synthetic rejection cases, not compiler fixtures."""
     common = {"inferred_alloc": "unresolved inferred allocation",
               "inferred_alloc_comptime": "unresolved inferred allocation",
-              "err_return_trace": "mutable error-return-trace",
-              "set_err_return_trace": "mutable error-return-trace",
-              "save_err_return_trace_index": "mutable error-return-trace"}
+              "err_return_trace": "error-return-trace operation",
+              "set_err_return_trace": "error-return-trace operation",
+              "save_err_return_trace_index": "error-return-trace operation"}
     cases = []
     for version in ("0.14.1", "0.15.2", "0.16.0"):
         reasons = dict(common)

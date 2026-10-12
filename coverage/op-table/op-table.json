@@ -2,8 +2,7 @@
  "tags":
  [{"tag": "ret_addr",
    "runtime_reason": null,
-   "exporter_reason":
-   "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument",
+   "exporter_reason": null,
    "emit": "straight-line",
    "effect": "value",
    "constructor": "retAddr"},
@@ -1090,27 +1089,6 @@
   {"tag": "legalize_compiler_rt_call",
    "runtime_reason":
    "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "err_return_trace",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "set_err_return_trace",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "save_err_return_trace_index",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
    "exporter_reason": null,
    "emit": null,
    "effect": null,

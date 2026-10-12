@@ -108,6 +108,8 @@ FIXTURES = [
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
      ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
+    ("tests/roadmap/union-bases/UnionBases/Gen.lean", "tests/roadmap/union-bases/air/0.16.0",
+     ["--namespace", "UnionBases", "--prefix", "union_bases.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
      ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
     ("tests/roadmap/noalias/Gen.lean", "tests/roadmap/noalias/air",

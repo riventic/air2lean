@@ -243,8 +243,9 @@ def errOp (errBits : Nat) (name : String) : String :=
 Named aggregate dictionaries choose these recursively for their fields. At a non-default
 error width every error union also gets an explicit dictionary, since the registered
 `Enc (Except ErrName α)` instance is the 16-bit one. A C/allowzero pointer (`layouts` gives
-allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes (`Check.lean` rejects
-an optional of one, which would need a separate flag). -/
+allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes; a nullable slice
+(`[]allowzero T`) with `Zig.nullableSliceEnc`. An optional of either has a flag after the
+payload (`Zig.Enc.optionWith`), never the scalar `Enc (Option Zig.Ptr)`. -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
     (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) :
     Option String :=
@@ -252,7 +253,9 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
       (id : TyId) (layouts : Array Layout) :=
     emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits)
   match types[id]? with
-  | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
+  | some (.ptr size ..) =>
+    if !nullablePtrTy types layouts id then none
+    else if size == "slice" then some "Zig.nullableSliceEnc" else some "Zig.nullablePtrEnc"
   | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
   | some (.optional c) =>
     match types[c]? with
@@ -1244,6 +1247,13 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
       match acc.find? (·.1 == b) with
       | some (_, root, path) =>
         let base := fc.pointee b
+        -- A tuple is nested pairs (`emitTy`): item `idx` of `n` is `.snd` `idx` times, then
+        -- `.fst` unless it is the last (`tupleProjection`).
+        if let .tuple fs := base then
+          let steps := (List.replicate idx (PathStep.field "snd")) ++
+            (if idx + 1 < fs.size then [PathStep.field "fst"] else [])
+          acc.push (i.id, root, path ++ steps.toArray)
+        else
         let step := match base with
           | .struct _ _ fields =>
             PathStep.field ((fields[idx]?).map (fc.memberName base ·.1) |>.getD s!"fld{idx}")
@@ -2623,21 +2633,30 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .wrapOptional a => let (env, l) := bindLet fc env inst.id s!"pure (some {rv a})"; (env, some l)
   | .isNullPtr isNull p =>
-    -- `?*T`: the payload is the flag (null = address 0). `?T`: a flag byte after the payload.
+    -- `?*T`: the payload is the flag (null = address 0). Every other `?T` (also `?*allowzero T`)
+    -- but an error set: a flag byte after the payload.
+    let flagged (c : TyId) := fc.storageExpr c
+      s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)}) {rv p}"
     let some' := match fc.pointeeOf p with
       | .optional c => match fc.tyOfId c with
-        | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
+        | .ptr .. =>
+          if nullablePtrTy fc.types fc.layouts c then flagged c
+          else s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
         | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
+        | _ => flagged c
       | _ => placeholder "is_null_ptr of a non-optional"
     let expr := if isNull then s!"(!·) <$> {some'}" else some'
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .optPayloadPtr set p =>
     let expr := match set, fc.pointeeOf p with
       | true, .optional c =>
-        match fc.tyOfId c with
-        | .ptr .. | .errorSet _ => s!"pure {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
+        -- An ordinary optional pointer or error set has no flag: the payload write sets it.
+        let noFlag := match fc.tyOfId c with
+          | .ptr .. => !nullablePtrTy fc.types fc.layouts c
+          | .errorSet _ => true
+          | _ => false
+        if noFlag then s!"pure {rv p}" else fc.storageExpr c
+          s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p =>
@@ -2937,6 +2956,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           if fc.sentinelChecked.contains inst.id then []
           else [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
         | none => [])
+    -- A C/allowzero pointer sliced into a nonnullable slice must not be address zero (Sema's
+    -- null check precedes; `Zig.ptrNonnull`).
+    let checks := checks ++
+      (if fc.nullableVal p && !nullablePtrTy fc.types fc.layouts inst.ty then
+        [s!"Zig.ptrNonnull {rv p}"] else [])
     let value := s!"(⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"
     let expr := if checks.isEmpty then s!"pure {value}"
       else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks} >>= fun _ => pure {value})"

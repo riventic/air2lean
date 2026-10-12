@@ -169,8 +169,8 @@ def topKeys : List Key :=
   [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, opt "unchecked_ib" .arr,
    req "profile" .obj,
    req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, opt "export" .obj,
-   opt "externs" .arr, req "params" .arr, req "noalias" .arr, req "ret" .nat, req "body" .arr,
-   opt "globals" .arr, req "types" .arr]
+   opt "externs" .arr, req "params" .arr, req "noalias" .arr, req "ret" .nat, opt "err_trace" .nat,
+   opt "err_trace_unresolved" .marker, req "body" .arr, opt "globals" .arr, req "types" .arr]
 
 /-- An `export fn`'s linker symbol and calling convention (`export`, G1). -/
 def exportKeys : List Key := [req "name" .str, req "cc" .str]
@@ -218,7 +218,11 @@ def instPayload (tag : String) : Option (List Key) :=
   | "block" | "loop" => some [req "body" .arr]
   | "dbg_inline_block" => some [opt "src" .obj, req "body" .arr]
   | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
-    some [req "callee" .obj, args]
+    some [req "callee" .obj, args, opt "err_trace" .nat, opt "err_trace_unresolved" .marker]
+  -- Error return tracing (§Error return trace).
+  | "err_return_trace" | "ret_addr" => some []
+  | "set_err_return_trace" => some [args]
+  | "save_err_return_trace_index" => some [req "index" .nat, req "ptr_ty" .nat]
   | "dbg_var_ptr" | "dbg_var_val" | "dbg_arg_inline" => some [args, req "name" .str]
   | "br" | "switch_dispatch" => some [req "target" .nat, args]
   | "repeat" => some [req "target" .nat]

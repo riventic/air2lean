@@ -810,7 +810,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`), an access below an
   OS mapping's first live offset (`BlockKind.mapped lo`), and two overlapping accesses of one
   call, one a write, through pointers with different `noalias` roots (`Zig.naMark`, LLVM's
-  `noalias`). Undefined bytes are explicit. `@returnAddress()` and an `undefined` pointer
+  `noalias`). The blocks and, with `--device-contract`, the declared register window (DEV-01)
+  are the only allocated objects: no object lies at address zero or at another address no block
+  covers (a `@ptrFromInt` address, memory-mapped I/O outside the declared window), so a nonzero
+  offset or a `@fieldParentPtr` from such an address is `.illegal`. Undefined bytes are explicit.
+  `@returnAddress()` and an `undefined` pointer
   operand (`--allocator-model translated`) read the explicit oracle `Mem.arbitrary`, so a
   theorem over every initial memory covers every value sequence.
 - Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Mem.Noalias`, `ZigLean.Sep.*`; implied by THR-01.

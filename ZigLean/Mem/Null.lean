@@ -56,6 +56,20 @@ def nullablePtrEnc : Enc Ptr where
   decode bs :=
     if bs.extract 0 8 == Array.replicate 8 (.int 0) then pure Ptr.null else Enc.decode bs
 
+/-- The storage dictionary of a nullable slice (`[]allowzero T`): its pointer half is a stored
+nullable pointer (`nullablePtrEnc`), its length half the ordinary length. -/
+def nullableSliceEnc : Enc Slice where
+  size := 16
+  align := 8
+  encode s := nullablePtrEnc.encode s.ptr ++ Enc.encode s.len
+  decode bs := do
+    pure ⟨← nullablePtrEnc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩
+
+/-- A nullable pointer becoming a nonnullable one without a safety check (a `[*c]T` sliced to
+`[]T`, whose null check Sema emits before): address zero is illegal behaviour. -/
+def ptrNonnull (p : Ptr) : MemM Ptr := do
+  if ← ptrIsNull p then throw .illegal else pure p
+
 /-- A projection of a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`,
 `ptr_sub`) is pointer formation, `ptrProject` (`ZigLean/Mem/Basic.lean`), as from any other base.
 The compiler inserts no null check. A constant offset 0 is the base itself, also at address
@@ -126,5 +140,24 @@ theorem null_to_optional (m : Mem) :
 
 /-- An ordinary optional `none` converts to address zero. -/
 theorem optional_none_to_null : ptrOfOptional none = Ptr.null := rfl
+
+/-- A zero-length `@memset` through a nullable slice at address zero touches nothing. -/
+theorem null_memset_empty {α : Type} [Enc α] (m : Mem) (align : Nat) (v : Option α) :
+    (memset align Ptr.null 0 v).run m = pure ((), m) := by
+  simp [memset, StateT.run]; rfl
+
+/-- A zero-length `@memcpy` between nullable slices at address zero touches nothing. -/
+theorem null_memcpy_empty (m : Mem) (size a b : Nat) :
+    (memcpy size a b Ptr.null Ptr.null 0 0).run m = pure ((), m) := by
+  simp [memcpy, memmove, Ptr.overlaps, StateT.run]; rfl
+
+/-- A nullable pointer cannot become a nonnullable one at address zero. -/
+theorem null_nonnull (m : Mem) : (ptrNonnull Ptr.null).run m = throw .illegal := by rfl
+
+/-- `@fieldParentPtr` (`·.add (-off)`) of address zero for a field at a nonzero offset is
+illegal behaviour (`sub nuw` wraps); at offset 0 it is address zero. -/
+theorem null_field_parent (m : Mem) (off : Int) (h : off ≠ 0) :
+    (ptrProject Ptr.null (·.add (-off))).run m = throw .illegal :=
+  null_project m _ (by simp [Ptr.null, Ptr.add, h])
 
 end Zig

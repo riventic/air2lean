@@ -18,7 +18,10 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
 FRESH_ROOT = HERE / "air-fresh"
-VERSIONS = ["0.16.0", "0.15.2", "0.14.1"]
+VERSIONS = ["0.17.0", "0.16.0", "0.15.2", "0.14.1"]
+LLVM_ROOT = HERE / "air-llvm"
+# llvm_correspondence.zig: the one base that the LLVM backend misplaces (the native test checks it).
+MISPLACED = "resElem"
 CONSTANTS = ["resElemPtr", "maybeElemPtr", "maybeBytePtr", "maybeSlice", "resCodePtr"]
 GEN = HERE / "ConstBases" / "Gen.lean"
 # The fixtures are `stage2_x86_64` exports (L06's backend-specific lowering): not the qualified
@@ -268,6 +271,32 @@ def main():
         for document in downgraded.values():
             legacy(document)
         checks += reject(binary, downgraded, "offset 24 of global 0 may address")
+    # LLVM correspondence (README §LLVM correspondence): the LLVM exports of llvm_correspondence.zig
+    # of every version, and the same files as legacy schema 11. The translator accepts every base
+    # that the native LLVM test finds at the model's offset, alone and together, and rejects the
+    # one that LLVM misplaces, with the backend-specific message.
+    assert sorted(provenance["llvm_air_sha256"]) == sorted(
+        f"{v}/{n}" for v in VERSIONS for n in fixtures(LLVM_ROOT / v)), "provenance lists other LLVM files"
+    for version in VERSIONS:
+        exported = fixtures(LLVM_ROOT / version)
+        for name, document in exported.items():
+            digest = hashlib.sha256((LLVM_ROOT / version / name).read_bytes()).hexdigest()
+            assert provenance["llvm_air_sha256"][f"{version}/{name}"] == digest, (version, name)
+            assert document["profile"]["backend"] == "stage2_llvm", (version, name)
+        misplaced = f"llvm_correspondence.{MISPLACED}.json"
+        assert misplaced in exported and len(exported) == 6, (version, sorted(exported))
+        for downgrade in (False, True):
+            documents = copy.deepcopy(exported)
+            if downgrade:
+                for document in documents.values():
+                    legacy(document)
+            agreed = {k: v for k, v in documents.items() if k != misplaced}
+            accept(binary, agreed)
+            for name, document in agreed.items():
+                accept(binary, {name: document})
+            marker = LEGACY if downgrade else LLVM
+            checks += reject(binary, {misplaced: documents[misplaced]}, marker, cli=True)
+            checks += reject(binary, documents, marker, cli=True)
     bodies = {v: t.split("\n", 1)[1] for v, t in texts.items()}
     assert len(set(bodies.values())) == 1, "the versions' fresh translations differ beyond the profile header"
     checks += 1
@@ -275,5 +304,28 @@ def main():
     print(f"{checks} constant-pointer-base CLI checks passed")
 
 
+def refresh(zig_root):
+    """Rewrite provenance.json after export.sh, with the compilers `<zig_root>/zig-air-<version>`."""
+    def sha(path):
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    record = json.loads((HERE / "provenance.json").read_text())
+    record["air_sha256"] = {f"{v}/{n}": sha(FRESH_ROOT / v / n) for v in VERSIONS for n in fixtures(FRESH_ROOT / v)}
+    record["llvm_air_sha256"] = {f"{v}/{n}": sha(LLVM_ROOT / v / n) for v in VERSIONS for n in fixtures(LLVM_ROOT / v)}
+    record["llvm_command"] = ("ZIG_AIR_JSON_DIR=air-llvm/<version> ZIG_AIR_JSON_FILTER=llvm_correspondence. <patched zig> "
+                              "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux-musl "
+                              "-mcpu=baseline -fllvm llvm_correspondence.zig (export.sh)")
+    record["llvm_source_sha256"] = sha(HERE / "llvm_correspondence.zig")
+    record["source_sha256"] = sha(HERE / "const_bases.zig")
+    record["exporter_sha256"] = sha(HERE.parents[2] / "zig-patch/air-json/json.zig")
+    record["pointer_offset_sha256"] = sha(HERE.parents[2] / "zig-patch/air-json/pointer-offset.zig")
+    record["patched_compiler_sha256"] = {v: sha(Path(zig_root) / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
+    record["note"] = ("Every export comes from compilers built by zig-patch/build.sh from this tree's exporter "
+                      "(export.sh). patched_compiler_sha256 hashes bin/zig-unlocked behind the AIR-only lock wrapper.")
+    (HERE / "provenance.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["--refresh-provenance"]:
+        refresh(sys.argv[2])
+    else:
+        main()

@@ -74,8 +74,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
-  (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
-    "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"),
   (#["spirv_runtime_array_len"],
     "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model"),
   (#["array_to_vector"],
@@ -101,8 +99,6 @@ def exporterTagReasons : Array (Array String × String) := #[
     "0.14.1 inline-assembly AIR uses a layout the exporter does not decode; translate assembly wrappers with Zig 0.15.2 or 0.16.0 (docs/generated-code.md, Inline asm)"),
   (#["breakpoint"],
     "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag"),
-  (#["ret_addr"],
-    "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument"),
   (#["frame_addr"],
     "@frameAddress exposes machine stack addresses outside the memory model; pass any needed identity as an explicit argument"),
   (#["int_from_float_optimized_safe"],
@@ -137,9 +133,23 @@ global, or with the exporter's unsupported marker, it keeps its rejection. -/
 def runtimeNavGlobal? (raw : Raw.RawInst) : Option Nat :=
   if raw.tag == "runtime_nav_ptr" && !raw.unsupported then raw.global else none
 
+/-- The reason for an error-return-trace tag that reaches `normalizeOp`: `Canon.errTraces`
+resolves every one that has a current trace. -/
+def errTraceTagReason : String :=
+  "an error-return-trace operation outside a function with an error return trace (a hidden \
+    `err_trace` parameter or an earlier `set_err_return_trace`), or an older exporter's \
+    `unsupported` marker; export with error tracing by a patched compiler built from this tree \
+    (docs/air-json.md §Error return trace)"
+
+/-- The reason a tag that reaches `normalizeOp` is rejected before decoding, if any. -/
+def stateTagReason? (tag : String) : Option String :=
+  (runtimeTagReason? tag).orElse fun _ =>
+    -- `ret_addr` reaching here is the oracle op of `--allocator-model translated`.
+    if tag != "ret_addr" && (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
+
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
   if (runtimeNavGlobal? raw).isSome then return
-  if let some reason := runtimeTagReason? raw.tag then
+  if let some reason := stateTagReason? raw.tag then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
 
 mutual

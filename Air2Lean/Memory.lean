@@ -289,7 +289,9 @@ pointer-free `T`. -/
 def pureParam (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
   match types[id]? with
   -- A `[]const volatile T` is device memory (L13): its items are events, never an `Array` value.
-  | some (.ptr "slice" true c) => !hasPtr types c && !volatilePtrTy types layouts id
+  -- A nullable slice (`[]allowzero const T`) can hold address zero with any length: never items.
+  | some (.ptr "slice" true c) =>
+    !hasPtr types c && !volatilePtrTy types layouts id && !nullablePtrTy types layouts id
   | _ => !hasPtr types id
 
 /-- The instruction list of `body` and of each nested body. -/
