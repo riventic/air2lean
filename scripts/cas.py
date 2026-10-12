@@ -12,6 +12,8 @@ prints nothing, `air` runs the compiler).
   cas.py run -- CMD...             CMD with those exports (a plain exec when caching is off)
   cas.py src VERSION --scratch D   the pinned pristine compiler source tree of VERSION
   cas.py air -- ZIG ARGS...        an AIR export (ZIG_AIR_JSON_DIR) served from the cache
+  cas.py native -- ZIG ARGS...     a stock-Zig build-exe/build-lib (-femit-bin) served from the cache
+  cas.py host-zig VERSION          path of the stock Zig of VERSION (as for zig-air's bootstrap)
   cas.py gc [--max-gib N]          evict least recently used entries above the size cap
   cas.py stats                     entry counts and sizes
 
@@ -24,6 +26,10 @@ hit: a changed input is a different key. (See docs/build-cache.md for the argume
   air/<key>             key: the compiler entry key, the export arguments and filter, the host
                         identity (a native target depends on it) and every file under the root
                         source's module directory (Zig imports stay inside it).
+  native/<key>          key: the compiler binary and its lib/ (path, size, mtime of each file), the
+                        build arguments, the target (the host identity when there is no -target)
+                        and, for each source root, every .zig/.zon file under its directory (a
+                        module imports only those; a tree using @embedFile is not cached).
   lake/                 Lake's own artifact cache (LAKE_CACHE_DIR): outputs are stored by
                         content hash under Lake's input hash (module source, the traces of its
                         imports, toolchain and options).
@@ -51,7 +57,7 @@ SCHEMA = 1
 ENV = 'AIR2LEAN_CAS_DIR'
 MARKER = '.cas.json'          # written into every published entry; its presence = complete
 USED = '.cas-used'            # touched on every hit (LRU)
-KINDS = ('zig', 'air', 'src')  # directory entries; lake/ is Lake's own layout
+KINDS = ('zig', 'air', 'src', 'native')  # directory entries; lake/ is Lake's own layout
 STAMP = '.air2lean-inputs.json'  # uncached mode: the key a worktree-local compiler was built from
 DEFAULT_MAX_GIB = 60
 # On macOS the build of these versions must not find Apple's SDK through `xcrun` (the
@@ -459,6 +465,84 @@ def air_export(zig, argv):
     return 0
 
 
+# ------------------------------------------------------------------ native builds
+
+def zig_sources(path):
+    """Digest of what a source root can bring into a build: a module imports only .zig/.zon files
+    under its root's directory. None when the tree uses @embedFile (any file could be embedded)."""
+    directory = Path(path).resolve().parent
+    rows = []
+    for dirpath, dirnames, filenames in os.walk(directory):
+        dirnames[:] = sorted(d for d in dirnames if d not in ('.lake', '.zig-cache', 'zig-cache', '.git'))
+        for name in sorted(filenames):
+            if name.endswith(('.zig', '.zon')):
+                file = Path(dirpath) / name
+                data = file.read_bytes()
+                if b'@embedFile' in data:
+                    return None
+                rows.append([file.relative_to(directory).as_posix(), hashlib.sha256(data).hexdigest()])
+    return digest([Path(path).name, rows])
+
+
+def native_plan(zig, argv):
+    """(key, preimage, output) of a cacheable stock-Zig build, or None to run it uncached."""
+    lib = Path(zig).resolve().parent / 'lib'
+    if not argv or argv[0] not in ('build-exe', 'build-lib') or os.environ.get('ZIG_LIB_DIR') or not lib.is_dir():
+        return None
+    output, args = None, []
+    for arg in argv[1:]:
+        module = re.fullmatch(r'-M([A-Za-z0-9_]+)=(.+)', arg)
+        source = module.group(2) if module else arg
+        if arg.startswith('-femit-bin='):
+            output = arg.split('=', 1)[1]
+            args.append(['emit', Path(output).suffix])
+        elif (module or not arg.startswith('-')) and Path(source).is_file():
+            content = zig_sources(source) if source.endswith('.zig') else sha256_file(source)
+            if content is None:
+                return None
+            args.append([module.group(1) if module else None, Path(source).name, content])
+        else:
+            args.append(arg)
+    if not output:
+        return None
+    preimage = {'schema': SCHEMA, 'zig': {'sha256': sha256_file(zig), 'lib': tree_stat(lib)}, 'args': args,
+                'host': None if '-target' in argv else host_identity()}
+    return digest(preimage), preimage, Path(output)
+
+
+def native_build(zig, argv):
+    """Run `ZIG ARGV`, or copy its -femit-bin output from the cache."""
+    store_root = cas_dir()
+    plan = native_plan(zig, argv) if store_root else None
+    if plan is None:
+        return subprocess.run([zig, *argv]).returncode
+    key, preimage, output = plan
+    store = Store(store_root)
+    with store.lock('native', key):
+        hit = store.lookup('native', key)
+        if hit is None:
+            staged = store.stage('native', key)
+            done = subprocess.run([zig, *argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            sys.stdout.buffer.write(done.stdout)
+            sys.stderr.buffer.write(done.stderr)
+            if done.returncode != 0:
+                shutil.rmtree(staged, ignore_errors=True)
+                return done.returncode
+            shutil.copy2(output, staged / 'output')
+            (staged / 'stdout').write_bytes(done.stdout)
+            (staged / 'stderr').write_bytes(done.stderr)
+            store.publish(staged, 'native', key, {'kind': 'native', 'key': key, 'preimage': preimage,
+                                                  'created': time.time()})
+            return 0
+    sys.stdout.buffer.write((hit / 'stdout').read_bytes())
+    sys.stderr.buffer.write((hit / 'stderr').read_bytes())
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name('.%s.cas-%d' % (output.name, os.getpid()))
+    shutil.copy2(hit / 'output', temporary)
+    os.replace(temporary, output)
+    return 0
+
+
 # ------------------------------------------------------------------ eviction
 
 def size_of(path):
@@ -585,6 +669,11 @@ def main(argv=None):
     p = sub.add_parser('air')
     p.add_argument('zig')
     p.add_argument('args', nargs=argparse.REMAINDER)
+    p = sub.add_parser('native')
+    p.add_argument('zig')
+    p.add_argument('args', nargs=argparse.REMAINDER)
+    p = sub.add_parser('host-zig')
+    p.add_argument('version')
     p = sub.add_parser('gc')
     p.add_argument('--max-gib', type=float, help='size cap (default $AIR2LEAN_CAS_MAX_GIB or %d)' % DEFAULT_MAX_GIB)
     p.add_argument('--min-age', type=float, default=3600, help='never evict what was used this many seconds ago')
@@ -605,6 +694,10 @@ def main(argv=None):
             print(pristine_source(ROOT, a.version, a.scratch))
         elif a.command == 'air':
             return air_export(a.zig, strip_dd(a.args))
+        elif a.command == 'native':
+            return native_build(a.zig, strip_dd(a.args))
+        elif a.command == 'host-zig':
+            print(host_zig(a.version))
         elif a.command == 'gc':
             cap = int(a.max_gib * (1 << 30)) if a.max_gib is not None else max_bytes_default()
             total, freed = gc(cap, a.min_age)

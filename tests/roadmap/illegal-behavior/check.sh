@@ -34,17 +34,18 @@ lake env lean -R "$work" -o "$work/Gen.olean" "$work/Gen.lean"
 LEAN_PATH="$work:$(lake env printenv LEAN_PATH)" lake env lean -R "$work" --run "$here/Cases.lean"
 
 python3 -B "$here/mutations.py" "$work/Gen.lean" "$work/mutants"
-for dir in "$work"/mutants/*/; do
-  name=$(basename "$dir")
-  lake env lean -R "$dir" -o "$dir/Gen.olean" "$dir/Gen.lean"
-  status=0
-  LEAN_PATH="$dir:$(lake env printenv LEAN_PATH)" lake env lean -R "$dir" --run "$here/Cases.lean" \
-    > "$dir/log" 2>&1 || status=$?
-  if [ "$status" = 0 ] || ! grep -q '^uncaught exception: illegal-behavior case' "$dir/log"; then
-    echo "mutant $name survived (status $status)" >&2; cat "$dir/log" >&2; exit 1
-  fi
-  echo "mutant $name killed"
-done
+# Each mutant in its own directory, in parallel (scripts/par.py, AIR2LEAN_JOBS).
+lean_path=$(lake env printenv LEAN_PATH)
+# shellcheck disable=SC2016  # expanded by the job's shell
+python3 -B scripts/par.py --mem-mib 2048 -- bash -c 'set -euo pipefail
+dir=$1 name=$(basename "$1")
+lake env lean -R "$dir" -o "$dir/Gen.olean" "$dir/Gen.lean"
+status=0
+LEAN_PATH="$dir:$2" lake env lean -R "$dir" --run "$3/Cases.lean" > "$dir/log" 2>&1 || status=$?
+if [ "$status" = 0 ] || ! grep -q "^uncaught exception: illegal-behavior case" "$dir/log"; then
+  echo "mutant $name survived (status $status)" >&2; cat "$dir/log" >&2; exit 1
+fi
+echo "mutant $name killed"' mutant {} "$lean_path" "$here" ::: "$work"/mutants/*/
 
 if [ -n "${AIR2LEAN_ZIG:-}" ]; then
   [ "$("$AIR2LEAN_ZIG" version)" = 0.16.0 ] || { echo 'native.zig needs stock Zig 0.16.0' >&2; exit 1; }

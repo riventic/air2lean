@@ -17,7 +17,8 @@ python3 tests/roadmap/local-parent/test_harness.py
 lake build Air2Lean Air2Lean.Check Air2Lean.Emit ZigLean ZigLean.Mem.Parent air2lean
 lake env lean tests/roadmap/local-parent/Proofs.lean
 lake env lean --run tests/roadmap/local-parent/Pipeline.lean "$work/generated"
-for source in "$work/generated/"*.lean; do lake env lean -R "$work/generated" "$source"; done
+# Independent generated modules, elaborated in parallel (scripts/par.py, AIR2LEAN_JOBS).
+python3 -B scripts/par.py --mem-mib 2048 -- lake env lean -R "$work/generated" {} ::: "$work/generated/"*.lean
 python3 tests/roadmap/local-parent/mutations.py "$work/generated" "$work/mutants"
 if [ "${1:-}" = --synthetic-only ]; then exit 0; fi
 version=${AIR2LEAN_LOCAL_PARENT_ZIG_VERSION:-0.16.0}
