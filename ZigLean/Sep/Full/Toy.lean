@@ -105,6 +105,28 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
   exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
 
+/-- `alloc` of no bytes: a pointer to offset 0 of a new block. The block has no byte, so there is
+nothing to own (an extent needs a live byte: `Holds.bauth`). -/
+theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (ha : 0 < align)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
+  refine FTriple.drop (K := fun _ r => r.heap = FHeap.empty) ?_ (fun _ _ h => h)
+  refine ((FTriple.ofTriple (E := fun _ => none) (B := fun _ => False)
+    (Triple.alloc kind 0 align ha hk) (Tame.alloc kind 0 align)
+    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
+    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
+    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
+  obtain ⟨E', ⟨hq, -, -⟩, -⟩ := h
+  obtain ⟨A, hq⟩ := hq
+  obtain ⟨⟨h0, -⟩, b, hpb, -, hl⟩ := Zig.sep_lift.mp hq
+  have hemp : r.heap = FHeap.empty := funext fun l => by
+    have := hl l
+    simp only [Array.size_replicate, Nat.add_zero] at this
+    rw [if_neg (by omega)] at this
+    simp only [FHeap.erase, Option.map_eq_none_iff] at this
+    exact this
+  exact sep_lift.mpr ⟨⟨by simp [hpb], h0⟩, hemp⟩
+
 /-- A run of `alloc` creates the block it returns. -/
 theorem alloc_fresh {kind : BlockKind} {size align : Nat} {m m' : Mem} {p : Ptr} {b : BlockId}
     (h : ((alloc kind size align).run m).run = some (.ok (p, m'))) (hb : p.block = some b) :
