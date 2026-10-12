@@ -147,7 +147,7 @@ theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
   unfold reverse
   fsym [reverse_loop sl vs hlen]
   -- The empty slice returns before the loop: its items are their own reverse.
-  obtain rfl : vs = [] := List.eq_nil_of_length_eq_zero (by rw [← hlen, hc]; rfl)
+  obtain rfl : vs = [] := List.eq_nil_of_length_eq_zero (by simp_all)
   exact EUpd.of_imp fun _ h => h
 
 /-! ## Non-vacuity witnesses: one item in one block
