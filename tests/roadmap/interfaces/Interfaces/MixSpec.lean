@@ -5,7 +5,6 @@ import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Block
 import ZigLean.Sep.Full.AutoPrim
 import ZigLean.Sep.Full.Typed
-import ZigLean.Sep.Full.Pinned
 import ZigLean.Sep.Full.Try
 import ZigLean.Sep.Full.Region
 
