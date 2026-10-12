@@ -255,6 +255,9 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
                     and set(conclusion) <= set(statement) <= set(theorem["dependencies"])):
                 raise ValueError(f"invalid statement dependencies: {theorem['name']}")
         theorem["opaque_dependencies"] = sorted(n for n in visited if n in nodes and nodes[n]["kind"] == "opaque")
+        # The ZigLean runtime modules the closure reaches: claims map them to premises (ORD-06).
+        theorem["runtime_modules"] = sorted({nodes[n]["module"] for n in visited if n in nodes and
+                                             nodes[n]["module"].split(".")[0] == "ZigLean"})
         theorem["compiler_redirections"] = sorted(n for n in visited if n in nodes and nodes[n].get("implemented_by"))
         theorem["extern_dependencies"] = sorted(n for n in visited if n in nodes and nodes[n].get("extern"))
         theorem["violations"] = sorted(visited.intersection(issues))
