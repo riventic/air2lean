@@ -235,10 +235,15 @@ structure RunCaches where
   facts : IO.Ref (Array Expr)
   probe : IO.Ref (Std.HashMap Expr (Expr ⊕ Nat))
   ctx : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
+  /-- The program simp context (`fsym_norm`, the caller's lemmas, the simprocs). -/
+  prog : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
+  /-- The registered rules with the head of their command (`headKey`). -/
+  rules : IO.Ref (Option (Array (Name × Name)))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
-           probe := ← IO.mkRef {}, ctx := ← IO.mkRef none }
+           probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
+           rules := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -273,6 +278,12 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+  let h0 ← IO.getNumHeartbeats
+  let r ← omegaRaw' facts ty
+  trace[fsym.prof] "raw {((← IO.getNumHeartbeats) - h0) / 1000} {facts.size} {r.isSome}"
+  return r
+where
+  omegaRaw' (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let s ← saveState
   -- `omega` may exhaust the recursion depth on a false goal with many case splits: a failure
   tryCatchRuntimeEx (do
@@ -691,13 +702,32 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
   return [g]
 
-def arith (g : MVarId) (quick := false) : TacticM Bool := do
+def arith (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
+  -- cached per run: a proof where its free variables are in scope; a failure in the same
+  -- context (the same last hypothesis)
+  let t ← instantiateMVars (← g.getType)
+  let lctx ← getLCtx
+  let last := (lctx.lastDecl.map (·.fvarId.name)).getD .anonymous
+  let posKey := mkApp (mkConst `fsym.arith) t
+  let negKey := mkApp3 (mkConst `fsym.arithNo) t (toExpr quick) (toExpr last)
+  let cacheable := !t.hasMVar
+  if cacheable then
+    match (← (← caches).probe.get).get? posKey with
+    | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then g.assign pf; return true
+    | _ => pure ()
+    if ((← (← caches).probe.get).get? negKey).isSome then return false
   let s ← saveState
   let h0 ← IO.getNumHeartbeats
   let ok := (← arithGoals g quick).isEmpty
-  trace[fsym.prof] "arith {((← IO.getNumHeartbeats) - h0) / 1000} {ok} {quick}: {← instantiateMVars (← g.getType)}"
-  if ok then return true
-  s.restore; return false
+  trace[fsym.prof] "arith {((← IO.getNumHeartbeats) - h0) / 1000} {ok} {quick}: {t}"
+  if ok then
+    if cacheable then
+      let pf ← instantiateMVars (.mvar g)
+      unless pf.hasExprMVar do (← caches).probe.modify (·.insert posKey (.inl pf))
+    return true
+  s.restore
+  if cacheable then (← caches).probe.modify (·.insert negKey (.inr 0))
+  return false
 
 /-- `fsym_arith`: the arithmetic solver (`arith`) as a tactic; within a run of `fsym` with the
 run's caches, else with its own. -/
@@ -981,20 +1011,25 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
 /-- Simplify the program with `fsym_norm` and the caller's lemmas. -/
 def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
   let (g, L, α, P, c, Q) ← view g
-  let some ext ← getSimpExtension? `fsym_norm | throwError "fsym: no fsym_norm"
-  let mut thms ← ext.getTheorems
-  for x in extra do
-    if let some n := (if x.isIdent then some x.getId else none) then
-      if let some n ← (try some <$> realizeGlobalConstNoOverloadWithInfo (mkIdent n) catch _ => pure none) then
-        thms ← thms.addConst n
-        continue
-    let e ← Term.elabTerm x none
-    thms ← thms.add (.stx (← mkFreshId) x) #[] e
-  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
-  -- Lean's simprocs, without the word complement of a literal: its value would make the program
-  -- equal to the folded one only by a deep unfolding in the kernel
-  let mut procs : Simp.SimprocsArray := #[(← Simp.getSimprocs).erase ``BitVec.reduceNot]
-  if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
+  let (ctx, procs) ← match ← (← caches).prog.get with
+    | some cp => pure cp
+    | none => do
+      let some ext ← getSimpExtension? `fsym_norm | throwError "fsym: no fsym_norm"
+      let mut thms ← ext.getTheorems
+      for x in extra do
+        if let some n := (if x.isIdent then some x.getId else none) then
+          if let some n ← (try some <$> realizeGlobalConstNoOverloadWithInfo (mkIdent n) catch _ => pure none) then
+            thms ← thms.addConst n
+            continue
+        let e ← Term.elabTerm x none
+        thms ← thms.add (.stx (← mkFreshId) x) #[] e
+      let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+      -- Lean's simprocs, without the word complement of a literal: its value would make the
+      -- program equal to the folded one only by a deep unfolding in the kernel
+      let mut procs : Simp.SimprocsArray := #[(← Simp.getSimprocs).erase ``BitVec.reduceNot]
+      if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
+      (← caches).prog.set (some (ctx, procs))
+      pure (ctx, procs)
   let (r, _) ← simp c ctx (simprocs := procs)
   if r.expr == c then return g
   let newT := mkT L α P r.expr Q
@@ -1273,8 +1308,8 @@ def offNat (p : Expr) : MetaM Expr := do mkAppM ``Int.toNat #[← mkAppM ``Zig.P
 def proveBytes (x y : Expr) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar (← mkEq x y)
   if ← closeWith m.mvarId! (← `(tactic| (simp only [Array.extract_append, Array.extract_extract,
-      Array.extract_size, Array.append_empty, Array.extract_zero, Array.size_append, Nat.zero_add,
-      Nat.sub_zero, Nat.sub_self, Nat.min_def] <;> first | rfl | (congr 1 <;> fsym_arith) | (simp <;> fsym_arith)))) then
+      Array.extract_size, Array.append_empty, Array.extract_zero, Array.size_append, Array.size_extract,
+      Nat.zero_add, Nat.sub_zero, Nat.sub_self, Nat.min_def] <;> first | rfl | (congr 1 <;> fsym_arith) | (simp <;> fsym_arith)))) then
     return some (← instantiateMVars m)
   return none
 
@@ -1372,12 +1407,13 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
         unless ← isDefEq qbs cur[5]! do throwError "bytes"
       else if !(← withReducible (isDefEq qbs cur[5]!)) then
         -- known bytes: equal to the carved ones (`Array` lemmas, sizes by arithmetic)
-        let some e ← proveBytes cur[5]! qbs | throwError "bytes"
-        let x := st.ats[j]!
-        let y ← mkRegion cur[0]! cur[1]! cur[2]! cur[3]! cur[4]! qbs
-        let ex ← mkCongrArg (← mkLambdaFVarsBytes x cur) e
-        st ← st.step #[j] #[y] (← mkAppM ``atom_eq #[ex])
-        j := 0
+        -- (else the final match proves them equal, argument by argument)
+        if let some e ← proveBytes cur[5]! qbs then
+          let x := st.ats[j]!
+          let y ← mkRegion cur[0]! cur[1]! cur[2]! cur[3]! cur[4]! qbs
+          let ex ← mkCongrArg (← mkLambdaFVarsBytes x cur) e
+          st ← st.step #[j] #[y] (← mkAppM ``atom_eq #[ex])
+          j := 0
       return some (st, st.ats[j]!)
     catch ex =>
       trace[fsym] "carve: {ex.toMessageData}"
@@ -1983,11 +2019,25 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     s.restore; return none
 
 /-- The registered rules and the caller's. -/
-def rules (user : Array Expr) : MetaM (Array Expr) := do
-  let reg := fsymRuleExt.getState (← getEnv)
+def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
+  -- the registered rules by the head of their command, once per run
+  let keyed ← match ← (← caches).rules.get with
+    | some k => pure k
+    | none => do
+      let mut k := #[]
+      for n in (fsymRuleExt.getState (← getEnv)).reverse do
+        let key ← withNewMCtxDepth do
+          let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
+          let concl ← whnfR concl
+          pure (if concl.isAppOfArity ``FTotalTriple 4 then headKey (concl.getArg! 2) else .anonymous)
+        k := k.push (key, n)
+      (← caches).rules.set (some k)
+      pure k
+  let kx := headKey x
   let mut out := user
-  for n in reg.reverse do
-    out := out.push (← mkConstWithFreshMVarLevels n)
+  for (key, n) in keyed do
+    if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
+      out := out.push (← mkConstWithFreshMVarLevels n)
   return out
 
 /-! ## The walk -/
@@ -2095,7 +2145,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   let h2 ← IO.getNumHeartbeats
   -- the first rule whose side goals are all proved; else the first that applies
   let mut partial? : Option (Tactic.SavedState × MVarId × List MVarId) := none
-  for r in ← rules user do
+  for r in ← rules user x do
     let h3 ← IO.getNumHeartbeats
     let s ← saveState
     let res ← tryRule g r x f
