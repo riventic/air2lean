@@ -15,7 +15,10 @@ esac
 [ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/claims
-lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total
+# Build every module the fixture imports (derived from its imports, not a hand list).
+fixture_imports=$(sed -n 's/^import \([A-Za-z0-9_.]*\)[[:space:]]*$/\1/p' tests/roadmap/claims/Fixture.lean)
+# shellcheck disable=SC2086
+lake build $fixture_imports
 lake env lean -o .lake/build/lib/lean/tests/roadmap/claims/Fixture.olean tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
 if [ "$write" = 1 ]; then
