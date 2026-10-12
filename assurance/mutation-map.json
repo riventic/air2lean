@@ -717,7 +717,7 @@
         },
         {
           "path": "tests/roadmap/volatile-effects/check-device.sh",
-          "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"
+          "anchor": "Only the output-less asm: rdtsc and rdrand are A01"
         },
         {
           "path": "tests/roadmap/volatile-effects/test_cli.py",
@@ -1497,6 +1497,18 @@
         {
           "path": "tests/roadmap/asm-effects/test_cli.py",
           "anchor": "writes through a const pointer"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "writes through a const pointer"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "64-bit integer operand"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "nor an allowlist entry declares its memory regions"
         }
       ],
       "mutants": [
@@ -1523,6 +1535,21 @@
         {
           "name": "local_store_dropped",
           "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "other"
+        },
+        {
+          "name": "env_read_constant",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "region_write_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "region_guard_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
           "category": "other"
         }
       ],
@@ -1611,9 +1638,40 @@
       "note": "Registry footprint/contract rejections are Lean-side (tests/roadmap/models, scripts/model-contracts.sh) without a designated mutant; the mutant covers the assumption report."
     },
     "E02": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "forwarding"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "CALLEE_EXTERN_UNBOUND"
+        },
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "incompatible signature"
+        },
+        {
+          "path": "tests/roadmap/callbacks/test_cli.py",
+          "anchor": "needs a declared 'footprint'"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "model_arm_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "unknown_admitted",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim_dropped",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "E03": {
       "categories": [],

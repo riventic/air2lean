@@ -382,11 +382,13 @@ Completed in [PR128](https://github.com/riventic/air2lean/pull/128): ZigLean/Flo
 
 ## A01 — Assembly effects and operand coverage
 
-Classification: partial.
+Classification: complete.
 
 explicit register, memory and observable-effect contracts before extending accepted constraints. Acceptance: writes affect the declared locations; aliases and clobbers are accounted for. Register assembly support does not imply arbitrary assembly safety.
 
-Bounded progress: Qualified register-only assembly. [PR126](https://github.com/riventic/air2lean/pull/126): read-write and memory asm operands are accepted only through an explicit effect contract (premise ASM-03): the opaque `airAsmFx_<hash>` is a pure function of the register inputs and the old read-write values, and the generated wrapper holds every memory effect (alias guard, loads, call, one store per lvalue output); `incm_frame`/`setm_frame`/`swapm_frame` prove that a run changes only the declared operands, aliased `+m` operands are `.unspecified`, a reviewed registry entry covers a `memory`-clobber barrier, 25 forms are rejected, and wrapper mutants fail the A03 interpreter harness. Remaining: effectful/non-allowlisted asm (rdtsc, rdrand, output-less, memory clobbers) was a repeatable opaque until the L13 asm allowlist (follow-up PR); memory-operand contracts absent.
+Bounded progress: Qualified register-only assembly. [PR126](https://github.com/riventic/air2lean/pull/126): read-write and memory asm operands are accepted only through an explicit effect contract (premise ASM-03): the opaque `airAsmFx_<hash>` is a pure function of the register inputs and the old read-write values, and the generated wrapper holds every memory effect (alias guard, loads, call, one store per lvalue output); `incm_frame`/`setm_frame`/`swapm_frame` prove that a run changes only the declared operands, aliased `+m` operands are `.unspecified`, a reviewed registry entry covers a `memory`-clobber barrier, 25 forms are rejected, and wrapper mutants fail the A03 interpreter harness. Batch I: memory-operand and observable-effect contracts. `rdtsc`/`rdrand` are allowlisted environment reads (premise ASM-05): each output is a fresh query of the explicit oracle `Mem.arbitrary` (`Zig.Asm.envWord`), never a repeatable opaque, and a device contract that declares the template keeps it a device event; an integer `m` input is its value (the compiler's private spill); `rep stosb`/`rep movsb` with a `"memory"` clobber are accepted through reviewed memory-region contracts (premise ASM-06: pointer-operand regions read with `Zig.Asm.readRegion` and written with `writeRegion` through checked accesses, pointer outputs moved with their provenance, written regions under the alias guard). Fresh 0.17.0/0.16.0/0.15.2 exports of `asm_env.zig` (0.14.1 exports no inline asm) translate identically; `tests/roadmap/asm-effects/AsmEnv/Proofs.lean` proves two `rdtsc` are two answers (`elapsed_not_repeatable`), `fill_frame`, `fill_zero`, `copy_frame` (only the declared region changes) and `loadm_eq`; `test_env_cli.py` rejects the forms outside the entries. Scope: other instructions need reviewed entries (port I/O, fences, `cpuid` stay rejected).
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## A02 — Instruction semantics and target expansion
 
@@ -416,11 +418,13 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## E02 — Callback and function pointer contracts
 
-Classification: partial.
+Classification: complete.
 
 callback result, state mutation, ownership, reentrancy and cancellation rules. Handle captured context pointers explicitly. Acceptance: evaluator/observer clients can use contracts rather than translating every external callback body; unknown callbacks cannot be given empty effects.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): ZigLean.External.Callback: `CallbackContract` over an explicit context pointer with a fixed context/re-entry footprint, reentrancy and cancellation flags, a borrowed-context lifetime rule, `Contract.comap` and a dispatch model whose unknown-target arm never succeeds; forEach/evaluate clients are proved from the contract alone, a concrete callback on the E01 fill contract, and uncontracted/havoc callbacks get no effects. Remaining: binding translated function-pointer call sites to contracts; concurrent/async callbacks.
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): ZigLean.External.Callback: `CallbackContract` over an explicit context pointer with a fixed context/re-entry footprint, reentrancy and cancellation flags, a borrowed-context lifetime rule, `Contract.comap` and a dispatch model whose unknown-target arm never succeeds; forEach/evaluate clients are proved from the contract alone, a concrete callback on the E01 fill contract, and uncontracted/havoc callbacks get no effects. Batch I: translated function-pointer call sites bind to registry contracts through the callable-address table: the address of an `extern fn` becomes the function block of `extern:<symbol>` and binds like a direct extern call (export definition or registry model, else CALLEE_EXTERN_UNBOUND); a model at a code address is checked at every call through a pointer of its type; `Contract.Holds.dispatch`/`CallbackContract.Holds.dispatch` lift a contract met by every target to the call site at every pointer. `tests/roadmap/callbacks` (fresh 0.17.0, 0.16.0, 0.15.2, 0.14.1 exports) proves the evaluator, a vtable call through memory, the observer loop (`Zig.loopMM_partial`) and the `&ext_visit` vtable chain from the assumed callback contract alone, and that the translated target meets the same contract. Asynchronous callbacks: a binding in a concurrent program needs a footprint, whose blocks the call claims for race detection (premise EXT-04); `async_cb.zig` (a spawned thread and the caller each call the callback) translates on all versions with `worker_spec`. Scope: callbacks passed in from outside the program (no address in the model) have no binding and throw `.illegal`.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## E03 — IO operating system and foreign API boundaries
 

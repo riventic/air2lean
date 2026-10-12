@@ -1238,6 +1238,15 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
 
+      # E02: function-pointer call sites bound to registry contracts (`&ext_visit` in a vtable
+      # and as a callback, also from a spawned thread), proofs from the callback contract alone.
+      - name: Callback contracts
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.External.Callback ZigLean.Sep.Loop Proofs.Asm.Effects
+          bash tests/roadmap/callbacks/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
@@ -2198,7 +2207,8 @@ jobs:
 
       # A01: the asm effect contract. Retained translation of hand-written AIR (+r, +m, =m,
       # aliases, registry `memory` clobber), frame/alias proofs on the generated wrappers, CLI
-      # rejections, and the wrappers under the A03 interpretation with six effect mutants.
+      # rejections, and the wrappers under the A03 interpretation with six effect mutants; fresh
+      # 0.17.0/0.16.0/0.15.2 exports of environment reads, `m` inputs and memory regions.
       - name: Asm effect contract
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         run: |

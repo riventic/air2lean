@@ -500,6 +500,23 @@ def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l
 
+/-- E02: the address of an `extern fn` (`&ext_visit`, a named `extern` global of function type)
+is a code address at the symbol's linker identity. It becomes the function block of the extern
+callee `extern:<symbol>` (`externSymbol?`), so it enters the callable-address table (`fnRefs`)
+like `&f` of a translated function, and `resolveExterns` binds it as it binds a direct extern
+call: to the program's `export fn` of that symbol or to a registry model, else the program is
+rejected (CALLEE_EXTERN_UNBOUND). A `noreturn` extern stays an extern global (rejected). -/
+def externCodeGlobal (types : Array Ty) (g : Global) : Global :=
+  match g.name, types[g.ty]? with
+  | some n, some (.other tn) =>
+    if g.isExtern && g.init.isNone && !g.threadlocal && tn.startsWith "fn (" &&
+        !tn.endsWith " noreturn" && (externSymbol? n).isNone then
+      let callee := "extern:" ++ n
+      { g with name := some callee, isExtern := false, isConst := true,
+               init := some (.func callee false) }
+    else g
+  | _, _ => g
+
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/
 def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
@@ -518,7 +535,8 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
   return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types, layouts, globals := raw.globals,
+           body, types := raw.types, layouts,
+           globals := raw.globals.map (externCodeGlobal raw.types),
            identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl,
            noalias := raw.noalias, uncheckedIb := raw.uncheckedIb,
            allocatorModel := raw.allocatorModel, targetOs := BuildProfile.tripleOs raw.profile.targetTriple }

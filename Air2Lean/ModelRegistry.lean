@@ -262,6 +262,29 @@ def callIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.r
   return calls.fold (fun buckets name sites => buckets.insert name sites.reverse.toArray)
     ({} : Std.HashMap String (Array CallSite))
 
+/-- The call sites of each model symbol (E02): its direct calls, then every call through a
+function pointer of a type at which the program takes the symbol's address (`fnRefs`): the
+emitted indirect call dispatches such a pointer to the model (`Emit.lean`, L11). Each site
+fixes the argument and result types that the binding's signature must match. -/
+def modelCallIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.run do
+  let direct := callIndex funcs
+  let mut byType : Std.HashMap String (Array CallSite) := {}
+  for (f, functionIndex) in funcs.zipIdx do
+    let insts := f.allInsts
+    let mut values : Option ValueTypeIndex := none
+    for i in insts do
+      if let .call callee args := i.op then
+        if let some tn := f.calleeValFnTy? callee then
+          let index := values.getD (valueTypeIndex f.types insts)
+          values := some index
+          byType := byType.insert tn ((byType.getD tn #[]).push
+            { functionIndex, function := f, values := index, args, ret := i.ty,
+              noreturn := false, spawnFn := none })
+  let mut sites := direct
+  for (tn, name) in fnRefs funcs do
+    sites := sites.insert name (sites.getD name #[] ++ byType.getD tn #[])
+  return sites
+
 /-- Profile uses the same parser and equality policy as AIR. Legacy bindings must explicitly
 select legacy metadata; there is no implicit default or wildcard. -/
 def parse (contents : String) : Except String (Array ModelBinding) := do
@@ -321,7 +344,8 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
     let errors ← strings m "errors"
     for e in errors do
       unless ["overflow", "outOfBounds", "divByZero", "unreachable", "panic", "unspecified",
-        "illegal", "deadlock", "unsupportedTimer"].contains e do throw s!"model registry: unknown safety error '{e}'"
+        "illegal", "deadlock", "unsupportedTimer", "trap", "stackOverflow"].contains e do
+        throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
     let footprint ← match m.getObjVal? "footprint" with
@@ -408,9 +432,8 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
   unless funcs.all (some ·.dialect.version == profile.version?) do
     throw "model registry: function Zig version differs from checked profile"
   let completedShapes ← funcs.mapM fun f => preflightShapes f.types f.layouts
-  let calls := callIndex funcs
+  let calls := modelCallIndex funcs
   let functionNames := funcs.foldl (fun names f => names.insert f.name) ({} : Std.HashSet String)
-  let addressTaken := (fnRefs funcs).foldl (fun names reference => names.insert reference.2) ({} : Std.HashSet String)
   let mut seen : Std.HashSet String := {}
   for m in models do
     if seen.contains m.symbol then throw s!"duplicate model symbol '{m.symbol}'"
@@ -420,10 +443,11 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     if functionNames.contains m.symbol || (anyStdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
     if let some reason := projectStdBinding? m.symbol (calleeModule funcs m.symbol) then throw reason
-    if addressTaken.contains m.symbol then
-      throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
+    -- E02: an address-taken binding is also checked at every call through a pointer of its
+    -- type (`modelCallIndex`): that call may dispatch to the model.
     let sites := calls.getD m.symbol #[]
-    if sites.isEmpty then throw s!"model '{m.symbol}' has no supported direct call"
+    if sites.isEmpty then
+      throw s!"model '{m.symbol}' has no supported direct call and no call through its address"
     for site in sites do
       unless !site.noreturn && site.spawnFn.isNone do
         throw s!"model '{m.symbol}': noreturn/comptime-worker calls are outside the extension API"
@@ -450,8 +474,14 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
             !((m.footprint.map (·.writes.contains index)).getD false) then
           throw s!"model '{m.symbol}': volatile pointer parameter {index} must be listed in footprint.writes (VOLATILE_ACCESS: a device access is an observable effect, not a pure repeatable read)"
   checkDependencies models
+  -- E02 (premise EXT-04): in a concurrent program a model call is one scheduler step, and the
+  -- emitted call claims each declared footprint block first, so a conflicting access of another
+  -- thread is a race. That needs the footprint.
   unless (concFunctions funcs).isEmpty do
-    throw "external model bindings currently require a sequential program"
+    for m in models do
+      if m.footprint.isNone then
+        throw s!"model '{m.symbol}': a model in a concurrent program needs a declared 'footprint' \
+          (its blocks are claimed for race detection before each call, premise EXT-04)"
 
 /-- Authoring template: missing implementation/contract/policy fields intentionally make
 this invalid as a registry until the project supplies and reviews its own declarations. -/
@@ -474,6 +504,19 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
           entries := entries.push <| Json.mkObj ([("symbol", .str name),
             ("profile", profile.toJson),
             ("signature", Json.mkObj [("params", .arr params), ("return", ret)])] ++ library.toList)
+  -- E02: an address-taken symbol without AIR (`&ext_visit`), typed by its first call through a
+  -- pointer of its type.
+  let sites := modelCallIndex funcs
+  for (_, name) in fnRefs funcs do
+    unless names.contains name || funcs.any (·.name == name) do
+      let some site := (sites.getD name #[])[0]? | continue
+      names := names.push name
+      let (params, ret) ← signatureWith site.function site.values site.args site.ret
+      let library := (externSymbol? name).map fun _ =>
+        ("extern", Json.mkObj [("library", .null)])
+      entries := entries.push <| Json.mkObj ([("symbol", .str name),
+        ("profile", profile.toJson),
+        ("signature", Json.mkObj [("params", .arr params), ("return", ret)])] ++ library.toList)
   pure <| Json.mkObj [("schema", Lean.toJson (1 : Nat)), ("models", .arr entries)]
 
 /-- Report trust separately from the qualified runtime semantics. No proved label is evidence
