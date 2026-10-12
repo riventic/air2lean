@@ -53,3 +53,6 @@ __pycache__/
 /assurance/provenance-gap/manifest.json
 /assurance/provenance-gap/pins.json
 /assurance/provenance-gap/receipt/
+
+# Claude Code worktrees
+.claude/worktrees/

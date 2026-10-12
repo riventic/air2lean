@@ -96,14 +96,16 @@ def retry_while_busy(name, attempt, busy):
 
 
 def guarded(name, argv, env=None, timeout=18000):
-    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy.
+    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 24576 MiB; lower it on a shared machine).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', '24576', '--log-bytes', 16 << 20, '--report', report, '--log', logfile, '--', *argv],
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '24576'), '--log-bytes', 16 << 20,
+         '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))
@@ -177,28 +179,77 @@ def step_coverage(check):
 
 
 def step_pins(check):
-    """Input pins of the L04 try-pointers integration (check-artifacts.py): the emitter, its
-    retained translation and the exporter they were taken with."""
+    """Input pins of the L04 try-pointers integration (check-artifacts.py): its retained
+    translation and the exporter it was taken with. Outputs are pinned, not translator sources:
+    check.sh and gen-integrity.py re-translate and compare the output itself."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
     pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
-                'current_emitter_sha256': digest('Air2Lean/Emit.lean'),
+                'format': 'l04-emitter-integration-inputs-v2',
                 'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
             'tests/roadmap/try-pointers/integration-qualification.json': {
                 'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}
+    # Fields a pin file no longer has (the v1 emitter pin) are dropped, so a format change is a regen.
+    obsolete = {'tests/roadmap/try-pointers/emitter-integration.json': ['current_emitter_sha256']}
     for rel, fields in pins.items():
         data = json.loads((ROOT / rel).read_text())
-        if all(data.get(k) == v for k, v in fields.items()):
+        if all(data.get(k) == v for k, v in fields.items()) and not any(k in data for k in obsolete.get(rel, [])):
             continue
         if check:
             raise Failed(rel + ' pins are stale')
+        for k in obsolete.get(rel, []):
+            data.pop(k, None)
         data.update(fields)
         write_if_changed(rel, (json.dumps(data, indent=2) + '\n').encode())
+
+
+LANG_LONG_TAIL = 'tests/roadmap/lang-long-tail'
+
+
+def step_lang_long_tail(check):
+    """tests/roadmap/lang-long-tail/provenance.json: the exporter hash and the patched compilers'
+    hashes the fixture exports were taken with. When the pins are stale, every fixture is
+    re-exported with the compilers built from this checkout (export.sh), then the record is
+    refreshed (test_provenance.py --refresh); a changed export is a reviewed diff."""
+    test = [PY, '-B', LANG_LONG_TAIL + '/test_provenance.py']
+    if ok(test):
+        return
+    if check:
+        raise Failed(LANG_LONG_TAIL + '/provenance.json is stale; run scripts/regen.sh --only lang-long-tail')
+    root = Path(tempfile.mkdtemp(prefix='air2lean-lang-long-tail-zig.'))
+    try:
+        for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+            (root / ('zig-air-' + version)).mkdir()
+            (root / ('zig-air-' + version) / 'bin').symlink_to(Path(cas.zig_air(ROOT, version)).parent)
+        env = dict(os.environ, AIR2LEAN_ZIG_AIR=str(root))
+        run(['bash', LANG_LONG_TAIL + '/export.sh'], env=env)
+        run(test + ['--refresh'], env=env)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    run(test)
 
 
 def step_claims(check):
     """tests/roadmap/claims/fixture-report.json from the statement extractor (Lean build)."""
     guarded('claims', ['bash', 'tests/roadmap/claims/check.sh'] + ([] if check else ['--write']),
             env=lake_env(), timeout=7200)
+
+
+def step_audit_exposure(check):
+    """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
+    audit fixtures (their fingerprints and redirections follow the library they import)."""
+    snapshot = [PY, '-B', 'tests/roadmap/architecture-audit/claims/snapshot.py']
+    # The libraries the fixtures import (as in CI): the audit replays them with `lake build --no-build`.
+    guarded('audit-exposure-deps', ['lake', 'build', 'ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen',
+                                    'ZigLean.Witness'], env=lake_env(), timeout=7200)
+    guarded('audit-exposure', ['bash', 'tests/roadmap/architecture-audit/claims/build.sh'],
+            env=lake_env(), timeout=7200)
+    if ok(snapshot + ['check']):
+        return
+    if check:
+        raise Failed('exposure-report.json is stale; regenerate with: '
+                     'tests/roadmap/architecture-audit/claims/snapshot.py write')
+    run(snapshot + ['write'])
+    run(snapshot + ['check'])
 
 
 def run_is_current(inv_mod, run_record):
@@ -297,11 +348,17 @@ STEPS = [
     ('coverage', 'tree', ['coverage/<version>.json'], step_coverage),
     ('pins', 'pr', ['tests/roadmap/try-pointers/emitter-integration.json',
                       'tests/roadmap/try-pointers/integration-qualification.json'], step_pins),
+    ('lang-long-tail', 'pr', [LANG_LONG_TAIL + '/provenance.json', LANG_LONG_TAIL + '/air/'],
+     step_lang_long_tail),
     ('premises', 'tree', ['docs/premise-index.md'],
      simple([PY, '-B', 'scripts/premises.py', 'check'], [PY, '-B', 'scripts/premises.py', 'write'])),
+    ('register', 'pr', ['ROADMAP.md and remaining-acceptance.md (marked regions)'],
+     simple([PY, 'scripts/register.py', 'check'], [PY, 'scripts/register.py', 'generate'])),
     ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
     ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
+    ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
+     step_audit_exposure),
     ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
     ('provenance', 'tree', ['assurance/provenance-gap/{manifest,pins}.json, receipt/',
                             'assurance/provenance/{manifest,pins}.json, receipt/'], None),

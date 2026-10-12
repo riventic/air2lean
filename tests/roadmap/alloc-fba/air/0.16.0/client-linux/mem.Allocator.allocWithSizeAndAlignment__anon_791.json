@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -47,6 +50,7 @@
   1,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -251,7 +255,7 @@
    "ty": 2,
    "callee": {
     "ty": 11,
-    "func": "mem.Allocator.allocBytesWithAlignment__anon_26383",
+    "func": "mem.Allocator.allocBytesWithAlignment__anon_26027",
     "module": "std",
     "instance_key": "1446b3d5ad8b78ce0ed2460b459d6c73678f44fd377e013a3ee49aab9e749ffa",
     "noreturn": false

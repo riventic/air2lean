@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -87,11 +90,21 @@
  },
  "name": "mc.shiftCopy",
  "module": "root",
+ "src": {
+  "file": "mc.zig",
+  "module": "mc",
+  "decl_line": 1
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
+ "export": {
+  "name": "shiftCopy",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -137,7 +150,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 24
   },
   {
    "id": 6,
@@ -157,7 +171,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 16
   },
   {
    "id": 8,
@@ -214,7 +229,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 33
   },
   {
    "id": 13,

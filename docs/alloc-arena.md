@@ -129,6 +129,11 @@ another block never matches; a slice of the node's block that ends at `buf_ptr +
 past the header, which `own` holds (`Core.lo_of`). The comparison needs no bytes of the slice:
 the slice's block reaches its end by the grant's extent share (`Core.last_dec`), so the refined
 `resize` (the client gives no bytes for a growth) decides it too. No premise per triple.
+`last_dec` compares only bytes known to be live: the first node's last byte before
+`buf + end_index` lies past its own `next` word, and the slice's last byte lies past the `next`
+word of the node it was granted from (`GrantOk`: a grant starts past its node's header), both
+owned by the arena. A memory model in which the low part of a block is not live (a thread's
+stack mapping below its stack pointer, MM-19) needs exactly that.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,
@@ -234,7 +239,8 @@ free list) is not attempted.
   atomic words, `next`; the child's token with the fraction `qn` it lent; the part `qh` of the
   node's extent share that the arena keeps; the unused tail of its buffer), the other used nodes
   and the free list as `next`-linked chains (each with its token and kept share), the child's
-  `own`, `Junk` (bytes that frees of earlier allocations leaked back), one receipt per grant
+  `own`, the junk as an exact heap `JunkAt jh` (bytes that frees of earlier allocations, shrinks
+  and `alloc`'s padding leaked back), one receipt per grant
   (`Rcpts`, at any bound) and the pool of shares that frees gave back (`Pool`). The token of a
   grant names it with its fraction and its cells' labels: `∃ i, gfrag γ e i (p, n, q, A, K)`;
   every grant lies in the block of a used node with that node's labels (`GrantOk`; the used nodes
@@ -269,6 +275,14 @@ free list) is not attempted.
     `EUpd.lendT`, `EUpd.rjoin`; `grow_ghost`). The arena needs no `q' = q` for a shrink (it never
     shrinks a block itself). `remap` is the whole-region `resize` (`resize_granted_ct`,
     `FAllocInv.resize_granted_of`) and returns `memory.ptr`.
+  * **Coverage of the nodes' buffers** (for `reset`, which must give each node's whole region to
+    the child's `free`): `OV.Facts` keeps `OV.Cov`, every byte of every used node's buffer is in
+    the junk's heap `jh`, in a grant of `M`, or in the first node's unused tail (`OV.Avail`). Each
+    update keeps it (`OV.avail_shrink`, `OV.avail_step`, `OV.Cov.step`): a `free` or shrink moves
+    the released bytes to the junk (`junk_grew`, from `junkAt_absorbR`) or back to the tail, a
+    growth and `alloc` carve them out of the tail, the padding and an old first node's tail join
+    the junk (`JunkTook`), a node grown in place extends the tail. With no outstanding grant a
+    reset turns each buffer's junk back into a region (`EUpd.junkRegion`).
   * **Fraction accounting per block** (for `reset`, which must give each node's whole share
     `qn` back to the child): the arena's variables name the grant map's bound `mN` and the pool's
     pieces (`Pool t pn pf`), and `OV.Facts` keeps, for every block `b`, `ndLent b nodes =

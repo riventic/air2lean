@@ -33,8 +33,10 @@ fix lands; the fixture then becomes an agreement test.
 | MM-13 | Value-level tagged-union retagging fills the new payload with `default` | HARDENING | code-read |
 | MM-14 | Race footprint and dead blocks grow without bound in single-threaded runs | HARDENING | measured |
 | MM-15 | Model `@memcpy` copies like `@memmove`; it relies on the ReleaseSafe alias check in AIR | control (agrees) | reproduced (`memcpyOverlap`) |
-| MM-16 | A stack-room resource is unsound over `Mem.top`/`Mem.roomFor`: freed stack space is never reused, other kinds and the placement consume it | SOUNDNESS (for total `alloc`) | code-read, three scenarios (§MM-16); design: per-thread stack regions |
-| MM-17 | A translated Linux thread's locals can never lie in the stack part of its `mmap`ed thread mapping | SOUNDNESS (address claims) | native (`E3`, §MM-16); model: the mapping is a live block |
+| MM-16 | `noalias` parameters are not modelled: an overlapping call gives a value | SOUNDNESS | reproduced (`na.shiftCopy`, `na.swapSelf`); fixed |
+| MM-17 | A NaN stored to memory and read as an integer gives the model's canonical NaN bits | SOUNDNESS | reproduced on x86_64 and aarch64 ([nan-bits.md](nan-bits.md)); fixed |
+| MM-18 | A stack-room resource is unsound over `Mem.top`/`Mem.roomFor`: freed stack space is never reused, other kinds and the placement consume it | SOUNDNESS (for total `alloc`) | code-read, three scenarios (§MM-18); design: per-thread stack regions |
+| MM-19 | A translated Linux thread's locals can never lie in the stack part of its `mmap`ed thread mapping | SOUNDNESS (address claims) | native (`E3`, §MM-18); model: the mapping is a live block |
 
 Mechanisms checked and found sound: block-id provenance for liveness (use after free, double
 free, foreign free are `.illegal` by block id, not address); one-past-the-end accesses;
@@ -58,7 +60,7 @@ build for each fixed finding below.
 | MM-2 | fixed | alignment checks follow the placement; a placement without the extra alignment panics as natively |
 | MM-3 | fixed | checked pointer formation `Zig.ptrProject` (`getelementptr inbounds`): a derived pointer outside `[0, size]` of its block is `.illegal` |
 | MM-4 | fixed | pointer `==` compares addresses for every pointer kind (`Zig.ptrEqAddr`, `Zig.optPtrEqAddr`) |
-| MM-5 | fixed | per-thread stack budget (`Mem.withStack`, MM-16), `Zig.enterFrame`, `Zig.Error.stackOverflow`; premise STK-01 without a budget |
+| MM-5 | fixed | per-thread stack budget (`Mem.withStack`, MM-18), `Zig.enterFrame`, `Zig.Error.stackOverflow`; premise STK-01 without a budget |
 | MM-6 | fixed | emitter arms write an unbound `placeholder`; output with one is rejected (`EMITTER_PLACEHOLDER`), every formerly reachable arm is a checker rule |
 | MM-7 | qualified | `docs/build-modes.md` lists the remaining exceptions of the ReleaseFast premise |
 | MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
@@ -67,8 +69,10 @@ build for each fixed finding below.
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
-| MM-16 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-16, `tests/roadmap/stack-region`) |
-| MM-17 | open | `clone` hands the child the stack part of the mapping (§MM-16, step 2) |
+| MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
+| MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
+| MM-18 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
+| MM-19 | open | `clone` hands the child the stack part of the mapping (§MM-18, step 2) |
 
 ## Measurements
 
@@ -174,8 +178,13 @@ provenance-free address, including address zero, is now `.illegal`. Slicing form
 before Sema's `start <= end` check, so an out-of-allocation start is `.illegal` in the model
 where native ReleaseSafe panics (conservative). The audit fixture is an agreement test:
 `oobCompare(1)` is `1` in both, and `oobCompare(2^63)`, `oobPtrCompare(2^63)` are `.illegal`.
-Residual: `Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer after a checked access
-to the error code, without a bounds check of their own (`docs/build-modes.md`).
+`Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer with `ptrProject` too
+(`codex/fix-try-payload-bounds`). For the compiler's layouts the error code access already
+puts it in bounds: the payload is at offset 0 or right after the 2-byte code at offset 0
+(`errPayloadPtr_formed`, `ZigLean/Mem/Lemmas.lean`), so a truncated object reached through a
+pointer cast fails at the code or payload access. The check matters for any other layout, such as
+`errUnionOffsetsW` with a payload alignment that does not divide the code size
+(`tests/roadmap/try-pointers/TryPointers/Runtime.lean`).
 
 Deliberate over-approximations (each `.illegal` where native Zig may be defined; conservative
 for no-illegal proofs, wrong for outcome reports and native diffs): an out-of-allocation result is
@@ -268,7 +277,7 @@ a model change.
 
 **Status: qualified** (`codex/fix-mm-failclosed`). `docs/build-modes.md` lists the open
 exceptions (MM-1/MM-2, MM-5, float `@divExact`) under the premise, and the README sentence
-names them. MM-3 is fixed on the same branch and listed there as fixed, with its residual.
+names them. MM-3 is fixed on the same branch and listed there as fixed.
 
 ### MM-8. Sep exports allocation-order address facts
 
@@ -368,7 +377,30 @@ AIR carries Sema's alias check, and the model panics like native (`memcpyOverlap
 model is right only because export is pinned to ReleaseSafe (`docs/build-modes.md`). If any
 other export mode is ever admitted, `@memcpy` needs its own overlap → `.illegal` rule.
 
-### MM-16. Stack room and per-thread stack regions (`codex/stack-region`)
+### MM-16. `noalias` parameters
+
+Zig lowers a `noalias` parameter to LLVM's `noalias` argument attribute (the language
+reference documents nothing): during the call, memory accessed through a pointer based on the
+parameter must not be accessed through any other pointer if either access writes. LLVM optimizes
+on it (reordering, forwarding stores), so a violating call has no defined result. The exporter
+did not write the attribute, and the model executed the call as if it were absent: a
+`memcpy`-like `copy(noalias dest, noalias src, n)` with `dest = src + 1` (compiler_rt's
+`memcpySmall`, which the C front end binds for `memcpy`) returned the `@memmove`-like bytes, and
+`swap(&x, &x)` returned a value. A theorem could fix such a value; native code is undefined.
+
+**Fix.** The exporter writes each function's `noalias` parameter indices (`noalias`, required
+in schema 12). For a function with some, `Air2Lean/Noalias.lean` gives every access the
+parameter its pointer is based on (LLVM's "based on": derived pointers, `@ptrFromInt` of a
+derived integer, locals that hold one), and the checker rejects the function when that is
+ambiguous or a based-on value escapes to memory or another function. The generated function
+checks the accesses of each call in a scope (`ZigLean/Mem/Noalias.lean`), right after each
+instruction and in every function it may call; two overlapping accesses with different roots,
+one a write, are `.illegal` before any later failure. Pointer tags in
+`Zig.Ptr` (a precise provenance per pointer) were not chosen: they would change every pointer
+construction, pointer equality and the keys of the futex and group tables. The static roots give
+the same answer for every function the translator accepts, and fail closed on the rest.
+
+### MM-18. Stack room and per-thread stack regions (`codex/stack-region`)
 
 **Status: design approved (decision A, 2026-10-12); step 1 (model, emitters, regressions)
 implemented, see §Implementation (step 1).** The logic side is in `docs/sep-full-state.md`
@@ -411,7 +443,7 @@ callee's local lies below the caller's:
 | E1 | an inlined callee's local lies **above** the caller's earlier local (below on aarch64-linux 0.14.1/0.15.2); a `noinline` callee's lies below | the address order of locals across model frames is not fixed |
 | E1' | the inlined callee's local and a later local of the caller **share one address** (LLVM stack colouring) | a dead stack block's address is reused inside one native frame |
 | E2 | two sibling calls put their locals at the same address | reuse across frames |
-| E3 | a spawned thread's locals lie inside the anonymous mapping that `std.Thread.spawn` `mmap`s (Linux: guard, stack, TLS, `Instance`; 16 MiB stack by default in all four versions) | MM-17 |
+| E3 | a spawned thread's locals lie inside the anonymous mapping that `std.Thread.spawn` `mmap`s (Linux: guard, stack, TLS, `Instance`; 16 MiB stack by default in all four versions) | MM-19 |
 | E4 | main stack: 8 MiB on macOS, the container's rlimit (16 MiB) on Linux; threads: `SpawnConfig.default_stack_size` = 16 MiB (0.14.1–0.17.0) | stack sizes are environment facts, not program facts |
 
 E1 and E1' rule out the obvious design: deterministic LIFO addresses (each new stack block just
@@ -533,9 +565,9 @@ form): the native stack of `t` holds every call chain whose model charge stays w
 4. Heap-kind runtime cells without an out-of-memory path (`Future.slotAlloc`: `alloc .heap`)
    keep today's `.stackOverflow` without address room: partial only, listed as follow-up (not a
    stack object; native `Io` implementations have their own fallback).
-5. MM-17 below stays open until step 2.
+5. MM-19 below stays open until step 2.
 
-#### MM-17. A child's locals cannot lie in its thread mapping
+#### MM-19. A child's locals cannot lie in its thread mapping
 
 The translated `LinuxThreadImpl.spawn` (all four versions) `mmap`s one mapping (guard page,
 `stack_size` bytes of stack, TLS area, `Instance`) and passes the stack's top to `clone`.
@@ -609,7 +641,7 @@ per-thread reserve contract.
 #### Steps (phase 2, one small PR each, on `codex/stack-region`)
 
 1. Model + emitters + lemmas + regressions (done, above).
-2. MM-17: `Os.clone` hands the child the stack part of its mapping (below).
+2. MM-19: `Os.clone` hands the child the stack part of its mapping (below).
 3. Logic: the `sp` resource, Holds conjunct, total rules (`docs/sep-full-state.md`), as one
    instance of the generic authoritative-counter pattern shared with the credits.
 4. Full/Init gives the main thread `sp 0 S k₀` under `Mem.withStack S`; replaces interim (C) and

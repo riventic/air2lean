@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -47,6 +50,7 @@
   2,
   1
  ],
+ "noalias": [],
  "ret": 3,
  "body": [
   {
@@ -432,7 +436,7 @@
      "ty": 18,
      "callee": {
       "ty": 19,
-      "func": "mem.alignPointerOffset__anon_17878",
+      "func": "mem.alignPointerOffset__anon_17454",
       "module": "std",
       "instance_key": "1fdb4fd23aee9308e7cb1ad2763d14019b6c1b3924b8523e8dfca891858cacaa",
       "noreturn": false

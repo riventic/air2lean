@@ -103,7 +103,7 @@ end Steps
 /-! ## Entry and exit -/
 
 /-- The stack block of `fba`: a fresh block, so not the buffer's. It needs room (`Mem.allocOk`:
-the address space, SEM-07, and the thread's stack budget, MM-16). -/
+the address space, SEM-07, and the thread's stack budget, MM-18). -/
 theorem alloc_fresh {P : Assn} (hP0 : ∀ h, P h → ∃ o c, h (0, o) = some c) :
     TotalTripleIn (·.allocOk .stack 24 8) P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
       (P ∗ Assn.ex fun Ac => ⌜Ac % 8 = 0⌝ ∗ bytesAt p Ac 24 .stack (Array.replicate 24 .undef))) := by

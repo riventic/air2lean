@@ -678,7 +678,7 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   subst r₁
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
-  -- The frees, in reverse order of allocation (MM-16): the group, then `x`.
+  -- The frees, in reverse order of allocation (MM-18): the group, then `x`.
   refine WP.bind (WP.liftMem_upd ((free_front (R := bytesAt s2 Ax 4 .stack (Enc.encode v)) hbs hg0
     (by decide)).conseq (fun _ h => sep_comm h) fun _ _ h => h) ho₈ (hs₈.current.trans hc₇)
     (by rw [hs₈.threads]; exact htl) hF₈ fun _ m₉ h₉ ho₉ hq₉ hc₉ ht₉ => ?_)

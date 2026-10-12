@@ -720,7 +720,7 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   refine WP.pure' ?_
   -- The frees.
   have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
-  -- In reverse order of allocation (MM-16): `c2`, `c1`, `y`, `x`.
+  -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
   refine WP.bind (WP.liftMem_fowned ((free_front (R := (ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆
     flagF s4 ky Ay b) h2b (ctxBytes_size s4 b) h20 (by decide)).pre fun _ h => sep_lcomm h)
     ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)

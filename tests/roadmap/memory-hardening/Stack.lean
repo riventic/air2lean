@@ -1,7 +1,7 @@
 import ZigLean
 import ZigLean.Mem.Lemmas
 
-/-! MM-5 regression: the stack budget (`Zig.enterFrame`, `Mem.withStack`, MM-16).
+/-! MM-5 regression: the stack budget (`Zig.enterFrame`, `Mem.withStack`, MM-18).
 
 `down n` has the shape of a generated recursive function that uses memory: it charges a frame,
 recurses, and releases the frame. The runs are evaluated (`#guard`); the lemma

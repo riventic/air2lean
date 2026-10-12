@@ -43,7 +43,7 @@ def accept(binary, documents):
         return out.read_text()
 
 
-def reject(binary, documents, marker):
+def reject(binary, documents, marker, code="INSTRUCTION_FAILURE"):
     """CLI rejection naming `marker`; `--diagnostics-json` reports the same message."""
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-effects-") as d:
         result, out = translate(binary, documents, Path(d))
@@ -56,7 +56,7 @@ def reject(binary, documents, marker):
         report = json.loads(diagnostics.stdout)
         hits = [e for e in report["diagnostics"] if marker in e["message"]]
         assert hits, (marker, report)
-        assert all(e["code"] == "INSTRUCTION_FAILURE" for e in hits), hits
+        assert all(e["code"] == code for e in hits), hits
     return 1
 
 
@@ -99,7 +99,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-effects-") as d:
         out = Path(d) / "Gen.lean"
         result = subprocess.run([str(binary), str(ROOT / "tests/golden/asm/air"), "-o", str(out),
-                                 "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le"], text=True,
+                                 "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le",
+                                 "--assume-asm-cpu-features"], text=True,
                                 capture_output=True, check=False, timeout=60)
         assert result.returncode == 0, result.stderr
         # check.sh may have rewritten Proofs/Asm/Gen.lean with this host's profile header first
@@ -129,11 +130,11 @@ def main():
 
     def barrier_nop(i, _):
         i["source"] = "nop"
-    checks += reject(binary, only("barrier", barrier_nop), "no reviewed registry entry")
+    checks += reject(binary, only("barrier", barrier_nop), "declares this block pure")
 
     def barrier_nonvolatile(i, _):
         i["volatile"] = False
-    checks += reject(binary, only("barrier", barrier_nonvolatile), "no reviewed registry entry")
+    checks += reject(binary, only("barrier", barrier_nonvolatile), "declares this block pure")
 
     # Read-write or memory output without a location (the expression's own result).
     def rw_result(i, d):
@@ -152,10 +153,15 @@ def main():
             i["outputs"][0]["constraint"] = c
         checks += reject(binary, only("incm", bad_out),
                          f"asm output constraint '{c}' is not a register, read-write or memory")
-    for c in ["m", "i", "rm", "+r"]:
+    for c in ["i", "rm", "+r"]:
         def bad_in(i, _, c=c):
             i["inputs"][0]["constraint"] = c
         checks += reject(binary, only("setm", bad_in), f"asm input constraint '{c}' is not a register")
+    # An integer `m` input is a value (A01), but this template with it has no allowlist entry.
+    def mem_in(i, _):
+        i["inputs"][0]["constraint"] = "m"
+    checks += reject(binary, only("setm", mem_in), "is not on the reviewed asm allowlist",
+                     code="ASM_VOLATILE_EFFECT")
 
     # A memory operand must be a whole 1/2/4/8 byte integer.
     def odd_width(i, d):

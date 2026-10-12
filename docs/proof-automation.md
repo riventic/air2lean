@@ -36,20 +36,22 @@ with its invariant).
 
 | Proof | heartbeats (default budget 200k) |
 | --- | --- |
-| FBA `alloc` | 64k |
-| FBA `resize` (refined) | 57k |
-| FBA `remap` | 70k |
-| FBA `free` | 21k |
-| page (linux) `free` / `resize` / `remap` | 13k / 78k / 85k |
-| page (macOS) `free` / `resize` / `remap` | 13k / 78k / 55k |
-| page `alloc` (concurrent, `CTriple`) | 141k |
+| FBA `alloc` | 61k |
+| FBA `resize` (refined) | 65k |
+| FBA `remap` | 80k |
+| FBA `free` | 22k |
+| page (linux) `free` / `resize` / `remap` | 9k / 72k / 89k |
+| page (macOS) `free` / `resize` / `remap` | 9k / 73k / 59k |
+| page `alloc` (concurrent, `CTriple`) | 89k |
 
 FBA `Full.lean` is 139 lines, of which the proofs are four `fsym` calls (the handwritten version
 was 1025 lines); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
 on a loaded machine (load average about 17): FBA 66 s, each page spec 17 s, one theorem at a time
-(`-j1`). The cost is `omega`: about 870 calls per page spec, a third of them case-split probes for
-truncated subtractions; failed probes are cheap (about 90 heartbeats each), the cost is spread over
-many successful calls with 20 to 30 facts.
+(`-j1`). The largest single cost is `omega` (`trace.fsym.prof`, 2026-10-12): the three linux page
+specs make 986 `omega` calls (80k of their 170k heartbeats), 235 of them fail (17k: probes of
+rules, providers and cases that do not apply, about 70 heartbeats each); FBA's four entries make
+788 calls (75k of 228k), 364 failed (13k). The rest of the cost is spread over many successful
+calls with 20 to 30 facts.
 
 ## Modules
 
@@ -65,7 +67,8 @@ many successful calls with 20 to 30 facts.
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
   rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
-  providers from atoms (`AddrOf`, `Reaches`), the planner's local updates (region
+  providers (`AddrOf`, `Reaches`, `Live`, `Active`; §Providers), pointer `==` across live blocks
+  (`ptrEqAddr_live`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
   lemmas (masks, overflow bits, shifts, no-wrap rewrites, atoms for `omega`).
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
@@ -86,6 +89,30 @@ For an atom of `Q` whose head `X` has a range law, the planner carves it out of 
 the first's end) are joined first (the law forwards). The law's hypotheses are side goals of the
 arithmetic solver. A head with a law is an atom (never unfolded). Regression:
 `tests/roadmap/sep-auto/Plan.lean` (claims and a user's own range assertion).
+
+### Providers
+
+A rule takes what it needs of the memory from a **provider**, a property of every memory that
+holds the precondition `P`: `AddrOf b A P` (block `b` at address `A`), `Reaches b k P` (at least
+`k` bytes), `Live b k P` (live, at least `k` bytes), `Active t P` (the tag `t` of a share is
+active). A provider kind `K` is a constant with a lemma `K.of_within : K … X → Within X P → K … P`.
+`fsym` proves a provider goal by
+
+* an **atom lemma** (`@[fsym_provider]`, conclusion `K … X` of an atom `X`: a region, a typed
+  value, `known`, an untagged share, an allocator's own state) on one of the parts of `P`, or
+* a **lemma about the whole precondition** (`@[fsym_provider]`, conclusion `K … P` of a variable
+  `P`), whose hypotheses are goals again: `Within X P` (a part of `P` that unifies with `X`),
+  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`; `Live.share`: a
+  share whose tag is active (`Within (bshare b q k t) P`, `Active t P`); `Active.root`;
+  `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+
+The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
+candidate leaves must all be proved. So a node pointer reaches its node's end through a share
+tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
+pointers into blocks that may differ (`ptrEqAddr_live`: both in bounds, or both past their
+blocks' starts) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+(`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
+definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
 ## How it works
 
@@ -116,13 +143,23 @@ arithmetic solver. A head with a law is an atom (never unfolded). Regression:
   (a field of a node, an argument) gets one from what the precondition owns at it. A facts
   lemma may need the memory, or be about an ordered pair of atoms (`MemFacts X φ` with `X` an atom
   or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
-  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart. Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`).
+  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart (by
+  addresses, `MemFacts.regions_apart`; by offsets in one block, `facts_regions_block`). A facts
+  lemma's premises are proved from the context (blocks `p.block = some b`) or by the arithmetic
+  solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
+  case splits). Block
+  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
-  (from the context), providers (from the atoms, with backtracking) and arithmetic.
+  (from the context), providers (§Providers, with backtracking) and arithmetic; a side goal that
+  is not arithmetic is closed by a hypothesis equal to it **up to arithmetic** in its arguments
+  (`I.fits x.toNat 0` by `I.fits (n + 1) 0` with `x.toNat = n + 1`: `congrEq`, function by
+  function down to numbers and words) or up to projections of structure values and unfolding
+  (`{ names := ns, .. }.names.contains e = true` by `Option.all domain.names.contains (some e)`):
+  `assumptionEq`.
 * **Word results are opaque** (symbolic execution in SSA form): a checked `a + b` gives a fresh
   `r` with the fact `r.toNat = a.toNat + b.toNat` (subtraction is stated additively), so later
   terms mention `r`, not the growing expression that computed it.
@@ -142,7 +179,14 @@ arithmetic solver. A head with a law is an atom (never unfolded). Regression:
   `Q`'s existentials become metavariables, assigned by unification; regions are matched exactly,
   or carved out of a state region (split at the start with `Q`'s alignment and at the end by a
   size fact), joining adjacent regions where needed (a region that a part of `Q` has claimed is
-  not joined again); shares of one block are joined, split and weakened, and a share with a
+  not joined again). **Planning order**: the unknown bytes of a
+  region of `Q` with a size fact are assigned by the region planner from the state's current
+  bytes, so an atom of `Q` that mentions them (the token `I.tok p bs.size …` of a grant whose bytes
+  were written after the allocation) is matched only after the regions, with its arguments equal
+  up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
+  state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
+  `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
+  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block are joined, split and weakened, and a share with a
   determined fraction is raised to a higher bound with another share of its block
   (`share_raise`), or with the authority of its block (`auth_raise`, up to the block's size);
   **authorities** (`bauth`, `bext`): a share of a block of which the state has none is lent out of
@@ -184,13 +228,19 @@ Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
 ## The arithmetic solver
 
 Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, also the tactic
-`fsym_arith`):
+`fsym_arith`; its normal forms and lemmas are `ZigLean/Sep/Full/AutoArith.lean`):
 
 1. turns the hypotheses into **facts in normal form**, each once per run and each normalized with
    the facts before it: values of words and pointers as natural numbers, user definitions of
    values unfolded, overflow bits and shifts as values, low and high masks as remainders by
    `2 ^ x`; and **no wrap-around** where it cannot happen (`Zig.toNat_add_of_lt` and friends: the
-   side condition by the discharger);
+   side condition by the discharger). Every reading of a word goes through its unsigned value
+   `x.toNat`, for any width: a signed value `x.toInt` is `x.toNat - 2 ^ w * (2 * x.toNat / 2 ^ w)`
+   (`toInt_eq_div`; a division by a literal for a literal width, which `omega` reads without a
+   case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
+   (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
+   fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -199,7 +249,9 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `x ≤ c` (`mod_pow_of_le`: `omega` reads `z % L`, not `z % 2 ^ x`), and runs `omega` on the facts. `omega` case-splits on every truncated subtraction, `Int.toNat`,
    `min` and `max`; a term whose case the split-free (linear) facts decide becomes an opaque
    atom with a linear defining fact (`subAtom`, also a subtraction truncated to `0`, `toNatAtom`,
-   `minAtom`, `maxAtom`), so no split is explored for it;
+   `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
+   subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
+   allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
 5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
@@ -219,7 +271,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
-* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
+* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`,
+  `Live`, `Active`); one from the whole precondition: `@[fsym_provider] theorem … (hw : Within X P)
+  … : Live b k P`. A new provider kind `K` needs `K.of_within`.
 * A new range resource to plan (split, join): its range law tagged `@[fsym_plan]`, and
   `@[fsym_drop]` for its atoms that may be forgotten. Another kind of planning (lending, a
   different algebra) is an engine change in `Auto.lean` (the fsym lane), not a user extension.

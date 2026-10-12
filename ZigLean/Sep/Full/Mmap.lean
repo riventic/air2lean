@@ -34,57 +34,9 @@ namespace Full
 
 open FAssn
 
-/-! ## Changing a resource's full extents -/
+/-! ## One block's extent changes
 
-/-- **The full extents of a resource can change** to any blocks on which the frame has only
-dormant claims: ledgers, balances and finiteness only see the frame there. -/
-theorem Ghost.ok_exts_change {E E' : BlockId → Option (Nat × BlockKind)} {gF : Ghost}
-    (hok : Ghost.Ok (Ghost.exts E) gF)
-    (hd : ∀ b, (E' b).isSome → (gF.extent b).Dormant gF.ls) : Ghost.Ok (Ghost.exts E') gF := by
-  have hep : ((Ghost.exts E).add gF).ls = gF.ls := Ghost.ls_exts_add
-  have hvF : ∀ b, (gF.extent b).Valid ∧ (gF.extent b).TagOk gF.ls := fun b => by
-    have hv := hok.1.2.1 b
-    have hle : (gF.extent b).Le (((Ghost.exts E).add gF).extent b) := ECell.le_add' _ _
-    refine ⟨ECell.Valid.of_add (b := (Ghost.exts E).extent b) ?_,
-      ECell.TagOk.of_le (ls' := ((Ghost.exts E).add gF).ls)
-        (fun _ _ _ h => by rw [hep]; exact h) hok.1.uniq hle hv.2⟩
-    rw [ECell.add_comm]; exact hv.1
-  refine ⟨⟨fun γ => ?_, fun b => ?_, hok.1.2.2.1.congr (by rw [Ghost.exts_add_cl, Ghost.exts_add_cl])
-    (by rw [Ghost.ls_exts_add, Ghost.ls_exts_add]), by simpa using hok.1.2.2.2⟩, ?_⟩
-  · have := hok.1.1 γ; simpa [Ghost.add, Ghost.exts] using this
-  · rw [Ghost.ls_exts_add]
-    by_cases hb : (E' b).isSome
-    · obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
-      rw [show (Ghost.add (Ghost.exts E') gF).extent b = (ECell.auth1 S K Frac.one).add (gF.extent b) by
-        simp [Ghost.add, Ghost.exts, hS]]
-      exact (hd b hb).auth1_ok
-    · have hn : E' b = none := by simpa using hb
-      rw [show (Ghost.add (Ghost.exts E') gF).extent b = gF.extent b by
-        simp [Ghost.add, Ghost.exts, hn]]
-      exact hvF b
-  · obtain ⟨N, hN⟩ := hok.2
-    refine ⟨N, fun γ hγ => ⟨by have := (hN γ hγ).1; simpa [Ghost.add, Ghost.exts] using this,
-      fun b e k => ?_, fun γ' e' M e => by
-        have := (hN γ hγ).2.2 γ' e' M e; simpa [Ghost.add, Ghost.exts] using this⟩⟩
-    have h1 := (hN γ hγ).2.1 b e k
-    rw [((Ghost.exts_add_tags E' gF b).2 γ e k).1, ((Ghost.exts_add_tags E' gF b).2 γ e k).2]
-    rwa [((Ghost.exts_add_tags E gF b).2 γ e k).1, ((Ghost.exts_add_tags E gF b).2 γ e k).2] at h1
-
-/-- The extent map of one block. -/
-def extOne (b : BlockId) (S : Nat) (K : BlockKind) : BlockId → Option (Nat × BlockKind) :=
-  fun x => if x = b then some (S, K) else none
-
-/-! ## One block's extent changes -/
-
-/-- The blocks after `set!` at an existing index. -/
-theorem blocks_set_get {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
-    (h : m'.blocks = m.blocks.set! b nb) (x : BlockId) :
-    m'.blocks[x]? = if x = b then some nb else m.blocks[x]? := by
-  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
-  by_cases e : x = b
-  · subst e; simp [hlt]
-  · simp [e, Ne.symm e]
+`Ghost.ok_exts_change`, `extOne` and `blocks_set_get` are in `Ops.lean`. -/
 
 /-- The resource after `Holds.reblock`: the bytes of `b` that became live, and `nb`'s extent. -/
 def reblockRes (m m' : Mem) (b : BlockId) (nb : Block) : Res :=

@@ -100,13 +100,12 @@ def main():
     # Real s390x exports outside the qualified big-endian model (`reject.zig`).
     rejects = load("s390x-reject")
     for name, error in [
-        ("reject.atomicRead.json", "an atomic op is outside the qualified big-endian model"),
+        ("reject.atomicU12.json", "an atomic op on a 12-bit integer representation"),
         ("reject.packedUnion.json", "a `packed union` is outside the qualified big-endian model"),
         ("reject.f80Add.json", "`f80` is outside the qualified big-endian model"),
         ("reject.boolLanes.json", "a vector of `bool` or pointer lanes is outside"),
         ("reject.nibbleLanes.json", "a vector of non-byte-multiple lanes is outside"),
         ("reject.tagName.json", "`@tagName` is outside the qualified big-endian model"),
-        ("reject.create.json", "the std model 'mem.Allocator.create"),
         ("reject.u128Bytes.json", "the memory model gives type"),
         ("reject.vecByte.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
         ("reject.vecLane0FromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),

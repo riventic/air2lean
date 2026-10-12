@@ -1,4 +1,4 @@
--- Appended to the fresh `StackDepth` translation of stack_depth.zig (check.sh). MM-5/MM-16: the
+-- Appended to the fresh `StackDepth` translation of stack_depth.zig (check.sh). MM-5/MM-18: the
 -- model charges each `depth` frame and its stack block to the main thread's stack budget
 -- (`Mem.withStack`). Without one (`mem0 .fresh`, premise STK-01) `depth(n)` returns `n`; under
 -- the 8 MiB main-thread stack of the native run it overflows, as the native ReleaseSafe build does.

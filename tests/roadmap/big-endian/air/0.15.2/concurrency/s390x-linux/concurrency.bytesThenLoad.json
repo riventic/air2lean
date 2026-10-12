@@ -1,0 +1,290 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-be-v1",
+  "target_triple": "s390x-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "big",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "arch8",
+  "features": [],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "concurrency.bytesThenLoad",
+ "module": "root",
+ "src": {
+  "file": "concurrency.zig",
+  "module": "concurrency",
+  "decl_line": 22
+ },
+ "params": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "arg",
+   "ty": 0,
+   "param": 3
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 23
+  },
+  {
+   "id": 5,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ],
+   "name": "b"
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 7,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "ptr": {
+      "global": 0,
+      "off": 1
+     }
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "ptr": {
+      "global": 0,
+      "off": 2
+     }
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "ptr": {
+      "global": 0,
+      "off": 3
+     }
+    },
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 12,
+   "tag": "atomic_load",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 5,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ],
+   "order": "seq_cst"
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 14,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "concurrency.w32",
+   "module": "root",
+   "ty": 1,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 1,
+    "val": "0"
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 0,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  }
+ ]
+}

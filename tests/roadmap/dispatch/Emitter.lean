@@ -27,6 +27,7 @@ private def ret (id : Nat) (v : Json) : Json := inst id "ret" 3 #[v]
 private def arg (id param : Nat) : Json := inst id "arg" 0 #[] [("param", num param)]
 private def file (name : String) (params : Array Nat) (body : Array Json) : Json :=
   obj [("schema", num 11), ("zig_version", toJson "0.16.0"), ("target_endian", toJson "little"),
+    ("unchecked_ib", .arr #[.str "for_len"]),
     ("name", toJson name), ("params", toJson params), ("ret", num 0),
     ("types", .arr baseTypes), ("body", .arr body)]
 private def process (j : Json) : Except String Func := do

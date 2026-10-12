@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the Q02 register-to-mutation map (assurance/mutation-map.json, docs/mutation-map.md).
 
-The map names, for every ROADMAP.md register ID, its negative tests and designated semantic
+The map names, for every requirement register ID, its negative tests and designated semantic
 mutants, each mutant with one category. `check` fails when
   * the map's IDs differ from the register, or an entry is malformed;
   * a referenced test file or anchor, or a referenced mutant, does not exist;
@@ -33,6 +33,8 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import register as register_data  # noqa: E402
 MAP = 'assurance/mutation-map.json'
 SCHEMA = 'air2lean-mutation-map/1'
 CATEGORIES = ('forwarding', 'layout', 'operand-order', 'failure-cleanup',
@@ -46,15 +48,11 @@ KILL_KINDS = ('diff', 'proof')
 MUTATION_MARK = re.compile(r'^echo "== mutation \(([a-z]+)\)', re.M)
 BLOCK_END = '[ "$mutations_run" -gt 0 ]'
 PY_MUTANTS = 'tests/roadmap/mutation-map/mutants.py'
-REGISTER_ROW = re.compile(r'\| ([A-Z]\d\d) \| [^|]+ \| (\w+) \|')
 
 
 def register(root):
-    """Ordered (id, status) rows of the ROADMAP.md requirement register."""
-    rows = [m.groups() for m in map(REGISTER_ROW.match, (root / 'ROADMAP.md').read_text().splitlines()) if m]
-    if not rows:
-        raise ValueError('ROADMAP.md: requirement register not found')
-    return rows
+    """Ordered (id, status) rows of the requirement register (assurance/register/<ID>.md)."""
+    return [(r['id'], r['status']) for r in register_data.load(root)]
 
 
 def mutate_sh_labels(root):
@@ -205,7 +203,7 @@ def analyze(root=ROOT, data=None, kills=None):
     for rid in [r for r, _ in rows if r not in entries]:
         problems.append(f'{rid}: register ID missing from {MAP}')
     for rid in [r for r in entries if r not in status]:
-        problems.append(f'{rid}: not a ROADMAP.md register ID')
+        problems.append(f'{rid}: not a register ID')
     labels = {'mutate.sh': mutate_sh_labels(root), 'shards': shard_labels(root), 'python': py_mutant_names(root)}
     by_category = {c: [] for c in MUTANT_CATEGORIES}
     mapped = {MUTATE_SH: set(), PY_MUTANTS: set()}

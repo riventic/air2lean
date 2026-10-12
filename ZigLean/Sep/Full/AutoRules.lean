@@ -1,6 +1,8 @@
 import ZigLean.Sep.Full.AutoAttr
+import ZigLean.Sep.Full.AutoArith
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Range
@@ -17,8 +19,10 @@ module.
   precondition (`ex_sep`, `lift_sep`).
 * **Step rules** (`@[fsym]`): pointer operations from the providers of `Ops.lean`, loads and
   stores of `pts`, the fields of a stored slice, the overflow-checked arithmetic of generated code.
-* **Providers from atoms**: `AddrOf`/`Reaches` of a precondition from one of its atoms
-  (`known`, `bshare`, an owned `pts` or region), up to associativity and commutativity of `⋆`.
+* **Providers** (`AddrOf`, `Reaches`, `Live`, `Active`): from one of the precondition's atoms
+  (`known`, an untagged `bshare`, an owned `pts` or region, an allocator's own state), or from the
+  whole precondition (a share whose tag is active, a ledger at its epoch), lifted by `K.of_within`.
+  Pointer `==` across two live blocks (`ptrEqAddr_live`).
 * **`Junk`** (the library's, `Full/AllocSpec.lean`): bytes an allocator gave up (padding, leaked
   frees); an `up` part is absorbed.
 * **`fsym_norm`** and **`fsym_arith`**: the simp sets for programs and side goals.
@@ -133,17 +137,35 @@ variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
     AtomFacts (apts p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
   rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
+/-- Two separately owned nonempty regions of one block do not overlap (by offsets;
+`MemFacts.regions_apart` compares addresses, also across blocks). The premises come from the
+context (blocks) and the arithmetic solver (sizes). -/
+@[fsym_facts] theorem facts_regions_block {q : Ptr} {b : BlockId} {A' S' a' : Nat} {K' : BlockKind}
+    {cs : Array Byte} (hp : p.block = some b) (hq : q.block = some b) (hn : 0 < bs.size)
+    (hn' : 0 < cs.size) :
+    AtomFacts (up (regionIn p A S K a bs) ⋆ up (regionIn q A' S' K' a' cs))
+      (p.off.toNat + bs.size ≤ q.off.toNat ∨ q.off.toNat + cs.size ≤ p.off.toNat) := by
+  rintro r ⟨r₁, r₂, hd, rfl, h1, h2⟩
+  refine Classical.byContradiction fun hc => ?_
+  -- the later start lies in both
+  obtain ⟨x, hx1, hx2⟩ : ∃ x, (p.off.toNat ≤ x ∧ x < p.off.toNat + bs.size) ∧
+      (q.off.toNat ≤ x ∧ x < q.off.toNat + cs.size) := by
+    rcases Nat.le_total p.off.toNat q.off.toNat with h | h
+    · exact ⟨q.off.toNat, by omega, by omega⟩
+    · exact ⟨p.off.toNat, by omega, by omega⟩
+  obtain ⟨f1, e1, -⟩ := Owns.region (a := a) (S := S) hp (i := x - p.off.toNat) (by omega) r₁ h1
+  obtain ⟨f2, e2, -⟩ := Owns.region (a := a') (S := S') hq (i := x - q.off.toNat) (by omega) r₂ h2
+  rw [show p.off.toNat + (x - p.off.toNat) = x by omega] at e1
+  rw [show q.off.toNat + (x - q.off.toNat) = x by omega] at e2
+  rcases hd (b, x) with e | e <;> simp_all
+
 end Facts
 
 /-! ## Providers from atoms -/
 
 section Providers
 
-variable {b : BlockId} {A k : Nat} {P X R : FAssn}
-
-theorem AddrOf.of_atom (h : AddrOf b A X) (e : P = (X ⋆ R)) : AddrOf b A P := e ▸ h.sepL
-
-theorem Reaches.of_atom (h : Reaches b k X) (e : P = (X ⋆ R)) : Reaches b k P := e ▸ h.sepL
+variable {b : BlockId} {A k : Nat}
 
 /-- A nonempty owned byte range at `p` (in block `b`): the block's address. -/
 theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
@@ -157,30 +179,6 @@ theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
     obtain ⟨fc, hfc, he⟩ := erase_cell hc
     exact ⟨_, fc, hfc, by rw [he]⟩
 
-/-- A nonempty owned byte range at `p` (in block `b`): the block reaches its end. -/
-theorem Reaches.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
-    (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
-    Reaches b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
-  obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
-  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
-  rw [hpb] at hb'; cases hb'
-  obtain ⟨fc, hfc, -⟩ := erase_cell hc
-  obtain ⟨blk, hblk, -, hj, -⟩ := hh.block hfc
-  exact ⟨blk, hblk, by omega⟩
-
-/-- A typed value at `p` owns its bytes: its block reaches one past it. -/
-theorem Reaches.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
-    (hn : 0 < Enc.size T) : Reaches b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
-  Reaches.bytes hpb fun _ hp => by
-    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
-    exact ⟨A, S, K, bs, by omega, by omega, hb⟩
-
-/-- A nonempty region owns its bytes: its block reaches its end. -/
-theorem Reaches.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
-    (hpb : p.block = some b) (hpos : 0 < bs.size) :
-    Reaches b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
-  Reaches.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
-
 /-- A nonempty region: its block's address. -/
 theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
     (hpb : p.block = some b) (hpos : 0 < bs.size) : AddrOf b A (up (regionIn p A S K a bs)) :=
@@ -188,7 +186,134 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
 
 end Providers
 
-attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.pts Reaches.region
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share
+
+/-! ## Providers over the whole precondition
+
+A provider kind `K … P` (`AddrOf`, `Reaches`, `Live`, `Active`) has a lemma `K.of_within`: what
+an atom `X` of the precondition provides, the precondition provides (`Within X P`). `fsym` proves
+a provider goal by an atom lemma (`@[fsym_provider]` with the conclusion `K … X` of an atom `X`)
+on one of the precondition's parts, or by a lemma about the whole precondition (the conclusion
+`K … P` of a variable `P`), whose hypotheses (`Within X P`, providers, blocks, arithmetic) are
+solved in turn. -/
+
+/-- Every resource of `P` has the tag `t` active (`Act`): the root, or a ledger at its epoch whose
+authority is a part of `P` under an active parent. A share tagged `t` gives its block while `t`
+is active (`Holds.bshare`). -/
+def _root_.Zig.Full.Active (t : STag) (P : FAssn) : Prop := ∀ r, P r → Act r.gh.ls t
+
+/-- Every memory that holds `P` has block `b` live with at least `k` bytes: an owned byte below
+`k`, or a share at bound `k` whose tag is active. Two live blocks lie apart (pointer `==` across
+blocks, `ptrEqAddr_live`). -/
+def _root_.Zig.Full.Live (b : BlockId) (k : Nat) (P : FAssn) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size
+
+section Whole
+
+variable {b : BlockId} {A k : Nat} {t : STag} {P X : FAssn}
+
+theorem _root_.Zig.Full.AddrOf.of_within (h : AddrOf b A X) (hw : Within X P) : AddrOf b A P :=
+  fun m r rF hh hp => by obtain ⟨_, h'⟩ := hw r hp; exact h.sepL m r rF hh h'
+
+theorem _root_.Zig.Full.Reaches.of_within (h : Reaches b k X) (hw : Within X P) : Reaches b k P :=
+  fun m r rF hh hp => by obtain ⟨_, h'⟩ := hw r hp; exact h.sepL m r rF hh h'
+
+theorem _root_.Zig.Full.Active.of_within (h : Active t X) (hw : Within X P) : Active t P :=
+  fun r hp => by
+    obtain ⟨_, r₁, r₂, -, rfl, h1, -⟩ := hw r hp
+    exact (h r₁ h1).mono (Ghost.ls_add _ _)
+
+theorem _root_.Zig.Full.Live.of_within (h : Live b k X) (hw : Within X P) : Live b k P :=
+  fun m r rF hh hp => by
+    obtain ⟨_, r₁, r₂, hd, rfl, h1, -⟩ := hw r hp
+    exact h m r₁ _ (Holds.split hd hh) h1
+
+/-- The root tag is always active. -/
+theorem _root_.Zig.Full.Active.root : Active none P := fun _ _ => Act.root
+
+/-- An allocator's own state keeps its tag active (`FAllocInv.act`). -/
+theorem _root_.Zig.Full.Active.allocOwn (I : FAllocInv) : Active I.tag I.own := I.act
+
+/-- A ledger at its epoch under an active parent: its tag is active (`act_gauthP`). -/
+theorem _root_.Zig.Full.Active.gauthP {γ e : Nat} {M : GMap} {p : STag}
+    (hw : Within (gauthP γ e M p) P) (hp : Active p P) : Active (some (γ, e)) P :=
+  fun r hr => act_gauthP hw hr (hp r hr)
+
+/-- A share whose tag is active: its block is live and reaches the share's bound. -/
+theorem _root_.Zig.Full.Live.share {q : Frac} (hw : Within (bshare b q k t) P) (ha : Active t P) :
+    Live b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, hl, hk, -⟩ := hh.bshareW hw hp (ha r hp)
+  exact ⟨blk, hb, hl, hk⟩
+
+/-- A nonempty owned byte range at `p` (in block `b`): the block is live and reaches its end. -/
+theorem _root_.Zig.Full.Live.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
+    (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
+    Live b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
+  obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
+  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
+  rw [hpb] at hb'; cases hb'
+  obtain ⟨fc, hfc, -⟩ := erase_cell hc
+  obtain ⟨blk, hblk, hl, hj, -⟩ := hh.block hfc
+  exact ⟨blk, hblk, hl, by omega⟩
+
+/-- A nonempty region: its block is live and reaches its end. -/
+theorem _root_.Zig.Full.Live.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+    (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    Live b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
+  Live.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
+
+/-- A typed value at `p`: its block is live and reaches one past it. -/
+theorem _root_.Zig.Full.Live.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
+    (hn : 0 < Enc.size T) : Live b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
+  Live.bytes hpb fun _ hp => by
+    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
+    exact ⟨A, S, K, bs, by omega, by omega, hb⟩
+
+/-- A live block reaches its bound (owned bytes, `Live.region`/`Live.pts`; shares, `Live.share`). -/
+theorem _root_.Zig.Full.Reaches.of_live (h : Live b k P) : Reaches b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, -, hk⟩ := h m r rF hh hp
+  exact ⟨blk, hb, hk⟩
+
+end Whole
+
+attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts Live.share
+  Reaches.of_live
+
+/-- `ptrEqAddr p q` of pointers into blocks `b` and `b'` at the blocks' addresses. -/
+theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : Block}
+    (hp : p.block = some b) (hb : m.blocks[b]? = some blk) (hq : q.block = some b')
+    (hb' : m.blocks[b']? = some blk') :
+    (ptrEqAddr p q).run m = pure (decide ((blk.addr : Int) + p.off = (blk'.addr : Int) + q.off), m) := by
+  obtain ⟨pb, po⟩ := p
+  obtain ⟨qb, qo⟩ := q
+  simp only at hp hq; subst hp hq
+  unfold ptrEqAddr
+  simp only [StateT.run_bind, ptrAddr_run hb, pure_bind, ptrAddr_run hb', StateT.run_pure]
+
+/-- **Pointer `==` of pointers into two live blocks** (possibly the same one): equal when the
+blocks and the offsets are. Both pointers are in bounds, or both are past the start (up to one
+past the end): two live blocks share no address (`Mem.LiveDisjoint.addr_ne`), but one block's end
+may be the next one's start. -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {k k' : Nat} {P : FAssn}
+    (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b k P) (hq : Live b' k' P)
+    (hk : (0 ≤ p.off ∧ p.off < k ∧ 0 ≤ q.off ∧ q.off < k') ∨
+      (0 < p.off ∧ p.off ≤ k ∧ 0 < q.off ∧ q.off ≤ k')) :
+    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
+  FTotalTriple.of_read fun m r rF hh hr hs => by
+    obtain ⟨blk, hb, hl, hsz⟩ := hp m r rF hh hr
+    obtain ⟨blk', hb', hl', hsz'⟩ := hq m r rF hh hr
+    rw [ptrEqAddr_blocks_run hpb hb hqb hb']
+    congr 2
+    by_cases hbb : b = b'
+    · subst hbb
+      rw [hb] at hb'; cases hb'
+      exact decide_eq_decide.mpr ⟨fun h => ⟨rfl, by omega⟩, fun h => by omega⟩
+    · have hne : ∀ x x', x < blk.bytes.size → x' < blk'.bytes.size → blk.addr + x ≠ blk'.addr + x' :=
+        fun x x' hx hx' => hs.2.2.1.addr_ne hbb hb hb' hl hl' hx hx'
+      refine decide_eq_decide.mpr ⟨fun h => ?_, fun h => absurd h.1 hbb⟩
+      rcases hk with ⟨h0, h1, h2, h3⟩ | ⟨h0, h1, h2, h3⟩
+      · exact absurd h (by have := hne p.off.toNat q.off.toNat (by omega) (by omega); omega)
+      · exact absurd h (by have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega); omega)
 
 /-! ## The fields of a stored slice -/
 
@@ -268,6 +393,14 @@ theorem slice_field {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
 attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
   FTotalTriple.checkAlign_of FTotalTriple.ptrEqAddr_of FTotalTriple.ptrProject_elem_of
   FTotalTriple.ptrProject_of
+
+/-- The size of written bytes, for the arithmetic solver (a region written after its
+allocation, or twice). -/
+@[fsym_arith] theorem _root_.Zig.Full.size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
+  simp [writeBytes]; omega
+
+attribute [fsym_arith] Array.size_replicate
 
 /-! ## Overflow-checked arithmetic -/
 
@@ -360,173 +493,17 @@ theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : 
     simp only [Zig.divTrunc, h, Bool.false_eq_true, ↓reduceIte]; rfl
   rw [e]; exact read_val BitVec.toNat_udiv
 
-/-- An unsigned `@intCast` whose value fits in the target width (widening always does). -/
-@[fsym] theorem intCast_step {n : Nat} {a : BitVec w} (h : a.toNat < 2 ^ n) :
-    FTotalTriple P (StateT.lift (Zig.intCast false false n a) : MemM (BitVec n))
-      (fun r => ⟪r.toNat = a.toNat⟫ ⋆ P) := by
-  rw [Zig.intCast_unsigned_of_lt h]; exact read_val (Zig.toNat_ofNat_of_lt h)
+/-- An `@intCast` (either signedness on either side) whose value fits in the target type. The
+result is stated by its value (the arithmetic solver reads a signed one, `r.toInt`, from it). -/
+@[fsym] theorem intCast_step {s₁ s₂ : Bool} {m : Nat} {a : BitVec w}
+    (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) :
+    FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
+      (fun r : BitVec m => ⟪r.toNat = (BitVec.ofInt m (Zig.val s₁ a)).toNat⟫ ⋆ P) := by
+  have e : Zig.intCast s₁ s₂ m a = pure (BitVec.ofInt m (Zig.val s₁ a)) := by
+    simp only [Zig.intCast, h, and_self, ↓reduceIte]
+  rw [e]; exact read_val rfl
 
 end Arith
-
-section Values
-
-variable {w : Nat}
-
-/-! The overflow bits of `@addWithOverflow` and friends, and shifts, as values. -/
-
-theorem addWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.addWithOverflow s a b).fst = a + b := rfl
-theorem subWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.subWithOverflow s a b).fst = a - b := rfl
-theorem mulWithOverflow_fst {s : Bool} (a b : BitVec w) : (Zig.mulWithOverflow s a b).fst = a * b := rfl
-
-theorem ovbit_ne (c : Bool) : ((if c = true then (1 : BitVec 1) else 0) != 0#1) = c := by
-  cases c <;> rfl
-
-theorem addWithOverflow_snd (a b : BitVec w) :
-    ((Zig.addWithOverflow false a b).snd != 0#1) = decide (2 ^ w ≤ a.toNat + b.toNat) := by
-  simp only [Zig.addWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.uaddOverflow]
-theorem subWithOverflow_snd (a b : BitVec w) :
-    ((Zig.subWithOverflow false a b).snd != 0#1) = decide (a.toNat < b.toNat) := by
-  simp only [Zig.subWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.usubOverflow]
-theorem mulWithOverflow_snd (a b : BitVec w) :
-    ((Zig.mulWithOverflow false a b).snd != 0#1) = decide (2 ^ w ≤ a.toNat * b.toNat) := by
-  simp only [Zig.mulWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_ne, BitVec.umulOverflow]
-
-theorem ovbit_eq (c : Bool) : ((if c = true then (1 : BitVec 1) else 0) = 0#1) = (c = false) := by
-  cases c <;> decide
-theorem addWithOverflow_snd_eq (a b : BitVec w) :
-    ((Zig.addWithOverflow false a b).snd = 0#1) = (a.toNat + b.toNat < 2 ^ w) := by
-  simp only [Zig.addWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.uaddOverflow]
-  simp
-theorem subWithOverflow_snd_eq (a b : BitVec w) :
-    ((Zig.subWithOverflow false a b).snd = 0#1) = (b.toNat ≤ a.toNat) := by
-  simp only [Zig.subWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.usubOverflow]
-  simp
-theorem mulWithOverflow_snd_eq (a b : BitVec w) :
-    ((Zig.mulWithOverflow false a b).snd = 0#1) = (a.toNat * b.toNat < 2 ^ w) := by
-  simp only [Zig.mulWithOverflow, Bool.false_eq_true, ↓reduceIte, ovbit_eq, BitVec.umulOverflow]
-  simp
-theorem shl_eq {m : Nat} (a : BitVec w) (b : BitVec m) : Zig.shl a b = BitVec.ofNat w (a.toNat * 2 ^ b.toNat) := by
-  apply BitVec.eq_of_toNat_eq
-  simp [Zig.shl, BitVec.toNat_shiftLeft, Nat.shiftLeft_eq]
-
-theorem sub_one_mod {W J : Nat} (hW : 0 < W) (hJ : 0 < J) : (W - 1 + J % W) % W = (J - 1) % W := by
-  have hd := Nat.div_add_mod J W
-  have hr := Nat.mod_lt J hW
-  generalize J / W = q at hd
-  generalize J % W = r at hd hr ⊢
-  subst hd
-  rcases Nat.eq_zero_or_pos r with rfl | h0
-  · have hq : 0 < q := Nat.pos_of_ne_zero (by rintro rfl; simp at hJ)
-    have := Nat.le_mul_of_pos_right W hq
-    rw [Nat.add_zero, Nat.mod_eq_of_lt (by omega : W - 1 < W),
-      show W * q + 0 - 1 = W * (q - 1) + (W - 1) by rw [Nat.mul_sub_one]; omega,
-      Nat.mul_add_mod, Nat.mod_eq_of_lt (by omega)]
-  · rw [show W - 1 + r = W + (r - 1) by omega, Nat.add_mod_left, show W * q + r - 1 = W * q + (r - 1) by omega,
-      Nat.mul_add_mod]
-
-/-- The low mask `2 ^ j - 1` of width `w`. -/
-theorem toNat_lowMask (j : Nat) : (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1).toNat = (2 ^ j - 1) % 2 ^ w := by
-  rcases w with _ | w
-  · simp [Nat.mod_one]
-  have h1 : 1 % 2 ^ (w + 1) = 1 := Nat.mod_eq_of_lt (Nat.one_lt_two_pow (by omega))
-  rw [BitVec.toNat_sub, BitVec.toNat_ofNat, BitVec.toNat_ofNat, h1]
-  exact sub_one_mod (Nat.two_pow_pos _) (Nat.two_pow_pos _)
-
-theorem mask_mod (x j : Nat) (hx : x < 2 ^ w) : x &&& ((2 ^ j - 1) % 2 ^ w) = x % 2 ^ j := by
-  rcases Nat.lt_or_ge j w with h | h
-  · rw [Nat.mod_eq_of_lt (by have := Nat.pow_lt_pow_right (by omega : 1 < 2) h; omega),
-      Nat.and_two_pow_sub_one_eq_mod]
-  · have e : (2 ^ j - 1) % 2 ^ w = 2 ^ w - 1 := by
-      obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
-      have hd := Nat.two_pow_pos d
-      have hw := Nat.two_pow_pos w
-      rw [Nat.pow_add, show 2 ^ w * 2 ^ d - 1 = 2 ^ w * (2 ^ d - 1) + (2 ^ w - 1) by
-        rw [Nat.mul_sub_one]; have := Nat.le_mul_of_pos_right (2 ^ w) hd; omega]
-      rw [Nat.mul_add_mod, Nat.mod_eq_of_lt (by omega)]
-    rw [e, Nat.and_two_pow_sub_one_eq_mod, Nat.mod_eq_of_lt hx,
-      Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by omega) h))]
-
-theorem and_not_add_and (z m : BitVec w) : (z &&& ~~~m).toNat + (z &&& m).toNat = z.toNat := by
-  have h0 : (z &&& ~~~m) &&& (z &&& m) = 0#w := by
-    ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_zero]
-    cases z[i] <;> cases m[i] <;> rfl
-  rw [← BitVec.toNat_add_of_and_eq_zero h0, BitVec.add_eq_or_of_and_eq_zero _ _ h0]
-  congr 1
-  ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_or]
-  cases z[i] <;> cases m[i] <;> rfl
-
-/-! **Masks** (`std.mem.alignForward`, `isPowerOfTwo`): `x &&& (2 ^ j - 1)` is `x % 2 ^ j` and
-`x &&& ~~~(2 ^ j - 1)` is `x - x % 2 ^ j`, for any width and any `j`. -/
-
-theorem and_lowMask (x : BitVec w) (j : Nat) :
-    (x &&& (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)).toNat = x.toNat % 2 ^ j := by
-  rw [BitVec.toNat_and, toNat_lowMask, mask_mod _ _ x.isLt]
-theorem and_lowMask' (x : BitVec w) (j : Nat) :
-    (x &&& BitVec.ofNat w (2 ^ j - 1)).toNat = x.toNat % 2 ^ j := by
-  rw [BitVec.toNat_and, BitVec.toNat_ofNat, mask_mod _ _ x.isLt]
-theorem and_not_lowMask (x : BitVec w) (j : Nat) :
-    (x &&& ~~~(BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)).toNat = x.toNat - x.toNat % 2 ^ j := by
-  have := and_not_add_and x (BitVec.ofNat w (2 ^ j) - BitVec.ofNat w 1)
-  rw [and_lowMask] at this; omega
-theorem and_not_lowMask' (x : BitVec w) (j : Nat) :
-    (x &&& ~~~BitVec.ofNat w (2 ^ j - 1)).toNat = x.toNat - x.toNat % 2 ^ j := by
-  have := and_not_add_and x (BitVec.ofNat w (2 ^ j - 1))
-  rw [and_lowMask'] at this; omega
-
-/-- An exponent reduced modulo a bound it is below (`2 ^ (k % 64)` from a `u6` shift count). -/
-theorem pow_mod_elim {b x m : Nat} (h : x < m) : b ^ (x % m) = b ^ x := by rw [Nat.mod_eq_of_lt h]
-
-/-- Masks of natural numbers known by facts (the arithmetic solver's `addFacts`). -/
-theorem land_low {a b j : Nat} (h : b = 2 ^ j - 1) : a &&& b = a % 2 ^ j := by
-  subst h; exact Nat.and_two_pow_sub_one_eq_mod a j
-theorem land_high' {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
-    a &&& b = a - a % 2 ^ j := by
-  have hjw : 2 ^ j ≤ 2 ^ w := Nat.pow_le_pow_right (by omega) hj
-  have hp := Nat.two_pow_pos j
-  have t := and_not_lowMask' (BitVec.ofNat w a) j
-  rw [BitVec.toNat_and, BitVec.toNat_not, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-    Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt (by omega : 2 ^ j - 1 < 2 ^ w)] at t
-  rw [h, ← t]; congr 1; omega
-
-/-- `land_high'` without truncated subtraction. -/
-theorem land_high {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
-    (a &&& b) + a % 2 ^ j = a := by
-  rw [land_high' ha hj h]; have := Nat.mod_le a (2 ^ j); omega
-
-/-! **Atoms for `omega`**: a truncated subtraction, `Int.toNat`, `min` or `max` whose case is
-known, as an opaque atom with a linear defining fact (no case split). -/
-
-/-- `a - b` as an atom for `omega` where `b ≤ a` is known (no case split). -/
-@[irreducible] def subAtom (a b : Nat) : Nat := a - b
-theorem subAtom_add {a b : Nat} (h : b ≤ a) : subAtom a b + b = a := by unfold subAtom; omega
-theorem subAtom_zero {a b : Nat} (h : a ≤ b) : subAtom a b = 0 := by unfold subAtom; omega
-/-- `x.toNat` as an atom for `omega` where `0 ≤ x` is known. -/
-@[irreducible] def toNatAtom (x : Int) : Nat := x.toNat
-theorem toNatAtom_eq {x : Int} (h : 0 ≤ x) : (toNatAtom x : Int) = x := by unfold toNatAtom; omega
-/-- `min a b`/`max a b` as an atom where the order is known. -/
-@[irreducible] def minAtom (a b : Nat) : Nat := Min.min a b
-theorem minAtom_left {a b : Nat} (h : a ≤ b) : minAtom a b = a := by unfold minAtom; omega
-theorem minAtom_right {a b : Nat} (h : b ≤ a) : minAtom a b = b := by unfold minAtom; omega
-@[irreducible] def maxAtom (a b : Nat) : Nat := Max.max a b
-theorem maxAtom_left {a b : Nat} (h : b ≤ a) : maxAtom a b = a := by unfold maxAtom; omega
-theorem maxAtom_right {a b : Nat} (h : a ≤ b) : maxAtom a b = b := by unfold maxAtom; omega
-
-/-! **No wrap-around**: the value of a word operation whose result fits (conditional rewrites of
-the arithmetic solver, side conditions by `omega`; `+ - *` are `Zig.toNat_add_of_lt`,
-`Zig.toNat_sub_of_le`, `BitVec.toNat_mul_of_lt`). -/
-
-theorem toNat_ofNat_nowrap {n : Nat} (h : n < 2 ^ w) : (BitVec.ofNat w n).toNat = n := by
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
-theorem toNat_ofInt_nowrap {i : Int} (h0 : 0 ≤ i) (h : i < 2 ^ w) : (BitVec.ofInt w i).toNat = i.toNat := by
-  rw [BitVec.toNat_ofInt]; congr 1; exact Int.emod_eq_of_lt h0 (by exact_mod_cast h)
-theorem sub_wrap {M a b : Nat} (hb : b ≤ a) (ha : a < M) : (M - b + a) % M = a - b := by
-  rw [show M - b + a = M + (a - b) by omega, Nat.add_mod_left, Nat.mod_eq_of_lt (by omega)]
-theorem mod_eq_zero_of_eq {z M : Nat} (h : z = M) : z % M = 0 := by subst h; exact Nat.mod_self z
-
-/-- `z` rounded down to a multiple of `M` is one. -/
-theorem sub_mod_self_mod (z M : Nat) : (z - z % M) % M = 0 := Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
-
-end Values
 
 /-! ## Junk -/
 
@@ -737,46 +714,6 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
   bind_pure_unit Zig.isNonErr Zig.isErr Bool.not_false Bool.not_true Bool.false_eq_true
   Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
-/-- `Zig` comparisons of unsigned words, as comparisons of their values. -/
-@[fsym_arith] theorem lt_false {n : Nat} (a b : BitVec n) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
-  simp [Zig.lt, BitVec.ult]
-@[fsym_arith] theorem le_false {n : Nat} (a b : BitVec n) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
-  simp [Zig.le, BitVec.ule]
-@[fsym_arith] theorem gt_false {n : Nat} (a b : BitVec n) : Zig.gt false a b = decide (b.toNat < a.toNat) := by
-  simp [Zig.gt, Zig.lt, BitVec.ult]
-@[fsym_arith] theorem ge_false {n : Nat} (a b : BitVec n) : Zig.ge false a b = decide (b.toNat ≤ a.toNat) := by
-  simp [Zig.ge, Zig.le, BitVec.ule]
-
-@[fsym_arith] theorem off_add (p : Ptr) (k : Int) : (p.add k).off = p.off + k := rfl
-@[fsym_arith] theorem block_add (p : Ptr) (k : Int) : (p.add k).block = p.block := rfl
-@[fsym_arith] theorem off_elem (p : Ptr) (s : Nat) (i : BitVec 64) :
-    (p.elem s i).off = p.off + ((s * i.toNat : Nat) : Int) := rfl
-@[fsym_arith] theorem block_elem (p : Ptr) (s : Nat) (i : BitVec 64) : (p.elem s i).block = p.block := rfl
-
-attribute [fsym_arith] BitVec.toNat_ofNat BitVec.toNat_ofInt BitVec.toNat_add BitVec.toNat_eq
-  BitVec.lt_def BitVec.le_def decide_eq_true_eq decide_eq_false_iff_not Bool.not_eq_true
-  Bool.not_eq_true' beq_iff_eq bne_iff_ne Int.natCast_add Int.natCast_mul Int.toNat_natCast
-  Bool.or_eq_true Bool.and_eq_true Nat.not_lt Nat.not_le BlockKind.mapped.injEq
-
-open Lean Meta Simp in
-/-- `x &&& m` for a literal mask `m = 2 ^ k - 1`: `x % 2 ^ k` (for `omega`). -/
-simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
-  let_expr HAnd.hAnd _ _ _ _ x m := e | return .continue
-  let some n := m.nat? | return .continue
-  let n1 := n + 1
-  if n1 &&& n != 0 then return .continue
-  let k := n1.log2
-  let pf := mkApp2 (mkConst ``Nat.and_two_pow_sub_one_eq_mod) x (mkNatLit k)
-  let rhs ← mkAppM ``HMod.hMod #[x, mkNatLit n1]
-  return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
-
-attribute [fsym_arith] LawfulEnc.size_encode Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
-
-attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_fst addWithOverflow_snd
-  subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
-attribute [fsym_arith high] addWithOverflow_snd_eq subWithOverflow_snd_eq mulWithOverflow_snd_eq
-attribute [fsym_arith high] and_lowMask and_lowMask' and_not_lowMask and_not_lowMask'
-
 theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
     Zig.add false a b = pure (a + b) := by
   simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
@@ -815,15 +752,6 @@ simproc [fsym_norm] reduceLitSub (Zig.sub false _ _) := reduceLitArithCore ``Zig
 simproc [fsym_norm] reduceLitMul (Zig.mul false _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
 
 open Lean Meta Simp in
-/-- The size `Enc.size T` of a closed type's encoding, as a literal (with `LawfulEnc.size_encode`:
-the size of an encoded value, `(Enc.encode v).size`). -/
-dsimproc [fsym_arith] reduceEncSize (Enc.size _) := fun e => do
-  unless e.isAppOfArity ``Enc.size 2 && !e.hasFVar && !e.hasMVar do return .continue
-  let v ← whnfD e
-  let some n := v.nat? <|> v.rawNatLit? | return .continue
-  return .done (mkNatLit n)
-
-open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`
 is `x`): a user definition whose body is a projection of one of its parameters. -/
 dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
@@ -849,36 +777,6 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let e' ← withTransparency .default (whnfCore e'.headBeta)
   if e' != e && (e.find? (· == e')).isSome then return .done e'
   return .continue
-
-open Lean Meta Simp in
-/-- A user definition (an invariant's, generated code's) with an arithmetic or logical value
-(`Nat`, `Int`, `BitVec`, `Bool`, `Prop`) is transparent to the arithmetic solver: unfolded
-(`bnd B`, `FOk …`). Monadic generated code is not touched (its value is a program). -/
-dsimproc [fsym_arith] unfoldUserValue (_) := fun e => do
-  let .const c _ := e.getAppFn | return .continue
-  let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
-  let some (.defnInfo info) := env.find? c | return .continue
-  if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
-  if info.value.getUsedConstants.contains c then return .continue
-  if (← isInstance c) then return .continue
-  let ty ← whnfR (← inferType e)
-  let ok := ty.isProp || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool ||
-    ty.isAppOfArity ``BitVec 1
-  unless ok do return .continue
-  let some e' ← withTransparency .default (unfoldDefinition? e) | return .continue
-  return .visit e'.headBeta
-
-/-! ## Sizes of the library's encodings -/
-
-@[fsym_arith] theorem enc_size_bv64 : Enc.size (BitVec 64) = 8 := rfl
-@[fsym_arith] theorem enc_size_bv32 : Enc.size (BitVec 32) = 4 := rfl
-@[fsym_arith] theorem enc_size_bv16 : Enc.size (BitVec 16) = 2 := rfl
-@[fsym_arith] theorem enc_size_bv8 : Enc.size (BitVec 8) = 1 := rfl
-@[fsym_arith] theorem enc_size_ptr : Enc.size Ptr = 8 := rfl
-@[fsym_arith] theorem enc_size_slice : Enc.size Slice = 16 := rfl
 
 /-! ## Facts about byte arrays (`keepsPrefix` of `resizePost`/`remapPost`) -/
 
@@ -912,32 +810,6 @@ theorem kp_extract_extract_append (bs t : Array Byte) (m n : Nat) :
     keepsPrefix bs (((bs ++ t).extract 0 m).extract 0 n) := by
   rw [Array.extract_extract]; simp only [Nat.zero_add]
   exact kp_extract_append bs t (Nat.min n m)
-
-/-- A power of two divides a literal power of two exactly when its exponent is at most the
-literal's. -/
-theorem two_pow_dvd_iff {k j L : Nat} (h : L = 2 ^ j) : 2 ^ k ∣ L ↔ k ≤ j := by
-  subst h; exact Nat.pow_dvd_pow_iff_le_right (by decide)
-
-/-- An exponent bounded by a power of two's literal bound. -/
-theorem le_of_two_pow_le {x c j : Nat} (h : 2 ^ x ≤ c) (hc : c < 2 ^ (j + 1)) : x ≤ j := by
-  rcases Nat.lt_or_ge j x with hx | hx
-  · have : 2 ^ (j + 1) ≤ 2 ^ x := Nat.pow_le_pow_right (by decide) (by omega)
-    omega
-  · exact hx
-
-open Lean Meta Simp in
-/-- `2 ^ k ∣ L` for a literal power of two `L = 2 ^ j`: `k ≤ j` (for `omega`). -/
-simproc [fsym_arith] reduceTwoPowDvd ((2 : Nat) ^ _ ∣ _) := fun e => do
-  let_expr Dvd.dvd _ _ p L := e | return .continue
-  let some l := L.nat? | return .continue
-  unless l > 0 && l &&& (l - 1) == 0 do return .continue
-  let_expr HPow.hPow _ _ _ _ two k := p | return .continue
-  unless two.nat? == some 2 do return .continue
-  let j := l.log2
-  let h ← mkDecideProof (← mkEq L (← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit j]))
-  let pf ← mkAppOptM ``two_pow_dvd_iff #[k, mkNatLit j, L, h]
-  let rhs ← mkAppM ``LE.le #[k, mkNatLit j]
-  return .done { expr := rhs, proof? := some (← mkPropExt pf) }
 
 end Zig.Full.Auto
 

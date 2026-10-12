@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Thread
 import ZigLean.Sep.Full.Tame
+import ZigLean.Sep.Full.Block
 import ZigLean.Conc.Own
 
 /-!
@@ -11,7 +12,8 @@ full-state thread triple (`FTTriple`, `ZigLean/Sep/Full/Thread.lean`) with the s
 sequential program (`soloAt`), so the legacy bridge does the full-state part, and the legacy
 thread triple on the exact cells gives ownership and `StepIn`.
 
-The primitive rules of a thread (`FTTriple.alloc'`, `free'`, `storeAt`, `loadAt`, `ptrProjectAt`)
+The primitive rules of a thread (`FTTriple.alloc'`, `free'`, `storeAt`, `storeBytesAt`, `loadAt`,
+`ptrProjectAt`)
 are lifted here until their native versions exist; a block's bytes come with its full extent
 (`bext`), which pins its size and kind. This module is the only full-state module that imports the
 legacy layer; it goes when the native rules replace it.
@@ -155,38 +157,21 @@ end FTTriple
 
 /-! ## Primitive rules of a thread
 
-The rules of `FTriple.alloc'` and `FTriple.free'` (`Full/Toy.lean`) for a thread, lifted from the
+The rules of `FTriple.alloc'` and `FTriple.free'` (`Full/Block.lean`) for a thread, lifted from the
 legacy thread triples (`TTriple.alloc`, `TTriple.free`, `TTriple.storeAt`, `TTriple.loadAt`,
 `TTriple.ptrProjectAt`) by the bridge; a block's bytes come with its full extent (`bext`), which
 pins its size and kind. -/
 
 namespace FTTriple
 
-/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent. -/
+/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent (the
+native rule `FTTriple.alloc`, `Full/Block.lean`). -/
 theorem alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
-    FTTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    FTTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
-  refine FTTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
-  refine ((FTTriple.ofTTriple (E := fun _ => none) (B := fun _ => False)
-    (TTriple.alloc kind size align ha hk) (Tame.alloc kind size align)
-    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
-    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
-    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
-  obtain ⟨E', ⟨hq, hk', hg⟩, hcov⟩ := id h
-  obtain ⟨A, hq⟩ := hq
-  obtain ⟨⟨h0, hA⟩, hb⟩ := Zig.sep_lift.mp hq
-  obtain ⟨b, hpb, -, hl⟩ := id hb
-  have hc := hl (b, p.off.toNat)
-  rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨rfl, Nat.le_refl _, by simp; omega⟩)] at hc
-  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
-  obtain ⟨fc, hfc, he⟩ := hc
-  have hx := upPost_bext (b := b) (S := size) (K := kind) h ⟨_, fc, hfc, by rw [he], by rw [he], fun h => h.elim⟩
-  obtain ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', e, x, hbx⟩, h2⟩ := hx
-  obtain ⟨A', x⟩ := up_ex.mp x
-  obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
-  exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
+  FTTriple.alloc kind size align ha hpos hk
 
 theorem bytesAt_cells {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
     (hpb : p.block = some b) :
@@ -244,12 +229,13 @@ theorem up_lift_sep {φ : Prop} {P : Assn} {R : FAssn} {r : Res} (h : (up (⌜φ
   obtain ⟨hφ, h1⟩ := up_lift.mp h1
   exact sep_lift.mpr ⟨hφ, r₁, r₂, hd, e, h1, h2⟩
 
-/-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go. -/
+/-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go
+(the native rule `FTTotalTriple.free`, `Full/Block.lean`). -/
 theorem free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
     (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
     (hK : K ≠ .constGlobal := by decide) :
     FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
-  (ofBlock hpb (TTriple.free hS h0 hpos hK) (Tame.free p)).forgetExt.post fun _ _ h => up_emp.mp h
+  (FTTotalTriple.free hpb hS h0 hpos hK).toPartial
 
 /-- A store of `w` at byte `k` of a thread's block, whose full extent it owns. -/
 theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind}
@@ -262,6 +248,17 @@ theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : Bl
     rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)]; omega
   exact FTTriple.drop ((ofBlock hpb (TTriple.storeAt w hq hn hk ha hK) (Tame.store a q w)).post
     fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h) fun _ _ h => h.1
+
+/-- A store of the bytes `bs'` at byte `k` of a thread's block, whose full extent it owns. -/
+theorem storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    {k a : Nat} (bs' : Array Byte) (hpb : p.block = some b) (hq : q = p.add k) (hn : 0 < bs'.size)
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.storeBytes q a bs')
+      (fun _ => up (bytesAt p A S K (writeBytes bs k bs')) ⋆ bext b S K) := by
+  have hpos : 0 < (writeBytes bs k bs').size := by rw [writeBytes_size _ _ _ (by omega)]; omega
+  exact FTTriple.drop ((ofBlock hpb (TTriple.storeBytesAt bs' hq hn hk ha hK)
+    (Tame.storeBytes q a bs' .write)).post fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h)
+    fun _ _ h => h.1
 
 /-- A load of `v` at byte `k` of a thread's block. -/
 theorem loadAt {T : Type} [Enc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}

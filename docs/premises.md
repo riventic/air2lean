@@ -41,6 +41,10 @@ the tool:
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
    header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   Each admission opt-in that the header records maps to its premises (`admissions`:
+   `no-libc` selects MTH-05); an admission without a mapping fails the check. A committed
+   example translation (`Proofs/<Ex>/Gen.lean`, a canonical body without a header) takes the
+   opt-ins of `examples/<ex>/translate.args`, which every translation of the example uses.
    Adds the caller obligations of every generated definition reached: the translator writes
    `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
@@ -89,17 +93,17 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
-| Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
+| Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
-| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
+| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
-| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
+| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
 
 ## Target and build profiles
 
@@ -253,12 +257,12 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: The placement oracle (SEM-07) may give a new block the address of a freed block.
   Block ids stay unique and every liveness check uses them, so lifetime theorems over arbitrary
-  `Mem` hold under every placement (`Triple.withPlacement`). `@ptrFromInt` of an address that two
+  `Mem` hold under every placement (`FTriple.withPlacement`, `FTotalTriple.withPlacement`). `@ptrFromInt` of an address that two
   blocks cover (a dead and a live block, or one block's end and an adjacent block's start) is
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
@@ -524,6 +528,28 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Mem.AtomicPtr`, `ZigLean.Conc.PtrAtomic`, `ZigLean.Conc.PtrAtomicLemmas`; tokens `AtomicPtrVal`, `ptrValEq`, `*PtrAt`, `*PtrC`.
 - Sources: [pointer-atomics.md](pointer-atomics.md).
 
+<a id="ord-06"></a>
+### ORD-06 — Memory-model adequacy of the compiled code
+
+- Kind: trusted.
+- Statement: On the theorem's target, every behaviour of the compiled program is one of the
+  model's outcomes: the backend's lowering of plain accesses and atomics and the hardware memory
+  model (x86-TSO on x86_64, ARMv8 on aarch64) produce no outcome that the interleaving scheduler
+  with its happens-before race check (THR-01) and the RC11 approximation (ORD-01) exclude. Not
+  proved. The argument per target, and its bounded qualification evidence, are the `memory_model`
+  record of [assurance/premises.json](../assurance/premises.json): a race between plain accesses
+  is `.illegal`, so a theorem is about race-free executions (DRF-SC); the standard C11 mappings
+  to x86-TSO and ARMv8 are proved sound for RC11, and ORD-01 admits every RC11 outcome; RC11's
+  no-load-buffering axiom is ORD-02. LLVM's optimizer is assumed to respect the C++11 model.
+  Targets in the record's `unqualified` list (wasm32, s390x) reject atomics and threads, so no
+  theorem about them carries this premise.
+- Derived from: implied by THR-01 and ORD-01, so every concurrency theorem carries it.
+  `scripts/premises.py` (`check` and `compiled`) fails when a theorem or a report below whose
+  premises contain THR-01 or ORD-01 omits it; `scripts/claims.py` lists it in each concurrency
+  claim's `premises`.
+- Sources: [research/C12.md](research/C12.md), [std-models.md](std-models.md#thread-model),
+  [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
+
 ## Timers and clocks
 
 <a id="tmr-01"></a>
@@ -648,13 +674,31 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### MTH-04 — aarch64 float lowering
 
 - Kind: environment.
-- Statement: The translation targets aarch64-macos, whose float lowering differs from
-  x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3` division;
-  before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f16`/`f32`/`f64` is a fused
-  instruction. The rules are read from the Zig 0.16.0 LLVM backend and compiler_rt sources and
-  checked by the macOS differential test; no other aarch64 target is qualified.
+- Statement: The translation targets aarch64-macos or aarch64-linux, whose float lowering
+  differs from x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3`
+  division; before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f32`/`f64` is a fused
+  instruction, on `f16` too where the baseline CPU has `fullfp16` (aarch64-macos `apple_m1`; not
+  aarch64-linux `generic`, which rounds through `f32` like x86_64). The rules are those of the
+  baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
+  compiler_rt sources and checked by each host's differential test. On aarch64-linux the
+  `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: the checker rejects the
+  `f128` ops that call them unless `--assume-no-libc` (recorded in the header, premise MTH-05)
+  states that the program links no libc.
 - Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
 - Sources: [floats.md](floats.md#targets).
+
+<a id="mth-05"></a>
+### MTH-05 — Program linked without libc
+
+- Kind: environment.
+- Statement: The program is linked without libc, so on a target whose `c_longdouble` is `f128`
+  (aarch64-linux, s390x, wasm32) the `long double` libm routines that `f128` `@sqrt`, `@mulAdd`,
+  `@floor`/`@ceil`/`@trunc`/`@round`, `@min`/`@max` and the division family other than `/` call
+  (`sqrtl`, `fmal`, `floorl`, …) are compiler_rt's, which the model ports. The AIR profile
+  records no `link_libc` fact; the user states this with `--assume-no-libc`.
+- Derived from: a reached generated module whose header records the admission `no-libc`
+  (`assurance/premises.json` `admissions`).
+- Sources: [floats.md](floats.md#targets), [air-json.md](air-json.md).
 
 ## Inline assembly
 
@@ -701,12 +745,62 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is zero (#DE); `bswap`, `lzcnt` and `popcnt` never. The generated code guards the opaque with
   `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
   guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
-  instruction's whole fault set on the target CPU, and the CPU has the instruction (`popcnt`
-  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`). `scripts/claims.py` lists ASM-04
+  instruction's whole fault set on the target CPU. That the CPU has the instruction (`popcnt`
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is no longer part of ASM-04: each
+  entry declares its `features`, the translator rejects a block whose features the profile lacks
+  (`checkAsmCpuFeatures`), and ASM-09 admits them. `scripts/claims.py` lists ASM-04
   in the `premises` of every such goal.
 - Derived from: implied by ASM-01.
 - Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
   [outcome-taxonomy.md](outcome-taxonomy.md).
+
+<a id="asm-05"></a>
+### ASM-05 — Environment-read assembly returns fresh oracle values
+
+- Kind: environment.
+- Statement: An allowlisted asm entry with `envRead` semantics (`rdtsc` combined into `rax`,
+  `rdrand` with or without its `setc` flag) reads state outside the model: each output is a
+  fresh query of the explicit oracle `Mem.arbitrary` (`Zig.Asm.envWord`), cut to the output's
+  width, in output order. The instruction touches no memory and writes only its outputs and
+  clobbers. No relation between reads is claimed (no monotonic counter, no randomness), and a
+  failed `rdrand` returns one of the oracle's values. The entry's fault condition and the CPU's
+  support for the instruction are ASM-04 (`rdtsc` under CR4.TSD) and ASM-09 (`rdrand` without RDRAND).
+- Derived from: tokens `Asm.envWord`; implies ASM-04.
+- Sources: [volatile-effects.md](volatile-effects.md#inline-asm), `Air2Lean/AsmAllowlist.lean`,
+  `tests/roadmap/asm-effects/AsmEnv/Proofs.lean`.
+
+<a id="asm-06"></a>
+### ASM-06 — Memory-region asm accesses only its declared regions
+
+- Kind: trusted.
+- Statement: An allowlisted asm entry with `regions` (`rep stosb`, `rep movsb`, with a
+  `"memory"` clobber) reads memory only in its declared read regions and writes exactly its
+  declared write regions, each a pointer operand and a byte length from an integer operand. The
+  written bytes and the outputs are functions of the integer inputs, the old integer values and
+  the read bytes (not of addresses); each pointer output is its old value moved by a signed
+  offset, so it keeps its provenance. The direction flag is clear (the ABI's state at every
+  call). The wrapper performs the accesses with the model's checked loads and stores
+  (`Zig.Asm.readRegion`, `writeRegion`, `movePtr`); overlapping accessed regions (and written
+  locations) are `.unspecified` (ASM-03's guard), since an overlapping copy depends on the
+  regions' distance.
+- Derived from: tokens `Asm.readRegion`, `Asm.writeRegion`, `Asm.movePtr`; implies ASM-03.
+- Sources: [generated-code.md](generated-code.md#memory-regions-and-environment-reads-a01),
+  `Air2Lean/AsmAllowlist.lean`, `Proofs/Asm/Effects.lean`.
+
+<a id="asm-09"></a>
+### ASM-09 — The running CPU has the asm features that the profile lacks
+
+- Kind: environment.
+- Statement: An allowlisted asm entry names the CPU features it needs (`features`: `lzcnt`,
+  `popcnt`, `rdrnd`). The translator derives support from the profile's `features` and rejects
+  an asm block with a missing one (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
+  `bsr`, so `lzcnt(1)` would be 0, not 63). `--assume-asm-cpu-features` skips the check and states
+  that the CPU that runs the program has the features, although the profile's CPU does not list
+  them. The header records the admission `asm-cpu-features`.
+- Derived from: a reached generated module whose header records the admission `asm-cpu-features`
+  (`assurance/premises.json` `admissions`).
+- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
+  [research/A02.md](research/A02.md).
 
 ## Core runtime semantics
 
@@ -718,7 +812,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is a `Zig.Error` (`.illegal`, `.unspecified`, panics) rather than undefined behavior.
   Zig error unions are ordinary values. Integer, bit, vector, packed and union operations
   follow `ZigLean/Basic.lean` and its companions.
-- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
+- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.PackedRepr`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
 - Sources: [generated-code.md](generated-code.md), [docs/generated-code.md §Panics](generated-code.md#panics).
 
 <a id="sem-02"></a>
@@ -730,12 +824,17 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   profile. A `const` global is read-only static storage: a write to it (`Mem.accessW`) and a
   `free` of it (`Zig.free`) are `.illegal`, so its bytes never change while it is live.
   Out-of-bounds, misaligned or dead accesses are `.illegal`, and so is forming a derived pointer
-  outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`) or an access below
-  an OS mapping's first live offset (`BlockKind.mapped lo`). Undefined bytes are explicit.
-  `@returnAddress()` and an `undefined` pointer operand (`--allocator-model translated`) read
-  the explicit oracle `Mem.arbitrary`, so a theorem over every initial memory covers every
-  value sequence.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
+  outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`), an access below an
+  OS mapping's first live offset (`BlockKind.mapped lo`), and two overlapping accesses of one
+  call, one a write, through pointers with different `noalias` roots (`Zig.naMark`, LLVM's
+  `noalias`). The blocks and, with `--device-contract`, the declared register window (DEV-01)
+  are the only allocated objects: no object lies at address zero or at another address no block
+  covers (a `@ptrFromInt` address, memory-mapped I/O outside the declared window), so a nonzero
+  offset or a `@fieldParentPtr` from such an address is `.illegal`. Undefined bytes are explicit.
+  `@returnAddress()` and an `undefined` pointer
+  operand (`--allocator-model translated`) read the explicit oracle `Mem.arbitrary`, so a
+  theorem over every initial memory covers every value sequence.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Mem.Noalias`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>
@@ -760,7 +859,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -779,11 +878,24 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: meaning.
 - Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
-  its fragment: an interpreter over the decoded `Air2Lean.Func`, over ZigLean's primitive
-  operations and `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment
-  and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`) relates the
-  generated definition to this meaning; it does not relate the meaning to Zig, the exporter
-  or canonicalization (TRU-02).
+  its fragment (integer arithmetic and safety checks, blocks, branches, switches, loops, stack
+  locals, loads, stores, field pointers and comparisons through plain pointers, pointer
+  arithmetic, slices of a function that uses memory, optionals and error unions as values,
+  `try`, direct calls): an interpreter over the
+  decoded `Air2Lean.Func`, with a typed SSA environment, over ZigLean's primitive operations and
+  `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment and ill-typed
+  steps are `⊥`. An `alloc` whose address is never taken (every use is the pointer of a `load`
+  or `store`, or debug information; `Sem.regAlloc`, decided on the AIR alone) is a cell of the
+  frame, not a memory block (a register local, as Clight's temporaries). This is faithful
+  because such a local's address is unobservable, and theorems hold for every placement `σ`
+  (SEM-07): every native address assignment of the remaining blocks is the one of some `σ`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`)
+  relates the generated definition to this meaning, so `Check.lean` and `Emit.lean` are not
+  trusted for a certified function; it does not relate the meaning to Zig, the exporter or
+  canonicalization (TRU-02). The plan to shrink this premise (raw-AIR certificates, executable
+  conformance tests of `Sem`) is in air-semantics.md §How SEM-06 shrinks. `Sem.Ctx.view` is a
+  certificate device that `execFunc` leaves empty; the relation of a viewed run to `execFunc` is
+  proved (`SemView.execFunc_view`), under the theorem's hypothesis `Mem.ClockWf` on the start
+  memory.
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
 
@@ -804,7 +916,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
   `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
   total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
-  inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-16,
+  inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-18,
   STK-02). The
   full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
   (`Mem.LiveBounded`). A global at program start that the placement does not place and that has
@@ -830,13 +942,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   definition, or a call of `Zig.enterFrame`) assumes that the native stack does not overflow
   on the runs it covers. The generated `mem0` gives no thread a stack budget (`Mem.stacks`
   empty); then the statement assumes this for every call chain. With a budget `S` of thread `t`
-  (`Mem.withStack`, MM-16) it assumes only that the native stack of `t` holds every call chain
+  (`Mem.withStack`, MM-18) it assumes only that the native stack of `t` holds every call chain
   whose model charge stays within `S`: a stack block charges `size + align`
   (`Zig.stackCharge`), the frame of a recursive function that uses memory `Zig.frameBase`, and
   the charges are popped LIFO; the model throws `.stackOverflow` at the charge that passes `S`.
   The charge is not a bound on the native frame (spills, saved registers, inlining), and pure
   recursive functions (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its
-  stack dies on a signal, which no model outcome without a budget reflects (MM-5, MM-16,
+  stack dies on a signal, which no model outcome without a budget reflects (MM-5, MM-18,
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md)). The same outcome
   covers address-space exhaustion of a block without an allocator of a thread without a budget:
   an `alloc` (stack local, thread-local instance, runtime cell) without room below
@@ -857,7 +969,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### STK-02 — Stack reserves lie in address space the native run never maps
 
 - Kind: environment.
-- Statement: A thread with a stack budget `S` owns a reserve `[base, base + S)` (MM-16,
+- Statement: A thread with a stack budget `S` owns a reserve `[base, base + S)` (MM-18,
   `Mem.withStack`, `Placement.reserve`) that every other block of the model avoids; its stack
   blocks that the placement does not place go there. The premise: every live thread's reserve
   can be placed in address space that the native run does not map while the thread lives, so
@@ -866,7 +978,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address space the native run leaves unmapped (e.g. 64 threads of 1 GiB in a `2^47` space).
 - Derived from: token `withStack` (a memory without a budget has no reserve).
 - Sources: `ZigLean/Mem/Basic.lean`, [architecture-audit/memory-model.md](architecture-audit/memory-model.md)
-  §MM-16, `tests/roadmap/stack-region`.
+  §MM-18, `tests/roadmap/stack-region`.
 
 ## External models
 
@@ -907,6 +1019,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
   `Air2Lean/Check.lean` `resolveExterns`.
 - Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
+
+<a id="ext-04"></a>
+### EXT-04 — Registry models in concurrent programs
+
+- Kind: trusted.
+- Statement: In a program with sync operations, a registry model call (direct, or through a
+  function pointer such as an asynchronous callback run by a spawned thread) is one scheduler
+  step. Its memory accesses lie in the blocks of its declared footprint parameters, which the
+  generated call claims first (`Zig.External.claim`: one recorded whole-block access, read or
+  write), so an unsynchronized conflicting access of another thread is a race (`.illegal`). A
+  binding without a footprint is rejected in a concurrent program.
+- Derived from: tokens `External.claim`; implies EXT-01 and THR-01.
+- Sources: [external-models.md](external-models.md#callback-contracts-e02),
+  `tests/roadmap/callbacks/Callbacks/AsyncProofs.lean`.
 
 ## OS page mapping
 
@@ -1149,6 +1275,26 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Derived from: implied by ASM-01 and MTH-02.
 - Sources: [assumptions-audit.md](assumptions-audit.md), [`assurance/policy.json`](../assurance/policy.json).
 
+<a id="tru-05"></a>
+### TRU-05 — Artifact signing key
+
+- Kind: trusted.
+- Statement: An artifact manifest or proof receipt that `scripts/attest.py verify` accepts was
+  signed by a holder of a private key whose public half the *verifier* listed in its
+  `allowed_signers` file for the attested principal and the namespace
+  `air2lean-attestation-v1`. The verifier obtains that file, or the key fingerprint it pins
+  with `--pin-fingerprint`, out of band; the attestation never carries its own trust anchor.
+  The signer is trusted to have recorded the manifest or receipt from the tree it describes,
+  and to keep the private key secret. A signature authenticates the exact bytes, not their
+  truth (TRU-02, TRU-03) and not their freshness: the manifest's own link checks decide
+  whether it still describes the tree. A stolen key forges any artifact until its entry is
+  removed from the verifier's allowed signers; there is no revocation list, timestamp or
+  transparency log, only the optional `valid-after`/`valid-before` of `allowed_signers`
+  (`--verify-time`). The signature primitive and its verification are OpenSSH's
+  (`ssh-keygen -Y sign|verify`), trusted as installed.
+- Derived from: use of an attestation (`--attestation`); not derived from any theorem.
+- Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
+
 ## Reports
 
 Each report below, and the premises a reader must accept to rely on it, is checked by the tool.
@@ -1158,12 +1304,14 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | `scripts/assumptions.sh` JSON ([assumptions-audit.md](assumptions-audit.md)) | TRU-01, TRU-04, EXT-02 |
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
 | Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
+| Authenticated manifests and receipts (`scripts/attest.py`, [artifact-manifest.md](artifact-manifest.md#authentication)) | TRU-05 |
 | Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
-| Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ALC-02, MTH-02 |
+| Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
-| Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, TRU-03 |
-| Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03 |
+| Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, ORD-06, TRU-03 |
+| Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05, ORD-06 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04, ORD-06 |
 | Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |
+| Native/WASM correspondence records (`scripts/wasm-correspondence.py`, [research/T05.md](research/T05.md)) | PRF-04, TRU-03 |

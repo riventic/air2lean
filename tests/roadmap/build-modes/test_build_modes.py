@@ -66,15 +66,16 @@ class CommittedRecord(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(bm.main(['check']), 0)
-        self.assertIn('8 records, 4 qualified', out.getvalue())
+        self.assertIn('8 records, 7 qualified', out.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(bm.main(['commands']), 0)
         self.assertIn('stage2_x86_64', out.getvalue())
 
-    def test_qualified_pairs_are_the_llvm_builds(self):
+    def test_qualified_pairs(self):
         qualified = [(r['mode'], r['backend']) for r in REGISTRY['records'] if r['status'] == 'qualified']
-        self.assertEqual(sorted(qualified), sorted((m, 'llvm') for m in bm.MODES))
+        self.assertEqual(sorted(qualified), sorted([(m, 'llvm') for m in bm.MODES] + [
+            (m, 'stage2_x86_64') for m in ('Debug', 'ReleaseSafe', 'ReleaseFast')]))
 
     def test_every_pair_with_a_run_cites_each_target(self):
         for r in REGISTRY['records']:
@@ -87,16 +88,24 @@ class CommittedRecord(unittest.TestCase):
                              ['aarch64-linux', 'aarch64-macos', 'x86_64-linux'])
             run = json.loads((ROOT / bm.RUN_DIR / f'0.16.0--aarch64-linux--{mode}--llvm.json').read_text())
             self.assertEqual((run['target'], run['emulated'], run['host']), ('aarch64-linux', False, 'Linux-aarch64'))
-            # No aarch64-linux float model: the run leaves floatops and floatconv out, so it
-            # shows none of the float @divExact mismatches the other two targets triage.
+            # The run tests this host's own float translations (Gen-linux-aarch64.lean): no example
+            # is left out and no mismatch is triaged.
             self.assertEqual(run['counts'].get('mismatch', 0), 0)
-            self.assertEqual(sorted(e['example'] for e in run['excluded_examples']), ['floatconv', 'floatops'])
+            self.assertEqual(run['excluded_examples'], [])
+            self.assertIn('floatops', run['examples'])
 
-    def test_unqualified_backend_records_state_findings(self):
+    def test_stage2_records_test_their_own_translation(self):
+        # T06: each run excludes exactly the examples the stage2_x86_64 rules reject (and asm,
+        # which the backend cannot compile), with no mismatch; ReleaseSmall has no run.
         for mode in ('Debug', 'ReleaseSafe', 'ReleaseFast'):
             stage2 = record(REGISTRY, mode, 'stage2_x86_64')
-            self.assertEqual(stage2['status'], 'unqualified')
-            self.assertIn('stage2-x86_64-narrow-int-extension', stage2['findings'])
+            self.assertEqual((stage2['status'], stage2['targets']), ('qualified', ['x86_64-linux']))
+            run = json.loads((ROOT / bm.RUN_DIR / f'0.16.0--x86_64-linux--{mode}--stage2_x86_64.json').read_text())
+            self.assertEqual(run['counts'].get('mismatch', 0), 0)
+            reasons = {e['example']: e['reason'] for e in run['excluded_examples']}
+            self.assertEqual(reasons, {'asm': 'compile error', 'floatops': 'rejected by the translator',
+                                       'layout': 'rejected by the translator'})
+        self.assertEqual(record(REGISTRY, 'ReleaseSmall', 'stage2_x86_64')['status'], 'unqualified')
 
     def test_release_fast_claim_states_premise(self):
         fast = record(REGISTRY, 'ReleaseFast', 'llvm')
@@ -188,7 +197,7 @@ class NegativeControls(Fixture):
         self.assertRejects("claim 'no-illegal-behaviour-transfer' must cite the premises")
 
     def test_unqualified_claim_needs_commands(self):
-        stage2 = record(self.data, 'Debug', 'stage2_x86_64')
+        stage2 = record(self.data, 'ReleaseSmall', 'stage2_x86_64')
         stage2.update(claim='tested-input-agreement', premises=['TRU-03'])
         del stage2['commands']
         self.assertRejects('must list the commands')
@@ -306,8 +315,18 @@ class RunControls(Fixture):
         self.assertRejects('mismatches that the triage entries do not cover')
 
     def test_triage_needs_reproducer_and_stated_exception(self):
-        (self.root / 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig').unlink()
+        (self.root / 'tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig').unlink()
         self.assertRejects('needs a note and an existing reproducer file')
+        # A mismatch triaged as unchecked illegal behaviour (the float @divExact class, now a
+        # model .illegal) needs the record to state that exception.
+        (self.root / 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig').write_text('//\n')
+        def triaged(run):
+            run['counts']['value_match'] -= 1
+            run['counts']['mismatch'] = run['counts'].get('mismatch', 0) + 1
+            run['triage'].append({'cases': 1, 'classification': 'illegal-behaviour-not-detected-by-releasesafe',
+                                  'example': 'floatops', 'function': 'divExact64', 'note': 'inexact quotient',
+                                  'reproducer': 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig'})
+        self.edit('ReleaseFast', 'llvm', triaged)
         record(self.data, 'ReleaseFast', 'llvm')['exceptions'] = []
         self.assertRejects('is not a stated exception of the record')
 

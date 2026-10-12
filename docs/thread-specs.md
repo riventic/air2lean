@@ -1,7 +1,7 @@
 # Generic sync specifications (`FutexSpec`, `MutexSpec`, `EventSpec`, `WaitGroupSpec`, `CondSpec`)
 
-Status: proof-only modules, not imported by `ZigLean.lean`. This is phase T3 of the plan in `docs/thread-io-translation.md` on branch
-`codex/spike-thread-io`. Threads, futexes and `std.Io` are to be translated from their
+Status: proof-only modules, not imported by `ZigLean.lean`. This is phase T3 of the plan in
+[thread-io-translation.md](thread-io-translation.md). Threads, futexes and `std.Io` are to be translated from their
 Zig 0.16.0 code over a trusted base of OS primitives (premises OSF/OST/…, T2). These specs are
 the contracts between the layers:
 

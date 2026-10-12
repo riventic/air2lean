@@ -399,7 +399,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     refine WP.bind (WP.callRC_ok rfl ?_)
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
-    -- The frees, in reverse order of allocation (MM-16): `right`, then `left`.
+    -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
     refine WP.bind (WP.liftMem_owned (free_front (enc_u32 0) hr0 (by decide))
       hi₅'.own rfl (by rw [hsz₅]; decide)
       (by rw [show ownOf G₁ { m₅ with current := 0 } 0 = hR ∪ hL from hown₅]
@@ -673,7 +673,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   subst r₂
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
-  -- The frees, in reverse order of allocation (MM-16): `right`, then `left`.
+  -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
   refine WP.bind (WP.liftMem_upd (free_front (enc_u32 (addWrap v 1)) hr0
     (by decide)) ho₁₆ hc₁₆ (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) (sep_comm hA₁₆)
     fun _ m₁₇ h₁₇ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)

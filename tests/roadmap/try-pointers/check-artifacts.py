@@ -37,8 +37,9 @@ def exporter_digest(case, manifest, record):
     return expected
 
 
-def generated_inventory(repo, case, manifest, record):
-    """An explicit current-emitter input variant retains every historical AIR identity."""
+def generated_inventory(case, manifest, record):
+    """An emitter-integration record retains every historical AIR identity and pins the current
+    generated output."""
     expected = dict(manifest['artifacts'])
     path = case / 'emitter-integration.json'
     if not path.exists():
@@ -46,11 +47,12 @@ def generated_inventory(repo, case, manifest, record):
     if record:
         raise ValueError('emitter integration cannot rewrite historical provenance')
     variant = HELPERS['parse_json'](path.read_text())
-    hashes = {'origin_provenance_sha256', 'origin_generated_sha256',
-              'current_generated_sha256', 'current_emitter_sha256'}
+    # Pins outputs, not translator sources: the current translator must regenerate exactly
+    # `current_generated_sha256` (check.sh re-translates and compares; gen-integrity.py).
+    hashes = {'origin_provenance_sha256', 'origin_generated_sha256', 'current_generated_sha256'}
     fields = hashes | {'format', 'status'}
     if (not isinstance(variant, dict) or set(variant) != fields or
-            variant['format'] != 'l04-emitter-integration-inputs-v1' or
+            variant['format'] != 'l04-emitter-integration-inputs-v2' or
             variant['status'] != 'inputs-only-not-compilation-attestation' or
             any(not isinstance(variant[k], str) or
                 re.fullmatch(r'[0-9a-f]{64}', variant[k]) is None for k in hashes)):
@@ -61,8 +63,6 @@ def generated_inventory(repo, case, manifest, record):
         raise ValueError('emitter integration origin generated SHA-256 differs')
     if digest(case / 'origin/TryPointers/Gen.lean') != variant['origin_generated_sha256']:
         raise ValueError('stale historical generated output')
-    if digest(repo / 'Air2Lean/Emit.lean') != variant['current_emitter_sha256']:
-        raise ValueError('stale current emitter')
     if digest(case / 'TryPointers/Gen.lean') != variant['current_generated_sha256']:
         raise ValueError('stale current generated output')
     expected['TryPointers/Gen.lean'] = variant['current_generated_sha256']
@@ -90,7 +90,7 @@ def inspect(repo=REPO, case=CASE, record=False, fresh_air=None):
             expected = exporter_digest(case, manifest, record)
         if digest(repo / manifest[role]) != expected:
             raise ValueError('stale ' + role)
-    expected_artifacts = generated_inventory(repo, case, manifest, record)
+    expected_artifacts = generated_inventory(case, manifest, record)
     air_dir = Path(fresh_air) if fresh_air is not None else case / 'air/0.16.0'
     files = sorted(air_dir.glob('*.json'))
     data = [HELPERS['parse_json'](path.read_text()) for path in files]
