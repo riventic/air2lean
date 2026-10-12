@@ -1682,13 +1682,13 @@ theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi :
     noRace_of fun e he _ _ _ => .inl (by rw [hc]; exact ld_le hi hg e he)
   exact MemM.noErr_of_run (load_run hacc₀ hd hnr) e
 
-/-- `main`'s end: the frees of the three blocks; the result. -/
+/-- `main`'s end: the frees of the three blocks (in reverse order of allocation); the result. -/
 theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi : Inv G m)
     (hg : G 0 = .ld) (hc : m.current = 0) (hv : v = 120 ∨ v = 210) :
     proto.WP 0 (do
-      Zig.free sPtr
-      Zig.free (cPtr 1)
       Zig.free (cPtr 2)
+      Zig.free (cPtr 1)
+      Zig.free sPtr
       pure (Except.ok v : Except ErrName (BitVec 32)) : ConcM Tgt _) QM G m d := by
   obtain ⟨blk₀, hb₀, hl₀, -, hkc₀, -⟩ := hi.b0
   obtain ⟨blk₁, hb₁, hl₁, -, hkc₁, -⟩ := hi.b1
@@ -1696,7 +1696,7 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   -- each access happened before `main` (both joins): the ends of the blocks race with nothing
   have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
     freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₂ hl₂ (hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
   refine ⟨rfl, ?_⟩
@@ -1706,10 +1706,10 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
   cases hb'
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 0) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₂) hl₂ (by exact hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₃ hf₃ => ?_)
+      exact hb₀) hl₀ (by exact hnr _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₃ hf₃ => ?_)
   obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
   cases hb'
   refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi.thr hg⟩⟩

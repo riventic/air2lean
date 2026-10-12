@@ -93,8 +93,8 @@ def groupAsync (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNam
       let i14 ← Zig.load (BitVec 32) 4 i2
       let i15 ← pure ((.ok i14) : Except Zig.ErrName (BitVec 32))
       pure (.ret i15))) : Zig.CM Tgt groupAsyncLocals groupAsyncExit).run' { (default : groupAsyncLocals) with out := s2, group := s4 }
-  Zig.free s2
   Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -138,8 +138,8 @@ def groupConcurrent (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
         let _i22 ← Zig.groupCancelC i4 p0
         let i23 ← pure ((.ok i21) : Except Zig.ErrName (BitVec 32))
         pure (.ret i23)))) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit).run' { (default : groupConcurrentLocals) with out := s2, group := s4 }
-  Zig.free s2
   Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -220,8 +220,8 @@ def threadPair (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))
         let i25 ← pure (Zig.addWrap i23 i24)
         let i26 ← pure ((.ok i25) : Except Zig.ErrName (BitVec 32))
         pure (.ret i26)))) : Zig.CM Tgt threadPairLocals threadPairExit).run' { (default : threadPairLocals) with left := s1, right := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
 

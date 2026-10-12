@@ -616,8 +616,8 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       let i30 ← pure (Zig.addWrap i27 i29)
       pure (.ret i30))
     | e => pure e) : Zig.MM sentinelArrLocals sentinelArrExit).run' { (default : sentinelArrLocals) with x := s1, local15 := s15 }
-  Zig.free s1
   Zig.free s15
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic

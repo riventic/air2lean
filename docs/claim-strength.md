@@ -176,7 +176,8 @@ Every derived strength assumes that the native stack does not overflow
 ([STK-01](premises.md#stk-01)): a theorem about the generated `mem0` sets no stack budget, so
 `no-panic` and `guaranteed-return` do not exclude a native stack overflow, which ReleaseSafe
 does not check. The premise index lists STK-01 for each theorem that recursion reaches. A
-statement that bounds `Mem.stackLimit` itself can exclude `.stackOverflow` for that budget.
+statement over a memory with a stack budget (`Mem.withStack`, MM-18) can exclude `.stackOverflow`
+for that budget (premise STK-01 in its budgeted form, STK-02).
 
 ## Tests
 
