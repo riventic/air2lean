@@ -3,7 +3,7 @@
 A union field of type `noreturn` can never be active: the variant has no values, adds no payload
 bytes, and Zig code that activates it is unreachable. `std.Io.Terminal.Mode` (0.16.0) has one off
 Windows (`windows_api: noreturn`), and it reaches `Io.Threaded` through `stderr_mode`
-(`docs/thread-io-translation.md` on the spike branch).
+(`docs/thread-io-translation.md`).
 
 The translator (`uninhabitedTy` in `Air2Lean/Air/Op.lean`):
 

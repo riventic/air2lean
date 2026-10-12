@@ -62,7 +62,7 @@ own bit-packed instance (`W = 1`).
 |---|---|
 | `intOfBytes_intBytes`, `intOfBytes_of_extract` | The bytes of an integer of any width read back as that integer. |
 | `laneOf_packLanes` | Lane `i` of the packed integer is the `i`-th lane. |
-| `Vec.packedEnc_lawful`; `LawfulEnc (Vec (BitVec w) n)`, `LawfulEnc (Vec (Float fmt) n)` | Every vector has an image of exactly `Enc.size` bytes, and decoding it gives the vector back (so `load_store_same`/`load_store_other` apply). |
+| `Vec.packedEnc_lawful`; `LawfulEnc (Vec (BitVec w) n)`; `Vec.float_size_encode`, `Vec.float_decode_encode` | Every vector has an image of exactly `Enc.size` bytes, and decoding it gives the vector back (so `load_store_same`/`load_store_other` apply). A float vector reads back if no lane is a NaN: a NaN lane's bits are undefined in memory (`Float.detMask`, [floats.md](floats.md#nan-in-memory)). |
 | `Vec.set_lane_self`, `Vec.set_lane_ne` | A lane write replaces lane `i` and keeps every other lane. |
 | `packLanes_set_mod`, `packLanes_set_shiftRight` | In the memory image, a write of lane `i` keeps every bit below bit `i * W` and every bit from `(i + 1) * W` up. |
 | `laneOf_packBits_set_ne` | Lane `j ≠ i` of the image after a write of lane `i` is unchanged. |
@@ -145,7 +145,8 @@ Under emulated x86_64-linux (Docker `linux/amd64`, stock Zig 0.16.0 `x86_64-linu
 
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
-only where the probe and `lanes.zig` run natively: an LLVM-backend profile on x86_64 or aarch64.
+only where the probe runs natively (`Target.lanePtrProbe`): an LLVM-backend profile on x86_64-linux,
+aarch64-macos or aarch64-linux (the `load`/`pad` rows of its T04 files, [aarch64-abi.md](aarch64-abi.md)).
 Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`), 0.14.1/0.15.2 runtime lanes
 and Zig 0.17.0 lane pointers (no native lane-pointer evidence yet) stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
 

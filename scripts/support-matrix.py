@@ -16,6 +16,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import register as register_data  # noqa: E402
 GENERATOR = 'scripts/support-matrix.py'
 # Every committed input; tests copy exactly these into a scratch root.
 SOURCES = [
@@ -25,8 +27,7 @@ SOURCES = [
     'Air2Lean/Air/Dialect.lean', 'Air2Lean/Main.lean', 'Air2Lean/Diagnose.lean',
     '.github/workflows/ci.yml',
 ]
-SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions']
-DEFAULT_SCRIPTS = ['scripts/check.sh', 'scripts/mutate.sh', 'scripts/translate.sh']
+SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions', 'assurance/register/*.md']
 # scripts/doctor.sh delegates to scripts/doctor.py, whose default is the release metadata's.
 DEFAULT_METADATA = 'compatibility.json'
 STATUSES = ['complete', 'partial', 'open', 'research']
@@ -82,18 +83,19 @@ def pinned_versions(root):
 
 
 def default_version(root):
-    found = {}
-    for rel in DEFAULT_SCRIPTS:
-        m = re.search(r'^zig_version=\$\{AIR2LEAN_ZIG_VERSION:-([^}]+)\}', read(root, rel), re.M)
-        if not m: raise Stale(f'{rel}: default AIR2LEAN_ZIG_VERSION not found')
-        found[rel] = m.group(1)
+    """zig.default of compatibility.json (the one source; the scripts read it through
+    scripts/compat.py), which the translator's `ZigVersion.defaultVersion` must repeat."""
     try:
-        found[DEFAULT_METADATA] = json.loads(read(root, DEFAULT_METADATA))['zig']['default']
+        default = json.loads(read(root, DEFAULT_METADATA))['zig']['default']
     except (ValueError, KeyError, TypeError):
         raise Stale(f'{DEFAULT_METADATA}: zig.default not found')
-    if len(set(found.values())) != 1:
-        raise Stale(f'default Zig versions disagree: {found}')
-    return next(iter(found.values()))
+    text = read(root, 'Air2Lean/Air/Dialect.lean')
+    m = re.search(r'def defaultVersion : ZigVersion := \.(v\d+_\d+_\d+)', text)
+    spelled = dict(re.findall(r'\|\s*(v\d+_\d+_\d+)\s*=>\s*"([^"]+)"', text))
+    found = spelled.get(m.group(1)) if m else None
+    if found != default:
+        raise Stale(f'default Zig versions disagree: {DEFAULT_METADATA} {default}, Dialect.defaultVersion {found}')
+    return default
 
 
 def version_status(root):
@@ -165,18 +167,11 @@ def coverage(root):
 
 
 def register(root):
-    rows = []
-    for line in read(root, 'ROADMAP.md').splitlines():
-        m = re.match(r'\| ([A-Z]\d\d) \| ([^|]+) \| (\w+) \|', line)
-        if m:
-            rows.append({'id': m.group(1), 'name': m.group(2).strip(), 'status': m.group(3)})
-    if not rows: raise Stale('ROADMAP.md: requirement register not found')
-    for row in rows:
-        if row['status'] not in STATUSES:
-            raise Stale(f'ROADMAP.md: {row["id"]} has unknown status {row["status"]!r}')
-        if row['id'][0] not in AREAS:
-            raise Stale(f'ROADMAP.md: {row["id"]} has an unknown area prefix')
-    return rows
+    try:
+        recs = register_data.load(root)
+    except ValueError as e:
+        raise Stale(str(e)) from e
+    return [{'id': r['id'], 'name': r['title'], 'status': r['status']} for r in recs]
 
 
 def lean_string(root, rel, name):
@@ -207,7 +202,7 @@ def version_rows(root):
         if full:
             ci = 'full job (pipeline, diff test, proofs)'
         elif restricted:
-            ci = 'restricted job (translation and proofs; no diff harness)'
+            ci = 'restricted job (pipeline, diff test, proofs on the listed examples)'
         else:
             ci = 'none'
         if shards: ci += f'; {len(shards)} mutation shards'
@@ -347,6 +342,10 @@ def consistency(root):
                             f'selection {selected}')
     # CLI: help names every supported version, the default and the matrix; usage flags agree.
     help_text = lean_string(root, 'Air2Lean/Main.lean', 'help')
+    if 'ZigVersion.helpList' in read(root, 'Air2Lean/Main.lean'):
+        # The help lists the versions through the dialect registry (`ZigVersion.helpList`: every
+        # version in registry order, the default marked), so the list is rendered here.
+        help_text += ' ' + ', '.join(v + (' (default)' if v == default else '') for v in versions)
     usage_text = lean_string(root, 'Air2Lean/Main.lean', 'usage')
     for v in versions:
         if v not in help_text:
@@ -377,7 +376,7 @@ def consistency(root):
               f'{counts["partial"]} partial, {counts["open"]} open and '
               f'{counts["research"]} research**')
     if header not in read(root, 'ROADMAP.md'):
-        problems.append(f'ROADMAP.md header does not state {header}')
+        problems.append(f'ROADMAP.md header does not state {header}; run scripts/register.py generate')
     # PLAN: history is marked historical; the open-work list repeats no completed work.
     plan = read(root, 'PLAN.md')
     if HISTORY_HEADING not in plan:

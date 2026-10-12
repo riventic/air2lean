@@ -52,6 +52,21 @@ def main():
     mac["profile"]["cpu"] = "apple_m1"
     mac["profile"]["features"] = ["neon"]
     run(binary, [mac])
+    # aarch64-linux (T04): gnu only (every supported Zig version has a native probe record).
+    arm = copy.deepcopy(CURRENT)
+    arm["profile"].update(target_triple="aarch64-linux.6.8...6.8-gnu.2.39", cpu="generic", features=["neon"])
+    run(binary, [arm])
+    arm17 = copy.deepcopy(arm)
+    arm17["zig_version"] = arm17["profile"]["zig_version"] = "0.17.0"
+    arm17["profile"]["build_mode"] = "safe"
+    run(binary, [arm17])
+    musl = copy.deepcopy(arm)
+    musl["profile"].update(target_triple="aarch64-linux-musl", abi="musl")
+    run(binary, [musl], error="qualified for the gnu ABI only")
+    # The float rules are generic's: a CPU with fullfp16 fuses an f16 @mulAdd.
+    fp16 = copy.deepcopy(arm)
+    fp16["profile"]["features"] = ["fullfp16", "neon"]
+    run(binary, [fp16], error="fullfp16 is outside the aarch64-linux float rules")
     run(binary, [CURRENT], ["--profile", "abi64-le-v1", "--float-semantics", "compiler-rt"], mode="compiler-rt")
     for field in CURRENT["profile"]:
         malformed = copy.deepcopy(CURRENT)
@@ -60,7 +75,7 @@ def main():
     for field, value, error in [
         ("pointer_bits", 32, "64-bit"), ("endian", "big", "little-endian"),
         ("target_triple", "wasm32-freestanding-none", "ABI differs"),
-        ("target_triple", "aarch64-linux-gnu", "model ABI scope"),
+        ("target_triple", "riscv64-linux-gnu", "model ABI scope"),
         ("zig_version", "0.15.2", "differs from top-level"),
         ("error_set_bits", 0, "1..32-bit"), ("error_set_bits", 33, "1..32-bit"),
         ("error_tracing", "false", "error_tracing"),

@@ -1,0 +1,34 @@
+Unable to find image 'gcc:13' locally
+13: Pulling from library/gcc
+2b2a5f9c2cca: Pulling fs layer
+8cb71386cfcf: Pulling fs layer
+610dc773fbd7: Pulling fs layer
+a4edf9c328e8: Pulling fs layer
+c6c71fff0869: Pulling fs layer
+15a7ba6b1974: Pulling fs layer
+b018d970ca52: Pulling fs layer
+ad07402c9b3e: Pulling fs layer
+ad07402c9b3e: Download complete
+2b2a5f9c2cca: Download complete
+8cb71386cfcf: Download complete
+a4edf9c328e8: Download complete
+15a7ba6b1974: Download complete
+b018d970ca52: Download complete
+8cb71386cfcf: Pull complete
+a4edf9c328e8: Pull complete
+7d25d1ecc0c5: Download complete
+f428a04fb6a7: Download complete
+c6c71fff0869: Download complete
+c6c71fff0869: Pull complete
+610dc773fbd7: Download complete
+610dc773fbd7: Pull complete
+b018d970ca52: Pull complete
+15a7ba6b1974: Pull complete
+ad07402c9b3e: Pull complete
+2b2a5f9c2cca: Pull complete
+Digest: sha256:b59036579f0622d1b3aa5286aaf2fcef9b9c6f88f31c6762236fc2f136f7f650
+Status: Downloaded newer image for gcc:13
+16
+fwait returned -1 errno=4
+hog vs victim, 2s: hog=15469504 victim=679938 acquisitions, victim worst wait=1837000 ns
+futex wait, word unchanged, no wake, one signal: returned_with_EINTR=1 other_return=0

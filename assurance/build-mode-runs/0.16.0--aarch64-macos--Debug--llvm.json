@@ -1,13 +1,12 @@
 {
   "backend": "llvm",
-  "cases": 85884,
+  "cases": 86209,
   "counts": {
     "error_return_match": 892,
-    "host_difference": 760,
-    "illegal_exclusion": 497,
-    "panic_match": 4975,
-    "unspecified_exclusion": 580,
-    "value_match": 78180
+    "illegal_exclusion": 794,
+    "panic_match": 4922,
+    "unspecified_exclusion": 1668,
+    "value_match": 77933
   },
   "emulated": false,
   "examples": {
@@ -15,8 +14,8 @@
     "basic": 2400,
     "errors": 900,
     "floatconv": 3000,
-    "floatops": 39600,
-    "floats": 1800,
+    "floatops": 39625,
+    "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
     "lists": 1503,
@@ -38,67 +37,61 @@
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 63,
+      "cases": 65,
       "example": "floatconv",
       "function": "f80ToF64",
-      "status": "host_difference"
+      "status": "unspecified_exclusion"
     },
     {
       "cases": 3,
       "example": "floatconv",
       "function": "toByte",
-      "status": "unspecified_exclusion"
+      "status": "illegal_exclusion"
     },
     {
       "cases": 2,
       "example": "floatconv",
       "function": "toI32",
-      "status": "unspecified_exclusion"
+      "status": "illegal_exclusion"
     },
     {
       "cases": 2,
       "example": "floatconv",
       "function": "toU64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 123,
+      "example": "floatops",
+      "function": "divExact64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 16,
+      "example": "floatops",
+      "function": "op128",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 5,
+      "cases": 17,
       "example": "floatops",
       "function": "op16",
-      "status": "host_difference"
+      "status": "unspecified_exclusion"
     },
     {
-      "cases": 4,
-      "example": "floatops",
-      "function": "op32",
-      "status": "host_difference"
-    },
-    {
-      "cases": 12,
+      "cases": 16,
       "example": "floatops",
       "function": "op32",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 27,
-      "example": "floatops",
-      "function": "op64",
-      "status": "host_difference"
-    },
-    {
-      "cases": 12,
+      "cases": 16,
       "example": "floatops",
       "function": "op64",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 655,
-      "example": "floatops",
-      "function": "op80",
-      "status": "host_difference"
-    },
-    {
-      "cases": 373,
+      "cases": 1351,
       "example": "floatops",
       "function": "op80",
       "status": "unspecified_exclusion"
@@ -134,6 +127,12 @@
       "status": "unspecified_exclusion"
     },
     {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 30,
       "example": "layout",
       "function": "shapeArea",
@@ -146,31 +145,31 @@
       "status": "illegal_exclusion"
     },
     {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 300,
       "example": "threads",
       "function": "race",
       "status": "illegal_exclusion"
     },
     {
-      "cases": 4,
-      "example": "vectors",
-      "function": "fMax",
-      "status": "host_difference"
-    },
-    {
-      "cases": 5,
+      "cases": 10,
       "example": "vectors",
       "function": "fMax",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 2,
-      "example": "vectors",
-      "function": "fMin",
-      "status": "host_difference"
-    },
-    {
-      "cases": 4,
+      "cases": 10,
       "example": "vectors",
       "function": "fMin",
       "status": "unspecified_exclusion"
@@ -204,7 +203,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "e99b8a1bbbc67f7337ae6114472c435cee6b31548421e61d2bf99352bbfbb350",
+  "sources_sha256": "640d6f03a0c59d918a3626c3c2379f5cdd96a01c7828919e15442236d61f6051",
   "stock_zig_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
   "target": "aarch64-macos",
   "triage": [],

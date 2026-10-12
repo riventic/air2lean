@@ -14,11 +14,11 @@ python3 scripts/semantic-fingerprints.py compare old.source-map.json new.source-
   --old-generated old/Gen.lean --new-generated new/Gen.lean --fail-on-change
 ```
 
-## Sidecar (`air2lean-source-map-v2`)
+## Sidecar (`air2lean-source-map-v3`)
 
 The top level records the namespace, the same profile/float metadata as the
 generated `-- air2lean-profile:` header, the semantic options (spawn policy and
-the model registry report, if any) and the translator revision. Each function, in
+the model registry report, if any), the translator revision and the runtime revision. Each function, in
 emission order, has:
 
 | Field | Meaning |
@@ -43,7 +43,23 @@ describes the binary that wrote the sidecar. The script recomputes `revision` fr
 each module digest can be compared with `sha256sum Air2Lean/<path>.lean`. Comments
 count: the key is conservative.
 
-## Fingerprints (`air2lean-semantic-fingerprint-v2`)
+## Runtime revision
+
+`runtime` has the same shape as `translator` and is computed the same way
+(`runtime_revision%`, `Air2Lean/Revision.lean`), over the `ZigLean` modules in the import
+closure of `import ZigLean`: the runtime that every generated module imports, and so the
+semantics of every emitted definition (`Zig.M`, `Zig.MM`, `Zig.loop`, the memory and
+concurrency models). The CLI imports `ZigLean`, so Lake rebuilds it, and re-embeds the
+digests, whenever any of those modules changes. The revision is part of every function's
+fingerprint and of every I04 module key: a runtime change invalidates every proof interface
+(`runtime_changed` in the comparison report), even though no translator input changed.
+`tests/roadmap/stable-generation/test_cli.py` checks the recorded module list against the
+import closure read from the checkout and each digest against the file. Scope: proof
+libraries outside that closure (`ZigLean.Sep`, `ZigLean.Conc.Spec`, ...) do not alter the
+meaning of generated definitions; they are covered by the I07 manifest's `runtime` link
+(all of `ZigLean/`) and by rebuilding the proofs.
+
+## Fingerprints (`air2lean-semantic-fingerprint-v3`)
 
 `local_sha256` is SHA-256 over canonical JSON of the function's `canonical` body,
 the profile metadata, the options and the translator revision. The call graph is split into strongly
@@ -57,6 +73,8 @@ internal edges, plus the fingerprints of callees outside it. Each member's
   recursion group and every transitive caller, and nothing else;
 * a different target profile, float semantics, spawn policy or model registry
   changes every fingerprint;
+* a different runtime revision (any change to a `ZigLean` module in the closure of
+  `import ZigLean`) changes every fingerprint;
 * a different translator revision (any change to the emitter or another translator
   module) changes every fingerprint, because it can change every generated body
   without changing any input.
@@ -75,7 +93,7 @@ their contracts are covered by the options digest, not by a body.
 | `renamed` | Same fingerprint, different Lean names: proofs need their references updated |
 | `added`, `removed` | Present on one side only |
 
-The report (`air2lean-proof-interface-comparison-v2`) also has `translator_changed`,
+The report (`air2lean-proof-interface-comparison-v3`) also has `translator_changed`,
 true when the two sidecars come from different translator revisions; every function is
 then `invalidated`.
 
@@ -89,9 +107,8 @@ fingerprints mean the translated inputs agree after this normalization. It is
 conservative. A reordered per-function type table, an AIR shape change between Zig
 versions, or a renamed callee changes it even when meaning is preserved.
 Fingerprints hash translator inputs and the translator revision, not the emitted
-Lean text. A translator revision covers the `Air2Lean` sources, not the `ZigLean`
-runtime library that generated code and proofs import; a runtime change is caught by
-rebuilding the proofs against it. `--generated` binds a sidecar to
+Lean text. A translator revision covers the `Air2Lean` sources; the runtime revision
+covers the `ZigLean` modules the generated code imports. `--generated` binds a sidecar to
 its Lean file by profile header, namespace and declaration names, which rejects a
 sidecar left from another run; it is not a content hash.
 Generic-instance numbers come from `Anon.lean`'s first-use scan. A new instance of

@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Extent
 import ZigLean.Sep.Full.Tame
+import ZigLean.Mem.Reuse
 
 /-!
 # Total full-state rules for the pointer operations of generated code
@@ -101,6 +102,41 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx)⟩
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
+
+/-! ## Every triple holds under every placement (M05, `ZigLean/Mem/Reuse.lean`) -/
+
+/-- A memory with another placement and provenance mode holds the same resources. -/
+theorem Holds.withPlacement {m : Mem} {r rF : Res} (hh : Holds m r rF) (σ : Placement)
+    (pm : ProvenanceMode) : Holds (m.withPlacement σ pm) r rF :=
+  Holds.congrMem (m := m) rfl rfl hh
+
+theorem _root_.Zig.Mem.FSeq.withPlacement {m : Mem} (hs : m.FSeq) (σ : Placement)
+    (pm : ProvenanceMode) : (m.withPlacement σ pm).FSeq :=
+  ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
+
+/-- **A full-state triple holds from a memory with any placement and provenance mode** (the frame
+rule, the allocation and free rules and every client spec built from them are
+address-independent): a triple quantifies over every `Mem.FSeq` memory, whatever its placement. -/
+theorem FTriple.withPlacement {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq)
+    (σ : Placement) (pm : ProvenanceMode) :
+    match (c.run (m.withPlacement σ pm)).run with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq :=
+  ht _ r rF (hh.withPlacement σ pm) hp (hs.withPlacement σ pm)
+
+/-- **A total full-state triple returns from a memory with any placement and provenance mode**,
+with its postcondition. -/
+theorem FTotalTriple.withPlacement {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq)
+    (σ : Placement) (pm : ProvenanceMode) :
+    ∃ v m' r', c.run (m.withPlacement σ pm) = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FSeq := by
+  obtain ⟨v, m', hr⟩ := ht.2 _ r rF (hh.withPlacement σ pm) hp (hs.withPlacement σ pm)
+  have h := ht.1.withPlacement hh hp hs σ pm
+  rw [hr] at h
+  obtain ⟨r', hh', hq, hs'⟩ := h
+  exact ⟨v, m', r', hr, hh', hq, hs'⟩
 
 /-! ## Rules -/
 

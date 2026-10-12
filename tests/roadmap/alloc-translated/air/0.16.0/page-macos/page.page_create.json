@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.13.0...15.6-none",
@@ -95,6 +98,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "page_create",
@@ -163,7 +167,7 @@
      "ty": 6,
      "callee": {
       "ty": 7,
-      "func": "mem.Allocator.create__anon_20588",
+      "func": "mem.Allocator.create__anon_20446",
       "module": "std",
       "instance_key": "8f6a81b88324595b9175c2eda47a7af7a96c10036863e6040c862f2bf0e33e87",
       "noreturn": false
@@ -334,7 +338,7 @@
    "ty": 1,
    "callee": {
     "ty": 11,
-    "func": "mem.Allocator.destroy__anon_20590",
+    "func": "mem.Allocator.destroy__anon_20448",
     "module": "std",
     "instance_key": "7fa4accb9a56b0e9fb9823debdb50906f7a9f0d675ce8ebd949fec04febce1df",
     "noreturn": false

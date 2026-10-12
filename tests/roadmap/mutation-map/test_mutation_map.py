@@ -31,12 +31,13 @@ def load(name, path):
 mm = load('mutation_map', 'scripts/mutation-map.py')
 runner = load('q02_mutants', 'tests/roadmap/mutation-map/mutants.py')
 
-ROADMAP = '''# Roadmap
-| ID | Requirement | Status | Bounded status and remaining scope |
-|---|---|---|---|
-| T01 | Profiles | complete | done |
-| L02 | Bit operations | partial | more |
-'''
+REGISTER = {'T01': ('Profiles', 'complete'), 'L02': ('Bit operations', 'partial')}
+
+
+def write_register(root, register=REGISTER):
+    for rid, (title, status) in register.items():
+        write(root / 'assurance/register' / f'{rid}.md',
+              f'id: {rid}\ntitle: {title}\nstatus: {status}\nrow: text\n---\nacceptance\n')
 MUTATE = 'echo "== mutation (a) one"\necho "== mutation (b) two"\n'
 PY_MUTANTS = "MUTANTS = {\n    'pm': (\n    ),\n}\n"
 GEN = "MUTANTS = {'swap': 1, \"drop\": 2}\n"
@@ -70,7 +71,7 @@ class Scratch(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix='air2lean-mutation-map-')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        write(self.root / 'ROADMAP.md', ROADMAP)
+        write_register(self.root)
         write(self.root / mm.MUTATE_SH, MUTATE)
         write(self.root / mm.SHARDS, 'a\nb\n')
         write(self.root / mm.PY_MUTANTS, PY_MUTANTS)
@@ -266,7 +267,7 @@ class Map(Scratch):
         self.assertEqual(report['gaps'][0]['lacks'], ['negative tests', 'mutants for forwarding'])
 
     def test_register_classification_comes_from_roadmap(self):
-        write(self.root / 'ROADMAP.md', ROADMAP.replace('| L02 | Bit operations | partial |', '| L02 | Bit operations | complete |'))
+        write_register(self.root, {**REGISTER, 'L02': ('Bit operations', 'complete')})
         self.assertEqual(self.problems(), ['L02: complete row lacks negative tests'])
 
     def test_missing_test_file_or_anchor_fails(self):
@@ -312,7 +313,7 @@ class Map(Scratch):
         self.assertProblem(f'L02: register ID missing from {mm.MAP}')
         self.data['requirements']['L02'] = entry
         self.data['requirements']['Z99'] = {'categories': [], 'negative_tests': [], 'mutants': []}
-        self.assertProblem('Z99: not a ROADMAP.md register ID')
+        self.assertProblem('Z99: not a register ID')
 
     def test_malformed_entries_fail(self):
         cases = [

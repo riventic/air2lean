@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -45,6 +48,7 @@
   0,
   0
  ],
+ "noalias": [],
  "ret": 1,
  "export": {
   "name": "fba_resize",
@@ -367,7 +371,7 @@
    "ty": 1,
    "callee": {
     "ty": 16,
-    "func": "mem.Allocator.resize__anon_26372",
+    "func": "mem.Allocator.resize__anon_26016",
     "module": "std",
     "instance_key": "ec6bca265858c0d92c8adc9b771d4dbd6b6c75eedea6376de74e48a0d5adca0b",
     "noreturn": false
