@@ -117,7 +117,11 @@ file with its profile header. Without the integration variant it retains raw Gen
 comparison. Historical provenance and raw retained AIR/Gen hashes remain unchanged.
 Fresh AIR, generated Lean and diagnostics stay under
 `RUNNER_TEMP`; this gate adds no artifact upload. Zig 0.14/0.15 exporter API source inspection and synthetic profile
-checks are the current boundary, pending actual export/native qualification on those versions.
+checks were the boundary until the 0.14.1, 0.15.2 and 0.17.0 exports: `air-fresh/<version>` and
+`aliases/air-fresh/<version>` hold them, and each translates body-identically to the retained
+module (`compiler-qualification.json`, `versions`). `lifetimes/` adds a union freed by its
+cleanup and payload pointers shared by threads, and runs the native tests of all three sources on
+x86_64-linux for every version (`lifetimes/README.md`).
 
 Compiler-free provenance regressions:
 

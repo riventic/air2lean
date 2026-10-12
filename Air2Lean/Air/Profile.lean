@@ -6,7 +6,7 @@ import Air2Lean.Air.Dialect
 Admitted: the targets of `Target.qualified` (`Air2Lean/Air/Dialect.lean`): the little-endian
 memory model with 64-bit pointers (x86_64-linux, aarch64-macos, aarch64-linux) or 32-bit pointers
 (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit big-endian model
-(s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11 retain
+(s390x-linux, mips64-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11 retain
 the explicitly named, unverified legacy 64-bit little-endian profile. A validated profile
 determines the translation's `Dialect` (`Dialect.ofProfile`). -/
 namespace Air2Lean
@@ -174,7 +174,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       report "profile.zig_version differs from top-level zig_version"
   let backend ← take? (strField p "backend")
   -- The big-endian bit-pointer host is the `(bits + 7) / 8`-byte integer of the LLVM backend
-  -- (`Zig.loadBitsOf`), and its vector lanes are LLVM's; no other backend targets s390x.
+  -- (`Zig.loadBitsOf`), and its vector lanes are LLVM's; other backends are not qualified there.
   if let (some "big", some backend) := (endian, backend) then
     unless backend == Target.llvmBackend do
       report s!"profile.backend '{backend}' is outside the big-endian model ({Target.llvmBackend} only)"

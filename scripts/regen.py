@@ -96,14 +96,16 @@ def retry_while_busy(name, attempt, busy):
 
 
 def guarded(name, argv, env=None, timeout=18000):
-    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy.
+    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 24576 MiB; lower it on a shared machine).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', '24576', '--log-bytes', 16 << 20, '--report', report, '--log', logfile, '--', *argv],
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '24576'), '--log-bytes', 16 << 20,
+         '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))

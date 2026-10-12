@@ -1322,6 +1322,18 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
           bash tests/roadmap/packed-fields/compiler.sh --check
+      # Batch D (L07/L08, L04, T03) and NaN bits through memory: committed exports of every
+      # version, their translations, kernel-checked results against the retained native outputs,
+      # and the rejections.
+      - name: Packed casts, NaN bits, pointer-try lifetimes, big-endian concurrency
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean Air2Lean air2lean
+          bash tests/roadmap/packed-casts/check.sh
+          bash tests/roadmap/nan-bits/check.sh
+          bash tests/roadmap/try-pointers/lifetimes/check.sh
+          bash tests/roadmap/big-endian/concurrency.sh
       # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
       # proofs of the native values and fail-closed rejections. Runs no compiler.
       - name: Noreturn union variants
@@ -1353,6 +1365,29 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
           # @divCeil: committed compiler-exported AIR, translation and native differential.
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
+
+      # Batch D: this row's Zig version natively on x86_64-linux (s390x and mips64 under
+      # qemu-user): packed casts and their compile errors, NaN bits through memory (aarch64 under
+      # qemu-user too), the packed-field tests, the pointer-try tests, and the big-endian
+      # concurrency program (0.15.2, 0.17.0).
+      - name: Packed casts, pointer try and big-endian concurrency, natively
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_X86_64_RUN: ""
+          AIR2LEAN_AARCH64_RUN: qemu-aarch64-static
+          AIR2LEAN_S390X_RUN: qemu-s390x-static
+          AIR2LEAN_MIPS64_RUN: qemu-mips64-static
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/packed-casts/check.sh --native '${{ matrix.zig }}'
+          bash tests/roadmap/packed-casts/check.sh --compile-errors '${{ matrix.zig }}'
+          bash tests/roadmap/nan-bits/check.sh --native '${{ matrix.zig }}'
+          bash tests/roadmap/packed-fields/compiler.sh --native-linux
+          bash tests/roadmap/try-pointers/lifetimes/check.sh --native '${{ matrix.zig }}'
+          case '${{ matrix.zig }}' in
+            0.15.2|0.17.0) bash tests/roadmap/big-endian/concurrency.sh --native '${{ matrix.zig }}' ;;
+          esac
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
@@ -1797,9 +1832,9 @@ jobs:
           AIR2LEAN_GLOBAL_ACTUAL_GEN="$fresh/Gen.lean" AIR2LEAN_GLOBAL_CLIENT_OUT="$fresh/clients" \
             bash tests/roadmap/global-payload-pointers/check-generated.sh
 
-      # L04 actual compiler/native qualification is currently specific to 0.16.0.
-      # 0.14/0.15 exporter APIs were source-inspected; their synthetic fixtures are
-      # checked in this gate, without claiming native/export qualification for them.
+      # L04 ownership, artifact and fresh-export gates (0.16.0). The 0.14.1, 0.15.2 and 0.17.0
+      # exports are checked by --check-qualification, and every version's native tests by the
+      # batch-D native step of its `lean` row.
       - name: Pointer try ownership, native and fresh source regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
@@ -1855,15 +1890,17 @@ jobs:
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
 
-      # T03: s390x (big endian) and x86_64 translations of one source, both-order proofs, the
-      # big-endian rejections, and the native program on s390x under qemu-user and on the host.
-      - name: Byte order (s390x big endian, x86_64)
+      # T03: s390x and mips64 (big endian) and x86_64 translations of one source, both-order
+      # proofs, the big-endian rejections, and the native program on s390x and mips64 under
+      # qemu-user and on the host.
+      - name: Byte order (s390x and mips64 big endian, x86_64)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
           AIR2LEAN_S390X_RUN: qemu-s390x-static
+          AIR2LEAN_MIPS64_RUN: qemu-mips64-static
           AIR2LEAN_X86_64_RUN: ""
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -1874,7 +1911,7 @@ jobs:
           trap 'rm -rf "$fresh"' EXIT
           bash tests/roadmap/big-endian/check.sh --export "$fresh"
           # A fresh export translates to the retained Gen.lean files byte for byte.
-          for pair in S390x:s390x-linux X64:x86_64-linux; do
+          for pair in S390x:s390x-linux Mips64:mips64-linux X64:x86_64-linux; do
             "$AIR2LEAN_TRANSLATOR" "$fresh/${pair#*:}" -o "$fresh/${pair%%:*}.lean" \
               --namespace "BigEndian.${pair%%:*}" --prefix big_endian.
             cmp "$fresh/${pair%%:*}.lean" "tests/roadmap/big-endian/BigEndian/${pair%%:*}/Gen.lean"

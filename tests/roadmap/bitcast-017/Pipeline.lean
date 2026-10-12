@@ -104,12 +104,12 @@ private def accepted : List (String × Nat × Nat) := [
   ("arr3u9ToU27", 33, 34), ("vec3u9ToU27", 35, 34), ("u8ToEnum", 17, 16), ("i8ToEnum", 18, 16),
   ("enumToI8", 16, 18), ("u8ToSignedEnum", 17, 31), ("signedEnumToU8", 31, 17),
   ("u8ToOpenEnum", 17, 30), ("arr4u8ToU32", 20, 21), ("arr8boolToU8", 22, 17),
-  ("vec4u8ToU32", 29, 21), ("arr4u8ToVec4u8", 20, 29)]
+  ("vec4u8ToU32", 29, 21), ("arr4u8ToVec4u8", 20, 29),
+  -- Elements with their own logical bits (`Zig.Packed`, `ZigLean/PackedRepr.lean`).
+  ("nestedBoolArray", 24, 5), ("floatLanes", 26, 27)]
 
 /-- The 0.17 casts the model rejects, with the diagnostic fragment. -/
 private def rejected : List (String × Nat × Nat × String) := [
-  ("nestedBoolArray", 24, 5, "element is not an integer or `bool`"),
-  ("floatLanes", 26, 27, "element is not an integer or `bool`"),
   ("sentinelArray", 28, 13, "sentinel-terminated array"),
   ("sizeMismatch", 14, 27, "between types of 48 and 64 logical bits")]
 
