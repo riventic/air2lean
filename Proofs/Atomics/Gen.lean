@@ -178,9 +178,9 @@ def mpRelAcq  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i29 ← pure ((.ok v17) : Except Zig.ErrName (BitVec 32))
         pure (.ret i29))
       | e => pure e)) : Zig.CM Tgt mpRelAcqLocals mpRelAcqExit).run' { (default : mpRelAcqLocals) with data := s0, flag := s2, c := s5 }
-  Zig.free s0
-  Zig.free s2
   Zig.free s5
+  Zig.free s2
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -264,9 +264,9 @@ def mpRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i29 ← pure ((.ok v17) : Except Zig.ErrName (BitVec 32))
         pure (.ret i29))
       | e => pure e)) : Zig.CM Tgt mpRelaxedLocals mpRelaxedExit).run' { (default : mpRelaxedLocals) with data := s0, flag := s2, c := s5 }
-  Zig.free s0
-  Zig.free s2
   Zig.free s5
+  Zig.free s2
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -458,12 +458,12 @@ def sbRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i44 ← pure (i41 ||| i43)
         let i45 ← pure ((.ok i44) : Except Zig.ErrName (BitVec 32))
         pure (.ret i45)))) : Zig.CM Tgt sbRelaxedLocals sbRelaxedExit).run' { (default : sbRelaxedLocals) with x := s0, y := s3, r1 := s6, r2 := s8, c1 := s10, c2 := s17 }
-  Zig.free s0
-  Zig.free s3
-  Zig.free s6
-  Zig.free s8
-  Zig.free s10
   Zig.free s17
+  Zig.free s10
+  Zig.free s8
+  Zig.free s6
+  Zig.free s3
+  Zig.free s0
   match e with
   | .ret v => pure v
 
@@ -574,9 +574,9 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             | e => pure e)
           | e => pure e)
         | e => pure e))) : Zig.CM Tgt stackPushLocals stackPushExit).run' { (default : stackPushLocals) with s := s0, c1 := s11, c2 := s16 }
-  Zig.free s0
-  Zig.free s11
   Zig.free s16
+  Zig.free s11
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -685,10 +685,10 @@ def twoPlusTwoW  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             pure (.ret i45))
           | e => pure e)
         | e => pure e))) : Zig.CM Tgt twoPlusTwoWLocals twoPlusTwoWExit).run' { (default : twoPlusTwoWLocals) with x := s0, y := s3, c1 := s6, c2 := s11 }
-  Zig.free s0
-  Zig.free s3
-  Zig.free s6
   Zig.free s11
+  Zig.free s6
+  Zig.free s3
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
