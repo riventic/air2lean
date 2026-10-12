@@ -73,9 +73,6 @@ theorem bind' (hx : x.Halts) (hf : ∀ a, (f a).Halts) : (x >>= f).Halts := fun 
 theorem map' (hx : x.Halts) {g : α → β} : (g <$> x).Halts := by
   rw [map_eq_pure_bind]; exact bind' hx fun _ => pure' _
 
-theorem seq' {y : MemM β} (hx : x.Halts) (hy : y.Halts) : (x *> y).Halts := by
-  rw [seqRight_eq_bind]; exact bind' hx fun _ => hy
-
 theorem get' : (get : MemM Mem).Halts := fun _ => by
   simp [Result.Halts, get, getThe, MonadStateOf.get, StateT.get, StateT.run, pure,
     ExceptT.pure, ExceptT.mk, ExceptT.run]
@@ -101,12 +98,6 @@ theorem lift' {r : Result α} (hr : r.Halts) : MemM.Halts (StateT.lift r : MemM 
 theorem liftM' {r : Result α} (hr : r.Halts) : MemM.Halts (liftM r : MemM α) := lift' hr
 
 theorem monadLift' {r : Result α} (hr : r.Halts) : MemM.Halts (monadLift r : MemM α) := lift' hr
-
-theorem ite' {c : Prop} [Decidable c] {x y : MemM α} (hx : x.Halts) (hy : y.Halts) :
-    (if c then x else y).Halts := by
-  split <;> assumption
-
-theorem of_fun {g : Mem → Result (α × Mem)} (h : ∀ m, (g m).Halts) : MemM.Halts (α := α) g := h
 
 /-! ### The body monad of a function that uses memory (`MM`) -/
 
@@ -417,5 +408,11 @@ theorem atomicStorePtrAt_halts {α : Type} [Enc α] (c : Nat) (ord : AtomicOrder
 
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicLoadPtrAt_halts _ _ _ _ _)
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicStorePtrAt_halts _ _ _ _ _)
+
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact fork_halts)
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact forkGated_halts)
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact join_halts _)
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact futexWake_halts _ _ _)
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact checkJoinedByChild_halts _)
 
 end Zig

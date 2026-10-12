@@ -11,7 +11,7 @@ turns** (`disjoint_returnsWithin`), and 6 is tight (`disjoint_not_within_five`).
 walks from the generated code: `writeFlag` has no stop (budget 0), `main` spawns twice
 (`0 + 2` each: the spawn, the kid's first turn) and joins twice. The rely is `True`: no budget
 depends on memory. No fairness premise: the bound holds for every oracle. Turns are model
-scheduler turns (THR-01), not time (SEM-05).
+scheduler turns (THR-01), not time.
 -/
 
 open Zig Zig.Conc Threads

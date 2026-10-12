@@ -251,16 +251,6 @@ theorem joinC' {tid : ThreadId} {s : σ} {Q : Unit × σ → Mem → Nat → Pro
     pure (a, s)) Q m B
   exact bind (map (sync rfl hle fun _ m' hr => pure' (h m' hr)))
 
-/-- An atomic op of the body (`atomicLoadC`, `atomicRmwC`, …): the oracle's pick (one turn),
-then the op in `MemM`. -/
-theorem pickMem {count : Mem → Nat} {x : Nat → MemM α} {s : σ} {Q : α × σ → Mem → Nat → Prop}
-    (hle : 1 ≤ B) (hx : ∀ c, (x c).Halts)
-    (h : ∀ c m', R m' → ∀ a m'', ((x c).run m').run = some (.ok (a, m'')) → Q (a, s) m'' (B - 1)) :
-    Stops R dispatch ((do let c ← pickC count; callMC (x c) : CM Tgt σ α).run s) Q m B := by
-  show Stops R dispatch ((pickC count : CM Tgt σ Nat).run s >>= fun p => (callMC (x p.1) : CM Tgt σ α).run p.2)
-    Q m B
-  exact bind (pickC' hle fun c m' hr => callMC' (hx c) fun a m'' he => h c m' hr a m'' he)
-
 /-! ### A body by its `run` (what `stops` walks) -/
 
 section Run
@@ -369,6 +359,8 @@ macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.spa
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.joinC'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.pickC'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.spinLoopHint'); (focus omega))
+macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.sync); (focus rfl); (focus omega))
+macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.liftSync); (focus rfl); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_reducible apply Stops.runLift)
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadC)
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicStoreC)
