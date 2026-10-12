@@ -1,4 +1,5 @@
-import ZigLean.Sep.Array
+import ZigLean.Sep.Automation
+import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Total
 import Lean
 

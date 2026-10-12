@@ -1,8 +1,19 @@
-import ZigLean.Sep.Array.Reassemble
+import ZigLean.Sep.Full.AutoAll
 
-open Zig Assn
+/-!
+Memory-backed array reassembly (`ZigLean/Sep/Full/Arr.lean`). Disjoint parts alone need not agree
+on their block's labels, so `arr_append_of_heap` and `arr_reassemble` take the actual memory's
+heap; in the full-state logic the joins are updates (`EUpd.arr_join`, `EUpd.arr_unfocus`) that
+read the labels from the memory, and `fsym` walks item stores with the array kept whole.
+-/
 
--- Reassembly explicitly consumes the actual-memory backing equality.
+namespace ProofTools.ReassembleTest
+
+open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
+
+/-! ## Assertion lemmas -/
+
+-- Reassembly consumes the actual-memory backing equality.
 example (p : Ptr) (xs ys : List (BitVec 32)) (m : Mem) (h hF : Heap)
     (hp : (arr p xs ∗ arr (p.add (4 * xs.length)) ys) h) (hm : m.heap = h ∪ hF) :
     arr p (xs ++ ys) h := by
@@ -26,7 +37,7 @@ example (p : Ptr) (m : Mem) (h hF : Heap)
   simpa [Ptr.add] using arr_append_of_heap (xs := ([] : List (BitVec 32)))
     (ys := ([] : List (BitVec 32))) (by decide) (by simpa [Ptr.add] using hp) hm
 
--- Reassemble first, last, and singleton focus, with the updated value and original neighbors.
+-- Reassemble first, last, and singleton focus, with the updated value and original neighbours.
 example (p : Ptr) (x y w : BitVec 32) (m : Mem) (h hF : Heap)
     (hp : (arr p ([] : List (BitVec 32)) ∗ (pts p 4 w ∗ arr (p.add 4) [y])) h)
     (hm : m.heap = h ∪ hF) : arr p [w, y] h := by
@@ -50,15 +61,6 @@ example (p : Ptr) (x w : BitVec 32) (m : Mem) (h hF : Heap)
     arr_reassemble (xs := [x]) (k := 0) (w := w) (by decide)
       (by simp only [List.length_cons, List.length_nil]; decide)
       (by simpa [Enc.size, Enc.align, intSize, intAlign, alignUp, Ptr.add] using hp) hm
-
--- Whole-array ownership supports a second independent store without unfolding byte internals.
-example (p : Ptr) (xs : List (BitVec 32)) (R : Assn) (i j : BitVec 64)
-    (hi : i.toNat < xs.length) (hj : j.toNat < xs.length) (first last : BitVec 32) :
-    Triple (arr p xs ∗ R) (store 4 (p.elem 4 i) first >>= fun _ => store 4 (p.elem 4 j) last)
-      (fun _ => arr p ((xs.set i.toNat first).set j.toNat last) ∗ R) := by
-  exact Triple.bind (Triple.arr_store_reassemble (by decide) (by decide) hi first)
-    (fun _ => Triple.arr_store_reassemble (by decide) (by decide)
-      (by simpa only [List.length_set] using hj) last)
 
 -- Adjacent disjoint ranges with conflicting addresses cannot be backed by one memory.
 example (b : BlockId) (m : Mem) (h₁ h₂ hF : Heap)
@@ -84,14 +86,31 @@ example (b : BlockId) (m : Mem) (h₁ h₂ hF : Heap)
   simp only [Cell.mk.injEq] at hc hc'
   omega
 
--- The backing equality is a necessary API premise, not invented by framing.
+/-! ## Updates and walks -/
+
+-- Split and join as updates: the join reads the labels from the memory.
+example (p : Ptr) (xs ys : List (BitVec 32)) :
+    EUpd (up (arr p xs) ⋆ up (arr (p.add (4 * xs.length)) ys)) (up (arr p (xs ++ ys))) :=
+  EUpd.arr_join (T := BitVec 32) (by decide)
+
+-- Two independent item stores on whole-array ownership, without unfolding byte internals.
+example (p : Ptr) (xs : List (BitVec 32)) (R : FAssn) (i j : BitVec 64)
+    (hi : i.toNat < xs.length) (hj : j.toNat < xs.length) (first last : BitVec 32) :
+    FTotalTriple (up (arr p xs) ⋆ R)
+      (Zig.store 4 (p.elem 4 i) first >>= fun _ => Zig.store 4 (p.elem 4 j) last)
+      (fun _ => up (arr p ((xs.set i.toNat first).set j.toNat last)) ⋆ R) := by
+  fsym
+
+/-! ## Rejected -/
+
+-- The backing equality is a necessary premise, not invented by framing.
 example (p : Ptr) (xs ys : List (BitVec 32)) (h : Heap)
     (hp : (arr p xs ∗ arr (p.add (4 * xs.length)) ys) h) : True := by
   fail_if_success
     have : arr p (xs ++ ys) h := by apply arr_append_of_heap (by decide) hp
   trivial
 
--- One-past-end focus cannot be reassembled as a write to an in-bounds element.
+-- A one-past-end focus cannot be reassembled as a write to an in-bounds item.
 example (p : Ptr) (x w : BitVec 32) (m : Mem) (h hF : Heap)
     (hp : (arr p [x] ∗ (pts (p.add 4) 4 w ∗ arr (p.add 8) ([] : List (BitVec 32)))) h)
     (hm : m.heap = h ∪ hF) : True := by
@@ -100,20 +119,20 @@ example (p : Ptr) (x w : BitVec 32) (m : Mem) (h hF : Heap)
       (by simp only [List.length_cons, List.length_nil]; decide) hp hm
   trivial
 
--- Duplicated ownership, lost frames, old values, and altered neighbors are rejected.
-example (p : Ptr) (x y z w : BitVec 32) (R : Assn) : True := by
-  let rule := Triple.arr_store_reassemble (p := p) (xs := [x, y, z]) (i := 1) (R := R)
-    (by decide) (by decide) (by simp only [List.length_cons, List.length_nil]; decide) w
+-- Duplicated ownership, a lost frame, the old value and a changed neighbour are rejected.
+example (p : Ptr) (x y z w : BitVec 32) (R : FAssn) : True := by
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ R) (store 4 (p.elem 4 1) w)
-        (fun _ => arr p [x, w, z]) := by sep_frame rule
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ R) (Zig.store 4 (p.elem 4 1) w)
+        (fun _ => up (arr p [x, w, z])) := by fsym
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ R) (store 4 (p.elem 4 1) w)
-        (fun _ => arr p [x, y, z] ∗ R) := by sep_frame rule
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ R) (Zig.store 4 (p.elem 4 1) w)
+        (fun _ => up (arr p [x, y, z]) ⋆ R) := by fsym
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ R) (store 4 (p.elem 4 1) w)
-        (fun _ => arr p [w, w, z] ∗ R) := by sep_frame rule
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ R) (Zig.store 4 (p.elem 4 1) w)
+        (fun _ => up (arr p [w, w, z]) ⋆ R) := by fsym
   fail_if_success
-    have : Triple (arr p [x, y, z] ∗ R) (store 4 (p.elem 4 1) w)
-        (fun _ => arr p [x, w, z] ∗ arr p [x, w, z] ∗ R) := by sep_frame rule
+    have : FTotalTriple (up (arr p [x, y, z]) ⋆ R) (Zig.store 4 (p.elem 4 1) w)
+        (fun _ => up (arr p [x, w, z]) ⋆ (up (arr p [x, w, z]) ⋆ R)) := by fsym
   trivial
+
+end ProofTools.ReassembleTest

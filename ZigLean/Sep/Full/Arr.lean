@@ -5,8 +5,7 @@ import ZigLean.Sep.Full.Region
 
 `arr p vs` (`ZigLean/Sep/Triple.lean`) owns the items `vs` at `p`. Here:
 
-* **Assertion lemmas** (moved from the legacy `Sep/Array.lean` and `Sep/Array/Reassemble.lean`,
-  which import this module): `arr_split` divides an array at a boundary, `arr_focus` exposes one
+* **Assertion lemmas**: `arr_split` divides an array at a boundary, `arr_focus` exposes one
   item as `pts`, `arr_append_of_heap` and `arr_reassemble` join parts backed by one memory
   (disjoint parts alone need not agree on their block's labels).
 * **Updates** (`EUpd`): `EUpd.arr_split`, `EUpd.arr_focus` (an implication), and
@@ -14,8 +13,9 @@ import ZigLean.Sep.Full.Region
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
   in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array;
-  `arr_ptrProject` (the pointer to an item, one past the end included), `arr_memset` (all
-  items) and `arr_memmove` (ranges that may overlap); `facts_arr` (`@[fsym_facts]`).
+  `arr_memset` (all items) and `arr_memmove` (ranges that may overlap), both from the rules on
+  owned bytes (`arr_of`); the facts of an array (`facts_arr`) and its extent for pointer
+  formation `&xs[i]` (`Live.arr`).
 -/
 
 namespace Zig
@@ -364,22 +364,6 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
 
-/-- An array: the block of its pointer, a nonnegative offset. -/
-@[fsym_facts] theorem facts_arr :
-    Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
-  rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
-
-/-- **Pointer to item `i ≤ vs.length`** of an owned array (one past the end included; `ptr_add`,
-`ptr_elem_ptr`, `slice_elem_ptr`): the memory is unchanged. The item size of generated code is a
-literal (`hsz`). -/
-@[fsym] theorem FTotalTriple.arr_ptrProject {i : BitVec 64} {size : Nat} (hsz : size = Enc.size T)
-    (hi : i.toNat ≤ vs.length) :
-    FTotalTriple (up (Zig.arr p vs)) (Zig.ptrProject p (·.elem size i))
-      (fun r => ⟪r = p.elem size i⟫ ⋆ up (Zig.arr p vs)) :=
-  FTotalTriple.of_read fun _ _ _ hh hp _ =>
-    have ⟨_, hp', hm⟩ := up_fix (SizeFree.arr p vs) hh hp
-    hsz ▸ arr_ptrProject_run hp'.1 hm hi
-
 /-- **A rule on an array from a rule on its owned bytes**: the rule turns the array's bytes into
 bytes that hold the items `vs'`; the alignment and kind are facts of the labels, which the bytes
 keep. -/
@@ -494,10 +478,22 @@ is a literal (`hsz`). -/
   exact ⟨_, memmove_bytesAt_self (q := p) (A := A) (S := S) (K := K) (bs := bs) (by omega)
     (by omega) (item_aligned hA ha hs) (item_aligned hA ha hs) hK, hs', hv'⟩
 
+/-- An array: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem Auto.facts_arr : Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-- A nonempty array owns its bytes: its block is live and reaches one past its last item (for
+pointer formation `&xs[i]`, `ptrProject_elem_of`, through `Reaches.of_live`). -/
+@[fsym_provider] theorem Live.arr {b : BlockId} (hpb : p.block = some b) (hn : 0 < Enc.size T)
+    (hl : 0 < vs.length) : Live b (p.off.toNat + Enc.size T * vs.length) (up (Zig.arr p vs)) :=
+  Live.bytes hpb fun _ hp => by
+    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
+    exact ⟨A, S, K, bs, by rw [hs]; exact Nat.mul_pos hn hl, by omega, hb⟩
+
 end Rules
 
--- The bound of an item of a literal array (`[x, y, z].length`), or of an array after a store
--- (`(vs.set i w).length`), is arithmetic for `omega`.
+-- The bound of an item of a literal array (`[x, y, z].length`) and of an array after a store
+-- (`(xs.set i w).length`) is arithmetic for `omega`.
 attribute [fsym_arith] List.length_cons List.length_nil List.length_set
 
 end Full
