@@ -1,14 +1,17 @@
 import ZigLean.Conc.Detach
 import ZigLean.Conc.Progress
+import ZigLean.Sep.Full.ThreadOwned
 
 /-!
 # A detached worker that owns its heap buffer, over all schedules (C07)
 
 `main` allocates a 4-byte heap buffer, spawns a worker with the buffer as its argument, detaches
 the worker and returns without joining it. The worker writes the buffer and frees it itself. The
-buffer is a C01 `owned` transfer (`ZigLean/Conc/Transfer.lean`): `main` hands all its cells to the
-worker at the spawn (`Owned.fork`), so the worker's accesses do not race with anyone, and the
-worker alone can free it. For every schedule and every fuel:
+buffer is a C01 `owned` transfer (`ZigLean/Conc/Transfer.lean`): `main` hands its whole part (the
+buffer's bytes and its block's extent) to the worker at the spawn (`FOwned.fork`), so the worker's
+accesses do not race with anyone, and the worker alone can free it. The proof is in the full-state
+logic (`docs/sep-threads.md`): thread triples (`FTTriple`) on the threads' parts (`FOwned`). For
+every schedule and every fuel:
 
 - no run gives an error (`worker_safe`): no data race, no use after free, no invalid handle, no
   missing join (`checkJoinedByChild 0` passes with the worker detached and possibly running);
@@ -21,7 +24,7 @@ that captured a pointer into a frame that has exited) is `.illegal`: `frame_exit
 `ZigLean/Conc/Detach.lean`, run-level witnesses in `tests/roadmap/detached-threads/Runtime.lean`.
 -/
 
-open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Detach Assn
+open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Detach Zig.Full
 
 namespace Detach.Worker
 
@@ -52,34 +55,43 @@ def mainRun : ConcM Tgt (BitVec 32) := Prod.fst <$> main.run ()
 
 /-! ## The worker's buffer -/
 
-/-- The worker's part: the 4-byte heap buffer at `p`. -/
-def Buf (p : Ptr) : Assn := fun h =>
-  ∃ A bs, p.off = 0 ∧ A % 4 = 0 ∧ bs.size = 4 ∧ bytesAt p A 4 .heap bs h
+/-- The worker's part: the 4-byte heap buffer at `p`, with its block's full extent. -/
+def Buf (p : Ptr) : FAssn :=
+  FAssn.ex fun A : Nat => FAssn.ex fun bs : Array Byte => FAssn.ex fun b : BlockId =>
+    ⟪p.block = some b ∧ p.off = 0 ∧ A % 4 = 0 ∧ bs.size = 4⟫ ⋆
+      (up (bytesAt p A 4 .heap bs) ⋆ bext b 4 .heap)
 
 theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
 
-theorem work_spec {p : Ptr} {A : Nat} {bs : Array Byte} (h0 : p.off = 0) (hA : A % 4 = 0)
-    (hs : bs.size = 4) : TTriple (bytesAt p A 4 .heap bs) (work p) (fun _ => emp) := by
+theorem work_spec {p : Ptr} {A : Nat} {bs : Array Byte} {b : BlockId} (hpb : p.block = some b)
+    (h0 : p.off = 0) (hA : A % 4 = 0) (hs : bs.size = 4) :
+    FTTriple (up (bytesAt p A 4 .heap bs) ⋆ bext b 4 .heap) (work p) (fun _ => FAssn.emp) := by
   unfold work
-  refine TTriple.bind (TTriple.storeAt (k := 0) (a := 4) (42 : BitVec 32) (by simp [Ptr.add])
-    (by decide) (by rw [hs]; decide) (by simp [h0, hA]) (by decide)) fun _ => ?_
-  refine TTriple.free ?_ h0 (by decide)
-  rw [writeBytes_size _ _ _ (by rw [hs, enc_u32]; decide), hs]
+  refine FTTriple.bind (FTTriple.storeAt (k := 0) (a := 4) (42 : BitVec 32) hpb
+    (by simp [Ptr.add]) (by decide) (by rw [hs]; decide) (by simp [h0, hA]) (by decide)) fun _ => ?_
+  exact FTTriple.free' hpb (by rw [writeBytes_size _ _ _ (by rw [hs, enc_u32]; decide), hs]) h0
+    (by decide)
 
 /-! ## Protocol -/
 
-/-- Ghost values: `main` before the spawn (it owns `h`) and after it (it owns nothing); the
-worker with its part `h`, its buffer `p` and whether it is done. -/
+/-- The empty resource: the part of a thread that owns nothing. -/
+abbrev r0 : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
+
+/-- The protocol's rest: the start memory's (empty) heap. -/
+abbrev rO : Res := ⟨({} : Mem).fheap, Know.none, Ghost.unit⟩
+
+/-- Ghost values: `main` before the spawn (it owns `r`) and after it (it owns nothing); the
+worker with its part `r`, its buffer `p` and whether it is done. -/
 inductive Gh where
   | none
-  | pre (h : Heap)
+  | pre (r : Res)
   | post
-  | wk (h : Heap) (p : Ptr) (done : Bool)
+  | wk (r : Res) (p : Ptr) (done : Bool)
 
 /-- The part of a thread. -/
-def Gh.heap : Gh → Heap
-  | .pre h | .wk h _ _ => h
-  | .none | .post => Heap.empty
+def Gh.res : Gh → Res
+  | .pre r | .wk r _ _ => r
+  | .none | .post => r0
 
 abbrev R (s : ThreadId) (j : Bool) : ThreadRec := { spawner := s, joined := j }
 

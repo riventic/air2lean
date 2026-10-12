@@ -255,6 +255,32 @@ theorem know_intro {b : BlockId} {A : Nat}
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
   exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
+/-- Knowledge and ghost state (anything that owns no bytes) can be forgotten (`FTriple.drop`). -/
+theorem drop {K : α → FAssn} (ht : FTTriple P c (fun v => Q v ⋆ K v))
+    (hK : ∀ v r, K v r → r.heap = FHeap.empty) : FTTriple P c Q := by
+  intro m r rF hh hp hcm ho
+  have := ht m r rF hh hp hcm ho
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hc', ho', hs'⟩ := this
+    have e := hK _ _ hk2
+    simp only [e, FHeap.union_empty] at hd hm ho'
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg⟩, hq, hc', ho', hs'⟩
+
+/-- A lifted triple whose post's extents are forgotten (`FTriple.forgetExt`). -/
+theorem forgetExt {Q : α → Assn} {B : BlockId → Prop}
+    {E : BlockId → Option (Nat × BlockKind)}
+    (ht : FTTriple P c (fun v => upPost (Q v) B E)) : FTTriple P c (fun v => up (Q v)) := by
+  intro m r rF hh hp hcm ho
+  have := ht m r rF hh hp hcm ho
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', ⟨E', ⟨hq, hk, hg⟩, -⟩, hc', ho', hs'⟩ := this
+    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E')
+      (by rw [hg, Ghost.unit_add]), ⟨hq, hk, rfl⟩, hc', ho', hs'⟩
+
 end FTTriple
 
 /-! ## Total thread triples
@@ -455,6 +481,95 @@ theorem ofTTriple_up (ht : TTriple P c Q) (hc : Tame c) (hsf : SizeFree (fun _ =
   ofNoFp ht (fun _ _ _ hh hp => upE_fix hsf (fun _ _ _ _ _ _ _ h => by cases h) hh (upE_none.mpr hp))
     fun m hm => (FTriple.ofTriple_up (soloAt_triple ht hm) (hc.soloAt m) (hsf.owns m m.current)
       (hk.soloAt m)).pre fun _ ⟨⟨hp, hk, hg⟩, ho⟩ => ⟨⟨hp, ho⟩, hk, hg⟩
+
+end FTTriple
+
+/-! ## Primitive rules of a thread
+
+The rules of `FTriple.alloc'` and `FTriple.free'` (`Full/Toy.lean`) for a thread, lifted from the
+legacy thread triples (`TTriple.alloc`, `TTriple.free`, `TTriple.storeAt`) by the bridge; a block's
+bytes come with its full extent (`bext`), which pins its size and kind for a store and a free. -/
+
+namespace FTTriple
+
+/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent. -/
+theorem alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
+  refine FTTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
+  refine ((FTTriple.ofTTriple (E := fun _ => none) (B := fun _ => False)
+    (TTriple.alloc kind size align ha hk) (Tame.alloc kind size align)
+    (fun h hp l c hl => by rw [hp] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
+    (SizeFree.of_pinned fun h hp l c hl => by rw [hp] at hl; cases hl) (.inl fun _ h => h.elim)).pre
+    fun _ h => upE_none.mpr (up_emp.mpr h)).post fun p r h => ?_
+  obtain ⟨E', ⟨hq, hk', hg⟩, hcov⟩ := id h
+  obtain ⟨A, hq⟩ := hq
+  obtain ⟨⟨h0, hA⟩, hb⟩ := Zig.sep_lift.mp hq
+  obtain ⟨b, hpb, -, hl⟩ := id hb
+  have hc := hl (b, p.off.toNat)
+  rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨rfl, Nat.le_refl _, by simp; omega⟩)] at hc
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
+  obtain ⟨fc, hfc, he⟩ := hc
+  have hx := upPost_bext (b := b) (S := size) (K := kind) h ⟨_, fc, hfc, by rw [he], by rw [he], fun h => h.elim⟩
+  obtain ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', e, x, hbx⟩, h2⟩ := hx
+  obtain ⟨A', x⟩ := up_ex.mp x
+  obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
+  exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
+
+theorem bytesAt_cells {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hpb : p.block = some b) :
+    ∀ h, bytesAt p A S K bs h → ∀ l c, h l = some c → l.1 = b ∧ c.size = S ∧ c.kind = K := by
+  intro h hb l c hc
+  obtain ⟨b', hb', -, hl⟩ := hb
+  rw [hpb] at hb'; cases hb'
+  rw [hl l] at hc
+  split at hc
+  · rename_i hin; cases hc; exact ⟨hin.1, rfl, rfl⟩
+  · cases hc
+
+/-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go. -/
+theorem free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
+  ((FTTriple.ofTTriple (E := fun x => if x = b then some (S, K) else none) (B := fun x => x = b)
+    (TTriple.free hS h0 hpos hK) (Tame.free p)
+    (fun h hp l c hc => (bytesAt_cells hpb h hp l c hc).1)
+    (fun h hp l c S' K' hc hE => by
+      obtain ⟨e, hs, hk⟩ := bytesAt_cells hpb h hp l c hc
+      simp only [e, ↓reduceIte] at hE; cases hE; exact ⟨hs, hk⟩)
+    (SizeFree.of_pinned fun h hp l c hc => by simp [(bytesAt_cells hpb h hp l c hc).1])
+    (.inl fun x hx => by simp [hx])).forgetExt.pre fun _ h => up_sep_bext h).post
+    fun _ _ h => up_emp.mp h
+
+/-- A store of `w` at byte `k` of a thread's block, whose full extent it owns. -/
+theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {k a : Nat} (w : T) (hpb : p.block = some b) (hq : q = p.add k)
+    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0)
+    (hK : K ≠ .constGlobal) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store a q w)
+      (fun _ => up (bytesAt p A S K (writeBytes bs k (Enc.encode w))) ⋆ bext b S K) := by
+  refine FTTriple.drop (K := fun _ r => r.heap = FHeap.empty ∧ r.know = Know.none) ?_ (fun _ _ h => h.1)
+  refine ((FTTriple.ofTTriple (E := fun x => if x = b then some (S, K) else none) (B := fun x => x = b)
+    (TTriple.storeAt w hq hn hk ha hK) (Tame.store a q w)
+    (fun h hp l c hc => (bytesAt_cells hpb h hp l c hc).1)
+    (fun h hp l c S' K' hc hE => by
+      obtain ⟨e, hs, hk⟩ := bytesAt_cells hpb h hp l c hc
+      simp only [e, ↓reduceIte] at hE; cases hE; exact ⟨hs, hk⟩)
+    (SizeFree.of_pinned fun h hp l c hc => by simp [(bytesAt_cells hpb h hp l c hc).1])
+    (.inl fun x hx => by simp [hx])).pre fun _ h => up_sep_bext h).post fun _ r h => ?_
+  have hpos : 0 < (writeBytes bs k (Enc.encode w)).size := by
+    rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)]; omega
+  obtain ⟨E', ⟨hq', -, -⟩, -⟩ := id h
+  obtain ⟨b', hb', -, hl⟩ := id hq'
+  rw [hpb] at hb'; cases hb'
+  have hc := hl (b, p.off.toNat)
+  rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨rfl, Nat.le_refl _, by omega⟩)] at hc
+  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
+  obtain ⟨fc, hfc, he⟩ := hc
+  exact upPost_bext h ⟨_, fc, hfc, by rw [he], by rw [he], fun _ => by simp⟩
 
 end FTTriple
 
