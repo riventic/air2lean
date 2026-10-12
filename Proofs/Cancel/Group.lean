@@ -1,7 +1,8 @@
 import Proofs.Cancel.Client
-import ZigLean.Conc.Csl
-import ZigLean.Conc.Transfer
 import ZigLean.Conc.Lemmas
+import ZigLean.Conc.Progress
+import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadBridge
 
 /-!
 # `cancelClient` over all schedules (C05)
@@ -18,34 +19,42 @@ steps, and `status = 2` when a cancelation point returned `error.Canceled`.
 - the result `(status, done)` satisfies `Outcome`: `(1, 3)` (completed, all work done) or
   `(2, d)` with `d < 3` (canceled, work left). A canceled task is never reported as a completed
   one, and a completion is never reported for unfinished work;
-- `main` gets the task's two words back at the join that `Group.cancel` does (C01 transfer:
-  `Owned.fork` hands them over at the spawn, `Owned.join` returns them) and frees them: when
-  `main` returns, no byte of the heap is live (`m.heap = Heap.empty`), so cancelation loses no
-  owned resource.
+- `main` gets the task's two words back at the join that `Group.cancel` does (`FOwned.fork`
+  hands them over at the spawn, `FOwned.join` returns them) and frees them: when `main` returns,
+  no byte of the heap is live (`m.heap = Heap.empty`), so cancelation loses no owned resource.
 
 The proof is partial correctness (`run_sound`): a run that gives an error or no result satisfies
 the spec. `Proofs/Cancel/Client.lean` and `tests/roadmap/cancellation/Runtime.lean` show that
 both outcomes happen and that sampled schedules give no error.
 
+It is in the full-state concurrent separation logic (`docs/sep-threads.md`): a word is its
+bytes with its block's full extent (`word`), a thread's `MemM` step is a thread triple
+(`FTTriple`) on its part, and the parts are `FOwned`'s.
+
 **Protocol.** A thread's ghost value (`Gh`) is `main` at a phase (`MPh`: at its spawn, at its
-spin hint, at its join) with the heap it owns, the task's words `W` and the group `g`, or the
-task with the heap it owns, the values of its words and whether it ended. The invariant (`Inv`):
-the parts of the heap (`Owned`), every live byte belongs to a part (`Covered`), the task's heap
-holds its two words with values allowed by `TaskOk`, and the threads and the group's tasks at
-each phase of `main` (`Shape`). The cancelation state (`Mem.cancels`), the futex queue and
-`current` are not in the invariant: every step that changes only them keeps it (`inv_keep`).
+spin hint, at its join) with the resource it owns, the task's words `W` and the group `g`, or the
+task with the resource it owns, the values of its words and whether it ended. The invariant
+(`Inv`): the parts (`FOwned`, next to the start memory's empty rest: every live byte belongs to a
+part, `FOwned.cover`), the task's part holds its two words with values allowed by `TaskOk`, and
+the threads and the group's tasks at each phase of `main` (`Shape`). The cancelation state
+(`Mem.cancels`), the futex queue and `current` are not in the invariant: every step that changes
+only them keeps it (`inv_keep`).
 -/
 
-open Zig Zig.Conc Zig.Conc.Proto Assn
+open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
 
 namespace Cancel.Group
+
+-- Unification must not unfold `WP` into the program (as in `Proofs/Threads/Disjoint.lean`).
+attribute [local irreducible] Proto.WP
 
 /-! ## Words -/
 
 theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
 
-/-- A 4-byte heap word at `p` (address `A`) that holds `v`. -/
-def word (p : Ptr) (A : Nat) (v : BitVec 32) : Assn := bytesAt p A 4 .heap (Enc.encode v)
+/-- A 4-byte heap word at `p` (address `A`, block `k`) that holds `v`, with its block's extent. -/
+abbrev word (p : Ptr) (A : Nat) (v : BitVec 32) (k : BlockId) : FAssn :=
+  up (bytesAt p A 4 .heap (Enc.encode v)) ⋆ bext k 4 .heap
 
 theorem decode_u32 (v : BitVec 32) :
     Enc.decode ((Enc.encode v).extract 0 (0 + Enc.size (BitVec 32))) =
@@ -54,47 +63,63 @@ theorem decode_u32 (v : BitVec 32) :
     Array.extract_size]
   exact LawfulEnc.decode_encode v
 
-theorem word_init {p : Ptr} {A : Nat} (h0 : p.off = 0) (hA : A % 4 = 0) (w : BitVec 32) :
-    TTriple (bytesAt p A 4 .heap (Array.replicate 4 .undef)) (Zig.store 4 p w)
-      (fun _ => word p A w) :=
-  (TTriple.storeAt (k := 0) (a := 4) w (by simp [Ptr.add]) (by decide) (by simp; decide)
-    (by simp [h0, hA]) (by decide)).conseq (fun _ h => h) fun _ _ h => by
+theorem word_init {p : Ptr} {A : Nat} {k : BlockId} (hpb : p.block = some k) (h0 : p.off = 0)
+    (hA : A % 4 = 0) (w : BitVec 32) :
+    FTTriple (up (bytesAt p A 4 .heap (Array.replicate 4 .undef)) ⋆ bext k 4 .heap)
+      (Zig.store 4 p w) (fun _ => word p A w k) :=
+  (FTTriple.storeAt (k := 0) (a := 4) w hpb (by simp [Ptr.add]) (by decide) (by simp; decide)
+    (by simp [h0, hA]) (by decide)).post fun _ _ h => by
       rwa [writeBytes_all (by simp [enc_u32])] at h
 
-theorem word_store {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) (hA : A % 4 = 0)
-    (w : BitVec 32) : TTriple (word p A v) (Zig.store 4 p w) (fun _ => word p A w) :=
-  (TTriple.storeAt (k := 0) (a := 4) w (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simp [h0, hA]) (by decide)).conseq (fun _ h => h)
-    fun _ _ h => by rwa [writeBytes_all (by rw [enc_u32, enc_u32])] at h
+theorem word_store {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
+    (h0 : p.off = 0) (hA : A % 4 = 0) (w : BitVec 32) :
+    FTTriple (word p A v k) (Zig.store 4 p w) (fun _ => word p A w k) :=
+  (FTTriple.storeAt (k := 0) (a := 4) w hpb (by simp [Ptr.add]) (by decide)
+    (by rw [enc_u32]; decide) (by simp [h0, hA]) (by decide)).post fun _ _ h => by
+      rwa [writeBytes_all (by rw [enc_u32, enc_u32])] at h
 
-theorem word_load {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) (hA : A % 4 = 0) :
-    TTriple (word p A v) (Zig.load (BitVec 32) 4 p) (fun r => ⌜r = v⌝ ∗ word p A v) :=
-  TTriple.loadAt (k := 0) (a := 4) (v := v) (by simp [Ptr.add]) (by decide)
+theorem word_load {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
+    (h0 : p.off = 0) (hA : A % 4 = 0) :
+    FTTriple (word p A v k) (Zig.load (BitVec 32) 4 p) (fun r => ⟪r = v⟫ ⋆ word p A v k) :=
+  FTTriple.loadAt (k := 0) (a := 4) (v := v) hpb (by simp [Ptr.add]) (by decide)
     (by rw [enc_u32]; decide) (by simp [h0, hA]) (decode_u32 v)
 
-theorem word_free {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) :
-    TTriple (word p A v) (Zig.free p) (fun _ => emp) :=
-  TTriple.free (enc_u32 v) h0 (by decide)
+theorem word_free {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
+    (h0 : p.off = 0) : FTTriple (word p A v k) (Zig.free p) (fun _ => emp) :=
+  FTTriple.free' hpb (enc_u32 v) h0 (by decide)
 
-/-- An allocation on the heap next to the heap `R` that the thread owns. -/
-theorem alloc_heap_next {R : Assn} :
-    TTriple R (Zig.alloc .heap 4 4) (fun p => R ∗ Assn.ex fun A =>
-      ⌜p.off = 0 ∧ A % 4 = 0⌝ ∗ bytesAt p A 4 .heap (Array.replicate 4 .undef)) :=
-  (TTriple.alloc .heap 4 4 (by decide)).frameL.conseq (fun _ h => sep_emp.mpr h) fun _ _ h => h
+/-- The bytes of a word belong to its resource. -/
+theorem word_owns {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} {r : Res}
+    (hpb : p.block = some k) (h : word p A v k r) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 4 → r.heap (k, x) ≠ none := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨⟨b, hb, -, hl⟩, -, -⟩, -⟩ := h
+  rw [hpb] at hb; cases hb
+  intro x h1 h2
+  have hx := hl (k, x)
+  rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨rfl, h1, by rw [enc_u32]; exact h2⟩)] at hx
+  simp only [FHeap.union_apply]
+  cases e : r₁.heap (k, x) with
+  | none => simp [FHeap.erase, e] at hx
+  | some _ => simp
 
 /-! ## Protocol -/
 
-/-- The task's two words: `status` at `st` (address `As`), the steps done at `dn` (`Ad`). -/
+/-- The task's two words: `status` at `st` (address `As`, block `ks`), the steps done at `dn`
+(`Ad`, `kd`). -/
 structure Words where
   st : Ptr
   dn : Ptr
   As : Nat
   Ad : Nat
+  ks : BlockId
+  kd : BlockId
 
-def Words.Ok (W : Words) : Prop := W.st.off = 0 ∧ W.dn.off = 0 ∧ W.As % 4 = 0 ∧ W.Ad % 4 = 0
+def Words.Ok (W : Words) : Prop :=
+  W.st.block = some W.ks ∧ W.dn.block = some W.kd ∧ W.st.off = 0 ∧ W.dn.off = 0 ∧ W.As % 4 = 0 ∧
+    W.Ad % 4 = 0
 
 /-- The two words hold `s` and `d`. -/
-def Words.A (W : Words) (s d : BitVec 32) : Assn := word W.st W.As s ∗ word W.dn W.Ad d
+def Words.A (W : Words) (s d : BitVec 32) : FAssn := word W.st W.As s W.ks ⋆ word W.dn W.Ad d W.kd
 
 /-- The values of the task's words: while it runs, `status = 0` and at most three steps are
 done; when it has ended, `Outcome`. -/
@@ -110,43 +135,42 @@ inductive MPh where
 /-- A thread's ghost value. -/
 inductive Gh where
   | none
-  | main (ph : MPh) (h : Heap) (W : Words) (g : Ptr)
-  | task (h : Heap) (W : Words) (s d : BitVec 32) (ended : Bool)
+  | main (ph : MPh) (r : Res) (W : Words) (g : Ptr)
+  | task (r : Res) (W : Words) (s d : BitVec 32) (ended : Bool)
 
-def Gh.heap : Gh → Heap
-  | .main _ h _ _ | .task h _ _ _ _ => h
-  | .none => Heap.empty
+/-- The resource that a thread owns. -/
+def Gh.res : Gh → Res
+  | .main _ r _ _ | .task r _ _ _ _ => r
+  | .none => rnil
 
-/-- The heaps of the threads: a joined thread owns nothing. -/
-def ownOf (G : ThreadId → Gh) (m : Mem) (u : ThreadId) : Heap :=
-  if joinedB m u then Heap.empty else (G u).heap
+/-- The parts of the threads: a joined thread owns nothing. -/
+def ownOf (G : ThreadId → Gh) (m : Mem) (u : ThreadId) : Res :=
+  if joinedB m u then rnil else (G u).res
 
-/-- Every live byte belongs to a part. -/
-def Covered (own : ThreadId → Heap) (m : Mem) : Prop :=
-  ∀ l c, m.heap l = some c → ∃ u, own u l ≠ none
+/-- The protocol's rest: the start memory's (empty) heap. -/
+abbrev rO : Res := ⟨({} : Mem).fheap, Know.none, Ghost.unit⟩
 
 /-- The threads and the group at each phase of `main`. -/
 def Shape (W : Words) (g : Ptr) (G : ThreadId → Gh) (m : Mem) : MPh → Prop
   | .spawn => m.threads.size = 1 ∧ m.groups = #[] ∧ ∀ u, 1 ≤ u → G u = .none
   | .hint => m.threads.size = 2 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
-      m.groups = #[(g, 1)] ∧ (∃ h s d e, G 1 = .task h W s d e) ∧ ∀ u, 2 ≤ u → G u = .none
+      m.groups = #[(g, 1)] ∧ (∃ r s d e, G 1 = .task r W s d e) ∧ ∀ u, 2 ≤ u → G u = .none
   | .join => m.threads.size = 2 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
-      (∃ h s d e, G 1 = .task h W s d e) ∧ ∀ u, 2 ≤ u → G u = .none
+      (∃ r s d e, G 1 = .task r W s d e) ∧ ∀ u, 2 ≤ u → G u = .none
 
 /-- The invariant (module doc). -/
 structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
-  own : Owned (ownOf G m) m
-  cover : Covered (ownOf G m) m
-  task : ∀ u h W s d e, G u = .task h W s d e → W.Ok ∧ W.A s d h ∧ TaskOk s d e
-  main : ∃ ph h W g, G 0 = .main ph h W g ∧ Shape W g G m ph
+  own : FOwned (ownOf G m) rO m
+  task : ∀ u r W s d e, G u = .task r W s d e → W.Ok ∧ W.A s d r ∧ TaskOk s d e
+  main : ∃ ph r W g, G 0 = .main ph r W g ∧ Shape W g G m ph
   t0 : m.threads[0]? = some { spawner := 0, joined := true }
 
 /-- The protocol (partial correctness). -/
 def proto : Proto Tgt Gh where
   inv := Inv
   init tgt g := match tgt with
-    | .worker st dn => ∃ h W, g = .task h W 0 0 false ∧ W.st = st ∧ W.dn = dn
-  fin g := ∃ h W s d, g = .task h W s d true
+    | .worker st dn => ∃ r W, g = .task r W 0 0 false ∧ W.st = st ∧ W.dn = dn
+  fin g := ∃ r W s d, g = .task r W s d true
 
 /-- `main`'s post: the declared outcome, and no live byte is left. -/
 def QM : BitVec 32 × BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop :=
@@ -154,31 +178,20 @@ def QM : BitVec 32 × BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop :
 
 /-! ## Frames -/
 
-theorem heap_congr {m m' : Mem} (hb : m'.blocks = m.blocks) : m'.heap = m.heap := by
-  funext ⟨b, o⟩
-  simp only [Mem.heap, hb]
-
 theorem joinedB_congr {m m' : Mem} (ht : m'.threads = m.threads) : joinedB m' = joinedB m := by
   funext u; simp only [joinedB, ht]
 
-/-- A step that changes no block, thread, clock or footprint entry (only `current`, the futex
-queue, the cancelation requests or the groups) keeps the parts. -/
-theorem owned_keep {own : ThreadId → Heap} {m m' : Mem} (ho : Owned own m)
-    (hb : m'.blocks = m.blocks) (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
-    (hf : m'.footprint = m.footprint) : Owned own m' :=
-  ho.keep (by rw [ht]) (by rw [hc]) (fun u => by rw [heap_congr hb]; exact ho.sub u)
-    (by rw [hb]; exact Nat.le_refl _) (fun u _ => by rw [hc]; exact VClock.le_refl _)
-    (fun e he => .inl (by rw [hf] at he; exact he))
-
-/-- `inv_keep` for a step that keeps the groups. -/
+/-- A step that changes no block, atomic location, thread, clock or recorded access (only
+`current`, the futex queue, the cancelation requests or the groups) keeps the invariant if it
+keeps the groups. -/
 theorem inv_keep {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m)
-    (hb : m'.blocks = m.blocks) (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
-    (hf : m'.footprint = m.footprint) (hg : m'.groups = m.groups) : Inv G m' := by
+    (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads)
+    (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) (hg : m'.groups = m.groups) :
+    Inv G m' := by
   have hown : ownOf G m' = ownOf G m := by funext u; simp only [ownOf, joinedB_congr ht]
-  refine ⟨hown ▸ owned_keep hi.own hb ht hc hf, ?_, hi.task, ?_, ?_⟩
-  · rw [hown]; intro l c hl; rw [heap_congr hb] at hl; exact hi.cover l c hl
-  · obtain ⟨ph, h, W, g, h0, hs⟩ := hi.main
-    refine ⟨ph, h, W, g, h0, ?_⟩
+  refine ⟨hown ▸ hi.own.keep hb ha ht hc hf, hi.task, ?_, ?_⟩
+  · obtain ⟨ph, r, W, g, h0, hs⟩ := hi.main
+    refine ⟨ph, r, W, g, h0, ?_⟩
     cases ph with
     | spawn => exact ⟨by rw [ht]; exact hs.1, by rw [hg]; exact hs.2.1, hs.2.2⟩
     | hint => exact ⟨by rw [ht]; exact hs.1, by rw [ht]; exact hs.2.1, by rw [hg]; exact hs.2.2.1,
@@ -186,45 +199,11 @@ theorem inv_keep {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m)
     | join => exact ⟨by rw [ht]; exact hs.1, by rw [ht]; exact hs.2.1, hs.2.2⟩
   · rw [ht]; exact hi.t0
 
-/-- A thread step with a triple: the covering moves with the step's part. -/
-theorem cover_step {own : ThreadId → Heap} {m m' : Mem} {t : ThreadId} {hQ : Heap}
-    (hcv : Covered own m) (hm' : m'.heap = hQ ∪ m.heap.diff (own t)) :
-    Covered (upd own t hQ) m' := by
-  intro l c hl
-  rw [hm', Heap.union_apply] at hl
-  cases hq : hQ l with
-  | some c' => exact ⟨t, by rw [upd_self, hq]; simp⟩
-  | none =>
-    rw [hq, Option.none_or] at hl
-    unfold Heap.diff at hl
-    split at hl
-    · rename_i hn
-      obtain ⟨u, hu⟩ := hcv l c hl
-      have hut : u ≠ t := fun e => by subst e; exact hu hn
-      exact ⟨u, by rw [upd_ne _ _ hut]; exact hu⟩
-    · cases hl
-
-/-- A `callMC` step of thread `t` with a triple on its part `h`: the parts and the covering
-after it, and what the step kept (`StepIn`). -/
-theorem WP.callMC_step {σ α : Type} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat}
-    {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn} {own : ThreadId → Heap} {h : Heap}
-    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (ht : TTriple Pa x Qa) (ho : Owned (upd own t h) m) (hcv : Covered (upd own t h) m)
-    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
-    (k : ∀ a m' h', Owned (upd own t h') m' → Covered (upd own t h') m' → Qa a h' →
-      StepIn (m.heap.diff h) m m' → Q (a, s) G m' n) :
-    proto.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
-  WP.liftM_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' hQ _ ho' hq hs hm' _ => by
-    have hcv' := cover_step hcv hm'
-    rw [upd_upd] at ho' hcv'
-    rw [upd_self] at hs
-    exact k a m' hQ ho' hcv' hq hs
-
 /-! ## The task -/
 
 /-- A task is thread 1, not joined, and `main` is at its spin hint or at its join. -/
-theorem task_live {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {h W s d e}
-    (hi : Inv G m) (hg : G u = .task h W s d e) :
+theorem task_live {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {r W s d e}
+    (hi : Inv G m) (hg : G u = .task r W s d e) :
     u = 1 ∧ joinedB m 1 = false ∧ m.threads.size = 2 := by
   obtain ⟨ph, hm, W', g, h0, hs⟩ := hi.main
   have hu0 : u ≠ 0 := fun e => by subst e; rw [h0] at hg; cases hg
@@ -250,7 +229,7 @@ theorem task_live {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {h W s d e}
 
 theorem ownOf_upd {G : ThreadId → Gh} {m m' : Mem} {u : ThreadId} {g : Gh}
     (ht : m'.threads = m.threads) (hj : joinedB m u = false) :
-    ownOf (upd G u g) m' = upd (ownOf G m) u g.heap := by
+    ownOf (upd G u g) m' = upd (ownOf G m) u g.res := by
   funext w
   unfold ownOf
   rw [joinedB_congr ht]
@@ -258,34 +237,34 @@ theorem ownOf_upd {G : ThreadId → Gh} {m m' : Mem} {u : ThreadId} {g : Gh}
   · subst hw; simp only [upd_self]; rw [hj]; rfl
   · rw [upd_ne _ _ hw, upd_ne _ _ hw]
 
-/-- The task's step to new words `h'` keeps the invariant with its new ghost value. -/
-theorem inv_task_step {G : ThreadId → Gh} {m m' : Mem} {h h' : Heap} {W : Words}
-    {s d s' d' : BitVec 32} {e e' : Bool} (hi : Inv G m) (hg : G 1 = .task h W s d e)
-    (ho : Owned (upd (ownOf G m) 1 h') m') (hcv : Covered (upd (ownOf G m) 1 h') m')
-    (ht : m'.threads = m.threads) (hgr : m'.groups = m.groups) (hA : W.A s' d' h')
-    (hok : TaskOk s' d' e') : Inv (upd G 1 (.task h' W s' d' e')) m' := by
+/-- The task's step to the new part `r'` keeps the invariant with its new ghost value. -/
+theorem inv_task_step {G : ThreadId → Gh} {m m' : Mem} {r r' : Res} {W : Words}
+    {s d s' d' : BitVec 32} {e e' : Bool} (hi : Inv G m) (hg : G 1 = .task r W s d e)
+    (ho : FOwned (upd (ownOf G m) 1 r') rO m') (ht : m'.threads = m.threads)
+    (hgr : m'.groups = m.groups) (hA : W.A s' d' r') (hok : TaskOk s' d' e') :
+    Inv (upd G 1 (.task r' W s' d' e')) m' := by
   obtain ⟨-, hj, -⟩ := task_live hi hg
-  have hown := ownOf_upd (G := G) (g := .task h' W s' d' e') ht hj
-  refine ⟨by rw [hown]; exact ho, by rw [hown]; exact hcv, fun u h₁ W₁ s₁ d₁ e₁ hu => ?_, ?_, ?_⟩
+  have hown := ownOf_upd (G := G) (g := .task r' W s' d' e') ht hj
+  refine ⟨by rw [hown]; exact ho, fun u r₁ W₁ s₁ d₁ e₁ hu => ?_, ?_, ?_⟩
   · by_cases h1 : u = 1
     · subst h1; rw [upd_self] at hu; cases hu
       exact ⟨(hi.task 1 _ _ _ _ _ hg).1, hA, hok⟩
     · rw [upd_ne _ _ h1] at hu; exact hi.task u _ _ _ _ _ hu
   · obtain ⟨ph, hm, W', g, h0, hs⟩ := hi.main
     refine ⟨ph, hm, W', g, by rw [upd_ne _ _ (by decide)]; exact h0, ?_⟩
-    have hnone : ∀ w, 2 ≤ w → G w = .none → upd G 1 (.task h' W s' d' e') w = .none :=
+    have hnone : ∀ w, 2 ≤ w → G w = .none → upd G 1 (.task r' W s' d' e') w = .none :=
       fun w hw hn => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn
     cases ph with
     | spawn => have := hs.2.2 1 (Nat.le_refl _); rw [hg] at this; cases this
     | hint =>
-      obtain ⟨hsz, hr, hgr0, ⟨h₁, s₁, d₁, e₁, h1⟩, hn⟩ := hs
+      obtain ⟨hsz, hr, hgr0, ⟨r₁, s₁, d₁, e₁, h1⟩, hn⟩ := hs
       rw [hg] at h1; cases h1
       exact ⟨by rw [ht]; exact hsz, by rw [ht]; exact hr, by rw [hgr]; exact hgr0,
-        ⟨h', s', d', e', upd_self _ _ _⟩, fun w hw => hnone w hw (hn w hw)⟩
+        ⟨r', s', d', e', upd_self _ _ _⟩, fun w hw => hnone w hw (hn w hw)⟩
     | join =>
-      obtain ⟨hsz, hr, ⟨h₁, s₁, d₁, e₁, h1⟩, hn⟩ := hs
+      obtain ⟨hsz, hr, ⟨r₁, s₁, d₁, e₁, h1⟩, hn⟩ := hs
       rw [hg] at h1; cases h1
-      exact ⟨by rw [ht]; exact hsz, by rw [ht]; exact hr, ⟨h', s', d', e', upd_self _ _ _⟩,
+      exact ⟨by rw [ht]; exact hsz, by rw [ht]; exact hr, ⟨r', s', d', e', upd_self _ _ _⟩,
         fun w hw => hnone w hw (hn w hw)⟩
   · rw [ht]; exact hi.t0
 
@@ -339,64 +318,45 @@ theorem wp_lateCancel {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh}
     split
     · simp only [StateT.run_bind]
       refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
-      exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl))
-    · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl))
+      exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl rfl))
+    · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl rfl))
   · exact WP.pure' (hQ _ _ _ _ hc hi)
 
 /-- The kernel's read of the task's `status` word in a futex wait (a recorded atomic read by the
-task, the word's owner) keeps the invariant. -/
-theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {h : Heap} {W : Words} {s d : BitVec 32}
-    {e : Bool} (hc : m.current = 1) (hi : Inv (upd G 1 (.task h W s d e)) m)
+task, the word's owner) keeps the invariant (`FOwned.recordAt`). -/
+theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {r : Res} {W : Words} {s d : BitVec 32}
+    {e : Bool} (hc : m.current = 1) (hi : Inv (upd G 1 (.task r W s d e)) m)
     {bid : BlockId} {blk : Block} {o : Nat} (ha : m.access W.st 4 4 = pure (bid, blk, o))
     (hr : ((recordAccess bid o 4 .atomicRead).run m).run = some (.ok ((), m'))) :
-    Inv (upd G 1 (.task h W s d e)) m' := by
+    Inv (upd G 1 (.task r W s d e)) m' := by
   obtain ⟨-, rfl⟩ := recordAccess_ok hr
-  have hg := upd_self G 1 (Gh.task h W s d e)
-  obtain ⟨⟨hs0, -, -, -⟩, hA, hok⟩ := hi.task 1 _ _ _ _ _ hg
+  have hg := upd_self G 1 (Gh.task r W s d e)
+  obtain ⟨⟨hsb, -, -, -, -, -⟩, hA, -⟩ := hi.task 1 _ _ _ _ _ hg
   obtain ⟨-, hj, hsz⟩ := task_live hi hg
-  have hown : ownOf (upd G 1 (.task h W s d e)) m 1 = h := by simp [ownOf, hj, Gh.heap]
-  have ho := hi.own
-  have hcv := hi.cover
-  rw [← upd_same (ownOf _ m) 1, hown] at ho hcv
+  have hown : ownOf (upd G 1 (.task r W s d e)) m 1 = r := by simp [ownOf, hj, Gh.res]
   obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
-  have hin : ∀ x, W.st.off.toNat ≤ x → x < W.st.off.toNat + 4 → h (bid, x) ≠ none := by
-    obtain ⟨h₁, h₂, -, heq, ⟨b, hpb', -, hcell⟩, -⟩ := hA
-    cases hpb.symm.trans hpb'
-    intro x h1 h2
-    rw [heq, Heap.union_apply, hcell, if_pos ⟨rfl, h1, by rw [enc_u32]; exact h2⟩]
-    simp
-  have htl : (1 : ThreadId) < m.threads.size := by rw [hsz]; decide
-  have hcs : m.current < m.clocks.size := by rw [ho.csize, hc]; exact htl
-  have hsub := ho.sub 1
-  rw [upd_self] at hsub
-  obtain ⟨hsplit, hd⟩ := Heap.diff_split hsub
-  have hs : StepIn (m.heap.diff ((upd (ownOf (upd G 1 (.task h W s d e)) m) 1 h) 1)) m
-      (m.recordAt bid W.st.off.toNat 4 .atomicRead) := by
-    rw [upd_self]
-    exact StepIn.recordAt hcs hd (by decide) hin (Array.getElem?_eq_some_iff.mp hblk).1
-  have hm' : (m.recordAt bid W.st.off.toNat 4 .atomicRead).heap =
-      h ∪ m.heap.diff ((upd (ownOf (upd G 1 (.task h W s d e)) m) 1 h) 1) := by
-    rw [upd_self]; exact hsplit
-  have howt : (m.recordAt bid W.st.off.toNat 4 .atomicRead).Owns 1 h := by
-    have h1 := ho.owns 1 htl
-    rw [upd_self, ← hc] at h1
-    rw [← hc]
-    exact Mem.Owns.recordAt hcs h1
-  have ho' := ho.step hc htl hs hm' (by rw [upd_self]; exact hd) howt
-  rw [upd_upd] at ho'
-  have hcv' := cover_step hcv hm'
-  rw [upd_upd] at hcv'
-  have := inv_task_step hi hg ho' hcv' rfl rfl hA hok
-  rwa [upd_upd] at this
+  rw [hsb] at hpb; cases hpb
+  have hin : ∀ x, W.st.off.toNat ≤ x → x < W.st.off.toNat + 4 →
+      (ownOf (upd G 1 (.task r W s d e)) m 1).heap (W.ks, x) ≠ none := by
+    rw [hown]
+    obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hA
+    intro x h1x h2x
+    have := word_owns hsb h1 x h1x h2x
+    simp only [FHeap.union_apply]
+    cases e : r₁.heap (W.ks, x) with
+    | none => exact absurd e this
+    | some _ => simp
+  exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) (by decide) hin
+    (Array.getElem?_eq_some_iff.mp hblk).1, hi.task, hi.main, hi.t0⟩
 
 /-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value:
 whatever it returns, the invariant holds with it. It may sleep, return spuriously, see the value
 differ, observe a pending request, or have one delivered. -/
-theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
+theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {r : Res} {W : Words}
     {s d : BitVec 32} {e : Bool}
-    (hc : m.current = 1) (hi : Inv (upd G 1 (.task h W s d e)) m)
+    (hc : m.current = 1) (hi : Inv (upd G 1 (.task r W s d e)) m)
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 (.task h W s d e)) m' → Q (r, ()) G' m' k) :
+    (hQ : ∀ x G' m' k, m'.current = 1 → Inv (upd G' 1 (.task r W s d e)) m' → Q (x, ()) G' m' k) :
     proto.WP 1 ((futexWaitCancelableC ⟨⟩ W.st (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
   unfold futexWaitCancelableC
   simp only [StateT.run_bind]
@@ -405,24 +365,24 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : 
   split
   · simp only [StateT.run_bind]
     refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
-    exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl))
+    exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl rfl))
   · simp only [StateT.run_bind]
-    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨.task h W s d e, hi,
+    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨.task r W s d e, hi,
       fun G₁ m₁ hg₁ hi₁ => ⟨fun h => absurd h not_strict, fun _ =>
         ⟨fun h => absurd h not_strict, fun b m' hr => ?_⟩⟩⟩)
-    have hi₁' : Inv (upd G₁ 1 (.task h W s d e)) m₁ := by rw [← hg₁, upd_same]; exact hi₁
-    have hi₀ : Inv (upd G₁ 1 (.task h W s d e)) { m₁ with current := 1 } :=
-      inv_keep hi₁' rfl rfl rfl rfl rfl
+    have hi₁' : Inv (upd G₁ 1 (.task r W s d e)) m₁ := by rw [← hg₁, upd_same]; exact hi₁
+    have hi₀ : Inv (upd G₁ 1 (.task r W s d e)) { m₁ with current := 1 } :=
+      inv_keep hi₁' rfl rfl rfl rfl rfl rfl
     rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ |
       ⟨-, bid, blk, o, v, m₂, ha, hrec, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
     all_goals simp only [Bool.false_eq_true, ↓reduceIte]
     · refine wp_lateCancel ?_ ?_ hQ
       · rfl
-      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+      · exact inv_keep hi₁' rfl rfl rfl rfl rfl rfl
     · have hI : Inv G₁ m₂ := by
         have := inv_read rfl hi₀ ha hrec
         rwa [← hg₁, upd_same] at this
-      refine ⟨inv_keep hI rfl rfl rfl rfl rfl, wp_lateCancel ?_ ?_ hQ⟩
+      refine ⟨inv_keep hI rfl rfl rfl rfl rfl rfl, wp_lateCancel ?_ ?_ hQ⟩
       · rfl
       · exact hi₀
     · refine wp_lateCancel ?_ ?_ hQ
@@ -431,136 +391,92 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : 
 
 /-! ## The task's steps -/
 
+/-- The task's part from the invariant. -/
+theorem task_part {G : ThreadId → Gh} {m : Mem} {r : Res} {W : Words} {s d : BitVec 32} {e : Bool}
+    (hi : Inv (upd G 1 (.task r W s d e)) m) :
+    ownOf (upd G 1 (.task r W s d e)) m 1 = r ∧ W.Ok ∧ W.A s d r ∧ m.threads.size = 2 := by
+  have hg := upd_self G 1 (Gh.task r W s d e)
+  obtain ⟨hW, hA, -⟩ := hi.task 1 _ _ _ _ _ hg
+  obtain ⟨-, hj, hsz⟩ := task_live hi hg
+  exact ⟨by simp [ownOf, hj, Gh.res], hW, hA, hsz⟩
+
 /-- The task at its step `i` with `k` steps left: it keeps the invariant at every stop and ends
 with `Outcome`. -/
-theorem steps_spec (k : Nat) : ∀ (i : Nat) (G : ThreadId → Gh) (m : Mem) (n : Nat) (h : Heap)
+theorem steps_spec (k : Nat) : ∀ (i : Nat) (G : ThreadId → Gh) (m : Mem) (n : Nat) (r : Res)
     (W : Words), i + k = 3 → m.current = 1 →
-    Inv (upd G 1 (.task h W 0 (BitVec.ofNat 32 i) false)) m →
+    Inv (upd G 1 (.task r W 0 (BitVec.ofNat 32 i) false)) m →
     proto.WP 1 ((steps W.st W.dn i k).run ()) (fun a G m d => proto.QKid 1 a.1 G m d) G m n := by
   induction k with
   | zero =>
-    intro i G m n h W hik hc hi
+    intro i G m n r W hik hc hi
     obtain rfl : i = 3 := by omega
-    have hg := upd_self G 1 (Gh.task h W 0 (BitVec.ofNat 32 3) false)
-    obtain ⟨⟨hs0, -, hAs, -⟩, hA, -⟩ := hi.task 1 _ _ _ _ _ hg
-    obtain ⟨-, hj, hsz⟩ := task_live hi hg
-    have hown : ownOf (upd G 1 (.task h W 0 (BitVec.ofNat 32 3) false)) m 1 = h := by
-      simp [ownOf, hj, Gh.heap]
-    have ho := hi.own
-    have hcv := hi.cover
-    rw [← upd_same (ownOf _ m) 1, hown] at ho hcv
+    have hg := upd_self G 1 (Gh.task r W 0 (BitVec.ofNat 32 3) false)
+    obtain ⟨hown, ⟨hsb, -, hs0, -, hAs, -⟩, hA, hsz⟩ := task_part hi
     simp only [steps]
-    refine WP.callMC_step ((word_store hs0 hAs 1).frame) ho hcv hc (by rw [hsz]; decide) hA
-      fun _ m' h' ho' hcv' hq hs => ?_
-    have := inv_task_step hi hg ho' hcv' hs.threads hs.groups hq
+    refine WP.callMC_fownedS ((word_store hsb hs0 hAs 1).frame) hi.own hc (by rw [hsz]; decide)
+      (by rw [hown]; exact hA) fun _ m' r' _ _ ho' hq hs => ?_
+    have := inv_task_step hi hg ho' hs.threads hs.groups hq
       (show TaskOk 1 (BitVec.ofNat 32 3) true from .inl ⟨rfl, rfl⟩)
     rw [upd_upd] at this
     exact ⟨_, this, ⟨_, _, _, _, rfl⟩, fun h => absurd h not_strict⟩
   | succ k ih =>
-    intro i G m n h W hik hc hi
+    intro i G m n r W hik hc hi
     simp only [steps, StateT.run_bind]
-    refine WP.bind (wp_cancelWait hc hi fun r G' m' k' hc' hi' => ?_)
-    have hg' := upd_self G' 1 (Gh.task h W 0 (BitVec.ofNat 32 i) false)
-    obtain ⟨⟨hs0, hd0, hAs, hAd⟩, hA, -⟩ := hi'.task 1 _ _ _ _ _ hg'
-    obtain ⟨-, hj, hsz⟩ := task_live hi' hg'
-    have hown : ownOf (upd G' 1 (.task h W 0 (BitVec.ofNat 32 i) false)) m' 1 = h := by
-      simp [ownOf, hj, Gh.heap]
-    have ho := hi'.own
-    have hcv := hi'.cover
-    rw [← upd_same (ownOf _ m') 1, hown] at ho hcv
+    refine WP.bind (wp_cancelWait hc hi fun x G' m' k' hc' hi' => ?_)
+    have hg' := upd_self G' 1 (Gh.task r W 0 (BitVec.ofNat 32 i) false)
+    obtain ⟨hown, ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩, hA, hsz⟩ := task_part hi'
     have hi3 : i < 3 := by omega
     dsimp only
-    cases r with
+    cases x with
     | error e =>
-      refine WP.callMC_step ((word_store hs0 hAs 2).frame) ho hcv hc' (by rw [hsz]; decide) hA
-        fun _ m'' h' ho' hcv' hq hs => ?_
+      refine WP.callMC_fownedS ((word_store hsb hs0 hAs 2).frame) hi'.own hc' (by rw [hsz]; decide)
+        (by rw [hown]; exact hA) fun _ m'' r' _ _ ho' hq hs => ?_
       have hok : TaskOk 2 (BitVec.ofNat 32 i) true := .inr ⟨rfl, by
         simp only [BitVec.toNat_ofNat]; omega⟩
-      have := inv_task_step hi' hg' ho' hcv' hs.threads hs.groups hq hok
+      have := inv_task_step hi' hg' ho' hs.threads hs.groups hq hok
       rw [upd_upd] at this
       exact ⟨_, this, ⟨_, _, _, _, rfl⟩, fun h => absurd h not_strict⟩
     | ok u =>
       cases u
       simp only [StateT.run_bind]
-      refine WP.bind (WP.callMC_step ((word_store hd0 hAd (BitVec.ofNat 32 (i + 1))).frameL) ho
-        hcv hc' (by rw [hsz]; decide) hA fun _ m'' h' ho' hcv' hq hs => ?_)
+      refine WP.bind (WP.callMC_fownedS ((word_store hdb hd0 hAd (BitVec.ofNat 32 (i + 1))).frameL)
+        hi'.own hc' (by rw [hsz]; decide) (by rw [hown]; exact hA) fun _ m'' r' _ _ ho' hq hs => ?_)
       have hok : TaskOk 0 (BitVec.ofNat 32 (i + 1)) false := ⟨rfl, by
         simp only [BitVec.toNat_ofNat]; omega⟩
-      have := inv_task_step hi' hg' ho' hcv' hs.threads hs.groups hq hok
+      have := inv_task_step hi' hg' ho' hs.threads hs.groups hq hok
       rw [upd_upd] at this
-      exact ih (i + 1) _ _ _ h' W (by omega) (by rw [hs.current, hc']) this
+      exact ih (i + 1) _ _ _ r' W (by omega) (by rw [hs.current, hc']) this
 
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (n : Nat) (_hu : 0 < u) (hgu : G u = g) (hi : Inv G m) :
     proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } n := by
   cases tgt with
   | worker st dn =>
-    obtain ⟨h, W, rfl, rfl, rfl⟩ := hg
+    obtain ⟨r, W, rfl, rfl, rfl⟩ := hg
     obtain ⟨rfl, -, -⟩ := task_live hi hgu
     show proto.WP 1 ((steps W.st W.dn 0 3).run' ()) _ G _ n
     rw [StateT.run'_eq]
-    refine WP.map (steps_spec 3 0 G _ n h W rfl rfl ?_)
-    have e : upd G 1 (Gh.task h W 0 (BitVec.ofNat 32 0) false) = G := by
+    refine WP.map (steps_spec 3 0 G _ n r W rfl rfl ?_)
+    have e : upd G 1 (Gh.task r W 0 (BitVec.ofNat 32 0) false) = G := by
       rw [show BitVec.ofNat 32 0 = (0 : BitVec 32) from rfl, ← hgu, upd_same]
     rw [e]
-    exact inv_keep hi rfl rfl rfl rfl rfl
+    exact inv_keep hi rfl rfl rfl rfl rfl rfl
 
-/-- A spawn: `t` gives `h₂` of its part `h₁ ∪ h₂` to the new thread `c`; the covering moves. -/
-theorem cover_fork {own : ThreadId → Heap} {m m' : Mem} {t c : ThreadId} {h₁ h₂ : Heap}
-    (hcv : Covered own m) (hb : m'.blocks = m.blocks) (hs : own t = h₁ ∪ h₂)
-    (hc : own c = Heap.empty) (htc : t ≠ c) : Covered (upd (upd own t h₁) c h₂) m' := by
-  intro l x hl
-  rw [heap_congr hb] at hl
-  obtain ⟨u, hu⟩ := hcv l x hl
-  by_cases hut : u = t
-  · subst hut
-    rw [hs, Heap.union_apply] at hu
-    cases h1 : h₁ l with
-    | some y => exact ⟨u, by rw [upd_ne _ _ htc, upd_self, h1]; simp⟩
-    | none =>
-      rw [h1, Option.none_or] at hu
-      exact ⟨c, by rw [upd_self]; exact hu⟩
-  · by_cases huc : u = c
-    · subst huc; rw [hc] at hu; exact absurd rfl hu
-    · exact ⟨u, by rw [upd_ne _ _ huc, upd_ne _ _ hut]; exact hu⟩
-
-/-- A join: `t` takes the part of `u`; the covering moves. -/
-theorem cover_join {own : ThreadId → Heap} {m m' : Mem} {t u : ThreadId} (hcv : Covered own m)
-    (hb : m'.blocks = m.blocks) (hut : u ≠ t) :
-    Covered (upd (upd own t (own t ∪ own u)) u Heap.empty) m' := by
-  intro l x hl
-  rw [heap_congr hb] at hl
-  obtain ⟨w, hw⟩ := hcv l x hl
-  refine ⟨if w = u then t else w, ?_⟩
-  by_cases hwu : w = u
-  · subst hwu
-    simp only [↓reduceIte]
-    rw [upd_ne _ _ (Ne.symm hut), upd_self, Heap.union_apply]
-    cases h : own t l <;> simp_all
-  · simp only [hwu, ↓reduceIte]
-    rw [upd_ne _ _ hwu]
-    by_cases hwt : w = t
-    · subst hwt
-      rw [upd_self, Heap.union_apply]
-      cases h : own w l <;> simp_all
-    · rw [upd_ne _ _ hwt]; exact hw
-
-/-- `main` goes to the phase `ph'` with the same heap, after steps that change no heap byte. -/
-theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {h : Heap} {W : Words}
-    {g : Ptr} (hi : Inv G m) (hg : G 0 = .main ph h W g) (hb : m'.blocks = m.blocks)
-    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint)
-    (hs : Shape W g (upd G 0 (.main ph' h W g)) m' ph') :
-    Inv (upd G 0 (.main ph' h W g)) m' := by
-  have hown : ownOf (upd G 0 (.main ph' h W g)) m' = ownOf G m := by
+/-- `main` goes to the phase `ph'` with the same part, after steps that change no heap byte. -/
+theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {r : Res} {W : Words}
+    {g : Ptr} (hi : Inv G m) (hg : G 0 = .main ph r W g) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
+    (hf : m'.footprint = m.footprint) (hs : Shape W g (upd G 0 (.main ph' r W g)) m' ph') :
+    Inv (upd G 0 (.main ph' r W g)) m' := by
+  have hown : ownOf (upd G 0 (.main ph' r W g)) m' = ownOf G m := by
     funext u
     unfold ownOf
     rw [joinedB_congr ht]
     by_cases hu : u = 0
     · subst hu; rw [upd_self, hg]; rfl
     · rw [upd_ne _ _ hu]
-  refine ⟨by rw [hown]; exact owned_keep hi.own hb ht hc hf, by
-    rw [hown]; intro l c hl; rw [heap_congr hb] at hl; exact hi.cover l c hl,
-    fun u h₁ W₁ s₁ d₁ e₁ hu => ?_, ⟨ph', h, W, g, upd_self _ _ _, hs⟩, by rw [ht]; exact hi.t0⟩
+  refine ⟨by rw [hown]; exact hi.own.keep hb ha ht hc hf, fun u r₁ W₁ s₁ d₁ e₁ hu => ?_,
+    ⟨ph', r, W, g, upd_self _ _ _, hs⟩, by rw [ht]; exact hi.t0⟩
   by_cases h0 : u = 0
   · subst h0; rw [upd_self] at hu; cases hu
   · rw [upd_ne _ _ h0] at hu; exact hi.task u _ _ _ _ _ hu
@@ -568,11 +484,11 @@ theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {h : Heap} {W
 /-! ## `main` -/
 
 theorem ownOf_main (m : Mem) (g : Gh) :
-    ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => Heap.empty) 0 g.heap := by
+    ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => rnil) 0 g.res := by
   funext u
   by_cases hu : u = 0
   · subst hu; simp [ownOf, joinedB, upd]
-  · simp only [ownOf, upd, hu, ↓reduceIte, Gh.heap]; split <;> rfl
+  · simp only [ownOf, upd, hu, ↓reduceIte, Gh.res]; split <;> rfl
 
 theorem groupTake_one {m : Mem} {g : Ptr} (hg : m.groups = #[(g, 1)]) :
     ((Thread.groupTake g).run m).run = some (.ok (#[1], { m with groups := #[] })) := by
@@ -582,20 +498,24 @@ theorem groupTake_one {m : Mem} {g : Ptr} (hg : m.groups = #[(g, 1)]) :
     bind, ExceptT.bind, ExceptT.bindCont]
 
 /-- `free` of the first word. -/
-theorem free_front {R : Assn} {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) :
-    TTriple (word p A v ∗ R) (Zig.free p) (fun _ => R) :=
-  (word_free h0).frame.conseq (fun _ h => h) fun _ _ h => sep_emp.mp (sep_comm h)
+theorem free_front {R : FAssn} {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId}
+    (hpb : p.block = some k) (h0 : p.off = 0) :
+    FTTriple (word p A v k ⋆ R) (Zig.free p) (fun _ => R) :=
+  (word_free hpb h0).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
 
-/-- No part owns a byte: no byte is live. -/
-theorem heap_empty {own : ThreadId → Heap} {m : Mem} (hcv : Covered own m)
-    (h0 : ∀ u, own u = Heap.empty) : m.heap = Heap.empty := by
-  funext l
-  cases hl : m.heap l with
-  | none => rfl
-  | some c =>
-    obtain ⟨u, hu⟩ := hcv l c hl
-    rw [h0 u] at hu
-    exact absurd rfl hu
+theorem sep_lcomm {P Q R : FAssn} {r : Res} (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
+  sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
+
+/-- The start memory holds the parts: no thread owns anything, the rest is empty. -/
+theorem start :
+    FOwned (upd (fun _ => rnil) 0 rnil) rO { ({} : Mem) with current := 0 } := by
+  have hbl : ∀ b : BlockId, ({} : Mem).blocks[b]? = none := fun b => by
+    show (#[] : Array Block)[b]? = none; simp
+  have hw : ShapesWF (shapes ({} : Mem)) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
+  have hl : ({} : Mem).LiveLayout :=
+    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
+  rw [show upd (fun _ => rnil) 0 rnil = (fun _ => rnil) from upd_same _ _]
+  exact (FOwned.start (m := {}) rfl rfl hw hl).current 0
 
 set_option maxHeartbeats 4000000 in
 theorem main_spec (n : Nat) :
@@ -604,77 +524,68 @@ theorem main_spec (n : Nat) :
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind]
-  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { ({} : Mem) with current := 0 } := by
-    rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
-    exact Owned.start rfl rfl
-  have hcv₀ : Covered (upd (fun _ => Heap.empty) 0 Heap.empty)
-      { ({} : Mem) with current := 0 } := by
-    intro ⟨b, o⟩ c hl; simp [Mem.heap] at hl
   -- `status`
-  refine WP.bind (WP.callMC_step (TTriple.alloc .heap 4 4 (by decide)) ho₀ hcv₀ rfl (by decide)
-    rfl fun st m₁ h₁ ho₁ hcv₁ hq₁ hs₁ => ?_)
-  obtain ⟨As, hA₁⟩ := hq₁
-  obtain ⟨⟨hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
-  refine WP.bind (WP.callMC_step (word_init hs0 hAs 0) ho₁ hcv₁ (by rw [hs₁.current]) (by
-    rw [hs₁.threads]; decide) hb₁ fun _ m₂ h₂ ho₂ hcv₂ hq₂ hs₂ => ?_)
+  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc' .heap 4 4 (by decide) (by decide)) start rfl
+    (by decide) ⟨rfl, rfl, rfl⟩ fun st m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
+  obtain ⟨As, ks, hA₁⟩ := hq₁
+  obtain ⟨⟨hsb, hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
+  refine WP.bind (WP.callMC_fownedS (word_init hsb hs0 hAs 0) ho₁ (by rw [hs₁.current]) (by
+    rw [hs₁.threads]; decide) hb₁ fun _ m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   -- `done`
-  refine WP.bind (WP.callMC_step alloc_heap_next ho₂ hcv₂ (by rw [hs₂.current, hs₁.current])
-    (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ h₃ ho₃ hcv₃ hq₃ hs₃ => ?_)
-  obtain ⟨Ad, ⟨hd0, hAd⟩, hb₃⟩ := sep_ex_lift hq₃
-  refine WP.bind (WP.callMC_step (word_init hd0 hAd 0).frameL ho₃ hcv₃
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .heap 4 4 (by decide) (by decide)).frameL).pre
+    fun _ h => sep_emp.mpr h) ho₂ (by rw [hs₂.current, hs₁.current])
+    (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ r₃ _ _ ho₃ hq₃ hs₃ => ?_)
+  obtain ⟨Ad, kd, ⟨hdb, hd0, hAd⟩, hb₃⟩ := sep_ex_ex_lift hq₃
+  refine WP.bind (WP.callMC_fownedS (word_init hdb hd0 hAd 0).frameL ho₃
     (by rw [hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) hb₃
-    fun _ m₄ h₄ ho₄ hcv₄ hq₄ hs₄ => ?_)
-  let W : Words := ⟨st, dn, As, Ad⟩
-  have hW : W.Ok := ⟨hs0, hd0, hAs, hAd⟩
+    fun _ m₄ r₄ _ _ ho₄ hq₄ hs₄ => ?_)
+  let W : Words := ⟨st, dn, As, Ad, ks, kd⟩
+  have hW : W.Ok := ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩
   -- the group
-  refine WP.bind (WP.callMC_step (alloc_next 16 8 (by decide)) ho₄ hcv₄
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+    fun _ h => sep_emp.mpr h) ho₄
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) hq₄
-    fun g m₅ h₅ ho₅ hcv₅ hq₅ hs₅ => ?_)
-  obtain ⟨Ag, ⟨hg0, hAg⟩, hb₅⟩ := sep_ex_lift hq₅
-  obtain ⟨hW₅, hG, hdWG, rfl, hWa, hGa⟩ := hb₅
+    fun g m₅ r₅ _ _ ho₅ hq₅ hs₅ => ?_)
+  obtain ⟨Ag, kg, ⟨hgb, hg0, hAg⟩, hb₅⟩ := sep_ex_ex_lift hq₅
+  obtain ⟨rW, rG, hdWG, rfl, hWa, hGa⟩ := hb₅
   have hc₅ : m₅.current = 0 := by
     rw [hs₅.current, hs₄.current, hs₃.current, hs₂.current, hs₁.current]
   have ht₅ : m₅.threads = ({} : Mem).threads := by
     rw [hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]
   have hg₅ : m₅.groups = #[] := by
     rw [hs₅.groups, hs₄.groups, hs₃.groups, hs₂.groups, hs₁.groups]
+  simp only [upd_upd] at ho₅
   dsimp only
   -- `Group.async`: the task gets the two words
-  refine WP.bind (WP.groupAsyncC fun k _ => ⟨.main .spawn (hW₅ ∪ hG) W g, ?_,
-    fun G₁ m₆ hg₁ hi₆ => ⟨.task hW₅ W 0 0 false, ⟨hW₅, W, rfl, rfl, rfl⟩, fun child m₇ hf => ?_⟩⟩)
-  · refine ⟨by rw [ownOf_main]; exact ho₅, by rw [ownOf_main]; exact hcv₅,
-      fun u _ _ _ _ _ hu => ?_, ⟨.spawn, _, W, g, upd_self _ _ _, ?_⟩, by rw [ht₅]; rfl⟩
+  refine WP.bind (WP.groupAsyncC fun k _ => ⟨.main .spawn (rsum rW rG) W g, ?_,
+    fun G₁ m₆ hg₁ hi₆ => ⟨.task rW W 0 0 false, ⟨rW, W, rfl, rfl, rfl⟩, fun child m₇ hf => ?_⟩⟩)
+  · refine ⟨by rw [ownOf_main]; exact ho₅, fun u _ _ _ _ _ hu => ?_,
+      ⟨.spawn, _, W, g, upd_self _ _ _, ?_⟩, by rw [ht₅]; rfl⟩
     · by_cases h0 : u = 0
       · subst h0; rw [upd_self] at hu; cases hu
       · rw [upd_ne _ _ h0] at hu; cases hu
     · exact ⟨by rw [ht₅]; rfl, hg₅, fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]⟩
-  -- the fork: `child = 1`
+  -- the fork: `child = 1`; `main` keeps the group's block
   obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₆.main
   rw [hg₁] at h0; cases h0
   obtain ⟨hsz₆, hgr₆, hn₆⟩ := hsh
-  have ho₆ := hi₆.own
-  have hcv₆ := hi₆.cover
   have hj₆ := hi₆.t0
+  have hown₆ : ownOf G₁ m₆ 0 = ⟨rG.heap ∪ rW.heap, rG.know.union rW.know, rG.gh.add rW.gh⟩ := by
+    simp only [ownOf, joinedB, bne_self_eq_false, Bool.false_and, Bool.false_eq_true, ↓reduceIte,
+      hg₁, Gh.res]
+    exact rsum_comm hdWG
+  have ho₇ := FOwned.fork (hi₆.own.current 0) (by rw [hsz₆]; decide) hown₆ hdWG.symm hf
   rw [Proto.fork_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
-  simp only [hsz₆]
-  have hown₆ : ownOf G₁ m₆ 0 = hG ∪ hW₅ := by
-    simp only [ownOf, joinedB, bne_self_eq_false, Bool.false_and, Bool.false_eq_true, ↓reduceIte,
-      hg₁, Gh.heap]
-    exact Heap.union_comm hdWG
-  have ho₇ := Owned.fork (ho₆.current 0) (by rw [hsz₆]; decide) hown₆ hdWG.symm
-    (Proto.fork_run _)
-  simp only [hsz₆] at ho₇
+  simp only [hsz₆] at ho₇ ⊢
   have hjb6 : ∀ u, joinedB m₆ u = false := by
     intro u; unfold joinedB
     by_cases hu : u = 0
     · subst hu; rfl
     · rw [Array.getElem?_eq_none (by rw [hsz₆]; unfold ThreadId at *; omega)]; simp
-  have hn₁ : ∀ u, 1 ≤ u → ownOf G₁ m₆ u = Heap.empty := by
-    intro u hu; simp [ownOf, hjb6, hn₆ u hu, Gh.heap]
   have hjb7 : ∀ M : Mem, M.threads = m₆.threads.push { spawner := 0, joined := false } →
       ∀ u, joinedB M u = false := by
     intro M hM u; unfold joinedB
@@ -685,25 +596,23 @@ theorem main_spec (n : Nat) :
       · simp
       · rw [Array.getElem?_eq_none (by rw [hsz₆]; unfold ThreadId at *; omega)]; simp
   have e : ∀ M : Mem, M.threads = m₆.threads.push { spawner := 0, joined := false } →
-      ownOf (upd (upd G₁ 1 (.task hW₅ W 0 0 false)) 0 (.main .hint hG W g)) M =
-        upd (upd (ownOf G₁ m₆) 0 hG) 1 hW₅ := by
+      ownOf (upd (upd G₁ 1 (.task rW W 0 0 false)) 0 (.main .hint rG W g)) M =
+        upd (upd (ownOf G₁ m₆) 0 rG) 1 rW := by
     intro M hM
     funext u
     simp only [ownOf, hjb7 M hM, Bool.false_eq_true, ↓reduceIte]
     by_cases h0 : u = 0
-    · subst h0; simp [upd, Gh.heap]
+    · subst h0; simp [upd, Gh.res]
     · by_cases h1 : u = 1
-      · subst h1; simp [upd, Gh.heap]
+      · subst h1; simp [upd, Gh.res]
       · simp [upd, h0, h1, ownOf, hjb6]
   -- the spin hint: the task may run
   refine WP.bind ?_
   show proto.WP 0 (Zig.spinLoopHint >>= fun a => pure (a, ((), ()).snd)) _ _ _ _
-  refine WP.bind (WP.spinLoopHint fun k₁ _ => ⟨.main .hint hG W g, ?_,
+  refine WP.bind (WP.spinLoopHint fun k₁ _ => ⟨.main .hint rG W g, ?_,
     fun G₂ m₈ hg₂ hi₈ => WP.pure' ?_⟩)
-  · refine ⟨by rw [e _ rfl]; exact owned_keep ho₇ rfl rfl rfl rfl, ?_, fun u h₁ W₁ s₁ d₁ e₁ hu => ?_,
-      ⟨.hint, hG, W, g, upd_self _ _ _, ?_⟩, ?_⟩
-    · rw [e _ rfl]
-      exact cover_fork hcv₆ rfl hown₆ (hn₁ 1 (Nat.le_refl _)) (by decide)
+  · refine ⟨by rw [e _ rfl]; exact ho₇.keep rfl rfl rfl rfl rfl, fun u r₁ W₁ s₁ d₁ e₁ hu => ?_,
+      ⟨.hint, rG, W, g, upd_self _ _ _, ?_⟩, ?_⟩
     · by_cases h0 : u = 0
       · subst h0; rw [upd_self] at hu; cases hu
       · rw [upd_ne _ _ h0] at hu
@@ -713,14 +622,14 @@ theorem main_spec (n : Nat) :
         · rw [upd_ne _ _ h1, hn₆ u (by unfold ThreadId at *; omega)] at hu; cases hu
     · refine ⟨by simp [hsz₆], by simp [Array.getElem_push, hsz₆],
         by simp [hgr₆],
-        ⟨hW₅, 0, 0, false, by simp [upd]⟩, fun u hu => ?_⟩
+        ⟨rW, 0, 0, false, by simp [upd]⟩, fun u hu => ?_⟩
       rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
         hn₆ u (by unfold ThreadId at *; omega)]
     · simp only [Array.getElem?_push, hsz₆]; exact hj₆
   -- `Group.cancel`: the take of the task, its cancelation request, the join
   obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₈.main
   rw [hg₂] at h0; cases h0
-  obtain ⟨hsz₈, hr₈, hgr₈, ⟨hT₈, sT₈, dT₈, eT₈, h1₈⟩, hn₈⟩ := hsh
+  obtain ⟨hsz₈, hr₈, hgr₈, ⟨rT₈, sT₈, dT₈, eT₈, h1₈⟩, hn₈⟩ := hsh
   refine WP.bind ?_
   unfold groupCancelC
   simp only [StateT.run_bind]
@@ -730,70 +639,74 @@ theorem main_spec (n : Nat) :
   dsimp only
   rw [← Array.forIn_toList]
   simp only [List.forIn_cons, List.forIn_nil, StateT.run_bind, bind_assoc]
-  refine WP.bind (WP.joinC fun k₂ _ => ⟨.main .join hG W g, ?_, fun G₃ m₉ hg₃ hi₉ =>
+  refine WP.bind (WP.joinC fun k₂ _ => ⟨.main .join rG W g, ?_, fun G₃ m₉ hg₃ hi₉ =>
     ⟨fun h => absurd h not_strict, fun hfin => ⟨fun h => absurd h not_strict, fun m₁₀ hj => ?_⟩⟩⟩)
-  · refine inv_main hi₈ hg₂ rfl rfl rfl rfl ⟨hsz₈, hr₈, ⟨hT₈, sT₈, dT₈, eT₈, ?_⟩, fun u hu => ?_⟩
+  · refine inv_main hi₈ hg₂ rfl rfl rfl rfl rfl ⟨hsz₈, hr₈, ⟨rT₈, sT₈, dT₈, eT₈, ?_⟩, fun u hu => ?_⟩
     · rw [upd_ne _ _ (by decide)]; exact h1₈
     · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn₈ u hu
   -- the join: `main` takes the task's words back
   obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₉.main
   rw [hg₃] at h0; cases h0
-  obtain ⟨hsz₉, hr₉, ⟨hT, s₉, d₉, e₉, h1₉⟩, hn₉⟩ := hsh
-  obtain ⟨hT, W'', s', d', hf1⟩ := hfin
+  obtain ⟨hsz₉, hr₉, ⟨rT, s₉, d₉, e₉, h1₉⟩, hn₉⟩ := hsh
+  obtain ⟨rT', W'', s', d', hf1⟩ := hfin
   rw [h1₉] at hf1
   simp only [Gh.task.injEq] at hf1
   obtain ⟨rfl, -, rfl, rfl, rfl⟩ := hf1
   obtain ⟨-, hTA, hout⟩ := hi₉.task 1 _ _ _ _ _ h1₉
-  have hown0 : ownOf G₃ m₉ 0 = hG := by simp [ownOf, joinedB, hg₃, Gh.heap]
-  have hown1 : ownOf G₃ m₉ 1 = hT := by simp [ownOf, joinedB, hr₉, h1₉, Gh.heap]
-  have hdisj : Heap.Disjoint hG hT := by
-    have := hi₉.own.disj 0 1 (by decide); rwa [hown0, hown1] at this
-  have ho₁₀ := Owned.join (hi₉.own.current 0) (by rw [hsz₉]; decide) (by decide) hj
+  have hown0 : ownOf G₃ m₉ 0 = rG := by simp [ownOf, joinedB, hg₃, Gh.res]
+  have hown1 : ownOf G₃ m₉ 1 = rT := by simp [ownOf, joinedB, hr₉, h1₉, Gh.res]
+  have hdisj : FHeap.Disjoint rG.heap rT.heap := by
+    have := hi₉.own.disj (u := 0) (v := 1) (by rw [hsz₉]; decide) (by rw [hsz₉]; decide) (by decide)
+    rwa [hown0, hown1] at this
+  have ho₁₀ := FOwned.join (hi₉.own.current 0) (by rw [hsz₉]; decide) (show (1 : ThreadId) ≠ 0 by decide) hj
   obtain ⟨rec, -, -, hm₁₀⟩ := Proto.join_eq hj
-  have hcv₁₀ := cover_join (m' := m₁₀) hi₉.cover (by rw [hm₁₀]) (show (1 : ThreadId) ≠ 0 by decide)
-  rw [hown0, hown1, upd_comm _ _ _ (show (0 : ThreadId) ≠ 1 by decide)] at ho₁₀ hcv₁₀
+  rw [hown0, hown1] at ho₁₀
   have hc₁₀ : m₁₀.current = 0 := by rw [hm₁₀]
   have ht₁₀ : m₁₀.threads.size = 2 := by rw [hm₁₀]; simp [hsz₉]
   refine WP.bind (WP.pure' ?_)
   dsimp only
   refine WP.bind (WP.pure' ?_)
   dsimp only
+  have hm₁₁ : FOwned (upd (upd (ownOf G₃ m₉) 1 rnil) 0 (rsum rG rT)) rO
+      { m₁₀ with cancels := m₁₀.cancels.filter (fun u => !(#[1] : Array ThreadId).contains u) } :=
+    ho₁₀.keep rfl rfl rfl rfl rfl
   refine WP.callMC_keep (dropCancels_run _ _) ?_ rfl
   dsimp only
-  have hP : (bytesAt g Ag 16 .stack (Array.replicate 16 .undef) ∗
-      (word st As s₉ ∗ word dn Ad d₉)) (hG ∪ hT) := ⟨hG, hT, hdisj, rfl, hGa, hTA⟩
+  have hP : ((up (bytesAt g Ag 16 .stack (Array.replicate 16 .undef)) ⋆ bext kg 16 .stack) ⋆
+      W.A s₉ d₉) (rsum rG rT) := ⟨rG, rT, hdisj, rfl, hGa, hTA⟩
   -- `status.*`, `done.*`
-  refine WP.bind (WP.callMC_step ((word_load hs0 hAs).frame_eq.frameL_eq)
-    (owned_keep ho₁₀ rfl rfl rfl rfl) (fun l c hl => hcv₁₀ l c hl) hc₁₀ (by rw [ht₁₀]; decide) hP
-    fun r₁ m₁₂ h₁₂ ho₁₂ hcv₁₂ hq₁₂ hs₁₂ => ?_)
+  refine WP.bind (WP.callMC_fownedS ((word_load hsb hs0 hAs).frame.frameL.post
+    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_assoc h) h))
+    hm₁₁ hc₁₀ (by rw [ht₁₀]; decide) hP fun r₁ m₁₂ r₁₂ _ _ ho₁₂ hq₁₂ hs₁₂ => ?_)
   obtain ⟨rfl, hP₁₂⟩ := sep_lift.mp hq₁₂
-  refine WP.bind (WP.callMC_step ((word_load hd0 hAd).frameL_eq.frameL_eq) ho₁₂ hcv₁₂
+  refine WP.bind (WP.callMC_fownedS ((word_load hdb hd0 hAd).frameL.frameL.post
+    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm h) h)) ho₁₂
     (by rw [hs₁₂.current, hc₁₀]) (by rw [hs₁₂.threads, ht₁₀]; decide) hP₁₂
-    fun r₂ m₁₃ h₁₃ ho₁₃ hcv₁₃ hq₁₃ hs₁₃ => ?_)
+    fun r₂ m₁₃ r₁₃ _ _ ho₁₃ hq₁₃ hs₁₃ => ?_)
   obtain ⟨rfl, hP₁₃⟩ := sep_lift.mp hq₁₃
   -- the frees
-  refine WP.bind (WP.callMC_step ((free_front hs0).frameL) ho₁₃ hcv₁₃
+  refine WP.bind (WP.callMC_fownedS ((free_front hsb hs0).frameL) ho₁₃
     (by rw [hs₁₃.current, hs₁₂.current, hc₁₀]) (by rw [hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
-    hP₁₃ fun _ m₁₄ h₁₄ ho₁₄ hcv₁₄ hq₁₄ hs₁₄ => ?_)
-  refine WP.bind (WP.callMC_step ((word_free hd0).frameL) ho₁₄ hcv₁₄
+    hP₁₃ fun _ m₁₄ r₁₄ _ _ ho₁₄ hq₁₄ hs₁₄ => ?_)
+  refine WP.bind (WP.callMC_fownedS ((word_free hdb hd0).frameL) ho₁₄
     (by rw [hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
     (by rw [hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
-    hq₁₄ fun _ m₁₅ h₁₅ ho₁₅ hcv₁₅ hq₁₅ hs₁₅ => ?_)
-  refine WP.bind (WP.callMC_step ((TTriple.free (by simp) hg0 (by decide)).conseq
-    (fun _ h => sep_emp.mp h) fun _ _ h => h) ho₁₅ hcv₁₅
+    hq₁₄ fun _ m₁₅ r₁₅ _ _ ho₁₅ hq₁₅ hs₁₅ => ?_)
+  refine WP.bind (WP.callMC_fownedS ((FTTriple.free' hgb (by simp) hg0 (by decide)).pre
+    fun _ h => sep_emp.mp h) ho₁₅
     (by rw [hs₁₅.current, hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
     (by rw [hs₁₅.threads, hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
-    hq₁₅ fun _ m₁₆ h₁₆ ho₁₆ hcv₁₆ hq₁₆ hs₁₆ => ?_)
-  have he : h₁₆ = Heap.empty := hq₁₆
-  subst he
-  refine WP.pure' ⟨hout, heap_empty hcv₁₆ fun u => ?_⟩
+    hq₁₅ fun _ m₁₆ r₁₆ _ _ ho₁₆ hq₁₆ hs₁₆ => ?_)
+  have he : r₁₆.heap = FHeap.empty := hq₁₆.1
+  refine WP.pure' ⟨hout, ho₁₆.heap_empty (fun u _ => ?_) (fheap_empty_mem)⟩
   by_cases h0 : u = 0
-  · subst h0; rw [upd_self]
-  · rw [upd_ne _ _ h0]
+  · subst h0; rw [upd_self]; exact he
+  · simp only [upd_upd] at *
+    rw [upd_ne _ _ h0]
     by_cases h1 : u = 1
     · subst h1; rw [upd_self]
     · rw [upd_ne _ _ h1]
-      simp [ownOf, hn₉ u (by unfold ThreadId at *; omega), Gh.heap]
+      simp [ownOf, hn₉ u (by unfold ThreadId at *; omega), Gh.res]
 
 /-! ## The results -/
 
@@ -819,5 +732,18 @@ theorem cancelClient_canceled_not_completed (env : Env) (henv : env.spawn = .ava
       .inl h2⟩
   · refine ⟨by rw [h1]; decide, fun _ h3 => ?_, .inr h1⟩
     rw [h3] at h2; exact absurd h2 (by decide)
+
+/-! ## Strength (`docs/sep-threads.md`): the legacy proof's statements, verbatim -/
+
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32 × BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+    Outcome v ∧ m.heap = Heap.empty :=
+  cancelClient_spec env henv h
+
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat}
+    {v : BitVec 32 × BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+    v.1 ≠ 0 ∧ (v.1 = 2 → v.2 ≠ 3) ∧ (v.2 = 3 ∨ v.1 = 2) :=
+  cancelClient_canceled_not_completed env henv h
 
 end Cancel.Group
