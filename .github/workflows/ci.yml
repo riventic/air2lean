@@ -532,7 +532,9 @@ jobs:
 
       - name: Counterexample bundle regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
+        run: |
+          python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
+          python3 -I -B tests/roadmap/counterexamples/test_row.py
 
       - name: Local Lake cache hygiene regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -1885,6 +1887,8 @@ jobs:
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
           # P08: the relaxed message-passing race replays; limits stay unsolved.
           python3 -I -B tests/roadmap/counterexamples/test_e2e.py tests/diff/.lake/build/bin/schedules
+          # P08: sequential cases of any shape replay through the production runners (row replay).
+          python3 -I -B tests/roadmap/counterexamples/test_row.py
           zig build-exe -OReleaseSafe -lc --dep common \
             -Mroot=tests/roadmap/outcome-accounting/Native.zig \
             -Mcommon=tests/diff/common.zig -femit-bin="$RUNNER_TEMP/outcome-native"
