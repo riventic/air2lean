@@ -110,7 +110,7 @@ private def hasErrorCapability (types : Array Ty) (id : TyId) (cycles : Bool := 
 
 /-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
 is used for global aliases whose strict capability traversal could not finish, and for pointer
-casts under `--allocator-model translated` (`translatedErrorCapability`); parent recovery
+casts under `--allocator-model translated` (`castErrorCapability`); parent recovery
 retains the strict cycle-rejecting traversal. -/
 private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
     (opaquePtrs : Bool := false) : Bool := Id.run do
@@ -136,7 +136,7 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
       let remaining := 1023 - step
       if count > remaining || rest.length + count > remaining then return false
       visited := visited.insert id
-      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`translatedErrorCapability`).
+      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`castErrorCapability`).
       let opaqueEdge := opaquePtrs && match ty with
         | .ptr _ _ c => types[c]? == some (.other "anyopaque")
         | _ => false
