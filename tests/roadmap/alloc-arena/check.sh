@@ -9,7 +9,7 @@
 # against FAllocSpec for each module (ArenaSpec*.lean, by the shared tactics of AllocArena/Core.lean);
 # an alloc that reserves nothing is rejected (mutant.sh); the admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
-# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim
+# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim
 # ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
 # against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).

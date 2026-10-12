@@ -1,5 +1,6 @@
-import ZigLean.VC.Mem
+import ZigLean.VC.Result
 import ZigLean.VC.ContractAttr
+import ZigLean.Sep.Full.AutoPrim
 
 /-!
 # Rules for automatic VC extraction
@@ -9,15 +10,19 @@ This file holds the kernel-checked pieces that `ZigLean.VC.Extract` combines:
 * normalization lemmas that remove the generated `StateT` locals/exit plumbing;
 * primitive `Result` contracts tagged `@[vc_contract]`, so an operation without an AST
   constructor becomes a checked modular call whose precondition is a safety obligation;
-* introduction rules, one per AST constructor, that split a generated VC into separate goals;
-* `ensures`, which separates a memory postcondition into a functional result and a heap effect.
+* `result_step`, which makes a `Result` contract a step rule of the symbolic executor `fsym`
+  (`docs/proof-automation.md`), and from it the `@[fsym]` rules of the primitive contracts that
+  the rule library lacks: memory VCs are `fsym`'s walk (`ZigLean/VC/Extract.lean`);
+* introduction rules, one per `ResultProgram` constructor, that split a generated VC into
+  separate goals;
+* `ensures`, which separates a postcondition into a functional result and a heap effect.
 
 Every rule is an ordinary theorem; nothing here is trusted by the extractor.
 -/
 
 namespace Zig.VC
 
-open Assn
+open Full
 
 /-! ## Normalization of generated bodies -/
 
@@ -108,49 +113,71 @@ variable {n : Nat}
 
 end Prim
 
-/-! ## Pointer equality -/
+/-! ## Contracts as step rules of `fsym`
 
-/-- `==` on pointers compares addresses (`ptrEqAddr`, MM-4). For two pointers without a block
-(from `@ptrFromInt`, or null) the addresses are the offsets; nothing is read or owned. -/
-@[vc_contract] theorem ptrEqAddr_raw (p q : Ptr) :
-    Triple ⌜p.block = none ∧ q.block = none⌝ (ptrEqAddr p q)
-      (fun r => ⌜r = decide (p.off = q.off)⌝) :=
-  Triple.of_run fun m _ hF _ hm hp hst => by
-    obtain ⟨⟨hpb, hqb⟩, rfl⟩ := hp
-    refine ⟨decide (p.off = q.off), m, Heap.empty, ?_, (Heap.disjoint_empty hF).symm,
-      by rw [hm, Heap.empty_union], ⟨rfl, rfl⟩, hst⟩
-    simp [ptrEqAddr, ptrAddr, hpb, hqb, zig_unfold]
+Memory VCs are the walk of the symbolic executor: a `Result` operation inside generated memory
+code is a command `StateT.lift x`, executed by a step rule. `result_step` makes a `Result`
+contract (`pre → ∃ v, x = pure v ∧ post v`) such a rule: its precondition is the rule's side
+condition, its summary a fact of the result. The primitive contracts that the rule library of
+`ZigLean/Sep/Full/AutoRules.lean` lacks are registered this way; `vc_gen` passes the other
+`@[vc_contract]` contracts to the walk. -/
 
-/-! ## Pointer formation (MM-3) -/
+/-- A `Result` contract as a step rule: the frame `P` is kept, the summary is a fact. -/
+theorem result_step {α : Type} {P : FAssn} {x : Result α} {pre : Prop} {post : α → Prop}
+    (contract : pre → ∃ v, x = pure v ∧ post v) (h : pre) :
+    FTotalTriple P (StateT.lift x : MemM α) (fun v => ⟪post v⟫ ⋆ P) := by
+  obtain ⟨v, rfl, hv⟩ := contract h
+  exact (FTotalTriple.ret (Q := fun r => ⟪post r⟫ ⋆ P) v).pre fun _ hp => Full.sep_lift.mpr ⟨hv, hp⟩
 
-/-- Owned bytes of `p` reaching `k` bytes past it (one past the end included): the block's bytes
-`bs` with alignment `A`, size `S` and kind `K` (`bytesAt`). -/
-def ownsOffset (p : Ptr) (k : Int) : Assn :=
-  Assn.ex fun (x : Nat × Nat × BlockKind × Array Byte) =>
-    ⌜0 ≤ k ∧ k ≤ x.2.2.2.size ∧ 0 < x.2.2.2.size⌝ ∗ bytesAt p x.1 x.2.1 x.2.2.1 x.2.2.2
+namespace Prim
 
-/-- `&p.f`, `p + k` for a byte offset (`struct_field_ptr`, `ptr_add`): checked pointer
-formation (`ptrProject`, `getelementptr inbounds`) needs base and result in bounds of the same
-block. Owning `p`'s bytes up to `k` (`ownsOffset`) gives both; nothing is read or changed. -/
-@[vc_contract] theorem ptrProject_bytes (p : Ptr) (k : Int) :
-    Triple (ownsOffset p k) (ptrProject p (·.add k)) (fun q => ⌜q = p.add k⌝ ∗ ownsOffset p k) :=
-  Triple.of_run fun m hP _ hd hm hown hs => by
-    obtain ⟨⟨A, S, K, bs⟩, hx⟩ := hown
-    obtain ⟨⟨h0, hk, hpos⟩, hb⟩ := sep_lift.mp hx
-    have hrun := bytesAt_ptrProject_run hb hm (k := k.toNat) (by omega) hpos
-    simp only [Int.toNat_of_nonneg h0] at hrun
-    exact ⟨_, m, hP, hrun, hd, hm, sep_lift.mpr ⟨rfl, ⟨⟨A, S, K, bs⟩, hx⟩⟩, hs⟩
+variable {n : Nat} {P : FAssn}
+
+@[fsym] theorem mul_unsigned_step (a b : BitVec n) (h : a.toNat * b.toNat < 2 ^ n) :
+    FTotalTriple P (StateT.lift (Zig.mul false a b) : MemM (BitVec n)) (fun v => ⟪v = a * b⟫ ⋆ P) :=
+  result_step (mul_unsigned a b) h
+
+@[fsym] theorem add_signed_step (a b : BitVec n) (h : a.saddOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.add true a b) : MemM (BitVec n)) (fun v => ⟪v = a + b⟫ ⋆ P) :=
+  result_step (add_signed a b) h
+
+@[fsym] theorem sub_signed_step (a b : BitVec n) (h : a.ssubOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.sub true a b) : MemM (BitVec n)) (fun v => ⟪v = a - b⟫ ⋆ P) :=
+  result_step (sub_signed a b) h
+
+@[fsym] theorem mul_signed_step (a b : BitVec n) (h : a.smulOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.mul true a b) : MemM (BitVec n)) (fun v => ⟪v = a * b⟫ ⋆ P) :=
+  result_step (mul_signed a b) h
+
+/-- `@intCast` in range (`Zig.Full.Auto.intCast_widen_step` covers unsigned widening). -/
+@[fsym] theorem intCast_range_step (s₁ s₂ : Bool) (m : Nat) (a : BitVec n)
+    (h : (if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
+      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) :
+    FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
+      (fun v => ⟪v = BitVec.ofInt m (Zig.val s₁ a)⟫ ⋆ P) :=
+  result_step (intCast_range s₁ s₂ m a) h
+
+@[fsym] theorem index_step {α : Type} (a : Array α) (i : usize) (h : i.toNat < a.size) :
+    FTotalTriple P (StateT.lift (Zig.index a i) : MemM α)
+      (fun v => ⟪∃ h : i.toNat < a.size, v = a[i.toNat]⟫ ⋆ P) :=
+  result_step (index a i) h
+
+@[fsym] theorem unwrapPayload_step {α : Type} (e : Except ErrName α) (h : Zig.isNonErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapPayload e) : MemM α) (fun v => ⟪e = .ok v⟫ ⋆ P) :=
+  result_step (unwrapPayload e) h
+
+@[fsym] theorem unwrapErr_step {α : Type} (e : Except ErrName α) (h : Zig.isErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapErr e) : MemM ErrName) (fun v => ⟪e = .error v⟫ ⋆ P) :=
+  result_step (unwrapErr e) h
+
+end Prim
 
 /-! ## Contract postconditions -/
 
-/-- A memory postcondition in two parts: the functional `result` and the `heap` effect.
-Extraction reports them as separate obligations. -/
-def ensures {α : Type} (result : α → Prop) (heap : α → Assn) : α → Assn :=
-  fun value h => result value ∧ heap value h
-
-theorem ensures_intro {α : Type} {result : α → Prop} {heap : α → Assn} {value : α} {h : Heap}
-    (result_ok : result value) (heap_ok : heap value h) : ensures result heap value h :=
-  ⟨result_ok, heap_ok⟩
+/-- A postcondition in two parts: the functional `result` (a fact) and the `heap` effect. `vc_gen`
+unfolds it, so the result is a separate obligation from the heap's. -/
+def ensures {α : Type} (result : α → Prop) (heap : α → FAssn) : α → FAssn :=
+  fun value => ⟪result value⟫ ⋆ heap value
 
 /-! ## Entry rules -/
 
@@ -159,23 +186,12 @@ theorem result_intro {α : Type} {program : ResultProgram α} {action : Result �
     ∃ value, action = pure value ∧ post value :=
   source ▸ program.sound post generated
 
-theorem triple_intro {α : Type} {program : MemProgram α} {action : MemM α} {pre : Assn}
-    {post : α → Assn} (source : program.eval = action)
-    (generated : MemProgram.obligation pre program post) : Triple pre action post :=
-  source ▸ MemProgram.verify generated
-
 /-- The link theorem of an extracted `ResultProgram`: the existing soundness theorem,
 transported along the kernel-checked source equality. -/
 theorem ResultProgram.sound_of {α : Type} {program : ResultProgram α} {action : Result α}
     (source : program.eval = action) (post : α → Prop) (generated : program.vc post) :
     ∃ value, action = pure value ∧ post value :=
   result_intro source generated
-
-/-- The link theorem of an extracted `MemProgram`. -/
-theorem MemProgram.sound_of {α : Type} {program : MemProgram α} {action : MemM α}
-    (source : program.eval = action) (post : α → Assn) :
-    Triple (program.vc post) action post :=
-  source ▸ program.sound post
 
 /-! ## Splitting rules for `ResultProgram.vc` -/
 
@@ -217,64 +233,5 @@ theorem branch_intro {α : Type} {condition : Bool} {yes no : ResultProgram α}
   | true => exact taken rfl
 
 end ResultProgram
-
-/-! ## Splitting rules for `MemProgram.vc` -/
-
-namespace MemProgram
-
-theorem ret_intro {α : Type} {value : α} {post : α → Assn} {h : Heap} (next : post value h) :
-    (MemProgram.ret value).vc post h := next
-
-theorem load_intro {T : Type} [Enc T] {pointer : Ptr} {alignment : Nat} {post : T → Assn}
-    {h : Heap} {old : T} (owned : pts pointer alignment old h) (size : 0 < Enc.size T)
-    (next : post old h) : (MemProgram.load (T := T) pointer alignment).vc post h :=
-  ⟨size, old, owned, next⟩
-
-theorem load_intro_any {T : Type} [Enc T] {pointer : Ptr} {alignment : Nat} {post : T → Assn}
-    {h : Heap} (size : 0 < Enc.size T) (owned : ∃ old : T, pts pointer alignment old h ∧ post old h) :
-    (MemProgram.load (T := T) pointer alignment).vc post h :=
-  ⟨size, owned⟩
-
-theorem store_intro {T : Type} [Enc T] [LawfulEnc T] {pointer : Ptr} {alignment : Nat}
-    {value : T} {post : Unit → Assn} {h : Heap} (size : 0 < Enc.size T)
-    (owned : ∃ old : T, pts pointer alignment old h)
-    (next : ∀ h', pts pointer alignment value h' → post () h') :
-    (MemProgram.store pointer alignment value).vc post h :=
-  ⟨size, owned, next⟩
-
-theorem read_intro {T : Type} [Enc T] {pointer : Ptr} {alignment : Nat} {old : T}
-    {post : T → Assn} {h : Heap} (size : 0 < Enc.size T) (owned : pts pointer alignment old h)
-    (next : post old h) : (MemProgram.read pointer alignment old).vc post h :=
-  ⟨size, owned, next⟩
-
-theorem write_intro {T : Type} [Enc T] [LawfulEnc T] {pointer : Ptr} {alignment : Nat}
-    {old value : T} {post : Unit → Assn} {h : Heap} (size : 0 < Enc.size T)
-    (owned : pts pointer alignment old h)
-    (next : ∀ h', pts pointer alignment value h' → post () h') :
-    (MemProgram.write pointer alignment old value).vc post h :=
-  ⟨size, owned, next⟩
-
-theorem lift_intro {α : Type} {program : ResultProgram α} {post : α → Assn} {h : Heap}
-    (generated : program.vc (fun value => post value h)) :
-    (MemProgram.lift program).vc post h := generated
-
-theorem call_intro {α : Type} {label : String} {action : MemM α} {pre : Assn}
-    {summary : α → Assn} {checked : Triple pre action summary} {post : α → Assn} {h : Heap}
-    (precondition : pre h) (next : ∀ value h', summary value h' → post value h') :
-    (MemProgram.call label action pre summary checked).vc post h := ⟨precondition, next⟩
-
-theorem bind_intro {α β : Type} {first : MemProgram α} {next : α → MemProgram β}
-    {post : β → Assn} {h : Heap} (generated : first.vc (fun value => (next value).vc post) h) :
-    (MemProgram.bind first next).vc post h := generated
-
-theorem branch_intro {α : Type} {condition : Bool} {yes no : MemProgram α}
-    {post : α → Assn} {h : Heap} (taken : condition = true → yes.vc post h)
-    (skipped : condition = false → no.vc post h) :
-    (MemProgram.branch condition yes no).vc post h := by
-  cases condition with
-  | false => exact skipped rfl
-  | true => exact taken rfl
-
-end MemProgram
 
 end Zig.VC
