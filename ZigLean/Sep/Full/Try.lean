@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.Local
 
 /-!
 # Error unions and optionals through pointers in the full-state logic (Plan A library lane A1)
@@ -589,6 +590,44 @@ theorem errUnion_size_pos : 0 < Enc.size (Except ErrName α) := by
   have e2 : writeBytes bs 0 (Enc.encode w) = Enc.encode w := by
     simp [writeBytes, hw, hs]
   rw [e2]; exact LawfulEnc.decode_encode w
+
+section Block
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {b : BlockId}
+
+/-- **Store of a whole error union** with a finite error domain at the start of a block's bytes
+held with the block's extent (an escaping local, `Full/Local.lean`). -/
+@[fsym] theorem FTotalTriple.storeBlock_finite [LawfulEnc α] (w : Except ErrName α)
+    (hpb : p.block = some b) (hk : Enc.size (Except ErrName α) ≤ bs.size)
+    (ha : (A + p.off.toNat) % al = 0) (hK : K ≠ .constGlobal)
+    (hdom : (errTagOf w).all d.names.contains = true) :
+    FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K)
+      (@Zig.store (Except ErrName α) (errorUnionEnc d inferInstance) al p w)
+      (fun _ => up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) := by
+  have e : @Zig.store (Except ErrName α) (errorUnionEnc d inferInstance) al p w = Zig.store al p w := by
+    unfold Zig.store; rw [errorUnionEnc_encode hdom]
+  rw [e]
+  have hw := LawfulEnc.size_encode w
+  exact FTotalTriple.storeBlock w hpb (by rw [hw]; exact errUnion_size_pos) (by rw [hw]; exact hk) ha hK
+
+/-- **Load of the error union stored** at the start of a block's bytes, with a finite error
+domain: it reads back what was stored. -/
+@[fsym] theorem FTotalTriple.loadBlock_finite [LawfulEnc α] {w : Except ErrName α}
+    (hpb : p.block = some b) (hk : Enc.size (Except ErrName α) ≤ bs.size)
+    (ha : (A + p.off.toNat) % al = 0) (hdom : (errTagOf w).all d.names.contains = true) :
+    FTotalTriple (up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K)
+      (@Zig.load (Except ErrName α) (errorUnionEnc d inferInstance) al p)
+      (fun x => ⟪x = w⟫ ⋆ (up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K)) := by
+  have hw := LawfulEnc.size_encode w
+  refine @FTotalTriple.loadBlock (Except ErrName α) (errorUnionEnc d inferInstance) p A S K _ b al w
+    hpb errUnion_size_pos (by rw [writeBytes_size _ _ _ (by omega)]; exact hk) ?_ ha
+  have e := extract_writeBytes bs 0 (Enc.encode w) (by omega)
+  rw [hw, Nat.zero_add] at e
+  have hd : Enc.decode ((writeBytes bs 0 (Enc.encode w)).extract 0 (Enc.size (Except ErrName α))) =
+      pure w := by rw [e]; exact LawfulEnc.decode_encode w
+  exact errorUnionEnc_decode hd hdom
+
+end Block
 
 /-! ### Payload pointers -/
 

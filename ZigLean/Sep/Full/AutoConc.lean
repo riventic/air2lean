@@ -14,14 +14,16 @@ import ZigLean.Mem.Repr
   `CTriple` counterparts of `Auto.step` & co. A `MemM` command `ConcM.liftMem c` is executed by a
   sequential rule about `c`: total (`@[fsym]`, `FTotalTriple`) or partial (`FTriple`: the atomic
   rules, since `CTriple` is partial correctness). A `CTriple` rule (`C.stepC`) executes a
-  concurrent command: a call through a table (`Table.call`, `CVTable.dispatch`, the
-  `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
+  concurrent command: a call through a table (`Table.call`, `Table.callOr`, `CVTable.dispatch`,
+  the `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
 * **An atomic op's oracle choice** is `0` in one thread (`C.pick`, `CTriple.pick_bind`).
-* **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else throw .illegal` is folded
-  into `callIndirect f [(c₁, x₁), …]` before the body is normalized (`callIndirect_fold_one`/
+* **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else d` (`d` is
+  `throw .illegal`, or the environment's call of an open interface) is folded into
+  `callIndirect f [(c₁, x₁), …] d` before the body is normalized (`callIndirect_fold_one`/`ext`/
   `cons`), read under the locals (`callIndirect_run`), and the common continuation of its arms is
-  pulled out (`callIndirect_bind`, `pullIndirect`), so the call is one command. `fsym` executes it by a `CTriple` rule for
-  the table call, or reads the arm that the facts select (`callIndirect_pos`/`_neg`).
+  pulled out (`callIndirect_bind`, `pullIndirect`), so the call is one command. `fsym` executes
+  it by a `CTriple` rule for the table call, or reads the arm that the facts select
+  (`callIndirect_pos`/`_neg`), then the last arm (`callIndirect_nil`).
 * **`fsym_norm`** for concurrent bodies: the `CNorm` lemmas (`conc_norm`), the atomic ops of
   `CM` as an oracle pick and a `MemM` op, and `ConcM.liftMem` pushed through the `MemM` layer
   (`liftMem_bind`, `liftMem_ite`), so a generated `MemM` callee is walked command by command.
@@ -214,17 +216,18 @@ theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 
   CTriple.pick_bind h
 
 /-- The arm of an indirect call that the function pointer selects. -/
-theorem callIndirect_pos {f p : Ptr} {x : ConcM Tgt β} {arms : List (Ptr × ConcM Tgt β)}
-    (h : f = p) : Full.callIndirect f ((p, x) :: arms) = x := by
+theorem callIndirect_pos {f p : Ptr} {x d : ConcM Tgt β} {arms : List (Ptr × ConcM Tgt β)}
+    (h : f = p) : Full.callIndirect f ((p, x) :: arms) d = x := by
   subst h; simp [Full.callIndirect]
 
 /-- Past an arm that the function pointer does not select. -/
-theorem callIndirect_neg {f p : Ptr} {x : ConcM Tgt β} {arms : List (Ptr × ConcM Tgt β)}
-    (h : ¬ f = p) : Full.callIndirect f ((p, x) :: arms) = Full.callIndirect f arms := by
+theorem callIndirect_neg {f p : Ptr} {x d : ConcM Tgt β} {arms : List (Ptr × ConcM Tgt β)}
+    (h : ¬ f = p) : Full.callIndirect f ((p, x) :: arms) d = Full.callIndirect f arms d := by
   simp [Full.callIndirect, h]
 
-/-- No arm left: the call is illegal. -/
-theorem callIndirect_nil (f : Ptr) : (Full.callIndirect f [] : ConcM Tgt β) = throw .illegal := rfl
+/-- No arm left: the last arm (`.illegal` for a closed function type, the environment's call
+for an open one). -/
+theorem callIndirect_nil (f : Ptr) (d : ConcM Tgt β) : Full.callIndirect f [] d = d := rfl
 
 end C
 
@@ -261,10 +264,11 @@ attribute [fsym_norm] callIndirect_run List.map_cons List.map_nil StateT.run_set
 
 open Lean Meta Simp in
 /-- The common continuation of the arms of an indirect call is pulled out
-(`callIndirect_bind`): `callIndirect f [(c₁, x₁ >>= g), …] = callIndirect f [(c₁, x₁), …] >>= g`,
-so the call is one command. -/
-simproc [fsym_norm] pullIndirect (Full.callIndirect _ _) := fun e => do
-  let_expr Full.callIndirect α m _ f arms := e | return .continue
+(`callIndirect_bind`): `callIndirect f [(c₁, x₁ >>= g), …] (d >>= g) = callIndirect f [(c₁, x₁),
+…] d >>= g`, so the call is one command. A last arm `throw e` (a closed function type) is
+`throw e >>= g` already. -/
+simproc [fsym_norm] pullIndirect (Full.callIndirect _ _ _) := fun e => do
+  let_expr Full.callIndirect α m f arms d := e | return .continue
   unless m.isAppOfArity ``Zig.ConcM 1 do return .continue
   -- the arms, a list literal
   let mut xs := #[]
@@ -287,13 +291,20 @@ simproc [fsym_norm] pullIndirect (Full.callIndirect _ _) := fun e => do
   let some g := g? | return .continue
   let β := (← inferType (ys[0]!.2)).appArg!
   let tgt := m.appArg!
-  let pairTy ← mkAppM ``Prod #[mkConst ``Zig.Ptr, ← mkAppM ``Zig.ConcM #[tgt, β]]
+  let cβ ← mkAppM ``Zig.ConcM #[tgt, β]
+  -- the last arm without the continuation
+  let d' ← if d.isAppOfArity ``Bind.bind 6 && d.appArg! == g then pure (d.getArg! 4)
+    else if d.isAppOfArity ``MonadExcept.throw 5 then
+      mkAppOptM ``MonadExcept.throw #[none, ← mkAppM ``Zig.ConcM #[tgt], none, β, d.appArg!]
+    else return .continue
+  unless ← isDefEq (← inferType d') cβ do return .continue
+  let pairTy ← mkAppM ``Prod #[mkConst ``Zig.Ptr, cβ]
   let mut lst ← mkAppOptM ``List.nil #[pairTy]
   for (c, y) in ys.reverse do
     lst ← mkAppOptM ``List.cons #[pairTy, ← mkAppOptM ``Prod.mk #[none, none, c, y], lst]
-  let call ← mkAppOptM ``Full.callIndirect #[β, m, none, f, lst]
+  let call ← mkAppOptM ``Full.callIndirect #[β, m, f, lst, d']
   let rhs ← mkAppM ``Bind.bind #[call, g]
-  let pf ← mkAppOptM ``Full.callIndirect_bind #[tgt, β, α, f, lst, g]
+  let pf ← mkAppOptM ``Full.callIndirect_bind #[tgt, β, α, f, lst, d', g]
   let pf ← mkEqSymm pf
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 

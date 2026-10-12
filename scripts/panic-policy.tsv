@@ -22,6 +22,7 @@ memcpyLenMismatch	panic
 memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
+sliceCastLenRemainder	panic
 panic	panic
 SIGFPE	trap
 unexpectedErrorCode	panic

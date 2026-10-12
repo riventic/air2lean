@@ -122,6 +122,15 @@ def reduceProjs (e : Expr) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
+/-- Raw natural-number literals as numerals (`OfNat.ofNat n`): unification can assign a rule's
+argument a raw literal (`BitVec.ofNat 6 ?k =?= 3`, an interface's alignment), which the
+precondition's atoms (`2 ^ ?k`) must match as the state writes them. Equal up to `instOfNatNat`. -/
+def normNatLits (e : Expr) : MetaM Expr :=
+  Meta.transform e (pre := fun x => do
+    if x.isAppOfArity ``OfNat.ofNat 3 then return .done x
+    if let .lit (.natVal n) := x then return .done (mkNatLit n)
+    return .continue)
+
 /-- Unfold an assertion atom while it unfolds to a combination of assertions (not to a raw
 predicate `fun r => …`). -/
 partial def unfoldAtom (e : Expr) : MetaM Expr := do
@@ -1448,7 +1457,7 @@ a large generated body as on a small one. At `x >>= f` only `x` is simplified an
 rewritten (`bind_assoc`, `pure_bind`, `ite_bind`, …); the continuation `f` is left as it is (it is
 normalized once it is the head: `pure_bind` makes it the head of the result, which simp visits).
 `fold?` (concurrent bodies): a generated indirect call `if f == c₁ then x₁ else …` is folded into
-`callIndirect` (`callIndirect_fold_one`/`cons`) at its `if`, before simp rewrites its tests. -/
+`callIndirect` (`callIndirect_fold_one`/`ext`/`cons`) at its `if`, before simp rewrites its tests. -/
 def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context) : Simp.Methods :=
   let m := Simp.mkDefaultMethodsCore procs
   let mFold := Simp.mkDefaultMethodsCore #[]
@@ -1514,6 +1523,7 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
   let foldCtx : MetaM Simp.Context := do
     if let some f ← (← caches).fold.get then return f
     let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
+    let thms ← thms.addConst ``Full.callIndirect_fold_ext
     let thms ← thms.addConst ``Full.callIndirect_fold_cons
     let f ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
     (← caches).fold.set (some f); return f
@@ -2691,7 +2701,9 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else some x
     let some tx := target? | s.restore; return none
     if kind == ``CTriple then
-      let cmd ← unfoldToHead (← instantiateMVars cmd) tx
+      -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
+      -- reduced first, so that a literal argument unifies as written, not in its unfolded form
+      let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
       unless headKey cmd == headKey tx do s.restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
@@ -2699,7 +2711,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     else
       unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
-    let P₀i ← instantiateMVars P₀
+    let P₀i ← normNatLits (← instantiateMVars P₀)
     let whole := P₀i.isMVar
     let mut R := mkConst empN
     -- `EUpd P (P₀ ⋆ R)` by the planner, when the rule's precondition is not literally there
@@ -2756,8 +2768,8 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
           trace[fsym] "rule {rule}: undetermined {a}"
           s.restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
-    let Q₀ ← instantiateMVars Q₀
-    let P₀ ← instantiateMVars P₀
+    let Q₀ ← normNatLits (← instantiateMVars Q₀)
+    let P₀ ← normNatLits (← instantiateMVars P₀)
     -- the rule in the backend's kind: `FTotalTriple` (sequential, total), `FTriple` (`P.step`,
     -- `C.step`) or `CTriple` (`C.stepC`)
     let mut kind := kind
@@ -2829,15 +2841,16 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
 mutual
-/-- An indirect call `callIndirect f ((p, y) :: arms)` that no rule covers: `y` if the facts show
-`f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is `throw .illegal`, which
-must be unreachable. -/
+/-- An indirect call `callIndirect f ((p, y) :: arms) d` that no rule covers: `y` if the facts
+show `f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is the last arm `d`:
+`throw .illegal` (closed: must be unreachable) or the environment's call (open, by its
+contract). -/
 partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array Expr)
     (extra : Array Syntax) (fuel : Nat) : TacticM (List MVarId) := g.withContext do
   let a := x.getAppArgs
-  let (β, fp, arms) := (a[0]!, a[3]!, a[4]!)
+  let (β, fp, arms, d) := (a[0]!, a[2]!, a[3]!, a[4]!)
   if arms.isAppOfArity ``List.nil 1 then
-    let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp]
+    let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp, d]
     let g' ← rewriteCmd g L α P Q c x (← inferType e).appArg! e
     return ← walk g' user extra (fuel - 1)
   unless arms.isAppOfArity ``List.cons 3 do return [g]
@@ -2845,20 +2858,20 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
   let rest := arms.getArg! 2
   let (p, y) := (hd.getArg! 2, hd.getArg! 3)
   if let some h ← proveEq fp p then
-    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, h]
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, d, rest, h]
     return ← walk (← rewriteCmd g L α P Q c x y e) user extra (fuel - 1)
   let eqT ← mkEq fp p
   -- `f ≠ p` (a pointer literal of another function, or by the facts)
   let hn ← mkFreshExprMVar (mkNot eqT)
   if ← arith hn.mvarId! (quick := true) <||> closeWith hn.mvarId! (← `(tactic| decide)) then
-    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, ← instantiateMVars hn]
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, d, rest, ← instantiateMVars hn]
     return ← walk (← rewriteCmd g L α P Q c x (← inferType e).appArg! e) user extra (fuel - 1)
   let (sp, sn) ← g.byCases eqT `hf
   let gp ← sp.mvarId.withContext do
-    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, Expr.fvar sp.fvarId]
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, d, rest, Expr.fvar sp.fvarId]
     rewriteCmd sp.mvarId L α P Q c x y e
   let gn ← sn.mvarId.withContext do
-    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, Expr.fvar sn.fvarId]
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, d, rest, Expr.fvar sn.fvarId]
     rewriteCmd sn.mvarId L α P Q c x (← inferType e).appArg! e
   let gp ← destruct gp sp.fvarId
   return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
