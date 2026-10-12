@@ -34,21 +34,18 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "reject.optional",
+ "name": "nullpointers.memsetAz",
  "module": "root",
  "src": {
-  "file": "reject.zig",
-  "module": "reject",
-  "decl_line": 2
+  "file": "nullpointers.zig",
+  "module": "nullpointers",
+  "decl_line": 101
  },
  "params": [
-  0
+  0,
+  1
  ],
- "ret": 1,
- "export": {
-  "name": "optional",
-  "cc": "x86_64_sysv"
- },
+ "ret": 2,
  "body": [
   {
    "id": 0,
@@ -58,14 +55,20 @@
   },
   {
    "id": 1,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 1,
-   "column": 47
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
   },
   {
    "id": 2,
-   "tag": "load",
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 1,
+   "column": 59
+  },
+  {
+   "id": 3,
+   "tag": "slice_len",
    "ty": 3,
    "args": [
     {
@@ -74,21 +77,17 @@
    ]
   },
   {
-   "id": 3,
-   "tag": "is_null",
-   "ty": 1,
+   "id": 4,
+   "tag": "memset_safe",
+   "ty": 2,
    "args": [
     {
-     "inst": 2
+     "inst": 0
+    },
+    {
+     "inst": 1
     }
    ]
-  },
-  {
-   "id": 4,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 1,
-   "column": 47
   },
   {
    "id": 5,
@@ -96,7 +95,8 @@
    "ty": 4,
    "args": [
     {
-     "inst": 3
+     "ty": 2,
+     "val": "{}"
     }
    ]
   }
@@ -104,20 +104,22 @@
  "types": [
   {
    "k": "ptr",
-   "size": "one",
+   "size": "slice",
    "const": false,
-   "child": 3,
-   "ptr_align": 8,
+   "child": 1,
+   "ptr_align": 1,
    "volatile": false,
-   "allowzero": false,
+   "allowzero": true,
    "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
-   "abi_size": 8,
+   "abi_size": 16,
    "abi_align": 8
   },
   {
-   "k": "bool",
+   "k": "int",
+   "signed": false,
+   "bits": 8,
    "abi_size": 1,
    "abi_align": 1
   },
@@ -127,34 +129,14 @@
    "abi_align": 1
   },
   {
-   "k": "optional",
-   "child": 5,
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
-   "k": "noreturn"
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 6,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": true,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
+   "k": "int",
+   "signed": false,
+   "bits": 64,
    "abi_size": 8,
    "abi_align": 8
   },
   {
-   "k": "int",
-   "signed": false,
-   "bits": 8,
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "noreturn"
   }
  ]
 }

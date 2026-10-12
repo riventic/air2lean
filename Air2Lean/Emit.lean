@@ -243,8 +243,9 @@ def errOp (errBits : Nat) (name : String) : String :=
 Named aggregate dictionaries choose these recursively for their fields. At a non-default
 error width every error union also gets an explicit dictionary, since the registered
 `Enc (Except ErrName α)` instance is the 16-bit one. A C/allowzero pointer (`layouts` gives
-allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes (`Check.lean` rejects
-an optional of one, which would need a separate flag). -/
+allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes; a nullable slice
+(`[]allowzero T`) with `Zig.nullableSliceEnc`. An optional of either has a flag after the
+payload (`Zig.Enc.optionWith`), never the scalar `Enc (Option Zig.Ptr)`. -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
     (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) :
     Option String :=
@@ -252,7 +253,9 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
       (id : TyId) (layouts : Array Layout) :=
     emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits)
   match types[id]? with
-  | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
+  | some (.ptr size ..) =>
+    if !nullablePtrTy types layouts id then none
+    else if size == "slice" then some "Zig.nullableSliceEnc" else some "Zig.nullablePtrEnc"
   | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
   | some (.optional c) =>
     match types[c]? with
@@ -1173,6 +1176,13 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
       match acc.find? (·.1 == b) with
       | some (_, root, path) =>
         let base := fc.pointee b
+        -- A tuple is nested pairs (`emitTy`): item `idx` of `n` is `.snd` `idx` times, then
+        -- `.fst` unless it is the last (`tupleProjection`).
+        if let .tuple fs := base then
+          let steps := (List.replicate idx (PathStep.field "snd")) ++
+            (if idx + 1 < fs.size then [PathStep.field "fst"] else [])
+          acc.push (i.id, root, path ++ steps.toArray)
+        else
         let step := match base with
           | .struct _ _ fields =>
             PathStep.field ((fields[idx]?).map (fc.memberName base ·.1) |>.getD s!"fld{idx}")
@@ -1883,6 +1893,21 @@ def FCtx.freeVarIds (fc : FCtx) (body : Array Inst) : Array InstId :=
     #[])
   used.filter (fun id => !defined.contains id)
 
+/-- `id` is the start `ptr_add` of a slicing `p[start..end]` of a C/allowzero pointer into a
+nonnullable slice, read only by that `slice`. Sema emits the `ptr_add` before its null check
+(`unwrapNull`) and the `slice` after it. An out-of-allocation `getelementptr inbounds` is poison,
+which is illegal behaviour only when used, so the native program panics on a null base with a
+nonzero start: the projection is formed at the `slice`, after the check (`.slice`). -/
+def FCtx.deferredSliceStart (fc : FCtx) (id : InstId) : Bool :=
+  match fc.opOf? (.inst id) with
+  | some (.ptrAdd false b _) =>
+    fc.nullableVal b && fc.allInsts.all fun i =>
+      !(fc.directVals i.op).contains (.inst id) || match i.op with
+        | .slice (.inst x) len => x == id && len != .inst id &&
+            !nullablePtrTy fc.types fc.layouts i.ty
+        | _ => false
+  | _ => false
+
 /-- Cache direct value uses from every instruction in the flattened function. Constant
 aggregate SSA refs are rejected by Canon; debug-only refs do not read runtime values. -/
 def FCtx.computeInstUses (fc : FCtx) : Std.HashSet InstId :=
@@ -2494,7 +2519,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- `?*T`: the payload is the flag (null = address 0). `?T`: a flag byte after the payload.
     let some' := match fc.pointeeOf p with
       | .optional c => match fc.tyOfId c with
-        | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
+        | .ptr .. =>
+          if nullablePtrTy fc.types fc.layouts c then
+            fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)}) {rv p}"
+          else s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
         | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
         | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _ => placeholder "is_null_ptr of a non-optional"
@@ -2504,7 +2532,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := match set, fc.pointeeOf p with
       | true, .optional c =>
         match fc.tyOfId c with
-        | .ptr .. | .errorSet _ => s!"pure {rv p}"
+        | .ptr .. | .errorSet _ =>
+          if nullablePtrTy fc.types fc.layouts c then
+            fc.storageExpr c s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)}) {rv p}"
+          else s!"pure {rv p}"
         | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2743,6 +2774,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       else fc.liftR s!"{fc.widthFn "Zig.index" "Zig.indexOf"} {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
+    if fc.deferredSliceStart inst.id then (env, none) else
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then fc.widthFn "elemSub" "elemSubOf" else fc.widthFn "elem" "elemOf"
     let (env, l) := bindLet fc env inst.id
@@ -2793,9 +2825,31 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           if fc.sentinelChecked.contains inst.id then []
           else [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
         | none => [])
-    let value := s!"(⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"
-    let expr := if checks.isEmpty then s!"pure {value}"
-      else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks} >>= fun _ => pure {value})"
+    -- A C/allowzero base sliced into a nonnullable slice: its deferred start projection
+    -- (`FCtx.deferredSliceStart`), and a pointer that must not be address zero (Sema's null
+    -- check precedes).
+    let nonnull := !nullablePtrTy fc.types fc.layouts inst.ty &&
+      (fc.nullableVal p || (match p with | .inst x => fc.deferredSliceStart x | _ => false))
+    let ptr := match p, fc.opOf? p with
+      | .inst x, some (.ptrAdd false b s) =>
+        if fc.deferredSliceStart x then
+          let size := fc.sizeOf ((ptrChild fc.types (fc.valTyId? p |>.getD 0)).getD 0)
+          some (fc.projectExpr b (fc.valTyId? p |>.getD 0) (rv b) s!"·.{fc.widthFn "elem" "elemOf"} {size} {rv s}"
+            (zero := size == 0 || s matches .int _ 0))
+        else none
+      | _, _ => none
+    let ptr := match ptr, nonnull with
+      | some e, true => some s!"({e} >>= fun q => {fc.callMName} (Zig.ptrNonnull q))"
+      | none, true => some s!"{fc.callMName} (Zig.ptrNonnull {rv p})"
+      | e, false => e
+    let value (q : String) := s!"(⟨{q}, {rv len}⟩ : {sliceTyName fc.ptrBits})"
+    let expr := match ptr with
+      | none =>
+        if checks.isEmpty then s!"pure {value (rv p)}"
+        else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks} >>= fun _ => pure {value (rv p)})"
+      | some e =>
+        let pre := if checks.isEmpty then "" else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks}) >>= fun _ => "
+        s!"{pre}{e} >>= fun q => pure {value "q"}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)
   | .arrayToSlice p =>

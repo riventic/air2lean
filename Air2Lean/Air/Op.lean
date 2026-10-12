@@ -358,6 +358,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
+  | some "memcpyLenMismatch"
   | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
   | some "unexpectedErrorCode" | some "loadUninstantiableType" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"

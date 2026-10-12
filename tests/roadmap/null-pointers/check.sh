@@ -20,13 +20,20 @@ case "${1:-}" in
     zig=${2:?usage: check.sh --native ZIG}
     version=$("$zig" version)
     [ -f "$here/expected/$version.txt" ] || { echo "no expected/$version.txt: a release Zig of a supported version is required" >&2; exit 1; }
-    cp "$here/nullpointers.zig" "$work/"
-    "$zig" build-exe -OReleaseSafe -fno-error-tracing "$work/nullpointers.zig" -femit-bin="$work/native" \
-      --cache-dir "$work/cache" --global-cache-dir "$work/global-cache"
-    code=0
-    "$work/native" > "$work/native.stdout" 2> "$work/native.txt" || code=$?
-    [ ! -s "$work/native.stdout" ] || { echo 'unexpected native stdout' >&2; exit 1; }
-    python3 "$here/native-transcript.py" "$version" "$code" "$work/native.txt" > "$work/transcript.txt"
+    # `main`, then one variant per `case` (each ends the process with a panic or a fault).
+    runs=()
+    for name in main sliceCNull memsetCNull optUnwrapNull memsetAzNull; do
+      mkdir -p "$work/$name"
+      sed "s/^const case = \"main\";\$/const case = \"$name\";/" "$here/nullpointers.zig" > "$work/$name/nullpointers.zig"
+      grep -q "^const case = \"$name\";\$" "$work/$name/nullpointers.zig" || { echo "no case line for $name" >&2; exit 1; }
+      "$zig" build-exe -OReleaseSafe -fno-error-tracing "$work/$name/nullpointers.zig" -femit-bin="$work/$name/native" \
+        --cache-dir "$work/cache" --global-cache-dir "$work/global-cache"
+      code=0
+      "$work/$name/native" > "$work/$name/stdout" 2> "$work/$name/stderr" || code=$?
+      [ ! -s "$work/$name/stdout" ] || { echo "unexpected native stdout ($name)" >&2; exit 1; }
+      if [ "$name" = main ]; then runs+=("$code" "$work/$name/stderr"); else runs+=("$name" "$code" "$work/$name/stderr"); fi
+    done
+    python3 "$here/native-transcript.py" "$version" "${runs[@]}" > "$work/transcript.txt"
     grep -v '^model ' "$here/expected/$version.txt" | diff -u - "$work/transcript.txt"
     echo "nullable pointer native: Zig $version, $(wc -l < "$work/transcript.txt") lines match"
     exit 0 ;;
@@ -38,7 +45,8 @@ lake build ZigLean air2lean ZigLean.Mem.NullLemmas
 lake env lean --run tests/roadmap/null-pointers/Generate.lean "$work/generated"
 for name in cNull cNonNull allowzeroAddress allowzeroManyAddress cZero cCast cUnwrap cLoad cEqual \
     storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeNextNonnull nodeVal nodeRoundTrip arrayItem \
-    cAdd cIndex cElem toOptional fromOptional; do
+    cAdd cIndex cElem toOptional fromOptional optStored optStoredIsNull cSlice azMemset azSliceStored \
+    azParent unionNullable errorUnionNullable; do
   [ -f "$work/generated/$name.lean" ] || { echo "missing semantic fixture $name" >&2; exit 1; }
   lake env lean "$work/generated/$name.lean"
 done
@@ -60,15 +68,15 @@ for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   cat "$here/Runner.lean" >> "$work/Gen-$version.lean"
   lake env lean --run "$work/Gen-$version.lean" > "$work/lean-$version.txt"
   diff -u "$here/expected/$version.txt" "$work/lean-$version.txt"
-  for name in optional fixed; do
+  for name in optionalCast fixed; do
     mkdir -p "$work/reject-$version-$name"
     cp "$here/air-reject/$version/reject.$name.json" "$work/reject-$version-$name/"
     if "$translator" "$work/reject-$version-$name" -o "$work/reject.lean" --namespace Rejected > "$work/reject.log" 2>&1; then
       echo "accepted compiler rejection fixture $version $name" >&2; exit 1
     fi
-    expected=$([ "$name" = optional ] && echo 'separate null flag' || echo 'pointer constant without a global')
+    expected=$([ "$name" = optionalCast ] && echo 'Zig miscompiles it' || echo 'pointer constant without a global')
     grep -q "$expected" "$work/reject.log" || { echo "wrong rejection: $(cat "$work/reject.log")" >&2; exit 1; }
   done
 done
 python3 -B "$here/test_provenance.py"
-echo "nullable pointer gate passed: 27 semantic cases, 1 killed mutant, 4 versions x 27 model lines (expected/<version>.txt), 2 compiler rejection roots per version"
+echo "nullable pointer gate passed: 30 semantic cases, 1 killed mutant, 4 versions x $(wc -l < "$here/expected/0.17.0.txt" | tr -d ' ') model lines (expected/<version>.txt), 2 compiler rejection roots per version"

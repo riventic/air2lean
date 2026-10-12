@@ -196,6 +196,7 @@ def panicOf? : String → Option Zig.Error
   | "debug.FullPanic((function 'defaultPanic')).call" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).sentinelMismatch" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).copyLenMismatch" => some .panic
+  | "debug.FullPanic((function 'defaultPanic')).memcpyLenMismatch" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).memcpyAlias" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).castToNull" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).incorrectAlignment" => some .panic

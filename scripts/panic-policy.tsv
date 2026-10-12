@@ -18,6 +18,7 @@ inactiveUnionField	panic
 corruptSwitch	panic
 sentinelMismatch	panic
 copyLenMismatch	panic
+memcpyLenMismatch	panic
 memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
