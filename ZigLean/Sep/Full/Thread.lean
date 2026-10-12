@@ -21,6 +21,8 @@ step's race freedom (`StepIn` of the frame's bytes) in the post. It replaces the
   lifts with the side conditions of `FTriple.ofTriple`. The step is read from `m.noFp` as a
   sequential program (`soloAt`), so the legacy bridge does the full-state part, and the legacy
   thread triple on the exact cells gives ownership and `StepIn`.
+- **Primitive rules** (`FTTriple.alloc'`, `free'`, `storeAt`): `FTriple.alloc'`/`free'` for a
+  thread, through the bridge; a block's bytes come with its full extent (`bext`).
 -/
 
 namespace Zig

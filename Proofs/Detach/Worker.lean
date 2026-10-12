@@ -24,7 +24,7 @@ that captured a pointer into a frame that has exited) is `.illegal`: `frame_exit
 `ZigLean/Conc/Detach.lean`, run-level witnesses in `tests/roadmap/detached-threads/Runtime.lean`.
 -/
 
-open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Detach Zig.Full
+open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Detach Zig.Full Zig.Full.FAssn
 
 namespace Detach.Worker
 
@@ -106,17 +106,17 @@ def Shape (G : ThreadId → Gh) (ts : Array ThreadRec) : Prop :=
      (∃ h p d, G 1 = .wk h p d) ∧
      ∀ u, 2 ≤ u → G u = .none))
 
-/-- The invariant: the parts (`Owned`), the worker's buffer while it runs, and the threads. -/
+/-- The invariant: the parts (`FOwned`), the worker's buffer while it runs, and the threads. -/
 structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
-  own : Owned (fun u => (G u).heap) m
-  kid : ∀ u h p d, G u = .wk h p d → (d = false → Buf p h) ∧ (d = true → h = Heap.empty)
+  own : FOwned (fun u => (G u).res) rO m
+  kid : ∀ u r p d, G u = .wk r p d → (d = false → Buf p r) ∧ (d = true → FAssn.emp r)
   shape : Shape G m.threads
 
 def proto : Proto Tgt Gh where
   inv := Inv
   init tgt g := match tgt with
-    | .worker p => ∃ h, g = .wk h p false
-  fin g := ∃ p, g = .wk Heap.empty p true
+    | .worker p => ∃ r, g = .wk r p false
+  fin g := ∃ p r, FAssn.emp r ∧ g = .wk r p true
   strict := true
 
 /-- `main`'s post: the result, and the worker's handle consumed by the detach. -/
@@ -146,7 +146,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
   have hi : Inv G m := hi
   cases tgt with
   | worker p =>
-    obtain ⟨h, rfl⟩ := hg
+    obtain ⟨r, rfl⟩ := hg
     -- The worker is thread 1, after the spawn.
     obtain ⟨h0, ⟨h', g0, -, hn⟩ | ⟨g0, hsz, h1, -, hn⟩⟩ := hi.shape
     · rw [hn u (by unfold ThreadId at *; omega)] at hgu; cases hgu
@@ -155,23 +155,20 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       · rw [hn u h2] at hgu; cases hgu
       · unfold ThreadId at *; omega
     subst hu1
-    obtain ⟨A, bs, hp0, hA, hbs, hb⟩ := (hi.kid 1 h p false hgu).1 rfl
-    refine WP.liftMem_owned (own := fun u => (G u).heap) (work_spec hp0 hA hbs)
-      (hi.own.current 1) rfl (by rw [hsz]; decide) (by simp only [hgu, Gh.heap]; exact hb)
-      fun _ m' hQ _ ho' hq hs _ _ => ?_
-    have hQ0 : hQ = Heap.empty := hq
-    subst hQ0
-    have hown : (fun w => (upd G 1 (.wk Heap.empty p true) w).heap) =
-        upd (fun u => (G u).heap) 1 Heap.empty := by
+    obtain ⟨A, bs, b, hbuf⟩ := (hi.kid 1 r p false hgu).1 rfl
+    obtain ⟨⟨hpb, hp0, hA, hbs⟩, hb⟩ := sep_lift.mp hbuf
+    refine WP.liftMem_fowned (own := fun u => (G u).res) (work_spec hpb hp0 hA hbs)
+      (hi.own.current 1) rfl (by rw [hsz]; decide) (by simp only [hgu, Gh.res]; exact hb)
+      fun _ m' r' _ ho' hq _ hth => ?_
+    have hown : (fun w => (upd G 1 (.wk r' p true) w).res) = upd (fun u => (G u).res) 1 r' := by
       funext w; by_cases hw : w = 1
-      · subst hw; simp [Gh.heap]
+      · subst hw; simp [Gh.res]
       · simp [upd, hw]
-    have hth : m'.threads = m.threads := hs.threads
-    refine ⟨.wk Heap.empty p true, ⟨by rw [hown]; exact ho', fun w h₁ p₁ d₁ hw => ?_, ?_⟩,
-      ⟨p, rfl⟩, fun _ => ?_⟩
+    refine ⟨.wk r' p true, ⟨by rw [hown]; exact ho', fun w r₁ p₁ d₁ hw => ?_, ?_⟩,
+      ⟨p, r', hq, rfl⟩, fun _ => ?_⟩
     · by_cases hw1 : w = 1
-      · subst hw1; rw [upd_self] at hw; cases hw; exact ⟨fun h => (by cases h), fun _ => rfl⟩
-      · rw [upd_ne _ _ hw1] at hw; exact hi.kid w h₁ p₁ d₁ hw
+      · subst hw1; rw [upd_self] at hw; cases hw; exact ⟨fun h => (by cases h), fun _ => hq⟩
+      · rw [upd_ne _ _ hw1] at hw; exact hi.kid w r₁ p₁ d₁ hw
     · show Shape _ m'.threads
       rw [hth]
       exact ⟨h0, .inr ⟨by rw [upd_ne _ _ (by decide)]; exact g0, hsz, h1,
@@ -183,40 +180,51 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 /-! ## `main` -/
 
 /-- The start: `main` alone, owning nothing. -/
-def G0 : ThreadId → Gh := fun u => if u = 0 then .pre Heap.empty else .none
+def G0 : ThreadId → Gh := fun u => if u = 0 then .pre r0 else .none
+
+/-- The start memory holds the parts: no thread owns anything. -/
+theorem start : FOwned (fun u => (G0 u).res) rO ({} : Mem) := by
+  have hown : (fun u => (G0 u).res) = fun _ => r0 := by
+    funext u; unfold G0; split <;> rfl
+  have hbl : ∀ b : BlockId, ({} : Mem).blocks[b]? = none := fun b => by
+    show (#[] : Array Block)[b]? = none; simp
+  have hw : ShapesWF (shapes ({} : Mem)) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
+  have hl : ({} : Mem).LiveLayout :=
+    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
+  rw [hown]
+  exact FOwned.start (m := {}) rfl rfl hw hl
 
 theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   unfold mainRun main
   refine WP.map ?_
   simp only [StateT.run_bind]
-  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) ({} : Mem) := by
-    rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
-    exact Owned.start rfl rfl
   -- Allocate and initialize the buffer.
-  refine WP.bind (WP.liftM_upd (TTriple.alloc .heap 4 4 (by decide)) ho₀ rfl (by decide) rfl
-    fun p m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)
-  obtain ⟨A, hA⟩ := hq₁
-  obtain ⟨⟨hp0, hAl⟩, hb₁⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftM_upd (TTriple.storeAt (k := 0) (a := 4) (0 : BitVec 32)
+  refine WP.bind (WP.liftM_fowned (FTTriple.alloc' .heap 4 4 (by decide) (by decide)) start rfl
+    (by decide) ⟨rfl, rfl, rfl⟩ fun p m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
+  obtain ⟨A, b, hq₁⟩ := hq₁
+  obtain ⟨⟨hpb, hp0, hAl⟩, hb₁⟩ := sep_lift.mp hq₁
+  refine WP.bind (WP.liftM_fowned (FTTriple.storeAt (A := A) (S := 4) (K := .heap)
+    (bs := Array.replicate 4 .undef) (k := 0) (a := 4) (0 : BitVec 32) hpb
     (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hp0, hAl]) (by decide)) ho₁ hc₁
-    (by rw [ht₁]; decide) hb₁ fun _ m₂ h₂ ho₂ hb₂ hc₂ ht₂ => ?_)
+    (by rw [ht₁]; decide) (by rw [upd_self]; exact hb₁) fun _ m₂ r₂ _ ho₂ hb₂ hc₂ ht₂ => ?_)
   have hbs : (writeBytes (Array.replicate 4 Byte.undef) 0 (Enc.encode (0 : BitVec 32))).size = 4 := by
     rw [writeBytes_size _ _ _ (by rw [enc_u32]; simp)]; simp
   dsimp only
   -- Spawn the worker: it gets the whole buffer.
-  refine WP.bind (WP.spawnC fun k _ => ⟨.pre h₂, ?_, fun G₁ m₃ hg₁ hi₃ =>
-    ⟨.wk h₂ p false, ⟨h₂, rfl⟩, fun child m₄ hf => ?_⟩⟩)
-  · have hown : (fun u => (upd G0 0 (.pre h₂) u).heap) = upd (fun _ => Heap.empty) 0 h₂ := by
+  refine WP.bind (WP.spawnC fun k _ => ⟨.pre r₂, ?_, fun G₁ m₃ hg₁ hi₃ =>
+    ⟨.wk r₂ p false, ⟨r₂, rfl⟩, fun child m₄ hf => ?_⟩⟩)
+  · have hown : (fun u => (upd G0 0 (.pre r₂) u).res) =
+        upd (upd (fun u => (G0 u).res) 0 r₁) 0 r₂ := by
       funext u; by_cases hu : u = 0
-      · subst hu; simp [Gh.heap]
-      · simp [upd, G0, hu, Gh.heap]
+      · subst hu; simp [Gh.res]
+      · simp [upd, G0, hu, Gh.res]
     refine ⟨by rw [hown]; exact ho₂, fun u h p' d hu => ?_, ?_⟩
     · by_cases hu0 : u = 0
       · subst hu0; rw [upd_self] at hu; cases hu
       · rw [upd_ne _ _ hu0] at hu; simp [G0, hu0] at hu
     · show Shape _ m₂.threads
       rw [ht₂, ht₁]
-      refine ⟨rfl, .inl ⟨h₂, upd_self _ _ _, rfl, fun u hu => ?_⟩⟩
+      refine ⟨rfl, .inl ⟨r₂, upd_self _ _ _, rfl, fun u hu => ?_⟩⟩
       simp [upd, G0, show u ≠ 0 by unfold ThreadId at *; omega]
   have hi₃ : Inv G₁ m₃ := hi₃
   obtain ⟨h0₃, ⟨h', g0, hs₃, hn₃⟩ | ⟨g0, -⟩⟩ := hi₃.shape
@@ -226,10 +234,11 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   obtain ⟨hc, hth₄, hcur₄⟩ := fork_eq hf
   rw [hs₃] at hc
   subst hc
-  have hown₃ : (fun u => (G₁ u).heap) 0 = Heap.empty ∪ h₂ := by
-    simp [hg₁, Gh.heap]
-  have ho₄ := Owned.fork (hi₃.own.current 0) (by rw [hs₃]; decide) hown₃
-    (Heap.disjoint_empty _).symm hf
+  have hsplit : (fun u => (G₁ u).res) 0 =
+      ⟨r0.heap ∪ r₂.heap, r0.know.union r₂.know, r0.gh.add r₂.gh⟩ := by
+    simp [hg₁, Gh.res, Know.none_union]
+  have ho₄ := FOwned.fork (r₁ := r0) (hi₃.own.current 0) (by rw [hs₃]; decide) hsplit
+    (FHeap.disjoint_empty _).symm hf
   dsimp only
   simp only [StateT.run_bind]
   -- Detach the worker.
@@ -238,26 +247,26 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   refine WP.bind (WP.detachC h1₄ hcur₄.symm rfl ?_)
   -- The stop after the detach: the worker may run now, or after `main` ends.
   refine WP.bind (WP.callC (WP.spinLoopHint fun k _ => ⟨.post, ?_, fun G₂ m₅ hg₂ hi₅ => ?_⟩))
-  · have hown : (fun u => (upd (upd G₁ 1 (.wk h₂ p false)) 0 .post u).heap) =
-        upd (upd (fun u => (G₁ u).heap) 0 Heap.empty) 1 h₂ := by
+  · have hown : (fun u => (upd (upd G₁ 1 (.wk r₂ p false)) 0 .post u).res) =
+        upd (upd (fun u => (G₁ u).res) 0 r0) 1 r₂ := by
       funext u
       by_cases hu0 : u = 0
-      · subst hu0; simp [upd, Gh.heap]
+      · subst hu0; simp [upd, Gh.res]
       · by_cases hu1 : u = 1
-        · subst hu1; simp [upd, Gh.heap]
+        · subst hu1; simp [upd, Gh.res]
         · simp [upd, hu0, hu1]
-    refine ⟨by rw [hown]; exact Owned.setThread ho₄ _, fun u h p' d hu => ?_, ?_⟩
+    refine ⟨by rw [hown]; exact FOwned.setThread ho₄ _ _, fun u h p' d hu => ?_, ?_⟩
     · by_cases hu0 : u = 0
       · subst hu0; rw [upd_self] at hu; cases hu
       · rw [upd_ne _ _ hu0] at hu
         by_cases hu1 : u = 1
         · subst hu1; rw [upd_self] at hu; cases hu
-          exact ⟨fun _ => ⟨A, _, hp0, hAl, hbs, hb₂⟩, fun h => (by cases h)⟩
+          exact ⟨fun _ => ⟨A, _, b, sep_lift.mpr ⟨⟨hpb, hp0, hAl, hbs⟩, hb₂⟩⟩, fun h => (by cases h)⟩
         · rw [upd_ne _ _ hu1, hn₃ u (by unfold ThreadId at *; omega)] at hu; cases hu
     · show Shape _ (m₄.threads.set! 1 _)
       have hlt : 1 < m₄.threads.size := by simp [hth₄, hs₃]
       rw [Array.set!_eq_setIfInBounds]
-      refine ⟨?_, .inr ⟨upd_self _ _ _, by simp [hth₄, hs₃], ?_, ⟨h₂, p, false, ?_⟩, fun u hu => ?_⟩⟩
+      refine ⟨?_, .inr ⟨upd_self _ _ _, by simp [hth₄, hs₃], ?_, ⟨r₂, p, false, ?_⟩, fun u hu => ?_⟩⟩
       · rw [Array.getElem?_setIfInBounds_ne (by decide), hth₄, Array.getElem?_push,
           ite_eq_right (by omega)]
         exact h0₃
@@ -290,5 +299,16 @@ theorem worker_result (env : Env) (henv : env.spawn = .available) {fuel : Nat} {
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ _ h => h.2.1) rfl (fun n => main_spec n) h
   exact ⟨hv, hj, h1⟩
+
+/-! ## Strength (`docs/sep-threads.md`): the legacy proof's statements, verbatim -/
+
+example (env : Env) (henv : env.spawn = .available) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
+  worker_safe env henv fuel o e
+
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
+    v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some Rd :=
+  worker_result env henv h
 
 end Detach.Worker
