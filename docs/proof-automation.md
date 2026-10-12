@@ -69,7 +69,7 @@ many successful calls with 20 to 30 facts.
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
   owned regions lie at disjoint address ranges), put in the context by `MemFacts.pre` (`fsym`
-  picks memory facts of atom pairs up itself once `addFacts` covers them, engine request #19).
+  does not yet add memory facts of atom pairs itself: `addFacts` covers single atoms only).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
 
 ### Range laws
