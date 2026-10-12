@@ -97,8 +97,7 @@ illegal behaviour in Zig. With the in-bounds projection rule of the memory model
 the arena's own code over a 256-byte `FixedBufferAllocator`: an allocation that fits, one of 4096
 bytes that the child refuses, then the `free` of the first; the translated run is `.illegal`
 (natively the undefined behaviour has no visible effect). `arena_oob_free` builds the same state
-by hand for the kernel-checked theorem (the kernel does not evaluate `alloc`, a `partial_fixpoint`
-group).
+by hand (`oob_free_illegal`); `not_fallocSpec_arena` below reaches it by the arena's own `alloc`.
 
 **O-E is reachable for every child.** A bound on the child does not help: the arena's requests
 are not bounded by its own `fits`. A new node has size `alignForward(1.5 · (prev_size + 24 +
@@ -111,9 +110,13 @@ accepts every request eventually makes the arena's overflow-checked size arithme
 So for every child, an invariant that holds after `init` and is kept by `alloc` (for a `fits` that
 admits some request) reaches a state in which `FAllocSpec`'s `alloc` (a panic) or `free` (an
 illegal projection of an outstanding grant) fails. `FAllocSpec` cannot be weakened to avoid this
-(no premise per triple, no budget). The kernel-checked form of this refutation
-(`not_fallocSpec_arena`) is not written yet; the argument above and `arena_oom_free` are the
-evidence. The fix is in the arena: the patch gives the reservation back when the request does
+(no premise per triple, no budget). **Kernel-checked** (`ArenaObstruction.not_fallocSpec_arena`)
+for the child of `arena_oom_free`: for every invariant `I` with `CAllocSpec vt arena I` whose `fits`
+admits 8 and 4096 bytes, `I.own` does not hold, with any frame, in the memory right after
+`init`: its `alloc` and `free` triples compose into a triple of the client `alloc(8)`, `alloc(4096)`, `free`
+(`client_ct`), whose run from that memory the kernel computes to `.illegal` (`client_illegal`,
+`unroll_solo` cutting the arena's `partial_fixpoint` group; the memory is `Mem.FSeq` by
+`decide`). The fix is in the arena: the patch gives the reservation back when the request does
 not fit and makes the overflowing sizes fail instead of panicking.
 
 **O-F: deciding a foreign slice needs live-block disjointness.** `free` and `resize` compare
@@ -308,9 +311,6 @@ Not proved yet, in order:
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
   `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
   calls the child's `free`/`resize`/`alloc`.
-* `not_fallocSpec_arena`: the kernel-checked refutation of O-E above (a concrete child, e.g. the
-  256-byte `FixedBufferAllocator` of `arena_oom_free`), which needs the stock `alloc`'s run on
-  concrete states (the `partial_fixpoint` group's equations, or `Unroll`-style cut loops).
 
 ## Legacy models
 

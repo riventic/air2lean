@@ -436,8 +436,10 @@ theorem parallelCounter_completes :
   unroll_sched 10
 ```
 
-`unroll_sched k` accepts a goal `Witness.okVal (Sched.run env dispatch fuel o main m₀) = some v`
-with concrete arguments (the environment `env` included). It:
+`unroll_sched k` accepts a goal `g (Sched.run env dispatch fuel o main m₀) = v` with concrete
+arguments (the environment `env` included), for an observation `g` of the run that tells a run
+without a result from `v` (`Witness.okVal r = some n`, `Witness.errOf r = some e`; the kernel
+checks `g Sched.noResult ≠ v`). It:
 
 1. unfolds every definition reachable from `dispatch` and `main` that runs a `Zig.loop`
    (`Unroll.expand`), and replaces each `Zig.loop body again` by
@@ -447,7 +449,7 @@ with concrete arguments (the environment `env` included). It:
 2. proves the expanded program monotone in `s` with core's `monotonicity` machinery
    (`monotone_loopSel` and the `partial_fixpoint_monotone` lemmas of the generated code),
    using `loopN_le_loop : loopN body again k ⊑ loop body again`;
-3. applies `Sched.okVal_le` (from `Sched.run_le`): if every thread of one program is below the
+3. applies `Sched.apply_le` (from `Sched.run_le`): if every thread of one program is below the
    corresponding thread of another, a run of the first with a result is a run of the second
    with the same result (a simulation of `Sched.go` that keeps the memory, the oracle step and
    each thread's op);
@@ -457,6 +459,13 @@ The proof uses only the standard axioms; nothing is evaluated outside the kernel
 value, a run out of fuel, an error, or a loop that needs more than `k` runs of its body leaves
 the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
 `k` bounds each loop's body runs per entry, so a loop entered again gets `k` more.
+
+`unroll_solo k` (module `ZigLean.Sep.Full.Unroll`) does the same for the in-thread reading of a
+concurrent function that `CTriple` speaks about: a goal `g ((Sched.soloRun fuel x).run m) = v`
+(`Sched.soloRun_apply_le`, from `soloTree_le`: a reading with a result is the reading of every
+tree above). `AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s
+`alloc`, `alloc`, `free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete
+memory is decidable).
 
 A `partial_fixpoint` definition or mutual group (a recursive call group of generated code,
 `Lean.Order.fix F h`) is cut the same way: it becomes `Unroll.fixSel k s (fun s => F) h`, which

@@ -596,7 +596,7 @@ of tags:
 | 4 | spec | refined `FAllocSpec.resize`, old form as a corollary, `toLegacy` and wrappers adjusted | ½ phase |
 | 5 | re-proofs | FBA (`resize` from the token; `bsize` of the buffer; no pin byte), `PageSpec` linux+macOS (token = `bext` + tail), arena `free`/`resize`/`remap` (O-F from the slice's bytes and the node's extent share) | done |
 | 6 | arena `alloc` | patched arena for every `CAllocSpec` child (dispatch through `CVTable.dispatch` + `vtR`; `fits` per O-C); page child instance; O-G regression (`8`-byte grant, then `alloc(5000)`) | 2–3 phases |
-| 7 | the rest | `reset` (stock and patched), the `Unroll` fix-group cut, `not_fallocSpec_arena` | 1–2 phases |
+| 7 | the rest | `reset` (stock and patched); the `Unroll` fix-group cut and `not_fallocSpec_arena` done | 1 phase |
 
 The general atomic rules the arena's `alloc` needs are done independently
 (`AtomicRules.lean`: `atomicXchgPtrW`, `cmpxchgWeakPtrW`, `atomicLoadUnorderedW`/`AsW`) and carry

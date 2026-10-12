@@ -257,6 +257,9 @@ def unfoldHead? (goal : MVarId) : MetaM (Option MVarId) := do
   let some (.defnInfo info) := (← getEnv).find? c | return none
   if c.getRoot == `Lean then return none
   let body' := (info.value.instantiateLevelParams info.levelParams ls).beta body.getAppArgs
+  -- A projection of a structure literal (an entry of a vtable value) is its field.
+  let body' ← withLocalDecl n bi d fun x => do
+    return (← whnfCore (body'.instantiate1 x)).abstract #[x]
   return some (← goal.replaceTargetDefEq (mkApp ty.appFn! (.lam n d body' bi)))
 
 /-- `Lean.Meta.Monotonicity.solveMono`, unfolding a definition where no rule applies. -/

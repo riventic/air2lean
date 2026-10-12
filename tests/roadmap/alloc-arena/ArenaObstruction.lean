@@ -1,5 +1,6 @@
 import AllocArena.ArenaLinux
-import ZigLean.Sep.Full.Conc
+import ZigLean.Sep.Full.Dispatch
+import ZigLean.Sep.Full.Unroll
 
 /-!
 # Obstructions O-A, O-E and O-H (kernel-checked)
@@ -27,8 +28,9 @@ then fails, that node stays first. `free` computes `buf_ptr + end_index` (a many
 addition: `getelementptr inbounds` natively, `Zig.ptrProject` here), which lies outside the
 node's block: `.illegal` (MM-3), and undefined behaviour natively
 (`docs/upstream/arena-oob-gep.md`). `arena_oob_free` builds that state by hand (a 64-byte node
-with `end_index = 1000`), because the kernel does not evaluate the translated `alloc` (a
-`partial_fixpoint` group), and frees a foreign slice.
+with `end_index = 1000`) and frees a foreign slice. `not_fallocSpec_arena` reaches it by the
+arena's own `alloc` (the kernel runs its `partial_fixpoint` group cut by `unroll_solo`) and refutes
+every `FAllocSpec` of the stock arena whose invariant holds after `init`.
 ## O-H: an address at the top of the address space overflows `alloc`'s alignment
 
 `alloc`'s fast path aligns `buf.ptr + end_index` with `Alignment.forward`, an addition with an
@@ -42,7 +44,7 @@ memory of the full-state invariant has its live blocks below `2^63` (`Mem.LiveBo
 
 namespace AllocArena.ArenaObstruction
 
-open Zig AllocArena.ArenaLinux
+open Zig Zig.Full Zig.Full.FAssn AllocArena.ArenaLinux
 
 /-- The one-thread schedule of a whole program (oracle `0`). -/
 def solo {α : Type} (main : ConcM Tgt α) : Option (Except Error α) :=
@@ -107,6 +109,99 @@ theorem aligned_index_ok :
       (mem0 σTop)).run = false := by
   decide +kernel
 
+/-! ## O-E for every invariant: `not_fallocSpec_arena`
+
+`arena_oom_free`'s run refutes every specification of the stock arena, not only `ArenaSpec.lean`'s
+invariant: the client below calls the arena's entries (`vt`) from the memory right after `init`
+(`mInit`), so an `FAllocSpec` invariant whose `own` held there would give the client a triple
+(`client_ct`, composed from the spec's `alloc` and `free` triples), while the kernel computes its
+run to `.illegal` (`client_illegal`: `unroll_solo` cuts the arena's `partial_fixpoint` group). -/
+
+/-- The stock arena's four entries. -/
+def vt : CVTable Tgt where
+  alloc c n k ra := heap_ArenaAllocator_alloc c n ⟨BitVec.ofNat 6 k⟩ ra
+  resize c s k n ra := heap_ArenaAllocator_resize c s ⟨BitVec.ofNat 6 k⟩ n ra
+  remap c s k n ra := heap_ArenaAllocator_remap c s ⟨BitVec.ofNat 6 k⟩ n ra
+  free c s k ra := heap_ArenaAllocator_free c s ⟨BitVec.ofNat 6 k⟩ ra
+
+/-- `arena_oom_free`'s start: a `FixedBufferAllocator` over the 256-byte global `small` and an
+arena over it, both on the stack. -/
+def setup : MemM Ptr := do
+  let fba ← allocStack 24 8
+  let arena ← allocStack 32 8
+  store (α := heap_FixedBufferAllocator) 8 fba (← heap_FixedBufferAllocator_init ⟨⟨some 0, 0⟩, 256⟩)
+  store (α := heap_ArenaAllocator) 8 arena (← heap_ArenaAllocator_init (← heap_FixedBufferAllocator_allocator fba))
+  pure arena
+
+/-- The memory after `setup` from the program start. -/
+def mInit : Mem := match (setup.run (mem0 .fresh)).run with
+  | some (.ok (_, m)) => m
+  | _ => default
+
+/-- The arena (`ctx`) that `setup` made. -/
+def arena : Ptr := match (setup.run (mem0 .fresh)).run with
+  | some (.ok (p, _)) => p
+  | _ => default
+
+/-- `arena_oom_free 8` from `mInit` through the entries: `alloc` of 8 bytes, of 4096 bytes (the
+child refuses the new node), `free` of the first slice. -/
+def client : ConcM Tgt Unit := do
+  match ← vt.alloc arena 8 0 0 with
+  | none => pure ()
+  | some p => do
+    let _ ← vt.alloc arena 4096 0 0
+    vt.free arena ⟨p, 8⟩ 0 0
+
+theorem mInit_fseq : mInit.FSeq := by decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- The client's run in the caller's thread is illegal (O-E): the kernel runs the stock arena's
+`alloc`, `alloc`, `free` (`unroll_solo`: the arena's `partial_fixpoint` group cut). -/
+theorem client_illegal :
+    Witness.errOf ((Sched.soloRun 1000 client).run mInit) = some .illegal := by
+  unroll_solo 8
+
+/-- Every resource. -/
+def Any : FAssn := fun _ => True
+
+set_option maxRecDepth 20000 in
+/-- **The client meets its triple under every `FAllocSpec` of the arena** whose `fits` admits the
+two requests: composed from the spec's `alloc` and `free`. -/
+theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) (h4096 : I.fits 4096 0) :
+    CTriple I.own client (fun _ => Any) := by
+  refine CTriple.bind (h.alloc 8 0 0 (by decide) (by decide) h8) fun o => ?_
+  match o with
+  | none => exact CTriple.ret' () fun _ _ => trivial
+  | some p =>
+    let G := FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 bs
+    refine CTriple.bind ((h.alloc 4096 0 0 (by decide) (by decide) h4096).frame (R := G)) fun v => ?_
+    refine CTriple.pre (P := FAssn.ex fun bs => ⟪bs.size = 8⟫ ⋆ ((I.own ⋆ I.granted p 0 bs) ⋆ Any))
+      (CTriple.ex fun bs => CTriple.lift fun hbs =>
+        CTriple.post ((h.free ⟨p, 8⟩ 0 0 bs (by decide) (by rw [hbs]; rfl) (by rw [hbs]; decide)).frame (R := Any))
+          fun _ _ _ => trivial) ?_
+    intro r hr
+    -- `alloc`'s result (a grant or nothing) joins the rest (`Any`).
+    have hr' : ((I.own ⋆ Any) ⋆ G) r := by
+      cases v with
+      | none => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) (sep_emp.mpr h)) hr
+      | some q => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
+    obtain ⟨bs, hb⟩ := sep_ex.mp (sep_comm hr')
+    obtain ⟨hbs, hb⟩ := Full.sep_lift.mp (sep_assoc hb)
+    -- `granted ⋆ (own ⋆ Any)` to `(own ⋆ granted) ⋆ Any`.
+    exact ⟨bs, Full.sep_lift.mpr ⟨hbs, sep_mono_left (fun _ h => sep_comm h) (sep_assoc' hb)⟩⟩
+
+/-- **O-E, kernel-checked: no `FAllocSpec` of the stock arena holds after `init`.** For every
+invariant `I` with `CAllocSpec vt arena I` whose `fits` admits the client's two requests, `I.own`
+does not hold in `mInit` (the arena over the 256-byte `FixedBufferAllocator` right after `init`),
+with any frame: the client's triple (`client_ct`) would rule out its run's `.illegal`
+(`client_illegal`; `mInit` is a full-state sequential memory, `mInit_fseq`). -/
+theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0)
+    (h4096 : I.fits 4096 0) : ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
+  rintro ⟨r, rF, hh, ho⟩
+  have ht := client_ct I h h8 h4096 1000 mInit r rF hh ho mInit_fseq
+  rw [Witness.errOf_eq_some.mp client_illegal] at ht
+  cases ht
+
 -- `check.sh` requires only the standard axioms.
 #print axioms foreign_free_panics
 #print axioms oob_free_illegal
@@ -114,5 +209,6 @@ theorem aligned_index_ok :
 #print axioms memTop_unbounded
 #print axioms node_buf_low
 #print axioms aligned_index_ok
+#print axioms not_fallocSpec_arena
 
 end AllocArena.ArenaObstruction

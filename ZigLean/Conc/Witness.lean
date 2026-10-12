@@ -68,4 +68,8 @@ def errOf {α : Type} (r : Result α) : Option Error :=
   | some (.error e) => some e
   | _ => none
 
+theorem errOf_eq_some {α : Type} {r : Result α} {e : Error} : errOf r = some e ↔ r.run = some (.error e) := by
+  unfold errOf
+  split <;> simp_all
+
 end Zig.Witness

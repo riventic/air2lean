@@ -36,6 +36,47 @@ open FAssn Conc
 live blocks at disjoint addresses (`Mem.LiveDisjoint`, stage 3 of `docs/sep-full-state.md`). -/
 def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveLayout
 
+/-! ### `Mem.FSeq` of a concrete memory is decidable
+
+So the kernel decides it (`decide +kernel`) for a memory that a concrete run computes, e.g. the
+memory in which a refutation applies a triple (`AllocArena.ArenaObstruction.not_fallocSpec_arena`). -/
+
+theorem _root_.Zig.Mem.liveDisjoint_iff (m : Mem) : m.LiveDisjoint ↔
+    ∀ i (hi : i < m.blocks.size) j (hj : j < m.blocks.size), i ≠ j → m.blocks[j].live = true →
+      m.blocks[i].clearOf m.blocks[j].addr m.blocks[j].bytes.size = true := by
+  constructor
+  · intro h i hi j hj hne hl
+    exact h i j _ _ hne (Array.getElem?_eq_getElem hi) (Array.getElem?_eq_getElem hj) hl
+  · intro h b b' blk blk' hne hb hb' hl
+    obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hb
+    obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp hb'
+    exact h b hi b' hj hne hl
+
+instance (m : Mem) : Decidable m.LiveDisjoint := decidable_of_iff' _ (Mem.liveDisjoint_iff m)
+
+theorem _root_.Zig.Mem.liveBounded_iff (m : Mem) : m.LiveBounded ↔
+    ∀ i (hi : i < m.blocks.size), m.blocks[i].live = true →
+      m.blocks[i].addr + m.blocks[i].bytes.size ≤ 2 ^ 63 := by
+  constructor
+  · intro h i hi hl; exact h i _ (Array.getElem?_eq_getElem hi) hl
+  · intro h b blk hb hl
+    obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hb
+    exact h b hi hl
+
+instance (m : Mem) : Decidable m.LiveBounded := decidable_of_iff' _ (Mem.liveBounded_iff m)
+
+instance (m : Mem) : Decidable m.LiveLayout := inferInstanceAs (Decidable (_ ∧ _))
+
+instance (m : Mem) : Decidable m.SingleThread := inferInstanceAs (Decidable (_ ∧ _))
+
+instance (m : Mem) : Decidable m.Seq := decidable_of_iff _ ⟨fun h => ⟨h⟩, fun h => h.single⟩
+
+instance (s t : Shape) : Decidable (Apart s t) := inferInstanceAs (Decidable (_ → _))
+
+instance (sh : List Shape) : Decidable (ShapesWF sh) := inferInstanceAs (Decidable (_ ∧ _))
+
+instance (m : Mem) : Decidable m.FSeq := inferInstanceAs (Decidable (_ ∧ _))
+
 /-- `m` holds the resource `r` and the frame `rF`: their disjoint union matches `m` (its live
 bytes, each byte's tag constraint: `FMatch`), their knowledge is true in `m`, and their ghost
 states compose (`Ghost.Ok`). -/
