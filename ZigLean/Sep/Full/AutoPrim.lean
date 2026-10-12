@@ -14,10 +14,8 @@ of `AutoRules.lean` did not cover:
   translator writes for a NaN constant's exact bytes) or of a value of any encoding (`Zig.store`
   without `LawfulEnc`: a float vector, whose NaN lanes have undefined bits) at the start of an
   owned region. The region's bytes are the written ones followed by the rest (`writeBytes`).
-
-The byte stores are lifted from the run-level store lemma `bytesAt_store` with the bridge
-`FTotalTriple.ofTotal_up`, as `Ops.lean` lifts `load`/`store` of `pts`; native rules replace
-them when the bridges go (Plan A, A6).
+  They follow from the native store of owned bytes (`FTotalTriple.storeBytes_bytesAt`,
+  `Ops.lean`).
 -/
 
 namespace Zig.Full.Auto
@@ -52,31 +50,18 @@ section Bytes
 
 variable {p : Ptr} {a al : Nat} {bs bs' : Array Byte}
 
-/-- `region` is size-free: its block's size and kind are existential. -/
-theorem SizeFree.region (p : Ptr) (a : Nat) (bs : Array Byte) :
-    SizeFree (fun _ => none) (Zig.region p a bs) := by
-  intro h h' hp hn hE hco
-  obtain ⟨A, S, K, hal, hK, hb⟩ := hp
-  obtain ⟨A', S', K', ⟨hal', hK'⟩, hb'⟩ := SizeFree.bytesAt_ex (p := p) (bs := bs)
-    (φ := fun A _ K => (A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal)
-    (fun A S K S' K' ⟨h1, h2⟩ hk => ⟨h1, fun e => h2 (by subst e; cases K <;> simp_all [BlockKind.norm])⟩)
-    h h' ⟨A, S, K, ⟨hal, hK⟩, hb⟩ hn hE hco
-  exact ⟨A', S', K', hal', hK', hb'⟩
-
 /-- **A store of raw bytes** `bs'` at the start of an owned region (`Zig.storeBytes`), aligned to
 `al`, which divides the region's alignment. -/
 @[fsym] theorem storeBytes_region (hn : 0 < bs'.size) (hk : bs'.size ≤ bs.size) (hal : a % al = 0) :
     FTotalTriple (up (Zig.region p a bs)) (Zig.storeBytes p al bs')
-      (fun _ => up (Zig.region p a (writeBytes bs 0 bs'))) := by
-  refine FTotalTriple.ofTotal_up (fun m hP hF hd hm hp hst => ?_) (Tame.storeBytes p al bs' .write)
-    (SizeFree.region p a bs) (Keeps.storeBytes p al bs' .write)
-  obtain ⟨A, S, K, hA, hK, hb⟩ := hp
-  have ha : (A + p.off.toNat + 0) % al = 0 :=
-    Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.dvd_of_mod_eq_zero hal) (Nat.dvd_of_mod_eq_zero hA))
-  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
-    bytesAt_store (q := p) (k := 0) (a := al) (bs' := bs') hb hm hd
-      (by cases p; simp [Ptr.add]) hn (by omega) ha hst hK
-  exact ⟨(), m', h', hrun, hd', hm', ⟨A, S, K, hA, hK, hb'⟩, hst'⟩
+      (fun _ => up (Zig.region p a (writeBytes bs 0 bs'))) :=
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, hA, hK, hbs⟩, hkn, hg⟩ => by
+    have ha : (A + p.off.toNat + 0) % al = 0 :=
+      Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.dvd_of_mod_eq_zero hal) (Nat.dvd_of_mod_eq_zero hA))
+    have t := FTotalTriple.storeBytes_bytesAt (q := p) (k := 0) (S := S) (bs := bs) hn
+      (by omega) ha hK
+    simp only [Int.natCast_zero, Ptr.add_zero] at t
+    exact ⟨_, _, t, ⟨hbs, hkn, hg⟩, fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, hA, hK, hb'⟩, hk', hg'⟩⟩
 
 /-- **A store of a value of any encoding** at the start of an owned region: its bytes
 (`Enc.encode`), whatever they are (a NaN lane's are undefined). No `LawfulEnc` is needed: the
