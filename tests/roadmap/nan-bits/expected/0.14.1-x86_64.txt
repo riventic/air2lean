@@ -1,0 +1,12 @@
+storeLoad: 0xffc00000
+storeLoad64: 0xfff8000000000000
+sumBits: 0x7fc00123
+unionView: 0xffc00000
+arrayCast: 0x3f800000ffc00000
+vectorCast: 0x3f800000ffc00000
+structView: 0x7ffc00000
+copyBytes: 0xffc00000
+finiteBits: 0x3eaaaaab
+constStore: 0x7fa00002
+constGlobal: 0x7fa00001
+reloadIsNaN: 0x1

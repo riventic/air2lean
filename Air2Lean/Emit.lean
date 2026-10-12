@@ -892,6 +892,18 @@ def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
   withStorageEnc (ptrBits := fc.ptrBits) fc.structNames fc.types fc.errBits tid expr fc.layouts
 
+/-- The bytes `enc` of the constant `v` with the exact bits of each NaN constant in it written
+over its undefined bits (`nanConstParts`, `docs/floats.md` §NaN in memory); `none` if `v` has no
+NaN constant. -/
+def FCtx.nanConstBytes? (fc : FCtx) (v : Val) (enc : String) : Option String :=
+  let bitsBytes (w bits : Nat) := s!"(Zig.Enc.encode ({bits} : BitVec {w}))"
+  match v, nanConstParts fc.types fc.layouts v with
+  | _, #[] => none
+  -- A NaN constant itself: the bytes of its bits, an integer of its width (same `Enc` size).
+  | .float .., #[(_, w, bits)] => some (bitsBytes w bits)
+  | _, parts => some <| parts.foldl (init := enc) fun acc (off, w, bits) =>
+    s!"(Zig.writeBytes ({acc}) {off} {bitsBytes w bits})"
+
 def FCtx.tyBits (fc : FCtx) (tid : TyId) : Nat := match fc.tyOfId tid with | .int _ b => b | _ => 0
 def FCtx.tySigned (fc : FCtx) (tid : TyId) : Bool :=
   match fc.tyOfId tid with | .int s _ => s | _ => false
@@ -2728,7 +2740,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let new := match v with
         | .undef _ => s!"Zig.Bytes.setUndef ({ty}) s.{field} {off}"
         | v => if isRaw then s!"Zig.Bytes.copy s.{field} {off} {rv v}"
-          else s!"Zig.Bytes.set s.{field} {off} ({rv v} : {ty})"
+          else match fc.nanConstBytes? v s!"Zig.Enc.encode ({rv v} : {ty})" with
+            | some bytes => s!"Zig.Bytes.copy s.{field} {off} {bytes}"
+            | none => s!"Zig.Bytes.set s.{field} {off} ({rv v} : {ty})"
       (env, some (fc.pointeeStorageExpr ptr s!"modify (fun s => \{ s with {field} := {new} })"))
     else if fc.isMemPtr ptr && fc.isVolatileVal ptr then
       (env, some s!"Zig.vstore {deviceDefName} {fc.pointeeBits ptr} {fc.ptrAlign ptr} {rv ptr} {rv v}")
@@ -2756,7 +2770,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
             (undefByteRanges fc.types fc.layouts · v)
           match ranges with
           | some ranges =>
-            let bytes := ranges.foldl (init := s!"Zig.Enc.encode ({fc.resolveVal env v (undefFill := true)} : {ty})") fun acc (off, len) =>
+            let enc := s!"Zig.Enc.encode ({fc.resolveVal env v (undefFill := true)} : {ty})"
+            let bytes := ranges.foldl (init := (fc.nanConstBytes? v enc).getD enc) fun acc (off, len) =>
               s!"(Zig.writeBytes ({acc}) {off} (Array.replicate {len} .undef))"
             (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
           | none => (env, some (placeholder "a store of a partly undefined value"))
@@ -2765,7 +2780,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           let f := if ptrTy?.any fc.laneBitPtr then "Zig.storeLane"
             else fc.bitsFn "storeBits"
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
-        else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
+        else
+          -- A constant with a NaN: its bytes, with the NaN constants' exact bits.
+          let store := match fc.nanConstBytes? v s!"Zig.Enc.encode ({rv v} : {ty})" with
+            | some bytes => s!"Zig.storeBytes {rv ptr} {align} {bytes}"
+            | none => s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"
+          (env, some (fc.pointeeStorageExpr ptr store))
     -- A wholly `undefined` value reaches a place only as a store no read observes
     -- (`deadUndefStores`; any other is a stack block or a byte local): filler.
     else (env, some (fc.storePlace ptr (fc.resolveVal env v (undefFill := v matches .undef _))))
@@ -2887,8 +2907,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else (env, none)
   | .memset dst v =>
     let (ptr, n) := fc.itemsOf dst (rv dst)
-    let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
-    let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
+    -- A NaN constant item: its exact bits, as the integer of its width (same size and alignment).
+    let itemTy := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
+    let (item, v') := match v, nanConstParts fc.types fc.layouts v with
+      | .float .., #[(_, w, bits)] => (s!"BitVec {w}", s!"(some ({bits} : BitVec {w}))")
+      | .undef _, _ => (itemTy, "none")
+      | _, _ => (itemTy, s!"(some {rv v})")
     (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"{fc.widthFn "Zig.memset" "Zig.memsetOf"} (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
   | .memcpy move dst src =>
     -- The item count of the operand that has one. `memcpy` also passes the source's count,
@@ -3739,7 +3763,9 @@ def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := no
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
   | some (.func ..) => "#[.undef]"
   | some (.undef _) | none => fc.storageExpr g.ty s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
-  | some init => fc.storageExpr g.ty (encodeTerm (fc.resolveVal #[] init) ty)
+  | some init =>
+    let enc := encodeTerm (fc.resolveVal #[] init) ty
+    fc.storageExpr g.ty ((fc.nanConstBytes? init enc).getD enc)
 
 /-- Every pointer constant in `v`, at any depth, whose pointer type's alignment `a` (`ptr_align`)
 is known and divides its offset: its global and `a`. Zig guarantees `(addr + off) % a = 0`, so

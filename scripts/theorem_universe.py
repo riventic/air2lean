@@ -51,6 +51,7 @@ GATES = {
     "tests/roadmap/packed-casts/ModelLogical.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/packed-casts/ModelVector.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/packed-casts/ModelAuto.lean": "tests/roadmap/packed-casts/check.sh",
+    "tests/roadmap/nan-bits/Model.lean": "tests/roadmap/nan-bits/check.sh",
     "tests/roadmap/try-pointers/lifetimes/Lifetimes.lean":
         "tests/roadmap/try-pointers/lifetimes/check.sh",
 }

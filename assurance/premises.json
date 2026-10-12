@@ -24,6 +24,7 @@
     "VectorFields.Gen": "tests/roadmap/packed-casts/check.sh copies gen/<version>/VectorFields.lean to VectorFields/Gen.lean in its work tree and compiles it at gate time.",
     "AutoItems.Gen": "tests/roadmap/packed-casts/check.sh copies gen/<version>/AutoItems.lean to AutoItems/Gen.lean in its work tree and compiles it at gate time.",
     "Show": "tests/roadmap/packed-casts/check.sh compiles Show.lean into its work tree at gate time.",
+    "NanBits.Gen": "tests/roadmap/nan-bits/check.sh copies gen/<version>/NanBits.lean to NanBits/Gen.lean in its work tree and compiles it at gate time.",
     "Conc.Gen": "tests/roadmap/big-endian/concurrency.sh copies conc-gen/<version>-<target>.lean to Conc/Gen.lean in its work tree and compiles it at gate time.",
     "ConcRun": "tests/roadmap/big-endian/concurrency.sh compiles ConcRun.lean into its work tree at gate time.",
     "TryLifetimes.Gen": "tests/roadmap/try-pointers/lifetimes/check.sh translates air/<version> to TryLifetimes/Gen.lean in its work tree and compiles it at gate time.",

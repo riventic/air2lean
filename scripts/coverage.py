@@ -309,6 +309,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/packed-casts/air/{version}/vector_fields': 'tests/roadmap/packed-casts/README.md',
     'tests/roadmap/packed-casts/air/{version}/auto_items': 'tests/roadmap/packed-casts/README.md',
     'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
+    # nan_bits.zig (nan-bits/check.sh --export; docs/architecture-audit/nan-bits.md).
+    'tests/roadmap/nan-bits/air/{version}/nan_bits': 'tests/roadmap/nan-bits/README.md',
     # L04: try_lifetimes.zig (lifetimes/check.sh --export).
     'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
