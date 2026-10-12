@@ -102,10 +102,10 @@ end Steps
 
 /-! ## Entry and exit -/
 
-/-- The stack block of `fba`: a fresh block, so not the buffer's. It needs room in the address
-space (`Mem.roomFor`, SEM-07). -/
+/-- The stack block of `fba`: a fresh block, so not the buffer's. It needs room (`Mem.allocOk`:
+the address space, SEM-07, and the thread's stack budget, MM-18). -/
 theorem alloc_fresh {P : Assn} (hP0 : ∀ h, P h → ∃ o c, h (0, o) = some c) :
-    TotalTripleIn (·.roomFor 24 8) P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
+    TotalTripleIn (·.allocOk .stack 24 8) P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
       (P ∗ Assn.ex fun Ac => ⌜Ac % 8 = 0⌝ ∗ bytesAt p Ac 24 .stack (Array.replicate 24 .undef))) := by
   intro m hP hF hd hm hp hst hroom
   obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', -, A, hA, hb, -⟩ :=
@@ -441,7 +441,7 @@ set_option maxHeartbeats 4000000 in
 /-- **The client theorem.** -/
 theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size = 16)
     (hA : A₀ + 16 ≤ 2 ^ 64) :
-    TotalTripleIn (·.roomFor 24 8) (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
+    TotalTripleIn (·.allocOk .stack 24 8) (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
       (fun r => ⌜Res v r⌝ ∗ junk) := by
   simp only [fba_client, heap_FixedBufferAllocator_init, heap_FixedBufferAllocator_allocator,
     alloc_eq, realloc_eq, free_eq]

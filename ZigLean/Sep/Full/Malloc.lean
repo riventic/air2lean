@@ -85,7 +85,7 @@ theorem FTotalTriple.mallocZero (env : Os.Env) :
   generalize (0 : BitVec 64).toNat + env.mallocSlack k (0 : BitVec 64).toNat = s
   cases s with
   | zero =>
-    refine (FTotalTriple.rawAllocZero _ (by decide)).post fun v r h => ?_
+    refine (FTotalTriple.rawAllocZero _).post fun v r h => ?_
     cases v with
     | none => exact h.2
     | some p => exact .inr ⟨h.1 p rfl, h.2⟩

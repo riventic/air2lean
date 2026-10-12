@@ -77,8 +77,8 @@ def stuck {α : Type} : Result α := ExceptT.mk none
 /-- SSA environment: the AIR type and the value of each instruction that has run. -/
 abbrev Env := InstId → Option (TyId × Value)
 
-/-- The frame of a running function: the stack blocks it has allocated, in allocation order,
-and the contents of its register locals (`none`: undefined). -/
+/-- The frame of a running function: the stack blocks it has allocated, newest first (the order
+they are freed in at the return, MM-18), and the contents of its register locals (`none`: undefined). -/
 structure Frame where
   blocks : List Zig.Ptr := []
   cells : InstId → Option Value := fun _ => none
@@ -770,7 +770,7 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
       match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
       | some (size, _), some align => do
         let p ← liftMem (Zig.allocStack size align)
-        modify fun fr => { fr with blocks := fr.blocks ++ [p] }
+        modify fun fr => { fr with blocks := p :: fr.blocks }
         execBody c rest (env.set i.id i.ty (.ptr p))
       | _, _ => liftR stuck
   | .load p => do
@@ -863,7 +863,9 @@ types, and a function that ends other than by `ret`, are stuck. -/
 def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
     let (e, frame) ← (execBody ⟨f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
-    -- The stack frame ends at the return (a panic leaves the memory behind).
+    -- The stack frame ends at the return (a panic leaves the memory behind), its blocks in
+    -- reverse order of their allocation (`Frame.blocks` is newest first; MM-18: every free is
+    -- of the top of the stack).
     frame.blocks.forM Zig.free
     match e with
     | .ret v => pure v

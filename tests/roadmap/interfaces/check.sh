@@ -31,19 +31,21 @@ assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 PY
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # E02's callbacks (tests/roadmap/callbacks) with their `Visitor` type open: that fixture's
-# exports and per-version registries (the foreign `ext_visit` model), plus registry-callbacks.json.
+# exports and per-version registries (the foreign `ext_visit` model) with the `interfaces` entry
+# of registry-callbacks-0.17.0.json, whose models are the callbacks fixture's 0.17.0 ones.
 cp tests/roadmap/callbacks/CallbackModel.lean "$work/CallbackModel.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/CallbackModel.olean" "$work/CallbackModel.lean"
-for version in 0.16.0 0.15.2 0.14.1 0.17.0; do
-  python3 - "tests/roadmap/callbacks/registry-$version.json" "$here/registry-callbacks.json" \
-    "$work/registry-callbacks-$version.json" <<'PY'
+python3 - "$here/registry-callbacks-0.17.0.json" "$work" <<'PY'
 import json, sys
-models, interfaces, out = sys.argv[1:]
-registry = json.load(open(models))
-registry['interfaces'] = json.load(open(interfaces))['interfaces']
-json.dump(registry, open(out, 'w'))
+committed, work = json.load(open(sys.argv[1])), sys.argv[2]
+for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+    registry = json.load(open(f'tests/roadmap/callbacks/registry-{version}.json'))
+    if version == '0.17.0':
+        assert {k: v for k, v in committed.items() if k != 'interfaces'} == registry, \
+            'registry-callbacks-0.17.0.json: models differ from tests/roadmap/callbacks'
+    registry['interfaces'] = committed['interfaces']
+    json.dump(registry, open(f'{work}/registry-callbacks-{version}.json', 'w'))
 PY
-done
 # program | module | prefix | exports ({v}: version) | registry ({v}) | extra translator options
 programs=(
   "lists|Lists|lists.|$here/air/{v}/lists|$here/registry-alloc.json|--allocator-model translated"

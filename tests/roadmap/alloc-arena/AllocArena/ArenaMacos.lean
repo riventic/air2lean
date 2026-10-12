@@ -3168,8 +3168,8 @@ def arena_fit (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
         pure (.ret i30))
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_fitLocals arena_fitExit).run' { (default : arena_fitLocals) with fba := s1, arena := s4 }
-  Zig.free s1
   Zig.free s4
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -3468,8 +3468,8 @@ def arena_mixed  : Zig.ConcM Tgt (BitVec 64) := do
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_mixedLocals arena_mixedExit).run' { (default : arena_mixedLocals) with fba := s0, arena := s16 }
-  Zig.free s0
   Zig.free s16
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -3546,8 +3546,8 @@ def arena_oom_free (p0 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
         pure (.ret true))
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_oom_freeLocals arena_oom_freeExit).run' { (default : arena_oom_freeLocals) with fba := s1, arena := s4 }
-  Zig.free s1
   Zig.free s4
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -4122,8 +4122,8 @@ def arena_reset (p0 : BitVec 64) (p1 : Bool) : Zig.ConcM Tgt (BitVec 64) := do
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_resetLocals arena_resetExit).run' { (default : arena_resetLocals) with fba := s2, arena := s5 }
-  Zig.free s2
   Zig.free s5
+  Zig.free s2
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -4227,8 +4227,8 @@ def arena_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
       let _i22 ← Zig.callC (heap_ArenaAllocator_deinit i21)
       pure (.ret i20))
     | e => pure e) : Zig.CM Tgt arena_resizeLocals arena_resizeExit).run' { (default : arena_resizeLocals) with fba := s2, arena := s5 }
-  Zig.free s2
   Zig.free s5
+  Zig.free s2
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -4311,8 +4311,8 @@ def arena_sum (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
         pure (.ret i45))
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_sumLocals arena_sumExit).run' { (default : arena_sumLocals) with fba := s1, arena := s4 }
-  Zig.free s1
   Zig.free s4
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -4428,8 +4428,8 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.CM Tgt arena_threeLocals arena_threeExit).run' { (default : arena_threeLocals) with fba := s1, arena := s4 }
-  Zig.free s1
   Zig.free s4
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic

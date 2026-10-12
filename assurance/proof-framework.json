@@ -457,9 +457,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Atomics/PtrPublish.lean"
-    },
-    {
       "path": "Proofs/Iogroup/Counter.lean"
     },
     {
@@ -562,12 +559,6 @@
       "path": "ZigLean/Sep/ArenaClient.lean"
     },
     {
-      "path": "ZigLean/Sep/Array.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Array/Reassemble.lean"
-    },
-    {
       "path": "ZigLean/Sep/Automation.lean"
     },
     {
@@ -597,10 +588,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Block.lean",
-      "approved": "coordinator 2026-10-12 (replaces Full/Toy's bridge use; native alloc/free Holds rules follow-up, Plan A6)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Conc.lean"
     },
     {
@@ -619,16 +606,8 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ops.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Pinned.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Region.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"
@@ -642,14 +621,6 @@
     },
     {
       "path": "ZigLean/Sep/Full/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Try.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Typed.lean",
-      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
@@ -755,18 +726,6 @@
       "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
     },
     {
-      "path": "tests/roadmap/proof-tools/Array.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/ArrayClients.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Reassemble.lean"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/StepClients.lean"
-    },
-    {
       "path": "tests/roadmap/resize-remap/Check.lean"
     },
     {
@@ -774,12 +733,6 @@
     },
     {
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Group.lean"
-    },
-    {
-      "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
     },
     {
       "path": "tests/roadmap/strength-log/ProofsLayout.lean",

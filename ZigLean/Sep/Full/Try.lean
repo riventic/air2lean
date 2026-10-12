@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.Typed
-import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.Local
 
 /-!
 # Error unions and optionals through pointers in the full-state logic (Plan A library lane A1)
@@ -249,37 +249,6 @@ instance {α : Type} [Enc α] [PrefixDecode α] : PrefixDecode (Option α) where
     rw [getElem?_extract_prefix hlt]
     simp only [e1, e2]
 
-section Bytes
-
-variable {q : Ptr} {a al o n : Nat} {bs : Array Byte}
-
-/-- A read of `n` bytes at byte `o` of a region. -/
-theorem TotalTriple.region_loadBytes (hn : 0 < n) (hb : al ∣ a) (ho : al ∣ o)
-    (hfit : o + n ≤ bs.size) :
-    TotalTriple (region q a bs) (Zig.loadBytes (q.add o) n al)
-      (fun x => ⌜x = bs.extract o (o + n)⌝ ∗ region q a bs) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, ha, -, hbs⟩ := id hp
-  obtain ⟨_, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := q.add o) (k := o) (n := n)
-    (a := al) hbs hm rfl hn hfit (mod_add_dvd ha hb ho)
-  refine ⟨_, _, hP, loadBytes_run hacc (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    sep_lift.mpr ⟨hx, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-
-/-- A write of the bytes `bs'` at byte `o` of a region. -/
-theorem TotalTriple.region_storeBytes {bs' : Array Byte} (hn : 0 < bs'.size) (hb : al ∣ a)
-    (ho : al ∣ o) (hfit : o + bs'.size ≤ bs.size) :
-    TotalTriple (region q a bs) (Zig.storeBytes (q.add o) al bs')
-      (fun _ => region q a (writeBytes bs o bs')) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, hA, hK, hbs⟩ := hp
-  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
-    bytesAt_store (q := q.add o) (k := o) (a := al) (bs' := bs') hbs hm hd rfl hn hfit
-      (mod_add_dvd hA hb ho) hst hK
-  exact ⟨(), m', h', hrun, hd', hm', ⟨A, S, K, hA, hK, hb'⟩, hst'⟩
-
-end Bytes
-
 namespace Full
 
 open FAssn
@@ -293,16 +262,20 @@ theorem FTotalTriple.region_loadBytes (hn : 0 < n) (hb : al ∣ a) (ho : al ∣ 
     (hfit : o + n ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.loadBytes (q.add o) n al)
       (fun x => ⟪x = bs.extract o (o + n)⟫ ⋆ up (Zig.region q a bs)) :=
-  (FTotalTriple.ofTotal_up (TotalTriple.region_loadBytes hn hb ho hfit) (Tame.loadBytes _ _ _ _)
-    (SizeFree.region q a bs) (Keeps.loadBytes _ _ _ _)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+    ⟨_, _, FTotalTriple.loadBytes_bytesAt hn hfit (mod_add_dvd ha hb ho), ⟨hbs, hk, hg⟩,
+      fun _ _ h => by
+        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
+        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
 
 /-- **Write of bytes** at byte `o` of a region. -/
 theorem FTotalTriple.region_storeBytes {bs' : Array Byte} (hn : 0 < bs'.size) (hb : al ∣ a)
     (ho : al ∣ o) (hfit : o + bs'.size ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.storeBytes (q.add o) al bs')
       (fun _ => up (Zig.region q a (writeBytes bs o bs'))) :=
-  FTotalTriple.ofTotal_up (TotalTriple.region_storeBytes hn hb ho hfit) (Tame.storeBytes _ _ _ _)
-    (SizeFree.region q a bs) (Keeps.storeBytes _ _ _ _)
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+    ⟨_, _, FTotalTriple.storeBytes_bytesAt hn hfit (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
+      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
 
 /-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of a nonempty region, up to
 one past its end. -/
@@ -623,7 +596,7 @@ section Block
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {b : BlockId}
 
 /-- **Store of a whole error union** with a finite error domain at the start of a block's bytes
-held with the block's extent (an escaping local, `Full/Pinned.lean`). -/
+held with the block's extent (an escaping local, `Full/Local.lean`). -/
 @[fsym] theorem FTotalTriple.storeBlock_finite [LawfulEnc α] (w : Except ErrName α)
     (hpb : p.block = some b) (hk : Enc.size (Except ErrName α) ≤ bs.size)
     (ha : (A + p.off.toNat) % al = 0) (hK : K ≠ .constGlobal)

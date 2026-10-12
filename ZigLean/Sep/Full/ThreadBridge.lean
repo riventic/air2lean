@@ -237,17 +237,12 @@ theorem free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : Block
     FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
   (FTTotalTriple.free hpb hS h0 hpos hK).toPartial
 
-/-- A store of `w` at byte `k` of a thread's block, whose full extent it owns. -/
-theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind}
-    {bs : Array Byte} {b : BlockId} {k a : Nat} (w : T) (hpb : p.block = some b) (hq : q = p.add k)
-    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0)
-    (hK : K ≠ .constGlobal) :
-    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store a q w)
-      (fun _ => up (bytesAt p A S K (writeBytes bs k (Enc.encode w))) ⋆ bext b S K) := by
-  have hpos : 0 < (writeBytes bs k (Enc.encode w)).size := by
-    rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)]; omega
-  exact FTTriple.drop ((ofBlock hpb (TTriple.storeAt w hq hn hk ha hK) (Tame.store a q w)).post
-    fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h) fun _ _ h => h.1
+/-- `free'` of the block in front of a frame `R`: the frame stays. -/
+theorem free_front {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTTriple ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (free p) (fun _ => R) :=
+  (free' hpb hS h0 hpos hK).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
 
 /-- A store of the bytes `bs'` at byte `k` of a thread's block, whose full extent it owns. -/
 theorem storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
@@ -259,6 +254,25 @@ theorem storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {
   exact FTTriple.drop ((ofBlock hpb (TTriple.storeBytesAt bs' hq hn hk ha hK)
     (Tame.storeBytes q a bs' .write)).post fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h)
     fun _ _ h => h.1
+
+/-- A store of `w`, whose encoding has the size of `T`, at byte `k` of a thread's block, whose
+full extent it owns: a type whose encoding is not `LawfulEnc` (a struct such as `Io.Group`). -/
+theorem storeAt' {T : Type} [Enc T] {p q : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {k a : Nat} (w : T) (hw : (Enc.encode w).size = Enc.size T)
+    (hpb : p.block = some b) (hq : q = p.add k) (hn : 0 < Enc.size T)
+    (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store a q w)
+      (fun _ => up (bytesAt p A S K (writeBytes bs k (Enc.encode w))) ⋆ bext b S K) :=
+  storeBytesAt (Enc.encode w) hpb hq (by omega) (by omega) ha hK
+
+/-- A store of `w` at byte `k` of a thread's block, whose full extent it owns. -/
+theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {k a : Nat} (w : T) (hpb : p.block = some b) (hq : q = p.add k)
+    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0)
+    (hK : K ≠ .constGlobal) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store a q w)
+      (fun _ => up (bytesAt p A S K (writeBytes bs k (Enc.encode w))) ⋆ bext b S K) :=
+  storeAt' w (LawfulEnc.size_encode w) hpb hq hn hk ha hK
 
 /-- A load of `v` at byte `k` of a thread's block. -/
 theorem loadAt {T : Type} [Enc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
