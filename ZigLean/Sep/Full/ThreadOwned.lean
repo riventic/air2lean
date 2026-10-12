@@ -13,8 +13,12 @@ thread's clock owns its part's bytes. It replaces the legacy `Owned` (`ZigLean/C
 for the full-state logic; a proof keeps it in its protocol invariant, as before.
 
 - `FOwned.start`: no parts, the whole memory in `rO`, in a memory with no recorded access.
-- `FOwned.step`, `WP.liftMem_fowned`, `WP.liftM_fowned`: a `MemM` step of thread `t` with a thread
-  triple (`FTTriple`) on its part; the other parts and `rO` are the frame.
+- `FOwned.step`, `WP.liftMem_fownedS` (and its forms `liftMem_fowned`, `liftM_fowned`,
+  `callMC_fowned(S)`): a `MemM` step of thread `t` with a thread triple (`FTTriple`) on its part;
+  the other parts and `rO` are the frame.
+- `FOwned.keep` (a step that changes no block, location, thread, clock or access),
+  `FOwned.recordAt` (a recorded access of a thread to its own bytes, e.g. a futex wait's read),
+  `FOwned.cover` / `heap_empty` (every live byte belongs to a part or to `rO`).
 - `FOwned.fork` (spawn), `FOwned.current` (a stop), `FOwned.setThread` (a detach): the clock
   reasoning is the legacy one (`Owned.fork`), applied to the parts' bytes with the memory's exact
   cells (`FOwned.legacy`).
@@ -46,6 +50,16 @@ theorem sepN_mem {f : Nat → FAssn} : ∀ {n : Nat} {r : Res} {j : Nat}, sepN n
       exact ⟨rj, hf, fun l hl => by
         have := hs l hl
         simp only [FHeap.union_apply]; cases e : r₁.heap l <;> simp_all⟩
+
+/-- A byte of a `sepN` belongs to one of its conjuncts. -/
+theorem sepN_cover {f : Nat → FAssn} : ∀ {n : Nat} {r : Res} {l : Loc}, sepN n f r →
+    r.heap l ≠ none → ∃ j < n, ∃ rj, f j rj ∧ rj.heap l ≠ none
+  | 0, _, _, ⟨he, _, _⟩, hl => absurd (by rw [he]; rfl) hl
+  | n + 1, _, l, ⟨r₁, r₂, _, rfl, h1, h2⟩, hl => by
+    by_cases e : r₁.heap l = none
+    · obtain ⟨j, hj, rj, hf, hr⟩ := sepN_cover h2 (by simpa [FHeap.union_apply, e] using hl)
+      exact ⟨j, by omega, rj, hf, hr⟩
+    · exact ⟨n, by omega, r₁, h1, e⟩
 
 /-- Pick thread `t`'s part out of the parts. -/
 theorem parts_pick {own : ThreadId → Res} {n t : Nat} {rT : Res} (ht : t < n)
@@ -326,7 +340,74 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
       upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le hul hw))]
     exact ho.outside w hw
 
+/-- **A step that changes no block, atomic location, thread, clock or recorded access** (a stop,
+a futex queue, a cancelation request, a group's table) keeps the parts. -/
+theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
+    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) :
+    FOwned own rO m' := by
+  have hsh : shapes m' = shapes m := by simp only [shapes, ha]
+  refine ⟨?_, fun u hu e he htc => ?_, fun u hu => ho.outside u (ht ▸ hu), by rw [hc, ht]; exact ho.csize,
+    ⟨hsh ▸ ho.conc.1, ?_⟩⟩
+  · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem hb ha h2⟩
+  · rw [ht] at hu; rw [hf] at he; rw [hb] at htc
+    show VClock.le e.clock (m'.clocks[u]!) = true
+    rw [hc]; exact ho.owns u hu e he htc
+  · obtain ⟨hd, hbd⟩ := ho.conc.2
+    exact ⟨fun b b' blk blk' hne h1 h2 => hd b b' blk blk' hne (hb ▸ h1) (hb ▸ h2),
+      fun b blk h1 => hbd b blk (hb ▸ h1)⟩
+
+/-- **A recorded access of thread `t` to bytes of its part** (a futex wait's read of its word):
+the parts stay. -/
+theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned own rO m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hlen : 0 < len)
+    (hin : ∀ x, off ≤ x → x < off + len → (own t).heap (b, x) ≠ none) (hb : b < m.blocks.size) :
+    FOwned own rO (m.recordAt b off len kind) := by
+  obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
+  have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
+  have := ho.step (m' := m.recordAt b off len kind) (r' := own t) hc ht hR hRO
+    (Holds.congrMem (m := m) rfl rfl hh)
+    ⟨by show m.current < (m.clocks.set! m.current _).size; simpa using hcs, ho.conc.1, ho.conc.2⟩
+    (Mem.Owns.recordAt hcs (hc ▸ ho.owns t ht))
+    (StepIn.recordAt hcs (FHeap.erase_disjoint hh.disj) hlen
+      (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb)
+  rwa [upd_same] at this
+
+/-- **Every live byte belongs to a thread's part or to the rest.** -/
+theorem cover (ho : FOwned own rO m) {l : Loc} {c : Cell} (hl : m.heap l = some c) :
+    (∃ u < m.threads.size, (own u).heap l ≠ none) ∨ rO.heap l ≠ none := by
+  obtain ⟨rT, hs, hh⟩ := ho.holds
+  have hu : (rT.heap ∪ rO.heap) l ≠ none := by
+    have := hh.heap.1 l
+    rw [hl] at this
+    intro hn; rw [hn] at this; cases this
+  by_cases e : rT.heap l = none
+  · exact .inr (by simpa [FHeap.union_apply, e] using hu)
+  · obtain ⟨j, hj, rj, hf, hr⟩ := sepN_cover hs e
+    exact .inl ⟨j, hj, by rw [← hf]; exact hr⟩
+
+/-- No part and not the rest owns a byte: no byte is live. -/
+theorem heap_empty (ho : FOwned own rO m) (h0 : ∀ u < m.threads.size, (own u).heap = FHeap.empty)
+    (hO : rO.heap = FHeap.empty) : m.heap = Heap.empty := by
+  funext l
+  cases hl : m.heap l with
+  | none => rfl
+  | some c =>
+    rcases ho.cover hl with ⟨u, hu, hn⟩ | hn
+    · rw [h0 u hu] at hn; exact absurd rfl hn
+    · rw [hO] at hn; exact absurd rfl hn
+
 end FOwned
+
+/-- The start memory `{}` has no byte. -/
+theorem fheap_empty_mem : ({} : Mem).fheap = FHeap.empty := by
+  funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty]
+
+theorem FAssn.sep_ex_ex_lift {R : FAssn} {φ : Nat → BlockId → Prop} {P : Nat → BlockId → FAssn}
+    {r : Res} (h : (R ⋆ FAssn.ex fun A => FAssn.ex fun b => ⟪φ A b⟫ ⋆ P A b) r) :
+    ∃ A b, φ A b ∧ (R ⋆ P A b) r := by
+  obtain ⟨r₁, r₂, hd, e, hr, A, b, hp⟩ := h
+  obtain ⟨hφ, hp⟩ := sep_lift.mp hp
+  exact ⟨A, b, hφ, r₁, r₂, hd, e, hr, hp⟩
 
 end Full
 
@@ -341,12 +422,13 @@ variable {Tgt γ σ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId �
   {n : Nat} {own : ThreadId → Res} {rO : Res}
 
 /-- **A `MemM` step of thread `t`** with a thread triple on its part `own t`: after it, `t`'s part
-is the triple's post and the other parts and `rO` are unchanged. -/
-theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+is the triple's post, the other parts and `rO` are unchanged, and the step is one of `t`'s
+(`StepIn`: the threads, the groups, the futex queue, … stay). -/
+theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q a G m' n) :
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → StepIn hF m m' → Q a G m' n) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩
@@ -355,8 +437,28 @@ theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
-    exact ⟨by rw [hs.threads],
-      h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq (hs.current.trans hc) hs.threads⟩
+    exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq hs⟩
+
+/-- `WP.liftMem_fownedS` with the current thread and the threads of the step. -/
+theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
+    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
+      m'.current = t → m'.threads = m.threads → Q a G m' n) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  WP.liftMem_fownedS ht ho hc htl hp fun a m' r' _ hr ho' hq hs =>
+    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads
+
+/-- `WP.liftMem_fownedS` for a call of a `MemM` function (`callMC`). -/
+theorem WP.callMC_fownedS {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
+    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → StepIn hF m m' → Q (a, s) G m' n) :
+    P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
+  exact WP.bind (WP.liftMem_fownedS ht ho hc htl hp fun a m' r' hF hr ho' hq hs =>
+    WP.pure' (h a m' r' hF hr ho' hq hs))
 
 /-- `WP.liftMem_fowned` for a step of generated code (`liftM`). -/
 theorem WP.liftM_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
@@ -364,10 +466,9 @@ theorem WP.liftM_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
       m'.current = t → m'.threads = m.threads → Q (a, s) G m' n) :
-    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
-  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp fun a m' r' hr ho' hq hc' ht' =>
-    WP.pure' (h a m' r' hr ho' hq hc' ht'))
+    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
+  WP.callMC_fownedS ht ho hc htl hp fun a m' r' _ hr ho' hq hs =>
+    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads
 
 /-- `WP.liftMem_fowned` for a call of a `MemM` function (`callMC`). -/
 theorem WP.callMC_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}

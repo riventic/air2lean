@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Arr
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # Arrays in the full-state logic (`ZigLean/Sep/Full/Arr.lean`), library-only

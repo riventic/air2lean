@@ -299,7 +299,7 @@ structure RunCaches where
   /-- The simp context that folds generated indirect calls (concurrent bodies). -/
   fold : IO.Ref (Option Simp.Context)
   /-- The facts lemmas (`@[fsym_facts]`) with the head of their assertion (`headKey`). -/
-  factLemmas : IO.Ref (Option (Array (Name × Name)))
+  factLemmas : IO.Ref (Option (Array (Array Name × Name)))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -1051,14 +1051,45 @@ def isCaseCtorApp (e : Expr) : MetaM Bool := do
   if ci.induct == ``Bool || ci.induct == ``Nat then return false
   return (← caseInduct? ci.induct).isSome
 
+/-- A value that a field's equation substitutes (`substCtor`): a constructor application of a type
+with several constructors (`isCaseCtorApp`), or a closed term of a type that is not arithmetic
+(`w.M = GMap.empty`: words and numbers stay facts of the arithmetic solver). -/
+def isSubstValue (e : Expr) : MetaM Bool := do
+  if ← isCaseCtorApp e then return true
+  if e.hasFVar || e.hasMVar || e.isLit then return false
+  let .const _ _ := e.getAppFn | return false
+  let ty ← whnfR (← inferType e)
+  if ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool || ty.isAppOf ``BitVec || ty.isSort then
+    return false
+  return !(← isProp ty)
+
+/-- A fact `o.isSome = true`, `¬o.isSome = true`, `o.isSome = false` (or the same of `isNone`):
+the lemma that turns it into `o = none` or `∃ a, o = some a`, and `o`. -/
+def optTest? (ty : Expr) : Option (Name × Expr) := do
+  let (neg, e) := if ty.isAppOfArity ``Not 1 then (true, ty.appArg!) else (false, ty)
+  let (_, l, r) ← e.eq?
+  let isSome ← if l.isAppOfArity ``Option.isSome 2 then some true
+    else if l.isAppOfArity ``Option.isNone 2 then some false else none
+  let val ← if r.isConstOf ``Bool.true then some true
+    else if r.isConstOf ``Bool.false then some false else none
+  let lem ← match isSome, val, neg with
+    | true, true, false => some ``opt_isSome_true
+    | true, true, true => some ``opt_not_isSome
+    | true, false, false => some ``opt_isSome_false
+    | false, true, false => some ``opt_isNone_true
+    | false, true, true => some ``opt_not_isNone
+    | false, false, false => some ``opt_isNone_false
+    | _, _, _ => none
+  return (lem, l.appArg!)
+
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
 and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
 which are split again, so a `match` on `t` (in the precondition, in a fact) reduces. `none` if
 there is nothing to do or the goal does not abstract over `t`. -/
 partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarId) := g.withContext do
-  let (t, symm) ← if (← isCaseCtorApp r) && !(← isCaseCtorApp l) then pure (l, false)
-    else if (← isCaseCtorApp l) && !(← isCaseCtorApp r) then pure (r, true)
+  let (t, symm) ← if (← isSubstValue r) && !(← isSubstValue l) then pure (l, false)
+    else if (← isSubstValue l) && !(← isSubstValue r) then pure (r, true)
     else return none
   -- a field of the locals or of a witness; not a library term (`p.block = some b` is a block fact)
   if let .const c _ := t.getAppFn then
@@ -1099,6 +1130,13 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
       return g
     return ← destruct g fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
+  -- a test of an optional that is not a constructor: its constructor equation (`opt_*`), next
+  -- to the test
+  if let some (lem, o) := optTest? ty then
+    unless ← isCaseCtorApp o do
+      let pf ← mkAppM lem #[mkFVar h]
+      let (h', g') ← (← g.assert `hopt (← inferType pf) pf).intro1
+      return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
       if let some g' ← observing? (subst g h) then return g'
@@ -1491,28 +1529,121 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
       mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
   return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
 
-/-- **A planner extension** (`@[fsym_plan]`): the assertion constants `heads` it plans (their
-atoms are not pre-assigned by unification) and `run`, which rearranges the state for the
-postcondition's atoms (by `St.step`). -/
-structure Planner where
-  heads : Array Name
-  run : St → Array Expr → TacticM St
-
-instance : Inhabited Planner := ⟨{ heads := #[], run := fun st _ => pure st }⟩
-
-unsafe def evalPlannerUnsafe (n : Name) : TacticM Planner := evalConstCheck Planner ``Planner n
-
-@[implemented_by evalPlannerUnsafe] opaque evalPlanner (n : Name) : TacticM Planner
-
-/-- The registered planner extensions. -/
-def planners : TacticM (Array Planner) := do
-  (fsymPlanExt.getState (← getEnv)).mapM evalPlanner
-
 def proveArith (ty : Expr) (quick := false) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
   if ← arith m.mvarId! quick then return some (← instantiateMVars m)
   trace[fsym] "arith failed: {ty}"
   return none
+
+/-! ### Range laws (`@[fsym_plan]`)
+
+A range law `X … lo m … ⋆ X … m hi … = X … lo hi …` (`RangeLaw`, e.g. `bclaim_split`) lets the
+planner treat the atoms of `X` like regions without bytes: an atom of the postcondition is carved
+out of a state atom that covers it (the law twice, backwards), adjacent state atoms are joined
+first when none covers it (the law forwards). The law's hypotheses are bounds, proved by the
+arithmetic solver. -/
+
+/-- `x` with its range bounds replaced by `lo` and `hi`. -/
+def RangeLaw.withBounds (law : RangeLaw) (x lo hi : Expr) : Expr :=
+  mkAppN x.getAppFn ((x.getAppArgs.set! law.lo lo).set! law.hi hi)
+
+/-- `x` is an atom of the law's head with the law's arity. -/
+def RangeLaw.args? (law : RangeLaw) (x : Expr) : Option (Array Expr) :=
+  if x.isAppOf law.head && law.lo < x.getAppNumArgs && law.hi < x.getAppNumArgs then
+    some x.getAppArgs else none
+
+/-- The law's instance `X lo m ⋆ X m hi = X lo hi` with `X lo hi` unified with `whole` and the
+split point `m`; the hypotheses are proved by the arithmetic solver. -/
+def RangeLaw.inst (law : RangeLaw) (whole m : Expr) : TacticM (Option Expr) := do
+  let lem ← mkConstWithFreshMVarLevels law.decl
+  let (args, _, ty) ← forallMetaTelescopeReducing (← inferType lem)
+  let some (_, lhs, c) := ty.eq? | return none
+  unless ← withReducible (isDefEq c whole) do return none
+  unless ← withReducible (isDefEq lhs.appFn!.appArg!.getAppArgs[law.hi]! m) do return none
+  for x in args do
+    if (← x.mvarId!.isAssigned) then continue
+    let xty ← instantiateMVars (← inferType x)
+    unless ← isProp xty do return none
+    let some h ← proveArith xty (quick := true) | return none
+    x.mvarId!.assign h
+  let h ← instantiateMVars (mkAppN lem args)
+  if h.hasExprMVar then return none
+  return some h
+
+/-- The atom `q` (bounds `qlo`, `qhi`) carved out of an unreserved state atom that covers it:
+`X lo hi` becomes `X lo qlo ⋆ X qlo qhi ⋆ X qhi hi`. -/
+def carveRange (law : RangeLaw) (st : St) (q : Expr) (reserved : Array Expr) :
+    TacticM (Option (St × Expr)) := do
+  let some qa := law.args? q | return none
+  let (qlo, qhi) := (qa[law.lo]!, qa[law.hi]!)
+  for i in [0:st.ats.size] do
+    let x := st.ats[i]!
+    if reserved.contains x then continue
+    let some xa := law.args? x | continue
+    let s0 ← saveState
+    try
+      unless ← withReducible (isDefEq (law.withBounds x qlo qhi) q) do throwError "other arguments"
+      let some _ ← proveArith (← mkAppM ``LE.le #[qlo, qhi]) (quick := true) | throwError "range"
+      let some h1 ← law.inst x qlo | throwError "split at {qlo}"
+      let rest := law.withBounds x qlo xa[law.hi]!
+      let some h2 ← law.inst rest qhi | throwError "split at {qhi}"
+      let st ← st.step #[i] #[law.withBounds x xa[law.lo]! qlo, rest] (← mkAppM ``atom_eq #[← mkEqSymm h1])
+      let mid := law.withBounds x qlo qhi
+      let st ← st.step #[1] #[mid, law.withBounds x qhi xa[law.hi]!] (← mkAppM ``atom_eq #[← mkEqSymm h2])
+      return some (st, mid)
+    catch ex =>
+      trace[fsym] "range carve ({law.decl}): {ex.toMessageData}"
+      s0.restore
+  return none
+
+/-- Join two unreserved adjacent state atoms of the law's head (the second from the first's end). -/
+def joinRanges (law : RangeLaw) (st : St) (reserved : Array Expr) : TacticM (Option St) := do
+  for i in [0:st.ats.size] do
+    let x := st.ats[i]!
+    if reserved.contains x then continue
+    let some xa := law.args? x | continue
+    for j in [0:st.ats.size] do
+      let y := st.ats[j]!
+      if i == j || reserved.contains y then continue
+      let some ya := law.args? y | continue
+      unless law.withBounds x ya[law.lo]! ya[law.hi]! == y do continue
+      let s0 ← saveState
+      try
+        let m := xa[law.hi]!
+        let some e ← proveArith (← mkEq ya[law.lo]! m) (quick := true) | throwError "adjacent"
+        -- `y` restated from `x`'s end
+        let y' := law.withBounds x m ya[law.hi]!
+        let motive ← withLocalDeclD `z (← inferType m) fun z =>
+          mkLambdaFVars #[z] (law.withBounds x z ya[law.hi]!)
+        let st1 ← st.step #[j] #[y'] (← mkAppM ``atom_eq #[← mkCongrArg motive e])
+        let some h ← law.inst (law.withBounds x xa[law.lo]! ya[law.hi]!) m | throwError "join"
+        return some (← st1.step #[if i < j then i + 1 else i, 0] #[law.withBounds x xa[law.lo]! ya[law.hi]!]
+          (← mkAppM ``atom_eq #[h]))
+      catch ex =>
+        trace[fsym] "range join ({law.decl}): {ex.toMessageData}"
+        s0.restore
+  return none
+
+/-- **The range planner**: each determined atom of the postcondition whose head has a range law
+is carved out of a state atom that covers it, joining adjacent state atoms when none covers it. -/
+def planRanges (st : St) (qats : Array Expr) : TacticM St := do
+  let laws := fsymPlanExt.getState (← getEnv)
+  if laws.isEmpty then return st
+  let mut st := st
+  let mut reserved : Array Expr := #[]
+  for a in qats do
+    let a ← instantiateMVars a
+    let some law := laws.find? (a.isAppOf ·.head) | continue
+    if a.hasExprMVar || (law.args? a).isNone then continue
+    if st.ats.any (fun x => x == a && !reserved.contains x) then reserved := reserved.push a; continue
+    let mut done := false
+    for _ in [0:16] do
+      if let some (st', x) ← carveRange law st a reserved then
+        st := st'; reserved := reserved.push x; done := true; break
+      let some st' ← joinRanges law st reserved | break
+      st := st'
+    unless done do trace[fsym] "ranges: no atom of the state covers {a}"
+  return st
 
 def regionArgs? (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``Zig.Full.FAssn.up 1 && e.appArg!.isAppOfArity ``Zig.regionIn 6 then
@@ -1980,8 +2111,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let mut Qi ← reduceProjs Qi
     let mut pQ := pQ
     let mut st ← St.init P
-    let exts ← planners
-    let planned (a : Expr) : Bool := exts.any fun x => x.heads.any (a.isAppOf ·)
+    let laws := fsymPlanExt.getState (← getEnv)
+    let planned (a : Expr) : Bool := laws.any (a.isAppOf ·.head)
     -- pre-assign by the atoms that unify outright; an atom that unfolds once its witnesses are
     -- assigned (a `match` on an existential) is opened again
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
@@ -2076,8 +2207,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
     st ← planShares st qsh
     trace[fsym] "plan: shares done"
-    -- planner extensions (`@[fsym_plan]`)
-    for x in exts do st ← x.run st qats
+    -- range laws (`@[fsym_plan]`)
+    st ← planRanges st qats
     -- authorities with a determined fraction: the block's untagged shares go back
     for a in qats do
       let a ← instantiateMVars a
@@ -2251,24 +2382,32 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
 
 /-! ## Facts of atoms -/
 
-/-- The facts lemmas (`@[fsym_facts]`) about the atom `a`: `(proof of AtomFacts a φ, φ)`. -/
-def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
-  -- the lemmas by the head of their assertion, once per run
+/-- The atoms a facts lemma is about: `X` or the pair `X₁ ⋆ X₂` of `AtomFacts X φ`/`MemFacts X φ`. -/
+def factSubjects (X : Expr) : Array Expr :=
+  if X.isAppOfArity sepN 2 then #[X.appFn!.appArg!, X.appArg!] else #[X]
+
+/-- The facts lemmas (`@[fsym_facts]`) about the atoms `as` (one atom, or an ordered pair):
+`(proof of AtomFacts X φ or MemFacts X φ for X the atom or `as[0] ⋆ as[1]`, φ, memory fact)`. -/
+def atomFacts (as : Array Expr) : MetaM (Array (Expr × Expr × Bool)) := do
+  -- the lemmas by the heads of their atoms, once per run
   let keyed ← match ← (← caches).factLemmas.get with
     | some k => pure k
     | none => do
       let k ← (fsymFactsExt.getState (← getEnv)).filterMapM fun n => withNewMCtxDepth do
         let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
-        return if concl.isAppOfArity ``AtomFacts 2 then some (headKey (concl.getArg! 0), n) else none
+        return if concl.isAppOfArity ``AtomFacts 2 || concl.isAppOfArity ``MemFacts 2 then
+          some ((factSubjects (concl.getArg! 0)).map headKey, n) else none
       (← caches).factLemmas.set (some k)
       pure k
+  let keys := as.map headKey
+  let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
   let mut out := #[]
   for (key, n) in keyed do
-    unless key == headKey a do continue
+    unless key == keys do continue
     let s ← saveState
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, concl) ← forallMetaTelescope (← inferType f)
-    unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) a) do s.restore; continue
+    unless ← withReducibleAndInstances (isDefEq (concl.getArg! 0) X) do s.restore; continue
     for x in args do
       unless ← x.mvarId!.isAssigned do
         if (← isClass? (← inferType x)).isSome then
@@ -2277,7 +2416,7 @@ def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
     let pf ← instantiateMVars (mkAppN f args)
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
-    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ)
+    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ, concl.isAppOfArity ``MemFacts 2)
   return out
 
 /-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
@@ -2295,28 +2434,34 @@ def knownFact (ψ : Expr) : MetaM Bool := do
   s.restore
   return r
 
-/-- Add the facts of the precondition's atoms (`@[fsym_facts]`: the block, offset and alignment
-of an owned pointer) that the context lacks, when the walk needs more facts (a rule's side goal,
+/-- Add the facts of the precondition's atoms and ordered pairs of atoms (`@[fsym_facts]`: the
+block, offset and alignment of an owned pointer; a token's grant in its authority's map; two
+owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
 an undecided `if`, a reachable panic, a return). `none` if there was none to add. -/
 partial def addFacts (g : MVarId) (done : Array Expr := #[]) : TacticM (Option MVarId) := g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let ats := atoms P
-  for i in [0:ats.size] do
-    let a := ats[i]!
-    if done.contains a then continue
-    for (hX, φ) in ← atomFacts a do
+  let n := ats.size
+  -- single atoms `[i]`, then ordered pairs `[i, j]`
+  let subjects := (List.range n).map (#[·]) ++
+    ((List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·]))
+  for idx in subjects do
+    let as := idx.map (ats[·]!)
+    let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
+    if done.contains X then continue
+    for (hX, φ, mem) in ← atomFacts as do
       if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
-      trace[fsym] "facts of {a}: {φ}"
-      let R := sepOf (ats.eraseIdx! i)
-      let g1 ← if P == mkSep a R then pure g else do
-        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep a R) c Q)
-        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep a R, Q, c, ← acEq P (mkSep a R), g2])
+      trace[fsym] "facts of {X}: {φ}"
+      let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
+      let g1 ← if P == mkSep X R then pure g else do
+        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep X R) c Q)
+        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep X R, Q, c, ← acEq P (mkSep X R), g2])
         pure g2.mvarId!
-      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep a R) c Q))
-      g1.assign (← mkAppM' (← mkAppOptM (L.nm ``pre_fact) #[L.L]) #[hX, k])
+      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep X R) c Q))
+      g1.assign (← mkAppM' (← mkAppOptM (L.nm (if mem then ``pre_mfact else ``pre_fact)) #[L.L]) #[hX, k])
       let (h, g2) ← k.mvarId!.intro `hf
       let g2 ← destruct g2 h
-      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push a)
+      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X)
   return if done.isEmpty then none else some g
 
 /-! ## Rules -/

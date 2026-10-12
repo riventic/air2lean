@@ -9,7 +9,7 @@
 # against FAllocSpec for each module (ArenaSpec*.lean, by the shared tactics of AllocArena/Core.lean);
 # an alloc that reserves nothing is rejected (mutant.sh); the admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
-# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim
+# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim
 # ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
 # against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).
@@ -46,14 +46,14 @@ for pair in "arena-linux ArenaLinux" "arena-macos ArenaMacos" "arena-fixed-linux
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean"
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
-# ArenaObstruction.lean prints the axioms of its seven theorems.
+# ArenaObstruction.lean prints the axioms of its eight theorems.
 "${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt"
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
 python3 - "$work/axioms.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert text.count('depends on axioms') == 7 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+assert text.count('depends on axioms') == 8 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 # The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
 cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"

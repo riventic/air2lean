@@ -1,6 +1,4 @@
-import ZigLean.Sep.Full.AllocSpec
-import ZigLean.Sep.Full.Ops
-import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.Region
 import ZigLean.Sep.Full.Const
 import ZigLean.Bit
 
@@ -17,10 +15,10 @@ their generated code, with the allocator's `FAllocSpec` fields as the rules of t
 This module is what such a proof needs beyond the step rules of `AutoRules`:
 
 * the postconditions of the contracts, over an `FAllocInv` (`owned`, `allocResult`,
-  `sliceResult`);
-* step rules (`@[fsym]`) for the commands of the wrappers' code that touch no allocator:
-  `@returnAddress()` (`returnAddress`) and the `@memset(_, undefined)` of fresh memory
-  (`memsetUndef`).
+  `sliceResult`, `bytesResult`);
+* the step rule (`@[fsym]`) of `@returnAddress()` (`returnAddress`); the byte operations on
+  regions (`@memset`, item loads and stores, `@memcpy`, the pointer order of its aliasing check)
+  are the region library's (`Full/Region`).
 -/
 
 namespace Zig
@@ -48,6 +46,12 @@ def allocResult (k n : Nat) : Except ErrName Ptr → FAssn
 /-- The result of an allocation of `len` items of `n` bytes in all that returns a slice. -/
 def sliceResult (k : Nat) (len : BitVec 64) (n : Nat) : Except ErrName Slice → FAssn
   | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr (Array.replicate n .undef)
+  | .error e => ⟪e = "OutOfMemory"⟫
+
+/-- The result of an allocation that returns a slice of `len` items with the bytes `bs`: a copy
+(`dupe`), or undefined items and a sentinel (`allocSentinel`). -/
+def bytesResult (k : Nat) (len : BitVec 64) (bs : Array Byte) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr bs
   | .error e => ⟪e = "OutOfMemory"⟫
 
 theorem owned_zero {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) : I.owned k p bs = emp := by
@@ -109,17 +113,6 @@ dsimproc [fsym_norm] reduceValLit (Zig.val _ _) := fun e => do
 
 /-! ## Step rules -/
 
-/-- `@memset` keeps every block (it stores into one live block). -/
-theorem Keeps.memset {D : BlockId → Prop} {β : Type} [Enc β] (a : Nat) (p : Ptr) (n : BitVec 64)
-    (v : Option β) : Keeps D (Zig.memset a p n v) := by
-  unfold Zig.memset
-  split
-  · exact Keeps.pure' _
-  · refine Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-      Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ => Keeps.storeBytes _ _ _ _
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
-
 namespace FTotalTriple
 
 variable {P : FAssn}
@@ -130,43 +123,6 @@ variable {P : FAssn}
     ⟨_, { m with arbitraryNext := m.arbitraryNext + 1 }, r, rfl,
       Holds.congrMem (m := m) (m' := { m with arbitraryNext := m.arbitraryNext + 1 }) rfl rfl hh, hp,
       ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩⟩
-
-/-- A region whose cells carry some size label and some kind of `K`'s normal form: a size-free
-form of `regionIn` (`SizeFree`), for lifting the region library's total triples. -/
-private def regionAny (p : Ptr) (A S : Nat) (K : BlockKind) (a : Nat) (bs : Array Byte) : Assn :=
-  fun h => ∃ A' S' K', (A' = A ∧ K'.norm = K.norm ∧ (A' + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal) ∧
-    bytesAt p A' S' K' bs h
-
-private theorem regionAny_sizeFree {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} :
-    SizeFree (fun _ => none) (regionAny p A S K a bs) :=
-  SizeFree.bytesAt_ex fun _ _ K₀ _ K' ⟨h1, h2, h3, h4⟩ hk =>
-    ⟨h1, hk.trans h2, h3, fun e => h4 (by
-      have hn : K₀.norm = .constGlobal := by rw [← hk, e]; rfl
-      clear h1 h2 h3 h4 hk e; revert hn; cases K₀ <;> simp [BlockKind.norm])⟩
-
-private theorem regionAny_of {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {h : Heap}
-    (hr : regionIn p A S K a bs h) : regionAny p A S K a bs h :=
-  ⟨A, S, K, ⟨rfl, rfl, hr.1, hr.2.1⟩, hr.2.2⟩
-
-/-- **`@memset(region, undefined)`** of all `n` bytes of a region: the region's bytes become
-undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
-@[fsym] theorem memsetUndef {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
-    {n : BitVec 64} (hn : n.toNat = bs.size) :
-    FTotalTriple (up (regionIn p A S K a bs)) (Zig.memset (α := BitVec 8) 1 p n none)
-      (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) := by
-  have ht : TotalTriple (regionAny p A S K a bs) (Zig.memset (α := BitVec 8) 1 p n none)
-      (fun _ => regionAny p A S K a (Array.replicate n.toNat .undef)) := by
-    intro m hP hF hd hm hp hst
-    obtain ⟨A', S', K', ⟨rfl, hk, hal, hK⟩, hb⟩ := hp
-    obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ :=
-      Region.memsetUndefIn (p := p) (A := A') (S := S') (K := K') (a := a) hn m hP hF hd hm ⟨hal, hK, hb⟩ hst
-    exact ⟨v, m', hQ, hr, hd', hm', ⟨A', S', K', ⟨rfl, hk, hq.1, hq.2.1⟩, hq.2.2⟩, hs'⟩
-  have hl := FTotalTriple.ofTotal_up ht (Tame.memset 1 p n none) regionAny_sizeFree
-    (Keeps.memset 1 p n none)
-  refine FTotalTriple.eupd_post (hl.pre fun r hr => up_imp (fun _ h => regionAny_of h) hr) fun _ => ?_
-  intro m r rF hh hp hs
-  obtain ⟨⟨A', S', K', ⟨rfl, hk, hal, hK⟩, hb⟩, hk2, hg⟩ := hp
-  exact EUpd.relabel (S := S') (S' := S) hk.symm m r rF hh ⟨⟨hal, hK, hb⟩, hk2, hg⟩ hs
 
 end FTotalTriple
 
