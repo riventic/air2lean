@@ -6,8 +6,8 @@
     "schema": 12,
     "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
     "patched_compiler_note": "hash of the bin/zig lock wrapper (zig-patch/lock.sh), the convention of the other fixtures; the compiler it runs is bin/zig-unlocked, below",
-    "patched_compiler_unlocked_sha256": "c1a081e0fcb3cc5ed476b183b2c6eecd57538e37aa3a74dd69bfa4e4c4608a40",
-    "built_from": "zig-patch tree of codex/soundness-batch ab2e95e3 (hook 0.17.0/hook.patch sha256 af9ff0529ca156f9b04cb4a5402738399a34f474ebd540aeda6d5151a7aebd93), `zig-patch/build.sh 0.17.0` with the host zig 0.17.0, Debug, no LLVM. This includes the content-addressed instance keys (identity.zig), which the shared /opt/dev/air2lean-build/zig-air-0.17.0 (zig-unlocked ee662e35...) predates.",
+    "patched_compiler_unlocked_sha256": "06bb59bed3e04c8e2b9b71599db50f4a587356fd1619521d646a5fe0ce71b4b2",
+    "built_from": "the content-addressed 0.17.0 patched compiler of the current zig-patch tree (CAS prefix zig/0.17.0-27167cd1fe67345a0d10f268ad0af699; schema 12 with the noalias list), `zig-patch/build.sh 0.17.0` with the host zig 0.17.0, Debug, no LLVM. This includes the content-addressed instance keys (identity.zig), which the shared /opt/dev/air2lean-build/zig-air-0.17.0 (zig-unlocked ee662e35...) predates.",
     "exporter_json_zig_sha256": "022d9b94ac8feaeb36d93b3d9aacea78a0f9726d5a753b33ecebd1646570ba49",
     "exporter_identity_zig_sha256": "a03eea3791f047909d370569c24c65d8be0ffae662968cd3000b01c39a970f7e",
     "exporter_pointer_offset_zig_sha256": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
@@ -16,7 +16,7 @@
   },
   "translation": "air2lean tests/roadmap/zig017/overflow/air/0.17.0 --namespace Ov --prefix overflow. translates (withOverflow) and the generated Lean elaborates. Evidence that the 0.17.0 exporter writes mul_with_overflow and the translator accepts it; no semantic contract or differential run (support:tags:mul_with_overflow stays emitted-unqualified).",
   "air_sha256": {
-    "air/0.17.0/overflow.mulOverflowI16.json": "83e865669472dbc5cc9f9d92ed45988d6c26ca2c9b0d840daef447f32c66b564",
-    "air/0.17.0/overflow.mulOverflowU32.json": "238ba64ab940da54a078c5cb4cf8272a7ecfdf531e0e0d8cb3ed7bda3a247e3e"
+    "air/0.17.0/overflow.mulOverflowI16.json": "54ab007a62dfc16f84700772a0d5a2ff92591335924838f09ef4f033bd0c8d38",
+    "air/0.17.0/overflow.mulOverflowU32.json": "e8190bae08022e93fcd11e0a5bfa749709aa111cd4eb1a575a8f121781535cb7"
   }
 }
