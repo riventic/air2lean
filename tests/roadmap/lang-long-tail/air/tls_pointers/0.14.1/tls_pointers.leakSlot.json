@@ -42,7 +42,7 @@
  "src": {
   "file": "tls_pointers.zig",
   "module": "tls_pointers",
-  "decl_line": 57
+  "decl_line": 58
  },
  "params": [
   0

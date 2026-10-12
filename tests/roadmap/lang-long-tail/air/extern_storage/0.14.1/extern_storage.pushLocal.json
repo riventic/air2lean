@@ -1,0 +1,417 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "extern_storage.pushLocal",
+ "module": "root",
+ "src": {
+  "file": "extern_storage.zig",
+  "module": "extern_storage",
+  "decl_line": 36
+ },
+ "params": [],
+ "noalias": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 15
+  },
+  {
+   "id": 1,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 1,
+      "off": 8
+     }
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "ty": 2,
+     "some": {
+      "ty": 4,
+      "ptr": {
+       "global": 1,
+       "off": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 6,
+   "tag": "load",
+   "ty": 5,
+   "args": [
+    {
+     "ty": 6,
+     "ptr": {
+      "global": 2,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 11,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "ty": 5,
+     "ptr": {
+      "global": 3,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 5,
+     "ptr": {
+      "global": 3,
+      "off": 0
+     }
+    },
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 19
+  },
+  {
+   "id": 15,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 7,
+    "func": "extern_storage.sumList",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": []
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 5
+  },
+  {
+   "id": 17,
+   "tag": "ret_safe",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "ext_head",
+   "module": "root",
+   "ty": 2,
+   "const": false,
+   "threadlocal": false,
+   "extern": true
+  },
+  {
+   "name": "extern_storage.local_node",
+   "module": "root",
+   "ty": 9,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 9,
+    "elems": [
+     {
+      "ty": 0,
+      "val": "100"
+     },
+     {
+      "ty": 2,
+      "null": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "ext_slot",
+   "module": "root",
+   "ty": 5,
+   "const": false,
+   "threadlocal": false,
+   "extern": true
+  },
+  {
+   "name": "ext_counter",
+   "module": "root",
+   "ty": 0,
+   "const": false,
+   "threadlocal": false,
+   "extern": true
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "optional",
+   "child": 4,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn () u32"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "extern_storage.Node",
+   "module": "root",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "v",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "next",
+     "ty": 2,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  }
+ ]
+}

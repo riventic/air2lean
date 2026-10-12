@@ -52,8 +52,9 @@ pub fn mainOnly(x: u32) u32 {
     return was +% now +% @as(u32, @intCast(name.len));
 }
 
-/// A worker leaves its `current` pointing at its dead stack node in its own instance; the
-/// instance itself dies with the thread, so a pointer to it read afterwards is a use after free.
+/// A worker leaves its `current` pointing at its stack node and hands out the address of its
+/// own instance of `current`. The instance dies with the thread, so reading it afterwards is a
+/// use after free (illegal behaviour), even without following the pointer it holds.
 fn leakSlot(out: *?*?*Node) void {
     var mine: Node = .{ .v = 9, .next = null };
     current = &mine;
@@ -65,7 +66,7 @@ pub fn leakedSlot() !u32 {
     const h = try std.Thread.spawn(.{}, leakSlot, .{&p});
     h.join();
     const slot = p orelse return 0;
-    return if (slot.*) |n| n.v else 1;
+    return if (slot.* != null) 1 else 2;
 }
 
 comptime {

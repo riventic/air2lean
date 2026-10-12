@@ -42,7 +42,7 @@
  "src": {
   "file": "tls_pointers.zig",
   "module": "tls_pointers",
-  "decl_line": 63
+  "decl_line": 64
  },
  "params": [],
  "noalias": [],
@@ -413,7 +413,7 @@
      ]
     },
     {
-     "id": 46,
+     "id": 40,
      "tag": "cond_br",
      "ty": 13,
      "args": [
@@ -424,77 +424,6 @@
      "then": [
       {
        "id": 38,
-       "tag": "optional_payload",
-       "ty": 21,
-       "args": [
-        {
-         "inst": 36
-        }
-       ]
-      },
-      {
-       "id": 39,
-       "tag": "dbg_var_val",
-       "ty": 1,
-       "args": [
-        {
-         "inst": 38
-        }
-       ],
-       "name": "n"
-      },
-      {
-       "id": 40,
-       "tag": "dbg_stmt",
-       "ty": 1,
-       "line": 6,
-       "column": 29
-      },
-      {
-       "id": 41,
-       "tag": "struct_field_ptr_index_0",
-       "ty": 22,
-       "args": [
-        {
-         "inst": 38
-        }
-       ]
-      },
-      {
-       "id": 42,
-       "tag": "load",
-       "ty": 19,
-       "args": [
-        {
-         "inst": 41
-        }
-       ]
-      },
-      {
-       "id": 43,
-       "tag": "wrap_errunion_payload",
-       "ty": 0,
-       "args": [
-        {
-         "inst": 42
-        }
-       ]
-      },
-      {
-       "id": 44,
-       "tag": "br",
-       "ty": 13,
-       "target": 35,
-       "args": [
-        {
-         "inst": 43
-        }
-       ]
-      }
-     ],
-     "else": [
-      {
-       "id": 45,
        "tag": "br",
        "ty": 13,
        "target": 35,
@@ -508,19 +437,36 @@
         }
        ]
       }
+     ],
+     "else": [
+      {
+       "id": 39,
+       "tag": "br",
+       "ty": 13,
+       "target": 35,
+       "args": [
+        {
+         "ty": 0,
+         "payload": {
+          "ty": 19,
+          "val": "2"
+         }
+        }
+       ]
+      }
      ]
     }
    ]
   },
   {
-   "id": 47,
+   "id": 41,
    "tag": "dbg_stmt",
    "ty": 1,
    "line": 6,
    "column": 5
   },
   {
-   "id": 48,
+   "id": 42,
    "tag": "ret_safe",
    "ty": 13,
    "args": [
@@ -614,7 +560,7 @@
   },
   {
    "k": "optional",
-   "child": 23,
+   "child": 21,
    "abi_size": 24,
    "abi_align": 8
   },
@@ -626,7 +572,7 @@
    "fields": [
     {
      "name": "impl",
-     "ty": 24,
+     "ty": 22,
      "offset": 0
     }
    ],
@@ -720,35 +666,7 @@
   },
   {
    "k": "optional",
-   "child": 21,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 25,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 19,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
+   "child": 23,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -760,12 +678,12 @@
    "fields": [
     {
      "name": "ptr",
-     "ty": 26,
+     "ty": 24,
      "offset": 0
     },
     {
      "name": "vtable",
-     "ty": 27,
+     "ty": 25,
      "offset": 8
     }
    ],
@@ -780,10 +698,64 @@
    "fields": [
     {
      "name": "thread",
-     "ty": 28,
+     "ty": 26,
      "offset": 0
     }
    ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 27,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 28,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 29,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 30,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -808,46 +780,6 @@
    "abi_align": 8
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 29,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 30,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 31,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
    "k": "other",
    "name": "anyopaque"
   },
@@ -859,19 +791,19 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 32
+     "ty": 31
     },
     {
      "name": "resize",
-     "ty": 33
+     "ty": 32
     },
     {
      "name": "remap",
-     "ty": 34
+     "ty": 33
     },
     {
      "name": "free",
-     "ty": 35
+     "ty": 34
     }
    ]
   },
@@ -883,21 +815,34 @@
    "fields": [
     {
      "name": "completion",
-     "ty": 36
+     "ty": 35
     },
     {
      "name": "child_tid",
-     "ty": 37
+     "ty": 36
     },
     {
      "name": "parent_tid",
-     "ty": 38
+     "ty": 37
     },
     {
      "name": "mapped",
-     "ty": 39
+     "ty": 38
     }
    ]
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 39,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
@@ -939,19 +884,6 @@
    "abi_align": 8
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 43,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
    "k": "struct",
    "name": "atomic.Value(Thread.Completion__enum_404)",
    "module": "std",
@@ -959,7 +891,7 @@
    "fields": [
     {
      "name": "raw",
-     "ty": 44
+     "ty": 43
     }
    ]
   },
@@ -971,7 +903,7 @@
    "fields": [
     {
      "name": "raw",
-     "ty": 38
+     "ty": 37
     }
    ]
   },
@@ -986,7 +918,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 45,
+   "child": 44,
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
@@ -1016,7 +948,7 @@
    "k": "enum",
    "name": "Thread.Completion__enum_404",
    "module": "std",
-   "tag": 45,
+   "tag": 44,
    "exhaustive": true,
    "fields": [
     {
