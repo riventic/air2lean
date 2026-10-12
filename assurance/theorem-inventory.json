@@ -13,14 +13,14 @@
       "module": "Proofs.Pointers.Sep",
       "example": "pointers",
       "scope": "sequential",
-      "domain": "`Triple` (partial correctness, one thread: `Mem.Seq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ∗ pts q 4 y` before, the values swapped after; any frame"
+      "domain": "`FTotalTriple` (total correctness, one thread: `Mem.FSeq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ⋆ pts q 4 y` before, `swap` returns with the values swapped; any frame"
     },
     {
       "name": "swap_self_sep",
       "module": "Proofs.Pointers.Sep",
       "example": "pointers",
       "scope": "sequential",
-      "domain": "`Triple` for every `p` and `x`: `swap(p, p)` keeps `pts p 4 x`"
+      "domain": "`FTotalTriple` for every `p` and `x`: `swap(p, p)` returns and keeps `pts p 4 x`"
     },
     {
       "name": "counter_init",
@@ -780,16 +780,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "c1441bd0384f8da3ec4ad6e1499db88b1e189387",
-        "tracked_dirty": false
+        "head": "afc9a2cae9f4a424d954bdda7667d5c9cc0cd8b6",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T18:08:46.883370+00:00",
-      "elapsed_seconds": 30.289,
+      "started_utc": "2026-10-12T18:23:55.784530+00:00",
+      "elapsed_seconds": 13.563,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "4921c0ece26ead8478e1567bec85b979b457ea6f0aba773ba1f6cb9f6c552e56",
+      "log_sha256": "8398337df95950f81fe32a5180e4b78ef4e3da967c843f304d72f56b1ba4a631",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Effects",
@@ -980,7 +980,7 @@
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
         "Proofs.Pointers.Proofs": "a77bd2cb94a4e12c77fc689bf5d887c36eba14092b2e1e614829d7644b5e11c3",
-        "Proofs.Pointers.Sep": "a9c09fcc515d936766c4152774d4e10b912bb10dff47d6ed7b879e0a1b578576",
+        "Proofs.Pointers.Sep": "a01bab1cdd78f76caa6da0b2304474115deb3745655b4f6005a56671636e78b1",
         "Proofs.Provenance.Proofs": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
         "Proofs.ProvenanceGap.Proofs": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
         "Proofs.Recursion.AirCert": "1731eb77057bae6ffcf1d8d91c06992ec46d7b4aed9c759141c4b5ef581f4653",
