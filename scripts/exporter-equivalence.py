@@ -86,7 +86,7 @@ def load_manifest(root, path=MANIFEST):
     default_args = data.get('default_args')
     if not (isinstance(default_args, list) and all(isinstance(a, str) for a in default_args)):
         raise Failure('%s: default_args must be a list of strings' % path)
-    known = {'id', 'versions', 'dir', 'source', 'filter', 'filter_file', 'args', 'compare'}
+    known = {'id', 'versions', 'dir', 'source', 'filter', 'filter_file', 'filter_from_committed', 'args', 'compare'}
     seen = set()
     entries = []
     for entry in data.get('export', []):
@@ -106,6 +106,8 @@ def load_manifest(root, path=MANIFEST):
             raise Failure('%s: compare must be "exact" or "subset"' % where)
         if len(versions) > 1 and '{version}' not in entry['dir']:
             raise Failure('%s: several versions need {version} in dir' % where)
+        if entry.get('filter_from_committed', False) not in (True, False):
+            raise Failure('%s: filter_from_committed must be a boolean' % where)
         args = entry.get('args', default_args)
         if not (isinstance(args, list) and all(isinstance(a, str) for a in args)):
             raise Failure('%s: args must be a list of strings' % where)
@@ -115,6 +117,21 @@ def load_manifest(root, path=MANIFEST):
         if set(entry) != {'root', 'reason'} or not all(isinstance(v, str) and v for v in entry.values()):
             raise Failure('%s: an [[excluded]] entry has exactly a nonempty root and reason' % path)
     return entries, excluded
+
+
+COMPILER_NUMBER = re.compile(r'(__(?:anon|func|enum|opaque|union|struct)_)[0-9]+.*')
+
+
+def committed_names(directory):
+    """The function names (`name`) of the committed AIR files in DIRECTORY, as filter prefixes.
+    A compiler-numbered name (`Thread.spawn__anon_487`) is cut after its marker: the number
+    depends on how much the compilation analysed, so every instance is exported."""
+    names = set()
+    for path in sorted(directory.glob('*.json')):
+        document = json.loads(path.read_text(encoding='utf-8'))
+        if isinstance(document, dict) and isinstance(document.get('name'), str):
+            names.add(COMPILER_NUMBER.sub(r'\1', document['name']))
+    return sorted(names)
 
 
 def fixture_exports(root, versions, manifest=MANIFEST):
@@ -127,8 +144,12 @@ def fixture_exports(root, versions, manifest=MANIFEST):
         for version in entry['versions']:
             if version not in versions:
                 continue
-            exports.append(Export(entry['id'], version, entry['source'], tuple(entry['args']), ','.join(prefixes),
-                                  (entry['dir'].replace('{version}', version),), entry['compare']))
+            directory = entry['dir'].replace('{version}', version)
+            # A kept selection (a call closure) of an export that cannot be repeated unfiltered:
+            # re-export exactly the committed functions.
+            names = committed_names(root / directory) if entry.get('filter_from_committed') else []
+            exports.append(Export(entry['id'], version, entry['source'], tuple(entry['args']),
+                                  ','.join(prefixes + names), (directory,), entry['compare']))
     return exports
 
 
@@ -217,7 +238,7 @@ def normalized_golden(root, layers, fresh, scratch):
 
     check.sh validates the fresh profile against the translator's report first and then drops it;
     here no translator runs, so the profile of the fresh export stands in for that report."""
-    normalize = runpy.run_path(str(root / 'scripts/normalize-air.py'))
+    normalize = runpy.run_path(str(Path(__file__).with_name('normalize-air.py')))
     context = normalize['ValidationContext']()
     first = next(iter(sorted(fresh.glob('*.json'))), None)
     if first is not None:
@@ -255,6 +276,9 @@ def check_export(root, export, current, alt, scratch, committed=True):
                 row['committed'] = {'error': 'no committed files in ' + export.committed[0]}
         if 'committed' not in row:
             row['committed'] = compare_trees(expected, actual)
+            if export.compare != 'golden' and not clean(row['committed'], export.compare):
+                # Tell a stale fixture (different AIR) from compiler numbering (`__anon_<n>`).
+                row['committed_normalized'] = compare_trees(*normalized_golden(root, export.committed, work / 'current', work))
     alt_ok = alt is None or clean(row['alt'], 'exact')
     committed_ok = not committed or ('error' not in row['committed'] and clean(row['committed'], export.compare))
     row['status'] = 'alt-differs' if not alt_ok else ('ok' if committed_ok else 'committed-differs')
@@ -351,6 +375,8 @@ def main(argv=None, root=ROOT):
             line += '; alt: ' + summary(row['alt'])
         if 'committed' in row:
             line += '; committed (%s): %s' % (row['compare'], summary(row['committed']))
+        if 'committed_normalized' in row:
+            line += ' (normalized: %s)' % summary(row['committed_normalized'])
         if 'stderr' in row:
             line += '\n    ' + row['stderr'].strip().replace('\n', '\n    ')
         print(line)

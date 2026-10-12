@@ -9,12 +9,16 @@
 #   dir      the committed directory (repository-relative)
 #   source   the root source file
 #   filter   ZIG_AIR_JSON_FILTER (empty or absent: every function); `filter_file` adds one
-#            prefix per line
+#            prefix per line; `filter_from_committed = true` adds the full name of every
+#            committed function (a kept call closure that an unfiltered export cannot repeat)
 #   args     the compiler arguments between `build-obj -fno-emit-bin` and the source
 #            (default: the `default_args` below)
 #   compare  "exact": the fresh directory equals the committed one, file for file and byte for
 #            byte. "subset": every committed file is in the fresh directory with the same bytes
 #            (the fixture keeps a selection, e.g. a call closure, of what the filter exports).
+#            When the bytes differ, the report adds the comparison after the golden
+#            normalization (scripts/normalize-air.py): a difference only there is compiler
+#            numbering (`__anon_<n>`), anything else is a fixture older than the exporter.
 #
 # Every key of scripts/coverage.py COMPILER_FIXTURE_ROOTS is either an [[export]] here or an
 # [[excluded]] entry with its reason (test_exporter_equivalence.py checks it). The goldens
@@ -336,7 +340,7 @@ id = "alloc-translated-page-linux"
 versions = ["0.16.0"]
 dir = "tests/roadmap/alloc-translated/air/{version}/page-linux"
 source = "tests/roadmap/alloc-translated/page.zig"
-filter = ""
+filter_from_committed = true
 compare = "subset"
 
 [[export]]
@@ -344,7 +348,7 @@ id = "alloc-translated-page-macos"
 versions = ["0.16.0"]
 dir = "tests/roadmap/alloc-translated/air/{version}/page-macos"
 source = "tests/roadmap/alloc-translated/page.zig"
-filter = ""
+filter_from_committed = true
 args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"]
 compare = "subset"
 
@@ -353,7 +357,7 @@ id = "alloc-translated-fba-linux"
 versions = ["0.16.0"]
 dir = "tests/roadmap/alloc-translated/air/{version}/fba-linux"
 source = "tests/roadmap/alloc-translated/fba.zig"
-filter = ""
+filter_from_committed = true
 compare = "subset"
 
 [[export]]
@@ -361,7 +365,7 @@ id = "alloc-translated-fba-macos"
 versions = ["0.16.0"]
 dir = "tests/roadmap/alloc-translated/air/{version}/fba-macos"
 source = "tests/roadmap/alloc-translated/fba.zig"
-filter = ""
+filter_from_committed = true
 args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"]
 compare = "subset"
 
@@ -370,7 +374,7 @@ id = "alloc-fba-client"
 versions = ["0.16.0"]
 dir = "tests/roadmap/alloc-fba/air/{version}/client-linux"
 source = "tests/roadmap/alloc-fba/client.zig"
-filter = ""
+filter_from_committed = true
 compare = "subset"
 
 [[export]]

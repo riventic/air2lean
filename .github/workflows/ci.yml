@@ -592,6 +592,12 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: python3 -B tests/roadmap/build-cache/test_cas.py -v
 
+      # Offline: stub compiler; the manifest covers every reviewed compiler-export root
+      # (docs/exporter-split.md). The real re-export is scripts/exporter-equivalence.py run.
+      - name: Exporter equivalence harness
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: python3 -B tests/roadmap/exporter-equivalence/test_exporter_equivalence.py -v
+
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
