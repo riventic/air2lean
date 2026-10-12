@@ -67,7 +67,8 @@
     {
       "name": "FTTotalTriple",
       "module": "tests.roadmap.architecture-audit.claims.AuditClaims.ShadowWithin",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (audit spoof fixtures, #230)"
     },
     {
       "name": "FTTriple",
@@ -83,7 +84,8 @@
     {
       "name": "FTotalTriple",
       "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Shadow",
-      "status": "target"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (audit spoof fixtures, #230)"
     },
     {
       "name": "FTriple",
