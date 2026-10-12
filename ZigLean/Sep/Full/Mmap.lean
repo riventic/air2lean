@@ -577,7 +577,8 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
       obtain ⟨_, e2, -, ho2, rfl⟩ := Mem.heap_some hc'
       rw [hb₁] at e1; cases e1; rw [hb₂] at e2; cases e2
       simp [nb, Array.getElem_append_left ho1])
-  refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩, ⟨⟨hs.1.single⟩,
+  refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩,
+    ⟨⟨Mem.SingleThread.forgetFrom (m := m₁) hs.1.single _ _⟩,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
       (by rw [hnbs]; have := le_alignUp n os.pageSize; omega)
       (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho)
