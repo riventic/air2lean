@@ -380,31 +380,119 @@ literal (`hsz`). -/
     have ⟨_, hp', hm⟩ := up_fix (SizeFree.arr p vs) hh hp
     hsz ▸ arr_ptrProject_run hp'.1 hm hi
 
-/-- **`@memset`** of all items of an array to `w`. Lifted from the run lemma `arr_memset_run`
-through the bridge `FTotalTriple.ofTotal_up`, as `Ops.lean` lifts `load`/`store`; native rules
-replace the bridges in Plan A, A6. -/
-@[fsym] theorem FTotalTriple.arr_memset [LawfulEnc T] {a : Nat} {n : BitVec 64} (hn : 0 < Enc.size T)
+/-- **A rule on an array from a rule on its owned bytes**: the rule turns the array's bytes into
+bytes that hold the items `vs'`; the alignment and kind are facts of the labels, which the bytes
+keep. -/
+theorem FTotalTriple.arr_of {α : Type} {c : MemM α} {vs' : List T}
+    (ht : ∀ A S K bs, (A + p.off.toNat) % Enc.align T = 0 → bs.size = Enc.size T * vs.length →
+      (∀ i (hi : i < vs.length),
+        Enc.decode (bs.extract (Enc.size T * i) (Enc.size T * i + Enc.size T)) = pure vs[i]) →
+      K ≠ .constGlobal → ∃ bs',
+        FTotalTriple (up (bytesAt p A S K bs)) c (fun _ => up (bytesAt p A S K bs')) ∧
+        bs'.size = Enc.size T * vs'.length ∧ ∀ i (hi : i < vs'.length),
+          Enc.decode (bs'.extract (Enc.size T * i) (Enc.size T * i + Enc.size T)) = pure vs'[i]) :
+    FTotalTriple (up (Zig.arr p vs)) c (fun _ => up (Zig.arr p vs')) :=
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩, hk, hg⟩ =>
+    have ⟨bs', ht', hs', hv'⟩ := ht A S K bs hA hsz hv hK
+    ⟨_, _, ht', ⟨hb, hk, hg⟩, fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, bs', hA, hs', hv', hb', hK⟩, hk', hg'⟩⟩
+
+/-- **`@memset`** of all items of an array to `w` (`memset_bytesAt`). -/
+@[fsym] theorem FTotalTriple.arr_memset [LawfulEnc T] {a : Nat} {n : BitVec 64}
     (ha : a ∣ Enc.align T) (hlen : n.toNat = vs.length) (w : T) :
     FTotalTriple (up (Zig.arr p vs)) (Zig.memset a p n (some w))
       (fun _ => up (Zig.arr p (List.replicate vs.length w))) :=
-  FTotalTriple.ofTotal_up (fun _ _ _ hd hm hp hs =>
-      have ⟨m', hr, hs', h', hd', hm', hp'⟩ := arr_memset_run hp hm hd hn ha hlen hs w
-      ⟨(), m', h', hr, hd', hm', hp', hs'⟩)
-    (Tame.memset a p n (some w)) (SizeFree.arr p vs) (Keeps.memset a p n (some w))
+  FTotalTriple.arr_of fun A S K bs hA hsz _ hK => by
+    have hw := LawfulEnc.size_encode w
+    have e : memsetBytes n.toNat (some w) = (Array.replicate n.toNat (Enc.encode w)).flatten := rfl
+    have hs' : (memsetBytes n.toNat (some w)).size = n.toNat * Enc.size T := by
+      rw [e, Array.size_flatten_replicate, hw]
+    have hall : (memsetBytes n.toNat (some w)).size = bs.size := by
+      rw [hs', hsz, hlen, Nat.mul_comm]
+    have t := memset_bytesAt (q := p) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs)
+      (n := n) (v := some w) hs' (by omega)
+      (by rw [Nat.add_zero]; exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero hA)))
+      hK
+    refine ⟨memsetBytes n.toNat (some w),
+      by simpa only [Int.natCast_zero, Ptr.add_zero, writeBytes_all hall] using t,
+      by rw [hs', List.length_replicate, hlen, Nat.mul_comm], fun i hi => ?_⟩
+    simp only [List.length_replicate] at hi
+    rw [List.getElem_replicate, e, ← hw, Array.extract_flatten_replicate _ _ _ (by omega)]
+    exact LawfulEnc.decode_encode w
+
+/-- The bytes of an array after `@memmove` of `n` items from item `s` to item `d` (the source
+items' bytes written at the destination) hold `copyItems`. -/
+theorem copyItems_bytes {bs : Array Byte} {d s n : Nat} (hsz : bs.size = Enc.size T * vs.length)
+    (hv : ∀ i (hi : i < vs.length),
+      Enc.decode (bs.extract (Enc.size T * i) (Enc.size T * i + Enc.size T)) = pure vs[i])
+    (hdn : d + n ≤ vs.length) (hsn : s + n ≤ vs.length) :
+    (writeBytes bs (Enc.size T * d)
+        (bs.extract (Enc.size T * s) (Enc.size T * s + n * Enc.size T))).size =
+      Enc.size T * (copyItems vs d s n).length ∧
+    ∀ j (hj : j < (copyItems vs d s n).length),
+      Enc.decode ((writeBytes bs (Enc.size T * d)
+          (bs.extract (Enc.size T * s) (Enc.size T * s + n * Enc.size T))).extract
+        (Enc.size T * j) (Enc.size T * j + Enc.size T)) = pure (copyItems vs d s n)[j] := by
+  have hlen : (copyItems vs d s n).length = vs.length := by simp [copyItems]
+  have hdk : Enc.size T * d + Enc.size T * n ≤ bs.size := by
+    rw [hsz, ← Nat.mul_add]; exact Nat.mul_le_mul_left _ hdn
+  have hsk : Enc.size T * s + Enc.size T * n ≤ bs.size := by
+    rw [hsz, ← Nat.mul_add]; exact Nat.mul_le_mul_left _ hsn
+  rw [Nat.mul_comm n]
+  have hsrc : (bs.extract (Enc.size T * s) (Enc.size T * s + Enc.size T * n)).size =
+      Enc.size T * n := by
+    simp only [Array.size_extract]; omega
+  refine ⟨by rw [writeBytes_size _ _ _ (by omega), hsz, hlen], fun j hj => ?_⟩
+  rw [hlen] at hj
+  have hjk : Enc.size T * j + Enc.size T ≤ bs.size := by
+    rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hj
+  simp only [copyItems, List.getElem_mapIdx]
+  by_cases hin : d ≤ j ∧ j < d + n
+  · have hlt : j - d + s < vs.length := by omega
+    simp only [hin, and_self, ↓reduceIte, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlt,
+      Option.getD_some]
+    have h1 := Nat.mul_le_mul_left (Enc.size T) hin.1
+    have h2 := Nat.mul_le_mul_left (Enc.size T) (Nat.succ_le_of_lt hin.2)
+    rw [Nat.mul_succ] at h2
+    rw [extract_writeBytes_in _ _ _ _ _ (by omega) h1 (by rw [hsrc, ← Nat.mul_add]; omega)]
+    have e1 := Nat.mul_sub (Enc.size T) j d
+    have e2 := Nat.mul_add (Enc.size T) (j - d) s
+    have e3 := Nat.mul_succ (Enc.size T) (j - d + s)
+    have h3 := Nat.mul_le_mul_left (Enc.size T) (show j - d + 1 ≤ n by omega)
+    rw [Nat.mul_succ] at h3
+    rw [Array.extract_extract, show Enc.size T * s + (Enc.size T * j - Enc.size T * d)
+        = Enc.size T * (j - d + s) by omega,
+      Nat.min_eq_left (by omega)]
+    rw [show Enc.size T * s + (Enc.size T * j - Enc.size T * d + Enc.size T)
+        = Enc.size T * (j - d + s) + Enc.size T by omega]
+    exact hv _ hlt
+  · simp only [hin, ↓reduceIte]
+    rw [extract_writeBytes_disjoint _ _ _ _ _ (by omega) hjk ?_]
+    · exact hv j hj
+    · rw [hsrc]
+      rcases Nat.lt_or_ge j d with h | h
+      · right; have := Nat.mul_le_mul_left (Enc.size T) (Nat.succ_le_of_lt h)
+        rw [Nat.mul_succ] at this; omega
+      · left; have : d + n ≤ j := by omega
+        have := Nat.mul_le_mul_left (Enc.size T) this; rw [Nat.mul_add] at this; omega
 
 /-- **`@memmove`** of `n` items from item `s` to item `d` of one array: the items are read before
-they are written, so the ranges may overlap (`copyItems`). Lifted like `arr_memset`; the item
-size is a literal (`hsz`). -/
+they are written, so the ranges may overlap (`copyItems`, `memmove_bytesAt_self`). The item size
+is a literal (`hsz`). -/
 @[fsym] theorem FTotalTriple.arr_memmove {a size : Nat} {d s n : BitVec 64} (hsz : size = Enc.size T)
-    (hn : 0 < Enc.size T) (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T)
+    (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T)
     (hdn : d.toNat + n.toNat ≤ vs.length) (hsn : s.toNat + n.toNat ≤ vs.length) :
     FTotalTriple (up (Zig.arr p vs)) (Zig.memmove size a a (p.elem size d) (p.elem size s) n)
       (fun _ => up (Zig.arr p (copyItems vs d.toNat s.toNat n.toNat))) := by
   subst hsz
-  exact FTotalTriple.ofTotal_up (fun _ _ _ hd' hm hp hst =>
-      have ⟨m', hr, hst', h', hd'', hm', hp'⟩ := arr_memmove_run hp hm hd' hn ha hs hdn hsn hst
-      ⟨(), m', h', hr, hd'', hm', hp', hst'⟩)
-    (Tame.memmove _ _ _ _ _ _) (SizeFree.arr p vs) (Keeps.memmove _ _ _ _ _ _)
+  rw [Ptr.elem_eq, Ptr.elem_eq]
+  refine FTotalTriple.arr_of fun A S K bs hA hbs hv hK => ?_
+  have ⟨hs', hv'⟩ := copyItems_bytes hbs hv hdn hsn
+  have hdk := Nat.mul_le_mul_left (Enc.size T) hdn
+  have hsk := Nat.mul_le_mul_left (Enc.size T) hsn
+  rw [Nat.mul_add] at hdk hsk
+  rw [Nat.mul_comm (Enc.size T) n.toNat] at hdk hsk
+  exact ⟨_, memmove_bytesAt_self (q := p) (A := A) (S := S) (K := K) (bs := bs) (by omega)
+    (by omega) (item_aligned hA ha hs) (item_aligned hA ha hs) hK, hs', hv'⟩
 
 end Rules
 
