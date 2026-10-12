@@ -889,9 +889,8 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
 /-- Close a goal that is not arithmetic by a hypothesis that is not arithmetic either, equal to
 it up to arithmetic in the arguments (`I.fits (n + 1) 0` for `I.fits x.toNat 0` with
 `x.toNat = n + 1`, `congrEq`), or up to projections of structure values and unfolding in one
-argument, the others equal (`{ names := ns, .. }.names.contains e = true` by
-`Option.all domain.names.contains (some e) = true`; unfolding only there: a byte lookup against
-a size would unfold the bytes). -/
+Boolean argument, the others equal (`{ names := ns, .. }.names.contains e = true` by
+`Option.all domain.names.contains (some e) = true`). -/
 def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
   let t ← instantiateMVars (← g.getType)
   if ← isArithProp t then return false
@@ -908,10 +907,14 @@ def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
       g.assign (← mkExpectedTypeHint (← mkEqMP e (← mkExpectedTypeHint d.toExpr dt')) t)
       return true
     s.restore
-    if t'.hasExprMVar then continue
+    -- unfolding: one function, one differing argument that is a Boolean test (data terms such
+    -- as bytes are equal up to arithmetic by `congrEq`, never by unfolding them)
+    if t'.hasExprMVar || !(← withReducible (isDefEq dt'.getAppFn t'.getAppFn)) then
+      s.restore; continue
     let pairs := dt'.getAppArgs.zip t'.getAppArgs
     let differ ← pairs.filterM fun (a, b) => return !(← withReducibleAndInstances (isDefEq a b))
     let [(a, b)] := differ.toList | s.restore; continue
+    unless (← whnfR (← inferType a)).isConstOf ``Bool do s.restore; continue
     if ← withDefault (isDefEq a b) then
       g.assign (← mkExpectedTypeHint d.toExpr t); return true
     s.restore
