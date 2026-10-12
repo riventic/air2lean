@@ -2175,7 +2175,8 @@ theorem wp_casOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {s : σ
       ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        (r = some S.one ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m') ∨
        (r = some S.two ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC .acquire .relaxed 4 L.ptr S.unl S.one : CM Tgt σ (Option α)).run s)
       Q G m n := by
   unfold cmpxchgAsC
@@ -2211,7 +2212,8 @@ theorem wp_xchgLockOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {s
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.unl ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        (r ≠ S.unl ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .acquire 4 L.ptr S.two : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
   simp only [StateT.run_bind]
@@ -2242,7 +2244,8 @@ theorem wp_xchgUnlockOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) 
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.one ∧ P.inv (upd G₁ t (L.set g .out Heap.empty)) m') ∨
        (r = S.two ∧ P.inv (upd G₁ t (L.set g .wake Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .release 4 L.ptr S.unl : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
   simp only [StateT.run_bind]
@@ -2271,7 +2274,8 @@ theorem wp_waitOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {io : 
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait) (hok : ok g)
     (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWaitC io L.ptr S.two : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.futexWaitC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
   have he : (Packed.toBits S.two).setWidth 32 = BitVec.ofNat 32 L.c := by rw [S.bits2, hS]; rfl
@@ -2301,7 +2305,8 @@ theorem wp_wakeOn (hP : L.FitsOn P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
     {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wake) (hok : ok g) (hi : P.inv (upd G t g) m)
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (L.set g .out Heap.empty)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .out Heap.empty)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io L.ptr (1 : BitVec 32) : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   obtain ⟨hst, hcu, hl⟩ := (hP.lock hi₁).wake (by rw [hg₁]; exact hg) (by decide) hw
@@ -2348,9 +2353,9 @@ theorem wp_cas (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ} {t : 
       ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        (r = some S.one ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m') ∨
        (r = some S.two ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC .acquire .relaxed 4 L.ptr S.unl S.one : CM Tgt σ (Option α)).run s)
-      Q G m n := wp_casOn hP.on S hS hg trivial hi h
+      Q G m n := wp_casOn hP.on S hS hg trivial hi h hcost
 
 theorem wp_xchgLock (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .spin) (hi : P.inv (upd G t g) m)
@@ -2358,9 +2363,9 @@ theorem wp_xchgLock (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ} 
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.unl ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        (r ≠ S.unl ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .acquire 4 L.ptr S.two : CM Tgt σ α).run s) Q G m n :=
-  wp_xchgLockOn hP.on S hS hg trivial hi h
+  wp_xchgLockOn hP.on S hS hg trivial hi h hcost
 
 theorem wp_xchgUnlock (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .holds)
@@ -2368,25 +2373,27 @@ theorem wp_xchgUnlock (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.one ∧ P.inv (upd G₁ t (L.set g .out Heap.empty)) m') ∨
        (r = S.two ∧ P.inv (upd G₁ t (L.set g .wake Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .release 4 L.ptr S.unl : CM Tgt σ α).run s) Q G m n :=
-  wp_xchgUnlockOn hP.on S hS hg trivial hi h
+  wp_xchgUnlockOn hP.on S hS hg trivial hi h hcost
 
 theorem wp_wait (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {io : Io} {s : σ} {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait)
     (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWaitC io L.ptr S.two : CM Tgt σ Unit).run s) Q G m n :=
-  wp_waitOn hP.on S hS hg trivial hi h
+  wp_waitOn hP.on S hS hg trivial hi h hcost
 
 theorem wp_wake (hP : L.Fits P U) {io : Io} {s : σ} {t : ThreadId} {G : ThreadId → γ}
     {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wake) (hi : P.inv (upd G t g) m)
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (L.set g .out Heap.empty)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .out Heap.empty)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io L.ptr (1 : BitVec 32) : CM Tgt σ Unit).run s) Q G m n :=
-  wp_wakeOn hP.on hg trivial hi h
+  wp_wakeOn hP.on hg trivial hi h hcost
 
 /-! ### `Thread.Mutex` (0.15.2): the ops on bits, with the contended value `3` -/
 
@@ -2416,7 +2423,8 @@ theorem wp_orLock (hP : L.Fits P U) (hc3 : L.c = 3) {s : σ} {t : ThreadId} {G :
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = 0 ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        ((r = 1 ∨ r = 3) ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .or false .acquire 4 L.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n := by
   unfold atomicRmwC
@@ -2444,7 +2452,8 @@ theorem wp_orLock (hP : L.Fits P U) (hc3 : L.c = 3) {s : σ} {t : ThreadId} {G :
 theorem wp_loadLock (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → γ}
     {m : Mem} {n : Nat} {g : γ} (hg : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t → P.inv (upd G₁ t g) m' → Q (r, s) G₁ m' k) :
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t → P.inv (upd G₁ t g) m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .relaxed 4 L.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   unfold atomicLoadC
   simp only [StateT.run_bind]
@@ -2466,7 +2475,8 @@ theorem wp_casD (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : T
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
        (r = some (BitVec.ofNat 32 L.c) ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 : CM Tgt σ _).run s)
       Q G m n := by
   have hnh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
@@ -2497,10 +2507,11 @@ theorem wp_waitD (hP : L.Fits P U) {s : σ} {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait)
     (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((threadFutexWaitC L.ptr (BitVec.ofNat 32 L.c) : CM Tgt σ Unit).run s) Q G m n := by
   rw [threadFutexWaitC_eq]
-  refine WP.futexWaitC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
+  refine WP.futexWaitC (fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩) hcost
   have he : (Packed.toBits (BitVec.ofNat 32 L.c)).setWidth 32 = BitVec.ofNat 32 L.c :=
     BitVec.setWidth_eq _
   simp only [he]
@@ -2527,12 +2538,13 @@ theorem wp_xchgRel (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G 
     {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .holds) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
-      P.inv (upd G₁ t (L.set g .wake Heap.empty)) m' → Q (r, s) G₁ m' k) :
+      P.inv (upd G₁ t (L.set g .wake Heap.empty)) m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .xchg false .release 4 L.ptr (0 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n := by
   unfold atomicRmwC
   simp only [StateT.run_bind]
-  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  refine WP.bind (WP.pickC (fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩) hcost)
   have hgone : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
   have hiP := hP.cur t hi₁ hgone
   have hiL := hP.lock hiP

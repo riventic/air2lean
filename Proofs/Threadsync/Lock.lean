@@ -76,7 +76,7 @@ if_decl Thread_Mutex_FutexImpl_lock in
 at `spin`. -/
 theorem tryLock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_FutexImpl_tryLock p) (fun r G' m' d' => d' < d ∧ m'.current = t ∧
       ((r = true ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') ∨
        (r = false ∧ P.inv (upd G' t (L.set g .spin Heap.empty)) m'))) G m d := by
@@ -110,7 +110,8 @@ def lockPost (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
 futex (a stop, so the depth gets smaller). -/
 theorem loop16_body (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (D : Nat) (s : Thread_Mutex_FutexImpl_lockSlowLocals) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (h : lockInv P L t g D s G m d) :
+    (d : Nat) (h : lockInv P L t g D s G m d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Thread_Mutex_FutexImpl_lockSlow.loop16 p).run s) (fun r G' m' d' =>
       if Thread_Mutex_FutexImpl_lockSlow.again16 r.1 then lockInv P L t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
@@ -146,7 +147,8 @@ theorem loop16_body (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
 /-- `lockSlow` by thread `t` at `spin`: it holds the mutex. -/
 theorem lockSlow_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t (L.set g .spin Heap.empty)) m) :
+    (hi : P.inv (upd G t (L.set g .spin Heap.empty)) m)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_FutexImpl_lockSlow p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   have hS : threadMutexS.c = L.c := hc3.symm
@@ -199,7 +201,7 @@ theorem lockSlow_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.pt
 /-- `FutexImpl.lock` by thread `t` at `out` (`g`): it holds the mutex. -/
 theorem futexLock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_FutexImpl_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   unfold Thread_Mutex_FutexImpl_lock
@@ -227,7 +229,7 @@ theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
 /-- `lock` (Linux) by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
 theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   rw [lock_eq]
@@ -238,7 +240,8 @@ theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) 
 (`Inv.ownerCheck`), and it goes to `out`. -/
 theorem futexUnlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_FutexImpl_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   have hS : threadMutexS.c = L.c := hc3.symm
@@ -280,7 +283,8 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
 /-- `unlock` (Linux) by the holder `t` (`g`), the current thread: it goes to `out`. -/
 theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   rw [unlock_eq]
@@ -306,7 +310,8 @@ def lockPostD (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
 futex (a stop, so the depth gets smaller). -/
 theorem loopD_body (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (D : Nat) (s : Thread_Mutex_lockLocals) (G : ThreadId → γ)
-    (m : Mem) (d : Nat) (h : lockInvD P L t g D s G m d) :
+    (m : Mem) (d : Nat) (h : lockInvD P L t g D s G m d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((osUnfairLockTry p : CM Tgt Thread_Mutex_lockLocals Bool).run s) (fun r G' m' d' =>
       if id r.1 then lockInvD P L t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Mutex_lockLocals) => 0) s)
@@ -343,7 +348,7 @@ theorem loopD_body (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) 
 /-- `lock` (macOS) by thread `t` at `out` (`g`): it holds the mutex. -/
 theorem lockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   unfold Thread_Mutex_lock
@@ -362,7 +367,8 @@ theorem lockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) 
 /-- `unlock` (macOS) by the holder `t` (`g`): it goes to `out`. -/
 theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   unfold Thread_Mutex_unlock
@@ -398,7 +404,7 @@ attribute [local irreducible] Proto.WP
 one of the translation of the OS. -/
 theorem lock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   first
@@ -408,7 +414,8 @@ theorem lock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.pt
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t := by first | assumption | rfl) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t := by first | assumption | rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   first

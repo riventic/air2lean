@@ -64,6 +64,11 @@ structure Proto (Tgt γ : Type) where
   /-- The proof covers failed thread assignments (`SpawnPolicy.fallible` environments): a `spawn`
   may return any error. `false`: it holds for `available` environments only (`run_sound`). -/
   spawnFails : Bool := false
+  /-- **Turn cost** (`docs/sep-threads.md` §Termination): `some cr` reads the credits `cr g` of a
+  ghost value; each stop then pays for its turn (`Proto.Charged`), so the sum of the credits
+  bounds the number of turns (`Proto.returnsWithin`). `none`: no charge (`Safe` is exactly the
+  partial-correctness one, `Safe.sync_none`). -/
+  cost : Option (γ → Nat) := none
 
 variable {Tgt γ : Type}
 
@@ -124,6 +129,33 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
   | .wake p n, K => ∀ cs m',
       ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
+/-- The charge of a stop at `op` with the credits `cr`: the thread resumed with `old` credits and
+stops with `new`. The turn that reaches the stop costs one credit, and the thread keeps at least
+one for the turn that resumes it (which may end the thread). A stop at a spawn also reserves the
+new thread's credits: every start value of the target has between `1` and `k`. A futex wait and a
+deferred task (`gate`, `spawnGated`) have no charge: their turns depend on other threads'
+progress, so a cost proof fails closed at them. -/
+def ChargeOk (cr : γ → Nat) : SyncOp Tgt → Nat → Nat → Prop
+  | .spawn tgt, old, new =>
+      1 ≤ new ∧ ∃ k, (∀ g₀, P.init tgt g₀ → 1 ≤ cr g₀ ∧ cr g₀ ≤ k) ∧ new + k + 1 ≤ old
+  | .wait _ _, _, _ | .gate, _, _ | .spawnGated _, _, _ => False
+  | _, old, new => 1 ≤ new ∧ new + 1 ≤ old
+
+/-- Thread `t`, which resumed with the ghost values `G`, stops at `op` with the ghost value `g`
+and pays for the turn (when the protocol counts turns, `Proto.cost`). -/
+def Charged (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (g : γ) : Prop :=
+  ∀ cr, P.cost = some cr → P.ChargeOk cr op (cr (G t)) (cr g)
+
+/-- The protocol claims no termination: partial correctness (`strict = false`) or no turn cost.
+Then a run with no result ("no result": a `MemM` step that does not return, or the depth ran out)
+satisfies `Safe`; a protocol that counts turns in strict mode allows "no result" only when the
+depth ran out. -/
+def Partial : Prop := P.strict = false ∨ P.cost = none
+
+variable {P} in
+theorem Charged.of_none {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {g : γ}
+    (h : P.cost = none) : P.Charged t op G g := fun _ hc => by rw [h] at hc; cases hc
+
 theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Mem}
     {K K' : op.Resp → (ThreadId → γ) → Mem → Prop} (h : ∀ r G m, K r G m → K' r G m)
     (hs : P.Step t op G m K) : P.Step t op G m K' := by
@@ -152,10 +184,10 @@ protocol, and each result `b` at the memory `m` and the depth `d` that is left s
 `Q b G m d`. -/
 def Safe {β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem → Nat → Prop) :
     {n : Nat} → Nat → (ThreadId → γ) → CoN Tgt (β × Mem) n → Prop
-  | _, _, _, .leaf none => True
+  | n, _, _, .leaf none => P.Partial ∨ n = 0
   | _, _, _, .leaf (some (.error e)) => P.strict = false ∨ e = .stackOverflow
   | n, N, G, .leaf (some (.ok (b, m))) => m.threads.size = N ∧ Q b G m n
-  | _, N, G, .sync op m k => m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧
+  | _, N, G, .sync op m k => m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧ P.Charged t op G g ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
         P.Step t op G₁ m₁ fun r G₂ m₂ => Safe t Q m₂.threads.size G₂ (k r m₂)
 
@@ -170,8 +202,20 @@ theorem Safe.mono {β : Type} {t : ThreadId} {Q Q' : β → (ThreadId → γ) �
     exact fun ⟨hN, hq⟩ => ⟨hN, h _ _ _ _ hq⟩
   | sync op m k ih =>
     simp only [Safe]
-    exact fun ⟨hN, g, hi, hk⟩ => ⟨hN, g, hi, fun G₁ m₁ hg hi₁ =>
+    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ =>
       Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁)⟩
+
+/-- **Without a turn cost `Safe` is the partial-correctness one**: at a stop the thread shows
+the invariant with its new ghost value, and nothing more. -/
+theorem Safe.sync_none {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
+    (hc : P.cost = none) {n N G} {op : SyncOp Tgt} {m : Mem}
+    {k : op.Resp → Mem → CoN Tgt (β × Mem) n} :
+    P.Safe t Q N G (.sync op m k) ↔ m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+        P.Step t op G₁ m₁ fun r G₂ m₂ => P.Safe t Q m₂.threads.size G₂ (k r m₂) := by
+  simp only [Safe]
+  exact ⟨fun ⟨hN, g, hi, _, hk⟩ => ⟨hN, g, hi, hk⟩,
+    fun ⟨hN, g, hi, hk⟩ => ⟨hN, g, hi, Charged.of_none hc, hk⟩⟩
 
 /-- Sequencing: the rest `f` of a result runs with the depth that is left. -/
 theorem Safe.bind {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
@@ -184,7 +228,7 @@ theorem Safe.bind {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) �
     exact fun ⟨hN, hq⟩ => hN ▸ hq
   | sync op m k ih =>
     simp only [Safe, CoN.bind]
-    exact fun ⟨hN, g, hi, hk⟩ => ⟨hN, g, hi, fun G₁ m₁ hg hi₁ =>
+    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ =>
       Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁)⟩
 
 /-! ## The weakest precondition of a run -/
@@ -218,11 +262,20 @@ theorem bind {x : ConcM Tgt α} {f : α → ConcM Tgt β} {Q : β → (ThreadId 
 theorem liftMem' {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false ∨ e = .stackOverflow)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
-      m'.threads.size = m.threads.size ∧ Q a G m' n) :
+      m'.threads.size = m.threads.size ∧ Q a G m' n)
+    (hnone : (x.run m).run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   show P.Safe t Q m.threads.size G (.leaf (x.run m))
   match hx : (x.run m).run with
-  | none => rw [show x.run m = ExceptT.mk none from hx]; simp [ExceptT.mk, Safe]
+  | none =>
+    rw [show x.run m = ExceptT.mk none from hx]; simp only [ExceptT.mk, Safe]; exact .inl (hnone hx)
   | some (.error e) =>
     rw [show x.run m = ExceptT.mk (some (.error e)) from hx]; simp only [ExceptT.mk, Safe]
     exact herr e hx
@@ -235,25 +288,41 @@ theorem liftMem' {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat →
 theorem liftMem {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
-      m'.threads.size = m.threads.size ∧ Q a G m' n) :
+      m'.threads.size = m.threads.size ∧ Q a G m' n)
+    (hnone : (x.run m).run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
-  liftMem' (fun e he => .inl (herr e he)) h
+  liftMem' (fun e he => .inl (herr e he)) h hnone
 
-/-- A sync op: the thread stops with the ghost value `g` and the invariant; `Q` holds of each
-response when it goes on. At depth `0` there is no result. -/
-theorem sync {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k) :
+/-- A sync op that pays for its turn (`Proto.Charged`; for a protocol that counts turns): the
+thread stops with the ghost value `g` and the invariant; `Q` holds of each response when it goes
+on. At depth `0` there is no result. -/
+theorem syncC {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ P.Charged t op G g ∧
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k) :
     P.WP t (ConcM.sync op) Q G m n := by
   unfold WP
   match n, h with
   | 0, _ => simp [ConcM.sync, Safe]
   | k + 1, h =>
-    obtain ⟨g, hi, hk⟩ := h k rfl
+    obtain ⟨g, hi, hch, hk⟩ := h k rfl
     simp only [ConcM.sync, Safe, true_and]
-    refine ⟨g, hi, fun G₁ m₁ hg hi₁ => Step.mono P ?_ (hk G₁ m₁ hg hi₁)⟩
-    intro r G₂ m₂ hq
-    exact hq
+    exact ⟨g, hi, hch, fun G₁ m₁ hg hi₁ => Step.mono P (fun _ _ _ hq => hq) (hk G₁ m₁ hg hi₁)⟩
+
+/-- A sync op of a protocol that does not count turns (`Proto.cost = none`): the thread stops
+with the ghost value `g` and the invariant; `Q` holds of each response when it goes on. -/
+theorem sync {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (ConcM.sync op) Q G m n :=
+  syncC fun k hk => let ⟨g, hi, hs⟩ := h k hk; ⟨g, hi, Charged.of_none hcost, hs⟩
 
 /-- A loop (`Zig.loop`) with the invariant `inv` on the locals, the ghost values, the memory
 and the depth. Each repeat passes a sync op (the depth gets smaller) or makes the measure `meas`
@@ -562,7 +631,7 @@ theorem settle_ok {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) �
       · simp at h
   | sync op m k =>
     simp only [Safe] at hs
-    obtain ⟨hN, g, hi, hk⟩ := hs
+    obtain ⟨hN, g, hi, -, hk⟩ := hs
     simp only [Sched.settle, Except.ok.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl, rfl⟩ := h
     exact ⟨rfl, hN, .inl ⟨rfl, _, g, rfl, hi, hk⟩⟩
