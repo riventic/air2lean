@@ -8,7 +8,7 @@ Library-only examples of the byte operations on regions that allocator wrappers 
 of a sentinel item and its read-back, `@memset(_, undefined)` of a whole region, `@memcpy`
 between two separate regions, the pointer order (`ptrLe`) inside a region, and the `@memcpy`
 aliasing check of `dupe` (`ptrLe(src + n, dst) or ptrLe(dst + n, src)`), whose panic is
-unreachable by the memory fact `MemFacts.regions_apart`. The programs are written by hand in the
+unreachable by the memory fact `MemFacts.regions_apart` (`@[fsym_facts]`, plain `fsym`). The programs are written by hand in the
 shape the translator generates.
 -/
 
@@ -28,6 +28,20 @@ theorem sentinel_total (n : BitVec 64) (bs : Array Byte) (h : n.toNat < bs.size)
       (fun r => ⟪r = 7#8⟫ ⋆ up (regionIn p A S K 1
         (writeBytes bs (Enc.size (BitVec 8) * n.toNat) (Enc.encode 7#8)))) := by
   unfold sentinel
+  fsym
+
+/-- The same through a formed pointer, as generated code does it (bounds check, `ptrProject`). -/
+def sentinelAt (n len : BitVec 64) : MemM (BitVec 8) := do
+  let q ← Zig.checkIndex len n >>= fun _ => Zig.ptrProject p (·.elem 1 n)
+  Zig.store 1 q (7 : BitVec 8)
+  Zig.checkSentinelIndex len n
+  Zig.load (BitVec 8) 1 q
+
+theorem sentinelAt_total (n len : BitVec 64) (bs : Array Byte) (h : n.toNat < len.toNat)
+    (hl : len.toNat = bs.size) :
+    FTotalTriple (up (regionIn p A S K 1 bs)) (sentinelAt p n len)
+      (fun r => ⟪r = 7#8⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs n.toNat (Enc.encode 7#8)))) := by
+  unfold sentinelAt
   fsym
 
 /-- Every byte of a region becomes undefined. -/
@@ -56,9 +70,17 @@ def aliasCheck (n : BitVec 64) : MemM Unit := do
   let b ← Zig.ptrLe (p.elem 1 n) q
   if a || b then pure () else throw .panic
 
-/-- Its panic is unreachable: two separately owned regions lie apart (a memory fact, put in the
-context by `MemFacts.pre`). -/
+/-- Its panic is unreachable: two separately owned regions lie apart (a memory fact of the pair
+of regions, `@[fsym_facts] MemFacts.regions_apart`, which `fsym` adds when the panic needs it). -/
 theorem aliasCheck_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
+    (h2 : n.toNat = bs.size) (hpos : 0 < n.toNat) :
+    FTotalTriple (up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs)) (aliasCheck p q n)
+      (fun _ => up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs)) := by
+  unfold aliasCheck
+  fsym
+
+/-- The memory fact by hand, in any logic (`MemFacts.pre`). -/
+theorem aliasCheck_pre (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) (hpos : 0 < n.toNat) :
     FTotalTriple (up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs)) (aliasCheck p q n)
       (fun _ => up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs)) := by
@@ -68,13 +90,12 @@ theorem aliasCheck_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd
 
 set_option linter.unusedVariables false
 
-/-- Without the memory fact the aliasing check's panic is not refuted: the walk does not assume
-that two regions lie apart. -/
-example (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size) (h2 : n.toNat = bs.size)
-    (hpos : 0 < n.toNat) : True := by
+/-- Rejected: a region checked against itself overlaps, so the panic is reachable (the facts of
+a pair are about two separately owned atoms). -/
+example (n : BitVec 64) (bd : Array Byte) (h1 : n.toNat = bd.size) (hpos : 0 < n.toNat) : True := by
   fail_if_success
-    have : FTotalTriple (up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs))
-        (aliasCheck p q n) (fun _ => up (regionIn p A S K 1 bd) ⋆ up (regionIn q A' S' K' 1 bs)) := by
+    have : FTotalTriple (up (regionIn p A S K 1 bd)) (aliasCheck p p n)
+        (fun _ => up (regionIn p A S K 1 bd)) := by
       unfold aliasCheck
       fsym
   trivial

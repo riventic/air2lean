@@ -8,9 +8,12 @@ import ZigLean.Sep.Bounded
 `xs.length + 1` body runs (`TotalTripleWithin`, counted by P06's `LoopRuns`) with the sum in its
 locals and the list unchanged. `sum_loop_total` is the total triple it implies.
 `sum_loop_not_within` shows the bound is tight: the bound `xs.length` is refuted by any list
-satisfying the precondition. `sum_total` is the function-level total triple for `sum`.
+satisfying the precondition. The function-level total triple for `sum` is
+`Lists.Linked.sum_total` (`Proofs/Lists/Linked.lean`, full-state logic).
 
-The bound counts loop-body runs of the model; it is not CPU time.
+The bound counts loop-body runs of the model; it is not CPU time. It stays in the legacy logic
+until the model counts loop-body runs: a full-state triple with credits does not bound them yet,
+since no run spends a credit (`docs/alloc-spec.md`, §Retired claims, `Sep/Cost`).
 -/
 
 namespace Lists
@@ -49,14 +52,5 @@ theorem sum_loop_not_within (hd : Option Ptr) (xs : List (BitVec 32))
   obtain ⟨k, e, s', m', _, -, hk, -⟩ := sum_loop_within hd xs htot m h hF hdj hm hl hst
   have := sum_count_unique hd xs hl hm hdj hst htot hk
   exact TotalTripleWithin.not_within_of_count hdj hm hl hst hk (by omega)
-
-/-- `sum` returns the sum and leaves the list unchanged. -/
-theorem sum_total (hd : Option Ptr) (xs : List (BitVec 32))
-    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    TotalTriple (list hd xs) (sum hd)
-      (fun r => ⌜r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ list hd xs) := by
-  intro m h hF hdj hm hl hst
-  obtain ⟨_, m', -, hr, -, hH, hst'⟩ := sum_cost hd xs hl hm hdj hst htot
-  exact ⟨_, m', h, hr, hdj, by rw [hH, hm], sep_lift.mpr ⟨rfl, hl⟩, hst'⟩
 
 end Lists

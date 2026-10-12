@@ -119,6 +119,13 @@ attribute [fsym_provider] Reaches.apts Reaches.aptsE
     AtomFacts (aptsE p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
   rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
+/-- A token of the current epoch names a grant of its authority's map (`gfrag_mem`). -/
+@[fsym_facts] theorem facts_gfrag {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} :
+    MemFacts (gauthP γ e M t ⋆ gfrag γ e i g) (M i = some g) := by
+  intro m r rF hh hr _
+  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hr
+  exact gfrag_mem ⟨r₁, r₂, hd, rfl, h1, h2⟩ (hh.ghost.1)
+
 end Seq
 
 attribute [fsym_norm] optPtrAddr_some optPtrAddr_none
@@ -194,6 +201,11 @@ theorem of_false (h : False) : CTriple P c Q := h.elim
 theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
     CTriple (X ⋆ R) c Q :=
   CTriple.pre (CTriple.lift t) fun _ h => sep_lift.mpr ⟨hX.sepL h, h⟩
+
+/-- A fact of a part `X` of the precondition that needs the memory, in the context. -/
+theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
+    CTriple (X ⋆ R) c Q :=
+  CTriple.eupd hX.sepL.eupd (CTriple.lift t)
 
 /-- **An atomic op's oracle choice**: `0` in one thread. -/
 theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :
