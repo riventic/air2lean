@@ -34,8 +34,8 @@ is AC/unit simplification and syntactic frame inference. It does not split byte
 ranges or arrays, choose existential witnesses, discharge arithmetic, or synthesize
 loop invariants. It is a bounded part of P01.
 
-Import `ZigLean.Sep.Array` for explicit array ownership framing. `arr_split hp hk hs`
-splits `arr p xs` into `arr p (xs.take k)` and
+Whole-array ownership is `ZigLean/Sep/Full/Arr.lean` (imported by `ZigLean.Sep.Full.AutoAll`).
+`arr_split hp hk hs` splits `arr p xs` into `arr p (xs.take k)` and
 `arr (p.add (Enc.size T * k)) (xs.drop k)`. It requires `k ≤ xs.length` and
 `Enc.align T ∣ Enc.size T`; both endpoints, including empty arrays, are supported.
 `arr_focus hp hk ha hs` additionally requires `k < xs.length` and
@@ -45,51 +45,34 @@ using `bytesAt_split`; they do not allocate, copy bytes, or assume an encoding
 round-trip law. Empty ranges remain `arr` assertions, with their pointer and alignment
 requirements, rather than becoming `emp` automatically.
 
-`Triple.arr_focus_frame hk ha hs rule` applies a supplied rule for the selected
-`pts` assertion. Its precondition is `arr p xs ∗ R`; its postcondition preserves
-the unchanged prefix, suffix, and independent frame `R` alongside the element
-rule's result. `Triple.arr_store_focus hn ha hs hi w` specializes it to an actual
-`store` at `p.elem (Enc.size T) i`, retaining both neighboring ranges and `R`.
-It additionally requires lawful encoding and positive element size. For example:
+`arr_append_of_heap hn hp hm` joins contiguous typed ranges; `arr_reassemble hn hk hp hm`
+joins a prefix, an updated element at full ABI alignment, and the original suffix into
+`arr p (xs.set k w)`. Both require positive element size and actual memory backing
+(`m.heap = h ∪ hF`). That premise matters: disjoint assertions alone can describe different
+addresses or block kinds for two ranges in the same block. In the full-state logic the joins
+are updates that read the labels from the memory (`EUpd.arr_join`, `EUpd.arr_unfocus`).
+
+`fsym` walks item loads and stores on whole-array ownership with the `@[fsym]` rules
+`FTotalTriple.arr_load` and `FTotalTriple.arr_store` (an in-bounds item `p.elem (Enc.size T) i`
+at the type's alignment; the array stays whole, the bound `i.toNat < xs.length` is a side
+condition), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
+`Reaches.arr`. For example:
 
 ```lean
-import ZigLean.Sep.Array
-open Zig Assn
-example (p : Ptr) (x y z w : BitVec 32) (R : Assn) :
-    Triple (arr p [x, y, z] ∗ R) (store 4 (p.elem 4 1) w)
-      (fun _ => (pts (p.elem 4 1) 4 w ∗
-        (arr p [x] ∗ arr (p.add 8) [z])) ∗ R) := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using Triple.arr_store_focus (p := p) (vs := [x, y, z]) (i := 1)
-    (a := 4) (R := R) (by decide) (by decide) (by decide)
-    (by simp only [List.length_cons, List.length_nil]; decide) w
+import ZigLean.Sep.Full.AutoAll
+open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
+example (p : Ptr) (x y z w : BitVec 32) (R : FAssn) :
+    FTotalTriple (up (arr p [x, y, z]) ⋆ R) (Zig.store 4 (p.elem 4 1) w)
+      (fun _ => up (arr p [x, w, z]) ⋆ R) := by
+  fsym
 ```
 
-Import `ZigLean.Sep.Array.Reassemble` to recover whole-array ownership explicitly.
-`arr_append_of_heap hn hp hm` joins contiguous typed ranges; `arr_reassemble hn hk
-hp hm` joins a prefix, an updated element at full ABI alignment, and the original
-suffix into `arr p (xs.set k w)`. Both require positive element size and actual
-memory backing (`m.heap = h ∪ hF`). That premise matters: disjoint assertions alone
-can describe different addresses or block kinds for two ranges in the same block.
-The join proof reads consistent metadata from the actual memory. Empty boundaries
-and empty concatenations are supported; no byte copying or new allocation occurs.
-
-`Triple.arr_update hn hk hs rule` obtains backing from the returned memory of a
-supplied full-alignment element rule and reassembles the array while retaining
-`R`. `Triple.arr_store_reassemble hn hs hi w` specializes this contract to a scalar
-store, and `Triple.arr_read hn hs hi` returns a selected value with unchanged
-array ownership. The interface supports a second update or read without exposing
-byte-level representation in the client proof. `ArrayClients.lean` reuses it for
-the existing generated `Slices.at` and `Slices.bumpAt` bodies from the public
-slice example, then composes the clients on independent arrays. The update is
-modulo 256 and the returned byte is the updated array's element 3; a capacity
-of four and an in-bounds selected index remain explicit premises.
-
-Array selection and arithmetic remain explicit. `sep_frame` continues treating
-arrays as opaque atoms. General array/range search, inferred loop invariants,
-zero-size element reassembly, and production container invariants remain outside
-this bounded P01/P04 contribution. These are contracts about existing generated
-model bodies; this slice adds no source/exporter qualification or general compiler
-correspondence claim.
+`tests/roadmap/proof-tools/ArrayClients.lean` proves the generated `Slices.at` and
+`Slices.bumpAt` bodies of the public slice example this way (`fsym` alone), then composes the
+clients on independent arrays. The update is modulo 256 and the returned byte is the updated
+array's element 3; a capacity of four and an in-bounds selected index remain explicit premises.
+These are contracts about existing generated model bodies; they add no source/exporter
+qualification or general compiler correspondence claim.
 
 `Proofs/Lists/Container.lean` defines `Lists.SeqImpl`, a reusable sequence contract: a handle
 type `H`, a representation predicate `Rep h xs`, and `add` with `add_spec` stating only that the
@@ -131,21 +114,17 @@ The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC 
 unit/duplicate handling, rejected framing, total bind, rejection of divergence/panics, partial
 and total correctness) are `fsym` regressions in the full-state logic:
 `tests/roadmap/sep-auto/Frame.lean` and `tests/roadmap/sep-auto/Total.lean`
-([proof-automation.md](proof-automation.md)). The array regressions stay in
-`tests/roadmap/proof-tools/` until the full-state library has array rules (`Full/Arr`):
-`Array.lean` checks prefix/element/suffix ownership,
-endpoint and singleton boundaries, a store preserving neighboring elements and an
-independent heap allocation, and rejection of out-of-bounds access, overlap,
-dropped frames, and incorrect postconditions. Build the optional modules with
-`lake build ZigLean.Sep.Automation ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble
-ZigLean.Sep.Total Proofs.Slices.Gen`, then run
-each with `lake env lean tests/roadmap/proof-tools/<name>.lean` (`Array`, `Reassemble` and
-`ArrayClients`). Reassembly fixtures
-include endpoint/singleton/empty boundaries, missing memory backing, inconsistent
-metadata, duplicated ownership, lost frames, stale values, and changed neighbors.
-CI retains the build and fixture logs.
-These checks establish the stated model
-contracts and rejected proof attempts; they add no native/export qualification.
+([proof-automation.md](proof-automation.md)). The array regressions in
+`tests/roadmap/proof-tools/` use `Full/Arr` and `fsym`: `Array.lean` checks
+prefix/element/suffix ownership, endpoint and singleton boundaries, a store preserving
+neighboring elements and an independent heap allocation, and rejection of out-of-bounds
+access, overlap, dropped frames, and incorrect postconditions. `Reassemble.lean` checks
+endpoint/singleton/empty boundaries, missing memory backing, inconsistent metadata, two stores
+on one array, duplicated ownership, lost frames, stale values, and changed neighbors. Build
+with `lake build ZigLean.Sep.Full.AutoAll Proofs.Slices.Gen`, then run each with
+`lake env lean tests/roadmap/proof-tools/<name>.lean` (`Array`, `Reassemble` and
+`ArrayClients`). CI retains the build and fixture logs. These checks establish the stated
+model contracts and rejected proof attempts; they add no native/export qualification.
 
 ## Symbolic execution steps (P01)
 
@@ -185,16 +164,13 @@ proof lines. Statements are unchanged.
 | `reverse_step` (`Proofs/Slices/Sep.lean`, two indexed loads and stores in a `u32` slice) | 64 | 52 |
 | `Lists.reverse_step` (`Proofs/Lists/Sep.lean`, in-place list reversal step) | 28 | 19 |
 | `Lists.freeAll_step` (`Proofs/Lists/Sep.lean`, read `next`, then free the node) | 19 | 16 |
-| `generated_at_array` → `at_array_steps` (`StepClients.lean`) | 15 | 3 |
-| `generated_bumpAt_array` → `bumpAt_array_steps` (`StepClients.lean`) | 51 | 3 |
-| the composition of both clients (`StepClients.lean`) | 18 | 3 |
 | node triples `node_next_total`, `node_set_next_total`, `node_free_total`, `list_cons_eq` (new, shared) | — | 10 |
-| total | 206 | 110 |
+| total | 122 | 101 |
 
-The reduction is 47% overall. Separation bookkeeping (memory threading, disjointness, frame
-heaps, run equations) disappears entirely. What remains in `reverse_step` is the list-index
-arithmetic of the invariant. `ArrayClients.lean` keeps its manual proofs as evidence for the
-reassembly interface; `StepClients.lean` proves the same statements with the tactics.
+Separation bookkeeping (memory threading, disjointness, frame heaps, run equations) disappears
+entirely. What remains in `reverse_step` is the list-index arithmetic of the invariant. (The
+generated array clients of the former `StepClients.lean` are `fsym` proofs in
+`ArrayClients.lean`.)
 
 The scenarios of the retired `Steps.lean` regressions are `fsym` regressions in the
 full-state logic, `tests/roadmap/sep-auto/Steps.lean`: framed `pts` steps in partial and total
@@ -202,8 +178,8 @@ form, an item store through `p.elem` with its neighbours framed, a side conditio
 as a goal, caller rules with existential/pure postconditions, existentials and facts of the
 precondition, and a generated-style `MM` body. It also rejects a missing points-to, a dropped
 frame, a store claiming the old value, a wrong array neighbor, and a rule for a different
-command. Steps on whole-array ownership `arr p xs` at a symbolic index wait for `Full/Arr`;
-`StepClients.lean` keeps the legacy tactics' generated array clients until then.
+command. Steps on whole-array ownership `arr p xs` at a symbolic index are the `Full/Arr`
+rules (`tests/roadmap/proof-tools/`, above).
 
 ## Loops, recursion and range conversions
 

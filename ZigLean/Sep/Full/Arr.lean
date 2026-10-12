@@ -6,15 +6,15 @@ import ZigLean.Sep.Full.Strength
 
 `arr p vs` (`ZigLean/Sep/Triple.lean`) owns the items `vs` at `p`. Here:
 
-* **Assertion lemmas** (moved from the legacy `Sep/Array.lean` and `Sep/Array/Reassemble.lean`,
-  which import this module): `arr_split` divides an array at a boundary, `arr_focus` exposes one
+* **Assertion lemmas**: `arr_split` divides an array at a boundary, `arr_focus` exposes one
   item as `pts`, `arr_append_of_heap` and `arr_reassemble` join parts backed by one memory
   (disjoint parts alone need not agree on their block's labels).
 * **Updates** (`EUpd`): `EUpd.arr_split`, `EUpd.arr_focus` (an implication), and
   `EUpd.arr_join`, `EUpd.arr_unfocus`, which read the block's labels from the memory (`Res.fix`):
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
-  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array.
+  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array; the
+  facts of an array (`facts_arr`) and its extent for pointer formation `&xs[i]` (`Reaches.arr`).
 -/
 
 namespace Zig
@@ -363,10 +363,23 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
 
+/-- An array: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem Auto.facts_arr : Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-- A nonempty array owns its bytes: its block reaches one past its last item (for pointer
+formation `&xs[i]`, `ptrProject_elem_of`). -/
+@[fsym_provider] theorem Reaches.arr {b : BlockId} (hpb : p.block = some b) (hn : 0 < Enc.size T)
+    (hl : 0 < vs.length) : Reaches b (p.off.toNat + Enc.size T * vs.length) (up (Zig.arr p vs)) :=
+  Auto.Reaches.bytes hpb fun _ hp => by
+    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
+    exact ⟨A, S, K, bs, by rw [hs]; exact Nat.mul_pos hn hl, by omega, hb⟩
+
 end Rules
 
--- The bound of an item of a literal array (`[x, y, z].length`) is arithmetic for `omega`.
-attribute [fsym_arith] List.length_cons List.length_nil
+-- The bound of an item of a literal array (`[x, y, z].length`) and of an array after a store
+-- (`(xs.set i w).length`) is arithmetic for `omega`.
+attribute [fsym_arith] List.length_cons List.length_nil List.length_set
 
 end Full
 end Zig

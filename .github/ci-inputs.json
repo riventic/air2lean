@@ -247,7 +247,6 @@
         "ZigLean/Mem",
         "ZigLean/Os",
         "ZigLean/Sep",
-        "ZigLean/Sep/Array",
         "ZigLean/VC",
         "ZigLean/Witnesses",
         "examples",

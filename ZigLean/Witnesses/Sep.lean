@@ -1,6 +1,5 @@
 import ZigLean.Sep
 import ZigLean.Sep.Witness
-import ZigLean.Sep.Array.Reassemble
 import ZigLean.Sep.Cost
 import ZigLean.Sep.LoopTemplate
 
@@ -156,30 +155,6 @@ nonvacuity_witness Mem.resetOwned_access_other :=
     by decide, trivial⟩
 nonvacuity_witness Owned.reset_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
 nonvacuity_witness ownedState_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
-
-/-! ## Arrays (`ZigLean/Sep/Array.lean`, `ZigLean/Sep/Array/Reassemble.lean`) -/
-
-nonvacuity_witness Triple.arr_store_focus :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, 4, emp, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide, 1, Admit.of_heap (sep_emp.mpr arr32) (mem1_seq _ _)⟩
-liveness_witness Triple.arr_store_focus :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, 4, emp, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide, 1,
-    Live.of_heap (sep_emp.mpr arr32) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.arr_read :=
-  ⟨BitVec 32, inferInstance, p0, [0], 0, by decide +kernel, by decide +kernel, by decide,
-    Admit.of_heap arr32 (mem1_seq _ _)⟩
-liveness_witness Triple.arr_read :=
-  ⟨BitVec 32, inferInstance, p0, [0], 0, by decide +kernel, by decide +kernel, by decide,
-    Live.of_heap arr32 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.arr_store_reassemble :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, emp, by decide +kernel, by decide +kernel,
-    by decide, 1, Admit.of_heap (sep_emp.mpr arr32) (mem1_seq _ _)⟩
-liveness_witness Triple.arr_store_reassemble :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, emp, by decide +kernel, by decide +kernel,
-    by decide, 1, Live.of_heap (sep_emp.mpr arr32) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
 
 /-! ## Discarded loads, error unions and `try` -/
 
