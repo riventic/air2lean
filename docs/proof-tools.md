@@ -170,7 +170,8 @@ proof lines. Statements are unchanged.
 Separation bookkeeping (memory threading, disjointness, frame heaps, run equations) disappears
 entirely. What remains in `reverse_step` is the list-index arithmetic of the invariant. (The
 generated array clients of the former `StepClients.lean` are `fsym` proofs in
-`ArrayClients.lean`.)
+`ArrayClients.lean`; `Proofs/Slices/Sep.lean` has since moved to the full-state logic: `fsym`
+alone proves `bump_spec` and the body of the `reverse` loop.)
 
 The scenarios of the retired `Steps.lean` regressions are `fsym` regressions in the
 full-state logic, `tests/roadmap/sep-auto/Steps.lean`: framed `pts` steps in partial and total
