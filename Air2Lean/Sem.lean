@@ -1,5 +1,6 @@
 import ZigLean.Mem
 import Air2Lean.Air.Op
+import Air2Lean.Air.Sink
 import Air2Lean.SemAttr
 
 /-!
@@ -19,6 +20,9 @@ The fragment:
   `intcast` and `trunc`;
 * control flow: `block`/`br`, `cond_br`, `switch_br` on an integer, `loop`/`repeat`, `ret`,
   `unreach`, `trap`, and a call to a safety-panic handler;
+* pointer formation (`ptr_add`, `ptr_sub`, `ptr_elem_ptr`, a pointer `bitcast`) as LLVM's
+  `getelementptr inbounds`: a result out of the base's allocation is *poison* (`Value.poison`),
+  and a `load` or `store` through poison is illegal behaviour (`formVal`);
 * locals over ZigLean's byte-level memory (`Zig.Mem`, `Zig.MemM`): `alloc` makes a stack block
   (`Zig.allocStack`) freed when the function returns, `load`/`store` of an integer or `bool`
   go through `Zig.load`/`Zig.store` (`store` of `undefined`: `Zig.storeUndef`);
@@ -45,6 +49,12 @@ inductive Value where
   | void
   /-- A pointer, with the alignment its AIR pointer type guarantees (`align(N)`). -/
   | ptr (p : Zig.Ptr) (align : Nat)
+  /-- LLVM's poison: a pointer formed out of its base's allocation (`formVal`). A `load` or
+  `store` through it is illegal behaviour. -/
+  | poison
+  /-- A value outside the fragment that a total operation produced (a formation of an
+  unmodelled base, such as a slice or a struct field): no instruction reads it. -/
+  | opaque
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
@@ -266,18 +276,11 @@ def Exit.again (id : InstId) : Exit → Bool
   | .rep t => t == id
   | _ => false
 
-/-- A body runs over the memory, with its stack frame. -/
-abbrev SM := Zig.MM Frame
-
 theorem sizeOf_toList {α : Type} [SizeOf α] (a : Array α) : sizeOf a.toList = sizeOf a - 1 := by
   cases a; simp
 
 theorem sizeOf_case_body (sc : SwitchCase) : sizeOf sc.body < sizeOf sc := by
   cases sc; simp; omega
-
-def liftR {α : Type} (x : Result α) : SM α := StateT.lift (StateT.lift x)
-
-def liftMem {α : Type} (x : MemM α) : SM α := StateT.lift x
 
 /-- The size and ABI alignment of a type, from the export's layout table. -/
 def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
@@ -313,6 +316,55 @@ def pointee? (f : Func) (t : TyId) : Option TyId :=
   match tyOf f t with
   | .ptr _ _ c => some c
   | _ => none
+
+/-- An operand's value, as `operand`, without the `Result` wrapper. -/
+def opnd (f : Func) (env : Env) : Val → Option Value
+  | .inst id => env id
+  | .int t n => match tyOf f t with
+    | .int s w => some (.int s w (litBV w n))
+    | _ => none
+  | .bool b => some (.bool b)
+  | .void => some .void
+  | _ => none
+
+/-- The value of a pointer formation (`Sink.isFormation`) in the memory `m`. LLVM's
+`getelementptr inbounds` (Zig's lowering of `ptr_add`, `ptr_sub`, `ptr_elem_ptr`) is poison
+unless the base and the result are in bounds of the base's allocation (`Mem.inBounds`, one past
+the end included; `Zig.ptrProject`'s rule), judged at formation; the same pointer (a `bitcast`,
+offset 0) is always allowed. A total function of the operands and the memory: a base outside the
+fragment (a slice, a struct field) gives `opaque`. -/
+def formVal (f : Func) (env : Env) (i : Inst) (m : Zig.Mem) : Value :=
+  let project (base : Val) (off : Option Int) : Value :=
+    match opnd f env base, off, ptrAlignOf f i.ty with
+    | some (.ptr p _), some o, some a =>
+      let q := p.add o
+      if q = p ∨ (q.block = p.block ∧ m.inBounds p = true ∧ m.inBounds q = true) then .ptr q a
+      else .poison
+    | some .poison, _, _ => .poison
+    | _, _, _ => .opaque
+  let offset (n : Val) (sub : Bool) : Option Int :=
+    match opnd f env n, (pointee? f i.ty).bind (layoutOf f) with
+    | some (.int _ _ k), some (size, _) =>
+      some (if sub then -((k.toNat * size : Nat) : Int) else ((k.toNat * size : Nat) : Int))
+    | _, _ => none
+  match i.op with
+  | .ptrAdd sub p n => project p (offset n sub)
+  | .elemPtr p n => project p (offset n false)
+  | .bitcast p => project p (some 0)
+  | _ => .opaque
+
+/-- A body runs over the memory, with its stack frame. -/
+abbrev SM := Zig.MM Frame
+
+def liftR {α : Type} (x : Result α) : SM α := StateT.lift (StateT.lift x)
+
+def liftMem {α : Type} (x : MemM α) : SM α := StateT.lift x
+
+/-- The value of a straight-line instruction without memory effects: a pointer formation reads
+the memory (`formVal`), anything else is `evalPure`. -/
+def evalStep (f : Func) (env : Env) (i : Inst) : SM Value :=
+  if Sink.isFormation f.types i then liftMem (fun m => pure (formVal f env i m, m))
+  else liftR (evalPure f env i)
 
 mutual
 
@@ -362,12 +414,14 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     | .ptr q align => do
       let v ← liftMem (loadAs c.func i.ty q align)
       execBody c rest (env.set i.id v)
+    | .poison => liftR (throw .illegal)
     | _ => liftR stuck
   | .store p v => do
     match ← liftR (operand c.func env p) with
     | .ptr q align => do
       liftMem (storeAs c.func env q align v)
       execBody c rest env
+    | .poison => liftR (throw .illegal)
     | _ => liftR stuck
   | .call (.func name _ _) args => do
     match panicOf? name with
@@ -379,7 +433,7 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
   | _ => do
-    let v ← liftR (evalPure c.func env i)
+    let v ← evalStep c.func env i
     execBody c rest (env.set i.id v)
 termination_by (sizeOf i + sizeOf rest, 1)
 decreasing_by
@@ -706,6 +760,7 @@ theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a 
   split <;> rfl
 
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+  evalStep Sink.isFormation
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some

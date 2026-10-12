@@ -6,7 +6,7 @@ import Air2Lean.StdModels
 /-!
 # Canonical AIR
 
-Eight rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -61,21 +61,12 @@ supported version, so one translation (and the proofs over it) serves all versio
    0.14.1 uses `bitcast` of a `u8` 0). Liveness marks these and their field/element pointers
    unused, so no code is generated for them. The pass drops them when nothing but other such
    pointers and debug instructions reads them; a read one is rejected by `Check.lean`.
-6. `sinkPastChecks`. Sema forms a pointer before the safety checks that guard it: `p[a..b]`
-   is `ptr_add(p, a)`, then the bounds checks (`startGreaterThanEnd`, `outOfBounds`) and, for a
-   C pointer, the null check (`unwrapNull`), then `slice`. LLVM's `getelementptr inbounds` out of
-   its allocation is poison, illegal behaviour only when used, so the native program panics at
-   the check; the model's checked formation (`Zig.ptrProject`) is `.illegal` at once. The pass
-   moves a pointer formation (`ptr_add`, `ptr_sub`, `ptr_elem_ptr`, a struct field pointer, a
-   pointer-to-pointer `bitcast`) past the safety checks (`checkCond?`) that come before its
-   first use in its body, to just before that use; chains (`ptr_add` then `bitcast`) move
-   together. A pointer formation has no effect but its `.illegal`, and a check does not read it,
-   so a run that passes the checks is unchanged, and a run that fails one now panics there as
-   the native program does: `s[a..b]` with `a` past the allocation and `b < a` or `b > s.len`,
-   and a null C pointer with any start (`docs/null-pointers.md`).
+6. `sinkPastChecks` runs on the decoded IR, where it is certified: `Air2Lean/Air/Sink.lean`.
 7. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
-   the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
+   the IDs `0, 1, …` in body order, then the debug instructions the IDs after them. The decoded
+   IR is renumbered once more after `sinkPastChecks` (`Sink.renumberFunc`), which gives the same
+   IDs as renumbering after it here.
 -/
 
 namespace Air2Lean.Raw
@@ -807,52 +798,13 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
   let (body, _) ← walk true f.body { next, reg, tys }
   return { f with params, body := args ++ body, errTrace := none }
 
-/-- `sinkPastChecks` (module doc): a pointer formation from a pointer base, which may be moved
-past a safety check. `tyOf`: the type of an operand. -/
-def pointerFormation (f : RawFunc) (tyOf : Val → Option TyId) (i : RawInst) : Bool :=
-  let isPtr (t : Option TyId) := match t.bind (f.types[·]?) with | some (.ptr ..) => true | _ => false
-  let formation := i.tag == "ptr_add" || i.tag == "ptr_sub" || i.tag == "ptr_elem_ptr" ||
-    (projection? i).any (·.1 == "struct_field_val") || (i.tag == "bitcast" && isPtr i.ty)
-  formation && isPtr ((i.args[0]?).bind tyOf)
-
-/-- The instruction ids that `i` reads, nested bodies and constant aggregates included. -/
-def deepUses (i : RawInst) : Array InstId :=
-  (flatten #[i]).flatMap fun j => j.uses ++ j.args.flatMap valRefs
-
-/-- `sinkPastChecks` (module doc), in `body` and its nested bodies. -/
-partial def sinkBody (movable : RawInst → Bool) (body : Array RawInst) : Array RawInst := Id.run do
-  let sink := sinkBody movable
-  let mut b := body.map fun i =>
-    { i with body := sink i.body, thenBody := sink i.thenBody, elseBody := sink i.elseBody,
-             cases := i.cases.map fun c => { c with body := sink c.body } }
-  for id in (body.filter movable).reverse.map (·.id) do
-    let some p := b.findIdx? (·.id == id) | continue
-    let some moved := b[p]? | continue
-    -- Debug instructions do not use a value; those of `id` move with it.
-    let usesId (j : RawInst) := !isDbgTag j.tag && (deepUses j).contains id
-    let some q := (b.extract (p + 1) b.size).findIdx? usesId | continue
-    let between := b.extract (p + 1) (p + 1 + q)
-    unless between.any (checkCond? · |>.isSome) do continue
-    let dbg := between.filter fun j => isDbgTag j.tag && j.uses.contains id
-    let rest := between.filter fun j => !(isDbgTag j.tag && j.uses.contains id)
-    b := b.extract 0 p ++ rest ++ #[moved] ++ dbg ++ b.extract (p + 1 + q) b.size
-  return b
-
-/-- `sinkPastChecks` (module doc). -/
-def sinkPastChecks (f : RawFunc) : RawFunc :=
-  let tys : Std.HashMap InstId TyId := (flatten f.body).foldl (init := {}) fun m i =>
-    match i.ty with | some t => m.insert i.id t | none => m
-  let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
-  { f with body := sinkBody (pointerFormation f tyOf) f.body }
-
-/-- The eight rewrites (module doc). -/
+/-- The raw rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
   let f ← errTraces f
   let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
-  let f := sinkPastChecks f
   validateRefs f
   pure (renumber f)
 

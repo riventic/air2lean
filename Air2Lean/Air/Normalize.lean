@@ -1,4 +1,5 @@
 import Air2Lean.Air.Canon
+import Air2Lean.Air.Sink
 
 /-!
 # Per-version normalizer
@@ -521,9 +522,11 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     | some (.vector ..) => { l with packedLanes }
     | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
-  return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types, layouts, globals := raw.globals,
-           identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl }
+  -- The certified rewrites of the decoded IR (`Air2Lean/Air/Sink.lean`).
+  return Sink.canonFunc
+    { dialect, name := raw.name, params := raw.params, ret := raw.ret,
+      body, types := raw.types, layouts, globals := raw.globals,
+      identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
