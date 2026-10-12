@@ -60,10 +60,8 @@
       "tree_names": true
     },
     "test/0.17.0/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.17.0/lean": {
       "inputs": [
@@ -72,10 +70,8 @@
       "tree_names": true
     },
     "test/0.15.2/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.15.2/lean": {
       "inputs": [
@@ -84,10 +80,8 @@
       "tree_names": true
     },
     "test/0.14.1/golden": {
-      "inputs": [
-        "**"
-      ],
-      "tree_names": true
+      "commit_bound": true,
+      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
     },
     "test/0.14.1/lean": {
       "inputs": [

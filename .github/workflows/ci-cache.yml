@@ -36,7 +36,7 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
           lookup-only: true
 
       - name: Restore an older Lake build (root package)
@@ -181,7 +181,7 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
 
       - name: Restore the tests/diff package
         id: lake-diff
@@ -233,7 +233,7 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
           lookup-only: true
 
       - name: Restore an older Lake build (macOS root package)
@@ -350,7 +350,7 @@ jobs:
           path: |
             .lake/*
             !.lake/check-tree
-          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
 
       - name: Restore the tests/diff package (macOS)
         id: lake-diff
@@ -406,7 +406,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lake
-          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
           lookup-only: true
 
       - name: Restore an older Lake build (aarch64-linux)

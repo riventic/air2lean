@@ -55,6 +55,9 @@ _spec.loader.exec_module(RR)
 _spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
 GENERATED = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(GENERATED)
+_spec = importlib.util.spec_from_file_location('air2lean_target_matrix', ROOT / 'scripts/target-matrix.py')
+TM = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(TM)
 
 
 class ReuseError(Exception):
@@ -187,11 +190,29 @@ def part_inputs(data, entry, hashfiles=()):
                   bool(entry.get('tree_names')))
 
 
+def may_run(step, context):
+    """False only when the step's `if` is false for this row in every executing run: it reads
+    nothing but the row, the runner OS and the reuse decision (`env.AIR2LEAN_REUSED` is empty in
+    an executing run). A status function, another step's output or any other context: True."""
+    condition = step.get('if', True)
+    if isinstance(condition, bool):
+        return condition
+    if re.search(r'\w\s*\(', condition):
+        return True
+    try:
+        return TM.condition(condition, context)
+    except TM.Unknown:
+        return True
+
+
 def job_definition(job, row):
-    """The job with its matrix replaced by this row: other rows are not inputs of this part."""
+    """The job with its matrix replaced by this row and without the steps that never run for it:
+    other rows, and the steps other rows' conditions select, are not inputs of this part."""
     job = json.loads(canonical(job))
     if row is not None:
         job['strategy']['matrix']['include'] = [row]
+        context = {'matrix': row, 'runner.os': 'macOS' if str(job.get('runs-on', '')).startswith('macos') else 'Linux'}
+        job['steps'] = [step for step in job.get('steps') or [] if may_run(step, context)]
     return job
 
 
@@ -384,7 +405,8 @@ class Reducer:
         self.pending = {}         # pid -> text of an <unfinished ...> call
         self.cwd = {}             # pid -> last known working directory
         self.deferred = {}        # pid -> [(relative path, kind)] before its cwd is known
-        self.exe = {}             # pid -> (executable, argv) of its last successful execve
+        self.exe = {}             # pid -> (executable, argv) of its image (last execve, else its parent's)
+        self.inherited = {}       # pid -> [(path, kind)] before its clone returned: its parent's image
         self.parent = {}          # child pid -> parent pid
         self.clone_entry = {}     # pid -> its cwd when it entered an unfinished clone
         self.observed = {}        # workspace-relative path -> set of kinds
@@ -402,22 +424,27 @@ class Reducer:
             return path[len(self.workspace) + 1:]
         return None
 
-    def is_git(self, pid):
-        exe = self.exe.get(pid)
-        return exe is not None and (os.path.basename(exe[0]) == 'git' or '/git-core/' in exe[0])
-
     def note(self, pid, path, kind):
+        # A process or thread runs its parent's image until its own execve. Until the parent's
+        # clone returns (strace may print the child first), that image is not known yet.
+        if pid not in self.exe:
+            self.inherited.setdefault(pid, []).append((path, kind))
+            return
+        self.attribute(self.exe[pid], path, kind)
+
+    def attribute(self, image, path, kind):
+        """One observation by a process running `image` ((executable, argv) or None: unknown)."""
         rel = self.relative(path)
         if rel is None:
             return
+        argv = image[1] if image and (os.path.basename(image[0]) == 'git' or '/git-core/' in image[0]) else None
         if rel == '.git' or rel.startswith('.git/'):
-            if self.is_git(pid):
-                argv = self.exe[pid][1]
+            if argv is not None:
                 self.git[canonical(argv)] = git_class(argv)
             else:
                 self.gitdir_by_others.add(rel)
             return
-        if self.is_git(pid) and git_class(self.exe[pid][1]) in ('status', 'names', 'none'):
+        if argv is not None and git_class(argv) in ('status', 'names', 'none'):
             return  # modelled by the command (docs/ci.md): status reads what the traced writes changed
         self.observed.setdefault(rel, set()).add(kind)
 
@@ -473,6 +500,11 @@ class Reducer:
                 cwd = self.clone_entry.pop(pid, self.cwd.get(pid))
                 if cwd is not None and child not in self.cwd:
                     self.learn_cwd(child, cwd)
+                # E.g. git's index-preload threads stat every tracked file as part of its command.
+                image = self.exe.get(pid)
+                self.exe.setdefault(child, image)
+                for path, kind in self.inherited.pop(child, []):
+                    self.attribute(image, path, kind)
             return
         if name == 'getcwd':
             return
@@ -545,6 +577,10 @@ class Reducer:
                 else:
                     self.note(pid, os.path.join(base, path), kind)
         self.deferred = {}
+        for pid, items in self.inherited.items():  # a clone that never returned: image unknown
+            for path, kind in items:
+                self.attribute(None, path, kind)
+        self.inherited = {}
         return {'complete': True, 'lines': self.lines,
                 'observed': {p: sorted(k) for p, k in sorted(self.observed.items())},
                 'git': {argv: cls for argv, cls in sorted(self.git.items())},
