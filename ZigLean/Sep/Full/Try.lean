@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.Typed
-import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.Local
 
 /-!
 # Error unions and optionals through pointers in the full-state logic (Plan A library lane A1)
@@ -596,7 +596,7 @@ section Block
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {b : BlockId}
 
 /-- **Store of a whole error union** with a finite error domain at the start of a block's bytes
-held with the block's extent (an escaping local, `Full/Pinned.lean`). -/
+held with the block's extent (an escaping local, `Full/Local.lean`). -/
 @[fsym] theorem FTotalTriple.storeBlock_finite [LawfulEnc α] (w : Except ErrName α)
     (hpb : p.block = some b) (hk : Enc.size (Except ErrName α) ≤ bs.size)
     (ha : (A + p.off.toNat) % al = 0) (hK : K ≠ .constGlobal)
