@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # L14: export error_tracing.zig with error return tracing (`-ferror-tracing`) by the patched
-# compilers of every supported version into air/<version>, or with --check compare a fresh export
-# byte for byte with the committed one; optional version arguments select versions. AIR2LEAN_ZIG_AIR: a directory holding
-# zig-air-<version>/bin/zig (scripts/zig-air.sh builds them from this tree's zig-patch/). On macOS, 0.15.2/0.14.1 also need a
-# failing `xcrun` shim first on PATH (zig-patch/README.md). After a re-export, run
-# `python3 tests/roadmap/error-tracing/test_provenance.py --refresh`.
+# compilers of every supported version (or the versions given) into air/<version>, or with --check
+# compare a fresh export byte for byte with the committed one. AIR2LEAN_ZIG_AIR: a directory
+# holding zig-air-<version>/bin/zig (scripts/zig-air.sh builds them from this tree's zig-patch/).
+# On macOS, 0.15.2/0.14.1 also need a failing `xcrun` shim first on PATH (zig-patch/README.md).
+# After a re-export, run `python3 tests/roadmap/error-tracing/test_provenance.py --refresh`.
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
