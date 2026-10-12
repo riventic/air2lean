@@ -20,6 +20,8 @@ for mod in Gen Counters Leak; do
   lake env lean -R "$dir" -o "$work/olean/ThreadLocals/$mod.olean" "$dir/ThreadLocals/$mod.lean"
 done
 lake env lean "$dir/Check.lean"
+# The strength log of the migrated proof (tests/roadmap/strength-log).
+lake env lean tests/roadmap/strength-log/ThreadLocals.lean
 lake env lean --run "$dir/ThreadLocals/Runtime.lean"
 PYTHONDONTWRITEBYTECODE=1 python3 "$dir/test_cli.py" "$translator"
 echo 'thread-local translation, proofs, schedules, mutants and CLI checks passed'
