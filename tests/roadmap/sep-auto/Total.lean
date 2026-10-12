@@ -30,8 +30,8 @@ theorem diverge_partial (P : FAssn) : FTriple P diverge (fun _ _ => False) :=
 theorem start (σ : Placement) :
     Holds (Mem.ofGlobals σ []) (initRes σ []) ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
       globals [] (initRes σ []) ∧ (Mem.ofGlobals σ []).FSeq :=
-  ⟨(initRes_holds σ [] (by decide)).1, (initRes_holds σ [] (by decide)).2,
-    Mem.init_fseq σ [] (by simp [Mem.GlobalsFit])⟩
+  let h := initRes_holds σ [] (by decide)
+  ⟨h.1, h.2, Mem.init_fseq σ [] (by simp [Mem.GlobalsFit])⟩
 
 /-- No total triple for divergence from a memory that holds the precondition. -/
 theorem diverge_not_total (Q : Unit → FAssn) (σ : Placement) :
