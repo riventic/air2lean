@@ -136,7 +136,7 @@ class InventoryTests(unittest.TestCase):
         # A supported tag whose only fixture is hand-written or missing AIR has no witness.
         rows['add']['tests']['paths'] = ['tests/roadmap/global-init/air/0.16.0/x.json', 'tests/golden/missing.json']
         # An unfixtured tag needs a current request; a rejected tag needs the current reason.
-        rows['is_err']['fixture_request'] = None
+        rows['is_err'].update(disposition='emitted-unfixtured', fixture_request=None)
         rows['prefetch']['rejection']['reason'] = 'stale text'
         rows['add_optimized']['rejection'] = None
         # A reason recorded under the wrong translator definition is not current.
@@ -150,6 +150,31 @@ class InventoryTests(unittest.TestCase):
             self.assertIsNone(coverage.fixture_request('sub_sat', (ROOT/coverage.FIXTURE_SOURCE).read_text()))
         self.assertFalse(coverage.compiler_fixture_path('tests/roadmap/undef-operands/air/0.16.0/a.json'))
         self.assertTrue(coverage.compiler_fixture_path('tests/roadmap/try-pointers/air/0.16.0/a.json'))
+
+    def test_producer_scan(self):
+        # Sema names `.add` (directly) and `.cmp_lt` (through an Air.zig helper returning a Tag);
+        # `.is_err` occurs only in Air.zig's enum, so it has no producer.
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source/'src').mkdir()
+            (source/'src/Air.zig').write_text('pub const Tag = enum { add, cmp_lt, is_err, };\n'
+                                              'pub fn fromCmpOp(op: Op) Tag { return switch (op) { .lt => .cmp_lt }; }\n')
+            (source/'src/Sema.zig').write_text('fn f() void { _ = block.addUnOp(.add, a); _ = Air.Inst.Tag.fromCmpOp(.lt); }\n')
+            produced = coverage.producer_literals(source, coverage.SourceCache())
+            self.assertTrue({'add', 'cmp_lt'} <= produced)
+            self.assertNotIn('is_err', produced)
+            # A tag computed from a name or an integer defeats the scan: no derivation.
+            # A post-hook consumer names every tag but builds no AIR: not a producer.
+            (source/'src/Liveness.zig').write_text('fn f() void { switch (tag) { .is_err => {} } }\n')
+            self.assertNotIn('is_err', coverage.producer_literals(source, coverage.SourceCache()))
+            # Another file that builds AIR is a producer.
+            (source/'src/Other.zig').write_text('fn f() void { _ = b.addUnOp(.is_err, x); }\n')
+            self.assertIn('is_err', coverage.producer_literals(source, coverage.SourceCache()))
+            (source/'src/Other.zig').unlink()
+            (source/'src/Sema.zig').write_text('fn f() void { _ = b.addUnOp(@field(Air.Inst.Tag, name), x); }\n')
+            self.assertIsNone(coverage.producer_literals(source, coverage.SourceCache()))
+            (source/'src/Sema.zig').unlink()
+            self.assertIsNone(coverage.producer_literals(source, coverage.SourceCache()))
 
     def test_every_roadmap_air_directory_is_reviewed(self):
         self.assertEqual(coverage.unreviewed_air_roots(), [])

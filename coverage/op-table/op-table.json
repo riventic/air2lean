@@ -1090,27 +1090,6 @@
    "emit": null,
    "effect": null,
    "constructor": null},
-  {"tag": "err_return_trace",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "set_err_return_trace",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "save_err_return_trace_index",
-   "runtime_reason":
-   "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics",
-   "exporter_reason": null,
-   "emit": null,
-   "effect": null,
-   "constructor": null},
   {"tag": "spirv_runtime_array_len",
    "runtime_reason":
    "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model",
@@ -1136,13 +1115,6 @@
    "runtime_reason": null,
    "exporter_reason":
    "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag",
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "ret_addr",
-   "runtime_reason": null,
-   "exporter_reason":
-   "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument",
    "emit": null,
    "effect": null,
    "constructor": null},

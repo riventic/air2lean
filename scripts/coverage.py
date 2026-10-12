@@ -245,28 +245,44 @@ def canon_resolved(text):
     return {tag: re.findall(r'"([^"]+)"', targets) for tag, targets in rows}
 
 
-# L14: the exporter hook runs right after Sema analyses a function body (zig-patch/<version>/
-# hook.patch), before any legalization, so Sema is the only producer of exported AIR. A tag whose
-# name never occurs as an enum literal in Sema, nor in an Air.zig helper that returns a `Tag`, has
-# no producer. A source that computes a tag from a name or an integer defeats the scan.
-PRODUCER_FILES = ('src/Sema.zig',)
-PRODUCER_DIRS = ('src/Sema',)
+# L14: the exporter hook runs right after a function body is analysed (zig-patch/<version>/
+# hook.patch), before any legalization, so the source files that build AIR before the hook are the
+# only producers of exported AIR. A tag whose name never occurs as an enum literal (`.name`,
+# `Tag.name`, `.@"name"`) in them, nor in an Air.zig helper that returns a `Tag`, has no producer.
+# Every other non-backend file that builds AIR must be a reviewed post-hook stage, else the scan
+# does not decide; so does a tag computed from a name or an integer.
+AIR_BUILDERS = re.compile(r'air_instructions|\.addInst\(|addUnOp\(|addInstAsIndex')
+BACKEND_DIRS = ('src/codegen/', 'src/arch/', 'src/link/')
+POST_HOOK_BUILDERS = ('src/Air/Legalize.zig',)  # legalization runs in the backends, after the hook
 COMPUTED_TAG = re.compile(r'@field\(\s*Air\.Inst\.Tag|stringToEnum\(\s*Air\.Inst\.Tag|'
-                          r'Air\.Inst\.Tag\s*=\s*@enumFromInt|@as\(\s*Air\.Inst\.Tag\s*,\s*@enumFromInt')
+                          r'Tag\s*=\s*@enumFromInt|@as\(\s*(?:Air\.Inst\.)?Tag\s*,\s*@enumFromInt')
+ENUM_LITERAL = re.compile(r'\.([A-Za-z_][A-Za-z0-9_]*)|\.@"([^"]+)"')
+
+
+def enum_literals(text):
+    return {a or b for a, b in ENUM_LITERAL.findall(text)}
 
 
 def producer_literals(source, cache):
-    """Every enum literal of the analysis stage (`.name`), or None when the scan cannot decide."""
-    paths = [source / f for f in PRODUCER_FILES]
-    for d in PRODUCER_DIRS:
-        if (source / d).is_dir():
-            paths += sorted((source / d).rglob('*.zig'))
+    """Every enum literal of the files that build AIR before the export hook, or None when the
+    scan cannot decide."""
+    if not exact_file(source / 'src/Air.zig') or not (source / 'src').is_dir():
+        return None
+    producers = []
+    for p in sorted((source / 'src').rglob('*.zig')):
+        relative = str(p.relative_to(source))
+        if relative.startswith(BACKEND_DIRS) or relative in POST_HOOK_BUILDERS or relative == 'src/Air.zig':
+            continue
+        if AIR_BUILDERS.search(cache.text(p)):
+            producers.append(p)
+    if not any(str(p.relative_to(source)) == 'src/Sema.zig' for p in producers):
+        return None
     literals = set()
-    for p in paths:
+    for p in producers:
         text = cache.text(p)
         if COMPUTED_TAG.search(text):
             return None
-        literals |= set(re.findall(r'(?<![A-Za-z0-9_@])\.([A-Za-z_][A-Za-z0-9_]*)', text))
+        literals |= enum_literals(text)
     # Air.zig helpers that return a tag (`fromCmpOp`) produce what their bodies name.
     air = cache.text(source / 'src/Air.zig')
     for m in re.finditer(r'fn \w+\([^)]*\)\s*(?:Air\.Inst\.)?Tag\s*\{', air):
@@ -274,7 +290,7 @@ def producer_literals(source, cache):
         while depth and i < len(air):
             depth += {'{': 1, '}': -1}.get(air[i], 0)
             i += 1
-        literals |= set(re.findall(r'\.([A-Za-z_][A-Za-z0-9_]*)', air[m.end():i]))
+        literals |= enum_literals(air[m.end():i])
     return literals
 
 
