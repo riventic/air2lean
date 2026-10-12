@@ -154,7 +154,12 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   rules) whose command unifies. Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
-  (from the context), providers (§Providers, with backtracking) and arithmetic.
+  (from the context), providers (§Providers, with backtracking) and arithmetic; a side goal that
+  is not arithmetic is closed by a hypothesis equal to it **up to arithmetic** in its arguments
+  (`I.fits x.toNat 0` by `I.fits (n + 1) 0` with `x.toNat = n + 1`: `congrEq`, function by
+  function down to numbers and words) or up to projections of structure values and unfolding
+  (`{ names := ns, .. }.names.contains e = true` by `Option.all domain.names.contains (some e)`):
+  `assumptionEq`.
 * **Word results are opaque** (symbolic execution in SSA form): a checked `a + b` gives a fresh
   `r` with the fact `r.toNat = a.toNat + b.toNat` (subtraction is stated additively), so later
   terms mention `r`, not the growing expression that computed it.
@@ -174,7 +179,14 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   `Q`'s existentials become metavariables, assigned by unification; regions are matched exactly,
   or carved out of a state region (split at the start with `Q`'s alignment and at the end by a
   size fact), joining adjacent regions where needed (a region that a part of `Q` has claimed is
-  not joined again); shares of one block are joined, split and weakened, and a share with a
+  not joined again). **Planning order**: the unknown bytes of a
+  region of `Q` with a size fact are assigned by the region planner from the state's current
+  bytes, so an atom of `Q` that mentions them (the token `I.tok p bs.size …` of a grant whose bytes
+  were written after the allocation) is matched only after the regions, with its arguments equal
+  up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
+  state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
+  `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
+  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block are joined, split and weakened, and a share with a
   determined fraction is raised to a higher bound with another share of its block
   (`share_raise`), or with the authority of its block (`auth_raise`, up to the block's size);
   **authorities** (`bauth`, `bext`): a share of a block of which the state has none is lent out of

@@ -738,7 +738,7 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
       ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
-      ``and_true] do
+      ``and_true, ``not_false_eq_true, ``not_true_eq_false] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -868,8 +868,70 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     trace[fsym.arith] "exception {ex.toMessageData}"
     s.restore; return false
 
+/-- `x = y` up to arithmetic: equal up to reducible unfolding and proof irrelevance, numbers and
+words equal by the arithmetic solver, applications of one function equal argument by argument
+(`replicate x.toNat b` and `replicate (n + 1) b` with the fact `x.toNat = n + 1`). -/
+partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
+  if ← withReducibleAndInstances (isDefEq x y) then return some (← mkEqRefl x)
+  if fuel == 0 then return none
+  let ty ← whnfR (← inferType x)
+  if ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 then
+    let m ← mkFreshExprMVar (← mkEq x y)
+    unless ← arithCore m.mvarId! (quick := true) do return none
+    return some (← instantiateMVars m)
+  let (fx, fy) := (x.getAppFn, y.getAppFn)
+  unless fx.isConst && fx.constName! == fy.constName! && x.getAppNumArgs == y.getAppNumArgs do return none
+  unless ← isDefEq fx fy do return none
+  let s ← saveState
+  try
+    let mut pf ← mkEqRefl fx
+    for (a, b) in x.getAppArgs.zip y.getAppArgs do
+      if ← withReducibleAndInstances (isDefEq a b) then
+        pf ← mkCongrFun pf a
+      else
+        let some e ← congrEq a b (fuel - 1) | s.restore; return none
+        -- a dependent argument (`mkCongr` needs a nondependent function) fails
+        pf ← mkCongr pf e
+    return some pf
+  catch _ => s.restore; return none
+
+/-- Close a goal that is not arithmetic by a hypothesis that is not arithmetic either, equal to
+it up to arithmetic in the arguments (`I.fits (n + 1) 0` for `I.fits x.toNat 0` with
+`x.toNat = n + 1`, `congrEq`), or up to projections of structure values and unfolding in one
+Boolean argument, the others equal (`{ names := ns, .. }.names.contains e = true` by
+`Option.all domain.names.contains (some e) = true`). -/
+def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  if ← isArithProp t then return false
+  let t' ← reduceProjs t
+  for d in ← getLCtx do
+    if d.isImplementationDetail then continue
+    let dt ← instantiateMVars d.type
+    unless headKey dt == headKey t' && dt.getAppNumArgs == t'.getAppNumArgs do continue
+    unless ← isProp dt do continue
+    if ← isArithProp dt then continue
+    let dt' ← reduceProjs dt
+    let s ← saveState
+    if let some e ← congrEq dt' t' then
+      g.assign (← mkExpectedTypeHint (← mkEqMP e (← mkExpectedTypeHint d.toExpr dt')) t)
+      return true
+    s.restore
+    -- unfolding: one function, one differing argument that is a Boolean test (data terms such
+    -- as bytes are equal up to arithmetic by `congrEq`, never by unfolding them)
+    if t'.hasExprMVar || !(← withReducible (isDefEq dt'.getAppFn t'.getAppFn)) then
+      s.restore; continue
+    let pairs := dt'.getAppArgs.zip t'.getAppArgs
+    let differ ← pairs.filterM fun (a, b) => return !(← withReducibleAndInstances (isDefEq a b))
+    let [(a, b)] := differ.toList | s.restore; continue
+    unless (← whnfR (← inferType a)).isConstOf ``Bool do s.restore; continue
+    if ← withDefault (isDefEq a b) then
+      g.assign (← mkExpectedTypeHint d.toExpr t); return true
+    s.restore
+  return false
+
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
-goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts). -/
+goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts, no
+hypotheses up to arithmetic). -/
 partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
   if ← g.isAssigned then return []
   let t ← instantiateMVars (← g.getType)
@@ -899,6 +961,7 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
   if ← arithCore g quick then return []
   unless quick do
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
+    if ← assumptionEq g then return []
   return [g]
 
 def arith (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
@@ -2135,6 +2198,27 @@ partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
       if let some u ← unfold1 φ then return ← conjuncts u (fuel - 1)
   return #[φ]
 
+/-- The size `n` of the bytes `bs` by a fact `bs.size = n` of a postcondition. -/
+def sizeFact? (facts : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+  let mut n? := none
+  for f in facts do
+    for φ in ← conjuncts f.appArg! do
+      if let some (_, l, r) := φ.eq? then
+        if l.isAppOfArity ``Array.size 2 then
+          if (← instantiateMVars l.appArg!) == bs then n? := some r
+  return n?
+
+/-- The unknowns of the bytes of the postcondition's regions that have a size fact. -/
+def sizedRegionBytes (qats : Array Expr) : MetaM (Array MVarId) := do
+  let facts := qats.filter (·.isAppOfArity liftN 1)
+  let mut out := #[]
+  for a in qats do
+    let some q := regionArgs? (← instantiateMVars a) | continue
+    let bs ← instantiateMVars q[5]!
+    if bs.hasExprMVar && (← sizeFact? facts bs).isSome then
+      out := out ++ (bs.collectMVars {}).result
+  return out
+
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
@@ -2218,18 +2302,25 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let laws := fsymPlanExt.getState (← getEnv)
     let planned (a : Expr) : Bool := laws.any (a.isAppOf ·.head)
     -- pre-assign by the atoms that unify outright; an atom that unfolds once its witnesses are
-    -- assigned (a `match` on an existential) is opened again
+    -- assigned (a `match` on an existential) is opened again. The unknown bytes of a region with
+    -- a size fact are the region planner's (`carve`, from the state's current bytes): an atom that
+    -- mentions them (a token `I.tok p bs.size …` of the allocation) waits for the final match,
+    -- where it matches up to arithmetic.
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
-      for a in qats do
+      let deferred ← sizedRegionBytes qats
+      let skip (a : Expr) : MetaM Bool := do
         if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then continue
+          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then
+          return true
+        return ((← instantiateMVars a).collectMVars {}).result.any (deferred.contains ·)
+      for a in qats do
+        if ← skip a then continue
         for x in st.ats do
           let s' ← saveState
           if ← unifyAtom a x then break
           s'.restore
       for a in qats do
-        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then continue
+        if ← skip a then continue
         if (← instantiateMVars a).hasExprMVar then
           for x in st.ats do
             if headKey a != headKey x then continue
@@ -2271,13 +2362,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let some q := regionArgs? (← instantiateMVars a) | continue
       -- a region with a size fact is carved (its bytes may change)
       let qbs ← instantiateMVars q[5]!
-      let mut sized := false
-      for f in facts do
-        for φ in ← conjuncts f.appArg! do
-          if let some (_, l, _) := φ.eq? then
-            if l.isAppOfArity ``Array.size 2 then
-              if (← instantiateMVars l.appArg!) == qbs then sized := true
-      if sized && qbs.hasExprMVar then continue
+      if qbs.hasExprMVar && (← sizeFact? facts qbs).isSome then continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState
@@ -2288,13 +2373,7 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let some q := regionArgs? (← instantiateMVars a) | continue
       if (← st.ats.anyM fun x => return x == (← instantiateMVars a)) then continue
       -- a size fact `q.bs.size = n`
-      let mut n? := none
-      let qbs ← instantiateMVars q[5]!
-      for f in facts do
-        for φ in ← conjuncts f.appArg! do
-          if let some (_, l, r) := φ.eq? then
-            if l.isAppOfArity ``Array.size 2 then
-              if (← instantiateMVars l.appArg!) == qbs then n? := some r
+      let n? ← sizeFact? facts (← instantiateMVars q[5]!)
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
