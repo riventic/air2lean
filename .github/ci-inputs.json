@@ -4,6 +4,8 @@
   "defaults": {
     "inputs": [
       "zig-patch/**",
+      "scripts/rosetta.sh",
+      "scripts/rosetta-elf.py",
       "**/.gitignore"
     ]
   },
