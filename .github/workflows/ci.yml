@@ -2070,7 +2070,7 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness
+          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
 
       # Same premise tables over the kernel dependency graph of the audited translation.
