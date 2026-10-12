@@ -298,6 +298,19 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/s390x-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    # T03: concurrency.zig at both byte orders (concurrency.sh --export).
+    'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
+    # L07/L08: one directory per source and version (check.sh --export).
+    'tests/roadmap/packed-casts/air/{version}/packed_casts': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/logical017': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/vector_fields': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/auto_items': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
+    # L04: try_lifetimes.zig (lifetimes/check.sh --export).
+    'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',

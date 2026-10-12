@@ -64,8 +64,8 @@ def profile_for_air(doc):
         raise ValueError("profile string fields must not be empty or malformed")
     # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos/
     # aarch64-linux (gnu, Zig 0.14.1-0.16.0: `Target.qualified`), 32-bit wasm32-freestanding/
-    # wasm32-wasi pointers or the 64-bit big-endian s390x-linux model (named `abi64-be-v1` by the
-    # exporter), and a 1..32-bit error integer.
+    # wasm32-wasi pointers or the 64-bit big-endian s390x-linux and mips64-linux models (named
+    # `abi64-be-v1` by the exporter), and a 1..32-bit error integer.
     big = p["endian"] == "big"
     if (p["name"] != ("abi64-be-v1" if big else "abi64-le-v1") or p["zig_version"] != version or
             type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
@@ -78,14 +78,16 @@ def profile_for_air(doc):
     target = (triple[0], triple[1].split(".")[0]) if len(triple) == 3 else None
     if (len(triple) != 3 or triple[2].split(".")[0] != p["abi"] or
             target not in {("x86_64", "linux"), ("aarch64", "macos"), ("aarch64", "linux"),
-                           ("s390x", "linux"), ("wasm32", "freestanding"), ("wasm32", "wasi")}):
+                           ("s390x", "linux"), ("mips64", "linux"), ("wasm32", "freestanding"),
+                           ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
     if target == ("aarch64", "linux") and (p["abi"] != "gnu" or
                                            version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
         raise ValueError("incompatible target profile")
-    if big != (target == ("s390x", "linux")) or (big and p["backend"] != "stage2_llvm"):
+    if big != (target in {("s390x", "linux"), ("mips64", "linux")}) or (
+            big and p["backend"] != "stage2_llvm"):
         raise ValueError("incompatible target profile")
     fs = p["features"]
     if (not isinstance(fs, list) or any(not isinstance(f, str) or not f for f in fs) or
