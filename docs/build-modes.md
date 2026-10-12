@@ -209,7 +209,12 @@ changed. The per-input exclusion pins name the committed inputs, so in this mode
 (`AIR2LEAN_DIFF_FRESH_INPUTS`, `diff-report.py --fresh-inputs`) a model `.illegal` or
 `.unspecified` result is an exclusion on any input, never a match, and no pin is checked; a
 value, returned-error or panic disagreement is a mismatch and fails the run. The summary records
-`fresh_input_seed`, so a failure reproduces from the seed.
+`fresh_input_seed`, so a failure reproduces from the seed. An example with per-input pins on the
+host (`unspecified.<host>.txt`, else `unspecified.txt`) is not re-tested: its pins stand for
+classes where the model and the native run do not agree by value (on x86_64-linux, x87 `f80`
+pseudo and invalid encodings in `floatops`; data races in `threads`), and a fresh input of such a
+class has no pin (on x86_64-linux in a `linux/amd64` container, seed `0xd477d9590eede18`
+gave `floatops.op80` mismatches in exactly those classes before this rule).
 
 CI runs it on every commit of the 0.16.0 full golden row with a seed taken from the commit hash
 (`Differential test on fresh inputs`), so each commit is tested on inputs no earlier commit

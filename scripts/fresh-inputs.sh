@@ -44,8 +44,17 @@ while read -r digest dir; do
   now=$(cat "$dir"/*.jsonl | shasum -a 256 | cut -d' ' -f1)
   ex=${dir#tests/diff/}; ex=${ex%/inputs}
   case "$eligible" in *" $ex "*) ;; *) continue ;; esac
-  if [ "$now" != "$digest" ]; then examples="$examples$ex "; fi
+  [ "$now" != "$digest" ] || continue
+  # Per-input exclusion pins of this host (scripts/diff-report.py) name committed inputs by
+  # hash and stand for classes the model and the native run do not agree on by value (f80
+  # pseudo encodings, data races, ...); a fresh input of such a class has no pin, so an example
+  # with pins on this host is not re-tested here.
+  pins=tests/diff/$ex/unspecified.$(uname -s)-$(uname -m).txt
+  [ -f "$pins" ] || pins=tests/diff/$ex/unspecified.txt
+  if [ -f "$pins" ] && grep -qv '^#' "$pins"; then skipped="${skipped:-}$ex "; continue; fi
+  examples="$examples$ex "
 done <"$before"
+[ -z "${skipped:-}" ] || echo "fresh inputs: not re-tested (per-input pins on this host): $skipped" >&2
 [ -n "$examples" ] || { echo "error: seed $seed changed no input file" >&2; exit 1; }
 echo "fresh inputs (seed $seed): $examples" >&2
 AIR2LEAN_DIFF_FRESH_INPUTS=$seed AIR2LEAN_DIFF_REPORT=$summary AIR2LEAN_EXAMPLES=$examples \
