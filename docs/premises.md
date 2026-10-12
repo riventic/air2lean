@@ -726,7 +726,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
-  global, OS mapping). Layout comes from `Zig.Enc` instances checked against the profile.
+  global, `const` global, OS mapping). Layout comes from `Zig.Enc` instances checked against the
+  profile. A `const` global is read-only static storage: a write to it (`Mem.accessW`) and a
+  `free` of it (`Zig.free`) are `.illegal`, so its bytes never change while it is live.
   Out-of-bounds, misaligned or dead accesses are `.illegal`, and so is forming a derived pointer
   outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`) or an access below
   an OS mapping's first live offset (`BlockKind.mapped lo`). Undefined bytes are explicit.

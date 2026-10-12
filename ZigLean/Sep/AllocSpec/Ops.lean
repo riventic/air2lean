@@ -348,16 +348,16 @@ theorem TotalTriple.covers {α : Type} {P G : Assn} {c : MemM α} {Q : α → As
   rw [hm', Heap.union_apply, hFi, Option.or_none] at hin
   exact hin
 
-/-- `free` of a whole block: its bytes go. -/
+/-- `free` of a whole block, not a `const` global: its bytes go. -/
 theorem free_whole {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {R : Assn}
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hK : K ≠ .constGlobal := by decide) :
     TotalTriple (bytesAt p A S K bs ∗ R) (free p) (fun _ => R) := by
   intro m hP hF hd hm hp hst
   obtain ⟨h₁, h₂, hd₁₂, rfl, hb, hr⟩ := hp
   obtain ⟨hd₁F, hd₂F⟩ := Heap.disjoint_union_left.mp hd
   have hm₁ : m.heap = h₁ ∪ (h₂ ∪ hF) := by rw [hm, Heap.union_assoc]
   obtain ⟨m', hrun, hm', hst', -⟩ := free_run hb hm₁ (Heap.disjoint_union_right.mpr ⟨hd₁₂, hd₁F⟩)
-    hS h0 hpos hst
+    hS h0 hpos hst hK
   exact ⟨(), m', h₂, hrun, hd₂F, by rw [hm', Heap.empty_union], hr, hst'⟩
 
 /-- `ptrProject_elem_ownsAt` for an item pointer into a nonempty region, at most one past it. -/

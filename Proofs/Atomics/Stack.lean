@@ -1690,26 +1690,26 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
       Zig.free (cPtr 1)
       Zig.free (cPtr 2)
       pure (Except.ok v : Except ErrName (BitVec 32)) : ConcM Tgt _) QM G m d := by
-  obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi.b0
-  obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi.b1
-  obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi.b2
+  obtain ⟨blk₀, hb₀, hl₀, -, hkc₀, -⟩ := hi.b0
+  obtain ⟨blk₁, hb₁, hl₁, -, hkc₁, -⟩ := hi.b1
+  obtain ⟨blk₂, hb₂, hl₂, -, hkc₂, -⟩ := hi.b2
   -- each access happened before `main` (both joins): the ends of the blocks race with nothing
   have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
     freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) e he).elim) fun _ m₁ hf₁ => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₁) hl₁ (by exact hnr _ _) e he).elim) fun _ m₂ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hnr _ _) (by rw [hkc₁]; nofun) e he).elim) fun _ m₂ hf₂ => ?_)
   obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₂) hl₂ (by exact hnr _ _) e he).elim) fun _ m₃ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₃ hf₃ => ?_)
   obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
   cases hb'
   refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi.thr hg⟩⟩

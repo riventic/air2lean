@@ -235,7 +235,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 
 `mem0` holds the globals of every function, also of a pure one, so each global's type has a `Zig.Enc` instance when the program has `mem0`. A comptime-resolved local (`const u: U = .{ .b = 0 }; _ = &u;`) is such a constant global: Sema points its live uses at the global (`⟨some k, 0⟩`) and leaves its dead `alloc` and stores as `bitcast`s of address 0, which the translator drops; a read one is rejected (`tests/roadmap/const-locals`).
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. A `threadlocal` global has one instance per thread (§Thread-local storage).
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`, and so does a `free` of one (`Zig.free`; no generated `free` reaches a `const` global). A `threadlocal` global has one instance per thread (§Thread-local storage).
 
 **Initial values are never defaulted.** A wholly `undefined` global (`var x: T = undefined`) is
 `Zig.Enc.size T` undefined bytes, so a load before the first store throws `.unspecified`. A

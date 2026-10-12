@@ -3572,10 +3572,10 @@ theorem main_spec (σ : Placement) (d : Nat) : proto.WP 0 handoff QM G0 { mem0 �
   refine WP.pure' ?_
   simp only [StateT.run_pure, pure_bind]
   -- the free of the `Box`
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₅.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₅.2.blk
   have hb₁₆ : m₁₆.blocks = m₁₅.blocks := by rw [hm₁₆]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₆]; exact hblk₀) hl₀
-      ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) e he).elim)
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₇ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩

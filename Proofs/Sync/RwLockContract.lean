@@ -191,7 +191,7 @@ theorem reclaim_joined_wp {G : ThreadId → Gh S} {m : Mem} {d : Nat} {x : Ph}
     (proto E).WP 0 (ConcM.liftMem (free bPtr))
       (fun _ _ m' _ => m'.threads = m.threads ∧ joinedAll 0 m') G m d := by
   have hj := joined_of_phase hi hjd
-  obtain ⟨blk, hb, hl, _⟩ := hi.2.1.blk
+  obtain ⟨blk, hb, hl, -, -, hk⟩ := hi.2.1.blk
   -- each thread is `main` or a child that `main` joined: the end of the block races with nothing
   have hnr : m.freeRaces 0 blk.bytes.size = false := by
     obtain ⟨h0, ⟨hs1, -, -⟩ | ⟨hs2, hr, -, -, -⟩⟩ := hi.2.1.shape
@@ -204,7 +204,7 @@ theorem reclaim_joined_wp {G : ThreadId → Gh S} {m : Mem} {d : Nat} {x : Ph}
         · have := hj _ (Array.mem_of_getElem? h1) (by rfl)
           exact .inr ⟨_, h1, hc.symm ▸ rfl, this, rfl⟩
         · exact .inr ⟨_, h1, hc.symm ▸ rfl, rfl, rfl⟩
-  refine WP.liftMem (fun e he => (free_noErr hb hl hnr e he).elim) ?_
+  refine WP.liftMem (fun e he => (free_noErr hb hl hnr (by rw [hk]; nofun) e he).elim) ?_
   intro _ m' hf
   obtain ⟨_, _, _, _, rfl⟩ := free_ok hf
   exact ⟨rfl, rfl, hj⟩

@@ -104,9 +104,10 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   obtain ⟨⟨h0', hA'⟩, x⟩ := up_lift.mp x
   exact ⟨_, r₂, hd, rfl, ⟨A', b, sep_lift.mpr ⟨⟨hpb, h0', hA'⟩, ⟨r₃, r₄, hd', e, x, hbx⟩⟩⟩, h2⟩
 
-/-- `free` of a whole block: its bytes and its full extent go. -/
+/-- `free` of a whole block, not a `const` global: its bytes and its full extent go. -/
 theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
-    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
     FTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) := by
   have hcells : ∀ h, bytesAt p A S K bs h → ∀ l c, h l = some c → l.1 = b ∧ c.size = S ∧ c.kind = K := by
     intro h hb l c hc
@@ -117,7 +118,7 @@ theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
     · rename_i hin; cases hc; exact ⟨hin.1, rfl, rfl⟩
     · cases hc
   refine ((FTriple.ofTriple (E := fun x => if x = b then some (S, K) else none) (B := fun x => x = b)
-    (Triple.free hS h0 hpos) (Tame.free p) (fun h hp l c hc => (hcells h hp l c hc).1)
+    (Triple.free hS h0 hpos hK) (Tame.free p) (fun h hp l c hc => (hcells h hp l c hc).1)
     (fun h hp l c S' K' hc hE => by
       obtain ⟨e, hs, hk⟩ := hcells h hp l c hc
       simp only [e, if_pos] at hE; cases hE; exact ⟨hs, hk⟩)
@@ -165,7 +166,7 @@ theorem FTriple.ptrAddrOf (q : Ptr) (a : Int) :
     exact FTriple.of_run fun m r _ hh hp hs => by
       obtain ⟨A, hp'⟩ := hp
       obtain ⟨hA, hk⟩ := sep_lift.mp hp'
-      obtain ⟨x, hx, hxa⟩ := hh.know b A (by rw [hk.2.1]; exact ⟨rfl, rfl⟩)
+      obtain ⟨x, hx, hxa⟩ := hh.know (.addr b A) (by rw [hk.2.1]; rfl)
       exact ⟨_, m, r, ptrAddr_run hx off, hh,
         sep_lift.mpr ⟨by rw [hxa]; exact hA, ⟨A, hp'⟩⟩, hs⟩
 
@@ -371,7 +372,7 @@ theorem addrOf_block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {o
     (h : addrOf ⟨some b, off⟩ a r) : ∃ blk, m.blocks[b]? = some blk ∧ (blk.addr : Int) + off = a := by
   obtain ⟨A, h⟩ := h
   obtain ⟨hA, hk⟩ := sep_lift.mp h
-  obtain ⟨blk, hblk, he⟩ := hh.know b A (by rw [hk.2.1]; exact ⟨rfl, rfl⟩)
+  obtain ⟨blk, hblk, he⟩ := hh.know (.addr b A) (by rw [hk.2.1]; rfl)
   exact ⟨blk, hblk, by rw [he]; exact hA⟩
 
 /-- **O1.** A memory that holds `inv` has the block of the pointer in `last`, live or freed:
