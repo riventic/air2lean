@@ -1,0 +1,7 @@
+storeThenBytes: 67305985
+bytesThenLoad: 67305985
+rmwCarryByte0: 0
+casSwap: 1230066625199609624
+rmwMax: 3
+threadsAdd: 117376518
+heapWord: 218103818

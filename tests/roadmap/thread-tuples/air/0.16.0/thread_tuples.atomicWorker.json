@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,12 +39,18 @@
  },
  "name": "thread_tuples.atomicWorker",
  "module": "root",
+ "src": {
+  "file": "thread_tuples.zig",
+  "module": "thread_tuples",
+  "decl_line": 25
+ },
  "params": [
   0,
   1,
   2,
   2
  ],
+ "noalias": [],
  "ret": 3,
  "body": [
   {
@@ -100,7 +109,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 8,
@@ -132,7 +142,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 24
   },
   {
    "id": 11,
@@ -148,12 +159,18 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 24
   },
   {
    "id": 13,
    "tag": "dbg_inline_block",
    "ty": 2,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 52
+   },
    "body": [
     {
      "id": 14,
@@ -221,7 +238,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 39
     },
     {
      "id": 21,
@@ -262,7 +280,8 @@
      "id": 24,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 25,

@@ -104,6 +104,69 @@ DIFF_STATUSES = {
 }
 
 
+# Outcomes a contract can admit. The incomplete classes (capped search, unspecified or unsupported
+# results, unsupported timers) are properties of the evidence or the model, not of a program: no
+# contract admits them, and observing one leaves the contract unassessed.
+CONTRACT_OUTCOMES = frozenset(Outcome) - INCOMPLETE
+
+
+def denied_by(strength: str) -> frozenset[Outcome]:
+    """Outcomes that a goal of this strength rules out (the failures of its absence claims)."""
+    return frozenset().union(*(ABSENCE_CLAIMS[c] for c in STRENGTH_ABSENCE.get(strength, ())))
+
+
+def default_admits(strength: str) -> frozenset[Outcome]:
+    """What a contract admits unless it declares otherwise. A strength with an absence claim
+    (safety, partial and total correctness) admits returned values and error returns (a returned
+    value, never a model failure): failures are admitted only by explicit declaration. A strength
+    that claims nothing about failures (resource bound, correspondence) is not refuted by one."""
+    return CONTRACT_OUTCOMES - (SAFETY_FAILURES if denied_by(strength) else frozenset())
+
+
+def contract_admits(strength: str, declared) -> frozenset[Outcome]:
+    """The outcomes a goal's contract admits; raises ValueError for a declaration that is unsound.
+
+    `declared` is None (use the strength's default) or a list of outcome names. A declaration may
+    admit documented failures (a function that panics on a bad input) but never an outcome its own
+    strength rules out, an incomplete class, an unknown name or a duplicate."""
+    if declared is None:
+        return default_admits(strength)
+    if not isinstance(declared, list) or not declared or not all(isinstance(n, str) for n in declared):
+        raise ValueError('outcomes.admits must be a nonempty list of outcome names')
+    if len(set(declared)) != len(declared):
+        raise ValueError('outcomes.admits lists an outcome twice')
+    known = {o.value: o for o in Outcome}
+    unknown = sorted(set(declared) - set(known))
+    if unknown:
+        raise ValueError(f'outcomes.admits names unknown outcomes {unknown}; known: {sorted(known)}')
+    admitted = frozenset(known[n] for n in declared)
+    if admitted - CONTRACT_OUTCOMES:
+        raise ValueError('outcomes.admits cannot admit ' + ', '.join(sorted(o.value for o in admitted - CONTRACT_OUTCOMES))
+                         + ': incomplete-evidence classes are not program outcomes')
+    if admitted & denied_by(strength):
+        raise ValueError(f'outcomes.admits admits {sorted(o.value for o in admitted & denied_by(strength))}, '
+                         f'which a {strength} goal rules out')
+    return admitted
+
+
+def contract(strength: str, declared, counts: dict[str, int]) -> dict:
+    """A goal's outcome contract against sampled outcome counts. Evidence can only refute it:
+    `refuted` (an outcome the contract does not admit was observed), `unassessed` (an incomplete
+    class was observed, so the evidence cannot confirm it), `no_evidence`, else `not_refuted`.
+    Error returns are admitted outcomes of their own, never a model failure."""
+    admitted = contract_admits(strength, declared)
+    violations = {o.value: counts[o.value] for o in Outcome
+                  if counts.get(o.value) and o in CONTRACT_OUTCOMES and o not in admitted}
+    incomplete = {o.value: counts[o.value] for o in Outcome if counts.get(o.value) and o in INCOMPLETE}
+    status = ('refuted' if violations else 'unassessed' if incomplete else 'not_refuted' if counts else 'no_evidence')
+    return {'admits': sorted(o.value for o in admitted), 'source': 'declared' if declared is not None else f'default for {strength}',
+            'observed': dict(counts), 'violations': violations, 'incomplete': incomplete, 'status': status,
+            'reason': (None if status in ('not_refuted', 'no_evidence') else
+                       'observed outcomes outside the contract: ' + ', '.join(f'{k} ({v})' for k, v in violations.items())
+                       if violations else 'incomplete evidence cannot confirm the contract: '
+                       + ', '.join(f'{k} ({v})' for k, v in incomplete.items()))}
+
+
 def case_outcomes(row: dict) -> frozenset[Outcome]:
     """Model outcomes of one differential case row (`<summary>.jsonl`)."""
     found = set()

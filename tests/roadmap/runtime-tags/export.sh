@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# L14: export runtime_tags.zig with the patched compilers (0.16.0, 0.15.2, 0.14.1) into
+# L14: export runtime_tags.zig with the patched compilers (0.17.0, 0.16.0, 0.15.2, 0.14.1) into
 # air/<version>, or with --check compare a fresh export byte for byte with the committed one.
 #
 # The compilers must be built by zig-patch/build.sh from the zig-patch tree of this checkout;
 # provenance.json records the hash of each compiler binary (bin/zig-unlocked behind the AIR-only
 # lock wrapper). Point AIR2LEAN_ZIG_AIR at a directory holding zig-air-<version>/bin/zig for the
-# three versions (default /opt/dev/air2lean-build, which may hold older builds). --check refuses
+# four versions (default /opt/dev/air2lean-build, which may hold older builds). --check refuses
 # a compiler whose hash differs from the record. On macOS 0.15.2/0.14.1 also need a failing
 # `xcrun` shim first on PATH (zig-patch/README.md).
 # After a re-export, run `python3 tests/roadmap/runtime-tags/test_provenance.py --refresh`.
@@ -18,7 +18,7 @@ mode=${1:-export}
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-runtime-tags.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
-for version in 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   if [ "$mode" = --check ]; then
     recorded=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["patched_compiler_sha256"][sys.argv[2]])' \
       "$here/provenance.json" "$version")

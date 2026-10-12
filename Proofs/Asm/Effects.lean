@@ -177,4 +177,44 @@ theorem run_bind_ok {α β : Type} {x : MemM α} {f : α → MemM β} {m m' : Me
     refine ⟨v, m₁, rfl, ?_⟩
     simpa [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont] using h
 
+/-! ### Memory regions and environment reads (A01, ASM-05, ASM-06) -/
+
+/-- A region read changes no byte. -/
+theorem Frame.of_readRegion_run {m m' : Mem} {p : Ptr} {n : Nat} {bs : Array Byte}
+    (locs : List Loc) (h : (readRegion p n).run m = pure (bs, m')) : Frame locs m m' := by
+  unfold readRegion at h
+  split at h
+  · have h : some (Except.ok (#[], m)) = some (Except.ok (bs, m')) := h
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.2]; exact Frame.refl _ _
+  · obtain ⟨b, -, o, -, -, rfl⟩ := loadBytes_inv h
+    exact Frame.recordAt locs m b o n .read
+
+/-- A region write of `n > 0` bytes at `p` changes only those bytes. -/
+theorem Frame.of_writeRegion_run {m m' : Mem} {p : Ptr} {n : Nat} {bs : Array Byte}
+    (h : (writeRegion p n bs).run m = pure ((), m')) :
+    ∃ b, (n = 0 → m' = m) ∧ (0 < n → p.block = some b) ∧ Frame [(b, p.off.toNat, n)] m m' := by
+  unfold writeRegion at h
+  split at h
+  · have h : some (Except.ok ((), m)) = some (Except.ok ((), m')) := h
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨-, rfl⟩ := h
+    exact ⟨0, fun _ => rfl, fun hn => by omega, Frame.refl _ _⟩
+  · obtain ⟨b, blk, o, hacc, rfl⟩ := storeBytes_inv h
+    obtain ⟨hb, hblk, -, h0, hsz, -, rfl⟩ := access_eq (access_of_accessW hacc)
+    have hw := Frame.write (m := m.recordAt b p.off.toNat (fitBytes n bs).size .write)
+      (bs := fitBytes n bs) (o := p.off.toNat) hblk (by rw [fitBytes_size] at hsz ⊢; omega)
+    rw [fitBytes_size] at hw
+    exact ⟨b, fun hn => absurd hn (by assumption), fun _ => hb,
+      (Frame.recordAt [] m _ _ _ _).trans hw⟩
+
+/-- An environment read changes no byte. -/
+theorem Frame.of_envWord_run {m m' : Mem} {w : Nat} {v : BitVec w} (locs : List Loc)
+    (h : (envWord w).run m = pure (v, m')) : Frame locs m m' := by
+  rw [envWord_run] at h
+  have h : some (Except.ok (_, _)) = some (Except.ok (v, m')) := h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  rw [← h.2]
+  exact ⟨fun _ => rfl, fun _ _ _ => rfl⟩
+
 end Zig.Asm

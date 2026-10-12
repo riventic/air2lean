@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,10 +39,20 @@
  },
  "name": "lane_reads.boolRead",
  "module": "root",
+ "src": {
+  "file": "lane_reads.zig",
+  "module": "lane_reads",
+  "decl_line": 17
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
+ "export": {
+  "name": "boolRead",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -51,7 +64,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -67,7 +81,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 15
   },
   {
    "id": 4,
@@ -87,7 +102,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,

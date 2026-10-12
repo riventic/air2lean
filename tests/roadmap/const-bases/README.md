@@ -69,21 +69,21 @@ AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/const-bases/check.sh --nativ
 
 ## Fresh exports
 
-`air-fresh/<version>` (0.16.0, 0.15.2, 0.14.1) is the unmodified export of `const_bases.zig`
+`air-fresh/<version>` (0.17.0, 0.16.0, 0.15.2, 0.14.1; `export.sh`) is the unmodified export of `const_bases.zig`
 from a patched compiler of that version (stage2_x86_64, x86_64-linux-musl, baseline,
 ReleaseSafe). `provenance.json` records the source, exporter (`json.zig`, `pointer-offset.zig`),
 compiler and per-file hashes. The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
 -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl
--mcpu=baseline`. All three compilers were built by `zig-patch/build.sh` from the exporter of this
+-mcpu=baseline`. All four compilers were built by `zig-patch/build.sh` from the exporter of this
 tree, and `provenance.json` records each compiler binary's hash (the installs under
 `/opt/dev/air2lean-build` are older builds). `test_cli.py` checks every version against the
 hand-written fixtures:
 
 * Every returned constant pointer has the same global (`const_bases.table`), offset
-  (24, 15, 15, slice 15, 20) and `payload_base` marker in all three versions. The generated
+  (24, 15, 15, slice 15, 20) and `payload_base` marker in all four versions. The generated
   definitions of `resElemPtr`, `maybeElemPtr`, `maybeBytePtr`, `maybeSlice` and `resCodePtr`
   are identical to the retained `Gen.lean`, and the profile is identical but for the version
-  and target triple. The three fresh translations are equal after the profile header line.
+  and target triple. The four fresh translations are equal after the profile header line.
 * Recorded differences: Sema's ReleaseSafe `projectRes`/`projectMaybe` include the
   `catch unreachable` error check and the `.?` null check that the hand-written fixtures
   omit. Sema also folds `readResElem` to `22`, so the hand-written fixture keeps the load
@@ -91,9 +91,9 @@ hand-written fixtures:
 * Every fresh program is rejected on `stage2_llvm` at offset 24, like the hand-written one,
   and also when downgraded to schema 11 (below).
 
-This is export and translation evidence only. The native offsets are checked with a stock
-0.16.0 compiler (`check.sh --native`); `zig test const_bases.zig -fno-llvm` was not run with
-0.15.2 or 0.14.1 here.
+This is export and translation evidence. The native offsets are checked by `check.sh
+--native`, which passed with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux-musl
+(linux/amd64 container).
 
 ## The LLVM constant `eu_payload` offset
 
@@ -130,8 +130,9 @@ bug, not from a model or exporter mismatch.
 
 The translator fails closed. On a `stage2_llvm` profile it rejects every pointer constant
 whose offset can lie at or one past such a payload of its global. The type scan is
-structural and over-approximating: it visits every struct/tuple field, array item and
-optional payload that contains the offset, and it rejects through unions and unknown layouts.
+structural and over-approximating: it visits every struct/tuple field, array item, optional
+payload and union member (any member can be active) that contains the offset, and it rejects
+unknown layouts. Union-member bases are in `tests/roadmap/union-bases`.
 Other backends are unaffected, and the generated model keeps the correct, Sema-given offset.
 The check reads the schema-12 `profile.backend`. Legacy schema 1–11 inputs carry no backend
 (`unverified`, the named legacy reference model), so the backend that compiled them is unknown
@@ -139,7 +140,32 @@ and the LLVM backend cannot be excluded. The translator therefore treats `unveri
 `stage2_llvm` here (`Air2Lean.mayMisplaceEuPayload`): the same constants are rejected with a
 message that names the missing backend, and the same controls (the error code, the optional
 payload, other fields, an aligned payload) are accepted. `test_cli.py` runs the hand-written
-fixtures and all three fresh exports downgraded to schema 11 (no `profile`). A one-off sweep of
+fixtures and all four fresh exports downgraded to schema 11 (no `profile`). A one-off sweep of
 the 54 committed directories of legacy AIR (tests, examples, case studies) found no
 newly rejected input. A legacy file whose constants touch such a payload now needs a re-export
 with a schema-12 exporter that names a backend other than LLVM or wasm.
+
+## LLVM correspondence
+
+The rejection above is a claim about the LLVM backend, and the legacy rule extends it to every
+file whose backend is unknown. `llvm_correspondence.zig` checks it against compiled code. Its
+six constant bases into one global (an element of an alignment-1 `Failure![3]u8` payload, the
+error code, an optional payload, an aligned `Failure!u16` payload, an `extern union` member and
+a later field) are each compared with the same projection computed at run time from a mutable
+copy, the model's offset. The test asserts that only the first differs, and only on LLVM.
+
+* Native: `zig test llvm_correspondence.zig -OReleaseSafe` passes with `-fllvm` and `-fno-llvm`
+  for stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux-musl (linux/amd64 container), with
+  `-fllvm` on aarch64-linux (linux/arm64 container) for all four, and on aarch64-macos for
+  0.15.2–0.17.0. `check.sh --native` runs it on x86_64.
+* Translator: `air-llvm/<version>` is the export of the same file on the LLVM backend
+  (`stage2_llvm` profile; `export.sh`, `provenance.json`'s `llvm_air_sha256`). For every version,
+  `test_cli.py` accepts the five agreeing bases, together and one by one, and rejects the
+  misplaced one with the `stage2_llvm` message; downgraded to legacy schema 11 the same files give
+  the same accept/reject split with the legacy message.
+
+So on LLVM and on legacy inputs the translator accepts exactly the constants whose compiled
+address is the model's, for these shapes on every supported version; the type scan rejects any
+other base whose offset can reach such a payload. Legacy schema-11 inputs stay `unverified`: a
+re-export with a schema-12 exporter names the backend.
+

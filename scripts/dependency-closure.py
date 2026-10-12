@@ -44,7 +44,7 @@ PANIC_PREFIX = "debug.FullPanic((function 'defaultPanic'))."
 PANIC_HANDLERS = frozenset(
     'integerOverflow integerOutOfBounds integerPartOutOfBounds shlOverflow shrOverflow outOfBounds '
     'divideByZero reachedUnreachable exactDivisionRemainder unwrapNull unwrapError forLenMismatch '
-    'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch '
+    'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch memcpyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
 MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
 ZIG_VERSION = re.compile(r'\.v(\d+)_(\d+)_(\d+)\b')

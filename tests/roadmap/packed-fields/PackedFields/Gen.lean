@@ -87,6 +87,11 @@ def Word.get_raw (u : Word) : Zig.Result (BitVec 24) := Zig.PackedU.get (BitVec 
 def Word.modify_raw (g : BitVec 24 → BitVec 24) (u : Word) : Word :=
   ⟨Zig.PackedU.set u.bytes (g (Zig.Raw.getD (Zig.PackedU.get (BitVec 24) u.bytes)))⟩
 
+instance : Zig.Packed Word 24 where
+  toBits u := Zig.PackedU.bitsOf 24 u.bytes.toArray
+  ofBits b := ⟨Zig.Raw.ofArray 4 (Zig.intBytes b)⟩
+  mask u := Zig.PackedU.maskOf 24 u.bytes.toArray
+
 instance : Zig.Enc Word where
   size := 4
   align := 4

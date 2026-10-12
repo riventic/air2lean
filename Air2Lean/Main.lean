@@ -6,6 +6,7 @@ import Air2Lean.Diagnose
 import Air2Lean.SourceMap
 import Air2Lean.ModuleSplit
 import Air2Lean.Revision
+import ZigLean
 import Air2Lean.Device
 import Air2Lean.Certificate
 import Air2Lean.OpTable
@@ -38,14 +39,22 @@ namespace Air2Lean
 /-- The sources this CLI was built from (`Air2Lean/Revision.lean`). -/
 def translator : Revision.Translator := translator_revision%
 
+/-- The runtime (`ZigLean`) this CLI was built against (`Air2Lean/Revision.lean`). -/
+def runtime : Revision.Translator := runtime_revision%
+
 /-- `translator` as recorded in the source-map sidecar and the module manifest. -/
-def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean),
-  ("revision", .str translator.revision),
-  ("modules", .arr (translator.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+def revisionJson (t : Revision.Translator) : Lean.Json := Lean.Json.mkObj [("lean", .str t.lean),
+  ("revision", .str t.revision),
+  ("modules", .arr (t.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+
+def translatorJson : Lean.Json := revisionJson translator
+
+/-- `runtime` as recorded in the source-map sidecar and the module manifest. -/
+def runtimeJson : Lean.Json := revisionJson runtime
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--allocator-model std|translated]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--allocator-model std|translated]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table"
 
@@ -62,6 +71,10 @@ def help : String :=
   "                               AIR schemas 1-11 need --profile legacy-abi64-le.\n" ++
   "  --allow-unqualified-build-mode  Also translate AIR of a build mode/backend that\n" ++
   "                               docs/build-modes.md does not qualify (recorded in the header).\n" ++
+  "  --assume-no-libc             The program links no libc: admit the f128 ops that call long double\n" ++
+  "                               libm routines where c_longdouble is f128 (recorded in the header).\n" ++
+  "  --assume-asm-cpu-features    Admit allowlisted asm whose CPU feature (lzcnt, popcnt, rdrnd) the profile\n" ++
+  "                               lacks: the running CPU has it (premise ASM-09; recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
@@ -79,7 +92,7 @@ def help : String :=
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
-  "Supported AIR: Zig 0.17.0, 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
+  "Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
@@ -105,6 +118,11 @@ structure Args where
   allowUnqualified : Bool := false
   /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
   assumeNoLb : Bool := false
+  /-- `--assume-no-libc` (`Dialect.noLibc`); recorded in the generated header. -/
+  assumeNoLibc : Bool := false
+  /-- `--assume-asm-cpu-features`: skip `checkAsmCpuFeatures` (premise ASM-09); recorded in the
+  generated header. -/
+  assumeAsmCpu : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -170,6 +188,12 @@ private partial def parseArgsGo (args : List String)
   | "--assume-no-lb" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeNoLb := true })
+  | "--assume-no-libc" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLibc := true })
+  | "--assume-asm-cpu-features" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeAsmCpu := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -307,6 +331,7 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      let errorTable ← readErrorTable a.airDir
       let models ← match a.modelRegistry with
         | none => pure #[]
         | some path =>
@@ -340,11 +365,12 @@ private def run (args : List String) : IO UInt32 := do
             let (normalized, normalizeNs) ← timed fun _ => (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              normalize raw : Except String Func)
+              withErrorTable (← normalize raw) errorTable : Except String Func)
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"
             | .ok f =>
+              let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
               match checkedOne with
@@ -369,6 +395,8 @@ private def run (args : List String) : IO UInt32 := do
         match BuildProfile.checkProgram profiles a.profile a.allowUnqualified with
         | .error e => die e
         | .ok profile =>
+          if !a.assumeAsmCpu && !a.registryTemplate then
+            if let .error e := checkAsmCpuFeatures funcs profile device then return ← die e
           if a.registryTemplate then
             match ModelRegistry.template profile funcs with
             | .error error => die error
@@ -388,8 +416,11 @@ private def run (args : List String) : IO UInt32 := do
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             -- An admission opt-in is part of the claim scope: the header records it.
-            let admission := if a.allowUnqualified then
-              [("admission", Lean.Json.str "unqualified-build-mode")] else []
+            let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
+              (if a.assumeNoLibc then ["no-libc"] else []) ++
+              (if a.assumeAsmCpu then ["asm-cpu-features"] else [])
+            let admission := if optIns.isEmpty then [] else
+              [("admission", Lean.Json.str (",".intercalate optIns))]
             let admission := admission ++ if a.allocatorModel == .translated then
               [("allocator_model", Lean.Json.str "translated")] else []
             let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
@@ -429,7 +460,7 @@ private def run (args : List String) : IO UInt32 := do
               let base := a.outPath.parent.getD "."
               let mods := ModuleSplit.modules parts a.ns root stem header
               ModuleSplit.write (base / stem) base mods
-              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson mods
+              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson runtimeJson mods
               let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
                 throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
@@ -437,7 +468,8 @@ private def run (args : List String) : IO UInt32 := do
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
             if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
-              let cert := Certificate.emit emissionFuncs a.ns declNames genModule
+              let cert := Certificate.emit emissionFuncs a.ns declNames genModule parts.memFuncs
+                parts.concFuncs parts.shapes
               try IO.FS.writeFile path cert catch e =>
                 throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then
@@ -454,9 +486,9 @@ private def run (args : List String) : IO UInt32 := do
                 let api := if a.proofApi then some (proofLemmaIndex f) else none
                 pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
-              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v2"),
+              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v3"),
                 ("namespace", .str a.ns), ("metadata", metadata),
-                ("translator", translatorJson),
+                ("translator", translatorJson), ("runtime", runtimeJson),
                 ("options", Lean.Json.mkObj ([("spawn_policy", .str spawn),
                   ("models", if models.isEmpty then .null else ModelRegistry.report models)] ++
                   (match device with | none => [] | some c => [("device", c.report)]))),

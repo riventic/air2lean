@@ -1,0 +1,3 @@
+fwait returned 0 errno=4
+hog vs victim, 2s: hog=16265156 victim=701459 acquisitions, victim worst wait=5644000 ns
+futex wait, word unchanged, no wake, one signal: returned_with_EINTR=1 other_return=0

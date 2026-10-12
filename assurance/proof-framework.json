@@ -1,0 +1,864 @@
+{
+  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
+  "judgments": [
+    {
+      "name": "AllocSpec",
+      "module": "ZigLean.Sep.AllocSpec",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "CAllocSpec",
+      "module": "ZigLean.Sep.Full.Dispatch",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "CTriple",
+      "module": "ZigLean.Sep.Full.Conc",
+      "status": "target"
+    },
+    {
+      "name": "CancelSpec",
+      "module": "tests.roadmap.futures.Futures.Proofs",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "CondSpec",
+      "module": "ZigLean.Conc.Spec.Cond",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "EventSpec",
+      "module": "ZigLean.Conc.Spec.Event",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "EventuallyReturns",
+      "module": "ZigLean.Conc.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "EventuallyReturnsUnder",
+      "module": "ZigLean.Conc.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "FAllocSpec",
+      "module": "ZigLean.Sep.Full.AllocSpec",
+      "status": "target"
+    },
+    {
+      "name": "FReturns",
+      "module": "ZigLean.Sep.Full.Logic",
+      "status": "target"
+    },
+    {
+      "name": "FTTReturns",
+      "module": "ZigLean.Sep.Full.Thread",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "FTTotalTriple",
+      "module": "ZigLean.Sep.Full.Thread",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "FTTriple",
+      "module": "ZigLean.Sep.Full.Thread",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "FTotalTriple",
+      "module": "ZigLean.Sep.Full.Logic",
+      "status": "target"
+    },
+    {
+      "name": "FTriple",
+      "module": "ZigLean.Sep.Full.Triple",
+      "status": "target"
+    },
+    {
+      "name": "Float.AllowedSpec",
+      "module": "ZigLean.Float.Allowed",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "FutexSpec",
+      "module": "ZigLean.Conc.Spec.Futex",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "LoopTemplate",
+      "module": "ZigLean.Sep.LoopTemplate",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "MutexSpec",
+      "module": "ZigLean.Conc.Spec.Mutex",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Returns",
+      "module": "ZigLean.Sep.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "ReturnsWithin",
+      "module": "ZigLean.Conc.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Sem.Spec",
+      "module": "Proofs.Sync.RwLock",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Spec",
+      "module": "ZigLean.Conc.TimedBudget",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Spec",
+      "module": "tests.roadmap.asm-wrappers.Interp",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TTriple",
+      "module": "ZigLean.Conc.Own",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TTripleIn",
+      "module": "ZigLean.Conc.TlsLemmas",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TotalTriple",
+      "module": "ZigLean.Sep.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TotalTriple",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Shadow",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TotalTripleIn",
+      "module": "ZigLean.Sep.Total",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "TotalTripleWithin",
+      "module": "ZigLean.Sep.Bounded",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "TotalTripleWithin",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.ShadowWithin",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Triple",
+      "module": "ZigLean.Sep.Triple",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "WaitGroupSpec",
+      "module": "ZigLean.Conc.Spec.WaitGroup",
+      "status": "legacy-to-retire"
+    },
+    {
+      "name": "Within",
+      "module": "ZigLean.Sep.Full.Extent",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "WithinSpec",
+      "module": "ZigLean.Conc.TimedBudget",
+      "status": "legacy-to-retire"
+    }
+  ],
+  "tactics": [
+    {
+      "tactic": "arena_bounds",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_free",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_free_checked",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_free_tail",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_loadBuf",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_prefix",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_remap",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_resize",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_resize_checked",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_resize_tail",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_toInt",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "blkat_alloc",
+      "kind": "syntax",
+      "module": "ZigLean.Conc.Lemmas",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "bridge_close",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "bridge_norm",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "conc_norm",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Conc",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "fma_case",
+      "kind": "syntax",
+      "module": "Proofs.Floatops.Proofs",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "fsym",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Auto",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "fsym_arith",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Auto",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "fsym_entail",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Auto",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "fsym_fact",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.AutoRules",
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "gen_norm",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.AllocSpec.Norm",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "loop_template",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.LoopTemplate",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "loop_template?",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.LoopTemplate",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "mono_step",
+      "kind": "syntax",
+      "module": "Air2Lean.Sem",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "nn_step",
+      "kind": "syntax",
+      "module": "tests.roadmap.idle-loops.IdleLoop.Total",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "ok_step",
+      "kind": "syntax",
+      "module": "Air2Lean.Sem",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "pure_norm",
+      "kind": "syntax",
+      "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_close",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_frame",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Automation",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_from",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.AllocSpec.Wrappers",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_intro",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_normalize",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Automation",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_ret",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_split",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_step",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_steps",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "sep_unfold",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Step",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "spec_case",
+      "kind": "syntax",
+      "module": "Proofs.Floatops.Proofs",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "tame",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Tame",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "tame_prim",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.AllocSpec.Wrappers",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "tomega",
+      "kind": "syntax",
+      "module": "ZigLean.Conc.Spec.Count",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "unroll_sched",
+      "kind": "syntax",
+      "module": "ZigLean.Conc.Unroll",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "unroll_solo",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Unroll",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "vc_gen",
+      "kind": "syntax",
+      "module": "ZigLean.VC.Extract",
+      "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "within",
+      "kind": "syntax",
+      "module": "ZigLean.Sep.Full.Extent",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    }
+  ],
+  "legacy_users": [
+    {
+      "path": "Proofs/Atomics/PtrPublish.lean"
+    },
+    {
+      "path": "Proofs/Iogroup/Counter.lean"
+    },
+    {
+      "path": "Proofs/Lists/Append.lean"
+    },
+    {
+      "path": "Proofs/Lists/Bounded.lean"
+    },
+    {
+      "path": "Proofs/Lists/Container.lean"
+    },
+    {
+      "path": "Proofs/Lists/Cost.lean"
+    },
+    {
+      "path": "Proofs/Lists/Sep.lean"
+    },
+    {
+      "path": "Proofs/Slices/Sep.lean"
+    },
+    {
+      "path": "Proofs/Sync/Handoff.lean"
+    },
+    {
+      "path": "Proofs/Sync/Mailbox.lean"
+    },
+    {
+      "path": "Proofs/Sync/Mutex.lean"
+    },
+    {
+      "path": "Proofs/Sync/RwLock.lean"
+    },
+    {
+      "path": "Proofs/Sync/RwLockContract.lean"
+    },
+    {
+      "path": "Proofs/Sync/RwLockSnapshotPair.lean"
+    },
+    {
+      "path": "Proofs/Sync/SemCounter.lean"
+    },
+    {
+      "path": "Proofs/Sync/Semaphore.lean"
+    },
+    {
+      "path": "Proofs/Sync/SnapshotCache.lean"
+    },
+    {
+      "path": "Proofs/Threadsync/Handoff.lean"
+    },
+    {
+      "path": "Proofs/Threadsync/Mutex.lean"
+    },
+    {
+      "path": "Proofs/Threadsync/WaitGroup.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Csl.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Own.lean"
+    },
+    {
+      "path": "ZigLean/Conc/TlsLemmas.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Witness.lean"
+    },
+    {
+      "path": "ZigLean/Sep.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AddrReuse.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Alloc.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Dispatch.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Norm.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Ops.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Region.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Toy.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
+    },
+    {
+      "path": "ZigLean/Sep/AllocSpec/Wrappers.lean"
+    },
+    {
+      "path": "ZigLean/Sep/ArenaClient.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Array.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Array/Reassemble.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Automation.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Block.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Bounded.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Cost.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Discard.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/AllocSpec.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Atomic.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/AutoClaims.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/AutoRules.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Conc.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Dispatch.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Ghost.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Logic.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Mmap.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Ops.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Pinned.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Region.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Res.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Tame.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/ThreadBridge.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Toy.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Triple.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Try.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Typed.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
+    },
+    {
+      "path": "ZigLean/Sep/Loop.lean"
+    },
+    {
+      "path": "ZigLean/Sep/LoopTemplate.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Mmap.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Owned.lean"
+    },
+    {
+      "path": "ZigLean/Sep/RawAlloc.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Remap.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Sentinel.lean"
+    },
+    {
+      "path": "ZigLean/Sep/SentinelRealloc.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Step.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Total.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Triple.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Try.lean"
+    },
+    {
+      "path": "ZigLean/Sep/TryAlias.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Witness.lean"
+    },
+    {
+      "path": "ZigLean/Witnesses/Conc.lean"
+    },
+    {
+      "path": "ZigLean/Witnesses/Sep.lean"
+    },
+    {
+      "path": "tests/roadmap/address-reuse/Kernel.lean"
+    },
+    {
+      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
+    },
+    {
+      "path": "tests/roadmap/alloc-fba/AllocFba/Client.lean"
+    },
+    {
+      "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
+    },
+    {
+      "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
+    },
+    {
+      "path": "tests/roadmap/allocation-policy/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/allocator-identity/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/allocator-identity/Kernel.lean"
+    },
+    {
+      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/Shadow.lean"
+    },
+    {
+      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/ShadowWithin.lean"
+    },
+    {
+      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/Vacuous.lean"
+    },
+    {
+      "path": "tests/roadmap/byte-sentinel/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/claims/Fixture.lean"
+    },
+    {
+      "path": "tests/roadmap/container-contracts/Clients.lean"
+    },
+    {
+      "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
+    },
+    {
+      "path": "tests/roadmap/global-init/GlobalInit/Proofs.lean"
+    },
+    {
+      "path": "tests/roadmap/global-payload-pointers/Model.lean"
+    },
+    {
+      "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
+    },
+    {
+      "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/Array.lean"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/ArrayClients.lean"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/Reassemble.lean"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/StepClients.lean"
+    },
+    {
+      "path": "tests/roadmap/resize-remap/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/resize-remap/Kernel.lean"
+    },
+    {
+      "path": "tests/roadmap/sentinel-realloc/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/spawn-failure/SpawnFailure/Group.lean"
+    },
+    {
+      "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
+    },
+    {
+      "path": "tests/roadmap/strength-log/ProofsLayout.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/ProofsLists.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/ProofsPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/thread-locals/ThreadLocals/Counters.lean"
+    },
+    {
+      "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
+    },
+    {
+      "path": "tests/roadmap/try-pointers/TryPointers/Proofs.lean"
+    },
+    {
+      "path": "tests/roadmap/try-pointers/TryPointers/Runtime.lean"
+    },
+    {
+      "path": "tests/roadmap/try-pointers/aliases/TryAliases/Proofs.lean"
+    },
+    {
+      "path": "tests/roadmap/vcs/Extract.lean"
+    },
+    {
+      "path": "tools/Assurance.lean"
+    },
+    {
+      "path": "tutorials/memory-safety/Controls.lean"
+    },
+    {
+      "path": "tutorials/memory-safety/Main.lean"
+    },
+    {
+      "path": "tutorials/memory-safety/Negative.lean"
+    },
+    {
+      "path": "tutorials/memory-safety/Solution.lean"
+    },
+    {
+      "path": "tutorials/mutable-arrays/Main.lean"
+    },
+    {
+      "path": "tutorials/mutable-arrays/Negative.lean"
+    },
+    {
+      "path": "tutorials/mutable-arrays/Solution.lean"
+    }
+  ]
+}

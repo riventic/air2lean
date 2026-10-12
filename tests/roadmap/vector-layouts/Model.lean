@@ -21,7 +21,10 @@ example : Enc.size (Vec (Float .f80) 2) = 32 := rfl
 example : Enc.size (Vec (BitVec 32) 3) = 16 := rfl
 example (v : Vec (BitVec 9) 4) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
 example (v : Vec (BitVec 24) 3) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
-example (v : Vec F80 2) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
+/-- A float vector reads back unless a lane is a NaN, whose bits are undefined in memory
+(`Float.detMask`, `docs/architecture-audit/nan-bits.md`). -/
+example (v : Vec F80 2) (h : ∀ x ∈ v.lanes.toList, x.isNaN = false) :
+    Enc.decode (Enc.encode v) = pure v := Vec.float_decode_encode v h
 example (v : Vec (BitVec 9) 4) (x : BitVec 9) :
     laneOf 9 ((v.set 2 x).packBits 9 id).toNat 0 = laneOf 9 (v.packBits 9 id).toNat 0 :=
   laneOf_packBits_set_ne 9 id v 2 x 0 (by decide) (by decide)
@@ -100,8 +103,17 @@ def cases : List (List String × Bool) := [
   case "u16x3" (#v[1, 0x8000, 3] : Vector (BitVec 16) 3) 0 0xbeef,
   case "u32x3" (#v[1, 2, 3] : Vector (BitVec 32) 3) 1 0xdeadbeef]
 
+/-- The vector a probe line is about (`vector f80x2 …`, `lane f80x2 …`, `load u9x4 …`). -/
+def lineVector (line : String) : String := ((line.splitOn " ").drop 1).headD ""
+
 def main (args : List String) : IO UInt32 := do
-  let model := cases.flatMap (·.1)
+  -- `--skip NAME`: a vector whose layout is a declared divergence of the file's Zig version
+  -- (`f80x2` in 0.17.0, tests/roadmap/aarch64-abi/Model.lean); neither side's lines are compared.
+  let (args, skip) := match args with
+    | [path, "--skip", name] => ([path], some name)
+    | _ => (args, none)
+  let keep (line : String) : Bool := skip != some (lineVector line)
+  let model := (cases.flatMap (·.1)).filter keep
   unless cases.all (·.2) do
     IO.eprintln "vector-layouts: a model image does not decode back to its vector, or a lane \
       store did not leave the image of `Vec.set`"
@@ -109,7 +121,7 @@ def main (args : List String) : IO UInt32 := do
   let [path] := args | do
     model.forM IO.println
     return 0
-  let observed := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty)
+  let observed := (((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty)).filter keep
   if observed == model then
     IO.println s!"vector-layouts: {model.length} model lines match {path}"
     return 0

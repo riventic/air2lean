@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.13.0...15.6-none",
@@ -98,6 +101,7 @@
   2,
   1
  ],
+ "noalias": [],
  "ret": 3,
  "body": [
   {
@@ -483,7 +487,7 @@
      "ty": 18,
      "callee": {
       "ty": 19,
-      "func": "mem.alignPointerOffset__anon_13024",
+      "func": "mem.alignPointerOffset__anon_12853",
       "module": "std",
       "instance_key": "1fdb4fd23aee9308e7cb1ad2763d14019b6c1b3924b8523e8dfca891858cacaa",
       "noreturn": false
