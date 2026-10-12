@@ -17,7 +17,9 @@
     "tutorials/memory-safety/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/mutable-arrays/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check)."
   },
-  "import_roots": ["tests/diff", "tests/roadmap/thread-locals"],
+  "import_roots": ["tests/diff", "tests/roadmap/outcome-taxonomy", "tests/roadmap/global-payload-pointers",
+    "tests/roadmap/global-init", "tests/roadmap/try-pointers", "tests/roadmap/try-pointers/aliases",
+    "tests/roadmap/thread-locals", "tests/roadmap/callbacks"],
   "generated_imports": {
     "PackedCasts.Gen": "tests/roadmap/packed-casts/check.sh copies gen/<version>/PackedCasts.lean to PackedCasts/Gen.lean in its work tree and compiles it at gate time.",
     "Logical017.Gen": "tests/roadmap/packed-casts/check.sh copies gen/0.17.0/Logical017.lean to Logical017/Gen.lean in its work tree and compiles it at gate time.",

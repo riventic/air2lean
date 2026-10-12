@@ -420,8 +420,8 @@ theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.
     · obtain ⟨fc, hfc, -⟩ := up_bytesAt_cell hp hpb' (j := k + i) (by omega)
       rw [← Nat.add_assoc] at hfc; rw [hfc]; simp
     · exact ⟨⟨singleThread_write (singleThread_recordAt hs.1.single _ _ _ _) _ _ _ _⟩, hs.2.1,
-        LDMono.set (nb := { blk with bytes := writeBytes blk.bytes (q.off.toNat + k) bs' }) hb id
-          rfl (by simp only; rw [writeBytes_size _ _ _ hfit']; exact Nat.le_refl _) rfl hs.2.2⟩
+        (LDMono.set (nb := { blk with bytes := writeBytes blk.bytes (q.off.toNat + k) bs' }) hb id
+          rfl (by simp only; rw [writeBytes_size _ _ _ hfit']; exact Nat.le_refl _) rfl) hs.2.2⟩
 
 /-- **Store of a `T`** at byte `k` of owned bytes, not of a `const` global. -/
 theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
@@ -498,6 +498,32 @@ theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K' : BlockKind} {b
   refine of_runEq fun m r rF hh hp hs => ⟨_, m, ?_, hh, hs, ht⟩
   obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
   obtain ⟨b, blk, hacc, -⟩ := (Holds.split hd hh).bytesAt_access h1 hpos hkd had
+  simp [Zig.memmove, h0, zig_unfold, hacc]
+
+/-- **`@memmove`** of `n` items of `sz` bytes from byte `j` to byte `k` of the same owned bytes,
+not of a `const` global: the ranges may overlap (the bytes are read before they are written). -/
+theorem memmove_bytesAt_self {sz da sa j : Nat} {n : BitVec 64}
+    (hkd : k + n.toNat * sz ≤ bs.size) (hjs : j + n.toNat * sz ≤ bs.size)
+    (had : (A + q.off.toNat + k) % da = 0) (has : (A + q.off.toNat + j) % sa = 0)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt q A S K bs)) (Zig.memmove sz da sa (q.add k) (q.add j) n)
+      (fun _ => up (bytesAt q A S K (writeBytes bs k (bs.extract j (j + n.toNat * sz))))) := by
+  by_cases h0 : n.toNat = 0 ∨ sz = 0
+  · have e : n.toNat * sz = 0 := by rcases h0 with h | h <;> simp [h]
+    rw [e, Nat.add_zero, show bs.extract j j = #[] from Array.eq_empty_of_size_eq_zero (by simp; omega),
+      writeBytes_empty (by omega)]
+    exact of_run fun m r rF hh hp hs =>
+      ⟨(), m, r, by simp [Zig.memmove, h0, zig_unfold], hh, hp, hs⟩
+  have hpos : 0 < n.toNat * sz := Nat.mul_pos (by omega) (by omega)
+  have ht : FTotalTriple (up (bytesAt q A S K bs))
+      (Zig.loadBytes (q.add j) (n.toNat * sz) sa >>= fun x => Zig.storeBytes (q.add k) da x)
+      (fun _ => up (bytesAt q A S K (writeBytes bs k (bs.extract j (j + n.toNat * sz))))) :=
+    bind (loadBytes_bytesAt hpos hjs has) fun _ => lift fun hx => by
+      subst hx
+      exact storeBytes_bytesAt (by simp only [Array.size_extract]; omega)
+        (by simp only [Array.size_extract]; omega) had hK
+  refine of_runEq fun m r rF hh hp hs => ⟨_, m, ?_, hh, hs, ht⟩
+  obtain ⟨b, blk, hacc, -⟩ := hh.bytesAt_access hp hpos hkd had
   simp [Zig.memmove, h0, zig_unfold, hacc]
 
 end OwnedBytes
@@ -610,6 +636,70 @@ theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.s
   ofSeq (FTotalTriple.store hn w)
     (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
       (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))
+
+section OwnedBytes
+
+variable {S k al : Nat} {K' : BlockKind} {bs : Array Byte}
+
+/-- `FTotalTriple.loadBytes_bytesAt` in a thread. -/
+theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
+    (ha : (A + q.off.toNat + k) % al = 0) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.loadBytes (q.add k) n al)
+      (fun x => ⟪x = bs.extract k (k + n)⟫ ⋆ up (bytesAt q A S K' bs)) :=
+  ofSeq (FTotalTriple.loadBytes_bytesAt hn hk ha) (ThreadLocal.loadBytes hn (OwnsPtr.bytesAt_add hk))
+
+/-- `FTotalTriple.load_bytesAt` in a thread. -/
+theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
+    (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.load T al (q.add k))
+      (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K' bs)) :=
+  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load hn (OwnsPtr.bytesAt_add hk))
+
+/-- `FTotalTriple.storeBytes_bytesAt` in a thread. -/
+theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.size ≤ bs.size)
+    (ha : (A + q.off.toNat + k) % al = 0) (hK : K' ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.storeBytes (q.add k) al bs')
+      (fun _ => up (bytesAt q A S K' (writeBytes bs k bs'))) :=
+  ofSeq (FTotalTriple.storeBytes_bytesAt hn hk ha hK)
+    (ThreadLocal.storeBytes hn (OwnsPtr.bytesAt_add hk))
+
+/-- `FTotalTriple.store_bytesAt` in a thread. -/
+theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
+    (hk : k + (Enc.encode w).size ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hK : K' ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.store al (q.add k) w)
+      (fun _ => up (bytesAt q A S K' (writeBytes bs k (Enc.encode w)))) :=
+  storeBytes_bytesAt hn hk ha hK
+
+/-- `FTotalTriple.memset_bytesAt` in a thread. -/
+theorem memset_bytesAt {α : Type} [Enc α] {n : BitVec 64} {v : Option α}
+    (hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size α)
+    (hk : k + n.toNat * Enc.size α ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hK : K' ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.memset al (q.add k) n v)
+      (fun _ => up (bytesAt q A S K' (writeBytes bs k (memsetBytes n.toNat v)))) := by
+  refine ofSeq (FTotalTriple.memset_bytesAt hsz hk ha hK) ?_
+  unfold Zig.memset
+  refine ThreadLocal.ite (fun _ => ThreadLocal.pure _) fun h =>
+    ThreadLocal.readBind (fun _ _ => rfl) fun _ => ?_
+  have hpos : 0 < n.toNat * Enc.size α := Nat.mul_pos (by omega) (by omega)
+  cases v <;> simp only [memsetBytes] at hsz <;>
+    exact ThreadLocal.storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact OwnsPtr.bytesAt_add hk)
+
+/-- `FTotalTriple.memmove_bytesAt` in a thread. -/
+theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
+    {bd bsrc : Array Byte} {n : BitVec 64} (hkd : k + n.toNat * sz ≤ bd.size)
+    (hjs : j + n.toNat * sz ≤ bsrc.size) (had : (A + d.off.toNat + k) % da = 0)
+    (has : (A' + s.off.toNat + j) % sa = 0) (hK : K' ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt d A S K' bd) ⋆ up (bytesAt s A' S' K'' bsrc))
+      (Zig.memmove sz da sa (d.add k) (s.add j) n)
+      (fun _ => up (bytesAt d A S K' (writeBytes bd k (bsrc.extract j (j + n.toNat * sz)))) ⋆
+        up (bytesAt s A' S' K'' bsrc)) :=
+  ofSeq (FTotalTriple.memmove_bytesAt hkd hjs had has hK)
+    (ThreadLocal.memmove (OwnsPtr.bytesAt_add hkd).sepL (OwnsPtr.bytesAt_add hjs).sepR)
+
+end OwnedBytes
 
 end FTTotalTriple
 

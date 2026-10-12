@@ -41,6 +41,10 @@ cmp "$work/TryAliases/Gen.lean" "$case_dir/TryAliases/Gen.lean"
 "${lean_cmd[@]}" -R tests/roadmap/try-pointers -o "$work/TryPointers/AliasProofs.olean" \
   tests/roadmap/try-pointers/TryPointers/AliasProofs.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/TryAliases/Gen.olean" "$work/TryAliases/Gen.lean"
-"${lean_cmd[@]}" -R "$case_dir" "$case_dir/TryAliases/Proofs.lean"
+"${lean_cmd[@]}" -R "$case_dir" -o "$work/TryAliases/Proofs.olean" "$case_dir/TryAliases/Proofs.lean"
 "${lean_cmd[@]}" -R "$case_dir" --run "$case_dir/TryAliases/Runtime.lean"
+# The strength log of every pointer-try triple (tests/roadmap/strength-log).
+"${lean_cmd[@]}" -R tests/roadmap/try-pointers -o "$work/TryPointers/Proofs.olean" \
+  tests/roadmap/try-pointers/TryPointers/Proofs.lean
+"${lean_cmd[@]}" tests/roadmap/strength-log/TryPointers.lean
 echo 'pointer-try alias/cleanup ownership and generated runtime gates passed'

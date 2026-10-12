@@ -102,15 +102,17 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   value, `known`, an untagged share, an allocator's own state) on one of the parts of `P`, or
 * a **lemma about the whole precondition** (`@[fsym_provider]`, conclusion `K … P` of a variable
   `P`), whose hypotheses are goals again: `Within X P` (a part of `P` that unifies with `X`),
-  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`; `Live.share`: a
-  share whose tag is active (`Within (bshare b q k t) P`, `Active t P`); `Active.root`;
-  `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`;
+  `Reaches.shareW`: a share whose tag is active (`Within (bshare b q k t) P`, `Active t P`);
+  `Active.root`; `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+  `Live b l k` (live bytes from `l` to below `k`) comes only from owned bytes: a share bounds
+  no first live offset (MM-19).
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
-pointers into blocks that may differ (`ptrEqAddr_live`: both in bounds, or both past their
-blocks' starts) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
+past a live byte) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
@@ -200,6 +202,18 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+* **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
+  invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
+  `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
+  `u`'s hypotheses are side goals, and `EUpd (Q₀ ⋆ R) (Q v)` closes the return (`tryUpd`; an
+  update that closes it is preferred, else the first that applies with its arithmetic goals
+  left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
+  arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
+  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
+  a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
+  adds its fields next to it; two owned nonempty regions of one block have the same address and
+  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 

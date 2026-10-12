@@ -19,16 +19,17 @@ pub fn reverse(s: []u32) void {
 ```
 
 The translation is `Slices.reverse` in [`Proofs/Slices/Gen.lean`](../../Proofs/Slices/Gen.lean).
-[`Proofs/Slices/Sep.lean`](../../Proofs/Slices/Sep.lean) proves, with a loop invariant:
+[`Proofs/Slices/Sep.lean`](../../Proofs/Slices/Sep.lean) proves, with a loop invariant and a
+measure (`fsym` walks the loop body):
 
 ```lean
 theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
-    Triple (arr sl.ptr vs) (reverse sl) (fun _ => arr sl.ptr vs.reverse)
+    FTotalTriple (up (arr sl.ptr vs)) (reverse sl) (fun _ => up (arr sl.ptr vs.reverse))
 ```
 
-`arr p vs` owns the bytes of the items `vs` at `p`. A `Triple P c Q` says: run `c` in any
-memory whose heap splits into a part satisfying `P` and a frame; if the run finishes, it raised
-no safety error, the frame is unchanged and the new part satisfies `Q`.
+`arr p vs` owns the bytes of the items `vs` at `p` (`up` lifts it to the full-state logic). An
+`FTotalTriple P c Q` says: run `c` in any memory that holds `P` beside a frame; the run returns
+without a safety error, the frame is unchanged and the new state holds `Q`.
 
 ## Steps
 
@@ -38,7 +39,7 @@ lake env lean tutorials/mutable-arrays/Main.lean
 ```
 
 [`Main.lean`](Main.lean) proves `reverse_twice`: reversing a slice twice restores its items. It
-chains two `reverse_spec` triples with `Triple.bind`; the second is instantiated at
+chains two `reverse_spec` triples with `FTotalTriple.bind`; the second is instantiated at
 `vs.reverse` and rewritten with `List.reverse_reverse`.
 
 ## Exercise
@@ -47,7 +48,7 @@ Prove that reversing a one-item slice leaves it unchanged:
 
 ```lean
 theorem reverse_one (sl : Slice) (x : BitVec 32) (hlen : sl.len.toNat = 1) :
-    Triple (arr sl.ptr [x]) (reverse sl) (fun _ => arr sl.ptr [x])
+    FTotalTriple (up (arr sl.ptr [x])) (reverse sl) (fun _ => up (arr sl.ptr [x]))
 ```
 
 Hint: `reverse_spec sl [x] hlen` and `simp` (`[x].reverse = [x]`). A solution is in
@@ -73,12 +74,10 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
   value/safety semantics and the byte-level block memory model.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
-- [SEM-03](../../docs/premises.md#sem-03): `Triple` is partial correctness. The theorem says
-  nothing about runs that do not finish; it does not prove termination.
-- [SEM-04](../../docs/premises.md#sem-04): derived because `Proofs/Slices/Sep.lean` imports
-  the P01 step tactics (`ZigLean.Sep.Step`), whose module also holds total-correctness rules.
-  This tutorial's theorem is the partial-correctness `Triple` above; it claims no
-  total-correctness statement.
+- [SEM-03](../../docs/premises.md#sem-03): the loop is a `partial_fixpoint`; the proof walks
+  it with `FTotalTriple.loop_measure`, whose measure shows that it ends.
+- [SEM-04](../../docs/premises.md#sem-04): `FTotalTriple` is total correctness: the run
+  returns an actual result.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and standard axioms.
 - [TRU-02](../../docs/premises.md#tru-02), [TRU-03](../../docs/premises.md#tru-03): the
   translation models the analyzed AIR, and the backend preserves it in the native binary.

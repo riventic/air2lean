@@ -65,6 +65,12 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
+      "name": "FTTotalTriple",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.ShadowWithin",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (audit spoof fixtures, #230)"
+    },
+    {
       "name": "FTTriple",
       "module": "ZigLean.Sep.Full.Thread",
       "status": "target",
@@ -76,6 +82,12 @@
       "status": "target"
     },
     {
+      "name": "FTotalTriple",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Shadow",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (audit spoof fixtures, #230)"
+    },
+    {
       "name": "FTriple",
       "module": "ZigLean.Sep.Full.Triple",
       "status": "target"
@@ -84,6 +96,12 @@
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "FnSpec",
+      "module": "ZigLean.Sep.Full.Dispatch",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (FnSpec, framework-approvals.md)"
     },
     {
       "name": "FutexSpec",
@@ -136,11 +154,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "TotalTriple",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Shadow",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "TotalTripleIn",
       "module": "ZigLean.Sep.Total",
       "status": "legacy-to-retire",
@@ -149,11 +162,6 @@
     {
       "name": "TotalTripleWithin",
       "module": "ZigLean.Sep.Bounded",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "TotalTripleWithin",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.ShadowWithin",
       "status": "legacy-to-retire"
     },
     {
@@ -475,9 +483,6 @@
       "path": "Proofs/Lists/Sep.lean"
     },
     {
-      "path": "Proofs/Slices/Sep.lean"
-    },
-    {
       "path": "Proofs/Sync/Handoff.lean"
     },
     {
@@ -693,15 +698,6 @@
       "path": "tests/roadmap/allocator-identity/Kernel.lean"
     },
     {
-      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/Shadow.lean"
-    },
-    {
-      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/ShadowWithin.lean"
-    },
-    {
-      "path": "tests/roadmap/architecture-audit/claims/AuditClaims/Vacuous.lean"
-    },
-    {
       "path": "tests/roadmap/byte-sentinel/Check.lean"
     },
     {
@@ -714,16 +710,7 @@
       "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
     },
     {
-      "path": "tests/roadmap/global-init/GlobalInit/Proofs.lean"
-    },
-    {
-      "path": "tests/roadmap/global-payload-pointers/Model.lean"
-    },
-    {
       "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
-    },
-    {
-      "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
     },
     {
       "path": "tests/roadmap/resize-remap/Check.lean"
@@ -733,6 +720,18 @@
     },
     {
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/strength-log/GlobalInit.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/OutcomeTaxonomy.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/strength-log/ProofsLayout.lean",
@@ -747,16 +746,12 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
+      "path": "tests/roadmap/strength-log/ProofsSlices.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/try-pointers/TryPointers/Proofs.lean"
-    },
-    {
-      "path": "tests/roadmap/try-pointers/TryPointers/Runtime.lean"
-    },
-    {
-      "path": "tests/roadmap/try-pointers/aliases/TryAliases/Proofs.lean"
+      "path": "tests/roadmap/strength-log/TryPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/vcs/Extract.lean"
@@ -775,15 +770,6 @@
     },
     {
       "path": "tutorials/memory-safety/Solution.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Main.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Negative.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Solution.lean"
     }
   ]
 }
