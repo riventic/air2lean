@@ -31,9 +31,10 @@ With no first node, `M` is empty. Every byte of a used node's buffer is in the j
 in a grant, or in the first node's unused tail (`OV.Cov`), which `reset` needs to give each node
 back whole. Every grant lies in the block of a used node, with that node's
 address and kind labels, at a nonnegative offset past that node's header (`GrantOk`). A token for the slice `(p, n)` with
-cell labels `A`, `K` is `gfrag γ e i (p, n, q, A, K)` for some grant id `i`, with the fraction `q`
-of the grant's extent share (tagged `(γ, e)`): it names exactly that region, so a token of the
-current epoch shows `M i = some (p, n, q, A, K)` (`gfrag_mem`), hence a first node: **O-A is excluded by ghost state**, not by a premise, and a `free` of a slice
+cell labels `A`, `K` is `gfrag γ e i (p, n, q, A, K, φ)` for some grant id `i`, with the fraction `q`
+of the grant's extent share (tagged `(γ, e)`) and the fee `φ` (`FAllocInv.fee`; the arena charges
+none yet): it names exactly that region, so a token of the
+current epoch shows `M i = some (p, n, q, A, K, φ)` (`gfrag_mem`), hence a first node: **O-A is excluded by ghost state**, not by a premise, and a `free` of a slice
 that this arena did not grant has no token: a permission violation. A token of an older epoch
 (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose `own` needs the authority
 of epoch `e'`, which no longer exists.

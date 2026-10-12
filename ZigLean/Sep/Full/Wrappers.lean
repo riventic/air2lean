@@ -32,33 +32,36 @@ namespace FAllocInv
 
 variable (I : FAllocInv)
 
-/-- The bytes `bs` at `p` that `I`'s allocator granted with alignment `2 ^ k`; nothing for zero
-bytes (a zero-length allocation is the constant pointer of its alignment, no grant). -/
-def owned (k : Nat) (p : Ptr) (bs : Array Byte) : FAssn :=
-  if bs.size = 0 then emp else I.granted p k bs
+/-- The bytes `bs` at `p` that `I`'s allocator granted with alignment `2 ^ k` for the fee `φ`;
+for zero bytes the unspent fee (a zero-length allocation is the constant pointer of its
+alignment, no grant: the wrapper does not call the allocator, and its `free` neither). -/
+def owned (k : Nat) (φ : Frac) (p : Ptr) (bs : Array Byte) : FAssn :=
+  if bs.size = 0 then I.fee φ else I.granted p k φ bs
 
-/-- The result of an allocation of `n` bytes with alignment `2 ^ k` that returns a pointer: a
-grant of `n` undefined bytes, or `error.OutOfMemory` and nothing. -/
-def allocResult (k n : Nat) : Except ErrName Ptr → FAssn
-  | .ok p => I.owned k p (Array.replicate n .undef)
-  | .error e => ⟪e = "OutOfMemory"⟫
+/-- The result of an allocation of `n` bytes with alignment `2 ^ k` for the fee `φ` that returns
+a pointer: a grant of `n` undefined bytes, or `error.OutOfMemory` and the fee back. -/
+def allocResult (k n : Nat) (φ : Frac) : Except ErrName Ptr → FAssn
+  | .ok p => I.owned k φ p (Array.replicate n .undef)
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.fee φ
 
 /-- The result of an allocation of `len` items of `n` bytes in all that returns a slice. -/
-def sliceResult (k : Nat) (len : BitVec 64) (n : Nat) : Except ErrName Slice → FAssn
-  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr (Array.replicate n .undef)
-  | .error e => ⟪e = "OutOfMemory"⟫
+def sliceResult (k : Nat) (φ : Frac) (len : BitVec 64) (n : Nat) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k φ s.ptr (Array.replicate n .undef)
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.fee φ
 
 /-- The result of an allocation that returns a slice of `len` items with the bytes `bs`: a copy
 (`dupe`), or undefined items and a sentinel (`allocSentinel`). -/
-def bytesResult (k : Nat) (len : BitVec 64) (bs : Array Byte) : Except ErrName Slice → FAssn
-  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr bs
-  | .error e => ⟪e = "OutOfMemory"⟫
+def bytesResult (k : Nat) (φ : Frac) (len : BitVec 64) (bs : Array Byte) :
+    Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k φ s.ptr bs
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.fee φ
 
-theorem owned_zero {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) : I.owned k p bs = emp := by
+theorem owned_zero {k : Nat} {φ : Frac} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) :
+    I.owned k φ p bs = I.fee φ := by
   simp [owned, h]
 
-theorem owned_pos {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size ≠ 0) :
-    I.owned k p bs = I.granted p k bs := by
+theorem owned_pos {k : Nat} {φ : Frac} {p : Ptr} {bs : Array Byte} (h : bs.size ≠ 0) :
+    I.owned k φ p bs = I.granted p k φ bs := by
   simp [owned, h]
 
 end FAllocInv

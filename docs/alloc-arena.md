@@ -77,8 +77,9 @@ arena's `free`, `resize`, `remap` (and `reset`) are proved where they hold.
 the token must record that this arena issued a region in its current generation.
 **Resolved by ghost state** ([sep-full-state.md](sep-full-state.md) §Ghost state): `own` holds the
 authority `gauth γ e M` of an epoch ledger of named grants (`M`: grant id ↦ region, empty without
-a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n, q, A, K)`
-(with the lent fraction `q` and the cells' address and kind labels `A`, `K`). A
+a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n, q, A, K, φ)`
+(with the lent fraction `q`, the cells' address and kind labels `A`, `K` and the fee `φ`,
+[sep-full-state.md](sep-full-state.md) §The fee of a grant). A
 token of the current epoch names a grant of `M` (`gfrag_mem`), so the arena has a node
 (`ArenaSpec.free_pre`). Because the token names its region, a `free`, `resize` or `remap` of a
 slice that this arena did not grant in its current epoch has no token: it is a permission
@@ -242,7 +243,7 @@ free list) is not attempted.
   `own`, the junk as an exact heap `JunkAt jh` (bytes that frees of earlier allocations, shrinks
   and `alloc`'s padding leaked back), one receipt per grant
   (`Rcpts`, at any bound) and the pool of shares that frees gave back (`Pool`). The token of a
-  grant names it with its fraction and its cells' labels: `∃ i, gfrag γ e i (p, n, q, A, K)`;
+  grant names it with its fraction, its cells' labels and its fee: `∃ i, gfrag γ e i (p, n, q, A, K, φ)`;
   every grant lies in the block of a used node with that node's labels (`GrantOk`; the used nodes
   after the first are an explicit list of node records, `NodeV`); the grant's share is tagged with
   the epoch (`FAllocInv.tag = some (γ, e)`), so a reset can revoke it.
