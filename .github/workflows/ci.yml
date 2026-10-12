@@ -1080,18 +1080,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/proof-tools"
           lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
-      - name: Separation normalization regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Normalize.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Normalize.log"
-
-      - name: Separation client regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
-
       - name: Explicit array framing regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
@@ -1105,18 +1093,13 @@ jobs:
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
 
+      # Legacy step tactics on the generated array clients, until the library has array rules
+      # (Full/Arr); the other step, frame and total scenarios are fsym regressions in sep-auto.
       - name: Symbolic-execution step regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Steps.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Steps.log"
           lake env lean tests/roadmap/proof-tools/StepClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/StepClients.log"
-
-      - name: Total correctness regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
       - name: Concrete runs of programs with loops (unroll_sched)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1137,7 +1120,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadOwned 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
