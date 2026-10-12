@@ -10,6 +10,8 @@ invariant, so it can count what the locals alone do not give (the rest of a list
 of a buffer); a measure on the locals is `FTotalTriple.loop_measure`.
 
 * `FTotalTriple.loop_ghost`: total correctness, by strong induction on the measure.
+* `FTotalTriple.loop_dispatch`: a dispatch loop (labelled `switch`, `continue :sw`): the invariant
+  indexed by the selector's state, the measure `B * data + rank` (lexicographic for ranks below `B`).
 * `FTriple.loop`: partial correctness without a measure, by fixpoint induction
   (`FTriple.admissible`, `FTriple.admissible_run`).
 * `FTriple.admissible_fun` is the same for the members of a recursive group (`partial_fixpoint`):
@@ -142,6 +144,22 @@ theorem FTotalTriple.loop_measure {body : MM σ ε} {again : ε → Bool} (I : �
         obtain ⟨hlt, hi⟩ := sep_lift.mp hx
         exact floopNext_repeat ha (n' := μ s') (by omega) (sep_lift.mpr ⟨rfl, hi⟩)) s (μ s)
   exact h.pre fun r hr => sep_lift.mpr ⟨rfl, hr⟩
+
+/-- **A dispatch loop** (a labelled `switch` whose prongs `continue :sw`; the selector is the
+locals field `dispatchValueN`, read by `sel`), total correctness: the invariant is indexed by the
+selector's state, and the measure combines the consumed data and the state's rank as
+`B * data + rank`, which is the lexicographic order of (data, rank) when every rank is below `B`.
+One run of the body from `inv (sel s) s` repeats with `inv (sel s') s'` at a smaller measure (less
+data, or the same data and a lower-ranked state), or exits with `post`. The measure is one
+number, so `fsym` decides the step's measure goal by arithmetic. -/
+theorem FTotalTriple.loop_dispatch {κ : Type} {body : MM σ ε} {again : ε → Bool} (sel : σ → κ)
+    (inv : κ → σ → FAssn) (data : σ → Nat) (rank : κ → Nat) (B : Nat) (post : ε × σ → FAssn)
+    (step : ∀ s, FTotalTriple (inv (sel s) s) (body.run s)
+      (fun r => if again r.1 then
+          ⟪B * data r.2 + rank (sel r.2) < B * data s + rank (sel s)⟫ ⋆ inv (sel r.2) r.2
+        else post r)) :
+    ∀ s, FTotalTriple (inv (sel s) s) ((Zig.loop body again).run s) post :=
+  FTotalTriple.loop_measure (fun s => inv (sel s) s) (fun s => B * data s + rank (sel s)) post step
 
 end Full
 end Zig

@@ -318,6 +318,15 @@ theorem Owns.region {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {a : Nat
     simp only [Option.map_some, Option.some.injEq] at this
     exact ⟨fc, rfl, by rw [this], by rw [this]⟩
 
+/-- An owned byte is a byte of a live block of the memory, at the cell's address, with the
+cell's kind up to `BlockKind.norm` (`Holds.block`). -/
+theorem Owns.block {b x A K} {P : FAssn} (h : Owns b x A K P) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      x < blk.bytes.size ∧ blk.addr = A ∧ blk.kind.norm = K.norm := by
+  obtain ⟨fc, hx, rfl, rfl⟩ := h r hp
+  obtain ⟨blk, hb, hl, hx', -, ha, hk⟩ := hh.block hx
+  exact ⟨blk, hb, hl, hx', ha.symm, hk.symm⟩
+
 /-- Junk that is exactly the heap `h`. -/
 def JunkAt (h : Heap) : FAssn := up (fun h' => h' = h)
 

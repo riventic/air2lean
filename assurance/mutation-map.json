@@ -291,11 +291,11 @@
         },
         {
           "path": "tests/roadmap/dispatch-templates/Template.lean",
-          "anchor": "dispatch_template (badInv N) μ (post N) using mach_step"
+          "anchor": "(have : ∀ N n acc, Step (badInv N) rank N ⟨n, acc, .count⟩ := by"
         },
         {
           "path": "tests/roadmap/dispatch-templates/Template.lean",
-          "anchor": "dispatch_template (inv N) flatμ (post N) using mach_step"
+          "anchor": "(have : ∀ N n acc, Step (inv N) flatRank N ⟨n, acc, .idle⟩ := by"
         },
         {
           "path": "tests/roadmap/dispatch-templates/check.sh",

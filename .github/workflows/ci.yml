@@ -1073,6 +1073,15 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 2, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # FAllocSpec is not vacuous: no double issue, no trapping free.
+          lake env lean tests/roadmap/sep-full/AllocNeg.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/alloc-neg.log"
+          python3 - "$RUNNER_TEMP/sep-full/alloc-neg.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
           # Block extents: what a cell no longer pins (size, ending the block) and the extent updates.
           lake env lean tests/roadmap/sep-full/BlockExtentsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/block-extents.log"
           python3 - "$RUNNER_TEMP/sep-full/block-extents.log" <<'EOF'
@@ -1143,7 +1152,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/loop-tactics"
-          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
+          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
@@ -2254,8 +2263,8 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
-      - name: Dispatch-loop template regressions
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"
