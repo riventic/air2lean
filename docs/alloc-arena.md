@@ -359,7 +359,12 @@ Not proved yet, in order:
   (`Full/Dispatch.lean`), for the child `CI : Core.Child` that the invariant names.
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
   `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
-  calls the child's `free`/`resize`/`alloc`.
+  calls the child's `free`/`resize`/`alloc`. The bytes cannot be left out: revocation withdraws
+  only ghost state, and **no** `{I.own} reset(.free_all) {I'.own}` holds next to `FAllocSpec`s
+  `I`, `I'` with `I.own` true after `init` (kernel-checked, `ArenaObstruction.not_reset_own`: an
+  `alloc(8)`, `reset`, `alloc(8)` client would hold two separate grants that the run puts at one
+  byte of the child's buffer). How a client gives the grants back without tracking the grant map
+  is open (epoch-token fractions, coordinator design 2026-10-12).
 
 ## Legacy models
 

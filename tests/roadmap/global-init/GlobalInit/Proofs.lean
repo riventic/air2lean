@@ -86,13 +86,13 @@ hypothesis on `ext.counter`. The proof is `bump_spec` from program start (`globa
 theorem bump_returns_from_start (σ : Placement) (ext : ExternInit)
     (hx : ext.counter.toNat + 1 < 2 ^ 32) :
     ∃ m', (bump.run (mem0 σ ext)).run = some (.ok (ext.counter + 1, m')) := by
-  obtain ⟨v, m', hr, -, -, ⟨r₁, -, -, -, hq, -⟩, -⟩ := FTotalTriple.run_init σ (globals0 ext)
+  obtain ⟨v, m', -, hr, -, ⟨r₁, -, -, -, hq, -⟩, -⟩ := FTotalTriple.run_init σ (globals0 ext)
     (by simp [Mem.GlobalsFit, LawfulEnc.size_encode, Enc.size, intSize, intAlign, alignUp])
     (by simp [BlockKind.mappedLo])
     ((bump_spec ext.counter hx).frame.pre fun _ h => globals_pts (j := 0) rfl
       (LawfulEnc.size_encode _) (LawfulEnc.decode_encode _) (by decide) (by decide) h)
   obtain rfl := (sep_lift.mp hq).1
-  exact ⟨m', hr⟩
+  exact ⟨m', by rw [show bump.run (mem0 σ ext) = _ from hr]; rfl⟩
 
 /-- The same from program start, in the partial form: a run that returns returns the external
 initial counter plus one. -/
