@@ -199,33 +199,6 @@ section State
 
 variable {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn}
 
-theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
-    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
-  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
-      ∃ a, y = some (.ok a) ∧ f a = pure b := by
-    intro y hy
-    rcases y with _ | e | a
-    · cases hy
-    · cases hy
-    · exact ⟨a, rfl, hy⟩
-  obtain ⟨a, ha, hf⟩ := this x h
-  exact ⟨a, ha, hf⟩
-
-theorem pts_slice_parts {q : Ptr} {s : Slice} {h : Heap} (hp : pts q 8 s h) :
-    ∃ A S K bs, (A + q.off.toNat) % 8 = 0 ∧ bs.size = 16 ∧
-      Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) ∧
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) ∧ bytesAt q A S K bs h := by
-  obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := hp
-  change (do pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩ : Result Slice) =
-    pure s at hv
-  obtain ⟨p, h1, hv⟩ := result_bind_eq_pure hv
-  obtain ⟨l, h2, hv⟩ := result_bind_eq_pure hv
-  have : (⟨p, l⟩ : Slice) = s := by
-    have := congrArg (fun r : Result Slice => r.run) hv
-    simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
-  subst this
-  exact ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩
-
 /-- A load of a field of a slice that `pts` describes. -/
 theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
     {A₀ S₀ : Nat} {K₀ : BlockKind} (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
@@ -234,7 +207,9 @@ theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} 
       Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
     TotalTriple (ptsM q A₀ S₀ K₀ 8 s) (load T 8 (q.add o)) (fun r => ⌜r = v⌝ ∗ ptsM q A₀ S₀ K₀ 8 s) := by
   intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩ := pts_slice_parts (ptsM_pts hp)
+  obtain ⟨A, S, K, bs, ha, hs, hdec, hb, -⟩ := ptsM_pts hp
+  obtain ⟨h1, h2⟩ := Slice.decode_fields hdec
+  have hs : bs.size = 16 := hs
   have hao : (A + q.off.toNat + o) % 8 = 0 := by rcases ho with rfl | rfl <;> omega
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (q := q.add o) (k := o) (n := Enc.size T) (a := 8) hb hm rfl
