@@ -191,8 +191,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
-    if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
-      throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
+    if nullablePtrTy types layouts id && l.hostSize != 0 then
+      throw s!"{fnName}: near line {line}: nullable bit-pointers are outside the qualified pointer fragment"
     -- A bit-pointer reads and writes its host's `hostSize` bytes, any count (`Zig.loadBits`):
     -- `(bits + 7) / 8` on LLVM (3 for a `packed struct(u24)`), the ABI size on x86_64.
     -- A lane pointer's host is the vector's integer bytes (`Zig.loadLane`), of any count.
@@ -216,21 +216,17 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       else recur child
     | "many" | "slice" | "c" => recur child
     | _ => throw s!"{fnName}: near line {line}: pointer size '{size}' is outside the subset"
-  -- Arrays and ordinary structs of C/allowzero pointers use the null-byte storage
-  -- dictionary (`Zig.nullablePtrEnc`); unions, tuples and error-union payloads do not.
+  -- Aggregates of C/allowzero pointers (arrays, structs, tuples, unions, error-union payloads,
+  -- optionals) store them with the null-byte dictionary (`Zig.nullablePtrEnc`).
   | .array _ child _ => recur child
   | .vector _ child =>
     unless (match types[child]? with
       | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
       throw s!"{fnName}: near line {line}: a vector with lanes other than integers, floats or bool is outside the subset"
     recur child
-  | .optional child =>
-    if nullablePtrTy types layouts child then
-      throw s!"{fnName}: near line {line}: an optional C/allowzero pointer needs a separate null flag and is outside the qualified pointer fragment"
-    recur child
+  -- `?*allowzero T`/`?[*c]T`: a separate flag after the payload (`modelLayout`).
+  | .optional child => recur child
   | .errorUnion set payload => do
-    if nullablePtrTy types layouts payload then
-      throw s!"{fnName}: near line {line}: nullable pointer error-union payloads are outside the qualified pointer fragment"
     recur set
     recur payload
   | .errorSet none => pure ()
@@ -248,8 +244,6 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
-    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     -- A `noreturn` field is a variant that is never active (`uninhabitedTy`); the union needs
     -- another field to have a value, and only a tagged union can have one.
     if fields.any (uninhabitedTy types ·.2) then
@@ -275,10 +269,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
       recur t
     fields.forM fun (_, fty) => recur fty
-  | .tuple fields =>
-    if fields.any (nullablePtrTy types layouts) then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
-    fields.forM recur
+  | .tuple fields => fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
   | .future result => recur result
 
@@ -340,15 +331,17 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
       throw s!"Io.Future field offsets differ from any_future at 0 and result at {off}"
     pure (Zig.alignUp (off + s) (Nat.max 8 a), Nat.max 8 a)
   | some (.optional c) =>
-    if nullablePtrTy types layouts c then
-      throw "an optional C/allowzero pointer needs a separate null flag"
-    match types[c]? with
-    | some (.ptr "slice" ..) => pure (2 * pb, pb)
-    | some (.ptr ..) => pure (pb, pb)
-    | some (.errorSet _) => modelLayout types layouts c errBits
-    | _ =>
+    -- The payload, then a flag byte. An ordinary pointer's address zero is the flag instead;
+    -- a C/allowzero pointer's zero is a value, so its optional has the flag.
+    let flagged : Except String (Nat × Nat) := do
       let (s, a) ← modelLayout types layouts c errBits
       pure (Zig.alignUp (s + 1) a, a)
+    match types[c]? with
+    | some (.ptr size ..) =>
+      if nullablePtrTy types layouts c then flagged
+      else pure (if size == "slice" then 2 * pb else pb, pb)
+    | some (.errorSet _) => modelLayout types layouts c errBits
+    | _ => flagged
   | some (.array len c sentinel) =>
     let (s, a) ← modelLayout types layouts c errBits
     pure ((len + if sentinel then 1 else 0) * s, a)
@@ -735,13 +728,6 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
     | _ => none
   | some (.ptr _ _ c) => some c
   | _ => none
-
-/-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
-qualified fragment. Field/element projections and pointer arithmetic are
-(`Zig.ptrProject`, `Zig.ptrProjectNonnull`). Cast to a nonnullable pointer after a null check first. -/
-def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
-  if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
-    cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
 
 /-- An atomic op's pointer pointee (C09): `*T`/`[*]T` or `?*T`/`?[*]T`, not a slice, C or
 allowzero pointer. Its value is `Zig.Ptr` or `Option Zig.Ptr`, whose message keeps the pointer's
@@ -1482,7 +1468,23 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
       let memCast := cx.bitCast == some .memory
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
-      -- A nullable pointer is never optional, so at most one side is the optional pointer.
+      -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.0
+      -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
+      -- so no cast to, from or between such optionals is translated.
+      let optNullable := optNullablePtrTy cx.types cx.layouts
+      if (optNullable aty || optNullable ty) && aty != ty then
+        cx.fail line "a cast to or from an optional C/allowzero pointer (`?*allowzero T`, \
+          `?[*c]T`) is outside the subset: Zig miscompiles it; unwrap and cast the payload"
+      -- A nullable slice (`[]allowzero T`) keeps its nullability: no cast to or from another
+      -- slice nullability or another type.
+      let nullableSlice (t : TyId) : Bool := nullable t && match cx.types[t]? with
+        | some (.ptr "slice" ..) => true
+        | _ => false
+      if (nullableSlice aty || nullableSlice ty) && !(nullableSlice aty && nullableSlice ty) then
+        cx.fail line "a cast between a nullable slice (`[]allowzero T`) and another type is \
+          outside the subset"
+      -- A nullable pointer is never optional, so at most one side is the optional pointer (an
+      -- optional of a nullable pointer was rejected above).
       if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then
         unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
           cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
@@ -1621,7 +1623,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       cx.fail line "`struct_field_ptr` field index has no known offset"
     pure line
   | .fieldParentPtr fieldPtr idx =>
-    cx.rejectNullableProjection line fieldPtr
     if let .inst b := fieldPtr then
       if cx.localRoots.any (·.1 == b) || cx.places.contains b then
         let some (_, path) := cx.localPaths.find? (·.1 == b)
@@ -1646,7 +1647,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   -- An address only: the access through the field pointer is checked at its `load`/`store`.
   | .sliceFieldPtr .. => pure line
   | .memset p _ =>
-    cx.rejectNullableProjection line p
     cx.itemAccess line p
     unless cx.hasLength p do
       cx.fail line "`memset` destination is not a slice or a pointer to an array"
@@ -1666,8 +1666,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     cx.knownSize line child
     pure line
   | .memcpy _ dst src =>
-    cx.rejectNullableProjection line dst
-    cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
     let dty ← cx.memPtrTy line dst
     cx.knownSize line (itemTy cx.types dty).get!
@@ -1676,12 +1674,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       cx.fail line "`memcpy` has no operand with an item count (a slice or a pointer to an array)"
     pure line
   | .wrapOptional p =>
-    if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
-      cx.fail line "wrapping a C/allowzero pointer as an optional needs explicit null wrapping"
+    -- `?*allowzero T` of a `*allowzero T` is `some p`, also at address zero; an ordinary `?*T`
+    -- of a nullable pointer is a `bitcast` that maps zero to `none` (`Zig.ptrToOptional`).
+    if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) &&
+        !optNullablePtrTy cx.types cx.layouts ty then
+      cx.fail line "wrapping a C/allowzero pointer as an ordinary optional pointer needs explicit null mapping"
     pure line
-  | .slice p _ => cx.rejectNullableProjection line p; pure line
+  | .slice .. => pure line
   | .arrayToSlice p =>
-    cx.rejectNullableProjection line p
     let _ ← cx.memPtrTy line p
     -- The emitted slice takes its length from the pointee (`FCtx.itemsOf`).
     match cx.pointee? p with

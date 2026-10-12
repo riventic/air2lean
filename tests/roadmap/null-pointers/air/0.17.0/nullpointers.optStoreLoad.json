@@ -1,17 +1,17 @@
 {
  "schema": 12,
- "zig_version": "0.14.1",
+ "zig_version": "0.17.0",
  "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
  "profile": {
   "name": "abi64-le-v1",
-  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
   "pointer_bits": 64,
   "endian": "little",
   "abi": "musl",
-  "zig_version": "0.14.1",
+  "zig_version": "0.17.0",
   "backend": "stage2_llvm",
   "cpu": "x86_64",
   "features": [
@@ -37,22 +37,19 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "reject.optional",
+ "name": "nullpointers.optStoreLoad",
  "module": "root",
  "src": {
-  "file": "reject.zig",
-  "module": "reject",
-  "decl_line": 2
+  "file": "nullpointers.zig",
+  "module": "nullpointers",
+  "decl_line": 68
  },
  "params": [
-  0
+  0,
+  1
  ],
  "noalias": [],
  "ret": 1,
- "export": {
-  "name": "optional",
-  "cc": "x86_64_sysv"
- },
  "body": [
   {
    "id": 0,
@@ -62,28 +59,27 @@
   },
   {
    "id": 1,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 1,
-   "column": 47
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
   },
   {
    "id": 2,
-   "tag": "load",
-   "ty": 3,
-   "args": [
-    {
-     "inst": 0
-    }
-   ]
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
-   "tag": "is_null",
-   "ty": 1,
+   "tag": "store_safe",
+   "ty": 2,
    "args": [
     {
-     "inst": 2
+     "inst": 0
+    },
+    {
+     "inst": 1
     }
    ]
   },
@@ -91,16 +87,33 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 1,
-   "column": 47
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,
-   "tag": "ret_safe",
-   "ty": 4,
+   "tag": "load",
+   "ty": 1,
    "args": [
     {
-     "inst": 3
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 7,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 5
     }
    ]
   }
@@ -110,7 +123,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 3,
+   "child": 1,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -121,20 +134,15 @@
    "abi_align": 8
   },
   {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "optional",
+   "child": 4,
+   "abi_size": 16,
+   "abi_align": 8
   },
   {
    "k": "void",
    "abi_size": 0,
    "abi_align": 1
-  },
-  {
-   "k": "optional",
-   "child": 5,
-   "abi_size": 16,
-   "abi_align": 8
   },
   {
    "k": "noreturn"
@@ -143,7 +151,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 6,
+   "child": 5,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": true,

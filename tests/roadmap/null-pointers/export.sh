@@ -18,7 +18,9 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX"
 trap 'rm -rf "$work"' EXIT
 roots="cNull allowzeroAddress allowzeroManyAddress castChecked cRead cZero storeLoad storedIsNull
   allowzeroStoreLoad nodeNext nodeVal nodeRoundTrip arrayItem cAdd cSub cIndex cElem nextPtr valPtr
-  allowzeroNextPtr allowzeroAdd toOptional fromOptional addIsNull"
+  allowzeroNextPtr allowzeroAdd toOptional fromOptional addIsNull optIsNull optUnwrap optWrap optEq
+  optStoreLoad optPayloadPtr optCIsNull optFromOrdinary boxPtr boxSet pairMake pairFirst errPtr
+  errStore sliceAz arrayAz sliceC memsetAz memcpyAz memsetC parentFirst parentSecond mmioIsNull"
 filter=$(printf 'nullpointers.%s,' $roots)
 flags=(-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline)
 for version in $versions; do

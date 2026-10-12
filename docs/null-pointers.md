@@ -1,11 +1,11 @@
-# C and allowzero pointer fragment (L05)
+# C and allowzero pointers (L05)
 
-Nonoptional `[*c]T`, `*allowzero T` and `[*]allowzero T` values use `Zig.Ptr`.
-Address zero is `Zig.Ptr.null = ⟨none, 0⟩`: no block and no allocation. The pointer
+`[*c]T`, `*allowzero T` and `[*]allowzero T` values use `Zig.Ptr`; `[]allowzero T` uses
+`Zig.Slice`. Address zero is `Zig.Ptr.null = ⟨none, 0⟩`: no block and no allocation. The pointer
 representation is separate from dereference validity: being nonnull never establishes
 provenance, lifetime, bounds or alignment. The reference scope is the existing 64-bit
-little-endian, ReleaseSafe AIR model. This fragment is deliberately smaller than complete
-C/allowzero pointer support.
+little-endian, ReleaseSafe AIR model (C/allowzero pointers are rejected on 32-bit profiles,
+T02).
 
 | Operation | Rule |
 | --- | --- |
@@ -21,6 +21,12 @@ C/allowzero pointer support.
 | Projection from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) | The checked pointer formation of every derived pointer, `ptrProject p project` (MM-3, `docs/architecture-audit/memory-model.md`): the same pointer is always allowed, so an offset-0 projection from address zero is defined (the compiler emits no `getelementptr`); any other result is `.illegal` unless base and result lie in bounds of the base's block, so a nonzero offset from address zero or another provenance-free address is `.illegal` (`getelementptr inbounds` poison). When the result type is nonnullable (0.14.1 and 0.15.2 type `&p.*.f` of a `[*c]T` as `*F`), `ptrProjectNonnull` also rejects address zero. The result keeps the base's provenance, so any access through it still needs the existing live-block/bounds/alignment premises. |
 | Item read through a C/allowzero pointer (`ptr_elem_val`, `p[i]`) | The existing item access; `Mem.access` rejects a null or raw base. |
 | `[*c]T`/`*allowzero T` ↔ `?*T`/`?[*]T` (`bitcast`, in-memory coercion) | `ptrToOptional` maps address zero to the explicit `none` and other values to `some`; `ptrOfOptional` maps `none` to address zero. No dereference or allocation. |
+| Optional of a nullable pointer (`?*allowzero T`, `?[*c]T`, `?[]allowzero T`) | `Option Zig.Ptr` (`Option Zig.Slice`) whose `none` differs from `some Ptr.null`: the compiler gives it a flag byte after the payload (16 bytes), stored with `Zig.Enc.optionWith Zig.nullablePtrEnc` (`nullableSliceEnc`). `is_null`, `optional_payload`, `wrap_optional`, `==`, `is_null_ptr`/`optional_payload_ptr(_set)` (`Zig.optIsSome`/`optSetSome` on the flag) are the ordinary optional rules. `?*u8` → `?*allowzero u8` is Sema's payload cast then `wrap_optional`, so `null` becomes `some` of address zero (native runs agree). A `@ptrCast` or `@ptrFromInt` to or from it is rejected: Zig miscompiles it ([upstream draft](upstream/optional-nullable-casts.md)). |
+| Nullable pointers in unions, tuples and error-union payloads | The generated union `Enc`, the error-union dictionary (`Zig.Enc.errorUnionWith`, `Zig.errorUnionEnc`) and tuple values select `Zig.nullablePtrEnc` per payload; values are ordinary `Zig.Ptr`. Tuples have no memory encoding yet (any tuple in memory is rejected, not only a nullable one); a tuple local (`ret_ptr`, `struct_field_ptr`) is a value of nested pairs. Packed aggregates of pointers stay outside the subset. |
+| Nullable slice `[]allowzero T` | `⟨ptr, len⟩` with a possibly-null `ptr`, stored with `Zig.nullableSliceEnc` (the pointer half is `nullablePtrEnc`). `slice`, `array_to_slice` (`*allowzero [n]T`), `slice_ptr`, `slice_len`, item reads and item pointers are the ordinary slice rules: an item access through address zero is `.illegal` (`Mem.access`), forming item 0 is address zero, a nonzero item offset from it is `.illegal`. A cast between a nullable and another slice type is rejected; a nullable slice is never a pure `Array` parameter. |
+| Slicing a C pointer `p[a..b]` into `[]T` | Sema emits `ptr_add(p, a)`, the bounds check, the null check (`unwrapNull`, a panic) and `slice`. Canonicalization moves the start projection past the checks to its use (`sinkPastChecks`, `Air2Lean/Air/Canon.lean`, for every pointer formation that a safety check separates from its first use): an out-of-allocation `getelementptr inbounds` is poison, illegal only when used, and the native program panics on a null `p` with any start (native runs agree). The slice's pointer must not be address zero (`Zig.ptrNonnull`, `.illegal` when no check precedes). |
+| Bulk memory (`@memset`, `@memcpy`) through nullable slices or C-pointer slices | The ordinary `Zig.memset`/`Zig.memcpy`: zero items touch nothing, also at address zero (`null_memset_empty`, `null_memcpy_empty`; LLVM's `memset`/`memcpy` with length 0 are no-ops); a positive count through address zero is `.illegal` (native: a segmentation fault, no safety check). A C-pointer operand is first sliced (`p[0..n]`), whose null check panics. |
+| `@fieldParentPtr` through `*allowzero F` | Pointer formation `ptrProject p (·.add (-offset))` (LLVM: `ptrtoint`, `sub nuw`, `inttoptr`): offset 0 from address zero is address zero; a nonzero field offset from address zero is `.illegal` (`null_field_parent`; `sub nuw` wraps, native code returns `2^64 - offset`); from a provenance-free nonzero address it is `.illegal` under SEM-02 (no object outside the model's blocks). A `[*c]F` operand must be cast to `*allowzero F` first (a Sema rule). |
 
 Null tests are address observations. They do not promise a zero-address object or
 MMIO semantics. A raw nonzero integer pointer also fails access until it has valid
@@ -28,13 +34,11 @@ block provenance. The model does not change its allocator or the global `Enc Ptr
 `Enc (Option Ptr)` encodings; the null-byte storage rule is an explicit dictionary bound
 only at C/allowzero storage sites.
 
-The checker still rejects `?[*c]T` and `?*allowzero T` (an optional of a nullable pointer
-needs a separate flag; its `none` must not be conflated with the payload's zero),
-nullable pointers in unions, tuples, packed aggregates and error-union payloads,
-nullable slices/bit-pointers/volatile pointers, conversions between a nullable pointer and
-an optional slice, `wrap_optional` of a nullable operand, and nullable slice construction,
-`@memset`/`@memcpy` and `@fieldParentPtr` through a nullable pointer. Use a checked
-nonnullable cast before those operations.
+The checker still rejects nullable bit-pointers and volatile nullable pointers, packed
+aggregates of pointers, conversions between a nullable pointer and an optional slice,
+`wrap_optional` of a nullable operand into an ordinary `?*T` (Sema emits a `bitcast` with null
+mapping instead), casts to or from an optional of a nullable pointer, and casts between a
+nullable slice and another type. Each is a fail-closed diagnostic.
 
 ## Projections from address zero
 
@@ -96,25 +100,49 @@ verdict: the two `.illegal` rows are illegal behaviour that ReleaseSafe does not
 run shows an address (0) where the model reports `.illegal`. Native diffs and outcome reports treat
 them as pinned illegal-behaviour exclusions (`native-transcript.py` maps exactly the two
 0.14.1/0.15.2 field-pointer lines `allowzeroNextPtr 0` and `nullNextPtr 0` to `illegal`), never as
-agreement or as a mismatch. The one remaining over-approximation is a nonzero offset from a nonzero
-provenance-free address (MMIO, a `@ptrFromInt` register window) outside a declared
-`--device-contract` window (L13/DEV-01, `docs/architecture-audit/memory-model.md` MM-3); it is
-not about address zero.
+agreement or as a mismatch.
+
+## Provenance-free nonzero addresses (MMIO)
+
+A nonzero offset from a nonzero address without a block (`@ptrFromInt` of an address no block
+covers, a memory-mapped register block) is `getelementptr inbounds` of an inttoptr pointer: it is
+defined only inside an object allocated there, which LLVM may assume of memory outside the
+module. Which objects exist outside the model is a fact about the environment, so the model makes
+it an explicit premise rather than an over-approximation: premise
+[SEM-02](premises.md#sem-02) states that the model's memory holds no allocated object other than
+its blocks and, with `--device-contract`, the declared register window (DEV-01). Under it the
+projection is exactly `.illegal`: offset 0 is the pointer itself; inside the declared window it
+is formed (`Zig.ptrProjectDevice`); any other offset has no object. A program that uses other
+external memory must declare it (today: as the device window); otherwise its theorems do not
+cover that access. Native evidence: on the reference hosts the low addresses (Linux
+`mmap_min_addr` 64 KiB, macOS `__PAGEZERO` 4 GiB) hold no object, and ReleaseSafe folds
+`(@ptrFromInt(2^64 - 4) + 4) == null` (`mmioIsNull`) to `false`, although address arithmetic
+gives 0: the backend treats the out-of-object offset as poison. `@fieldParentPtr` of such an
+address is the same rule.
 
 ## Fresh exports and native observations
 
 `tests/roadmap/null-pointers/air/<version>` and `air-reject/<version>` are the exports of
-`nullpointers.zig` (24 roots) and `reject.zig` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
+`nullpointers.zig` (47 roots) and `reject.zig` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
 compilers (x86_64-linux, baseline, ReleaseSafe; `export.sh`, `provenance.json`,
 `test_provenance.py`; `COMPILER_FIXTURE_ROOTS`). `check.sh` translates each version, runs the
-model on the native `main`'s inputs and compares with `expected/<version>.txt` (26 native lines
-and one model-only line of the nonzero offsets from address zero), and checks both rejection roots
-of each version. `check.sh --native ZIG` runs `nullpointers.zig` with a stock Zig and compares its
-transcript with the same file. It passed for stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on
-x86_64-linux (linux/amd64 container) and aarch64-linux (linux/arm64 container), and for 0.15.2,
-0.16.0 and 0.17.0 on aarch64-macos (stock 0.14.1 does not link on this macOS). The 0.17.0 run ends
-with the null-field panic, its last line. `check.sh --export [VERSIONS]` checks that a patched
-compiler reproduces the committed export.
+model on the native `main`'s inputs and compares with `expected/<version>.txt` (39 native `main`
+lines, four `case` lines and two model-only lines), and checks both rejection roots of each
+version (`optionalCast`, a cast of `?*allowzero u8`; `fixed`, a nonzero constant address).
+`check.sh --native ZIG` runs `nullpointers.zig` with a stock Zig, then one variant per `case`
+(`const case = "<name>";`; each ends the process): a C-pointer slice and a C-pointer `@memset` of
+address zero (`sliceCNull`, `memsetCNull`: the null-check panic, also with a nonzero start), an
+unwrap of a null `?*allowzero u8` (`optUnwrapNull`: panic) and a one-item `@memset` through a
+null `[]allowzero u8` (`memsetAzNull`: a segmentation fault, illegal behaviour that no check
+catches, recorded as `illegal`). It compares the transcript with the same file. It passed for
+stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux (linux/amd64 container) and
+aarch64-linux (linux/arm64 container), and for 0.15.2, 0.16.0 and 0.17.0 on aarch64-macos (stock
+0.14.1 does not link on this macOS), 43 lines each. The 0.17.0 `main` ends with the null-field
+panic, its last line. The model-only lines are illegal behaviour that native code runs without a
+check: a nonzero start from a null `[*]allowzero u8`, `@fieldParentPtr` of a nonzero field offset
+from address zero and from a provenance-free address, a one-item `@memset` at address zero, and
+a nonzero offset from `@ptrFromInt(4096)` (SEM-02). `check.sh --export [VERSIONS]` checks that
+a patched compiler reproduces the committed export.
 
 ## Proof and regression evidence
 
@@ -122,8 +150,9 @@ compiler reproduces the committed export.
 `nullable_from_zero`, `null_is_null`, `null_unwrap`, `raw_address_access`,
 `null_project_zero` (an offset-0 projection from address zero is defined), `null_project`
 (any other projection from it is `.illegal`), `null_project_nonnull` (into a nonnullable
-result type every projection from it is `.illegal`), `null_offset_access`, `null_to_optional`
-and `optional_none_to_null`.
+result type every projection from it is `.illegal`), `null_offset_access`, `null_to_optional`,
+`optional_none_to_null`, `null_memset_empty`, `null_memcpy_empty` (zero items at address zero
+touch nothing), `null_nonnull` and `null_field_parent`.
 The direct-access validity premises reuse `ZigLean/Mem/Lemmas.lean`'s existing
 `access_of`/`access_eq` rules. A nonnull check cannot discharge those premises.
 
@@ -133,15 +162,19 @@ umbrella, because it imports `ZigLean.Mem.Lemmas`; build it with
 `load_store_same`/`store_run` rules apply to stored C pointers), the representation match
 `nullablePtrEnc_encode_eq_optional`, `nullablePtrEnc_decode_zero`, `load_store_null`,
 `ptrProjectNonnull_ok`, `projected_access_block` (an access through any projection
-succeeds only in a live block of the base's own provenance) and `ptrOfOptional_toOptional`.
+succeeds only in a live block of the base's own provenance), `ptrOfOptional_toOptional`,
+`nullableSliceEnc_lawful` and `nullableSliceEnc_encode_null`.
 
-`tests/roadmap/null-pointers/Generate.lean` adds eighteen hand-written AIR cases matching the
+`tests/roadmap/null-pointers/Generate.lean` adds thirty hand-written AIR cases matching the
 exporter schema: stored C and allowzero pointers (null bytes, round trips, zero-byte and
 undefined-byte reads), extern-struct field loads and field pointers at offsets 0 and 8 (also from
 an `allowzero` base) and a struct round trip with a null field, an array item,
 `ptr_add`/`ptr_sub`/`ptr_elem_ptr`/`ptr_elem_val` from a C or `allowzero` base at offsets 0 and
-nonzero, a field pointer typed nonnullable as 0.14.1/0.15.2 export it, and both optional
-conversions. Each checks the emitted helper and elaborates its `native_decide`
+nonzero, a field pointer typed nonnullable as 0.14.1/0.15.2 export it, both optional
+conversions, a stored `?*allowzero u8` (`none` versus `some` of address zero, the flag byte,
+`is_null_ptr`), a C pointer sliced without a check (`Zig.ptrNonnull`), `@memset` and a stored
+`[]allowzero u8`, `@fieldParentPtr` from address zero, and an extern union and an error union of
+a C pointer. Each checks the emitted helper and elaborates its `native_decide`
 regressions; adjacent rejections cover the still-restricted forms above. The same operations
 are also compiler-exported and compared natively (below).
 Theorems apply to this model, with its existing compiler/export/normalization
@@ -156,24 +189,21 @@ tests/roadmap/null-pointers/check.sh --native ZIG     # a stock Zig on this host
 AIR2LEAN_ZIG_AIR=<dir of zig-air-<version>> tests/roadmap/null-pointers/check.sh --export [VERSIONS]
 ```
 
-It builds the runtime and translator, elaborates twenty-seven generated semantic cases, kills an
+It builds the runtime and translator, elaborates thirty generated semantic cases, kills an
 inverted-null-predicate mutant, translates the committed exports of every version and compares
 the model's lines with `expected/<version>.txt` (§Fresh exports), and checks the two rejection
-roots of each version (`optional`, a stored `?*allowzero u8`; `fixed`, a nonzero constant
-address). The six integer inputs include zero, small addresses and the maximum 64-bit address.
+roots of each version. The six integer inputs include zero, small addresses and the maximum 64-bit address.
 Native dereference is exercised only with a live byte; invalid provenance and dead-block access
 are tested in the model. The `addIsNull` line records `illegal` natively because the ReleaseSafe
 build answers `true` for `(null + 1) == null`, which address arithmetic would answer `false`; it
 depends on LLVM's fold and is a witness, not a proof, of the undefined case.
 
 `native_decide` occurs only in generated regression fixtures, following the existing emitter-test
-convention. The shipped universal theorem definitions (eleven in `Null.lean`, thirteen in
+convention. The shipped universal theorem definitions (fifteen in `Null.lean`, fifteen in
 `NullLemmas.lean`) use kernel reductions and do not use `native_decide`, `sorry`, `admit` or
 axioms. CI runs the default mode, `--export 0.16.0` with that job's patched compiler and
-`--native` with its stock 0.16.0 on x86_64-linux. Full L05 remains open for optionals of nullable
-pointers, nullable pointers in unions/tuples/error-union payloads, nullable bulk
-memory/slicing/parent recovery, and the other deliberately rejected operations above; finite
-observations are not a preservation theorem.
+`--native` with its stock 0.16.0 on x86_64-linux. The deliberately rejected operations above stay
+fail-closed; finite observations are not a preservation theorem.
 
 The nullable mutation gate requires normal Lean exit 1 and exactly the three
 located `native_decide` evaluation refutations for `cNull` at 0, 1 and the maximum

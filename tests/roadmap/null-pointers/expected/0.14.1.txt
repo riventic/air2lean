@@ -23,5 +23,23 @@ allowzeroAdd 0 1
 toOptional 1 1
 fromOptional 0 1
 addIsNull 1 illegal
+optional 1 0 0 0 1 1 0
+optWrap 0 0
+optStoreLoad 1 0 1
+optPayloadPtr 0 1
+optC 1 0
+optFromOrdinary 0 0
+box 0 1 5
+pair 0 1
+errPtr 0 99 errStore 0 1
+sliceAz 0 0 1 1 arrayAz 0 2
+memsetAz 5 5 memcpyAz 6 memsetC 3 3 sliceC 2
+parent 1 0
+mmioIsNull 0 illegal
 nullNextPtr illegal
 model nonzeroFromNull cAdd illegal cSub illegal cIndex illegal valPtr illegal allowzeroAdd illegal
+model nullableIllegal sliceAz illegal parentSecond illegal parentSecondRaw illegal memsetAz illegal mmioIsNull illegal
+case sliceCNull panic
+case memsetCNull panic
+case optUnwrapNull panic
+case memsetAzNull illegal

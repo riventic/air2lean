@@ -1,17 +1,17 @@
 {
  "schema": 12,
- "zig_version": "0.15.2",
+ "zig_version": "0.17.0",
  "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
  "profile": {
   "name": "abi64-le-v1",
-  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
   "pointer_bits": 64,
   "endian": "little",
   "abi": "musl",
-  "zig_version": "0.15.2",
+  "zig_version": "0.17.0",
   "backend": "stage2_llvm",
   "cpu": "x86_64",
   "features": [
@@ -37,22 +37,18 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "reject.optional",
+ "name": "nullpointers.optUnwrap",
  "module": "root",
  "src": {
-  "file": "reject.zig",
-  "module": "reject",
-  "decl_line": 2
+  "file": "nullpointers.zig",
+  "module": "nullpointers",
+  "decl_line": 65
  },
  "params": [
   0
  ],
  "noalias": [],
  "ret": 1,
- "export": {
-  "name": "optional",
-  "cc": "x86_64_sysv"
- },
  "body": [
   {
    "id": 0,
@@ -65,11 +61,11 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 1,
-   "column": 47
+   "column": 74
   },
   {
    "id": 2,
-   "tag": "load",
+   "tag": "is_non_null",
    "ty": 3,
    "args": [
     {
@@ -78,52 +74,113 @@
    ]
   },
   {
-   "id": 3,
-   "tag": "is_null",
-   "ty": 1,
-   "args": [
+   "id": 5,
+   "tag": "block",
+   "ty": 2,
+   "body": [
     {
-     "inst": 2
+     "id": 6,
+     "tag": "cond_br",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 2
+      }
+     ],
+     "then": [
+      {
+       "id": 7,
+       "tag": "br",
+       "ty": 4,
+       "target": 5,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 3,
+       "tag": "call",
+       "ty": 4,
+       "callee": {
+        "ty": 5,
+        "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 4,
+       "tag": "unreach",
+       "ty": 4
+      }
+     ]
     }
    ]
   },
   {
-   "id": 4,
+   "id": 8,
+   "tag": "optional_payload",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 1,
-   "column": 47
+   "column": 61
   },
   {
-   "id": 5,
+   "id": 10,
+   "tag": "int_from_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 1,
+   "column": 54
+  },
+  {
+   "id": 12,
    "tag": "ret_safe",
    "ty": 4,
    "args": [
     {
-     "inst": 3
+     "inst": 10
     }
    ]
   }
  ],
  "types": [
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 3,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
+   "k": "optional",
+   "child": 6,
+   "abi_size": 16,
    "abi_align": 8
   },
   {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "void",
@@ -131,19 +188,22 @@
    "abi_align": 1
   },
   {
-   "k": "optional",
-   "child": 5,
-   "abi_size": 16,
-   "abi_align": 8
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "noreturn"
   },
   {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 6,
+   "child": 7,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": true,
