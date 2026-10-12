@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Dispatch
+import ZigLean.External
 
 /-!
 # Indirect calls through a read-only vtable, read in one thread
@@ -251,6 +252,58 @@ def FnSpec (P : A → FAssn) (Q : A → α → FAssn) (g : A → ConcM Tgt α) :
 theorem FnSpec.call {P : A → FAssn} {Q : A → α → FAssn} {g : A → ConcM Tgt α}
     (h : FnSpec P Q g) (a : A) : CTriple (P a) (g a) (Q a) :=
   h a
+
+/-! ## Registry models (`--model-registry`)
+
+A foreign function of the program (an `extern` whose address is taken) is an arm of the dispatch
+that runs its registry model: `External.claim` of the declared footprint, then the model's
+implementation, whose evidence is a `MemM` contract (`External.Contract.Holds`, premises
+EXT-02/EXT-03). `FTriple.of_contract` reads the evidence as a full-state triple, so the arm meets
+an interface contract (`FnSpec`) when the model's contract implies it; `FTriple.claim` is the
+access record before it. -/
+
+/-- **A registry model's contract as a full-state triple.** The evidence `c.Holds term errs eff
+impl` gives `FTriple P (impl a) Q` when the contract's precondition follows from `P`, every error
+the contract allows is a stack overflow (a full-state triple admits no other failure), and every
+successful run the contract allows re-establishes the frame's resources with `Q` in an `FSeq`
+memory. -/
+theorem FTriple.of_contract {Args R : Type} {c : External.Contract Args R}
+    {term : External.Termination} {errs : List Error} {eff : External.Effects}
+    {impl : Args → MemM R} (ev : c.Holds term errs eff impl) (a : Args) {P : FAssn}
+    {Q : R → FAssn}
+    (hpre : ∀ m r rF, Holds m r rF → P r → m.FSeq → c.pre a m)
+    (herr : ∀ m r rF e, Holds m r rF → P r → m.FSeq → e ∈ errs → c.failure a m e →
+      e = .stackOverflow)
+    (hpost : ∀ m r rF v m', Holds m r rF → P r → m.FSeq → c.post a m v m' → c.frame a m m' →
+      (∃ δ : Array FootprintEntry, m'.footprint = m.footprint ++ δ ∧
+        ∀ e, e ∈ δ.toList → c.access a m e) →
+      ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq) :
+    FTriple P (impl a) Q := by
+  intro m r rF hh hp hs
+  have h := ev a m (hpre m r rF hh hp hs)
+  show match impl a m with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq
+  revert h
+  rcases impl a m with _ | e | ⟨v, m'⟩
+  · intro; trivial
+  · rintro ⟨he, hf⟩; exact herr m r rF e hh hp hs he hf
+  · rintro ⟨hq, hfr, hacc, -⟩; exact hpost m r rF v m' hh hp hs hq hfr hacc
+
+/-- **The access record of a model call** (`External.claim`) keeps every resource. -/
+theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind) (P : FAssn) :
+    FTriple P (External.claim x k) (fun _ => P) := by
+  refine FTriple.of_run fun m r rF hh hp hs => ?_
+  show ∃ v m' r', External.claim x k m = pure (v, m') ∧ _
+  unfold External.claim
+  split
+  · exact ⟨(), m, r, rfl, hh, hp, hs⟩
+  · split
+    · exact ⟨(), _, r, recordAccess_run (noRace_of_singleThread hs.1.single _ _ _ _),
+        Holds.congrMem (m := m) rfl rfl hh, hp,
+        ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hs.2.2⟩⟩
+    · exact ⟨(), m, r, rfl, hh, hp, hs⟩
 
 /-- **A call through a table, then a continuation**: the form of a generated call site after
 `conc_norm` (the continuation is pushed into every arm). -/

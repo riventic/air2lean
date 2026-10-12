@@ -104,6 +104,14 @@ lane `codex/alloc-param`).
   `Interfaces/CallbacksSpec.lean` is E02's `callbacks.zig` with its callback type opened:
   `evaluate` for every callback from the `FnSpec` (`visitPre`/`visitPost`) of the function the
   call runs.
+* **A foreign function's arm** runs its registry model (`External.claim` of the footprint, then
+  the model), whose evidence is a `MemM` contract (`External.Contract.Holds`).
+  `FTriple.of_contract` reads that evidence as a full-state triple when the contract implies it
+  (precondition, errors only `.stackOverflow`, success re-establishes the resources);
+  `FTriple.claim` is the access record. E02's `ext_visit` is not discharged this way: its
+  registered contract allows every error, and `CallbacksSpec.model_contract_weaker` is a
+  panicking implementation that meets it but not the callback contract. Its arm needs a model
+  contract that excludes those failures and fixes the context's bytes.
 
 ## Premise
 
