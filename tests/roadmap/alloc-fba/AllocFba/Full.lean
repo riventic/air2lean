@@ -1,5 +1,5 @@
 import AllocFba.Fba
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoClaims
 
 /-!
 # The translated `FixedBufferAllocator` satisfies the full-state `FAllocSpec`
@@ -18,6 +18,10 @@ buffer's **extent share** (`docs/sep-full-state.md` §Block extents):
   even when every byte of the buffer is lent out, so `buffer.ptr + end_index` is formed
   (`ptrProject`, MM-3). A share, not the full extent: the buffer may itself lie in a grant of
   another allocator.
+* The invariant holds the **claim** on the free tail `[e, cap)` (`fclaim`, `docs/sep-full-state.md`
+  §Byte-range claims; the buffer's creator minted it): a grant gets the claim on its bytes carved
+  from it, a `free` or shrink of the last grant joins it back, other frees drop it (like their
+  bytes, which become junk). The claims planner of `fsym` (`AutoClaims.lean`) does the carving.
 * A grant gets half of the invariant's share, weakened to its own end (`EUpd.weaken`), as the
   stronger `FAllocSpec` requires; `free` and `resize` take it back (`EUpd.join` at the buffer's
   bound). The token says that the grant lies in the buffer, with the buffer's address and its
@@ -77,9 +81,13 @@ def fst (ctx : Ptr) (B : FBuf) (e : Nat) (q : Frac) (b cb : BlockId) : FAssn :=
 def ftail (B : FBuf) (e : Nat) (tail : Array Byte) : FAssn :=
   up (regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail)
 
+/-- The claim on the free tail: a grant carved from the tail gets the claim on its bytes. -/
+def fclaim (B : FBuf) (e : Nat) (b : BlockId) : FAssn :=
+  bclaim b (B.ptr.off.toNat + e) (bnd B)
+
 /-- The invariant's parts, with the block ids `b` (buffer) and `cb` (struct) named. -/
 def fbody (ctx : Ptr) (B : FBuf) (e : Nat) (tail : Array Byte) (q : Frac) (b cb : BlockId) : FAssn :=
-  fst ctx B e q b cb ⋆ ftail B e tail
+  fst ctx B e q b cb ⋆ (ftail B e tail ⋆ fclaim B e b)
 
 def fown (ctx : Ptr) (B : FBuf) : FAssn :=
   FAssn.ex fun e => FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>

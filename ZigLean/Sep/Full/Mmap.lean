@@ -888,7 +888,9 @@ theorem FTotalTriple.mremapMove' (os : Os.Target) (hhas : os.hasMremap = true) {
 
 A new mapping's creator claims its bytes (`FTriple.mintClaimOpt`): `mmap` yields the claim on
 `[0, 2^64)` of the new block, past the mapping's end as well, so that an in-place `mremap` growth
-(which mints nothing: the block is not new) finds the new bytes already claimed. `mremap` passes the
+(which mints nothing: the block is not new) finds the new bytes already claimed. A mapping live
+from `lo` carries the claim on `[lo, lo + 2^64)`: its end lies past every byte of the mapping
+without a bound on `lo`. `mremap` passes the
 mapping's claim on: in place it stays, a moved mapping's new block gets a fresh one (the old block's
 claim is dropped with the old block). -/
 
@@ -1014,9 +1016,9 @@ def fmremapPostC (P : Nat) (p : Ptr) (b : BlockId) (A S lo a : Nat) (bs : Array 
       ⟪s.ptr.block = some b' ∧ s.ptr.off = (lo' : Int) ∧ A' % P = 0 ∧ lo' % P = 0⟫ ⋆
         (up (regionIn s.ptr A' (lo' + newLen.toNat) (.mapped lo') P
           (bs ++ mremapFill P bs.size newLen.toNat)) ⋆
-          (bext b' (lo' + newLen.toNat) (.mapped lo') ⋆ bclaim b' lo' claimEnd))
+          (bext b' (lo' + newLen.toNat) (.mapped lo') ⋆ bclaim b' lo' (lo' + claimEnd)))
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
-      (bext b S (.mapped lo) ⋆ bclaim b lo claimEnd))
+      (bext b S (.mapped lo) ⋆ bclaim b lo (lo + claimEnd)))
 
 /-- **mremap, growth of a whole mapping, with its claim** (`FTotalTriple.mremapMove'`): in place the
 claim stays, a moved mapping gets a fresh one. -/
@@ -1027,7 +1029,7 @@ theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {
     (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
     (hn : S - lo < newLen.toNat) :
     FTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
-        (bext b S (.mapped lo) ⋆ bclaim b lo claimEnd)))
+        (bext b S (.mapped lo) ⋆ bclaim b lo (lo + claimEnd))))
       (Os.mremap os (some p) oldLen newLen flags none)
       (fmremapPostC os.pageSize p b A S lo a bs newLen) := by
   let nb : Except ErrName Slice → Option BlockId := fun v => match v with
@@ -1036,9 +1038,9 @@ theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {
   let lo' : Except ErrName Slice → Nat := fun v => match v with
     | .ok s => s.ptr.off.toNat
     | .error _ => 0
-  refine (((FTotalTriple.mintClaimOpt nb lo' (fun _ => claimEnd)
+  refine (((FTotalTriple.mintClaimOpt nb lo' (fun v => lo' v + claimEnd)
     (FTotalTriple.mremapMove' os hhas hfl (A := A) (S := S) (lo := lo) (a := a) (bs := bs) hpb hp0 hlt hA
-      hlo hold0 hold hn) ?_ ?_).frame (R := bclaim b lo claimEnd)).pre ?_).eupd_post ?_
+      hlo hold0 hold hn) ?_ ?_).frame (R := bclaim b lo (lo + claimEnd))).pre ?_).eupd_post ?_
   · intro m v m' b' h e
     cases v with
     | error => cases e
@@ -1133,7 +1135,7 @@ theorem FTotalTriple.mremapShrinkR (os : Os.Target) (hhas : os.hasMremap = true)
 theorem alignUp_pos_eq {n a : Nat} (h : 0 < a) : alignUp n a = (n + a - 1) / a * a := by
   unfold alignUp; rw [if_neg (by omega)]
 
-attribute [fsym_arith] alignUp_pos_eq Os.Target.pageSize Os.Target.hasMremap mremapFill_size
+attribute [fsym_arith] alignUp_pos_eq Os.Target.pageSize Os.Target.hasMremap mremapFill_size claimEnd
 
 attribute [fsym] FTotalTriple.mmapC FTotalTriple.munmapWhole' FTotalTriple.mremapMoveC
   FTotalTriple.munmapTailR FTotalTriple.mremapShrinkR

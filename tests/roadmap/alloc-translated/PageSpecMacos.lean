@@ -1,6 +1,6 @@
 import AllocTranslated.PageMacos
 import PageTok
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Sep.Full.Mmap
 
 /-!

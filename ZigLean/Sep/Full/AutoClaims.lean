@@ -37,7 +37,7 @@ theorem claim_split3 (h1 : lo ≤ a) (h2 : a ≤ c) (h3 : c ≤ hi) :
 /-- **Join adjacent claims** (`bclaim_split`). -/
 theorem claim_join {m' : Nat} (e : m = m') (h1 : lo ≤ m) (h2 : m' ≤ hi) :
     EUpd (bclaim b lo m t ⋆ bclaim b m' hi t) (bclaim b lo hi t) := by
-  subst e; exact atom_eq (bclaim_split h1 h2)
+  subst e; exact Auto.atom_eq (bclaim_split h1 h2)
 
 /-- **Drop a claim**: it owns no bytes and no knowledge. -/
 theorem claim_drop {R : FAssn} : EUpd (bclaim b lo hi t ⋆ R) R :=

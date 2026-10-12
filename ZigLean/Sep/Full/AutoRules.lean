@@ -603,7 +603,7 @@ theorem known_of_region {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩⟩
 
 /-- Knowledge can be forgotten. -/
-theorem known_drop {A : Nat} {R : FAssn} : EUpd (known b A ⋆ R) R := by
+@[fsym_drop] theorem known_drop {A : Nat} {R : FAssn} : EUpd (known b A ⋆ R) R := by
   rintro m _ rF hh ⟨r₁, r₂, -, rfl, ⟨e1, -, e3⟩, hp⟩ -
   obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
   simp only [e1, e3, FHeap.empty_union, Ghost.unit_add] at hd hm hg

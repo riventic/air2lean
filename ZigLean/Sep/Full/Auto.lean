@@ -1485,6 +1485,23 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
       mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
   return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
 
+/-- **A planner extension** (`@[fsym_plan]`): the assertion constants `heads` it plans (their
+atoms are not pre-assigned by unification) and `run`, which rearranges the state for the
+postcondition's atoms (by `St.step`). -/
+structure Planner where
+  heads : Array Name
+  run : St → Array Expr → TacticM St
+
+instance : Inhabited Planner := ⟨{ heads := #[], run := fun st _ => pure st }⟩
+
+unsafe def evalPlannerUnsafe (n : Name) : TacticM Planner := evalConstCheck Planner ``Planner n
+
+@[implemented_by evalPlannerUnsafe] opaque evalPlanner (n : Name) : TacticM Planner
+
+/-- The registered planner extensions. -/
+def planners : TacticM (Array Planner) := do
+  (fsymPlanExt.getState (← getEnv)).mapM evalPlanner
+
 def proveArith (ty : Expr) (quick := false) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
   if ← arith m.mvarId! quick then return some (← instantiateMVars m)
@@ -1954,19 +1971,21 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let mut Qi ← reduceProjs Qi
     let mut pQ := pQ
     let mut st ← St.init P
+    let exts ← planners
+    let planned (a : Expr) : Bool := exts.any fun x => x.heads.any (a.isAppOf ·)
     -- pre-assign by the atoms that unify outright; an atom that unfolds once its witnesses are
     -- assigned (a `match` on an existential) is opened again
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
       for a in qats do
         if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
+          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then continue
         for x in st.ats do
           let s' ← saveState
           if ← unifyAtom a x then break
           s'.restore
       for a in qats do
         if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 then continue
+          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then continue
         if (← instantiateMVars a).hasExprMVar then
           for x in st.ats do
             if headKey a != headKey x then continue
@@ -2048,6 +2067,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
     st ← planShares st qsh
     trace[fsym] "plan: shares done"
+    -- planner extensions (`@[fsym_plan]`)
+    for x in exts do st ← x.run st qats
     -- authorities with a determined fraction: the block's untagged shares go back
     for a in qats do
       let a ← instantiateMVars a
@@ -2134,15 +2155,25 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
               found := true; break
           s'.restore
       unless found do throwError "fsym: the state has no atom for{indentExpr a}"
-    -- knowledge left over is forgotten (`known_drop`)
+    -- atoms left over that a drop lemma forgets (`@[fsym_drop]`: knowledge, claims)
     if frame?.isNone then
+      let drops := fsymDropExt.getState (← getEnv)
       let mut i := 0
       while i < st.ats.size do
-        if used.contains i || !st.ats[i]!.isAppOfArity ``Zig.Full.known 2 then i := i + 1; continue
+        if used.contains i then i := i + 1; continue
         let x := st.ats[i]!
         let rest := st.ats.eraseIdx! i
+        let mut h? := none
+        for dn in drops do
+          let s' ← saveState
+          let lem ← mkConstWithFreshMVarLevels dn
+          let (args, _, ty) ← forallMetaTelescope (← inferType lem)
+          if ← isDefEq ty (← mkAppM ``EUpd #[mkSep x (sepOf rest), sepOf rest]) then
+            let h ← instantiateMVars (mkAppN lem args)
+            unless h.hasExprMVar do h? := some h; break
+          s'.restore
+        let some h := h? | i := i + 1; continue
         let e ← acEq (sepOf st.ats) (mkSep x (sepOf rest))
-        let h ← mkAppOptM ``known_drop #[x.getArg! 0, x.getArg! 1, sepOf rest]
         st := { ats := rest, pf := ← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``eupd_pre_eq #[e, h]] }
         used := used.map fun k => if k > i then k - 1 else k
     let pats := st.ats
