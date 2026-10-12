@@ -91,11 +91,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "LoopTemplate",
-      "module": "ZigLean.Sep.LoopTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "MutexSpec",
       "module": "ZigLean.Conc.Spec.Mutex",
       "status": "legacy-to-retire"
@@ -323,18 +318,6 @@
       "tactic": "gen_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.AllocSpec.Norm",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "loop_template",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.LoopTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "loop_template?",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.LoopTemplate",
       "status": "legacy-to-retire"
     },
     {
@@ -570,9 +553,6 @@
       "path": "ZigLean/Sep/AllocSpec/Region.lean"
     },
     {
-      "path": "ZigLean/Sep/AllocSpec/Toy.lean"
-    },
-    {
       "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
     },
     {
@@ -617,6 +597,10 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
+      "path": "ZigLean/Sep/Full/Block.lean",
+      "approved": "coordinator 2026-10-12 (replaces Full/Toy's bridge use; native alloc/free Holds rules follow-up, Plan A6)"
+    },
+    {
       "path": "ZigLean/Sep/Full/Conc.lean"
     },
     {
@@ -657,9 +641,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Toy.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {
@@ -672,9 +653,6 @@
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/LoopTemplate.lean"
     },
     {
       "path": "ZigLean/Sep/Mmap.lean"
@@ -717,9 +695,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/address-reuse/Kernel.lean"
     },
     {
       "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
