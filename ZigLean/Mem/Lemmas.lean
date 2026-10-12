@@ -44,54 +44,63 @@ theorem decodeLoad_ok {α : Type} [Enc α] {blocks : Array Block} {bs : Array By
     · cases h
   · exact .inl h
 
-/-! ## Stack budget (MM-5) -/
+/-! ## Stack budget (MM-5, MM-16) -/
 
-/-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
-and never overflows. A statement over such a memory carries premise STK-01. -/
-theorem enterFrame_run_none {m : Mem} (h : m.stackLimit = none) (bytes : Nat) :
-    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+/-- Without a stack budget (every generated `mem0`), a frame charges nothing and never
+overflows. A statement over such a memory carries premise STK-01. -/
+theorem enterFrame_run_none {m : Mem} (h : (m.stackOf m.current).budget = none) :
+    enterFrame.run m = pure ((), m) := by
   simp [enterFrame, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-    set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
-    ExceptT.bindCont]
+    pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
 
-/-- A frame that fits in the budget is charged. -/
-theorem enterFrame_run_fits {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
-    (hfit : m.stackUsed + (frameBase + bytes) ≤ limit) :
-    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
-  have : ¬ limit < m.stackUsed + (frameBase + bytes) := by omega
+/-- A frame that fits in the budget pushes its entry. -/
+theorem enterFrame_run_fits {m : Mem} {S : Nat} (h : (m.stackOf m.current).budget = some S)
+    (hfit : m.stackDepth m.current + frameBase ≤ S) :
+    enterFrame.run m = pure ((), { m with stacks := m.pushEntry none frameBase }) := by
+  have : ¬ S < m.stackDepth m.current + frameBase := by omega
   simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk,
     ExceptT.bind, ExceptT.bindCont]
 
 /-- A frame that does not fit in the budget overflows the stack. -/
-theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
-    (hover : limit < m.stackUsed + (frameBase + bytes)) :
-    ((enterFrame bytes).run m).run = some (.error .stackOverflow) := by
+theorem enterFrame_overflow {m : Mem} {S : Nat} (h : (m.stackOf m.current).budget = some S)
+    (hover : S < m.stackDepth m.current + frameBase) :
+    (enterFrame.run m).run = some (.error .stackOverflow) := by
   simp [enterFrame, h, hover, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     pure, ExceptT.pure, StateT.lift, ExceptT.run]
 
-/-- `alloc` with room in the address space (`Mem.roomFor`) makes the block `m.blocks.size`. -/
+/-- `alloc` with room (`Mem.allocOk`) makes the block `m.blocks.size`. -/
 theorem alloc_run_eq (m : Mem) {kind : BlockKind} {size align : Nat}
-    (hroom : m.roomFor size align = true) :
+    (hroom : m.allocOk kind size align = true) :
     (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) := by
-  show (if m.roomFor size align = true then
+  show (if m.allocOk kind size align = true then
       (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
       else throw .stackOverflow : MemM Ptr).run m = _
   rw [if_pos hroom]; rfl
 
-/-- Without room (`Mem.roomFor`) `alloc` throws `.stackOverflow` (STK-01). -/
+/-- Without room (`Mem.allocOk`) `alloc` throws `.stackOverflow` (STK-01). -/
 theorem alloc_run_noRoom (m : Mem) {kind : BlockKind} {size align : Nat}
-    (hroom : m.roomFor size align = false) :
+    (hroom : m.allocOk kind size align = false) :
     ((alloc kind size align).run m).run = some (.error .stackOverflow) := by
-  show ((if m.roomFor size align = true then
+  show ((if m.allocOk kind size align = true then
       (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
       else throw .stackOverflow : MemM Ptr).run m).run = _
   rw [if_neg (by simp [hroom])]; rfl
 
-/-- Releasing a frame restores the bytes that `enterFrame` charged. -/
-theorem leaveFrame_run (m : Mem) (bytes : Nat) :
-    (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl
+/-- A stack block whose charge does not fit in its thread's budget overflows the stack (MM-16),
+whatever the placement and the address space. -/
+theorem alloc_stack_overflow {m : Mem} {S size align : Nat}
+    (h : (m.stackOf m.current).budget = some S)
+    (hover : S < m.stackDepth m.current + stackCharge size align) :
+    ((alloc .stack size align).run m).run = some (.error .stackOverflow) :=
+  alloc_run_noRoom m (by simp [Mem.allocOk, Mem.stackBudget?, h, Nat.not_le.mpr hover])
+
+/-- Without a budget, `leaveFrame` changes nothing. -/
+theorem leaveFrame_run_none {m : Mem} (h : (m.stackOf m.current).budget = none) :
+    leaveFrame.run m = pure ((), m) := by
+  simp [leaveFrame, h, StateT.run, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
+    pure, ExceptT.pure, ExceptT.mk]
 
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/
@@ -1002,29 +1011,60 @@ theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align 
   unfold Mem.placed? at h
   split at h
   · split at h
-    · cases h; simpa [Mem.placeOk, and_assoc] using ‹m.placeOk _ size align = true›
+    · cases h
+      have := ‹m.placeOk _ size align = true›
+      simp only [Mem.placeOk, Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at this
+      exact ⟨this.1.1.1.1, this.1.1.1.2, this.1.1.2, this.1.2⟩
     · cases h
   · cases h
 
-private theorem foldl_top (l : List Block) (t : Nat) :
-    t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
-      ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
+/-- A placed address is outside every stack reserve. -/
+theorem Mem.placed?_reservesFree {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
+    m.reservesFree A size = true := by
+  unfold Mem.placed? at h
+  split at h
+  · split at h
+    · cases h
+      have := ‹m.placeOk _ size align = true›
+      simp only [Mem.placeOk, Bool.and_eq_true] at this
+      exact this.2
+    · cases h
+  · cases h
+
+private theorem foldl_max {β : Type} (f : β → Nat) (l : List β) (t : Nat) :
+    t ≤ l.foldl (fun t x => Nat.max t (f x)) t ∧
+      ∀ x ∈ l, f x ≤ l.foldl (fun t x => Nat.max t (f x)) t := by
   induction l generalizing t with
   | nil => simp
   | cons x xs ih =>
-    obtain ⟨h1, h2⟩ := ih (Nat.max t (x.addr + x.bytes.size + 1))
+    obtain ⟨h1, h2⟩ := ih (Nat.max t (f x))
     simp only [List.foldl_cons, List.mem_cons]
-    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun blk hb => ?_⟩
-    rcases hb with rfl | hb
-    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_trans (Nat.le_max_right _ _) h1)
-    · exact h2 blk hb
+    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun y hy => ?_⟩
+    rcases hy with rfl | hy
+    · exact Nat.le_trans (Nat.le_max_right _ _) h1
+    · exact h2 y hy
+
+/-- `Mem.top` is past the blocks' part of it. -/
+private theorem Mem.blocksTop_le_top (m : Mem) :
+    m.blocks.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) 4096 ≤ m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList (xs := m.stacks)]
+  exact (foldl_max StackState.reserveEnd m.stacks.toList _).1
 
 /-- Every block, dead or live, ends below `Mem.top`. -/
 theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk) :
     blk.addr + blk.bytes.size < m.top := by
-  unfold Mem.top
+  refine Nat.lt_of_lt_of_le ?_ m.blocksTop_le_top
   rw [← Array.foldl_toList]
-  exact (foldl_top m.blocks.toList 4096).2 blk
+  exact (foldl_max (fun blk : Block => blk.addr + blk.bytes.size + 1) m.blocks.toList 4096).2 blk
+    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+/-- Every stack reserve ends below `Mem.top`. -/
+theorem Mem.reserveEnd_le_top {m : Mem} {t : Nat} {s : StackState} (h : m.stacks[t]? = some s) :
+    s.reserveEnd ≤ m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList (xs := m.stacks)]
+  exact (foldl_max StackState.reserveEnd m.stacks.toList _).2 s
     (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
 
 /-- A placed address always fits (`Mem.placeOk`), so `Mem.roomFor` only rejects a fallback. -/
@@ -1056,6 +1096,102 @@ theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
   split
   · exact (Mem.placed?_ok ‹_›).2.1
   · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+
+/-! ### The address of a block that `alloc` makes (`Mem.allocAddr`, MM-16)
+
+Every block but a stack block of a thread with a budget gets `Mem.newAddr` and needs
+`Mem.roomFor`; a stack block of a thread with a budget gets the placement's address or the LIFO
+fallback, and `Mem.allocOk` checks that it is valid. Either way the address is aligned, clear of
+every live block and inside the address space. -/
+
+theorem Mem.allocAddr_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
+    (size align : Nat) : m.allocAddr kind size align = m.newAddr size align := by
+  simp [Mem.allocAddr, h]
+
+theorem Mem.allocOk_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
+    (size align : Nat) : m.allocOk kind size align = m.roomFor size align := by
+  simp [Mem.allocOk, h]
+
+/-! Every kind but `.stack`: today's room and address. -/
+section
+variable (m : Mem) (n a : Nat)
+@[simp] theorem Mem.allocOk_heap : m.allocOk .heap n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_global : m.allocOk .global n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_constGlobal : m.allocOk .constGlobal n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_owned (i : AllocId) : m.allocOk (.owned i) n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_mapped (lo : Nat) : m.allocOk (.mapped lo) n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocAddr_heap : m.allocAddr .heap n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_global : m.allocAddr .global n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_constGlobal : m.allocAddr .constGlobal n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_owned (i : AllocId) : m.allocAddr (.owned i) n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_mapped (lo : Nat) : m.allocAddr (.mapped lo) n a = m.newAddr n a := rfl
+@[simp] theorem Mem.stacksAfterAlloc_heap : m.stacksAfterAlloc .heap n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_global : m.stacksAfterAlloc .global n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_constGlobal : m.stacksAfterAlloc .constGlobal n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_owned (i : AllocId) : m.stacksAfterAlloc (.owned i) n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_mapped (lo : Nat) : m.stacksAfterAlloc (.mapped lo) n a = m.stacks := rfl
+end
+
+/-- A block of any kind but `.stack` has no stack budget. -/
+theorem Mem.stackBudget?_of_ne {m : Mem} {kind : BlockKind} (h : kind ≠ .stack) :
+    m.stackBudget? kind = none := by
+  cases kind <;> first | rfl | exact absurd rfl h
+
+/-- With room the new block's address is valid: not 0 for a stack block of a thread with a
+budget, a multiple of `align` there, inside the address space and clear of every live block. -/
+theorem Mem.allocOk_fit {m : Mem} {kind : BlockKind} {size align : Nat}
+    (h : m.allocOk kind size align = true) :
+    m.allocAddr kind size align + size ≤ m.place.addrLimit ∧
+      m.addrFree (m.allocAddr kind size align) size = true := by
+  cases hb : m.stackBudget? kind with
+  | none =>
+    rw [Mem.allocOk_of_none hb] at h
+    rw [Mem.allocAddr_of_none hb]
+    refine ⟨Mem.roomFor_iff.mp h, ?_⟩
+    unfold Mem.newAddr; split
+    · exact (Mem.placed?_ok ‹_›).2.2.2
+    · unfold Mem.addrFree
+      rw [Array.all_eq_true]
+      intro i hi
+      have := Mem.lt_top (m := m) (b := i) (Array.getElem?_eq_getElem hi)
+      have := le_alignUp m.top align
+      simp [Block.clearOf]; omega
+  | some S =>
+    simp only [Mem.allocOk, hb, Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at h
+    exact ⟨h.2.1.2, h.2.2⟩
+
+/-- A block that `alloc` makes ends inside the address space, so below `2 ^ 63` (O-H). -/
+theorem Mem.allocOk_le {m : Mem} {kind : BlockKind} {size align : Nat}
+    (h : m.allocOk kind size align = true) : m.allocAddr kind size align + size ≤ 2 ^ 63 :=
+  Nat.le_trans (Mem.allocOk_fit h).1 m.place.addrLimit_le
+
+theorem alignDown_mod {n a : Nat} : alignDown n a % a = 0 := by
+  simp [alignDown, Nat.mul_mod_left]
+
+theorem Mem.allocAddr_mod (m : Mem) (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+    m.allocAddr kind size align % align = 0 := by
+  cases hb : m.stackBudget? kind with
+  | none => rw [Mem.allocAddr_of_none hb]; exact m.newAddr_mod size align ha
+  | some S =>
+    simp only [Mem.allocAddr, hb]
+    cases hp : m.placed? size align with
+    | some A => exact (Mem.placed?_ok hp).2.1
+    | none =>
+      have e : Nat.max align 1 = align := by simp [Nat.max_def]; omega
+      simp only [Option.getD_none, Mem.stackFallback, e]
+      exact alignDown_mod
+
+@[simp] theorem Mem.allocAddr_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).allocAddr = m.allocAddr := rfl
+
+@[simp] theorem Mem.allocAddr_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).allocAddr = m.allocAddr := rfl
+
+@[simp] theorem Mem.allocOk_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).allocOk = m.allocOk := rfl
+
+@[simp] theorem Mem.allocOk_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).allocOk = m.allocOk := rfl
 
 /-! ### First fit (globals at program start)
 

@@ -80,17 +80,25 @@ theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
     have := Mem.lt_top hblk; have := le_alignUp m.top align
     simp only; omega
 
+/-- The address range of a block that `alloc` makes with room (`Mem.allocOk`) is clear of every
+live block (`Mem.newAddr_clear` for every kind, MM-16). -/
+theorem Mem.allocAddr_clear {m : Mem} {kind : BlockKind} {size align : Nat}
+    (hroom : m.allocOk kind size align = true) {l : Loc} {c : Cell} (hc : m.heap l = some c) :
+    size = 0 ∨ c.addr + c.size ≤ m.allocAddr kind size align ∨
+      m.allocAddr kind size align + size ≤ c.addr :=
+  Mem.addrFree_cell (Mem.allocOk_fit hroom).2 hc
+
 /-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. This
 holds for every address the block gets: the heap is per block id. -/
 theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.roomFor size align = true)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.allocOk kind size align = true)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       p.block = some m.blocks.size ∧ m'.blocks.size = m.blocks.size + 1 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m.SameThreads m' ∧
-      ∃ A, A = m.newAddr size align ∧ A % align = 0 ∧
+      ∃ A, A = m.allocAddr kind size align ∧ A % align = 0 ∧
         bytesAt p A size kind (Array.replicate size .undef) h' := by
-  let A := m.newAddr size align
+  let A := m.allocAddr kind size align
   let h' : Heap := fun l =>
     if l.1 = m.blocks.size ∧ 0 ≤ l.2 ∧ l.2 < 0 + size then some ⟨.undef, A, size, kind⟩ else none
   -- Every location of the new block is free in the old memory.
@@ -108,7 +116,7 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     · subst hx; right; exact (hfree y).2
     · left; exact hh' x y hx
   · funext ⟨x, y⟩
-    unfold Mem.afterAlloc
+    show ({ m with blocks := m.blocks.push _ } : Mem).heap (x, y) = _
     rw [Mem.heap_push]
     by_cases hx : x = m.blocks.size
     · subst hx
@@ -123,7 +131,7 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     · right; exact hh' x y hx
   · -- `alloc` only changes `blocks`.
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact m.newAddr_mod size align ha
+  · exact m.allocAddr_mod kind size align ha
   · refine ⟨m.blocks.size, rfl, Int.le_refl 0, fun l => ?_⟩
     simp only [h', Int.toNat_zero, Array.size_replicate]
     split <;> simp_all
@@ -134,9 +142,9 @@ theorem Mem.Seq.alloc {m : Mem} (hst : m.Seq) (kind : BlockKind) (size align : N
   ⟨hst.single⟩
 
 /-- `alloc` under every placement: a new block id whose bytes nothing owned, at an aligned address
-`A` whose range is clear of every live block (`Mem.newAddr_clear`). -/
+`A` whose range is clear of every live block (`Mem.allocAddr_clear`). -/
 theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.roomFor size align = true)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.allocOk kind size align = true)
     (hst : m.Seq)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
@@ -152,7 +160,7 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
   refine ⟨p, _, h', hr, h0, hd', hm', hdd, hst.alloc kind size align, by simp [Mem.afterAlloc], A,
     hA, hb, fun l c hc => ?_⟩
   subst hAe
-  exact Mem.newAddr_clear m size align hc
+  exact Mem.allocAddr_clear hroom hc
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned, its end races with no
 access: `Mem.freeRaces`, not a `const` global) removes it from the heap. -/
@@ -212,7 +220,7 @@ theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
     Triple emp (alloc kind size align) (fun p => Assn.ex fun A =>
       ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
   fun m hP _ hd hm hp hst => by
-    cases hroom : m.roomFor size align
+    cases hroom : m.allocOk kind size align
     · rw [alloc_run_noRoom m hroom]; try trivial
     obtain ⟨p, m', h', hr, h0, hd', hm', -, hst', -, A, hA, hb, -⟩ :=
       alloc_run hd hm kind size align ha hroom hst hk

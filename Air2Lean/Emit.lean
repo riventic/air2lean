@@ -3392,13 +3392,14 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let sets := stack.map (fun (aid, field, _, _) => s!"{field} := s{aid}") ++ byteSets
   let init := if sets.isEmpty then s!"(default : {localsName})"
     else s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
-  let freeLines := (stack.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
+  -- The stack blocks die in reverse order of their allocation, so every free is of the top of
+  -- the thread's stack (MM-16: the LIFO accounting gives the charge back at once).
+  let freeLines := (stack.reverse.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
   -- A recursive function that uses memory charges its frame against the stack budget
-  -- (`Zig.enterFrame`, MM-5): the bytes of its escaping locals, each rounded up to its
-  -- alignment; `Zig.enterFrame` adds the fixed per-call part (`Zig.frameBase`).
+  -- (`Zig.enterFrame`, MM-5): the fixed per-call part (`Zig.frameBase`); its escaping locals are
+  -- charged by their own stack blocks (MM-16).
   let (enterLines, leaveLines) := if fc.recursive && fc.mem && !fc.conc then
-      let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
-      ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
+      (["  Zig.enterFrame"], ["  Zig.leaveFrame"])
     else ([], [])
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"

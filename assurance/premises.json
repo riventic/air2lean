@@ -279,6 +279,7 @@
     {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"},
     {"premise": "STK-01", "scope": "closure", "pattern": "^partial_fixpoint$|(?:^|\\.)enterFrame$"},
     {"premise": "STK-01", "scope": "closure", "pattern": "^(?:Zig\\.)?(?:allocStack|alloc|(?:Error\\.)?stackOverflow)$"},
+    {"premise": "STK-02", "scope": "closure", "pattern": "(?:^|\\.)withStack$"},
     {"premise": "OSM-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:mmap|munmap|mremap)$"},
     {"premise": "OSF-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:futexWait|Linux\\.futex_4arg|Darwin\\.__ulock_wait2?)$"},
     {"premise": "OSF-02", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:futexWake|wakeAt|Linux\\.futex_3arg|Darwin\\.__ulock_wake)$"},

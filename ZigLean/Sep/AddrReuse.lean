@@ -51,7 +51,7 @@ theorem afterAlloc_old (m : Mem) (kind : BlockKind) (size align : Nat) {b : Bloc
 
 /-- The new block's id is not the id of any existing block, whatever its address. -/
 theorem alloc_new_id (m : Mem) (kind : BlockKind) (size align : Nat) {b : BlockId} {blk : Block}
-    (hb : m.blocks[b]? = some blk) (hroom : m.roomFor size align = true) :
+    (hb : m.blocks[b]? = some blk) (hroom : m.allocOk kind size align = true) :
     ∃ p m', (alloc kind size align).run m = pure (p, m') ∧ p.block ≠ some b := by
   refine ⟨⟨some m.blocks.size, 0⟩, _, alloc_run_eq m hroom, fun h => ?_⟩
   have hlt := (Array.getElem?_eq_some_iff.mp hb).1
