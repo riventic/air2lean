@@ -221,12 +221,21 @@ size, a full-state one does not), so it would not cover `bytesAt`; the coordinat
   `{}` (no blocks: `FOwned.start` with `rO` empty) or `initRes` (D1(b)); ghost resources appear
   only where their creator provides them.
 
+### Strength log
+
+Each migrated client ends with its legacy statements as `example`s checked against the new
+theorems (`## Strength` at the end of the file).
+
+| client | theorems | statement | precondition delta |
+|---|---|---|---|
+| `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
+
 ## Phases
 
 | | content | state |
 |---|---|---|
 | T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
-| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); `Proofs/Detach/Worker` | this branch |
+| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads`, `Proofs/Cancel`, `Proofs/Iogroup`, `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas`, `Detach`, `TlsLemmas` restated; `spawn-failure`, `thread-locals`, `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
