@@ -2955,6 +2955,12 @@
       ],
       "correspondence": "model"
     },
+    "tests/roadmap/vcs/Memory.lean": {
+      "labels": [
+        "abstract-spec"
+      ],
+      "correspondence": "model"
+    },
     "tests/roadmap/vector-layouts/Model.lean": {
       "labels": [
         "ieee"

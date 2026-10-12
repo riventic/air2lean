@@ -302,6 +302,12 @@ subtraction, which `omega` would case-split on). -/
     simp only [Zig.divTrunc, h, Bool.false_eq_true, ↓reduceIte]; rfl
   rw [e]; exact read_val BitVec.toNat_udiv
 
+/-- An unsigned `@intCast` whose value fits in the target width (widening always does). -/
+@[fsym] theorem intCast_step {n : Nat} {a : BitVec w} (h : a.toNat < 2 ^ n) :
+    FTotalTriple P (StateT.lift (Zig.intCast false false n a) : MemM (BitVec n))
+      (fun r => ⟪r.toNat = a.toNat⟫ ⋆ P) := by
+  rw [Zig.intCast_unsigned_of_lt h]; exact read_val (Zig.toNat_ofNat_of_lt h)
+
 end Arith
 
 section Values
