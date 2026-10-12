@@ -37,7 +37,7 @@ theorem visit_call {Tgt : Type} {g : Ptr × BitVec 32 → ConcM Tgt Bool}
     (h : ∀ v, FnSpec (visitPre v) visitPost g) (ctx : Ptr) (x v : BitVec 32) :
     CTriple (up (pts ctx 4 v)) (g (ctx, x))
       (fun r => ⟪r = true⟫ ⋆ FAssn.ex fun v' : BitVec 32 => up (pts ctx 4 v')) :=
-  h v (ctx, x)
+  (h v).call (ctx, x)
 
 variable [Ext]
 

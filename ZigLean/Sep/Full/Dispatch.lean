@@ -685,7 +685,7 @@ theorem FnSpec.randomFill {fill : Ptr × Slice → ConcM Tgt Unit} {ctx : Ptr} {
     CTriple (R ⋆ up (bytesAt s.ptr A S K bs)) (fill (ctx, s))
       (fun _ => R ⋆ FAssn.ex fun vs : Array (BitVec 8) =>
         ⟪vs.size = s.len.toNat⟫ ⋆ up (bytesAt s.ptr A S K (vs.map Byte.int))) :=
-  (h A S K bs (ctx, s)).pre fun _ hr => sep_lift.2 ⟨⟨rfl, hK, hn⟩, hr⟩
+  ((h A S K bs).call (ctx, s)).pre fun _ hr => sep_lift.2 ⟨⟨rfl, hK, hn⟩, hr⟩
 
 end Full
 end Zig
