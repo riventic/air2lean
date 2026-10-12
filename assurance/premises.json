@@ -17,7 +17,8 @@
     "tutorials/memory-safety/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/mutable-arrays/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check)."
   },
-  "import_roots": ["tests/diff"],
+  "import_roots": ["tests/diff", "tests/roadmap/outcome-taxonomy", "tests/roadmap/global-payload-pointers",
+    "tests/roadmap/global-init", "tests/roadmap/try-pointers", "tests/roadmap/try-pointers/aliases"],
   "generated_imports": {
     "ExternModel": "tests/roadmap/extern-calls/check.sh compiles Model.lean as ExternModel.olean at gate time (a module name cannot contain the directory's hyphen).",
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
