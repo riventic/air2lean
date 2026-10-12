@@ -76,8 +76,7 @@ variable {n : Nat}
 
 /-- The range condition of `@intCast`, as in its definition. -/
 @[vc_contract] theorem intCast_range (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) :
-    ((if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
-      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) →
+    (Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) →
     ∃ v, Zig.intCast s₁ s₂ m a = pure v ∧ v = BitVec.ofInt m (Zig.val s₁ a) := fun h =>
   ⟨_, by simp only [Zig.intCast, h, and_self, ↓reduceIte], rfl⟩
 
