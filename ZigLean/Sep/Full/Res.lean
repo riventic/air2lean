@@ -1827,6 +1827,22 @@ theorem Ghost.exts_add_tags (E : BlockId → Option (Nat × BlockKind)) (g : Gho
 theorem upE_none {P : Assn} {r : Res} : upE P (fun _ => none) r ↔ up P r := by
   simp [upE, up]
 
+/-- The full extent of `b` only. -/
+def ext1 (b : BlockId) (S : Nat) (K : BlockKind) : BlockId → Option (Nat × BlockKind) :=
+  fun x => if x = b then some (S, K) else none
+
+theorem ext1_isSome {b x : BlockId} {S : Nat} {K : BlockKind} (h : x = b) : (ext1 b S K x).isSome := by
+  subst h; simp [ext1]
+
+/-- A cell of `bytesAt p A S K bs` lies in `p`'s block and records the size `S` and kind `K`. -/
+theorem bytesAt_of_cell {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap}
+    (hb : bytesAt p A S K bs h) {l : Loc} {c : Cell} (hl : h l = some c) :
+    p.block = some l.1 ∧ c.size = S ∧ c.kind = K := by
+  obtain ⟨b, hpb, -, hh⟩ := hb
+  rw [hh l] at hl
+  split at hl
+  · rename_i hc; cases hl; exact ⟨by rw [hc.1]; exact hpb, rfl, rfl⟩
+  · cases hl
 
 end Full
 end Zig

@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Mmap
 import ZigLean.Sep.Full.AutoAttr

@@ -583,17 +583,6 @@
       "path": "ZigLean/Sep/Full/Atomic.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/AutoClaims.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/AutoRules.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Conc.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Dispatch.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
@@ -606,10 +595,6 @@
     },
     {
       "path": "ZigLean/Sep/Full/Mmap.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Pinned.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
@@ -669,10 +654,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
