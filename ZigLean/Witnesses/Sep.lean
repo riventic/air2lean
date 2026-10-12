@@ -70,9 +70,9 @@ liveness_witness Triple.store :=
 
 nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, trivial⟩
 
-nonvacuity_witness Triple.alloc := ⟨.heap, 1, 1, by decide, Admit.emp⟩
+nonvacuity_witness Triple.alloc := ⟨.heap, 1, 1, by decide, rfl, Admit.emp⟩
 liveness_witness Triple.alloc :=
-  ⟨.heap, 1, 1, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
+  ⟨.heap, 1, 1, by decide, rfl, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness Triple.free :=
   ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, Admit.of_heap (byte1 _) (mem1_seq _ _)⟩

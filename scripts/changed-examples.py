@@ -31,7 +31,7 @@ def git(*args):
 def changed_paths(base):
     merge_base = subprocess.run(['git', '-C', str(ROOT), 'merge-base', base, 'HEAD'], check=True,
                                 capture_output=True, text=True).stdout.strip()
-    paths = git('diff', '-z', '--name-only', merge_base) + git('ls-files', '-z', '--others', '--exclude-standard')
+    paths = git('diff', '-z', '--name-only', '--no-renames', merge_base) + git('ls-files', '-z', '--others', '--exclude-standard')
     return sorted({p for p in paths if p})
 
 

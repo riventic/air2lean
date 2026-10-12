@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 SCHEMA = 'air2lean-compatibility/1'
-KNOWN_HOSTS = ('x86_64-linux', 'aarch64-macos')
+KNOWN_HOSTS = ('x86_64-linux', 'aarch64-macos', 'aarch64-linux')
 # A pinned version is `qualified` or still `in-qualification` (CI runs it; not the default).
 STATUSES = ('qualified', 'in-qualification')
 SHA = re.compile(r'^[0-9a-f]{64}$')

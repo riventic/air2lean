@@ -67,6 +67,10 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         # the same AIR as a golden that predates the field.
         if root and key == "export":
             continue
+        # No `noalias` parameter (`"noalias": []`) is the same AIR as a golden that predates the
+        # field; a nonempty list stays observable.
+        if root and key == "noalias" and item == []:
+            continue
         # A packed field bit-pointer's `"vector_index": null` (the exporter's explicit "not a
         # lane pointer") is the same AIR as a golden that predates the field. A lane number or
         # "runtime" stays observable. Likewise a pointer's `"address_space": "generic"`; any

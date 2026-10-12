@@ -145,7 +145,8 @@ Under emulated x86_64-linux (Docker `linux/amd64`, stock Zig 0.16.0 `x86_64-linu
 
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
-only where the probe and `lanes.zig` run natively: an LLVM-backend profile on x86_64 or aarch64.
+only where the probe runs natively (`Target.lanePtrProbe`): an LLVM-backend profile on x86_64-linux,
+aarch64-macos or aarch64-linux (the `load`/`pad` rows of its T04 files, [aarch64-abi.md](aarch64-abi.md)).
 Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`), 0.14.1/0.15.2 runtime lanes
 and Zig 0.17.0 lane pointers (no native lane-pointer evidence yet) stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
 

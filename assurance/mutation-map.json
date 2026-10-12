@@ -495,7 +495,8 @@
     },
     "L09": {
       "categories": [
-        "layout"
+        "layout",
+        "operand-order"
       ],
       "negative_tests": [
         {
@@ -505,6 +506,10 @@
         {
           "path": "tests/diff/layout/harness.zig",
           "anchor": "\"maskStore\""
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def vector_casts"
         }
       ],
       "mutants": [
@@ -517,17 +522,32 @@
           "name": "u",
           "path": "scripts/mutate.sh",
           "category": "layout"
+        },
+        {
+          "name": "lane_order_reversed",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "item_cast_lanewise",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
     "L10": {
       "categories": [
-        "layout"
+        "layout",
+        "forwarding"
       ],
       "negative_tests": [
         {
           "path": "tests/roadmap/error-storage/Runtime.lean",
           "anchor": "unless got = expected do throw"
+        },
+        {
+          "path": "tests/roadmap/lang-long-tail/test_cli.py",
+          "anchor": "def error_params"
         }
       ],
       "mutants": [
@@ -550,6 +570,11 @@
           "name": "foreign_domain",
           "path": "tests/roadmap/error-storage/mutations.py",
           "category": "other"
+        },
+        {
+          "name": "error_param_constant",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "forwarding"
         }
       ]
     },
@@ -625,21 +650,64 @@
       ]
     },
     "L13": {
-      "categories": ["forwarding", "operand-order"],
+      "categories": [
+        "forwarding",
+        "operand-order"
+      ],
       "negative_tests": [
-        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def assert_volatile"},
-        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_device"},
-        {"path": "tests/roadmap/volatile-effects/check-device.sh", "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"},
-        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_asm"}
+        {
+          "path": "tests/roadmap/volatile-effects/test_cli.py",
+          "anchor": "def assert_volatile"
+        },
+        {
+          "path": "tests/roadmap/volatile-effects/test_cli.py",
+          "anchor": "def check_device"
+        },
+        {
+          "path": "tests/roadmap/volatile-effects/check-device.sh",
+          "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"
+        },
+        {
+          "path": "tests/roadmap/volatile-effects/test_cli.py",
+          "anchor": "def check_asm"
+        }
       ],
       "mutants": [
-        {"name": "merge_reads", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "reorder_write_read", "category": "operand-order", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "drop_unused_read", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "ordinary_load", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "merge_asm", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "claims-asm-fault-premise-dropped", "category": "other", "path": "tests/roadmap/mutation-map/mutants.py"}
+        {
+          "name": "merge_reads",
+          "category": "forwarding",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "reorder_write_read",
+          "category": "operand-order",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "drop_unused_read",
+          "category": "other",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "ordinary_load",
+          "category": "other",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "merge_asm",
+          "category": "forwarding",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "repeatable_asm",
+          "category": "other",
+          "path": "tests/roadmap/volatile-effects/device-mutants.py"
+        },
+        {
+          "name": "claims-asm-fault-premise-dropped",
+          "category": "other",
+          "path": "tests/roadmap/mutation-map/mutants.py"
+        }
       ]
     },
     "L14": {
@@ -773,7 +841,7 @@
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
-          "anchor": "#check_failure (TimedBudget.loop countdown (\u27e810\u27e9 : WallTimestamp) 3 0)"
+          "anchor": "#check_failure (TimedBudget.loop countdown (⟨10⟩ : WallTimestamp) 3 0)"
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
@@ -1608,7 +1676,7 @@
           "name": "frame-atom-dropped",
           "path": "tests/roadmap/proof-tools/Steps.lean",
           "category": "other",
-          "anchor": "Triple (pts p 4 x \u2217 R) (load (BitVec 32) 4 p) (fun r => \u231cr = x\u231d \u2217 pts p 4 x)"
+          "anchor": "Triple (pts p 4 x ∗ R) (load (BitVec 32) 4 p) (fun r => ⌜r = x⌝ ∗ pts p 4 x)"
         }
       ],
       "note": "Mutated specifications of the sep_* step tactics (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (Steps.lean, CI proof-tools step)."
@@ -2603,9 +2671,18 @@
     "X01": {
       "categories": [],
       "negative_tests": [
-        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "corpus source changed since the record"},
-        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "cgen.py no longer produces the recorded program"},
-        {"path": "tests/roadmap/c-frontend/cgen.py", "anchor": "a loop counter is assigned"}
+        {
+          "path": "tests/roadmap/c-frontend/run.py",
+          "anchor": "corpus source changed since the record"
+        },
+        {
+          "path": "tests/roadmap/c-frontend/run.py",
+          "anchor": "cgen.py no longer produces the recorded program"
+        },
+        {
+          "path": "tests/roadmap/c-frontend/cgen.py",
+          "anchor": "a loop counter is assigned"
+        }
       ],
       "mutants": []
     }

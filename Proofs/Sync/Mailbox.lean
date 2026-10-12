@@ -207,15 +207,15 @@ theorem partOk_off {x : Ph} {h : Heap} (hp : PartOk x h) {y : Nat} (hy : y < 24)
 
 /-- The pad cell (byte 20 of block 0): nobody writes it. -/
 theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 32) : m.heap (0, x) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs, -⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hrest_lo⟩ := hb
   simp only [Mem.heap, hblk]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 20) = m.heap (0, 20)) : BlkOk m' := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (0, 20) = some ⟨blk.bytes[20]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he

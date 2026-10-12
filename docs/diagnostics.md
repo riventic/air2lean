@@ -12,8 +12,9 @@ including argument and directory errors. The leading `--diagnostics-json` select
 this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096, default 256),
 `--unit-diagnostic-limit` (1–4096, default 64), `--spawn-policy available|fallible`,
 `--assume-no-lb` (the load-buffering shape is reported as a model failure without it, as
-translation rejects it), and
-`--device-contract <json>` (L13, checks volatile integer accesses as device events); `-o`,
+translation rejects it),
+`--device-contract <json>` (L13, checks volatile integer accesses as device events), and
+`--allocator-model std|translated` ([allocator-model.md](allocator-model.md)); `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary
 emission mode keeps its fail-fast interfaces and generated source format.
 
@@ -89,7 +90,9 @@ instruction anchor) marks a `@cmpxchgStrong`/`@cmpxchgWeak` or an `@atomicRmw`
 `.Max`/`.Min` on an integer representation with padding bits (`u24`, `u31`, `i40`,
 an `enum(u24)`, a packed struct backed by `u40`): Zig lowers it to an op on the whole
 ABI cell, so the padding bits, which the model leaves undefined, take part in the
-comparison. Use an integer whose width is a power-of-two number of bytes. It replaces
+comparison; a signed `.Max`/`.Min` is also wrong with zero padding (a negative cell orders
+as a large unsigned value; [upstream/padded-rmw-minmax.md](upstream/padded-rmw-minmax.md)). Use an
+integer whose width is a power-of-two number of bytes. It replaces
 the generic `INSTRUCTION_FAILURE` check of that instruction.
 
 `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, canonical instruction

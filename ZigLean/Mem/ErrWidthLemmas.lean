@@ -10,6 +10,9 @@ statements quantify over the profile's `error_set_bits` (`bits`, `ValidErrBits b
 
 * width selection: `errorLimitBits` is the least width holding `--error-limit` nonzero codes,
   and the default limit gives 16 bits;
+* code bytes: a store defines the `errValueSize` value bytes and leaves a padding byte (17 to 24
+  bits) undefined (`errBytesW_padding`); a load reads only the value bytes
+  (`errOfBytesW_extract_value`);
 * the 16-bit instance is the existing storage model (`errOfBytesW_sixteen`,
   `errorEncW_sixteen`, `errorUnionWithW_sixteen`, ...);
 * stores and loads: `errorEncW`, `optionalErrorEncW`, `FiniteErrorW` and finite error unions
@@ -79,26 +82,95 @@ theorem errCodeAlign_sixteen : errCodeAlign 16 = 2 := by decide
 
 /-! ## Code bytes -/
 
+/-- The value bytes of a valid width: 1 to 4, at most the code's size. -/
+private theorem valueSize_table :
+    ∀ b, b < 33 → 0 < b → 0 < errValueSize b ∧ errValueSize b ≤ 4 ∧
+      (errValueSize b = errCodeSize b ∨ (16 < b ∧ b ≤ 24)) := by
+  decide
+
+theorem errValueSize_pos {bits : Nat} (h : ValidErrBits bits) : 0 < errValueSize bits :=
+  (valueSize_table bits (by have := h.2; omega) h.1).1
+
+theorem errValueSize_le_four {bits : Nat} (h : ValidErrBits bits) : errValueSize bits ≤ 4 :=
+  (valueSize_table bits (by have := h.2; omega) h.1).2.1
+
+theorem errValueSize_le_codeSize (bits : Nat) : errValueSize bits ≤ errCodeSize bits :=
+  le_alignUp _ _
+
+/-- The code has padding (a byte the store does not write) only at 17 to 24 bits. -/
+theorem errValueSize_eq_codeSize {bits : Nat} (h : ValidErrBits bits) (hp : ¬(16 < bits ∧ bits ≤ 24)) :
+    errValueSize bits = errCodeSize bits := by
+  rcases (valueSize_table bits (by have := h.2; omega) h.1).2.2 with h' | h'
+  · exact h'
+  · exact absurd h' hp
+
+theorem errValueSize_sixteen : errValueSize 16 = 2 := by decide
+
+@[simp] theorem errValueW_size (bits : Nat) (e : Option ErrName) :
+    (errValueW bits e).size = errValueSize bits := by
+  cases e <;> simp [errValueW]
+
 @[simp] theorem errBytesW_size (bits : Nat) (e : Option ErrName) :
     (errBytesW bits e).size = errCodeSize bits := by
-  cases e <;> simp [errBytesW]
+  have := errValueSize_le_codeSize bits
+  simp only [errBytesW, padTo, Array.size_append, errValueW_size, Array.size_replicate]
+  omega
+
+/-- A stored code starts with its value bytes. -/
+theorem errBytesW_extract_value (bits : Nat) (e : Option ErrName) :
+    (errBytesW bits e).extract 0 (errValueSize bits) = errValueW bits e := by
+  apply Array.ext
+  · have := errValueSize_le_codeSize bits
+    simp only [Array.size_extract, errBytesW_size, errValueW_size]
+    omega
+  · intro i h1 h2
+    simp only [errValueW_size] at h2
+    simp only [errBytesW, padTo, Array.getElem_extract, Nat.zero_add]
+    rw [Array.getElem_append_left (by simpa using h2)]
+
+/-- The bytes after the value bytes are padding: undefined, as natively, where a store of the
+error integer does not write them. -/
+theorem errBytesW_padding (bits : Nat) (e : Option ErrName) {i : Nat}
+    (h1 : errValueSize bits ≤ i) (h2 : i < errCodeSize bits) :
+    (errBytesW bits e)[i]? = some .undef := by
+  have hs : i < (errBytesW bits e).size := by simpa using h2
+  rw [Array.getElem?_eq_getElem hs]
+  simp only [errBytesW, padTo]
+  rw [Array.getElem_append_right (by simpa using h1)]
+  simp
+
+theorem errValueW_some_get0 {bits : Nat} (h : ValidErrBits bits) (e : ErrName) :
+    (errValueW bits (some e))[0]? = some (.errFrag e ⟨0, by decide⟩) := by
+  have hp := errValueSize_pos h
+  simp [errValueW, hp]
+
+theorem errValueW_some_ne_none {bits : Nat} (h : ValidErrBits bits) (e : ErrName) :
+    errValueW bits (some e) ≠ errValueW bits none := by
+  intro heq
+  have hp := errValueSize_pos h
+  have := congrArg (fun a : Array Byte => a[0]?) heq
+  simp [errValueW_some_get0 h, errValueW, hp] at this
 
 theorem errBytesW_some_ne_none {bits : Nat} (h : ValidErrBits bits) (e : ErrName) :
     errBytesW bits (some e) ≠ errBytesW bits none := by
   intro heq
-  have hp := errCodeSize_pos h
-  have h4 := errCodeSize_le_four h
-  have := congrArg (fun a : Array Byte => a[0]?) heq
-  simp [errBytesW, hp] at this
+  have := congrArg (fun a : Array Byte => a.extract 0 (errValueSize bits)) heq
+  simp only [errBytesW_extract_value] at this
+  exact errValueW_some_ne_none h e this
 
 theorem errBytesW_some_get0 {bits : Nat} (h : ValidErrBits bits) (e : ErrName) :
     (errBytesW bits (some e))[0]? = some (.errFrag e ⟨0, by decide⟩) := by
-  have hp := errCodeSize_pos h
-  simp [errBytesW, hp]
+  have hp := errValueSize_pos h
+  rw [errBytesW, padTo, Array.getElem?_append_left (by simpa using hp), errValueW_some_get0 h]
 
-/-- The code reads back from any bytes that start with it. -/
-theorem errOfBytesW_of_extract {bits : Nat} (h : ValidErrBits bits) {bs : Array Byte}
-    {e : Option ErrName} (hx : bs.extract 0 (errCodeSize bits) = errBytesW bits e) :
+/-- The decoder reads only the value bytes: a padding byte after them has no effect. -/
+theorem errOfBytesW_extract_value (bits : Nat) (bs : Array Byte) :
+    errOfBytesW bits (bs.extract 0 (errValueSize bits)) = errOfBytesW bits bs := by
+  simp [errOfBytesW, Array.extract_extract]
+
+/-- The code reads back from any bytes whose value bytes are its value bytes. -/
+theorem errOfBytesW_of_value {bits : Nat} (h : ValidErrBits bits) {bs : Array Byte}
+    {e : Option ErrName} (hx : bs.extract 0 (errValueSize bits) = errValueW bits e) :
     errOfBytesW bits bs = pure e := by
   have h4 := errCodeSize_le_four h
   unfold errOfBytesW
@@ -107,8 +179,17 @@ theorem errOfBytesW_of_extract {bits : Nat} (h : ValidErrBits bits) {bs : Array 
   cases e with
   | none => simp
   | some x =>
-    rw [if_neg (errBytesW_some_ne_none h x), errBytesW_some_get0 h x]
+    rw [if_neg (errValueW_some_ne_none h x), errValueW_some_get0 h x]
     simp
+
+/-- The code reads back from any bytes that start with it. -/
+theorem errOfBytesW_of_extract {bits : Nat} (h : ValidErrBits bits) {bs : Array Byte}
+    {e : Option ErrName} (hx : bs.extract 0 (errCodeSize bits) = errBytesW bits e) :
+    errOfBytesW bits bs = pure e := by
+  apply errOfBytesW_of_value h
+  have := congrArg (fun a : Array Byte => a.extract 0 (errValueSize bits)) hx
+  simp only [Array.extract_extract, errBytesW_extract_value, Nat.zero_add] at this
+  rwa [Nat.min_eq_left (errValueSize_le_codeSize bits)] at this
 
 @[simp] theorem errBytesW_extract (bits : Nat) (e : Option ErrName) :
     (errBytesW bits e).extract 0 (errCodeSize bits) = errBytesW bits e := by
@@ -121,36 +202,45 @@ theorem errOfBytesW_of_extract {bits : Nat} (h : ValidErrBits bits) {bs : Array 
 /-- Undefined bytes (a foreign name's storage) are no code. -/
 theorem errOfBytesW_undef {bits : Nat} (h : ValidErrBits bits) :
     errOfBytesW bits (Array.replicate (errCodeSize bits) .undef) = throw .unspecified := by
-  have hp := errCodeSize_pos h
+  have hp := errValueSize_pos h
   have h4 := errCodeSize_le_four h
+  have hv := errValueSize_le_codeSize bits
   unfold errOfBytesW
-  have hne : (Array.replicate (errCodeSize bits) Byte.undef) ≠ errBytesW bits none := by
+  have hx : (Array.replicate (errCodeSize bits) Byte.undef).extract 0 (errValueSize bits) =
+      Array.replicate (errValueSize bits) Byte.undef := by
+    simp [Array.extract_replicate, Nat.min_eq_left hv]
+  have hne : Array.replicate (errValueSize bits) Byte.undef ≠ errValueW bits none := by
     intro heq
     have := congrArg (fun a : Array Byte => a[0]?) heq
-    simp [errBytesW, hp] at this
-  rw [if_neg (by omega), if_neg (by simpa using hne)]
+    simp [errValueW, hp] at this
+  simp only [hx]
+  rw [if_neg (by omega), if_neg hne]
   simp [hp]
 
 /-! ## The default width is the existing model -/
 
-theorem errBytesW_sixteen : errBytesW 16 = errBytes := by
+theorem errValueW_sixteen : errValueW 16 = errBytes := by
   funext e
   cases e with
   | none => decide
   | some e =>
     apply Array.ext
-    · simp [errBytes, errCodeSize_sixteen]
+    · simp [errBytes, errValueSize_sixteen]
     · intro i h1 _
-      have hi : i < 2 := by simpa [errCodeSize_sixteen] using h1
-      simp only [errBytesW, Array.getElem_ofFn, errBytes]
+      have hi : i < 2 := by simpa [errValueSize_sixteen] using h1
+      simp only [errValueW, Array.getElem_ofFn, errBytes]
       rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl <;> rfl
 
+theorem errBytesW_sixteen : errBytesW 16 = errBytes := by
+  funext e
+  cases e <;> simp [errBytesW, padTo, errValueW_sixteen, errBytes, errCodeSize_sixteen]
+
 theorem errOfBytesW_sixteen (bs : Array Byte) : errOfBytesW 16 bs = errOfBytes bs := by
-  have hz : errBytesW 16 none = #[.int 0, .int 0] := by decide
-  have hs : ∀ e, errBytesW 16 (some e) = #[.errFrag e 0, .errFrag e 1] := fun e => by
-    rw [errBytesW_sixteen]; rfl
+  have hz : errValueW 16 none = #[.int 0, .int 0] := by rw [errValueW_sixteen]; rfl
+  have hs : ∀ e, errValueW 16 (some e) = #[.errFrag e 0, .errFrag e 1] := fun e => by
+    rw [errValueW_sixteen]; rfl
   unfold errOfBytesW errOfBytes
-  rw [errCodeSize_sixteen]
+  rw [errCodeSize_sixteen, errValueSize_sixteen]
   simp only [hz, hs, errBytes]
   rcases bs with ⟨l⟩
   rcases l with _ | ⟨x, _ | ⟨y, l⟩⟩

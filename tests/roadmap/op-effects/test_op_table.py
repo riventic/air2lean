@@ -31,14 +31,14 @@ BINARY = None
 # (file, definition, rule): `no-wildcard` — no default arm at the definition's arm indentation;
 # `no-op-match` — reads `Op.effects` instead of matching on the op.
 CLASSIFIER_DEFS = [
-    ('Air2Lean/Air/Effects.lean', 'Op.effects', 'no-wildcard'),
+    ('Air2Lean/Air/Effects.lean', 'Op.effectsIn', 'no-wildcard'),
     ('Air2Lean/Air/Effects.lean', 'Op.ctorName', 'no-wildcard'),
     ('Air2Lean/Air/Effects.lean', 'Control.bodies', 'no-wildcard'),
     ('Air2Lean/Air/Effects.lean', 'Control.jumpTarget?', 'no-wildcard'),
     ('Air2Lean/Air/Effects.lean', 'Op.emitRoute', 'no-wildcard'),
     ('Air2Lean/Check.lean', 'summarizeTryErrors', 'no-wildcard'),
     ('Air2Lean/Check.lean', 'CheckCtx.checkVolatile', 'no-op-match'),
-    ('Air2Lean/Check.lean', 'ptrOperands', 'no-op-match'),
+    ('Air2Lean/Memory.lean', 'ptrOperands', 'no-op-match'),
     ('Air2Lean/Memory.lean', 'flattenOp', 'no-op-match'),
     ('Air2Lean/Memory.lean', 'valueOperands', 'no-op-match'),
     ('Air2Lean/Memory.lean', 'placeOperands', 'no-op-match'),

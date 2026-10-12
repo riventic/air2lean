@@ -11,8 +11,12 @@ A program is a JSON-serializable AST. `typecheck` states the generator's invaria
 types, no shadowing, Zig's unused/never-mutated/unreachable-code rules, bounded loops, acyclic
 calls); `evaluate` is the Python reference semantics (wrapping arithmetic, left-to-right
 evaluation, LIFO defers, errdefer only on error return). Programs exercise pointer aliasing,
-globals, defer/errdefer cleanup, tagged unions, casts and nested loops/switches. The heavy
-differential (native Zig test, AIR export, translation, Lean evaluation) is check.sh --heavy.
+globals, defer/errdefer cleanup, tagged unions, casts and nested loops/switches. The `wide` profile
+adds u16/u64/i64 arithmetic and a cast table, arrays (also aliased through element pointers),
+slices with `for` loops, optionals with `orelse`/capturing `if`, and structs (value copies, field
+pointers, pointer-taking helpers). The `core` profile generates exactly the original subset, so its
+seeds keep their meaning. The heavy differential (native Zig test, AIR export, translation, Lean
+evaluation) is check.sh --heavy.
 """
 import argparse
 import copy
@@ -28,10 +32,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from shrink import get_path as _get, nodes as _nodes, with_path as _set  # noqa: E402
 
 INPUTS = [(0, 0), (1, 2), (4294967295, 7), (305419896, 2863311530)]
-SCALARS = ("u32", "i32", "u8")
-BITS = {"u32": 32, "i32": 32, "u8": 8}
+CORE_SCALARS = ("u32", "i32", "u8")
+SCALARS = CORE_SCALARS + ("u16", "u64", "i64")  # what the typechecker accepts; the core profile uses CORE_SCALARS
+BITS = {"u32": 32, "i32": 32, "u8": 8, "u16": 16, "u64": 64, "i64": 64}
 MAX_LOOP = 4
+ARRAY_LEN = 4
 FEATURES = ("alias", "global", "defer", "errdefer", "union", "cast", "nested_control")
+WIDE_FEATURES = FEATURES + ("wide_int", "array", "slice", "optional", "struct")
+PROFILES = {"core": FEATURES, "wide": WIDE_FEATURES}
+FIELD_TY = {"x": "u32", "y": "i32"}
+# name -> (source type, target type, form); the legacy core casts come first.
+CASTS = {"i2u": ("i32", "u32", "bitcast"), "widen8": ("u8", "u32", "widen"), "u2i": ("u32", "i32", "bitcast"),
+         "trunc8": ("u32", "u8", "trunc"), "intcast8": ("u32", "u8", "intcast8"),
+         "widen16": ("u16", "u32", "widen"), "trunc16": ("u32", "u16", "trunc"),
+         "widen64": ("u32", "u64", "widen"), "trunc64": ("u64", "u32", "trunc"),
+         "i2l": ("i32", "i64", "widen"), "l2i": ("i64", "i32", "trunc"),
+         "u2l": ("u64", "i64", "bitcast"), "l2u": ("i64", "u64", "bitcast"),
+         "w8to16": ("u8", "u16", "widen"), "intcast16": ("u32", "u16", "intcast16")}
+WIDE_LITS = {"u16": [0, 1, 255, 256, 32768, 65535],
+             "u64": [0, 1, 4294967296, 81985529216486895, 18446744073709551615],
+             "i64": [0, 1, -1, 4294967296, 9223372036854775807, -9223372036854775808]}
 
 
 class TypeError_(Exception):
@@ -42,17 +62,20 @@ class TypeError_(Exception):
 
 def wrap(ty, v):
     v &= (1 << BITS[ty]) - 1
-    if ty == "i32" and v >= 1 << 31:
-        v -= 1 << 32
+    if ty[0] == "i" and v >= 1 << (BITS[ty] - 1):
+        v -= 1 << BITS[ty]
     return v
 
 
 # --- generator ---------------------------------------------------------------------------
 
 class Gen:
-    def __init__(self, seed):
+    def __init__(self, seed, profile="core"):
         self.rng = random.Random(seed)
         self.seed = seed
+        self.profile = profile
+        self.wide = profile == "wide"
+        self.scalars = SCALARS if self.wide else CORE_SCALARS
         self.counter = 0
         self.funcs = []
         self.globals = []
@@ -72,10 +95,14 @@ class Gen:
             params = [[f"p{j}", rng.choice(["u32", "i32"])] for j in range(rng.randint(0, 2))]
             self.funcs.append(self.function(f"f{k}", params, err))
         self.funcs.append(self.function("work", [["p0", "u32"], ["p1", "u32"]], False))
-        return {"seed": self.seed, "globals": self.globals, "funcs": self.funcs}
+        program = {"seed": self.seed, "globals": self.globals, "funcs": self.funcs}
+        if self.wide:
+            program["profile"] = "wide"
+        return program
 
     def function(self, name, params, err):
-        self.scope = {"vals": {n: ty for n, ty in params}, "muts": {}, "ptrs": {}, "unions": []}
+        self.scope = {"vals": {n: ty for n, ty in params}, "muts": {}, "ptrs": {}, "unions": [],
+                      "arrays": [], "slices": {}, "opts": [], "structs": []}
         for g in self.globals:
             self.scope["muts"][g["name"]] = g["ty"]
         self.err = err
@@ -109,8 +136,13 @@ class Gen:
         kinds = ["let", "set", "store", "helper"]
         if not in_defer:
             kinds += ["let", "ptr", "let_union", "set_union"]
+            if self.wide:
+                kinds += ["let_array", "arr_set", "ptr_elem", "let_slice", "let_slice", "sstore", "let_opt",
+                          "set_opt", "let_struct", "set_field", "copy_struct", "ptr_field", "bump_struct"]
             if depth < 3:
                 kinds += ["if", "while", "switch", "switch_union", "defer"]
+                if self.wide:
+                    kinds += ["for_slice", "for_slice", "if_opt"]
                 if self.err:
                     kinds.append("errdefer")
         elif depth < 2:
@@ -126,19 +158,19 @@ class Gen:
         return ["let", name, "u32", expr]
 
     def s_let(self, depth, loop, in_defer):
-        ty = self.rng.choice(SCALARS + ("bool",))
+        ty = self.rng.choice(self.scalars + ("bool",))
         name = self.fresh("x")
         expr = self.expr(ty, 2)
         self.scope["muts"][name] = ty
         return ["let", name, ty, expr]
 
     def s_set(self, depth, loop, in_defer):
-        names = [n for n, t in self.scope["muts"].items() if t in SCALARS]
+        names = [n for n, t in self.scope["muts"].items() if t in self.scalars]
         if not names:
             return None
         name = self.rng.choice(names)
         ty = self.scope["muts"][name]
-        return ["set", name, self.rng.choice(["=", "+%=", "^="] if ty != "i32" else ["=", "+%="]),
+        return ["set", name, self.rng.choice(["=", "+%=", "^="] if ty[0] != "i" else ["=", "+%="]),
                 self.expr(ty, 2)]
 
     def s_store(self, depth, loop, in_defer):
@@ -184,6 +216,115 @@ class Gen:
         tag = self.rng.choice("ab")
         return ["set_union", self.rng.choice(self.scope["unions"]), tag,
                 self.expr("u32" if tag == "a" else "i32", 2)]
+
+    # --- wide profile: arrays, slices, optionals, structs --------------------------------
+    def index(self):
+        """A side-effect-free index: a literal or locals (never globals, which a call may change)."""
+        local = [n for n in self.visible("u32") if n not in {g["name"] for g in self.globals}]
+        pick = self.rng.random()
+        if not local or pick < 0.3:
+            return ["lit", "u32", self.rng.choice([0, 1, 2, 3, 5, 4294967295])]
+        if pick < 0.7:
+            return ["var", self.rng.choice(local)]
+        return ["bin", self.rng.choice(["+%", "^"]), ["var", self.rng.choice(local)],
+                ["lit", "u32", self.rng.choice([1, 2, 3])]]
+
+    def s_let_array(self, depth, loop, in_defer):
+        name = self.fresh("ar")
+        elems = [self.expr("u32", 1) for _ in range(ARRAY_LEN)]
+        self.scope["arrays"].append(name)
+        return ["let_array", name, elems]
+
+    def s_arr_set(self, depth, loop, in_defer):
+        if not self.scope["arrays"]:
+            return None
+        name = self.rng.choice(self.scope["arrays"])
+        return ["arr_set", name, self.index(), self.rng.choice(["=", "+%="]), self.expr("u32", 2)]
+
+    def s_ptr_elem(self, depth, loop, in_defer):
+        if not self.scope["arrays"]:
+            return None
+        name = self.fresh("q")
+        self.scope["ptrs"][name] = "u32"
+        return ["ptr_elem", name, self.rng.choice(self.scope["arrays"]), self.index()]
+
+    def s_let_slice(self, depth, loop, in_defer):
+        if not self.scope["arrays"]:
+            return None
+        lo = self.rng.randint(0, ARRAY_LEN - 1)
+        hi = self.rng.randint(lo, ARRAY_LEN)
+        name = self.fresh("sl")
+        self.scope["slices"][name] = hi - lo
+        return ["let_slice", name, self.rng.choice(self.scope["arrays"]), lo, hi]
+
+    def s_for_slice(self, depth, loop, in_defer):
+        if not self.scope["slices"]:
+            return None
+        cap = self.fresh("e")
+        self.scope["vals"][cap] = "u32"
+        body = self.block(depth + 1, True, True)
+        del self.scope["vals"][cap]
+        return ["for_slice", self.rng.choice(sorted(self.scope["slices"])), cap, body]
+
+    def s_sstore(self, depth, loop, in_defer):
+        names = sorted(n for n, length in self.scope["slices"].items() if length)
+        if not names:
+            return None
+        return ["sstore", self.rng.choice(names), self.index(), self.rng.choice(["=", "+%="]), self.expr("u32", 2)]
+
+    def s_let_opt(self, depth, loop, in_defer):
+        name = self.fresh("op")
+        built = ["let_opt", name, self.expr("bool", 2), self.expr("u32", 2)]
+        self.scope["opts"].append(name)
+        return built
+
+    def s_set_opt(self, depth, loop, in_defer):
+        if not self.scope["opts"]:
+            return None
+        return ["set_opt", self.rng.choice(self.scope["opts"]), self.expr("bool", 2), self.expr("u32", 2)]
+
+    def s_if_opt(self, depth, loop, in_defer):
+        if not self.scope["opts"]:
+            return None
+        name, cap = self.rng.choice(self.scope["opts"]), self.fresh("o")
+        self.scope["vals"][cap] = "u32"
+        then = self.block(depth + 1, loop, not in_defer, in_defer)
+        del self.scope["vals"][cap]
+        other = self.block(depth + 1, loop, False, in_defer) if self.rng.random() < 0.6 else []
+        return ["if_opt", name, cap, then, other]
+
+    def s_let_struct(self, depth, loop, in_defer):
+        name = self.fresh("st")
+        built = ["let_struct", name, self.expr("u32", 2), self.expr("i32", 2)]
+        self.scope["structs"].append(name)
+        return built
+
+    def s_set_field(self, depth, loop, in_defer):
+        if not self.scope["structs"]:
+            return None
+        field = self.rng.choice("xy")
+        return ["set_field", self.rng.choice(self.scope["structs"]), field, self.rng.choice(["=", "+%="]),
+                self.expr(FIELD_TY[field], 2)]
+
+    def s_copy_struct(self, depth, loop, in_defer):
+        if not self.scope["structs"]:
+            return None
+        name = self.fresh("st")
+        source = self.rng.choice(self.scope["structs"])
+        self.scope["structs"].append(name)
+        return ["copy_struct", name, source]
+
+    def s_ptr_field(self, depth, loop, in_defer):
+        if not self.scope["structs"]:
+            return None
+        field, name = self.rng.choice("xy"), self.fresh("q")
+        self.scope["ptrs"][name] = FIELD_TY[field]
+        return ["ptr_field", name, self.rng.choice(self.scope["structs"]), field]
+
+    def s_bump_struct(self, depth, loop, in_defer):
+        if not self.scope["structs"]:
+            return None
+        return ["bump_struct", self.rng.choice(self.scope["structs"]), self.expr("u32", 1)]
 
     def s_if(self, depth, loop, in_defer):
         cond = self.expr("bool", 2)
@@ -235,6 +376,15 @@ class Gen:
             options += ["var", "var"]
         if ty in ("u32", "i32") and any(t == ty for t in self.scope["ptrs"].values()):
             options.append("deref")
+        if self.wide and ty == "u32":
+            if self.scope["arrays"]:
+                options.append("index")
+            if any(length for length in self.scope["slices"].values()):
+                options.append("sindex")
+            if self.scope["opts"]:
+                options.append("orelse")
+        if self.wide and ty in FIELD_TY.values() and self.scope["structs"]:
+            options.append("field")
         if not leaf:
             if ty == "bool":
                 options += ["cmp", "cmp", "not", "logic"]
@@ -254,25 +404,40 @@ class Gen:
                 return ["lit", ty, rng.choice([0, 1, -1, 7, -2147483648, 2147483647, 1234])]
             if ty == "u8":
                 return ["lit", ty, rng.choice([0, 1, 127, 128, 255])]
+            if ty in WIDE_LITS:
+                return ["lit", ty, rng.choice(WIDE_LITS[ty])]
             return ["lit", ty, rng.choice([0, 1, 2, 3, 255, 65536, 4294967295, 2654435761])]
         if kind == "var":
             return ["var", rng.choice(self.visible(ty))]
         if kind == "deref":
             return ["deref", rng.choice([n for n, t in self.scope["ptrs"].items() if t == ty])]
+        if kind == "index":
+            return ["index", rng.choice(self.scope["arrays"]), self.index()]
+        if kind == "sindex":
+            return ["sindex", rng.choice(sorted(n for n, length in self.scope["slices"].items() if length)),
+                    self.index()]
+        if kind == "orelse":
+            return ["orelse", rng.choice(self.scope["opts"]), self.expr("u32", depth - 1)]
+        if kind == "field":
+            field = rng.choice([f for f, t in FIELD_TY.items() if t == ty])
+            return ["field", rng.choice(self.scope["structs"]), field]
         if kind == "cmp":
-            sub = rng.choice(SCALARS)
+            sub = rng.choice(self.scalars)
             return ["cmp", rng.choice(["<", "==", "!=", ">="]), self.expr(sub, depth - 1), self.expr(sub, depth - 1)]
         if kind == "not":
             return ["not", self.expr("bool", depth - 1)]
         if kind == "logic":
             return ["bin", rng.choice(["and", "or"]), self.expr("bool", depth - 1), self.expr("bool", depth - 1)]
         if kind == "bin":
-            ops = ["+%", "-%", "*%"] + (["^", "&", "|"] if ty != "i32" else [])
+            ops = ["+%", "-%", "*%"] + (["^", "&", "|"] if ty[0] != "i" else [])
             return ["bin", rng.choice(ops), self.expr(ty, depth - 1), self.expr(ty, depth - 1)]
         if kind == "shr":
             return ["shr", self.expr("u32", depth - 1), rng.randint(0, 31)]
         if kind == "mod":
             return ["mod", self.expr("u32", depth - 1), rng.randint(1, 9)]
+        if kind == "cast" and self.wide:
+            name = rng.choice([c for c, (_, target, _) in CASTS.items() if target == ty])
+            return ["cast", name, self.expr(CASTS[name][0], depth - 1)]
         if kind == "cast":
             if ty == "u32":
                 return rng.choice([["cast", "i2u", self.expr("i32", depth - 1)],
@@ -287,13 +452,16 @@ class Gen:
         return ["catch", f["name"], args, self.expr("u32", depth - 1)]
 
 
-def generate(seed):
-    return Gen(seed).program()
+def generate(seed, profile="core"):
+    return Gen(seed, profile).program()
 
 
 # --- typechecker (the generator's invariants) --------------------------------------------
 
 EXIT = {"return", "fail", "break"}
+CORE_CASTS = ("i2u", "widen8", "u2i", "trunc8", "intcast8")
+WIDE_STMT_TAGS = {"let_array", "arr_set", "ptr_elem", "let_slice", "for_slice", "sstore", "let_opt", "set_opt",
+                  "if_opt", "let_struct", "set_field", "copy_struct", "ptr_field", "bump_struct"}
 
 
 def _exits(stmt):
@@ -306,6 +474,8 @@ def _exits(stmt):
         return all(_block_exits(b) for _, b in stmt[2]) and _block_exits(stmt[3])
     if tag == "switch_union":
         return all(_block_exits(arm[1]) for arm in stmt[2].values())
+    if tag == "if_opt":
+        return bool(stmt[3]) and bool(stmt[4]) and _block_exits(stmt[3]) and _block_exits(stmt[4])
     return False
 
 
@@ -313,12 +483,14 @@ def _block_exits(block):
     return any(_exits(s) for s in block)
 
 
-RESERVED = {"U", "FuzzError", "std", "bump", "swap", "entry", "r", "a", "b", "t", "p", "d"}
+RESERVED = {"U", "P", "FuzzError", "std", "bump", "bumpP", "swap", "entry", "r", "a", "b", "t", "p", "d"}
+PURE_TAGS = {"lit", "var", "bin", "shr", "mod", "cast"}
 
 
 class Checker:
     def __init__(self, program):
         self.program = program
+        self.wide = program.get("profile", "core") == "wide"
         self.funcs = {}
         self.globals = {}
         self.top = set(RESERVED)
@@ -395,6 +567,111 @@ class Checker:
             raise TypeError_(f"{name} is not a mutable scalar")
         return ty
 
+    def pure(self, e):
+        """An index expression with no calls, array/slice reads or globals: evaluation order cannot matter."""
+        if not isinstance(e, list) or not e or e[0] not in PURE_TAGS:
+            raise TypeError_("impure index")
+        if e[0] == "var" and e[1] in self.globals:
+            raise TypeError_("global in an index")
+        for child in e[1:]:
+            if isinstance(child, list):
+                self.pure(child)
+
+    def need(self, name, kind):
+        found, info = self.lookup(name)
+        if found != kind:
+            raise TypeError_(f"{name} is not a {kind}")
+        return info
+
+    def wide_stmt(self, s, loop, in_defer):
+        tag = s[0]
+        if not self.wide:
+            raise TypeError_(f"statement {tag} outside the wide profile")
+        if tag == "let_array":
+            _, name, elems = s
+            if not isinstance(elems, list) or len(elems) != ARRAY_LEN:
+                raise TypeError_("array length")
+            for e in elems:
+                self.expr(e, "u32")
+            self._declare(name, ("array", ARRAY_LEN))
+        elif tag == "arr_set":
+            _, name, idx, op, e = s
+            self.need(name, "array")
+            self.pure(idx)
+            self.expr(idx, "u32")
+            if op not in ("=", "+%="):
+                raise TypeError_("arr_set op")
+            self.expr(e, "u32")
+        elif tag == "ptr_elem":
+            _, name, arr, idx = s
+            self.need(arr, "array")
+            self.pure(idx)
+            self.expr(idx, "u32")
+            self._declare(name, ("ptr", "u32"))
+        elif tag == "let_slice":
+            _, name, arr, lo, hi = s
+            self.need(arr, "array")
+            if any(not isinstance(v, int) or isinstance(v, bool) for v in (lo, hi)) or not 0 <= lo <= hi <= ARRAY_LEN:
+                raise TypeError_("slice bounds")
+            self._declare(name, ("slice", hi - lo))
+        elif tag == "for_slice":
+            _, name, cap, body = s
+            self.need(name, "slice")
+            self.scopes.append({})
+            self._declare(cap, ("val", "u32"))
+            self.block(body, True, False)
+            self.scopes.pop()
+        elif tag == "sstore":
+            _, name, idx, op, e = s
+            if self.need(name, "slice") < 1 or op not in ("=", "+%="):
+                raise TypeError_("sstore")
+            self.pure(idx)
+            self.expr(idx, "u32")
+            self.expr(e, "u32")
+        elif tag == "let_opt":
+            _, name, cond, e = s
+            self.expr(cond, "bool")
+            self.expr(e, "u32")
+            self._declare(name, ("opt", "u32"))
+        elif tag == "set_opt":
+            _, name, cond, e = s
+            self.need(name, "opt")
+            self.expr(cond, "bool")
+            self.expr(e, "u32")
+        elif tag == "if_opt":
+            _, name, cap, then, other = s
+            self.need(name, "opt")
+            self.scopes.append({})
+            self._declare(cap, ("val", "u32"))
+            self.block(then, loop, in_defer)
+            self.scopes.pop()
+            self.block(other, loop, in_defer)
+        elif tag == "let_struct":
+            _, name, ex, ey = s
+            self.expr(ex, "u32")
+            self.expr(ey, "i32")
+            self._declare(name, ("struct", "P"))
+        elif tag == "set_field":
+            _, name, field, op, e = s
+            self.need(name, "struct")
+            if field not in FIELD_TY or op not in ("=", "+%="):
+                raise TypeError_("set_field")
+            self.expr(e, FIELD_TY[field])
+        elif tag == "copy_struct":
+            _, name, source = s
+            self.need(source, "struct")
+            self._declare(name, ("struct", "P"))
+        elif tag == "ptr_field":
+            _, name, source, field = s
+            self.need(source, "struct")
+            if field not in FIELD_TY:
+                raise TypeError_("ptr_field")
+            self._declare(name, ("ptr", FIELD_TY[field]))
+        elif tag == "bump_struct":
+            _, name, e = s
+            self.need(name, "struct")
+            self.expr(e, "u32")
+
     def pointer_arg(self, arg):
         if arg[0] == "pvar":
             kind, ty = self.lookup(arg[1])
@@ -410,9 +687,11 @@ class Checker:
         tag = s[0]
         if in_defer and tag not in ("set", "store", "helper", "if", "let"):
             raise TypeError_(f"{tag} inside defer")
-        if tag == "let":
+        if tag in WIDE_STMT_TAGS:
+            self.wide_stmt(s, loop, in_defer)
+        elif tag == "let":
             _, name, ty, e = s
-            if ty not in SCALARS + ("bool",):
+            if ty not in SCALARS + ("bool",) or (ty not in CORE_SCALARS + ("bool",) and not self.wide):
                 raise TypeError_("let type")
             self.expr(e, ty)
             self._declare(name, ("mut", ty))
@@ -529,8 +808,9 @@ class Checker:
             self.expr(e[1], "bool")
         elif tag == "bin":
             _, op, a, b = e
-            allowed = {"bool": ("and", "or"), "i32": ("+%", "-%", "*%"),
-                       "u32": ("+%", "-%", "*%", "^", "&", "|"), "u8": ("+%", "-%", "*%", "^", "&", "|")}
+            allowed = {"bool": ("and", "or"), "i32": ("+%", "-%", "*%"), "i64": ("+%", "-%", "*%"),
+                       "u32": ("+%", "-%", "*%", "^", "&", "|"), "u8": ("+%", "-%", "*%", "^", "&", "|"),
+                       "u16": ("+%", "-%", "*%", "^", "&", "|"), "u64": ("+%", "-%", "*%", "^", "&", "|")}
             if op not in allowed[ty]:
                 raise TypeError_("bin op")
             self.expr(a, ty)
@@ -541,11 +821,31 @@ class Checker:
                 raise TypeError_(tag)
             self.expr(e[1], "u32")
         elif tag == "cast":
-            source, target = {"i2u": ("i32", "u32"), "widen8": ("u8", "u32"), "u2i": ("u32", "i32"),
-                              "trunc8": ("u32", "u8"), "intcast8": ("u32", "u8")}[e[1]]
-            if target != ty:
+            source, target, _ = CASTS[e[1]]
+            if target != ty or (not self.wide and e[1] not in CORE_CASTS):
                 raise TypeError_("cast")
             self.expr(e[2], source)
+        elif tag in ("index", "sindex", "orelse", "field"):
+            if not self.wide:
+                raise TypeError_(f"expression {tag} outside the wide profile")
+            if tag == "index":
+                self.need(e[1], "array")
+                self.pure(e[2])
+                self.expr(e[2], "u32")
+            elif tag == "sindex":
+                if self.need(e[1], "slice") < 1:
+                    raise TypeError_("sindex of an empty slice")
+                self.pure(e[2])
+                self.expr(e[2], "u32")
+            elif tag == "orelse":
+                self.need(e[1], "opt")
+                self.expr(e[2], "u32")
+            elif e[2] not in FIELD_TY:
+                raise TypeError_("field")
+            else:
+                self.need(e[1], "struct")
+            if ty != (FIELD_TY[e[2]] if tag == "field" else "u32"):
+                raise TypeError_(f"{tag} type")
         elif tag in ("call", "catch"):
             f = self.funcs.get(e[1])
             if f is None or f["err"] != (tag == "catch") or ty != "u32" or len(e[2]) != len(f["params"]):
@@ -568,7 +868,11 @@ class Checker:
         if tag in ("shr", "mod", "call", "catch"):
             return "u32"
         if tag == "cast":
-            return {"i2u": "u32", "widen8": "u32", "u2i": "i32", "trunc8": "u8", "intcast8": "u8"}[e[1]]
+            return CASTS[e[1]][1]
+        if tag in ("index", "sindex", "orelse"):
+            return "u32"
+        if tag == "field":
+            return FIELD_TY[e[2]]
         if tag == "bin":
             return "bool" if e[1] in ("and", "or") else self.infer(e[2])
         raise TypeError_("infer")
@@ -686,6 +990,8 @@ class Machine:
                 a[0], b[0] = b[0], a[0]
         elif tag == "ptr":
             env[-1][s[1]] = [self.cell(env, s[2])]
+        elif tag in WIDE_STMT_TAGS:
+            self.wide_stmt(s, env)
         elif tag in ("let_union", "set_union"):
             value = (s[2], self.expr(s[3], env))
             if tag == "let_union":
@@ -727,11 +1033,88 @@ class Machine:
         elif tag == "break":
             raise _Break()
 
+    def assign(self, cell, op, ty, value_of):
+        """`cell op= value`: a compound assignment loads its target before evaluating the operand."""
+        if op == "=":
+            cell[0] = value_of()
+        else:
+            old = cell[0]
+            cell[0] = wrap(ty, old + value_of())
+
+    def wide_stmt(self, s, env):
+        tag = s[0]
+        if tag == "let_array":
+            env[-1][s[1]] = [[[self.expr(e, env)] for e in s[2]]]
+        elif tag == "arr_set":
+            cell = self.cell(env, s[1])[0][self.expr(s[2], env) % ARRAY_LEN]
+            self.assign(cell, s[3], "u32", lambda: self.expr(s[4], env))
+        elif tag == "ptr_elem":
+            env[-1][s[1]] = [self.cell(env, s[2])[0][self.expr(s[3], env) % ARRAY_LEN]]
+        elif tag == "let_slice":
+            env[-1][s[1]] = [self.cell(env, s[2])[0][s[3]:s[4]]]
+        elif tag == "for_slice":
+            for cell in list(self.cell(env, s[1])[0]):
+                self.tick()
+                env.append({s[2]: [cell[0]]})
+                try:
+                    self.block(s[3], env)
+                except _Break:
+                    break
+                finally:
+                    env.pop()
+        elif tag == "sstore":
+            cells = self.cell(env, s[1])[0]
+            cell = cells[self.expr(s[2], env) % len(cells)]
+            self.assign(cell, s[3], "u32", lambda: self.expr(s[4], env))
+        elif tag in ("let_opt", "set_opt"):
+            value = self.expr(s[3], env) if self.expr(s[2], env) else None
+            if tag == "let_opt":
+                env[-1][s[1]] = [value]
+            else:
+                self.cell(env, s[1])[0] = value
+        elif tag == "if_opt":
+            value = self.cell(env, s[1])[0]
+            if value is None:
+                self.block(s[4], env)
+            else:
+                env.append({s[2]: [value]})
+                try:
+                    self.block(s[3], env)
+                finally:
+                    env.pop()
+        elif tag == "let_struct":
+            x = self.expr(s[2], env)
+            env[-1][s[1]] = [{"x": [x], "y": [self.expr(s[3], env)]}]
+        elif tag == "set_field":
+            cell = self.cell(env, s[1])[0][s[2]]
+            self.assign(cell, s[3], FIELD_TY[s[2]], lambda: self.expr(s[4], env))
+        elif tag == "copy_struct":
+            env[-1][s[1]] = [{f: [c[0]] for f, c in self.cell(env, s[2])[0].items()}]
+        elif tag == "ptr_field":
+            env[-1][s[1]] = [self.cell(env, s[2])[0][s[3]]]
+        elif tag == "bump_struct":
+            d = self.expr(s[2], env)
+            fields = self.cell(env, s[1])[0]
+            fields["x"][0] = wrap("u32", fields["x"][0] + d)
+            fields["y"][0] = wrap("i32", fields["y"][0] + wrap("i32", d))
+        else:
+            raise ValueError(tag)
+
     def expr(self, e, env):
         self.tick()
         tag = e[0]
         if tag == "lit":
             return e[2]
+        if tag == "index":
+            return self.cell(env, e[1])[0][self.expr(e[2], env) % ARRAY_LEN][0]
+        if tag == "sindex":
+            cells = self.cell(env, e[1])[0]
+            return cells[self.expr(e[2], env) % len(cells)][0]
+        if tag == "orelse":
+            value = self.cell(env, e[1])[0]
+            return value if value is not None else self.expr(e[2], env)
+        if tag == "field":
+            return self.cell(env, e[1])[0][e[2]][0]
         if tag == "var":
             return self.cell(env, e[1])[0]
         if tag == "deref":
@@ -757,16 +1140,14 @@ class Machine:
             return self.expr(e[1], env) % e[2]
         if tag == "cast":
             v = self.expr(e[2], env)
-            kind = e[1]
-            if kind == "i2u":
-                return v & 0xFFFFFFFF
-            if kind == "u2i":
-                return wrap("i32", v)
-            if kind == "widen8":
+            _, target, form = CASTS[e[1]]
+            if form == "widen":
                 return v
-            if kind == "trunc8":
-                return v & 0xFF
-            return v & 0x7F  # intcast8 of (v & 0x7f)
+            if form == "intcast8":
+                return v & 0x7F  # @intCast(v & 0x7f)
+            if form == "intcast16":
+                return v & 0x7FFF  # @intCast(v & 0x7fff)
+            return wrap(target, v)  # bitcast and truncate both reinterpret the low bits
         if tag in ("call", "catch"):
             args = [self.expr(a, env) for a in e[2]]
             status, value = self.call(e[1], args)
@@ -787,7 +1168,11 @@ def _infer_static(e, var_types):
     if tag in ("shr", "mod", "call", "catch"):
         return "u32"
     if tag == "cast":
-        return {"i2u": "u32", "widen8": "u32", "u2i": "i32", "trunc8": "u8", "intcast8": "u8"}[e[1]]
+        return CASTS[e[1]][1]
+    if tag in ("index", "sindex", "orelse"):
+        return "u32"
+    if tag == "field":
+        return FIELD_TY[e[2]]
     if e[1] in ("and", "or"):
         return "bool"
     return _infer_static(e[2], var_types)
@@ -804,8 +1189,12 @@ def _var_types(program):
                 types[node[1]] = node[2]
             elif tag == "ptr":
                 types[node[1]] = types.get(node[2])
-            elif tag == "while":
+            elif tag in ("while", "for_slice", "if_opt"):
+                types[node[1] if tag == "while" else node[2]] = "u32"
+            elif tag == "ptr_elem":
                 types[node[1]] = "u32"
+            elif tag == "ptr_field":
+                types[node[1]] = FIELD_TY[node[3]]
             elif tag == "switch_union":
                 types[node[2]["a"][0]] = "u32"
                 types[node[2]["b"][0]] = "i32"
@@ -868,12 +1257,58 @@ def _refs(node, out):
     elif tag == "pvar" and len(node) == 2:
         out.append((node[1], "read"))
         return
+    elif tag in ("index", "sindex", "orelse", "field") and len(node) == 3:
+        out.append((node[1], "read"))
+        _refs(node[2], out)
+        return
+    elif tag in ("arr_set", "sstore", "set_field") and len(node) == 5:
+        out.append((node[1], "write" if tag != "sstore" else "read"))
+        _refs(node[2], out)
+        _refs(node[4], out)
+        return
+    elif tag == "ptr_elem" and len(node) == 4:
+        out.append((node[2], "addr"))
+        _refs(node[3], out)
+        return
+    elif tag in ("let_slice", "ptr_field") and len(node) in (4, 5):
+        out.append((node[2], "addr"))
+        return
+    elif tag == "for_slice" and len(node) == 4:
+        out.append((node[1], "read"))
+        _refs(node[3], out)
+        return
+    elif tag == "set_opt" and len(node) == 4:
+        out.append((node[1], "write"))
+        _refs(node[2], out)
+        _refs(node[3], out)
+        return
+    elif tag == "if_opt" and len(node) == 5:
+        out.append((node[1], "read"))
+        _refs(node[3], out)
+        _refs(node[4], out)
+        return
+    elif tag == "copy_struct" and len(node) == 3:
+        out.append((node[2], "read"))
+        return
+    elif tag == "bump_struct" and len(node) == 3:
+        out.append((node[1], "addr"))
+        _refs(node[2], out)
+        return
     elif tag == "switch_union" and len(node) == 3:
         out.append((node[1], "read"))
         _refs(node[2], out)
         return
-    elif tag in ("let", "let_union") and len(node) == 4:
+    elif tag in ("let", "let_union", "let_opt") and len(node) == 4:
+        _refs(node[2] if tag == "let_opt" else node[3], out)
+        if tag == "let_opt":
+            _refs(node[3], out)
+        return
+    elif tag == "let_struct" and len(node) == 4:
+        _refs(node[2], out)
         _refs(node[3], out)
+        return
+    elif tag == "let_array" and len(node) == 3:
+        _refs(node[2], out)
         return
     elif tag == "while" and len(node) == 4:
         _refs(node[3], out)
@@ -882,13 +1317,25 @@ def _refs(node, out):
         _refs(child, out)
 
 
-ZTY = {"u32": "u32", "i32": "i32", "u8": "u8", "bool": "bool"}
+ZTY = {ty: ty for ty in SCALARS + ("bool",)}
 
 
 class Renderer:
     def __init__(self, program):
         self.program = program
         self.var_types = _var_types(program)
+        self.slice_len = {}
+
+        def walk(node):
+            if isinstance(node, list):
+                if len(node) == 5 and node[0] == "let_slice":
+                    self.slice_len[node[1]] = node[4] - node[3]
+                for child in node:
+                    walk(child)
+            elif isinstance(node, dict):
+                for child in node.values():
+                    walk(child)
+        walk([f["body"] for f in program["funcs"]])
 
     def lit(self, ty, v):
         if ty == "bool":
@@ -903,6 +1350,14 @@ class Renderer:
             return e[1]
         if tag == "deref":
             return f"{e[1]}.*"
+        if tag == "index":
+            return f"{e[1]}[({self.expr(e[2])} % {ARRAY_LEN})]"
+        if tag == "sindex":
+            return f"{e[1]}[({self.expr(e[2])} % {self.slice_len[e[1]]})]"
+        if tag == "orelse":
+            return f"({e[1]} orelse {self.expr(e[2])})"
+        if tag == "field":
+            return f"{e[1]}.{e[2]}"
         if tag == "cmp":
             return f"({self.expr(e[2])} {e[1]} {self.expr(e[3])})"
         if tag == "not":
@@ -915,9 +1370,11 @@ class Renderer:
             return f"({self.expr(e[1])} % {e[2]})"
         if tag == "cast":
             inner = self.expr(e[2])
-            return {"i2u": f"@as(u32, @bitCast({inner}))", "u2i": f"@as(i32, @bitCast({inner}))",
-                    "widen8": f"@as(u32, {inner})", "trunc8": f"@as(u8, @truncate({inner}))",
-                    "intcast8": f"@as(u8, @intCast({inner} & 0x7f))"}[e[1]]
+            _, target, form = CASTS[e[1]]
+            return {"bitcast": f"@as({target}, @bitCast({inner}))", "widen": f"@as({target}, {inner})",
+                    "trunc": f"@as({target}, @truncate({inner}))",
+                    "intcast8": f"@as(u8, @intCast({inner} & 0x7f))",
+                    "intcast16": f"@as(u16, @intCast({inner} & 0x7fff))"}[form]
         if tag == "call":
             return f"{e[1]}({', '.join(self.expr(a) for a in e[2])})"
         if tag == "catch":
@@ -960,6 +1417,8 @@ class Renderer:
             return [f"{pad}{s[1]}.* {s[2]} {self.expr(s[3])};"]
         if tag == "set_union":
             return [f"{pad}{s[1]} = .{{ .{s[2]} = {self.expr(s[3])} }};"]
+        if tag in WIDE_STMT_TAGS:
+            return self.wide_stmt(s, indent, refs)
         if tag == "helper":
             if s[1] == "bump":
                 return [f"{pad}bump({self.ptr_arg(s[2][0])}, {self.expr(s[2][1])});"]
@@ -996,6 +1455,47 @@ class Renderer:
             return [f"{pad}break;"]
         raise ValueError(tag)
 
+    def wide_stmt(self, s, indent, refs):
+        pad = "    " * indent
+        tag = s[0]
+        if tag == "let_array":
+            return self.decl(pad, s[1], f"[{ARRAY_LEN}]u32", ".{ " + ", ".join(self.expr(e) for e in s[2]) + " }", refs)
+        if tag in ("arr_set", "sstore"):
+            length = ARRAY_LEN if tag == "arr_set" else self.slice_len[s[1]]
+            return [f"{pad}{s[1]}[({self.expr(s[2])} % {length})] {s[3]} {self.expr(s[4])};"]
+        if tag == "ptr_elem":
+            lines = [f"{pad}const {s[1]} = &{s[2]}[({self.expr(s[3])} % {ARRAY_LEN})];"]
+        elif tag == "ptr_field":
+            lines = [f"{pad}const {s[1]} = &{s[2]}.{s[3]};"]
+        elif tag == "let_slice":
+            return self.decl(pad, s[1], "[]u32", f"{s[2]}[{s[3]}..{s[4]}]", refs)
+        elif tag == "for_slice":
+            capture = s[2] if self._uses(s[2], refs) else "_"
+            return ([f"{pad}for ({s[1]}) |{capture}| {{"] + self.block(s[3], indent + 1, refs) + [f"{pad}}}"])
+        elif tag == "let_opt":
+            return self.decl(pad, s[1], "?u32", f"if ({self.expr(s[2])}) {self.expr(s[3])} else null", refs)
+        elif tag == "set_opt":
+            return [f"{pad}{s[1]} = if ({self.expr(s[2])}) {self.expr(s[3])} else null;"]
+        elif tag == "if_opt":
+            capture = s[2] if self._uses(s[2], refs) else "_"
+            lines = [f"{pad}if ({s[1]}) |{capture}| {{"] + self.block(s[3], indent + 1, refs)
+            if s[4]:
+                lines += [f"{pad}}} else {{"] + self.block(s[4], indent + 1, refs)
+            return lines + [f"{pad}}}"]
+        elif tag == "let_struct":
+            return self.decl(pad, s[1], "P", f".{{ .x = {self.expr(s[2])}, .y = {self.expr(s[3])} }}", refs)
+        elif tag == "set_field":
+            return [f"{pad}{s[1]}.{s[2]} {s[3]} {self.expr(s[4])};"]
+        elif tag == "copy_struct":
+            return self.decl(pad, s[1], "P", s[2], refs)
+        elif tag == "bump_struct":
+            return [f"{pad}bumpP(&{s[1]}, {self.expr(s[2])});"]
+        else:
+            raise ValueError(tag)
+        if not self._uses(s[1], refs):
+            lines.append(f"{pad}_ = {s[1]};")
+        return lines
+
     def function(self, f):
         refs = []
         _refs(f["body"], refs)
@@ -1012,15 +1512,21 @@ class Renderer:
 
     def source(self, module, expected):
         program = self.program
-        lines = [f"// Generated by tests/roadmap/fuzz/zig_gen.py from seed {program['seed']}; do not edit.",
+        wide = program.get("profile", "core") == "wide"
+        lines = [f"// Generated by tests/roadmap/fuzz/zig_gen.py from seed {program['seed']}"
+                 + ("" if not wide else " (wide profile)") + "; do not edit.",
                  'const std = @import("std");', "",
                  "const U = union(enum) { a: u32, b: i32 };",
                  "const FuzzError = error{Fuzz};", ""]
+        if wide:
+            lines += ["const P = struct { x: u32, y: i32 };", ""]
         for g in program["globals"]:
             lines.append(f"var {g['name']}: {g['ty']} = {g['init']};")
         lines += ["", "fn bump(p: *u32, d: u32) void {", "    p.* +%= d;", "}", "",
                   "fn swap(a: *u32, b: *u32) void {", "    const t = a.*;", "    a.* = b.*;",
                   "    b.* = t;", "}", ""]
+        if wide:
+            lines += ["fn bumpP(p: *P, d: u32) void {", "    p.x +%= d;", "    p.y +%= @as(i32, @bitCast(d));", "}", ""]
         for f in program["funcs"]:
             lines += self.function(f)
         lines.append("pub fn entry(a: u32, b: u32) u32 {")
@@ -1042,8 +1548,12 @@ class Renderer:
         return "\n".join(lines)
 
 
+def module_name(program):
+    return f"fuzz_{'w' if program.get('profile', 'core') == 'wide' else 's'}{program['seed']}"
+
+
 def render(program, module=None):
-    module = module or f"fuzz_s{program['seed']}"
+    module = module or module_name(program)
     return Renderer(program).source(module, evaluate(program))
 
 
@@ -1062,9 +1572,16 @@ def features(program):
         found.add("union")
     if '["cast"' in text:
         found.add("cast")
+    if any(f'"{ty}"' in text for ty in ("u16", "u64", "i64")):
+        found.add("wide_int")
+    for feature, tag in (("array", "let_array"), ("slice", "let_slice"), ("optional", "let_opt"),
+                         ("struct", "let_struct")):
+        if f'["{tag}"' in text:
+            found.add(feature)
 
     def nested(node, depth):
-        if isinstance(node, list) and node and node[0] in ("while", "switch", "switch_union", "if"):
+        if isinstance(node, list) and node and node[0] in ("while", "switch", "switch_union", "if", "for_slice",
+                                                              "if_opt"):
             depth += 1
             if depth >= 2:
                 return True
@@ -1104,8 +1621,9 @@ def _is_block(node):
 
 
 STMT_TAGS = {"let", "set", "store", "helper", "ptr", "let_union", "set_union", "if", "while",
-             "switch", "switch_union", "defer", "errdefer", "return", "fail", "break"}
-EXPR_TAGS = {"lit", "var", "deref", "cmp", "not", "bin", "shr", "mod", "cast", "call", "catch"}
+             "switch", "switch_union", "defer", "errdefer", "return", "fail", "break"} | WIDE_STMT_TAGS
+EXPR_TAGS = {"lit", "var", "deref", "cmp", "not", "bin", "shr", "mod", "cast", "call", "catch", "index", "sindex",
+             "orelse", "field"}
 
 
 def _expr_type(program, path, var_types):
@@ -1152,8 +1670,10 @@ def candidates(program):
             inner = []
             if s[0] == "if":
                 inner = [s[2], s[3]]
-            elif s[0] in ("while",):
+            elif s[0] in ("while", "for_slice"):
                 inner = [s[3]]
+            elif s[0] == "if_opt":
+                inner = [s[3], s[4]]
             elif s[0] == "switch":
                 inner = [b for _, b in s[2]] + [s[3]]
             elif s[0] == "switch_union":
@@ -1167,6 +1687,8 @@ def candidates(program):
                     yield _set(program, path + (k, 2), s[2][:j] + s[2][j + 1:])
             if s[0] == "if" and s[3]:
                 yield _set(program, path + (k, 3), [])
+            if s[0] == "if_opt" and s[4]:
+                yield _set(program, path + (k, 4), [])
     var_types = _var_types(program)
     for path, node in list(_nodes(program)):
         if not (path and _tagged(node, EXPR_TAGS)):
@@ -1225,14 +1747,14 @@ def shrink(program, still_fails, budget=5000):
 # --- commands ----------------------------------------------------------------------------
 
 def cmd_light(args):
-    counts = dict.fromkeys(FEATURES, 0)
+    counts = dict.fromkeys(PROFILES[args.profile], 0)
     for seed in range(args.start, args.start + args.seeds):
-        program = generate(seed)
+        program = generate(seed, args.profile)
         error = typecheck_error(program)
         if error:
             print(f"seed {seed}: generator produced an ill-typed program: {error}")
             return 1
-        if generate(seed) != program:
+        if generate(seed, args.profile) != program:
             print(f"seed {seed}: generator is not deterministic")
             return 1
         source = render(program)
@@ -1242,18 +1764,18 @@ def cmd_light(args):
         for feature in features(program):
             counts[feature] += 1
     missing = [f for f, n in counts.items() if n == 0]
-    print(json.dumps({"seeds": args.seeds, "start": args.start, "features": counts}))
+    print(json.dumps({"profile": args.profile, "seeds": args.seeds, "start": args.start, "features": counts}))
     if missing:
         print(f"features never generated: {missing}")
         return 1
-    print(f"{args.seeds} generated programs typecheck, evaluate and render deterministically")
+    print(f"{args.seeds} {args.profile} programs typecheck, evaluate and render deterministically")
     return 0
 
 
 def write_case(program, out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    module = f"fuzz_s{program['seed']}"
+    module = module_name(program)
     expected = evaluate(program)
     (out / f"{module}.zig").write_text(Renderer(program).source(module, expected))
     (out / "program.json").write_text(json.dumps(program, indent=1) + "\n")
@@ -1263,7 +1785,7 @@ def write_case(program, out):
 
 
 def cmd_emit(args):
-    print(write_case(generate(args.seed), args.out))
+    print(write_case(generate(args.seed, args.profile), args.out))
     return 0
 
 
@@ -1314,9 +1836,11 @@ def main(argv=None):
     light = sub.add_parser("light")
     light.add_argument("--seeds", type=int, default=300)
     light.add_argument("--start", type=int, default=0)
+    light.add_argument("--profile", choices=sorted(PROFILES), default="core")
     emit = sub.add_parser("emit")
     emit.add_argument("seed", type=int)
     emit.add_argument("out")
+    emit.add_argument("--profile", choices=sorted(PROFILES), default="core")
     checks = sub.add_parser("lean-checks")
     checks.add_argument("expected")
     checks.add_argument("gen")
