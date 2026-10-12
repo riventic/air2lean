@@ -4,7 +4,7 @@
 #   scripts/worktree-init.sh [--zig VERSION ...] [--no-lean] [--no-generated]
 #
 # 1. Lean: builds what CI's `lake` job builds (ZigLean, Air2Lean, air2lean, Proofs,
-#    AssuranceTools and every tracked ZigLean module) and the tests/diff package. With
+#    AssuranceTools and every tracked ZigLean module) and the tests/diff Lean libraries. With
 #    AIR2LEAN_CAS_DIR set, the build goes through `scripts/cas.py run`: Lake's artifact cache,
 #    keyed by each module's input hash (source, the traces of its imports, toolchain, options), so
 #    a module whose inputs some other worktree already built is restored as hard links, and
@@ -60,7 +60,8 @@ if [ "$lean" = 1 ]; then
   while IFS= read -r module; do modules+=("$module"); done < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
   phase 'lean (root package)' guarded root "$PWD" \
     lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
-  phase 'lean (tests/diff package)' guarded diff "$PWD/tests/diff" lake build
+  # Its executables link archives that scripts/diff.sh builds with Zig; diff.sh builds them on use.
+  phase 'lean (tests/diff libraries)' guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 fi
 for version in ${versions[@]+"${versions[@]}"}; do
   phase "patched zig $version" scripts/zig-air.sh "$version"
