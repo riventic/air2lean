@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Toy
+import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.AutoAttr
 
 /-!

@@ -146,18 +146,17 @@ theorem SizeFree.sep {E : BlockId → Option (Nat × BlockKind)} {P Q : Assn} (h
     (fun l l' c c' e e' hb => ?_)⟩
   · by_cases e : h₁ l = none <;> simp [k₁, k₂, e]
   · funext l; by_cases e : h₁ l = none <;> simp [k₁, k₂, e, Heap.union_apply]
-    cases h' l <;> rfl
   · have := hn l; simp only [Heap.union_apply] at this
     by_cases e : h₁ l = none
     · simp [k₁, e]
     · obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp e
-      simp only [k₁, e, ite_false, hc]; rw [← this, hc]; rfl
+      rw [show k₁ l = h' l from ite_eq_right e, ← this, hc]; rfl
   · have := hpin l c (by simp [Heap.union_apply, hc]) hE
     simp [k₁, hc, this]
   · simp only [k₁] at e e'; split at e <;> split at e' <;> first | cases e | cases e' | exact hsz l l' c c' e e' hb
   · have := hn l; simp only [Heap.union_apply] at this
     by_cases e : h₁ l = none
-    · simp only [k₂, e, ite_true]; rw [← this, e]; rfl
+    · rw [show k₂ l = h' l from ite_eq_left e, ← this, e]; rfl
     · simp [k₂, e, hsplit l e]
   · have h1n : h₁ l = none := (hd l).resolve_right (by simp [hc])
     have := hpin l c (by simp [Heap.union_apply, h1n, hc]) hE

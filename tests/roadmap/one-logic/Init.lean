@@ -12,10 +12,10 @@ namespace OneLogic.Init
 open Zig Zig.Full
 
 def gs : List (Array Byte × Nat × BlockKind) :=
-  [(Enc.encode (7 : BitVec 32), 4, .global), (Enc.encode (1 : BitVec 8), 1, .constGlobal)]
+  [(Array.replicate 4 .undef, 4, .global), (#[.int 1], 1, .constGlobal)]
 
 theorem start_fseq (σ : Placement) : (Mem.ofGlobals σ gs).FSeq :=
-  Mem.init_fseq σ gs (by decide)
+  Mem.init_fseq σ gs (by simp [Mem.GlobalsFit, gs])
 
 theorem start_holds (σ : Placement) :
     Holds (Mem.ofGlobals σ gs) (initRes σ gs) ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧

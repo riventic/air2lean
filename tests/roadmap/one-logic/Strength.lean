@@ -5,8 +5,8 @@ import ZigLean.Sep.Full.Strength
 
 Every theorem migrated from the legacy logic to the full-state logic gets an entry here: its
 full-state statement, through `FTriple.toTriple_on` / `FTotalTriple.toTotal_on`, gives the legacy
-statement on every `Mem.FSeq` memory (the memories a run reaches: `Mem.init_fseq`). The legacy
-theorem is deleted only after its entry checks. The log is the `#print axioms` output of
+statement on every `Mem.FSeq` memory (the memories a run reaches: `Mem.init_fseq`). A legacy
+statement is deleted only after its entry checks. The log is the `#print axioms` output of
 `check.sh`.
 -/
 
