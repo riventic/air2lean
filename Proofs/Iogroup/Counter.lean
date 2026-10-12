@@ -1627,23 +1627,23 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- every task is joined: the ends of the blocks race with no access
   have hcl : m₁₂.ClocksLe := by
     rw [hm₁₂]; exact (Mem.ClocksLe.of_threads ho.csize (by rw [hc₁₁]; exact hall)).recordAt _ _ _ _
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
-    (hcl.freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₁) hl₁
+    (hcl.freeRaces _ _) (by rw [hkc₁]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
-  obtain ⟨b', blk', hb', hblk', rfl⟩ := free_ok hfr
+  obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hfr
   cases hb'
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1)
-    (m := { m₁₂ with blocks := m₁₂.blocks.set! 0 { blk' with live := false } }) (by
-    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₁)
-    hl₁ (hcl.freeRaces _ _) (by rw [hkc₁]; nofun) e he).elim) fun _ m₁₄ hfr' => ?_)
-  obtain ⟨b'', -, hb'', -, rfl⟩ := free_ok hfr'
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 0)
+    (m := { m₁₂ with blocks := m₁₂.blocks.set! 1 { blk' with live := false } }) (by
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₀)
+    hl₀ (hcl.freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁₄ hfr' => ?_)
+  obtain ⟨b'', blk'', hb'', hblk'', rfl⟩ := free_ok hfr'
   cases hb''
-  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk' with live := false }, ?_, rfl⟩, ?_⟩⟩
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk'' with live := false }, ?_, rfl⟩, ?_⟩⟩
   · have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂]; rfl
     exact hja r (by simpa [hth] using hr) hsp
-  · simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (by decide : (1 : Nat) ≠ 0)]
-    exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk').1
+  · simp only [Array.set!_eq_setIfInBounds]
+    exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk'').1
   · show RegionOwned IoR m₁₂ (m₁₂.clocks[0]!)
     rw [hm₁₂]
     exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; exact Nat.succ_pos _) b o 4 .read

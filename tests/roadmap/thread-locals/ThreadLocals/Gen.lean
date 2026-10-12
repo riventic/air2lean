@@ -141,8 +141,8 @@ def twoCounters  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i31 ← Zig.add false i28 i30
         let i32 ← pure ((.ok i31) : Except Zig.ErrName (BitVec 32))
         pure (.ret i32)))) : Zig.CM Tgt twoCountersLocals twoCountersExit).run' { (default : twoCountersLocals) with a := s0, b := s2 }
-  Zig.free s0
   Zig.free s2
+  Zig.free s0
   match e with
   | .ret v => pure v
 

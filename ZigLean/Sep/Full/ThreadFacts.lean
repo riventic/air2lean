@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Conc.Lock
 
 /-!
 # Facts of a concurrent proof that do not depend on its protocol
@@ -114,6 +115,10 @@ theorem _root_.Zig.LawfulEnc.decode_extract {T : Type} [Enc T] [LawfulEnc T] (v 
     Enc.decode ((Enc.encode v).extract 0 (0 + Enc.size T)) = (pure v : Result T) := by
   rw [Nat.zero_add, ← LawfulEnc.size_encode v, Array.extract_size]
   exact LawfulEnc.decode_encode v
+
+/-- A `u32` is 4 bytes. -/
+theorem _root_.Zig.LawfulEnc.size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 :=
+  LawfulEnc.size_encode v
 
 end Full
 end Zig
