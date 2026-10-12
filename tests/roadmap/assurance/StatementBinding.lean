@@ -27,4 +27,13 @@ theorem premise_only (x : Nat) (_h : root x = 0) : True := trivial
 /-- (c) A genuine theorem about `root`. -/
 theorem root_spec (x : Nat) : root x = x + 1 := rfl
 
+/-- Stands in for a two-argument generated root. -/
+def root2 (x y : Nat) : Nat := x + y
+
+/-- (d) A relational property: both sides apply the root, so it fixes no result. -/
+theorem root2_comm (x y : Nat) : root2 x y = root2 y x := Nat.add_comm x y
+
+/-- (e) A reflexive equation relates the root to itself with identical arguments. -/
+theorem root2_refl (x y : Nat) : root2 x y = root2 x y := rfl
+
 end StatementFixture

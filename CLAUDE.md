@@ -64,6 +64,9 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - On the dev Mac, set `AIR2LEAN_CAS_DIR=$HOME/.cache/air2lean/cas`: worktrees then share patched
   compilers (`scripts/zig-air.sh <version>`), Lean build outputs and AIR exports. Unset (CI), nothing
   is cached. See [docs/build-cache.md](docs/build-cache.md).
+- Start every new worktree with `scripts/worktree-init.sh [--zig <version>]`: it builds the Lean
+  packages through the shared cache (only modules no worktree has built yet are compiled), the
+  requested patched compilers and the generated files.
 - Run `scripts/preflight.sh` before every push: it materializes the whole-tree files and checks
   every committed generated file CI checks for staleness, in minutes.
 - **Local first, CI confirms.** Every CI part can be run on the development Mac, and a PR is pushed
