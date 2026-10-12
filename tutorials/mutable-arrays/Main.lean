@@ -12,13 +12,13 @@ See tutorials/mutable-arrays/README.md for the source, the exercise and the nega
 
 namespace MutableArrays
 
-open Slices Zig Assn
+open Slices Zig Zig.Full FAssn
 
 /-- Reversing a slice twice gives back its items: two `reverse_spec` triples, chained. -/
 theorem reverse_twice (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
-    Triple (arr sl.ptr vs) (do reverse sl; reverse sl) (fun _ => arr sl.ptr vs) := by
+    FTotalTriple (up (arr sl.ptr vs)) (do reverse sl; reverse sl) (fun _ => up (arr sl.ptr vs)) := by
   have back := reverse_spec sl vs.reverse (by simp [hlen])
   rw [List.reverse_reverse] at back
-  exact Triple.bind (reverse_spec sl vs hlen) (fun _ => back)
+  exact FTotalTriple.bind (reverse_spec sl vs hlen) (fun _ => back)
 
 end MutableArrays

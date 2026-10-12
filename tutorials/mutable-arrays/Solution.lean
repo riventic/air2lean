@@ -4,10 +4,10 @@ import Proofs.Slices.Sep
 
 namespace MutableArrays
 
-open Slices Zig Assn
+open Slices Zig Zig.Full FAssn
 
 theorem reverse_one (sl : Slice) (x : BitVec 32) (hlen : sl.len.toNat = 1) :
-    Triple (arr sl.ptr [x]) (reverse sl) (fun _ => arr sl.ptr [x]) := by
+    FTotalTriple (up (arr sl.ptr [x])) (reverse sl) (fun _ => up (arr sl.ptr [x])) := by
   simpa using reverse_spec sl [x] hlen
 
 end MutableArrays
