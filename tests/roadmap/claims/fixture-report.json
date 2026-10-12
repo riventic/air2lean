@@ -34,6 +34,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -47,6 +48,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -215,6 +217,15 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -225,6 +236,9 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -402,6 +416,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -415,6 +430,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -558,6 +574,15 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -568,6 +593,9 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -680,6 +708,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -693,6 +722,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -839,6 +869,15 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -849,6 +888,9 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -968,6 +1010,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -981,6 +1024,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -1135,6 +1179,15 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -1145,6 +1198,9 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -1389,9 +1445,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -1491,9 +1545,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -1567,9 +1619,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -1741,9 +1791,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -1819,9 +1867,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -1992,9 +2038,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -2071,9 +2115,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -2611,9 +2653,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -2740,9 +2780,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -2821,9 +2859,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -2940,9 +2976,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -3018,9 +3052,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -3104,9 +3136,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -3373,9 +3403,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -3450,9 +3478,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -4152,9 +4178,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -4229,9 +4253,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -4578,9 +4600,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
@@ -4625,6 +4645,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4638,6 +4659,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -4766,6 +4788,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4779,6 +4802,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -4937,6 +4961,15 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -4947,6 +4980,9 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -5103,9 +5139,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Env.Host",
