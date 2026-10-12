@@ -16,6 +16,10 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   which the illegal behaviour already permits. The only per-version file of the exporter.
 - `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
+The writer is moving out of the compiler: a capture shim in the compiler and a standalone
+renderer ([docs/exporter-split.md](../docs/exporter-split.md)). `capture/` holds its generated tag
+tables; `scripts/exporter-equivalence.py` re-runs every recorded export and compares the bytes.
+
 New dumps include `target_endian` (`little` or `big`) in schema 11. The translator rejects
 explicitly non-little-endian dumps; older dumps without this optional field assume little
 endian. Memory layout checks also enforce the model's 64-bit ABI.
