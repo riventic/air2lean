@@ -63,6 +63,7 @@
     "ZigLean.BitCast": ["SEM-01", "SEM-02"],
     "ZigLean.Packed": ["SEM-01", "SEM-02"],
     "ZigLean.PackedRepr": ["SEM-01", "SEM-02"],
+    "ZigLean.Conc.Endian": ["SEM-02"],
     "ZigLean.Endian": ["SEM-02"],
     "ZigLean.EndianLemmas": ["SEM-02"],
     "ZigLean.Union": ["SEM-01", "SEM-02"],

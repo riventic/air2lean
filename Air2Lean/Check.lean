@@ -2678,7 +2678,9 @@ private def checkLaneConstant (f : Func) (v : Val) : Except String Unit :=
 
 /-- A big-endian profile (T03, `ZigLean/Endian.lean`) parameterizes the byte order of
 integers, floats, slices, enums, packed structs (their backing integer and bit-pointer hosts),
-whole-byte vector lanes and every aggregate built from them. The rest is unqualified on a
+whole-byte vector lanes, every aggregate built from them, atomic ops and futex words
+(`ZigLean/Conc/Endian.lean`). The std allocator, thread and OS models read no integer from
+memory except the futex word, so they are the same at both orders. The rest is unqualified on a
 big-endian target and fails closed (`docs/profiles.md` §Byte order). -/
 def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
   let fail {α : Type} (what : String) : Except String α :=
@@ -2707,14 +2709,21 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
       | _ => false
     | _ => false
   let hostOf (t : TyId) : Nat := (f.layouts[t]?.map (·.hostSize)).getD 0
+  -- An atomic op is the little-endian op under a byte swap (`ZigLean/Conc/Endian.lean`): its
+  -- integer representation is at most one byte or a whole number of bytes. A pointer's bytes
+  -- are symbolic, the same at both orders.
+  let atomicPtr (v : Val) : Option TyId := (tyOf v).bind (ptrChild f.types)
+  let atomicWidth (v : Val) : Except String Unit := do
+    if let some bits := (atomicPtr v).bind (packedBits f.types) then
+      unless bits ≤ 8 || bits % 8 == 0 do
+        fail s!"an atomic op on a {bits}-bit integer representation (neither at most one byte nor a \
+          whole number of bytes)"
   for i in insts do
     match i.op with
-    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => fail "an atomic op"
+    | .atomicLoad p _ | .atomicStore p _ _ | .atomicRmw _ _ p _ | .cmpxchg _ p .. => atomicWidth p
     | .asm .. => fail "inline assembly"
     | .tagName _ => fail "`@tagName`"
     | .errorName _ => fail "`@errorName`"
-    | .call (.func callee ..) _ =>
-      if modelledStdFn callee f.allocatorModel then fail s!"the std model '{callee}'"
     -- The little-endian byte offset of a byte-aligned packed field (`FCtx.fieldOffsetIn`).
     | .fieldPtr b _ =>
       if (tyOf b).any packedPtr && hostOf i.ty == 0 then fail "a byte pointer to a packed struct field"

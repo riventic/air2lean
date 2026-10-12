@@ -1429,6 +1429,11 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) (baseBit : Nat := 0) :
 /-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
 def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
 
+/-- The integer atomic or futex op `name` (`ZigLean/Conc/Call.lean`), or its byte-order form at
+`.big` (`ZigLean/Conc/Endian.lean`) for a big-endian profile. -/
+def FCtx.atomicFn (fc : FCtx) (name : String) : String :=
+  if fc.bigEndian then s!"Zig.{name}Of .big" else s!"Zig.{name}"
+
 /-- The bit-pointer access `name` (`ZigLean/Packed.lean`), or its byte-order form at `.big`
 (`ZigLean/Endian.lean`) for a big-endian profile. -/
 def FCtx.bitsFn (fc : FCtx) (name : String) : String :=
@@ -1689,11 +1694,11 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .yield => "Zig.threadYieldC"
   | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
-  | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
-  | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWait => s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
+  | .futexWaitU => s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"
   | .futexWake => s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
   -- `Thread.Futex.wait(ptr, expect)`, `Thread.Futex.wake(ptr, max_waiters)`.
-  | .threadFutexWait => s!"Zig.threadFutexWaitC {String.intercalate " " (args.toList.map rv)}"
+  | .threadFutexWait => s!"{fc.atomicFn "threadFutexWaitC"} {String.intercalate " " (args.toList.map rv)}"
   | .threadFutexWake => s!"Zig.threadFutexWakeC {String.intercalate " " (args.toList.map rv)}"
   -- `DarwinImpl.lock(self)`: `self` points to the `os_unfair_lock` (its only field).
   | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
@@ -2770,14 +2775,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- `unordered`: `--allocator-model translated` only (`Check.lean`).
     let expr := if order == .unordered then
         if fc.atomicPtr ptr then s!"Zig.atomicLoadUnorderedEncC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
-        else s!"Zig.atomicLoadUnorderedC (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+        else s!"{fc.atomicFn "atomicLoadUnorderedC"} (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
       else if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
-      else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
-      else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicTyped ptr then s!"{fc.atomicFn "atomicLoadAsC"} ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else s!"{fc.atomicFn "atomicLoadC"} (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .atomicStore ptr v order =>
     let f := if fc.atomicPtr ptr then s!"Zig.atomicStorePtrC (α := {fc.pointeeTy ptr})"
-      else if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
+      else if fc.atomicTyped ptr then fc.atomicFn "atomicStoreAsC" else fc.atomicFn "atomicStoreC"
     (env, some s!"{f} {orderTerm order} {fc.ptrAlign ptr} {rv ptr} {rv v}")
   | .atomicRmw op order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
@@ -2790,15 +2795,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let o := orderTerm order
     -- `Check.lean` admits only `.Xchg` on a pointer.
     let expr := if fc.atomicPtr ptr then s!"Zig.atomicXchgPtrC (α := {fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
-      else if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
-      else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else if fc.atomicTyped ptr then s!"{fc.atomicFn "atomicRmwAsC"} {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else s!"{fc.atomicFn "atomicRmwC"} {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmpxchg weak ptr expected new succ fail =>
     let f := if fc.atomicPtr ptr then
         if weak then s!"Zig.cmpxchgWeakPtrC (α := {fc.pointeeTy ptr})" else s!"Zig.cmpxchgPtrC (α := {fc.pointeeTy ptr})"
       else if fc.atomicTyped ptr then
-        if weak then "Zig.cmpxchgWeakAsC" else "Zig.cmpxchgAsC"
-      else if weak then "Zig.cmpxchgWeakC" else "Zig.cmpxchgC"
+        fc.atomicFn (if weak then "cmpxchgWeakAsC" else "cmpxchgAsC")
+      else fc.atomicFn (if weak then "cmpxchgWeakC" else "cmpxchgC")
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>

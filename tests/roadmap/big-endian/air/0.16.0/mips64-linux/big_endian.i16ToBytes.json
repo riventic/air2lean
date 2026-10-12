@@ -7,14 +7,31 @@
  ],
  "profile": {
   "name": "abi64-be-v1",
-  "target_triple": "s390x-linux.5.10...6.19-musl",
+  "target_triple": "mips64-linux.5.10...6.19-muslabi64",
   "pointer_bits": 64,
   "endian": "big",
-  "abi": "musl",
+  "abi": "muslabi64",
   "zig_version": "0.16.0",
   "backend": "stage2_llvm",
-  "cpu": "arch8",
-  "features": [],
+  "cpu": "mips64r2",
+  "features": [
+   "fp64",
+   "gp64",
+   "mips1",
+   "mips2",
+   "mips3",
+   "mips32",
+   "mips32r2",
+   "mips3_32",
+   "mips3_32r2",
+   "mips4",
+   "mips4_32",
+   "mips4_32r2",
+   "mips5",
+   "mips5_32r2",
+   "mips64",
+   "mips64r2"
+  ],
   "build_mode": "ReleaseSafe",
   "float_mode": "per-instruction",
   "error_set_bits": 16,
@@ -22,12 +39,12 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "reject.atomicRead",
+ "name": "big_endian.i16ToBytes",
  "module": "root",
  "src": {
-  "file": "reject.zig",
-  "module": "reject",
-  "decl_line": 22
+  "file": "big_endian.zig",
+  "module": "big_endian",
+  "decl_line": 19
  },
  "params": [
   0
@@ -51,7 +68,7 @@
   {
    "id": 2,
    "tag": "bitcast",
-   "ty": 3,
+   "ty": 1,
    "args": [
     {
      "inst": 0
@@ -60,54 +77,37 @@
   },
   {
    "id": 3,
-   "tag": "atomic_load",
-   "ty": 1,
-   "args": [
-    {
-     "inst": 2
-    }
-   ],
-   "order": "seq_cst"
-  },
-  {
-   "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 2,
    "column": 5
   },
   {
-   "id": 5,
+   "id": 4,
    "tag": "ret_safe",
-   "ty": 4,
+   "ty": 3,
    "args": [
     {
-     "inst": 3
+     "inst": 2
     }
    ]
   }
  ],
  "types": [
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 1,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
+   "k": "int",
+   "signed": true,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
   },
   {
-   "k": "int",
-   "signed": false,
-   "bits": 32,
-   "abi_size": 4,
-   "abi_align": 4
+   "k": "array",
+   "len": 2,
+   "child": 4,
+   "sentinel": false,
+   "abi_size": 2,
+   "abi_align": 1
   },
   {
    "k": "void",
@@ -115,21 +115,14 @@
    "abi_align": 1
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 1,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
+   "k": "noreturn"
   },
   {
-   "k": "noreturn"
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

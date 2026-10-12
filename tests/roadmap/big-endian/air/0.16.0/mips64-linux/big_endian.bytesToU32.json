@@ -1,0 +1,128 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-be-v1",
+  "target_triple": "mips64-linux.5.10...6.19-muslabi64",
+  "pointer_bits": 64,
+  "endian": "big",
+  "abi": "muslabi64",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "mips64r2",
+  "features": [
+   "fp64",
+   "gp64",
+   "mips1",
+   "mips2",
+   "mips3",
+   "mips32",
+   "mips32r2",
+   "mips3_32",
+   "mips3_32r2",
+   "mips4",
+   "mips4_32",
+   "mips4_32r2",
+   "mips5",
+   "mips5_32r2",
+   "mips64",
+   "mips64r2"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "big_endian.bytesToU32",
+ "module": "root",
+ "src": {
+  "file": "big_endian.zig",
+  "module": "big_endian",
+  "decl_line": 15
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "bitcast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "array",
+   "len": 4,
+   "child": 4,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}
