@@ -32,6 +32,12 @@ invariant and ghost values.
   on when a wake woke it. A wait that would sleep may instead return spuriously
   (`Sched.spuriousWake`), so its continuation must also hold from the memory before the wait.
 
+- **Turn cost** (`Proto.cost`, opt-in). With `some cr` each stop pays for its turn in credits
+  (`Proto.Charged`) and, in strict mode, a run may have no result only when its depth ran out
+  (`Proto.Partial`); `Proto.returnsWithin` (`ZigLean/Conc/Returns.lean`) then bounds every
+  schedule's turns. With `none` (the default) `Safe` is the partial-correctness one
+  (`Safe.sync_none`); the rules below take `P.cost = none` by `rfl` for a concrete protocol.
+
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post
 gets the depth that is left: a loop repeat that passes a sync op has a smaller depth, so a loop
