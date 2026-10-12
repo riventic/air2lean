@@ -1,4 +1,5 @@
 import ZigLean.Mem.Thread
+import Lean
 
 /-!
 # Steps that have a result
@@ -106,6 +107,41 @@ theorem ite' {c : Prop} [Decidable c] {x y : MemM α} (hx : x.Halts) (hy : y.Hal
 
 theorem of_fun {g : Mem → Result (α × Mem)} (h : ∀ m, (g m).Halts) : MemM.Halts (α := α) g := h
 
+/-! ### The body monad of a function that uses memory (`MM`) -/
+
+variable {σ : Type} {s : σ}
+
+theorem runBind {x : MM σ α} {f : α → MM σ β} (hx : (x.run s).Halts)
+    (hf : ∀ p : α × σ, ((f p.1).run p.2).Halts) : ((x >>= f).run s).Halts := by
+  rw [StateT.run_bind]; exact bind' hx hf
+
+theorem run' {x : MM σ α} (hx : (x.run s).Halts) : (x.run' s).Halts := by
+  rw [StateT.run'_eq]; exact map' hx
+
+theorem runPure (a : α) : ((pure a : MM σ α).run s).Halts := by
+  rw [StateT.run_pure]; exact pure' _
+
+theorem runGet : ((get : MM σ σ).run s).Halts := by
+  rw [StateT.run_get]; exact pure' _
+
+theorem runSet (s' : σ) : ((set s' : MM σ PUnit).run s).Halts := by
+  rw [StateT.run_set]; exact pure' _
+
+theorem runModify (g : σ → σ) : ((modify g : MM σ PUnit).run s).Halts := by
+  rw [StateT.run_modify]; exact pure' _
+
+theorem runLift {x : MemM α} (hx : x.Halts) : ((StateT.lift x : MM σ α).run s).Halts := by
+  rw [StateT.run_lift]; exact bind' hx fun _ => pure' _
+
+theorem runMonadLift {x : MemM α} (hx : x.Halts) : ((monadLift x : MM σ α).run s).Halts :=
+  runLift hx
+
+theorem runCallM {x : MemM α} (hx : x.Halts) : ((callM x : MM σ α).run s).Halts := runLift hx
+
+theorem runThrow (e : Error) : ((throw e : MM σ α).run s).Halts := by
+  show ((StateT.lift (throw e : MemM α) : MM σ α).run s).Halts
+  exact runLift (throw' e)
+
 end MemM.Halts
 
 /-! ## Primitives -/
@@ -170,6 +206,25 @@ macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact MemM.Halts
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact MemM.Halts.throw' _)
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact intOfBytes_halts _ _ _)
 
+open Lean Elab Tactic Meta in
+/-- Unfold the head function of a `Halts` goal: a generated function (or a primitive without a
+lemma) is shown to halt by its body. Recursive definitions (`partial_fixpoint` loops) have no
+unfolding equation here and are left alone. -/
+elab "halts_unfold" : tactic => do
+  let t ← whnfR (← instantiateMVars (← getMainTarget))
+  let some x := t.getAppArgs.back? | throwError "halts_unfold: no argument"
+  let .const n _ := x.getAppFn | throwError "halts_unfold: no constant head"
+  if (← getEnv).isProjectionFn n then throwError "halts_unfold: projection"
+  let env ← getEnv
+  if let some idx := env.getModuleIdxFor? n then
+    let mod := env.header.moduleNames[idx.toNat]!
+    if [`Init, `Lean, `Std].any (·.isPrefixOf mod) then
+      throwError "halts_unfold: core definition"
+  let some info := (← getEnv).find? n | throwError "halts_unfold: unknown"
+  unless info.hasValue do throwError "halts_unfold: no body"
+  if ← isRecursiveDefinition n then throwError "halts_unfold: recursive"
+  evalTactic (← `(tactic| unfold $(mkIdent n):ident))
+
 /-- `halts`: a straight-line composition of halting steps halts (`halts_leaf` for the leaves). -/
 syntax "halts" : tactic
 
@@ -177,6 +232,16 @@ macro_rules
   | `(tactic| halts) => `(tactic| repeat (first
       | halts_leaf
       | assumption
+      | (with_reducible apply MemM.Halts.runBind <;> try intro)
+      | with_reducible apply MemM.Halts.run'
+      | with_reducible exact MemM.Halts.runPure _
+      | with_reducible exact MemM.Halts.runGet
+      | with_reducible exact MemM.Halts.runSet _
+      | with_reducible exact MemM.Halts.runModify _
+      | with_reducible exact MemM.Halts.runThrow _
+      | with_reducible apply MemM.Halts.runCallM
+      | with_reducible apply MemM.Halts.runMonadLift
+      | with_reducible apply MemM.Halts.runLift
       | (with_reducible apply MemM.Halts.bind' <;> try intro)
       | with_reducible apply MemM.Halts.map'
       | with_reducible apply MemM.Halts.lift'
@@ -185,7 +250,13 @@ macro_rules
       | (with_reducible apply Result.Halts.bind' <;> try intro)
       | with_reducible apply Result.Halts.map'
       | dsimp only
-      | split))
+      | split
+      | halts_unfold))
+
+theorem unwrapErr_halts {α : Type} (e : Except ErrName α) : (unwrapErr e).Halts := by
+  unfold unwrapErr; split <;> halts
+
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact unwrapErr_halts _)
 
 theorem access_halts (m : Mem) (p : Ptr) (n a : Nat) : (m.access p n a).Halts := by
   unfold Mem.access; halts

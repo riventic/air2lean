@@ -32,18 +32,28 @@ variable {Tgt γ : Type} {P : Proto Tgt γ}
 /-! ## Budgets of the scheduler's threads -/
 
 /-- The paths of a thread end within `B` turns; the values at the end are not constrained. -/
-abbrev TT (R : Mem → Prop) (kb : Tgt → Option Nat) {β : Type} (B : Nat) {n : Nat}
+abbrev TT (R : Mem → Prop) (dispatch : Tgt → ConcM Tgt Unit) {β : Type} (B : Nat) {n : Nat}
     (x : CoN Tgt (β × Mem) n) : Prop :=
-  Turns R kb (fun _ _ _ _ => True) B x
+  Turns R dispatch (fun _ _ _ _ => True) B x
 
 /-- A waiting thread with budget `b`: the op it waits at fits, and the rest is within the rest. -/
-def PB (R : Mem → Prop) (kb : Tgt → Option Nat) {β : Type} (b : Nat) (p : Sched.Paused Tgt β) :
-    Prop :=
-  ∃ c, opCost kb p.op = some c ∧ c ≤ b ∧ ∀ r m', R m' → TT R kb (b - c) (p.k r m')
+def PB (R : Mem → Prop) (dispatch : Tgt → ConcM Tgt Unit) {β : Type} (b : Nat)
+    (p : Sched.Paused Tgt β) : Prop :=
+  ∃ m, TT R dispatch b (.sync p.op m p.k)
+
+theorem PB.pos {R : Mem → Prop} {dispatch : Tgt → ConcM Tgt Unit} {β : Type} {b : Nat}
+    {p : Sched.Paused Tgt β} (h : PB R dispatch b p) : 1 ≤ b := by
+  obtain ⟨d, op, k⟩ := p
+  obtain ⟨m, h⟩ := h
+  cases op with
+  | spawn tgt => obtain ⟨kk, -, hle, -⟩ := Turns.spawn_inv h; omega
+  | _ =>
+    obtain ⟨c, hc, hle, -⟩ := Turns.step_inv h (by intro _ h; cases h)
+    have := opCost_pos hc; omega
 
 /-- A thread with budget `b` (an ended thread needs none). -/
-def TB (R : Mem → Prop) (kb : Tgt → Option Nat) {β : Type} (b : Nat) : Sched.TS Tgt β → Prop
-  | .paused p => PB R kb b p
+def TB (R : Mem → Prop) (dispatch : Tgt → ConcM Tgt Unit) {β : Type} (b : Nat) : Sched.TS Tgt β → Prop
+  | .paused p => PB R dispatch b p
   | .done => True
 
 /-- The sum `f 0 + … + f (n - 1)`. -/
@@ -72,9 +82,9 @@ theorem bsum_set {f : Nat → Nat} {i v : Nat} :
       simp only [Ne.symm hi, ↓reduceIte]; omega
 
 /-- The budgets of the threads of `s` sum to at most `fuel`. -/
-def BInv (R : Mem → Prop) (kb : Tgt → Option Nat) {α : Type} (s : Sched.State Tgt α)
+def BInv (R : Mem → Prop) (dispatch : Tgt → ConcM Tgt Unit) {α : Type} (s : Sched.State Tgt α)
     (fuel : Nat) : Prop :=
-  ∃ bm bk, TB R kb bm s.main ∧ (∀ i (h : i < s.kids.size), TB R kb (bk i) s.kids[i]) ∧
+  ∃ bm bk, TB R dispatch bm s.main ∧ (∀ i (h : i < s.kids.size), TB R dispatch (bk i) s.kids[i]) ∧
     bm + bsum bk s.kids.size ≤ fuel
 
 /-! ## One turn -/
@@ -82,26 +92,26 @@ def BInv (R : Mem → Prop) (kb : Tgt → Option Nat) {α : Type} (s : Sched.Sta
 /-- A turn's result within budget `b`: it has a result, and on success the thread is left with
 `b - c` for some `c ≥ 1`, `main` is unchanged, and the kids are the same or have one new kid
 with `k + 1` of the `c = k + 2`. -/
-def TurnB (R : Mem → Prop) (kb : Tgt → Option Nat) {α β : Type} (b : Nat) (s : Sched.State Tgt α) :
+def TurnB (R : Mem → Prop) (dispatch : Tgt → ConcM Tgt Unit) {α β : Type} (b : Nat) (s : Sched.State Tgt α) :
     Except (Option Error) (Sched.TS Tgt β × Option β × Sched.State Tgt α) → Prop
   | .error none => False
   | .error (some _) => True
-  | .ok (ts, _, s') => ∃ c, 1 ≤ c ∧ c ≤ b ∧ TB R kb (b - c) ts ∧ s'.main = s.main ∧
-      (s'.kids = s.kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, s'.kids = s.kids.push nk ∧ TB R kb (k + 1) nk)
+  | .ok (ts, _, s') => ∃ c, 1 ≤ c ∧ c ≤ b ∧ TB R dispatch (b - c) ts ∧ s'.main = s.main ∧
+      (s'.kids = s.kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, s'.kids = s.kids.push nk ∧ TB R dispatch (k + 1) nk)
 
-variable {R : Mem → Prop} {kb : Tgt → Option Nat}
+variable {R : Mem → Prop} {dispatch : Tgt → ConcM Tgt Unit}
 
 /-- `settle` of a tree within `b - c`, from a state whose `main` and kids are those of `s` (or
 have the new kid of a spawn). -/
 theorem settle_budget {α β : Type} {t : ThreadId} {s s₁ : Sched.State Tgt α} {b c n : Nat}
-    {tree : CoN Tgt (β × Mem) n} (hc : 1 ≤ c) (hcb : c ≤ b) (ht : TT R kb (b - c) tree)
+    {tree : CoN Tgt (β × Mem) n} (hc : 1 ≤ c) (hcb : c ≤ b) (ht : TT R dispatch (b - c) tree)
     (hm : s₁.main = s.main)
-    (hk : s₁.kids = s.kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, s₁.kids = s.kids.push nk ∧ TB R kb (k + 1) nk) :
-    TurnB R kb b s (Sched.settle t s₁ tree) := by
+    (hk : s₁.kids = s.kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, s₁.kids = s.kids.push nk ∧ TB R dispatch (k + 1) nk) :
+    TurnB R dispatch b s (Sched.settle t s₁ tree) := by
   cases tree with
   | leaf r =>
     rcases r with _ | _ | ⟨v, m⟩
-    · simp [TT, Turns] at ht
+    · exact (Turns.not_none ht).elim
     · trivial
     · simp only [Sched.settle]
       have hh := checkJoinedByChild_halts t m
@@ -109,7 +119,7 @@ theorem settle_budget {α β : Type} {t : ThreadId} {s s₁ : Sched.State Tgt α
       match hr : ((Thread.checkJoinedByChild t).run m).run, hh with
       | some (.error _), _ => trivial
       | some (.ok _), _ => exact ⟨c, hc, hcb, trivial, hm, hk⟩
-  | sync op m k => exact ⟨c, hc, hcb, ht, hm, hk⟩
+  | sync op m k => exact ⟨c, hc, hcb, ⟨m, ht⟩, hm, hk⟩
 
 /-- The scheduler's part of a fork, a join or a futex wake keeps the blocks. -/
 theorem fork_blocks {m m' : Mem} {c : ThreadId} (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
@@ -138,32 +148,48 @@ theorem join_blocks {m m' : Mem} {tid : ThreadId}
 /-- One turn of a thread with budget `b` (`PB`), from a state whose memory satisfies the rely. -/
 theorem turn_budget {α β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat)
     (o : Nat → Nat) (hRb : ∀ m m', m.blocks = m'.blocks → R m → R m')
-    (hkid : ∀ tgt k, kb tgt = some k → ∀ m, R m →
-      Stops R kb (dispatch tgt) (fun _ _ _ => True) m k)
     {t : ThreadId} {s : Sched.State Tgt α} {p : Sched.Paused Tgt β} {b : Nat}
-    (hRs : R s.mem) (hpb : PB R kb b p) (hfuel : b ≤ fuel + 1) :
-    TurnB R kb b s (Sched.turn env dispatch fuel o t s p) := by
+    (hRs : R s.mem) (hpb : PB R dispatch b p) (hfuel : b ≤ fuel + 1) :
+    TurnB R dispatch b s (Sched.turn env dispatch fuel o t s p) := by
   obtain ⟨d, op, k⟩ := p
-  obtain ⟨c, hc, hcb, hk⟩ := hpb
-  have c1 := opCost_pos hc
+  obtain ⟨m₀, hpb⟩ := hpb
   have hRt : R { s.mem with current := t } := hRb s.mem _ rfl hRs
   cases op with
-  | yield =>
+  | spawn tgt =>
+    obtain ⟨kk, hkid, hcb, hk⟩ := Turns.spawn_inv hpb
     simp only [Sched.turn, Sched.turnTrace]
-    exact settle_budget c1 hcb (hk _ _ hRt) rfl (.inl rfl)
-  | choose n =>
+    generalize hso : Sched.State.spawnOutcome env { s with mem := { s.mem with current := t } } o = so
+    obtain ⟨c', s₀⟩ := so
+    obtain ⟨⟨st, tr, rfl⟩, -⟩ := spawnOutcome_eq hso
+    simp only
+    split
+    rotate_left
+    · exact settle_budget (by omega) hcb (hk _ _ hRt) rfl (.inl rfl)
+    simp only [Sched.State.onMem, bind, Except.bind]
+    have hh := fork_halts { s.mem with current := t }
+    unfold Result.Halts at hh
+    match hf : (Thread.fork.run { s.mem with current := t }).run, hh with
+    | some (.error _), _ => trivial
+    | some (.ok (child, m₁)), _ =>
+      refine settle_budget (by omega) hcb (hk _ _ (hRb _ _ (fork_blocks hf).symm hRt)) rfl
+        (.inr ⟨kk, rfl, _, rfl, ⟨m₀, .step rfl (by omega) fun _ m' hr => ?_⟩⟩)
+      exact hkid m' fuel hr (by omega)
+  | wait | gate | spawnGated =>
+    obtain ⟨c, hc, -⟩ := Turns.step_inv hpb (by intro tgt h; cases h)
+    simp [opCost] at hc
+  | yield | choose | pick =>
+    obtain ⟨c, hc, hcb, hk⟩ := Turns.step_inv hpb (by intro tgt h; cases h)
     simp only [Sched.turn, Sched.turnTrace, Sched.State.choose]
-    exact settle_budget c1 hcb (hk _ _ hRt) rfl (.inl rfl)
-  | pick count =>
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.choose]
-    exact settle_budget c1 hcb (hk _ _ hRt) rfl (.inl rfl)
+    exact settle_budget (opCost_pos hc) hcb (hk _ _ hRt) rfl (.inl rfl)
   | asyncChoice =>
+    obtain ⟨c, hc, hcb, hk⟩ := Turns.step_inv hpb (by intro tgt h; cases h)
     simp only [Sched.turn, Sched.turnTrace]
     generalize hso : Sched.State.asyncChoice env { s with mem := { s.mem with current := t } } o = so
     obtain ⟨c', s₀⟩ := so
     obtain ⟨⟨st, tr, rfl⟩, -⟩ := asyncChoice_eq hso
-    exact settle_budget c1 hcb (hk _ _ hRt) rfl (.inl rfl)
+    exact settle_budget (opCost_pos hc) hcb (hk _ _ hRt) rfl (.inl rfl)
   | wake ptr n =>
+    obtain ⟨c, hc, hcb, hk⟩ := Turns.step_inv hpb (by intro tgt h; cases h)
     simp only [Sched.turn, Sched.turnTrace]
     generalize hso : Sched.State.chooseWake { s with mem := { s.mem with current := t } } o ptr n = so
     obtain ⟨cs, s₀⟩ := so
@@ -175,45 +201,24 @@ theorem turn_budget {α β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Uni
         Except.ok.injEq, Prod.mk.injEq] at hw
       rw [← hw.2]
     simp only [Sched.State.onMem, bind, Except.bind, hw]
-    exact settle_budget c1 hcb (hk _ _ (hRb _ _ hb.symm hRs)) rfl (.inl rfl)
+    exact settle_budget (opCost_pos hc) hcb (hk _ _ (hRb _ _ hb.symm hRs)) rfl (.inl rfl)
   | join tid =>
+    obtain ⟨c, hc, hcb, hk⟩ := Turns.step_inv hpb (by intro tgt h; cases h)
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind]
     have hh := join_halts tid { s.mem with current := t }
     unfold Result.Halts at hh
     match hj : ((Thread.join tid).run { s.mem with current := t }).run, hh with
     | some (.error _), _ => trivial
     | some (.ok ((), m₁)), _ =>
-      exact settle_budget c1 hcb (hk _ _ (hRb _ _ (join_blocks hj).symm hRt)) rfl (.inl rfl)
-  | spawn tgt =>
-    simp only [opCost] at hc
-    obtain ⟨kk, hkk, rfl⟩ : ∃ kk, kb tgt = some kk ∧ kk + 2 = c := by
-      cases h : kb tgt <;> simp_all
-    simp only [Sched.turn, Sched.turnTrace]
-    generalize hso : Sched.State.spawnOutcome env { s with mem := { s.mem with current := t } } o = so
-    obtain ⟨c', s₀⟩ := so
-    obtain ⟨⟨st, tr, rfl⟩, -⟩ := spawnOutcome_eq hso
-    simp only
-    split
-    rotate_left
-    · exact settle_budget c1 hcb (hk _ _ hRt) rfl (.inl rfl)
-    simp only [Sched.State.onMem, bind, Except.bind]
-    have hh := fork_halts { s.mem with current := t }
-    unfold Result.Halts at hh
-    match hf : (Thread.fork.run { s.mem with current := t }).run, hh with
-    | some (.error _), _ => trivial
-    | some (.ok (child, m₁)), _ =>
-      refine settle_budget c1 hcb (hk _ _ (hRb _ _ (fork_blocks hf).symm hRt)) rfl
-        (.inr ⟨kk, rfl, _, rfl, ⟨1, rfl, by omega, fun _ m' hr => ?_⟩⟩)
-      exact Turns.mono (fun _ h => h) (fun _ _ _ _ _ => trivial) _
-        (hkid tgt kk hkk m' hr fuel (by omega))
-  | wait | gate | spawnGated => simp [opCost] at hc
+      exact settle_budget (opCost_pos hc) hcb (hk _ _ (hRb _ _ (join_blocks hj).symm hRt)) rfl
+        (.inl rfl)
 
 /-- The kids after a turn of cost `c`: the same, or one new kid with `k + 1` of `c = k + 2`. The
 new budgets agree below `kids.size` and their sum grows by at most `c - 1`. -/
 theorem kids_budget {kids kids₂ : Array (Sched.TS Tgt Unit)} {bk : Nat → Nat} {c : Nat}
-    (hc : 1 ≤ c) (hbk : ∀ i (h : i < kids.size), TB R kb (bk i) kids[i])
-    (hk : kids₂ = kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, kids₂ = kids.push nk ∧ TB R kb (k + 1) nk) :
-    ∃ bk', (∀ i < kids.size, bk' i = bk i) ∧ (∀ i (h : i < kids₂.size), TB R kb (bk' i) kids₂[i]) ∧
+    (hc : 1 ≤ c) (hbk : ∀ i (h : i < kids.size), TB R dispatch (bk i) kids[i])
+    (hk : kids₂ = kids ∨ ∃ k, c = k + 2 ∧ ∃ nk, kids₂ = kids.push nk ∧ TB R dispatch (k + 1) nk) :
+    ∃ bk', (∀ i < kids.size, bk' i = bk i) ∧ (∀ i (h : i < kids₂.size), TB R dispatch (bk' i) kids₂[i]) ∧
       bsum bk' kids₂.size + 1 ≤ bsum bk kids.size + c := by
   rcases hk with rfl | ⟨k, rfl, nk, rfl, hnk⟩
   · exact ⟨bk, fun _ _ => rfl, hbk, by omega⟩
@@ -239,18 +244,16 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
     (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hR : ∀ G m, P.inv G m → R m) (hRb : ∀ m m', m.blocks = m'.blocks → R m → R m')
-    (hkid : ∀ tgt k, kb tgt = some k → ∀ m, R m →
-      Stops R kb (dispatch tgt) (fun _ _ _ => True) m k) :
+    :
     ∀ (fuel : Nat) (s : Sched.State Tgt α) (G : ThreadId → γ), P.SInv QM s G →
-      BInv R kb s fuel → (Sched.go env dispatch o fuel s).1 ≠ none := by
+      BInv R dispatch s fuel → (Sched.go env dispatch o fuel s).1 ≠ none := by
   intro fuel
   induction fuel with
   | zero =>
     rintro s G hs ⟨bm, bk, hbm, -, hle⟩
     obtain ⟨p, hp, -⟩ := hs.main
     rw [hp] at hbm
-    obtain ⟨c, hc, hcb, -⟩ := hbm
-    have := opCost_pos hc
+    have := PB.pos hbm
     omega
   | succ fuel ih =>
     rintro s G hs ⟨bm, bk, hbm, hbk, hle⟩
@@ -287,7 +290,7 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
       simp only [hp₀]
       rw [← hm₁] at hp₀
       rw [← hm₁, hp₀] at hbm
-      have htb := turn_budget env dispatch fuel o hRb hkid (t := 0) hRs hbm (by omega)
+      have htb := turn_budget env dispatch fuel o hRb (t := 0) hRs hbm (by omega)
       unfold Sched.turn at htb
       split
       · rename_i e he
@@ -324,7 +327,7 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
         rw [he] at hpb
         have hbi : bk i ≤ bsum bk s₁.kids.size := by
           have := bsum_set (f := bk) (v := 0) hlt; omega
-        have htb := turn_budget env dispatch fuel o hRb hkid (t := i + 1) hRs hpb (by omega)
+        have htb := turn_budget env dispatch fuel o hRb (t := i + 1) hRs hpb (by omega)
         unfold Sched.turn at htb
         split
         · rename_i e he'
@@ -360,9 +363,9 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
             rcases hkids₂ with h | ⟨_, _, _, h, _⟩
             · rw [h]; exact hlt
             · rw [h, Array.size_push]; exact Nat.lt_succ_of_lt hlt
-          have hB : BInv R kb { s₂ with kids := s₂.kids.set! i ts } fuel := by
+          have hB : BInv R dispatch { s₂ with kids := s₂.kids.set! i ts } fuel := by
             refine ⟨bm, fun j => if j = i then bk i - c else bk' j, ?_, fun j hj => ?_, ?_⟩
-            · show TB R kb bm s₂.main; rw [hmain₂, hm₁]; exact hbm
+            · show TB R dispatch bm s₂.main; rw [hmain₂, hm₁]; exact hbm
             · simp only [Array.set!, Array.size_setIfInBounds] at hj ⊢
               rw [Array.getElem_setIfInBounds hj]
               split
@@ -397,11 +400,9 @@ theorem returnsWithin {α : Type} (env : Env) (henv : env.spawn = .fallible → 
     (hQM : ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
     (hmain : ∀ n, P.WP 0 main QM G0 { m0 with current := 0 } n)
-    {R : Mem → Prop} {kb : Tgt → Option Nat}
+    {R : Mem → Prop}
     (hR : ∀ G m, P.inv G m → R m) (hRb : ∀ m m', m.blocks = m'.blocks → R m → R m')
-    (hkid : ∀ tgt k, kb tgt = some k → ∀ m, R m →
-      Stops R kb (dispatch tgt) (fun _ _ _ => True) m k)
-    {B : Nat} (hB : Stops R kb main (fun _ _ _ => True) { m0 with current := 0 } B) :
+    {B : Nat} (hB : Stops R dispatch main (fun _ _ _ => True) { m0 with current := 0 } B) :
     Total.ReturnsWithin B env dispatch main m0 (fun v m => ∃ G d, QM v G m d) := by
   intro o fuel hf
   have hsome : (Sched.run env dispatch fuel o main m0).run ≠ none := by
@@ -409,10 +410,10 @@ theorem returnsWithin {α : Type} (env : Env) (henv : env.spawn = .fallible → 
     have hsafe : P.Safe 0 QM 1 G0 (main fuel { m0 with current := 0 }) := by
       have := hmain fuel; unfold WP at this; rwa [show ({ m0 with current := 0 } : Mem).threads.size = 1
         from hsize] at this
-    have htb := settle_budget (R := R) (kb := kb) (t := 0)
+    have htb := settle_budget (R := R) (dispatch := dispatch) (t := 0)
       (s := ({ main := .done, kids := #[], mem := { m0 with current := 0 }, step := 0, trace := #[] } :
         Sched.State Tgt α)) (b := B + 1) (c := 1) (Nat.le_refl _) (by omega)
-      (Turns.mono (fun _ h => h) (fun _ _ _ _ _ => trivial) _ (hB fuel hf)) rfl (.inl rfl)
+      (Turns.mono (fun _ h => h) (fun _ _ _ _ _ => trivial) (hB fuel hf)) rfl (.inl rfl)
     split
     · rename_i e he
       rw [he] at htb
@@ -426,7 +427,7 @@ theorem returnsWithin {α : Type} (env : Env) (henv : env.spawn = .fallible → 
       obtain ⟨e, hN, hr⟩ := settle_ok hsafe hs
       rcases hr with ⟨-, p, g, rfl, hi, hpk⟩ | ⟨b, d, -, hov, -⟩
       · have hk0 : s₁.kids.size = 0 := by rw [e]; rfl
-        refine go_some env henv dispatch o hdisp hR hRb hkid fuel { s₁ with main := .paused p }
+        refine go_some env henv dispatch o hdisp hR hRb fuel { s₁ with main := .paused p }
           (upd G0 0 g) ⟨hi, ?_, ⟨p, rfl, by rw [upd_self]; exact hpk⟩, ?_⟩
           ⟨B + 1 - c, fun _ => 0, htb', fun i hi => absurd hi (by simp [hk0]), ?_⟩
         · show s₁.mem.threads.size = s₁.kids.size + 1
