@@ -159,9 +159,10 @@ def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
     m.reservesFree blk.addr n
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
-that the grown range is free (`Mem.growFree`) before applying it. Thread bookkeeping is retained verbatim. -/
+that the grown range is free (`Mem.growFree`) before applying it. The offsets past the old end
+lose their access history (`Mem.forgetFrom`); the rest of the thread bookkeeping is retained. -/
 def Mem.afterByteRemap (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Mem :=
-  { m with
+  { m.forgetFrom b blk.bytes.size with
     blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n } }
 
 /-- Selected successful remap of one whole live heap byte-buffer. Growth in place needs the
