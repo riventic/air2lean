@@ -3,6 +3,7 @@
 
   compat.py check   [--root DIR] [--json]   compare compatibility.json with its sources of truth
   compat.py release [--root DIR] [--out F]  print the metadata plus computed exporter checksums
+  compat.py default [--root DIR]            print zig.default, the default Zig version
 
 The sources of truth stay where they are: zig-patch/versions.toml (downloads and checksums),
 lean-toolchain, lakefile.toml, lake-manifest.json, the version lists of the workflow scripts and
@@ -57,6 +58,12 @@ def zig_version_tables(tables):
 
 def load(root):
     return json.loads((Path(root) / 'compatibility.json').read_text())
+
+
+def default_version(root=Path(__file__).resolve().parents[1]):
+    """zig.default of compatibility.json: the one place the default Zig version is written. Scripts
+    ask this (Python: here; shell: scripts/zig-default.sh) instead of spelling the version."""
+    return load(root)['zig']['default']
 
 
 def sha256_file(path):
@@ -243,11 +250,18 @@ def release(root):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('command', choices=('check', 'release'))
+    parser.add_argument('command', choices=('check', 'release', 'default'))
     parser.add_argument('--root', default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument('--json', action='store_true', help='check: machine-readable result')
     parser.add_argument('--out', help='release: write the manifest here instead of stdout')
     args = parser.parse_args(argv)
+    if args.command == 'default':
+        try:
+            print(default_version(args.root))
+        except (OSError, ValueError, KeyError) as exc:
+            print('error: compatibility.json has no usable zig.default: %s' % exc, file=sys.stderr)
+            return 1
+        return 0
     if args.command == 'check':
         errors = check(args.root)
         if args.json:

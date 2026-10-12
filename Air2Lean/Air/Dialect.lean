@@ -35,6 +35,18 @@ def toString : ZigVersion → String
 
 instance : ToString ZigVersion := ⟨ZigVersion.toString⟩
 
+/-- The default version, the one the scripts and the CLI help name: `compatibility.json`'s
+`zig.default` (`scripts/version-literals.py` fails when they differ). -/
+def defaultVersion : ZigVersion := .v0_17_0
+
+/-- `all` as the CLI help lists it, the default marked: `0.17.0 (default), 0.16.0 and 0.15.2`. -/
+def helpList : String :=
+  let names := all.map fun v => if v == defaultVersion then s!"{v} (default)" else v.toString
+  match names.reverse with
+  | [] => ""
+  | [only] => only
+  | last :: before => ", ".intercalate before.reverse ++ " and " ++ last
+
 /-- The supported version spelled `s`, if any. -/
 def ofString? (s : String) : Option ZigVersion := all.find? (·.toString == s)
 

@@ -105,7 +105,10 @@ usage() {
   echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix | mutations' >&2
   exit 2
 }
-mode=${1:-full} version=${2:-0.16.0} examples=${3:-}
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo"
+. "$repo/scripts/zig-default.sh"
+mode=${1:-full} version=${2:-$(air2lean_default_zig_version "$repo")} examples=${3:-}
 case "$mode" in
   targeted) [ "$#" = 3 ] && [ -n "$examples" ] || usage ;;
   full) [ "$#" -le 2 ] || usage ;;
@@ -113,8 +116,6 @@ case "$mode" in
   *) usage ;;
 esac
 case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$repo"
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-ci.XXXXXX")
 container=
 artifacts=
