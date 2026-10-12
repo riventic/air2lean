@@ -78,8 +78,8 @@ One mechanism, the defined-bit masks that batch D introduced for packed values:
   NaN's bytes are undefined; so do the big-endian `floatEncOf` and both vector encodings
   (`Vec` float instance, `Vec.floatEncOf`). An integer read of them is `.unspecified`.
 - A NaN constant has determined bits, which the compiler stores exactly. The translator writes
-  them over the encoding for a store, a `@memset` item and a global initializer
-  (`Air2Lean/Memory.lean`'s `nanConstParts`, `Emit.lean`'s `FCtx.withNaNConsts`), at any depth
+  them over the encoding for a store (to memory or a byte local), a scalar `@memset` item and a global initializer
+  (`Air2Lean/Memory.lean`'s `nanConstParts`, `Emit.lean`'s `FCtx.nanConstBytes?`), at any depth
   where the exporter gives the byte offset.
 
 A stored NaN read back as a float is now `.unspecified` as well (`reloadIsNaN`): the bytes do

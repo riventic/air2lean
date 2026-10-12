@@ -118,7 +118,7 @@ def Float.detMask {fmt : FloatFmt} (x : Float fmt) : BitVec fmt.width :=
 bits are undefined (`Float.detMask`): an integer load of them is `.unspecified`, never the
 model's canonical NaN, and so is a float load (the model cannot say which NaN it reads;
 `docs/floats.md` §NaN in memory). A NaN constant keeps its bits: the translator writes its exact
-bytes (`Air2Lean/Memory.lean`'s `nanConstBytes`). -/
+bytes (`Air2Lean/Memory.lean`'s `nanConstParts`). -/
 instance {fmt : FloatFmt} : Enc (Float fmt) where
   size := intSize fmt.width
   align := intAlign fmt.width

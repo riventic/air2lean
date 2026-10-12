@@ -62,7 +62,8 @@ case "${1:---check}" in
         runner_var="AIR2LEAN_$(tr '[:lower:]' '[:upper:]' <<<"$arch")_RUN"
         if [ -n "${!runner_var+set}" ]; then
           # shellcheck disable=SC2086
-          ${!runner_var} "$work/$exe" 2> "$work/$exe.txt"
+          ${!runner_var} "$work/$exe" > "$work/$exe.txt" 2>&1 ||
+            { echo "native $arch-linux-musl $mode ($2) failed:" >&2; cat "$work/$exe.txt" >&2; exit 1; }
         else
           docker run --rm --platform "linux/$platform" -v "$work:/w:ro" alpine:3 \
             sh -c "/w/$exe 2>&1" > "$work/$exe.txt"

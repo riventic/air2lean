@@ -180,19 +180,20 @@ def floatFmtOfWidth? : Nat → Option Zig.FloatFmt
   | 128 => some .f128
   | _ => none
 
-/-- The NaN float constants in the constant `v` of type `tid`: the byte offset (from `base`), bit
-width and bits of each. A float's memory encoding leaves a NaN's bits undefined
-(`Zig.Float.detMask`, `ZigLean/Mem/Enc.lean`), because the model's NaN results stand for every
-NaN. A NaN *constant* has determined bits, and the compiler stores exactly them, so a store or
-global initializer of `v` writes them over its encoding (`Emit.lean`'s `FCtx.withNaNConsts`).
-Found at any depth where the exporter gives the byte offset: the value itself, an item of an
-array, a field of a non-`packed` struct or tuple. A NaN constant elsewhere (in an optional,
-union, vector, packed struct) keeps undefined bits: never a wrong value. -/
-partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (tid : TyId) (v : Val)
-    (base : Nat := 0) : Array (Nat × Nat × Nat) :=
+/-- The NaN float constants in the constant `v`: the byte offset (from `base`), bit width and
+bits of each, each at the type the constant carries. A float's memory encoding leaves a NaN's
+bits undefined (`Zig.Float.detMask`, `ZigLean/Mem/Enc.lean`), because the model's NaN results
+stand for every NaN. A NaN *constant* has determined bits, and the compiler stores exactly them,
+so a store or global initializer of `v` writes them over its encoding (`Emit.lean`'s
+`FCtx.nanConstBytes?`). Found at any depth where the exporter gives the byte offset
+(`aggParts?`): the value itself, an item of an array, a field of a non-`packed` struct or tuple.
+A NaN constant elsewhere (in an optional, union, vector, packed struct) keeps undefined bits:
+never a wrong value. -/
+partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (v : Val) (base : Nat := 0) :
+    Array (Nat × Nat × Nat) :=
   match v with
-  | .float _ bits =>
-    match types[tid]? with
+  | .float ty bits =>
+    match types[ty]? with
     | some (.float w) =>
       match floatFmtOfWidth? w with
       | some fmt =>
@@ -200,9 +201,12 @@ partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (tid : TyI
           #[(base, w, bits)] else #[]
       | none => #[]
     | _ => #[]
-  | .agg _ elems =>
-    let parts := (aggParts? types layouts tid elems.size).getD #[]
-    (elems.zip parts).flatMap fun (e, t, o) => nanConstParts types layouts t e (base + o)
+  | .agg ty elems =>
+    match aggParts? types layouts ty elems.size with
+    | some parts =>
+      if parts.size != elems.size then #[] else
+      (elems.zip parts).flatMap fun (e, _, o) => nanConstParts types layouts e (base + o)
+    | none => #[]
   | _ => #[]
 
 /-- The `alloc`s of `f` that escape by their uses. A store of a partly `undefined` constant to a
