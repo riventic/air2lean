@@ -31,8 +31,7 @@ case "${1:-}" in
     exit 0 ;;
 esac
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
-[ -x "$translator" ] || { echo "build the translator first (lake build air2lean)" >&2; exit 1; }
-lake build ZigLean ZigLean.Mem.NullLemmas
+lake build ZigLean air2lean ZigLean.Mem.NullLemmas
 # Imported theorem definitions are kernel checked with the runtime build above; the
 # proof-only storage/projection rules (outside the ZigLean umbrella) are built explicitly.
 lake env lean --run tests/roadmap/null-pointers/Generate.lean "$work/generated"

@@ -522,8 +522,10 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+          python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json coverage/0.17.0.json
           python3 -B tests/roadmap/runtime-tags/test_provenance.py
+          python3 -B tests/roadmap/error-tracing/test_provenance.py
+          python3 -B tests/roadmap/null-pointers/test_provenance.py
 
       - name: Schedule exploration cap accounting regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -1416,16 +1418,34 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: python3 -B tests/roadmap/null-pointers/test_classify_mutant.py
 
-      # The scalar C/allowzero fragment is qualified on 0.16.0. Use this job's
-      # patched exporter and separately installed matching shipping compiler.
+      # L05: the committed exports of every version translate and match expected/<version>.txt;
+      # this job's patched exporter reproduces its version's export, and the shipping compiler's
+      # native run matches the same transcript.
       - name: Scalar nullable pointer source and semantic gate
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
-          AIR2LEAN_NULL_ZIG_VERSION: ${{ matrix.zig }}
-          AIR2LEAN_NULL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
-          AIR2LEAN_NULL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
-          AIR2LEAN_NULL_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
-        run: tests/roadmap/null-pointers/check.sh
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: |
+          set -euo pipefail
+          tests/roadmap/null-pointers/check.sh
+          tests/roadmap/null-pointers/check.sh --export ${{ matrix.zig }}
+          tests/roadmap/null-pointers/check.sh --native "$GITHUB_WORKSPACE/host-zig/zig"
+
+      # L14: error return tracing. The committed exports of every version translate and their
+      # model runs match expected.txt, as does the shipping compiler's native run.
+      - name: Error return tracing gate (L14)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: |
+          set -euo pipefail
+          lake build ZigLean air2lean
+          python3 -B tests/roadmap/error-tracing/test_provenance.py
+          tests/roadmap/error-tracing/check.sh
+          tests/roadmap/error-tracing/export.sh --check ${{ matrix.zig }}
+          tests/roadmap/error-tracing/check.sh --native "$GITHUB_WORKSPACE/host-zig/zig"
 
       - name: Byte sentinel allocation source, ownership and kernel mutations
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
