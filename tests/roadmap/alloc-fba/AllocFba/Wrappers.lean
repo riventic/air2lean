@@ -10,7 +10,8 @@ the allocator through the `Allocator` value's vtable (`vtR`: persistent knowledg
 vtable). Each contract below holds for **every allocator invariant `I`** whose vtable entries
 satisfy their `FAllocSpec` triples at the wrapper's alignment (the hypotheses `hA`, `hF`): the
 wrapper's own code (the zero-length case, the length overflow check, the `@memset(_, undefined)` of
-fresh and freed memory, the `@alignCast` check, `@returnAddress()`) is walked by `fsym`, and the
+fresh and freed memory, the `@alignCast` check, `@returnAddress()`, the sentinel's `len + 1` on
+`free`) is walked by `fsym`, and the
 vtable call is the entry's triple. The `…_of` corollaries take the triples from `FAllocSpec` of
 the translated `FixedBufferAllocator` entries (`impl`), for every invariant, in particular
 `FBA.fallocSpec`'s.
@@ -72,6 +73,18 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
   fsym [fun (s : Slice) ra (h : 0 < s.len.toNat) =>
     hF s ra (Array.replicate s.len.toNat .undef) (by simp) (by simpa using h)]
 
+/-- **`a.free(s)`** of a `[:7]u8` (from `allocSentinel`): the grant of `s.len + 1` bytes, the
+sentinel included, goes back. -/
+theorem freeSentinel_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.size)
+    (hs : bs.size < 2 ^ 64)
+    (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
+      FTotalTriple (I.own ⋆ I.granted s.ptr 0 bs) (heap_FixedBufferAllocator_free ctx s ⟨0#6⟩ ra)
+        (fun _ => I.own)) :
+    FTotalTriple (I.own ⋆ (I.granted s.ptr 0 bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_free__anon_4cd0e3a7c1bf ⟨ctx, vtp⟩ s) (fun _ => I.own ⋆ vtR vtp fns.toList) := by
+  fsym [fun (s : Slice) ra (h : 0 < s.len.toNat) =>
+    hF s ra (Array.replicate s.len.toNat .undef) (by simp) (by simpa using h)]
+
 /-- **`a.destroy(p)`** of a `*u32`: the 4-byte grant goes back. -/
 theorem destroy_spec (p : Ptr) (bs : Array Byte) (hbs : bs.size = 4)
     (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
@@ -113,6 +126,12 @@ theorem destroy_of (p : Ptr) (bs : Array Byte) (hbs : bs.size = 4) :
     FTotalTriple (I.own ⋆ (I.granted p 2 bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_destroy__anon_7fa4accb9a56 ⟨ctx, vtp⟩ p) (fun _ => I.own ⋆ vtR vtp fns.toList) :=
   destroy_spec ctx vtp I p bs hbs fun s ra bs h1 h2 => h.free s 2 ra bs (by decide) h1 h2
+
+theorem freeSentinel_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.size)
+    (hs : bs.size < 2 ^ 64) :
+    FTotalTriple (I.own ⋆ (I.granted s.ptr 0 bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_free__anon_4cd0e3a7c1bf ⟨ctx, vtp⟩ s) (fun _ => I.own ⋆ vtR vtp fns.toList) :=
+  freeSentinel_spec ctx vtp I s bs hlen hs fun s ra bs h1 h2 => h.free s 0 ra bs (by decide) h1 h2
 
 end OfSpec
 

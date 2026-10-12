@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Block
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # Blocks in the full-state logic (`ZigLean/Sep/Full/Block.lean`), library-only
