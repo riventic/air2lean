@@ -2,8 +2,8 @@
 
 Zig 0.17.0 (released 2026-10-01, LLVM 22) is **qualified**: `qualification/0.17.0.json`
 (from 0.16.0, `scripts/qualify-upgrade.py check` exit 0) records its upgrade obligations as
-passed, and `compatibility.json` gives it `status: qualified`. Zig 0.16.0 stays the default,
-and every gate that is qualified only on particular versions stays on those versions
+passed, and `compatibility.json` gives it `status: qualified`. Zig 0.17.0 is the default
+(`compatibility.json` `zig.default`, read through `scripts/compat.py default`), and every gate that is qualified only on particular versions stays on those versions
 (the 0.17.0 job does not run them). This page covers the CI,
 metadata and version-list part of the 0.17.0 work. The exporter pin and hook
 (`zig-patch/`), the coverage inventory (`coverage/0.17.0.json`), the translator's
@@ -15,7 +15,7 @@ by the other 0.17.0 tracks.
 | Row | Decision |
 |---|---|
 | `0.17.0` full job | Added (`full: true`, every example `scripts/example-selection.sh` selects for 0.17.0). It runs every gate that applies to every version: the compiler inventory check, the float probe, the patched compiler build, golden AIR/translation/diff (`scripts/check.sh`), proofs, VCs, exporter review (`AIR2LEAN_REVIEW_ZIG17`), allocation policy, progress kernel and `no-sorry`. |
-| Mutation shards | Stay on 0.16.0, the default; moving them to 0.17.0 is a separate decision. |
+| Once-per-run parts and mutation shards | Run on `zig.ci_once` (0.16.0), not on the default: their steps gate on the version they were qualified on and the T06 build-mode records exist for it. Moving them to 0.17.0 needs fresh evidence and is a separate decision. |
 | 0.16.0 / 0.15.2 / 0.14.1 rows | Unchanged. |
 
 The 0.17.0 job is a blocking job, not `continue-on-error`. Its inputs are the exporter pin
@@ -42,7 +42,7 @@ row but rejects unknown versions. Its condition now lists the qualified versions
 
 | Field | 0.17.0 |
 |---|---|
-| `status` | `qualified` (was `in-qualification` until the qualification record passed; `default` stays 0.16.0) |
+| `status` | `qualified` (was `in-qualification` until the qualification record passed; `zig.default` is 0.17.0; `zig.ci_once` stays 0.16.0) |
 | `hosts` | `x86_64-linux`, `aarch64-macos` |
 | `source` | `https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz`, sha256 `b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd` |
 | `hook` | `0.17.0/hook.patch` |
@@ -75,7 +75,7 @@ Search: `grep -rn '0\.16\.0'` over `*.py *.sh *.json *.toml *.lean *.yml *.md`, 
 |---|---:|---:|---|
 | (a) version enumeration, this track | 38 | 10 | 0.17.0 added (CI full row and review env, workflow-common/local-ci/translate lists, `compatibility.json` entries, README/PLAN/support-matrix lists, the version-list tests) |
 | (a) version enumeration, other tracks | 10 | 5 | left for their owners: `zig-patch/versions.toml`, `zig-patch/README.md` LLVM list (Z1), `Air2Lean/Air/Normalize.lean` `supportedVersions` and `Air2Lean/Main.lean` help (Z3), `docs/coverage.md` inventory list (Z2) |
-| (c) default version | 46 | 12 | left on 0.16.0: `AIR2LEAN_ZIG_VERSION:-0.16.0` in check/mutate/translate, `local-ci.sh`'s default, `doctor.py` usage, `zig.default`, `clean-env.sh`, getting-started/README/distribution bootstrap instructions, doctor tests of the default, the five 0.16.0 mutation shard rows, and the "once per run" CI steps on the default row (support matrix, release record) |
+| (c) default version | 46 | 12 | moved to 0.17.0 (one source: `zig.default`, read by `scripts/compat.py default`; `scripts/version-literals.py` rejects a default literal): check/mutate/translate, `local-ci.sh`, `doctor.py`, `clean-env.sh`; the rest was left on 0.16.0 (getting-started/README/distribution bootstrap instructions, doctor tests of the default, the five 0.16.0 mutation shard rows, and the "once per run" CI steps on the default row (support matrix, release record) |
 | (b) qualified on specific versions | 587 | 178 | left: the evidence and gates are scoped to the versions they were run on |
 
 Class (b) by area: `tests/roadmap` 323 lines/95 files (per-feature qualification gates,

@@ -17,7 +17,8 @@ sha256, the Lean toolchain by its exact version in `lean-toolchain` (elan instal
 | `zig.versions[]` | supported Zig versions in order, source tarball URL/sha256, hook, LLVM major, CI host Zig URL/sha256 | `zig-patch/versions.toml` |
 | `zig.versions[].hosts` | supported build hosts (`x86_64-linux`, `aarch64-macos`) | the Linux-only rule in `scripts/workflow-common.sh` |
 | `zig.versions[].status` | `qualified` (every pinned version, including 0.17.0: [zig-0.17-ci.md](zig-0.17-ci.md)), or `in-qualification` for a newly pinned version (CI runs it; version-specific gates and evidence incomplete) | — (checked: one of the two) |
-| `zig.default` | default Zig version; must be `qualified` | `scripts/translate.sh` |
+| `zig.default` | default Zig version; must be `qualified`. The one place the default is written: scripts read it with `scripts/compat.py default` (`scripts/zig-default.sh`), the translator repeats it as `ZigVersion.defaultVersion` | `Air2Lean/Air/Dialect.lean` |
+| `zig.ci_once` | the version the CI once-per-run parts and mutation shards run on (their steps gate on the version they were qualified on); `qualified`, x86_64-linux | `.github/workflows/ci.yml` rows |
 | `air2lean.air_json_schemas` | accepted AIR-JSON schemas | `Air2Lean/Air/Profile.lean` |
 | `profiles` | accepted target/build profiles | `Air2Lean/Air/Profile.lean` |
 | `translation` | target, CPU, optimize mode and error tracing of `translate.sh` exports | `scripts/translate.sh` |
@@ -91,7 +92,7 @@ The doctor needs Python 3.8+; committed proofs themselves need only elan.
 
 ```sh
 scripts/clean-env.sh               # every tutorial, its exercise and negative control
-scripts/clean-env.sh --translate   # also bootstrap Zig 0.16.0, check the lock, translate and prove
+scripts/clean-env.sh --translate   # also bootstrap the default Zig, check the lock, translate and prove
 ```
 
 It builds `Dockerfile.clean-env` (Ubuntu 24.04 with only bash, ca-certificates, curl, git,
@@ -104,7 +105,7 @@ then builds the modules of every tutorial (`python3 scripts/tutorials.py modules
 `python3 scripts/tutorials.py check`: each `Main.lean` and solved exercise must elaborate, and
 each negative control (for example the first proof's `pure 1`) must fail with its expected
 error.
-`--translate` additionally installs the pinned host Zig, runs `zig-patch/build.sh 0.16.0`
+`--translate` additionally installs the pinned host Zig, runs `zig-patch/build.sh <default>`
 (default: no LLVM, AIR-only lock), requires the doctor to report `locked`, verifies the locked
 compiler refuses `build-exe`, translates the getting-started demo and checks its separate proof.
 Results (doctor JSON, logs) are written under `.lake/clean-env-results/`.

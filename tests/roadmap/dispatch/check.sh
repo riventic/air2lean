@@ -43,7 +43,7 @@ CHECK
   python3 tests/roadmap/dispatch/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'dispatch synthetic and kernel-proof regressions passed'; exit 0; fi
-version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 zig_air=${AIR2LEAN_DISPATCH_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_DISPATCH_ZIG_STOCK:-zig}
 case "$version" in 0.14.1|0.15.2|0.16.0) ;; *) echo "unsupported dispatch profile: $version" >&2; exit 2;; esac

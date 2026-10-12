@@ -164,9 +164,12 @@ def check(root):
     elif any(isinstance(e, dict) and e.get('version') == default and e.get('status') != 'qualified'
              for e in entries):
         errors.append('zig.default %r is not a qualified version' % default)
+    once = get(('zig', 'ci_once'))
+    if once not in pinned or not any(isinstance(e, dict) and e.get('version') == once
+                                     and e.get('status') == 'qualified'
+                                     and 'x86_64-linux' in (e.get('hosts') or []) for e in entries):
+        errors.append('zig.ci_once %r is not a qualified x86_64-linux version' % once)
     translate = text('scripts/translate.sh')
-    found = re.search(r'AIR2LEAN_ZIG_VERSION:-([0-9.]+)\}', translate)
-    expect('zig.default', default, found.group(1) if found else None, 'scripts/translate.sh')
 
     # Every hard-coded supported-version list agrees.
     common = text('scripts/workflow-common.sh')

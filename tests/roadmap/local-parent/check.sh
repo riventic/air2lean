@@ -21,7 +21,7 @@ lake env lean --run tests/roadmap/local-parent/Pipeline.lean "$work/generated"
 python3 -B scripts/par.py --mem-mib 2048 -- lake env lean -R "$work/generated" {} ::: "$work/generated/"*.lean
 python3 tests/roadmap/local-parent/mutations.py "$work/generated" "$work/mutants"
 if [ "${1:-}" = --synthetic-only ]; then exit 0; fi
-version=${AIR2LEAN_LOCAL_PARENT_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_LOCAL_PARENT_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 [ "$version" = 0.16.0 ] || { echo 'only Zig 0.16.0 is qualified by this slice' >&2; exit 2; }
 zig_air=${AIR2LEAN_LOCAL_PARENT_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_LOCAL_PARENT_ZIG_STOCK:-zig}
