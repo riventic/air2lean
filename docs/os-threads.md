@@ -1,7 +1,7 @@
 # OS thread primitives: the trusted base of translated `std.Thread` and `std.Io`
 
 `std.Thread`, the `std.Io` sync primitives and `Io.Threaded` are to be translated from their Zig
-code (`docs/thread-io-translation.md` on `codex/spike-thread-io`, phase T2). Only the OS calls
+code ([thread-io-translation.md](thread-io-translation.md), phase T2). Only the OS calls
 below them get a trusted model, one premise per group
 ([premises.md](premises.md#os-thread-primitives)). The models are in `ZigLean/Os/`, imported by
 `ZigLean.lean` through `ZigLean/Os.lean`. The proof-only rules are in `ZigLean/Sep/OsMalloc.lean`
@@ -19,7 +19,7 @@ run is a `ConcM` function. It stops at sync ops of the existing scheduler (`ZigL
 
 ## Signatures
 
-Arguments map as for the OSM-01 rows (`docs/os-mmap.md` on `codex/alloc-translated-p2`): a
+Arguments map as for the OSM-01 rows ([os-mmap.md](os-mmap.md)): a
 `packed struct(u32)` or an `enum(u32)` is its bits (`BitVec 32`), `?*T` is `Option Ptr`, a
 `pthread_t` is the model's `ThreadId` (`Enc ThreadId`, 8 bytes), `c_int` is `BitVec 32`, and
 `std.c.E` (macOS, `enum(u16)`) is `BitVec 16`. A Linux wrapper returns the raw `usize`, `-errno`
