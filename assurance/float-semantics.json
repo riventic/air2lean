@@ -2831,6 +2831,15 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.Float.Lemmas::Zig.toInt_i0_rejects_neg_one": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Float.Lemmas::Zig.toInt_of_toRat": {
       "semantics": "ieee",
       "targets": [

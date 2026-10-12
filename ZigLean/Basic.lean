@@ -156,11 +156,23 @@ allowed (Sema checks only `b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverf
 @[inline] def subWrap (a b : BitVec n) : BitVec n := a - b
 @[inline] def mulWrap (a b : BitVec n) : BitVec n := a * b
 
+/-- Smallest value of the `n`-bit integer type (signed if `s`). The `0 < n` guard matters: `i0` has
+the single value 0, and Nat subtraction would make `n - 1 = 0` give `-1` (`docs/architecture-audit/zero-width-ints.md`). -/
+def intLo (s : Bool) (n : Nat) : Int := if s ∧ 0 < n then -(2 ^ (n - 1)) else 0
+
+/-- Largest value of the `n`-bit integer type (signed if `s`); `0` for `i0` and `u0`. -/
+def intHi (s : Bool) (n : Nat) : Int := if s then 2 ^ (n - 1) - 1 else 2 ^ n - 1
+
+@[simp] theorem intLo_unsigned (n : Nat) : intLo false n = 0 := by simp [intLo]
+@[simp] theorem intHi_unsigned (n : Nat) : intHi false n = 2 ^ n - 1 := rfl
+@[simp] theorem intLo_signed_succ (k : Nat) : intLo true (k + 1) = -(2 ^ k) := by simp [intLo]
+@[simp] theorem intHi_signed_succ (k : Nat) : intHi true (k + 1) = 2 ^ k - 1 := by simp [intHi]
+@[simp] theorem intLo_zero (s : Bool) : intLo s 0 = 0 := by simp [intLo]
+@[simp] theorem intHi_zero (s : Bool) : intHi s 0 = 0 := by cases s <;> simp [intHi]
+
 /-- Clamp a mathematical integer into the range of an `n`-bit type. -/
 def clamp (s : Bool) (n : Nat) (v : Int) : BitVec n :=
-  let lo : Int := if s then -(2 ^ (n - 1)) else 0
-  let hi : Int := if s then 2 ^ (n - 1) - 1 else 2 ^ n - 1
-  .ofInt n (max lo (min hi v))
+  .ofInt n (max (intLo s n) (min (intHi s n) v))
 
 @[inline] def val (s : Bool) (a : BitVec n) : Int := if s then a.toInt else a.toNat
 
@@ -238,9 +250,7 @@ after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shi
 /-- `@intCast`: the value must fit in the target type. -/
 @[inline] def intCast (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) : Result (BitVec m) :=
   let v := val s₁ a
-  let lo : Int := if s₂ then -(2 ^ (m - 1)) else 0
-  let hi : Int := if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1
-  if lo ≤ v ∧ v ≤ hi then pure (.ofInt m v) else throw .overflow
+  if intLo s₂ m ≤ v ∧ v ≤ intHi s₂ m then pure (.ofInt m v) else throw .overflow
 
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m

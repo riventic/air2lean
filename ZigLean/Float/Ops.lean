@@ -115,8 +115,8 @@ def Float.toInt {fmt : FloatFmt} (s : Bool) (n : Nat) (safe : Bool) (x : Float f
   | .finite sn m e =>
     let mag : Nat := if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat
     let tv : Int := if sn then -(mag : Int) else (mag : Int)
-    let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
-    let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
+    let lo : Int := intLo s n
+    let hi : Int := intHi s n
     if tv < lo || tv > hi then
       if safe then throw .overflow else throw .illegal
     else pure (.ofInt n tv)
