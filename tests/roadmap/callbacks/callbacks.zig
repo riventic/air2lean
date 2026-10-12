@@ -29,6 +29,11 @@ pub fn viaOps(ops: *const Ops, xs: []const u32, ctx: *u32) bool {
     return forEach(xs, ctx, ops.visit);
 }
 
+/// A call through a vtable field loaded from memory.
+pub fn callOps(ops: *const Ops, ctx: *u32, x: u32) bool {
+    return ops.visit(ctx, x);
+}
+
 /// The evaluator: one call through the pointer.
 pub fn evaluate(cb: Visitor, ctx: *u32, x: u32) bool {
     return cb(ctx, x);
@@ -45,6 +50,7 @@ pub fn runLocal(xs: []const u32, ctx: *u32) bool {
 comptime {
     _ = &forEach;
     _ = &viaOps;
+    _ = &callOps;
     _ = &evaluate;
     _ = &runExternal;
     _ = &runLocal;

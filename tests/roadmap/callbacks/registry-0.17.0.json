@@ -5,7 +5,17 @@
       "dependencies": [],
       "effects": "tracked",
       "errors": [
-        "illegal"
+        "overflow",
+        "outOfBounds",
+        "divByZero",
+        "unreachable",
+        "panic",
+        "unspecified",
+        "illegal",
+        "deadlock",
+        "unsupportedTimer",
+        "trap",
+        "stackOverflow"
       ],
       "extern": {
         "library": null,
@@ -118,7 +128,7 @@
         }
       },
       "symbol": "extern:ext_visit",
-      "termination": "total",
+      "termination": "partial",
       "trust": "assumed"
     }
   ],

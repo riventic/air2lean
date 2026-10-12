@@ -42,7 +42,7 @@
  "src": {
   "file": "callbacks.zig",
   "module": "callbacks",
-  "decl_line": 37
+  "decl_line": 42
  },
  "params": [
   0,

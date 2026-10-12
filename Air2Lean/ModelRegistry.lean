@@ -344,7 +344,8 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
     let errors ← strings m "errors"
     for e in errors do
       unless ["overflow", "outOfBounds", "divByZero", "unreachable", "panic", "unspecified",
-        "illegal", "deadlock", "unsupportedTimer"].contains e do throw s!"model registry: unknown safety error '{e}'"
+        "illegal", "deadlock", "unsupportedTimer", "trap", "stackOverflow"].contains e do
+        throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
     let footprint ← match m.getObjVal? "footprint" with

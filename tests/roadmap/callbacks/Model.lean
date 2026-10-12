@@ -9,12 +9,21 @@ implementation with the callback contract `visitCallback` (`trust: "assumed"`, p
 for the symbol, EXT-02 for the assumed evidence). The emitted indirect call dispatches a
 pointer to `ext_visit`'s function block to that model (`Emit.lean`, L11 table).
 
-`visitCallback` is a non-re-entrant, never-cancelling callback that borrows its context: a
-call returns `true`, keeps the context live and changes no block other than the context's.
+`visitCallback` is a non-re-entrant, never-cancelling callback that borrows its context: a call
+that returns gives `true`, keeps the context live, changes no block other than the context's and
+records accesses to the context's block only. It may fail with any error or not return
+(partial): the caller propagates either.
 `visit_satisfiable` is a kernel-checked witness that the contract has an implementation, so
 the assumed evidence is not vacuous. -/
 namespace CallbackModel
 open Zig Zig.External
+
+/-- Every `Zig.Error`: the callback may fail in any way, and the caller propagates it. -/
+def allErrors : List Error :=
+  [.overflow, .outOfBounds, .divByZero, .unreachable, .panic, .unspecified, .illegal, .deadlock,
+   .unsupportedTimer, .trap, .stackOverflow]
+
+theorem mem_allErrors (e : Error) : e ∈ allErrors := by cases e <;> simp [allErrors]
 
 /-- The foreign implementation: unknown to the model. -/
 opaque visit : Ptr × BitVec 32 → MemM Bool := fun _ => pure true
@@ -27,10 +36,10 @@ def visitCallback : CallbackContract (BitVec 32) Bool where
       (∀ b, some b ≠ a.1.block → after.blocks[b]? = before.blocks[b]?) ∧
         (Live before a.1 → Live after a.1)
     access := fun a _ entry => some entry.block = a.1.block
-    failure := fun _ _ error => error = .illegal
-    divergence := fun _ _ => False }
-  termination := .total
-  errors := [.illegal]
+    failure := fun _ _ _ => True
+    divergence := fun _ _ => True }
+  termination := .«partial»
+  errors := allErrors
   effects := .tracked
   reads := fun _ => []
   reentrancy := .forbidden

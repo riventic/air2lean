@@ -124,4 +124,61 @@ theorem loop_sep_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I
   obtain ⟨e, s', m', hr, h', hd', hm', hp, hst'⟩ := this
   exact ⟨e, s', m', h', hr, hd', hm', hp, hst'⟩
 
+/-- Partial correctness of a loop over memory: when every successful body run from the invariant
+re-establishes it, or `post` on the exit, every successful run of the loop ends in `post`. No
+measure and no successful step are needed: a body that fails or does not return makes the loop
+fail or not return, which the statement does not constrain. By fixpoint induction (`Zig.loop`
+is a `partial_fixpoint`); used where a step can fail, for example through a callback contract
+that allows any error (E02, `tests/roadmap/callbacks`). -/
+theorem loopMM_partial {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (inv : σ → Mem → Prop)
+    (post : ε → σ → Mem → Prop)
+    (step : ∀ s m, inv s m → ∀ e s' m', (body.run s).run m = pure ((e, s'), m') →
+      if again e then inv s' m' else post e s' m') :
+    ∀ s m, inv s m → ∀ e s' m', ((loop body again).run s).run m = pure ((e, s'), m') →
+      post e s' m' := by
+  refine loop.fixpoint_induct body again (motive := fun v => ∀ s m, inv s m → ∀ e s' m',
+    (v.run s).run m = pure ((e, s'), m') → post e s' m') ?_ ?_
+  · apply Lean.Order.admissible_pi_apply (P := fun s v => ∀ m, inv s m → ∀ e s' m',
+      (StateT.run v m) = pure ((e, s'), m') → post e s' m')
+    intro s
+    apply Lean.Order.admissible_pi_apply (P := fun m v => inv s m → ∀ e s' m',
+      v = pure ((e, s'), m') → post e s' m')
+    intro m
+    apply Lean.Order.admissible_pi
+    intro _
+    apply Lean.Order.admissible_pi
+    intro e
+    apply Lean.Order.admissible_pi
+    intro s'
+    apply Lean.Order.admissible_pi
+    intro m'
+    exact Lean.Order.Option.admissible_eq_some _ _
+  · intro v ih s m hs e s' m' hrun
+    have unfold : (((do let e ← body; if again e then v else pure e : MM σ ε).run s).run m) =
+        ((body.run s).run m >>= fun r =>
+          if again r.1.1 then (v.run r.1.2).run r.2 else pure r) := by
+      simp only [StateT.run, bind, StateT.bind]
+      congr 1
+      funext r
+      rcases r with ⟨⟨e, s'⟩, m'⟩
+      cases again e <;> rfl
+    rw [unfold] at hrun
+    generalize hb : (body.run s).run m = rb at hrun
+    match rb, hb, hrun with
+    | .mk none, _, hrun => simp [bind, ExceptT.bind, ExceptT.mk] at hrun; cases hrun
+    | .mk (some (.error _)), _, hrun =>
+      simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont] at hrun; cases hrun
+    | .mk (some (.ok ((e₁, s₁), m₁))), hb, hrun =>
+      have hstep := step s m hs e₁ s₁ m₁ hb
+      have hrun : (if again e₁ = true then (v.run s₁).run m₁ else pure ((e₁, s₁), m₁)) =
+          pure ((e, s'), m') := hrun
+      cases ha : again e₁
+      · simp only [ha, Bool.false_eq_true, ↓reduceIte] at hstep hrun
+        have hr : some (Except.ok ((e₁, s₁), m₁)) = some (Except.ok ((e, s'), m')) := hrun
+        simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+        obtain ⟨⟨rfl, rfl⟩, rfl⟩ := hr
+        exact hstep
+      · simp only [ha, ↓reduceIte] at hstep hrun
+        exact ih s₁ m₁ hstep e s' m' hrun
+
 end Zig
