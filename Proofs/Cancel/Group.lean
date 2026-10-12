@@ -701,7 +701,7 @@ theorem main_spec (n : Nat) :
   refine WP.pure' ⟨hout, ho₁₆.heap_empty (fun u _ => ?_) (fheap_empty_mem)⟩
   by_cases h0 : u = 0
   · subst h0; rw [upd_self]; exact he
-  · simp only [upd_upd] at *
+  · simp only [upd_upd]
     rw [upd_ne _ _ h0]
     by_cases h1 : u = 1
     · subst h1; rw [upd_self]

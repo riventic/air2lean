@@ -466,10 +466,9 @@ theorem WP.liftM_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
       m'.current = t → m'.threads = m.threads → Q (a, s) G m' n) :
-    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
-  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp fun a m' r' hr ho' hq hc' ht' =>
-    WP.pure' (h a m' r' hr ho' hq hc' ht'))
+    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
+  WP.callMC_fownedS ht ho hc htl hp fun a m' r' _ hr ho' hq hs =>
+    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads
 
 /-- `WP.liftMem_fowned` for a call of a `MemM` function (`callMC`). -/
 theorem WP.callMC_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
