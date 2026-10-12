@@ -6,6 +6,7 @@ import Air2Lean.Diagnose
 import Air2Lean.SourceMap
 import Air2Lean.ModuleSplit
 import Air2Lean.Revision
+import ZigLean
 import Air2Lean.Device
 import Air2Lean.Certificate
 import Air2Lean.OpTable
@@ -38,10 +39,18 @@ namespace Air2Lean
 /-- The sources this CLI was built from (`Air2Lean/Revision.lean`). -/
 def translator : Revision.Translator := translator_revision%
 
+/-- The runtime (`ZigLean`) this CLI was built against (`Air2Lean/Revision.lean`). -/
+def runtime : Revision.Translator := runtime_revision%
+
 /-- `translator` as recorded in the source-map sidecar and the module manifest. -/
-def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean),
-  ("revision", .str translator.revision),
-  ("modules", .arr (translator.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+def revisionJson (t : Revision.Translator) : Lean.Json := Lean.Json.mkObj [("lean", .str t.lean),
+  ("revision", .str t.revision),
+  ("modules", .arr (t.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+
+def translatorJson : Lean.Json := revisionJson translator
+
+/-- `runtime` as recorded in the source-map sidecar and the module manifest. -/
+def runtimeJson : Lean.Json := revisionJson runtime
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
@@ -81,7 +90,7 @@ def help : String :=
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
-  "Supported AIR: Zig 0.17.0, 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
+  "Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
@@ -439,7 +448,7 @@ private def run (args : List String) : IO UInt32 := do
               let base := a.outPath.parent.getD "."
               let mods := ModuleSplit.modules parts a.ns root stem header
               ModuleSplit.write (base / stem) base mods
-              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson mods
+              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson runtimeJson mods
               let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
                 throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
@@ -465,9 +474,9 @@ private def run (args : List String) : IO UInt32 := do
                 let api := if a.proofApi then some (proofLemmaIndex f) else none
                 pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
-              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v2"),
+              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v3"),
                 ("namespace", .str a.ns), ("metadata", metadata),
-                ("translator", translatorJson),
+                ("translator", translatorJson), ("runtime", runtimeJson),
                 ("options", Lean.Json.mkObj ([("spawn_policy", .str spawn),
                   ("models", if models.isEmpty then .null else ModelRegistry.report models)] ++
                   (match device with | none => [] | some c => [("device", c.report)]))),

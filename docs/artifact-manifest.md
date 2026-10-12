@@ -103,10 +103,55 @@ dirty provenance and failed expectations. Exit 0 means `status: current`; exit 2
 to accept, so a manifest for another source or profile cannot be passed off. `--verify-receipt`
 additionally runs the existing receipt `verify` on a chained attempt (needs that toolchain).
 
+## Authentication
+
+A manifest or receipt, as recorded, is unauthenticated: its hashes detect drift but anyone can
+record a consistent one. `scripts/attest.py` adds an authentication layer over the same bytes
+without changing either format. An attestation (`air2lean-attestation-v1`) is a JSON document
+holding a statement (principal, namespace and the subjects: kind, name and the sha256 of every
+file, plus `manifest_sha256` for a manifest) and an OpenSSH signature of the canonical
+statement (`ssh-keygen -Y sign`, namespace `air2lean-attestation-v1`, typically Ed25519).
+
+```sh
+ssh-keygen -t ed25519 -f release-key                       # once; keep the private key off CI logs
+python3 scripts/attest.py sign --key release-key --principal release \
+  --manifest M.json [--receipt ATTEMPT_DIR] --out M.attestation.json     # never overwrites
+echo "release $(cut -d' ' -f1,2 release-key.pub)" > allowed_signers      # the verifier's file
+python3 scripts/attest.py verify M.attestation.json --allowed-signers allowed_signers \
+  --manifest M.json [--receipt ATTEMPT_DIR] [--pin-fingerprint SHA256:...] [--principal release]
+python3 scripts/proof-receipt.py check-manifest M.json --attestation M.attestation.json \
+  --allowed-signers allowed_signers --require-attestation [--pin-fingerprint ...]
+```
+
+`verify` is offline and fails closed (exit 2). It accepts only if the signature verifies against
+the verifier's allowed-signers file for the attested principal and namespace (and the pinned
+fingerprint, if given), every subject is matched by a supplied artifact with identical digests,
+no supplied artifact is left uncovered, and a manifest's chain recomputes. An edited subject,
+statement, principal, signature or namespace, a signature of another key or over another
+statement, an unlisted key, an expired key (`--verify-time` with `valid-before`), a
+manifest signed as a file or the reverse, a missing or extra artifact, a duplicate JSON key and
+a malformed document are all rejected. `check-manifest --attestation` reports
+`authentication: {status: attested, principal, key_fingerprint}`; when the attestation is
+rejected or `--require-attestation` is given without one, the report has a problem and is not
+`current`. `provenance-evidence.py check` takes the same options for the committed fixtures.
+A signed manifest authenticates its chained receipt too, because the `receipt` link hashes
+`receipt.json`, `plan.json` and `audit.json`; a standalone receipt is attested with `--receipt`.
+
+The key premise is [TRU-05](premises.md#tru-05): the signature authenticates who vouches for
+the bytes, relative to a key list the verifier trusts; it says nothing about freshness (the link
+checks do) or about the truth of the claim, and there is no revocation list or timestamp. The
+manifests and receipts of the committed fixtures are whole-tree generated files (regenerated
+by every CI run), so no signature over them is committed and CI holds no release key:
+`tests/roadmap/attestation/test_attestation.py` signs the materialized fixtures with a fresh
+key and runs the tamper regressions, and a committed known-answer attestation
+(`tests/roadmap/attestation/fixture/`, signed once by a key whose private half was discarded)
+pins the verification path. Signing a release's manifest and receipts is an operator step with
+the operator's key.
+
 ## What it establishes and what it does not
 
 A current manifest means the recorded bytes are still present. It does **not** rebuild AIR from
-source, rerun the translator, recheck proofs, authenticate anyone, or prove source-to-AIR,
+source, rerun the translator, recheck proofs, authenticate anyone (without an attestation, see Authentication), or prove source-to-AIR,
 AIR-to-Lean or Lean-to-native correspondence: those links are recorded identities of a run, not
 re-derived relations. The source-scan theorem list is lexical (not compiler-checked); bind a
 receipt or audit for the compiled inventory. Directory links include tracked and

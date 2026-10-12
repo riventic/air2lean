@@ -56,7 +56,8 @@ class Reports(unittest.TestCase):
         source = 'api.sum'
         base = 'air2lean_api' + ''.join('_' + str(b) for b in source.encode())
         loop = lambda k: dict(body=f'{base}_loop{k}_body', again=f'{base}_loop{k}_again',
-                              body_unfold=f'{base}_loop{k}_body_unfold', step=f'{base}_loop{k}_step')
+                              body_unfold=f'{base}_loop{k}_body_unfold', step=f'{base}_loop{k}_step',
+                              spec=f'{base}_loop{k}_spec')
         r = dict(format='air2lean-proof-lemmas-v1', source=source, definition='sum',
                  model=base+'_model', unfold=base+'_unfold', loops=[loop(0), loop(1)])
         line = lambda r: ('-- air2lean-proof-lemmas: '+json.dumps(r)+'\n').encode()

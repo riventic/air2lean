@@ -47,6 +47,13 @@ GATES = {
     "tests/roadmap/indirect-calls/Bridge.lean": "tests/roadmap/indirect-calls/check.sh",
     "tests/roadmap/dispatch-templates/TokenizerProof.lean": "tests/roadmap/dispatch-templates/check.sh",
     "tests/roadmap/env-boundaries/StdIo.lean": "tests/roadmap/env-boundaries/check.sh",
+    "tests/roadmap/packed-casts/Model.lean": "tests/roadmap/packed-casts/check.sh",
+    "tests/roadmap/packed-casts/ModelLogical.lean": "tests/roadmap/packed-casts/check.sh",
+    "tests/roadmap/packed-casts/ModelVector.lean": "tests/roadmap/packed-casts/check.sh",
+    "tests/roadmap/packed-casts/ModelAuto.lean": "tests/roadmap/packed-casts/check.sh",
+    "tests/roadmap/nan-bits/Model.lean": "tests/roadmap/nan-bits/check.sh",
+    "tests/roadmap/try-pointers/lifetimes/Lifetimes.lean":
+        "tests/roadmap/try-pointers/lifetimes/check.sh",
 }
 PLACEHOLDER = re.compile(r"\b(sorry|admit|native_decide)\b")
 # Never acceptable: the elaborator would write declarations the kernel did not check.

@@ -29,7 +29,14 @@ def translator(emit='e' * 64):
     return t
 
 
+def runtime(basic='b' * 64):
+    t = dict(lean='4.34.0', modules=[['ZigLean.Basic', basic]], revision='')
+    t['revision'] = ms.fp.translator_revision(t)
+    return t
+
+
 TRANSLATOR = translator()
+RUNTIME = runtime()
 # a <- b <- c, a <- d; e independent.
 GROUPS = dict(a=[], b=['a'], c=['b'], d=['a'], e=[])
 
@@ -39,7 +46,7 @@ def module(name, kind='group', imports=(), functions=()):
                 functions=list(functions), definitions=list(functions), imports=list(imports))
 
 
-def write(directory, texts=None, metadata=METADATA, extra=(), revision=TRANSLATOR):
+def write(directory, texts=None, metadata=METADATA, extra=(), revision=TRANSLATOR, rt=RUNTIME):
     texts = texts or {}
     mods = [module('Types', 'types', ['ZigLean'])]
     for g, callees in GROUPS.items():
@@ -49,7 +56,7 @@ def write(directory, texts=None, metadata=METADATA, extra=(), revision=TRANSLATO
     (directory / 'R').mkdir(parents=True, exist_ok=True)
     for m in mods:
         (directory / m['file']).write_text(texts.get(m['module'], f'-- {m["module"]}\n'))
-    doc = dict(format=ms.FORMAT, namespace='Ex', root='R', metadata=metadata, translator=revision,
+    doc = dict(format=ms.FORMAT, namespace='Ex', root='R', metadata=metadata, translator=revision, runtime=rt,
                modules=mods)
     path = directory / 'Gen.modules.json'
     path.write_text(json.dumps(doc))
@@ -63,7 +70,7 @@ def sidecar(directory, changed=()):
                  for g, callees in GROUPS.items()]
     path = directory / 'map.json'
     path.write_text(json.dumps(dict(format=ms.fp.SIDECAR, namespace='Ex', metadata=METADATA,
-                                    options={}, translator=TRANSLATOR, functions=functions)))
+                                    options={}, translator=TRANSLATOR, runtime=RUNTIME, functions=functions)))
     return ms.fp.load_sidecar(path)
 
 
@@ -109,6 +116,10 @@ def main():
         emitter = ms.compare(old, ms.keys(ms.load_manifest(write(work / 'emitter', revision=translator('f' * 64)))))
         assert emitter['changed'] == [] and emitter['unaffected'] == [], emitter
 
+        # A runtime (ZigLean) change invalidates every module the same way.
+        changed_runtime = ms.compare(old, ms.keys(ms.load_manifest(write(work / 'runtime', rt=runtime('f' * 64)))))
+        assert changed_runtime['changed'] == [] and changed_runtime['unaffected'] == [], changed_runtime
+
         # A semantic fingerprint change with identical text still invalidates (source map bound).
         manifest = ms.load_manifest(write(work / 'sem'))
         base = ms.keys(manifest, sidecar(work))
@@ -129,6 +140,8 @@ def main():
         bad(lambda d: d['modules'][1]['imports'].append('R.F_c'), 'import cycle', 'cycle')
         bad(lambda d: d.pop('translator'), 'not an', 'no-translator')
         bad(lambda d: d['translator']['modules'][0].__setitem__(1, 'f' * 64), 'translator revision', 'forged')
+        bad(lambda d: d.pop('runtime'), 'not an', 'no-runtime')
+        bad(lambda d: d['runtime']['modules'][0].__setitem__(1, 'f' * 64), 'runtime revision', 'forged-runtime')
         mismatch = sidecar(work); mismatch['functions'].pop()
         expect_error(lambda: ms.keys(manifest, mismatch), 'different functions')
         renamed = sidecar(work); renamed['functions'][0]['definition'] = 'other'
@@ -137,6 +150,8 @@ def main():
         expect_error(lambda: ms.keys(manifest, moved), 'different translations')
         rebuilt = ms.load_manifest(write(work / 'rebuilt', revision=translator('f' * 64)))
         expect_error(lambda: ms.keys(rebuilt, sidecar(work)), 'different translations')
+        rebuilt_runtime = ms.load_manifest(write(work / 'rebuilt-runtime', rt=runtime('f' * 64)))
+        expect_error(lambda: ms.keys(rebuilt_runtime, sidecar(work)), 'different translations')
 
         # CLI: malformed input exits 2.
         result = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'keys', str(work / 'old/cycle.json')],

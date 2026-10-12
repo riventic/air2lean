@@ -21,7 +21,10 @@ example : Enc.size (Vec (Float .f80) 2) = 32 := rfl
 example : Enc.size (Vec (BitVec 32) 3) = 16 := rfl
 example (v : Vec (BitVec 9) 4) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
 example (v : Vec (BitVec 24) 3) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
-example (v : Vec F80 2) : Enc.decode (Enc.encode v) = pure v := LawfulEnc.decode_encode v
+/-- A float vector reads back unless a lane is a NaN, whose bits are undefined in memory
+(`Float.detMask`, `docs/architecture-audit/nan-bits.md`). -/
+example (v : Vec F80 2) (h : ∀ x ∈ v.lanes.toList, x.isNaN = false) :
+    Enc.decode (Enc.encode v) = pure v := Vec.float_decode_encode v h
 example (v : Vec (BitVec 9) 4) (x : BitVec 9) :
     laneOf 9 ((v.set 2 x).packBits 9 id).toNat 0 = laneOf 9 (v.packBits 9 id).toNat 0 :=
   laneOf_packBits_set_ne 9 id v 2 x 0 (by decide) (by decide)

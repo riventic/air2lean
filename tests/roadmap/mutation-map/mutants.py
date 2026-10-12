@@ -64,9 +64,14 @@ MUTANTS = {
         '        if True:\n', OUTCOMES, 'REPORT', ('Outcomes.test_model_exclusion_needs_a_pin_for_its_input',)),
     # L13 (S7): a claim over an asm opaque carries the allowlist fault-condition premise.
     'claims-asm-fault-premise-dropped': (
-        'scripts/claims.py', "    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
-        "    return ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        'scripts/claims.py', "        found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
+        "        found = ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
         ('ClassifyTests.test_asm_closure_carries_fault_premise',)),
+    # C12: a concurrency claim must list the memory-model adequacy premise.
+    'claims-memory-model-premise-dropped': (
+        'scripts/claims.py', "    return [model['premise']] if set(model['concurrency']) & set(reached) else []\n",
+        "    return []\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_concurrency_claim_lists_memory_model_premise',)),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',

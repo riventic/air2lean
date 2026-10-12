@@ -102,6 +102,7 @@ class CheckTests(unittest.TestCase):
                      'witnesses': {'nonvacuity': {'status': 'trivial', 'theorem': None},
                                    'liveness': {'status': liveness, 'theorem': name + '.returns'}}}
         return dict({'name': name, 'module': 'Proofs.Example.Contract', 'axioms': ['propext'], 'opaque_dependencies': [],
+                     'runtime_modules': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
                      'statement_dependencies': [subject], 'conclusion_dependencies': [subject],
                      'conclusion': {'head': head, 'args': []}, 'statement': statement}, **extra)

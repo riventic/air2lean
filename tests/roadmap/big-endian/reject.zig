@@ -19,8 +19,10 @@ pub fn vecLane0FromBytes(b: [8]u8) u32 {
     return v[0];
 }
 
-pub fn atomicRead(p: *u32) u32 {
-    return @atomicLoad(u32, p, .seq_cst);
+/// A big-endian atomic op on a representation that is neither at most one byte nor a whole
+/// number of bytes (`ZigLean/Conc/Endian.lean` conjugates by a byte swap).
+pub fn atomicU12(p: *u12) u12 {
+    return @atomicLoad(u12, p, .seq_cst);
 }
 
 pub const PU = packed union { a: u16, b: i16 };
@@ -52,17 +54,13 @@ pub fn tagName(e: E) []const u8 {
     return @tagName(e);
 }
 
-pub fn create(a: std.mem.Allocator) !*u32 {
-    return a.create(u32);
-}
-
 /// `u128` is 8-byte aligned on s390x, 16 in the model: a layout mismatch.
 pub fn u128Bytes(x: u128) [16]u8 {
     return @bitCast(x);
 }
 
 comptime {
-    _ = &atomicRead;
+    _ = &atomicU12;
     _ = &vecByte;
     _ = &vecLane0FromBytes;
     _ = &packedUnion;
@@ -70,6 +68,5 @@ comptime {
     _ = &boolLanes;
     _ = &nibbleLanes;
     _ = &tagName;
-    _ = &create;
     _ = &u128Bytes;
 }

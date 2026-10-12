@@ -35,6 +35,18 @@ def toString : ZigVersion → String
 
 instance : ToString ZigVersion := ⟨ZigVersion.toString⟩
 
+/-- The default version, the one the scripts and the CLI help name: `compatibility.json`'s
+`zig.default` (`scripts/version-literals.py` fails when they differ). -/
+def defaultVersion : ZigVersion := .v0_17_0
+
+/-- `all` as the CLI help lists it, the default marked: `0.17.0 (default), 0.16.0 and 0.15.2`. -/
+def helpList : String :=
+  let names := all.map fun v => if v == defaultVersion then s!"{v} (default)" else v.toString
+  match names.reverse with
+  | [] => ""
+  | [only] => only
+  | last :: before => ", ".intercalate before.reverse ++ " and " ++ last
+
 /-- The supported version spelled `s`, if any. -/
 def ofString? (s : String) : Option ZigVersion := all.find? (·.toString == s)
 
@@ -100,6 +112,12 @@ def buildModeRenames : ZigVersion → List (String × String)
   | v0_14_1 | v0_15_2 | v0_16_0 => []
   | v0_17_0 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
 
+/-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs or tagged
+unions is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the items too. -/
+def bitCastAutoItems : ZigVersion → Bool
+  | v0_14_1 | v0_15_2 => true
+  | v0_16_0 | v0_17_0 => false
+
 /-- Comptime lane pointers into bit-packed vectors have native evidence
 (`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.0 has none
 yet. -/
@@ -150,7 +168,7 @@ def Endian.ofString? : String → Option Endian
 §Targets), at its baseline CPU (`-mcpu=baseline`, the CPU of the native differential test). -/
 inductive FloatRules where
   /-- The reference (x86_64-linux): `f80` on the x87 and `@mulAdd` through compiler_rt (no FMA
-  instruction). The targets without rules of their own (s390x, wasm32) keep it. -/
+  instruction). The targets without rules of their own (s390x, mips64, wasm32) keep it. -/
   | reference
   /-- aarch64 (premise MTH-04): soft-float `f80` (`Zig.Float.softF80Chk`; `__divxf3`; before
   0.16.0, `@sqrt` through `f64`) and the fused `fmadd` for `@mulAdd` on `f32`/`f64`. With
@@ -192,9 +210,9 @@ structure Target where
 /-- The Zig versions with T04 probe records for both aarch64 profiles. -/
 def Target.aarch64Probed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
 
-/-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian
-(`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). s390x and wasm32
-reject every atomic op (`Check.lean`). The two aarch64 targets are qualified separately
+/-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian (s390x,
+mips64; `ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). wasm32
+rejects every atomic op (`Check.lean`). The two aarch64 targets are qualified separately
 (`docs/aarch64-abi.md`). -/
 def Target.qualified : List Target := [
   { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
@@ -206,6 +224,10 @@ def Target.qualified : List Target := [
     floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
     versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true },
   { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
+    atomicBits := 64 },
+  -- MIPS64 n64 (`mips64-linux-muslabi64`, `mips64r2` baseline): `long double` is `f128` and
+  -- `@mulAdd` goes through compiler_rt as on the reference (no fused multiply-add at r2).
+  { arch := "mips64", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
     atomicBits := 64 },
   { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
     longDoubleBits := 128, atomicBits := 32 },
@@ -229,7 +251,7 @@ def Target.llvmBackend : String := "stage2_llvm"
 facts: no architecture, an `unverified` backend and build mode, 16-bit errors. -/
 structure Dialect where
   version : ZigVersion
-  /-- The target architecture (`x86_64`, `aarch64`, `s390x`, `wasm32`); empty for a legacy
+  /-- The target architecture (`x86_64`, `aarch64`, `s390x`, `mips64`, `wasm32`); empty for a legacy
   profile, whose reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
   arch : String := ""
   /-- The target OS (`linux`, `macos`, …); empty for a legacy profile. -/

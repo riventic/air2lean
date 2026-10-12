@@ -5,7 +5,7 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 : "${AIR2LEAN_ZIG_AIR:?set the patched Zig AIR exporter}"
 zig_stock=${AIR2LEAN_ZIG:-zig}
-version=${AIR2LEAN_EXPECT_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_EXPECT_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 case "$version" in 0.14.1|0.15.2|0.16.0) ;; *) echo 'unsupported qualification version' >&2; exit 1;; esac
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-permutations.XXXXXX")
 trap 'rm -rf "$work"' EXIT
