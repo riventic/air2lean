@@ -506,8 +506,8 @@ theorem WP.liftMem_owned {x : MemM α} {Pa : Assn} {Qa : α → Assn}
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
   have hx := ht m (own t) _ hd hm hp hcs (hc ▸ ho.owns t htl)
-  refine WP.liftMem (fun e he => ?_) fun a m' hr => ?_
-  · rw [he] at hx; exact hx.elim
+  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
     have ho'' : m'.Owns t hQ := by rw [hs.current, hc] at ho'; exact ho'

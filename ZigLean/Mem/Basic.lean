@@ -634,21 +634,19 @@ def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
       { bytes := Array.replicate size .undef, align, kind, live := true,
         addr := m.newAddr size align } }
 
-/-- A run with no outcome: the address space has no room for a block (`alloc`). Like a run that
-does not terminate, it is outside every partial-correctness statement; a total-correctness
-statement shows room (`Mem.roomFor`, premise SEM-07). -/
-def noRoom {α : Type} : MemM α := StateT.lift (ExceptT.mk none)
-
 /-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`); its address is the
-placement's (`Mem.newAddr`). If the block does not fit inside the address space
-(`Mem.roomFor`), the allocation fails as for an exhausted address space: the run has no outcome
-(`noRoom`). The block is never placed above `Placement.addrLimit` (O-H). -/
+placement's (`Mem.newAddr`). The block is never placed above `Placement.addrLimit` (O-H): without
+room (`Mem.roomFor`) the run throws `.stackOverflow`, the outcome of an exhausted stack budget
+(MM-5, premise STK-01). `alloc` makes the blocks that have no allocator of their own: stack
+locals (`allocStack`), thread-local instances and the runtime's cells; every allocator path
+checks room first and fails as out of memory (`rawAlloc` returns null, `mmap` fails with
+`ENOMEM`). -/
 def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   let m ← get
   if m.roomFor size align then
     set (m.afterAlloc kind size align)
     pure ⟨some m.blocks.size, 0⟩
-  else noRoom
+  else throw .stackOverflow
 
 /-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
 `e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of

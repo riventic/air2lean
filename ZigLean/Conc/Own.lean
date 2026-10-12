@@ -238,7 +238,7 @@ def TTriple {α : Type} (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
     m.Owns m.current hP →
     match (c.run m).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Owns m'.current hQ ∧
         StepIn hF m m'
@@ -300,7 +300,7 @@ theorem bind {R : β → Assn} {f : α → MemM β} (hc : TTriple P c Q) (hf : �
   | none => intro; trivial
   | some r =>
     cases r with
-    | error e => intro h1; exact h1.elim
+    | error e => intro h1; exact h1
     | ok r =>
       obtain ⟨v, m'⟩ := r
       rintro ⟨hQ, hd', hm', hq, ho', hs⟩
@@ -530,7 +530,7 @@ theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
     have hP0 : hP = Heap.empty := hp
     subst hP0
     cases hroom : m.roomFor size align
-    · rw [alloc_run_noRoom m hroom]; trivial
+    · rw [alloc_run_noRoom m hroom]; try trivial
     obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, -, hA, hb⟩ :=
       alloc_run_core hd hm kind size align ha hroom hk
     simp only [Heap.empty_union] at hd' hm'

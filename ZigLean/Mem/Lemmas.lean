@@ -71,6 +71,24 @@ theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = so
     StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     pure, ExceptT.pure, StateT.lift, ExceptT.run]
 
+/-- `alloc` with room in the address space (`Mem.roomFor`) makes the block `m.blocks.size`. -/
+theorem alloc_run_eq (m : Mem) {kind : BlockKind} {size align : Nat}
+    (hroom : m.roomFor size align = true) :
+    (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) := by
+  show (if m.roomFor size align = true then
+      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
+      else throw .stackOverflow : MemM Ptr).run m = _
+  rw [if_pos hroom]; rfl
+
+/-- Without room (`Mem.roomFor`) `alloc` throws `.stackOverflow` (STK-01). -/
+theorem alloc_run_noRoom (m : Mem) {kind : BlockKind} {size align : Nat}
+    (hroom : m.roomFor size align = false) :
+    ((alloc kind size align).run m).run = some (.error .stackOverflow) := by
+  show ((if m.roomFor size align = true then
+      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
+      else throw .stackOverflow : MemM Ptr).run m).run = _
+  rw [if_neg (by simp [hroom])]; rfl
+
 /-- Releasing a frame restores the bytes that `enterFrame` charged. -/
 theorem leaveFrame_run (m : Mem) (bytes : Nat) :
     (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl

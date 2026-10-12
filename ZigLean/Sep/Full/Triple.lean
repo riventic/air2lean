@@ -51,7 +51,7 @@ def FTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
   ∀ m r rF, Holds m r rF → P r → m.FSeq →
     match (c.run m).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq
 
 namespace FTriple
@@ -118,7 +118,7 @@ theorem bind {S : β → FAssn} {f : α → MemM β} (hc : FTriple P c Q)
   | none => intro; trivial
   | some x =>
     cases x with
-    | error e => intro h1; exact h1.elim
+    | error e => intro h1; exact h1
     | ok x =>
       obtain ⟨v, m'⟩ := x
       rintro ⟨r', hh', hq, hs'⟩
@@ -335,7 +335,7 @@ theorem FTriple.of_fix {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
     (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.FSeq →
       match (c.run m).run with
       | none => True
-      | some (.error _) => False
+      | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq) :
     FTriple P c Q := by
   intro m r rF hh hp hs

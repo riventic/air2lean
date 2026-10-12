@@ -150,12 +150,12 @@ theorem bind {S : β → FAssn} {f : α → ConcM Tgt β} (hx : CTriple P x Q)
   rw [run_eq] at h1
   show match soloTree ((x n m).bind fun (a, m') k => f a k m') with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ S v r' ∧ m'.FSeq
-  rcases soloTree_bind (x n m) (fun (a, m') k => f a k m') with ⟨-, h2⟩ | ⟨e, he, -⟩ |
+  rcases soloTree_bind (x n m) (fun (a, m') k => f a k m') with ⟨-, h2⟩ | ⟨e, he, h2⟩ |
     ⟨⟨a, m'⟩, k, he, h2⟩
   · rw [h2]; trivial
-  · rw [he] at h1; exact h1.elim
+  · rw [he] at h1; rw [h2]; exact h1
   · rw [he] at h1
     obtain ⟨r', hh', hq, hs'⟩ := h1
     rw [h2]
@@ -270,7 +270,7 @@ theorem admissible : Lean.Order.admissible (fun x : ConcM Tgt α => CTriple P x 
   have := admissible_solo (Tgt := Tgt) (fun n m o => ∀ r rF, Holds m r rF → P r → m.FSeq →
     match o with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq) (fun _ _ _ _ _ _ _ => trivial)
   intro c hc h n m r rF hh hp hs
   exact this c hc (fun x hx n m r rF hh hp hs => h x hx n m r rF hh hp hs) n m r rF hh hp hs
