@@ -75,7 +75,7 @@ theorem intCast_unsigned_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
   have hfit : (a.toNat : Int) ≤ 2 ^ m - 1 := by
     have : ((2 ^ m : Nat) : Int) = 2 ^ m := by norm_cast
     omega
-  simp only [intCast, val, Bool.false_eq_true, ↓reduceIte, Int.natCast_nonneg, hfit, and_self]
+  simp only [intCast, intLo_unsigned, intHi_unsigned, val, Bool.false_eq_true, ↓reduceIte, Int.natCast_nonneg, hfit, and_self]
   rw [BitVec.ofInt_natCast]
 
 /-! ## Range bounds -/

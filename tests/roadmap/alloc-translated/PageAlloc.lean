@@ -328,7 +328,7 @@ theorem tame_addr64 (q : Ptr) : Full.Tame (do let d ← ptrAddr q; pure (BitVec.
 theorem subSat_pow {k : Nat} (hk : k < 64) :
     Zig.subSat false (BitVec.ofNat 64 (2 ^ k)) 4096 = BitVec.ofNat 64 (2 ^ k - P) := by
   have := Ops.toNat_two_pow hk
-  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte, this]
+  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte, Zig.intLo_unsigned, Zig.intHi_unsigned, this]
   apply BitVec.eq_of_toNat_eq
   simp only [BitVec.toNat_ofInt, BitVec.toNat_ofNat]
   have hlt := Ops.two_pow_lt hk
