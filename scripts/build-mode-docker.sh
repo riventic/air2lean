@@ -57,6 +57,7 @@ if [ -z "$examples" ]; then
   source scripts/example-selection.sh
   examples=$(air2lean_default_examples "$repo" "$version" x86_64)
 fi
+[ -n "${examples// /}" ] || { echo "error: no examples selected" >&2; exit 1; }
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-mode.XXXXXX")
 container=
 cleanup() {
