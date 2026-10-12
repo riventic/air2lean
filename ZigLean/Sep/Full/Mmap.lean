@@ -430,7 +430,8 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
           obtain ⟨hlo1, hlt1⟩ := h1.mp hb1
           have hn : ¬ (lo ≤ o ∧ o < hi) := fun hc => (h2.mpr hc) hb2
           exact ⟨by omega, by omega⟩
-      · simp [hx]), ?_, LDMono.set (nb := nb) hb (fun _ => hl) rfl (by rw [hnbs, hsz]; omega) hbs⟩
+      · simp [hx]), ?_, LDMono.set (nb := nb) hb (fun _ => hl) rfl (by rw [hnbs, hsz]; omega) hbs
+        (by simp [nb])⟩
   have := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨this.1, by omega⟩
   rwa [hnbs, hnbk] at this
@@ -551,7 +552,8 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨by omega, this.2⟩
   rw [show nb.bytes.size = S from hsz] at hpost
   exact ⟨(), m', _, hrun, hh', hpost, ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩,
-    hs.2.1, LDMono.set (nb := nb) hb (fun _ => hl) rfl (Nat.le_refl _) rfl hs.2.2⟩⟩
+    hs.2.1, LDMono.set (nb := nb) hb (fun _ => hl) rfl (Nat.le_refl _) rfl
+      (by simp only [nb, hK, BlockKind.mappedLo_mapped]; omega) hs.2.2⟩⟩
 
 /-! ## `mremap` growth in place -/
 
@@ -629,7 +631,7 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
       (by rw [hnbs]; have := le_alignUp n os.pageSize; omega)
       (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho)
-      (Nat.le_trans (Mem.mappingRoom_le hroom) os.addrLimit_le) rfl hs₁.2.2⟩⟩
+      (Nat.le_trans (Mem.mappingRoom_le hroom) os.addrLimit_le) rfl (by simp [nb, hK]) hs₁.2.2⟩⟩
   have hup := growRes_up (m := m₁) (m' := m₂) (b := b) (nb := nb) (q := q)
     (P := bytesAt ⟨some b, (blk.bytes.size : Int)⟩ blk.addr (lo + n) (.mapped lo) fill) ?_
   · rw [hnbs, show nb.kind = .mapped lo from hK] at hup; exact hup

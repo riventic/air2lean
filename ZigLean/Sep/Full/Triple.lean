@@ -43,7 +43,8 @@ memory in which a refutation applies a triple (`AllocArena.ArenaObstruction.not_
 
 theorem _root_.Zig.Mem.liveDisjoint_iff (m : Mem) : m.LiveDisjoint ↔
     ∀ i (hi : i < m.blocks.size) j (hj : j < m.blocks.size), i ≠ j → m.blocks[j].live = true →
-      m.blocks[i].clearOf m.blocks[j].addr m.blocks[j].bytes.size = true := by
+      m.blocks[i].clearOf (m.blocks[j].addr + m.blocks[j].kind.mappedLo)
+        (m.blocks[j].bytes.size - m.blocks[j].kind.mappedLo) = true := by
   constructor
   · intro h i hi j hj hne hl
     exact h i j _ _ hne (Array.getElem?_eq_getElem hi) (Array.getElem?_eq_getElem hj) hl
@@ -1154,35 +1155,41 @@ theorem upPost_bext {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (N
 
 /-! ## Address disjointness of live blocks (stage 3) -/
 
-/-- **Owned bytes of two different blocks lie at disjoint addresses**: owning byte `x` of `b`
-and byte `x'` of `b'` puts byte `x` of `b` before `b'` or byte `x'` of `b'` before `b` (from
-ownership and `Mem.LiveDisjoint`, part of `Mem.FSeq`). Taking the last owned byte of each gives
-the owned ranges and one past them; whole blocks need their extents (`bext`). -/
+/-- **Owned bytes of two different blocks lie at disjoint addresses**: owning bytes `x` and `y`
+of `b` and `x'` and `y'` of `b'` puts byte `x` of `b` before byte `y'` of `b'` or byte `x'` of
+`b'` before byte `y` of `b` (from ownership and `Mem.LiveDisjoint`, part of `Mem.FSeq`: the live
+bytes of two blocks are apart; a block may lie below an OS mapping's live bytes, MM-19). Taking
+the last and the first owned byte of each gives the owned ranges; whole blocks need their extents
+(`bext`). -/
 theorem Holds.apart {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
-    {b b' : BlockId} {x x' : Nat} {fc fc' : FCell} (hbb : b ≠ b') (h1 : r.heap (b, x) = some fc)
-    (h2 : r.heap (b', x') = some fc') :
-    fc.cell.addr + x < fc'.cell.addr ∨ fc'.cell.addr + x' < fc.cell.addr := by
+    {b b' : BlockId} {x y x' y' : Nat} {fc gc fc' gc' : FCell} (hbb : b ≠ b')
+    (h1 : r.heap (b, x) = some fc) (hy : r.heap (b, y) = some gc)
+    (h2 : r.heap (b', x') = some fc') (hy' : r.heap (b', y') = some gc') :
+    fc.cell.addr + x < fc'.cell.addr + y' ∨ fc'.cell.addr + x' < fc.cell.addr + y := by
   obtain ⟨blk, hb, hl, hx, -, ha, -⟩ := hh.block h1
   obtain ⟨blk', hb', hl', hx', -, ha', -⟩ := hh.block h2
+  obtain ⟨blk₁, hb₁, -, hy₁, hlo, -, -⟩ := hh.block hy
+  obtain ⟨blk₁', hb₁', -, hy₁', hlo', -, -⟩ := hh.block hy'
+  rw [hb] at hb₁; cases hb₁
+  rw [hb'] at hb₁'; cases hb₁'
   have := clearOf_iff.mp (hs.2.2.1 b b' blk blk' hbb hb hb' hl')
   rw [ha, ha']
   rcases this with h | h | h | h | h
   · simp_all
-  · omega
-  · omega
-  · right; omega
-  · left; omega
+  all_goals omega
 
-/-- **The `apart` rule**: owning byte `x` of `b` (address `A`) and byte `x'` of `b'` (address
-`A'`) gives the fact that they lie apart, each before the other block. -/
+/-- **The `apart` rule**: owning bytes `x` and `y` of `b` (address `A`) and `x'` and `y'` of `b'`
+(address `A'`) gives the fact that byte `x` lies before byte `y'` or byte `x'` before byte `y`
+(`Holds.apart`). -/
 theorem FTriple.apart {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {b b' : BlockId}
-    {A x A' x' : Nat} (hbb : b ≠ b')
+    {A x y A' x' y' : Nat} (hbb : b ≠ b')
     (hc : ∀ r, P r → (∃ fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A) ∧
-      ∃ fc, r.heap (b', x') = some fc ∧ fc.cell.addr = A')
-    (ht : FTriple (⟪A + x < A' ∨ A' + x' < A⟫ ⋆ P) c Q) : FTriple P c Q := by
+      (∃ fc, r.heap (b, y) = some fc) ∧ (∃ fc, r.heap (b', x') = some fc ∧ fc.cell.addr = A') ∧
+      ∃ fc, r.heap (b', y') = some fc)
+    (ht : FTriple (⟪A + x < A' + y' ∨ A' + x' < A + y⟫ ⋆ P) c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
-  obtain ⟨⟨fc, h1, rfl⟩, ⟨fc', h2, rfl⟩⟩ := hc r hp
-  exact ht m r rF hh (sep_lift.mpr ⟨hh.apart hs hbb h1 h2, hp⟩) hs
+  obtain ⟨⟨fc, h1, rfl⟩, ⟨gc, hy⟩, ⟨fc', h2, rfl⟩, ⟨gc', hy'⟩⟩ := hc r hp
+  exact ht m r rF hh (sep_lift.mpr ⟨hh.apart hs hbb h1 hy h2 hy', hp⟩) hs
 
 end Full
 end Zig

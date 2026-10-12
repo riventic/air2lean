@@ -27,9 +27,11 @@ example {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : TotalTriple
   ht.withPlacement hd hm hp hs σ pm
 
 -- (d) A new block's address range is clear of every live block under every placement (and
--- nothing about order or gaps).
+-- nothing about order or gaps). A block's live bytes start at its first live offset (an OS
+-- mapping's unmapped prefix or a thread's stack in it is not the mapping's, MM-19).
 example (m : Mem) (size align : Nat) {l : Loc} {c : Cell} (hc : m.heap l = some c) :
-    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨ m.newAddr size align + size ≤ c.addr :=
+    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨
+      m.newAddr size align + size ≤ c.addr + c.kind.mappedLo :=
   Mem.newAddr_clear m size align hc
 
 -- (e) Reuse happens; the naive address argument is false under the default provenance mode.

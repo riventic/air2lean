@@ -105,10 +105,12 @@ theorem MemFacts.regions_apart :
       · rw [e] at f1'; cases f1'
       · rw [e] at f2'; cases f2'
     omega
-  · -- two blocks: the last byte of each lies before the other block
+  · -- two blocks: the last byte of each lies before the first byte of the other
     obtain ⟨f1, e1, a1⟩ := region_cell hb (i := bs.size - 1) (by omega) h1
     obtain ⟨f2, e2, a2⟩ := region_cell hb' (i := cs.size - 1) (by omega) h2
-    have := hh.apart hs hbb (inL _ _ e1) (inR _ _ e2)
+    obtain ⟨g1, e1', -⟩ := region_cell hb (i := 0) hn h1
+    obtain ⟨g2, e2', -⟩ := region_cell hb' (i := 0) hn' h2
+    have := hh.apart hs hbb (inL _ _ e1) (inL _ _ e1') (inR _ _ e2) (inR _ _ e2')
     rw [a1, a2] at this
     omega
 

@@ -419,14 +419,29 @@ structure StackEntry where
   closed : Bool := false
   deriving Repr, Inhabited, DecidableEq
 
+/-- A thread's native stack inside an OS mapping (MM-19): the offsets `[lo, hi)` of the mapping
+`host`, at the addresses `[start, start + hi - lo)`. Linux `clone` gets the top of the stack
+(`Os.Linux.clone`); the stack is the mapping's live part below it. While the thread runs the
+mapping's first live offset is `hi` (`BlockKind.mapped`), so the mapping no longer occupies the
+range and nobody can access it through the mapping; the thread's own stack blocks may lie in it,
+and no other block may. The thread's end gives the range back to the mapping. -/
+structure NativeStack where
+  host : BlockId
+  lo : Nat
+  hi : Nat
+  start : Nat
+  deriving Repr, Inhabited, DecidableEq
+
 /-- A thread's stack (MM-16). With a budget `S` the thread owns the reserve `[base, base + S)`,
 which no other block meets, and its stack blocks and frames are charged LIFO: `entries` in push
 order, popped lazily (`StackState.held`). Without a budget (`none`, the default) there is no
-accounting: a stack block is placed like any other block. -/
+accounting: a stack block is placed like any other block. `native`: the thread's native stack
+inside an OS mapping (MM-19), where its stack blocks may lie and no other block may. -/
 structure StackState where
   budget : Option Nat := none
   base : Nat := 0
   entries : Array StackEntry := #[]
+  native : Option NativeStack := none
   deriving Repr, Inhabited
 
 structure Mem where
@@ -608,23 +623,40 @@ def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .
 
 /-- `blk` does not constrain a range `[A, A + n)`: it is dead, one of the two ranges is empty, or
 they are disjoint. Zig guarantees disjoint storage for live objects, nothing else (no gap, no
-order, no separation for a zero-size object). -/
+order, no separation for a zero-size object). A block occupies its live bytes
+`[addr + lo, addr + size)`, `lo` its first live offset (`BlockKind.mappedLo`, 0 but for an OS
+mapping): the pages below `lo` of a mapping were unmapped or are a thread's stack (MM-19,
+`Os.Linux.clone`), and other blocks may lie there. -/
 def Block.clearOf (blk : Block) (A n : Nat) : Bool :=
-  !blk.live || n == 0 || blk.bytes.size == 0 ||
-    decide (A + n ≤ blk.addr) || decide (blk.addr + blk.bytes.size ≤ A)
+  !blk.live || n == 0 || decide (blk.bytes.size ≤ blk.kind.mappedLo) ||
+    decide (A + n ≤ blk.addr + blk.kind.mappedLo) || decide (blk.addr + blk.bytes.size ≤ A)
 
 /-- No live block's address range meets `[A, A + n)` (`Block.clearOf`). -/
 def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
   m.blocks.all (·.clearOf A n)
 
-/-- The reserve of `s` (`[base, base + S)` with a budget `S`, nothing without one) does not meet
-`[A, A + n)`. -/
-def StackState.reserveClear (s : StackState) (A n : Nat) : Bool :=
-  match s.budget with
-  | none => true
-  | some S => n == 0 || S == 0 || decide (A + n ≤ s.base) || decide (s.base + S ≤ A)
+/-- One past the end of a native stack. -/
+def NativeStack.stop (ns : NativeStack) : Nat := ns.start + (ns.hi - ns.lo)
 
-/-- No thread's stack reserve meets `[A, A + n)` (MM-16). -/
+/-- The native stack `ns` does not meet `[A, A + n)`. -/
+def NativeStack.clearOf (ns : NativeStack) (A n : Nat) : Bool :=
+  n == 0 || decide (A + n ≤ ns.start) || decide (ns.stop ≤ A)
+
+/-- `[A, A + n)` lies inside the native stack `ns`. -/
+def NativeStack.holds (ns : NativeStack) (A n : Nat) : Bool :=
+  decide (ns.start ≤ A) && decide (A + n ≤ ns.stop)
+
+/-- The reserves of `s` (`[base, base + S)` with a budget `S`, and its native stack, MM-19) do not
+meet `[A, A + n)`. -/
+def StackState.reserveClear (s : StackState) (A n : Nat) : Bool :=
+  (match s.budget with
+   | none => true
+   | some S => n == 0 || S == 0 || decide (A + n ≤ s.base) || decide (s.base + S ≤ A)) &&
+  (match s.native with
+   | none => true
+   | some ns => ns.clearOf A n)
+
+/-- No thread's stack reserve meets `[A, A + n)` (MM-16, MM-19). -/
 def Mem.reservesFree (m : Mem) (A n : Nat) : Bool :=
   m.stacks.all (·.reserveClear A n)
 
@@ -648,11 +680,15 @@ def Mem.placed? (m : Mem) (size align : Nat) : Option Nat :=
   | some A => if m.placeOk A size align then some A else none
   | none => none
 
-/-- One past the end of a thread's stack reserve (0 without a budget). -/
+/-- One past the end of a thread's stack reserves (0 without a budget or a native stack). -/
 def StackState.reserveEnd (s : StackState) : Nat :=
-  match s.budget with
-  | some S => s.base + S + 1
-  | none => 0
+  Nat.max
+    (match s.budget with
+     | some S => s.base + S + 1
+     | none => 0)
+    (match s.native with
+     | some ns => ns.stop + 1
+     | none => 0)
 
 /-- One past the end of every block, dead or live, and of every stack reserve, plus a gap byte;
 at least 4096. The fallback address of a new block (`Mem.newAddr`) starts here, so it is clear of
@@ -733,20 +769,44 @@ address below the held entries' charge from the reserve's end. -/
 def Mem.stackFallback (m : Mem) (S size align : Nat) : Nat :=
   alignDown ((m.stackOf m.current).base + S - m.stackDepth m.current - size) (Nat.max align 1)
 
-/-- The address of a new block of kind `kind`: the placement's (`Mem.placed?`); else a stack
+/-- `A` is a valid address for a new block of kind `kind` in the current thread's native stack
+(MM-19): a stack block, inside that native stack, valid apart from it (`Mem.fitOk`, clear of
+every other reserve). Only a thread's own stack blocks may lie in its native stack. -/
+def Mem.homeOk (m : Mem) : BlockKind → Nat → Nat → Nat → Bool
+  | .stack, A, size, align =>
+    let s := m.stackOf m.current
+    m.fitOk A size align &&
+      (match s.native with
+       | some ns => ns.holds A size
+       | none => false) &&
+      (setStackAt m.stacks m.current { s with native := none }).all (·.reserveClear A size)
+  | _, _, _, _ => false
+
+/-- The placement's address for the next block, of kind `kind`, if it is valid: in the current
+thread's native stack for its own stack block (`Mem.homeOk`), else anywhere valid
+(`Mem.placeOk`). For every kind but `.stack` this is `Mem.placed?`. -/
+def Mem.placedFor? (m : Mem) (kind : BlockKind) (size align : Nat) : Option Nat :=
+  match m.place.propose m.blocks.size with
+  | some A => if m.homeOk kind A size align || m.placeOk A size align then some A else none
+  | none => none
+
+/-- The address of a new block of kind `kind`: the placement's (`Mem.placedFor?`); else a stack
 block of a thread with a budget gets the LIFO fallback in its reserve and every other block
-`Mem.top` rounded up (`Mem.newAddr`). -/
+`Mem.top` rounded up (as `Mem.newAddr`). -/
 def Mem.allocAddr (m : Mem) (kind : BlockKind) (size align : Nat) : Nat :=
   match m.stackBudget? kind with
-  | none => m.newAddr size align
-  | some S => (m.placed? size align).getD (m.stackFallback S size align)
+  | none =>
+    match m.placedFor? kind size align with
+    | some A => A
+    | none => alignUp m.top align
+  | some S => (m.placedFor? kind size align).getD (m.stackFallback S size align)
 
-/-- `alloc` can make the block: room in the address space (`Mem.roomFor`); for a stack block of a
-thread with a budget `S`, its charge fits (depth plus charge at most `S`) and its address is
+/-- `alloc` can make the block: room in the address space (as `Mem.roomFor`); for a stack block
+of a thread with a budget `S`, its charge fits (depth plus charge at most `S`) and its address is
 valid (`Mem.fitOk`; the fallback in the reserve always is in a memory that a run reaches). -/
 def Mem.allocOk (m : Mem) (kind : BlockKind) (size align : Nat) : Bool :=
   match m.stackBudget? kind with
-  | none => m.roomFor size align
+  | none => decide (m.allocAddr kind size align + size ≤ m.place.addrLimit)
   | some S => decide (m.stackDepth m.current + stackCharge size align ≤ S) &&
       m.fitOk (m.allocAddr kind size align) size (Nat.max align 1)
 
@@ -1056,7 +1116,8 @@ More than one block covers `n` when a freed block and a later block share addres
 when `n` is one past the end of a block and the start of an adjacent one: the integer does not
 say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
 gives no provenance; the address-sensitive contract `.liveBlock` takes the live block that
-contains `n`, else a live block that ends at `n`, and gives no provenance if none of the
+contains `n` among its live bytes (`Block.clearOf`: not below an OS mapping's first live offset,
+where a thread's stack block may lie, MM-19), else a live block that ends at `n`, and gives no provenance if none of the
 covering blocks is live (`docs/address-reuse.md`).
 
 **No provenance** is `⟨none, n⟩`, as when no block covers `n`: its address is `n` (`ptrAddr`, so
@@ -1076,7 +1137,8 @@ def ptrFromAddr (n : Nat) : MemM Ptr := do
     match m.allocPolicy.provenance with
     | .strict => pure ⟨none, n⟩
     | .liveBlock =>
-      match (hits.find? fun (_, blk) => blk.live ∧ n < blk.addr + blk.bytes.size) <|>
+      match (hits.find? fun (_, blk) =>
+            blk.live ∧ blk.addr + blk.kind.mappedLo ≤ n ∧ n < blk.addr + blk.bytes.size) <|>
           hits.find? (·.2.live) with
       | some (b, blk) => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
       | none => pure ⟨none, n⟩

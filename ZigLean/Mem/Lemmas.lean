@@ -1104,12 +1104,41 @@ Every block but a stack block of a thread with a budget gets `Mem.newAddr` and n
 fallback, and `Mem.allocOk` checks that it is valid. Either way the address is aligned, clear of
 every live block and inside the address space. -/
 
+/-- A placed address for a block of any kind is valid apart from the reserves (`Mem.fitOk`). -/
+theorem Mem.placedFor?_ok {m : Mem} {kind : BlockKind} {size align A : Nat}
+    (h : m.placedFor? kind size align = some A) :
+    0 < A ∧ A % align = 0 ∧ A + size ≤ m.place.addrLimit ∧ m.addrFree A size = true := by
+  unfold Mem.placedFor? at h
+  split at h
+  · split at h
+    · cases h
+      have hf : m.fitOk A size align = true := by
+        rcases Bool.or_eq_true_iff.mp ‹_› with h | h
+        · unfold Mem.homeOk at h
+          split at h
+          · simp only [Bool.and_eq_true] at h; exact h.1.1
+          · cases h
+        · simp only [Mem.placeOk, Bool.and_eq_true] at h; exact h.1
+      simp only [Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at hf
+      exact ⟨hf.1.1.1, hf.1.1.2, hf.1.2, hf.2⟩
+    · cases h
+  · cases h
+
+/-- Every kind but `.stack`: the placement of `Mem.newAddr`. -/
+theorem Mem.placedFor?_of_ne_stack {m : Mem} {kind : BlockKind} (hk : kind ≠ .stack)
+    (size align : Nat) : m.placedFor? kind size align = m.placed? size align := by
+  have : ∀ A, m.homeOk kind A size align = false := by
+    intro A; cases kind <;> first | exact absurd rfl hk | rfl
+  simp only [Mem.placedFor?, Mem.placed?, this, Bool.false_or]
+
 theorem Mem.allocAddr_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
-    (size align : Nat) : m.allocAddr kind size align = m.newAddr size align := by
-  simp [Mem.allocAddr, h]
+    (size align : Nat) : m.allocAddr kind size align =
+      (m.placedFor? kind size align).getD (alignUp m.top align) := by
+  simp only [Mem.allocAddr, h]; split <;> simp_all
 
 theorem Mem.allocOk_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
-    (size align : Nat) : m.allocOk kind size align = m.roomFor size align := by
+    (size align : Nat) : m.allocOk kind size align =
+      decide (m.allocAddr kind size align + size ≤ m.place.addrLimit) := by
   simp [Mem.allocOk, h]
 
 /-! Every kind but `.stack`: today's room and address. -/
@@ -1140,12 +1169,13 @@ theorem Mem.allocOk_fit {m : Mem} {kind : BlockKind} {size align : Nat}
       m.addrFree (m.allocAddr kind size align) size = true := by
   cases hb : m.stackBudget? kind with
   | none =>
-    rw [Mem.allocOk_of_none hb] at h
+    rw [Mem.allocOk_of_none hb, decide_eq_true_eq] at h
+    refine ⟨h, ?_⟩
     rw [Mem.allocAddr_of_none hb]
-    refine ⟨Mem.roomFor_iff.mp h, ?_⟩
-    unfold Mem.newAddr; split
-    · exact (Mem.placed?_ok ‹_›).2.2.2
-    · unfold Mem.addrFree
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.2.2
+    | none =>
+      unfold Mem.addrFree
       rw [Array.all_eq_true]
       intro i hi
       have := Mem.lt_top (m := m) (b := i) (Array.getElem?_eq_getElem hi)
@@ -1166,11 +1196,15 @@ theorem alignDown_mod {n a : Nat} : alignDown n a % a = 0 := by
 theorem Mem.allocAddr_mod (m : Mem) (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     m.allocAddr kind size align % align = 0 := by
   cases hb : m.stackBudget? kind with
-  | none => rw [Mem.allocAddr_of_none hb]; exact m.newAddr_mod size align ha
+  | none =>
+    rw [Mem.allocAddr_of_none hb]
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.1
+    | none => simp only [Option.getD_none, alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
   | some S =>
     simp only [Mem.allocAddr, hb]
-    cases hp : m.placed? size align with
-    | some A => exact (Mem.placed?_ok hp).2.1
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.1
     | none =>
       have e : Nat.max align 1 = align := by simp [Nat.max_def]; omega
       simp only [Option.getD_none, Mem.stackFallback, e]
@@ -1278,7 +1312,7 @@ theorem Mem.fitFrom_spec (m : Mem) (size align : Nat) : ∀ (fuel A : Nat),
       have h2 := alignUp_le_add (b.addr + b.bytes.size) align
       rw [hA'] at h1 h2
       have hin : b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size :=
-        ⟨by simpa using hl', Nat.pos_of_ne_zero (by simpa using hs0), hlt2⟩
+        ⟨by simpa using hl', by omega, hlt2⟩
       have d1 := fitWeight_drop (w := fun _ => 1) hmem (by omega) hin h1
       have d2 := fitWeight_drop (w := fun b => size + b.bytes.size + align) hmem (by omega) hin h1
       obtain ⟨hfree, hmod, hge, hle⟩ := Mem.fitFrom_spec m size align fuel A' (by omega)

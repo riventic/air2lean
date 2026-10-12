@@ -143,12 +143,26 @@ theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
         · exact (Proto.MemM.throw_ok h₁).elim
       · exact (Proto.MemM.throw_ok h₁).elim
 
+/-- A prefix `munmap` moves the first live offset up. -/
+theorem _root_.Zig.Os.unmapCase_prefix_ge {P lo hi off n e : Nat}
+    (h : Os.unmapCase P lo hi off n = some (.prefix e)) : lo ≤ e := by
+  unfold Os.unmapCase at h
+  simp only at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  split at h
+  · cases h; omega
+  split at h <;> cases h
+
 theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun m v m' h => by
   unfold Os.munmap at h
   obtain ⟨⟨b, blk, lo⟩, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
   obtain ⟨rfl, hb, -, hkm⟩ := mappingAt_ok h1
   simp only at hb h2 hkm
-  have tail : ∀ (u : Option Os.Unmap) (m₀ : Mem) (v' : Unit) (h : ((match u with
+  have tail : ∀ (u : Option Os.Unmap) (hu : ∀ e, u = some (.prefix e) → lo ≤ e) (m₀ : Mem)
+      (v' : Unit) (h : ((match u with
       | none => (MonadExcept.throw Error.illegal : MemM Unit)
       | some u => do
         Zig.recordAccess b s.ptr.off.toNat ((s.ptr.off.toNat + alignUp s.len.toNat os.pageSize).min
@@ -157,7 +171,7 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
         set { m with blocks := m.blocks.set! b (Os.Unmap.apply blk u) }).run m₀).run =
         some (Except.ok (v', m'))) (hb0 : m₀.blocks[b]? = some blk),
       m'.atomics = m₀.atomics ∧ KMono m₀ m' ∧ LDMono m₀ m' := by
-    intro u m₀ v' h hb0
+    intro u hu m₀ v' h hb0
     split at h
     · exact (Proto.MemM.throw_ok h).elim
     · rename_i u
@@ -169,12 +183,15 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
       subst this
       refine ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl)
         (by rw [hkm]; nofun) rfl,
-        LDMono.set (nb := Os.Unmap.apply blk u) hb0 ?_ (by cases u <;> rfl) ?_ rfl⟩
+        LDMono.set (nb := Os.Unmap.apply blk u) hb0 ?_ (by cases u <;> rfl) ?_ rfl ?_⟩
       · cases u <;> simp [Os.Unmap.apply]
       · cases u <;> simp [Os.Unmap.apply]; omega
+      · cases u <;> first
+          | exact Nat.le_refl _
+          | (simp only [Os.Unmap.apply, hkm, BlockKind.mappedLo_mapped]; exact hu _ rfl)
   split at h2
   · exact (throw_bind_ok h2).elim
-  · exact tail _ _ _ h2 hb
+  · exact tail _ (fun e he => Os.unmapCase_prefix_ge he) _ _ h2 hb
 
 theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Block}
     (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
@@ -219,7 +236,7 @@ theorem _root_.Zig.Full.LDMono.set_dead_push {m m' : Mem} {b : BlockId} {blk x :
 theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo : Nat}
     {newLen : BitVec 64} {flags : BitVec 32} {m m' : Mem} {v : Except ErrName Slice}
     (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hlo : lo ≤ blk.bytes.size)
-    (hk : blk.kind ≠ .constGlobal)
+    (hk : blk.kind ≠ .constGlobal) (hkl : blk.kind.mappedLo = lo)
     (h : ((Os.mremapLive os p b blk lo newLen flags).run m).run = some (.ok (v, m'))) :
     m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m' := by
   unfold Os.mremapLive at h
@@ -279,7 +296,8 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
       refine ⟨rfl, hset rfl rfl, LDMono.grow (lo := lo) (len := alignUp newLen.toNat os.pageSize)
         (nb := { blk with bytes := blk.bytes ++ mremapFill os.pageSize (blk.bytes.size - lo) newLen.toNat })
         hb hl rfl hlo ?_ (fun j o hj ho => Mem.mappingRoom_clear (by simpa using ‹¬_ = false›) j o hj ho)
-        (Nat.le_trans (Mem.mappingRoom_le (by simpa using ‹¬_ = false›)) os.addrLimit_le) rfl⟩
+        (Nat.le_trans (Mem.mappingRoom_le (by simpa using ‹¬_ = false›)) os.addrLimit_le) rfl
+        (by simp [hkl])⟩
       simp only [Array.size_append, mremapFill, Array.size_map, Array.size_range]
       have := le_alignUp (newLen.toNat) os.pageSize
       omega
@@ -300,7 +318,8 @@ theorem mremap (os : Os.Target) (o : Option Ptr) (oldLen newLen : BitVec 64) (fl
     split at h4
     · exact (throw_bind_ok h4).elim
     · rename_i hchk
-      refine mremapLive_ok hb hl ?_ (by simp only at hkm; rw [hkm]; nofun) h4
+      refine mremapLive_ok hb hl ?_ (by simp only at hkm; rw [hkm]; nofun)
+        (by simp only at hkm; rw [hkm]; rfl) h4
       dsimp only at hchk
       simp only [not_or, Decidable.not_not] at hchk
       obtain ⟨-, h0, hal⟩ := hchk
