@@ -1876,6 +1876,19 @@ jobs:
           AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
 
+      # T06: correspondence beyond the committed inputs (docs/build-modes.md §Fresh inputs): the
+      # generated inputs again from a seed derived from the commit, in a check tree; any value,
+      # error or panic disagreement fails. The summary records the seed, so a failure reproduces.
+      - name: Differential test on fresh inputs (seed from the commit)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
+        run: |
+          set -euo pipefail
+          seed="0x$(git rev-parse HEAD | cut -c1-15)"
+          scripts/fresh-inputs.sh "$seed" "$RUNNER_TEMP/fresh-inputs/report.json"
+
       # T06: the same differential examples in another optimize mode on LLVM (one row per mode),
       # checked against the committed x86_64-linux run records (docs/build-modes.md). ReleaseFast
       # and ReleaseSmall exclude the inputs on which the model throws (illegal behaviour there).

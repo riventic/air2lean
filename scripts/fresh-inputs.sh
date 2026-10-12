@@ -36,11 +36,15 @@ for d in tests/diff/*/inputs; do
 done >"$before"
 printf '//! scripts/fresh-inputs.sh\npub const seed: u64 = %s;\n' "$seed" >tests/diff/input_seed.zig
 "$zig" run tests/diff/gen_inputs.zig >/dev/null
+# The examples this host runs by default (scripts/example-selection.sh) whose inputs changed.
+source scripts/example-selection.sh
+eligible=" $(air2lean_default_examples "$PWD" "$version" "$(uname -m)") "
 examples=''
 while read -r digest dir; do
   now=$(cat "$dir"/*.jsonl | shasum -a 256 | cut -d' ' -f1)
   ex=${dir#tests/diff/}; ex=${ex%/inputs}
-  if [ "$now" != "$digest" ] && [ -f "examples/$ex/$ex.zig" ]; then examples="$examples$ex "; fi
+  case "$eligible" in *" $ex "*) ;; *) continue ;; esac
+  if [ "$now" != "$digest" ]; then examples="$examples$ex "; fi
 done <"$before"
 [ -n "$examples" ] || { echo "error: seed $seed changed no input file" >&2; exit 1; }
 echo "fresh inputs (seed $seed): $examples" >&2
