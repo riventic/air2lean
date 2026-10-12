@@ -399,7 +399,10 @@ def arithOps : Std.HashMap Name Nat := Std.HashMap.ofList [
   (``HPow.hPow, 2), (``LE.le, 2), (``LT.lt, 2), (``GE.ge, 2), (``GT.gt, 2), (``Dvd.dvd, 2),
   (``Eq, 2), (``Ne, 2), (``Min.min, 2), (``Max.max, 2), (``And, 2), (``Or, 2), (``Iff, 2),
   (``Not, 1), (``Neg.neg, 1), (``Nat.cast, 1), (``Int.ofNat, 1), (``Int.toNat, 1), (``Nat.succ, 1),
-  (``OfNat.ofNat, 0), (``subAtom, 2), (``minAtom, 2), (``maxAtom, 2), (``toNatAtom, 1)]
+  (``OfNat.ofNat, 0), (``subAtom, 2), (``minAtom, 2), (``maxAtom, 2), (``toNatAtom, 1),
+  (``HShiftLeft.hShiftLeft, 2), (``HShiftRight.hShiftRight, 2), (``HAnd.hAnd, 2), (``HOr.hOr, 2),
+  (``HXor.hXor, 2), (``Int.natAbs, 1), (``Int.subNatNat, 2), (``Int.negSucc, 1), (``Int.emod, 2),
+  (``Int.ediv, 2), (``Nat.sub, 2), (``Nat.add, 2), (``Nat.mul, 2), (``Nat.div, 2), (``Nat.mod, 2)]
 
 /-- The atoms of an arithmetic proposition or term: its maximal subterms that are not arithmetic
 operations or literals (`omega`'s variables). -/
@@ -418,8 +421,10 @@ partial def arithAtoms (e : Expr) (acc : Std.HashSet Expr := {}) : Std.HashSet E
         | none => acc.insert e
     | _ => acc.insert e
 
-/-- The facts relevant to `ty`: those connected to it by shared atoms (transitively). All facts
-for a goal without atoms (`False`: a refutation of the context). -/
+/-- The facts relevant to `ty`: those connected to it by shared atoms (transitively), and those
+without atoms. All facts for a goal without atoms (`False`: a refutation of the context, which is
+how an unreachable branch is closed; a side goal on an unreachable path whose contradiction does
+not touch its atoms is left to that refutation). -/
 def relevantFacts (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Expr) := Id.run do
   let mut seen := arithAtoms ty
   if seen.isEmpty then return facts
@@ -429,7 +434,7 @@ def relevantFacts (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Ex
   while changed do
     changed := false
     for i in [0:facts.size] do
-      if used[i]! || !fa[i]!.any seen.contains then continue
+      if used[i]! || !(fa[i]!.isEmpty || fa[i]!.any seen.contains) then continue
       used := used.set! i true; changed := true
       seen := fa[i]!.foldl (·.insert ·) seen
   return (facts.zip used).filterMap fun (f, u) => if u then some f else none
@@ -1032,7 +1037,8 @@ def caseInduct? (tn : Name) : MetaM (Option InductiveVal) := do
   return if ii.ctors.length ≥ 2 then some ii else none
 
 /-- `e` is an application of a constructor of an inductive type with several constructors other
-than `Bool` (an optional, an error union, an enumeration). -/
+than `Bool` and `Nat` (an optional, an error union, an enumeration): `Bool` tests go through `if`,
+and `Nat` constructors are arithmetic (literals, `n + 1`), which `fsym_arith` reads. -/
 def isCaseCtorApp (e : Expr) : MetaM Bool := do
   let .const c _ := e.getAppFn | return false
   let some (.ctorInfo ci) := (← getEnv).find? c | return false
@@ -1059,10 +1065,10 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
   if fs.isEmpty && !(← has (← g.getType)) then return none
   let s ← saveState
   try
-    let (_, g1) ← g.revert fs (preserveOrder := true)
+    let (rev, g1) ← g.revert fs (preserveOrder := true)
     let res ← g1.rewrite (← g1.getType) (mkFVar h) symm
     let g2 ← g1.replaceTargetEq res.eNew res.eqProof
-    let (xs, g3) ← g2.introNP fs.size
+    let (xs, g3) ← g2.introNP rev.size
     let mut g := g3
     for x in xs do
       if (← g.withContext x.findDecl?).isSome then g ← destruct g x
@@ -1103,10 +1109,12 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   return g
 end
 
-/-- The pointer that `p` is derived from by `Ptr.add`/`elem`/`elemSub` (same block, `block_add`). -/
+/-- The pointer that `p` is derived from by `Ptr.add`/`elem`/`elemSub`/`elemOf`/`elemSubOf`
+(same block, `block_add`). -/
 partial def ptrBase (p : Expr) : Expr :=
   let p := p.consumeMData
-  if p.isAppOfArity ``Zig.Ptr.add 2 || p.isAppOfArity ``Zig.Ptr.elem 3 || p.isAppOfArity ``Zig.Ptr.elemSub 3 then
+  if p.isAppOfArity ``Zig.Ptr.add 2 || p.isAppOfArity ``Zig.Ptr.elem 3 || p.isAppOfArity ``Zig.Ptr.elemSub 3 ||
+      p.isAppOfArity `Zig.Ptr.elemOf 4 || p.isAppOfArity `Zig.Ptr.elemSubOf 4 then
     ptrBase (p.getArg! 0) else p
 
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
@@ -2229,7 +2237,7 @@ def atomFacts (a : Expr) : MetaM (Array (Expr × Expr)) := do
     let pf ← instantiateMVars (mkAppN f args)
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
-    unless pf.hasExprMVar do out := out.push (pf, φ)
+    unless pf.hasMVar || φ.hasMVar do out := out.push (pf, φ)
   return out
 
 /-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis. -/
@@ -2591,8 +2599,9 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if let .const tn _ := (← whnfD (← inferType d)).getAppFn then
         if let some ii ← caseInduct? tn then
           unless ii.isRec do
-            let (xs, g') ← g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]
-            return ← casesWalk g' (.fvar xs[0]!) user extra fuel
+            -- a goal that does not abstract over `d` (a dependent match): no split
+            if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
+              return ← casesWalk g' (.fvar xs[0]!) user extra fuel
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
