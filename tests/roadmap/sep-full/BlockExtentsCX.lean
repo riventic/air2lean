@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Toy
+import ZigLean.Sep.Full.Block
 import ZigLean.Sep.Full.Extent
 
 /-!

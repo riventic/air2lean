@@ -3,6 +3,7 @@
 
 Synthetic oracles stand in for the translator and compilers; nothing here runs a tool.
 """
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -127,10 +128,13 @@ class AirFuzz(unittest.TestCase):
             self.assertTrue(list(case.glob("[0-9][0-9].json")))
 
 
-def _program(body, ret=("lit", "u32", 0), funcs=(), globals_=()):
+def _program(body, ret=("lit", "u32", 0), funcs=(), globals_=(), profile=None):
     work = {"name": "work", "params": [["p0", "u32"], ["p1", "u32"]], "err": False,
             "body": json.loads(json.dumps(body)), "ret": list(ret)}
-    return {"seed": 0, "globals": [dict(g) for g in globals_], "funcs": list(funcs) + [work]}
+    program = {"seed": 0, "globals": [dict(g) for g in globals_], "funcs": list(funcs) + [work]}
+    if profile:
+        program["profile"] = profile
+    return program
 
 
 LIT = lambda ty, v: ["lit", ty, v]  # noqa: E731
@@ -149,6 +153,135 @@ class ZigGenerator(unittest.TestCase):
         for seed in range(150):
             seen |= zig_gen.features(zig_gen.generate(seed))
         self.assertEqual(seen, set(zig_gen.FEATURES))
+
+    def test_core_profile_is_the_original_subset(self):
+        # The heavy differential verified these seeds (docs/fuzzing.md): the core generator must not drift.
+        digest = hashlib.sha256()
+        for seed in range(40):
+            digest.update(zig_gen.render(zig_gen.generate(seed)).encode())
+        self.assertEqual(digest.hexdigest(), "719bcb5aae6b56ba6b99942d0afa02e3c08e728e799dcb969bd47c5f5db2149f")
+        for seed in range(150):
+            self.assertNotIn("profile", zig_gen.generate(seed))
+            text = json.dumps(zig_gen.generate(seed))
+            for tag in sorted(zig_gen.WIDE_STMT_TAGS) + ['"u16"', '"u64"', '"i64"', '"index"', '"field"']:
+                self.assertNotIn(tag if tag.startswith('"') else f'["{tag}"', text)
+
+    def test_wide_profile_is_deterministic_well_typed_and_covers_its_features(self):
+        seen = set()
+        for seed in range(150):
+            program = zig_gen.generate(seed, "wide")
+            self.assertEqual(program["profile"], "wide")
+            self.assertIsNone(zig_gen.typecheck_error(program), seed)
+            self.assertEqual(program, zig_gen.generate(seed, "wide"))
+            self.assertEqual(zig_gen.render(program), zig_gen.render(json.loads(json.dumps(program))))
+            seen |= zig_gen.features(program)
+        self.assertEqual(seen, set(zig_gen.WIDE_FEATURES))
+
+    def test_wide_constructs_are_rejected_in_the_core_profile(self):
+        body = [["let_array", "ar1", [LIT("u32", 1)] * 4]]
+        self.assertTrue(zig_gen.typecheck(_program(body, profile="wide")))
+        self.assertFalse(zig_gen.typecheck(_program(body)))
+        self.assertFalse(zig_gen.typecheck(_program([["let", "x1", "u64", LIT("u64", 1)]])))
+        self.assertTrue(zig_gen.typecheck(_program([["let", "x1", "u64", LIT("u64", 1)]], profile="wide")))
+
+    def test_typecheck_rejects_invalid_wide_programs(self):
+        array = ["let_array", "ar1", [LIT("u32", 1)] * 4]
+        bad = [
+            [["let_array", "ar1", [LIT("u32", 1)] * 3]],                                     # wrong length
+            [array, ["arr_set", "ar1", ["call", "f0", []], "=", LIT("u32", 0)]],            # impure index
+            [array, ["arr_set", "ar1", ["var", "g0"], "=", LIT("u32", 0)]],                  # global index
+            [array, ["let_slice", "sl2", "ar1", 3, 5]],                                      # bounds
+            [array, ["let_slice", "sl2", "ar1", 2, 2], ["sstore", "sl2", LIT("u32", 0), "=", LIT("u32", 1)]],  # empty
+            [["arr_set", "nope", LIT("u32", 0), "=", LIT("u32", 0)]],                        # unbound
+            [["let_opt", "op1", LIT("bool", True), LIT("u32", 1)],
+             ["let", "x2", "u32", ["field", "op1", "x"]]],                                   # not a struct
+            [["let_struct", "st1", LIT("u32", 1), LIT("u32", 1)]],                           # y is i32
+            [["let_opt", "op1", LIT("bool", True), LIT("u32", 1)],
+             ["if_opt", "op1", "o2", [["return", LIT("u32", 1)]], [["return", LIT("u32", 2)]]]],  # unreachable return
+            [["defer", [["let_array", "ar1", [LIT("u32", 1)] * 4]]]],                        # wide statement in defer
+            [["let", "x1", "u32", ["cast", "widen64", LIT("u32", 1)]]],                      # cast to the wrong type
+        ]
+        globals_ = [{"name": "g0", "ty": "u32", "init": 0}]
+        for body in bad:
+            self.assertFalse(zig_gen.typecheck(_program(body, profile="wide", globals_=globals_,
+                                                        funcs=[{"name": "f0", "params": [], "err": False, "body": [],
+                                                                "ret": LIT("u32", 0)}])), body)
+
+    def test_wide_evaluator_semantics(self):
+        W = lambda body, ret=("lit", "u32", 0): _program(body, ret=ret, profile="wide")  # noqa: E731
+        ones = [LIT("u32", n) for n in (10, 20, 30, 40)]
+        # Element pointers and slices alias the array; indexes wrap modulo the length.
+        body = [["let_array", "ar1", ones], ["ptr_elem", "q2", "ar1", LIT("u32", 5)],
+                ["store", "q2", "+%=", LIT("u32", 1)],
+                ["let_slice", "sl3", "ar1", 1, 3], ["sstore", "sl3", LIT("u32", 3), "=", LIT("u32", 99)]]
+        program = W(body, ret=("bin", "+%", ["index", "ar1", LIT("u32", 1)],
+                              ["bin", "*%", ["index", "ar1", LIT("u32", 2)], LIT("u32", 1000)]))
+        self.assertTrue(zig_gen.typecheck(program))
+        # ar1 = 10, 21, 30, 40; sl3 = [21, 30], index 3 % 2 = 1 -> ar1[2] = 99.
+        self.assertEqual(zig_gen.evaluate(program)[0], 21 + 99 * 1000)
+        # A for loop over a slice reads each element when its iteration starts.
+        body = [["let_array", "ar1", ones], ["let_slice", "sl2", "ar1", 0, 3], ["let", "x3", "u32", LIT("u32", 0)],
+                ["for_slice", "sl2", "e4", [["set", "x3", "+%=", ["var", "e4"]],
+                                            ["arr_set", "ar1", LIT("u32", 2), "=", LIT("u32", 1)]]]]
+        self.assertEqual(zig_gen.evaluate(W(body, ret=("var", "x3")))[0], 10 + 20 + 1)
+        # Optionals: orelse, a capturing if and a reset to null; the condition decides before the value runs.
+        body = [["let_opt", "op1", LIT("bool", False), LIT("u32", 5)], ["let", "x2", "u32", ["orelse", "op1", LIT("u32", 7)]],
+                ["set_opt", "op1", LIT("bool", True), LIT("u32", 9)],
+                ["if_opt", "op1", "o3", [["set", "x2", "+%=", ["var", "o3"]]], [["set", "x2", "=", LIT("u32", 0)]]]]
+        self.assertEqual(zig_gen.evaluate(W(body, ret=("var", "x2")))[0], 7 + 9)
+        # Structs copy by value; field pointers and the pointer-taking helper alias the original.
+        body = [["let_struct", "st1", LIT("u32", 1), LIT("i32", -1)], ["copy_struct", "st2", "st1"],
+                ["ptr_field", "q3", "st1", "x"], ["store", "q3", "=", LIT("u32", 50)],
+                ["bump_struct", "st1", LIT("u32", 4294967295)], ["set_field", "st2", "y", "+%=", LIT("i32", 3)]]
+        program = W(body, ret=("bin", "+%", ["bin", "*%", ["field", "st1", "x"], LIT("u32", 1000)],
+                              ["cast", "i2u", ["bin", "+%", ["field", "st1", "y"], ["field", "st2", "y"]]]))
+        self.assertTrue(zig_gen.typecheck(program))
+        # st1.x = 50 + (2^32 - 1) = 49; st1.y = -1 + (-1) = -2; st2.y = 2; sum 0.
+        self.assertEqual(zig_gen.evaluate(program)[0], (49 * 1000) & 0xFFFFFFFF)
+        # Wide integers wrap at their own width; casts truncate or reinterpret.
+        body = [["let", "x1", "u64", ["bin", "+%", LIT("u64", 18446744073709551615), LIT("u64", 2)]],
+                ["let", "x2", "i64", ["cast", "u2l", ["bin", "-%", LIT("u64", 0), LIT("u64", 1)]]],
+                ["let", "x3", "u16", ["cast", "trunc16", LIT("u32", 70000)]]]
+        ret = ("bin", "+%", ["bin", "+%", ["cast", "trunc64", ["var", "x1"]], ["cast", "i2u", ["cast", "l2i", ["var", "x2"]]]],
+               ["cast", "widen16", ["var", "x3"]])
+        self.assertEqual(zig_gen.evaluate(W(body, ret=ret))[0], (1 + 0xFFFFFFFF + (70000 & 0xFFFF)) & 0xFFFFFFFF)
+
+    def test_wide_renderer_follows_zig_local_rules(self):
+        body = [["let_array", "ar1", [LIT("u32", n) for n in (1, 2, 3, 4)]], ["let_array", "ar2", [LIT("u32", 0)] * 4],
+                ["let_slice", "sl3", "ar2", 1, 3], ["for_slice", "sl3", "e4", []],
+                ["let_opt", "op5", LIT("bool", True), LIT("u32", 1)], ["if_opt", "op5", "o6", [], []],
+                ["let_struct", "st7", LIT("u32", 1), LIT("i32", 1)], ["ptr_field", "q8", "st7", "y"]]
+        source = zig_gen.render(_program(body, profile="wide"))
+        self.assertIn("const ar1: [4]u32", source)   # never mutated
+        self.assertIn("var ar2: [4]u32", source)     # a slice may write it
+        self.assertIn("const sl3: []u32 = ar2[1..3];", source)
+        self.assertIn("for (sl3) |_| {", source)     # unused capture
+        self.assertIn("const op5: ?u32 = if (true) @as(u32, 1) else null;", source)
+        self.assertIn("if (op5) |_| {", source)
+        self.assertIn("var st7: P", source)
+        self.assertIn("_ = q8;", source)
+        self.assertIn("const P = struct { x: u32, y: i32 };", source)
+        self.assertIn("fn bumpP(", source)
+        self.assertIn("_ = ar1;", source)
+
+    def test_wide_shrinker_is_minimal_for_synthetic_oracle(self):
+        def has_slice_loop(program):
+            return '"for_slice"' in json.dumps(program)
+
+        seeds = [s for s in range(600) if has_slice_loop(zig_gen.generate(s, "wide"))][:3]
+        self.assertTrue(seeds)
+        for seed in seeds:
+            reduced = zig_gen.shrink(zig_gen.generate(seed, "wide"), has_slice_loop)
+            self.assertTrue(zig_gen.typecheck(reduced))
+            self.assertEqual(reduced["profile"], "wide")
+            # 1-minimal: no well-typed single-step reduction still fails.
+            for candidate in zig_gen.candidates(reduced):
+                if zig_gen.typecheck(candidate) and zig_gen.size(candidate) < zig_gen.size(reduced):
+                    self.assertFalse(has_slice_loop(candidate))
+            # The loop needs a slice, and the slice needs an array: nothing else survives.
+            [carrier] = [f for f in reduced["funcs"] if f["body"]]
+            self.assertEqual([s[0] for s in carrier["body"]], ["let_array", "let_slice", "for_slice"])
+            self.assertEqual(carrier["body"][2][3], [])
 
     def test_typecheck_rejects_invalid_programs(self):
         ret = ["return", LIT("u32", 1)]

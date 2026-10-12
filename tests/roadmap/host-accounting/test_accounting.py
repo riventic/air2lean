@@ -22,12 +22,14 @@ ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location('air2lean_accounting', ROOT/'scripts/accounting.py')
 ACC = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(ACC)
 EXAMPLES = sorted(p.name for p in (ROOT/'examples').iterdir() if p.is_dir())
-IN_QUALIFICATION = {'0.17.0'}
+NEWER_THAN_TABLES = {'0.17.0'}
 CLAIMED = {  # README's default selections (x86_64); the committed-tree test pins them to CI.
-    '0.17.0': [e for e in EXAMPLES if e != 'threadsync'],  # in qualification; full CI job
+    '0.17.0': [e for e in EXAMPLES if e != 'threadsync'],  # full CI job
     '0.16.0': [e for e in EXAMPLES if e != 'threadsync'],
     '0.15.2': [e for e in EXAMPLES if e not in ('iogroup', 'sync')],
 }
+# The 0.14.1 row's CI examples (restricted job, diff test on these only).
+RESTRICTED = ['basic', 'errors', 'floatops', 'floats', 'layout', 'options', 'pointers', 'recursion', 'variants']
 
 
 def summary(version='0.16.0', host='Linux-x86_64', counts=None, examples=None, **extra):
@@ -217,8 +219,8 @@ class Published(unittest.TestCase):
                                    *(a for path in summaries for a in ('--summary', path)))
                 self.assertEqual(code, 0, output)
                 versions = {r['version'] for r in json.loads(table.read_text())['rows']}
-                # A table records one CI run: a version still in qualification (0.17.0) may postdate it.
-                self.assertLessEqual(set(CLAIMED) - IN_QUALIFICATION, versions)
+                # A table records one CI run: the newest version (0.17.0) may postdate it.
+                self.assertLessEqual(set(CLAIMED) - NEWER_THAN_TABLES, versions)
 
 
 class Claims(Temp):
@@ -258,6 +260,7 @@ class Claims(Temp):
 
     def test_full_matrix_summaries_hold(self):
         code, output = self.claims(summary('0.17.0'), summary('0.16.0'), summary('0.15.2'),
+                                   summary('0.14.1', examples=RESTRICTED),
                                    summary('0.16.0', 'Darwin-arm64',
                                            examples=[e for e in CLAIMED['0.16.0'] if e != 'asm']),
                                    require=True)
@@ -268,7 +271,12 @@ class Claims(Temp):
                          summary('0.16.0'), require=True)
 
     def test_restricted_version_summary_contradicts_claim(self):
-        self.assertClaim('README claims no diff harness', summary('0.14.1', examples=['basic']))
+        # The 0.14.1 row runs the diff test on its listed examples: a summary of those is evidence.
+        self.assertEqual(self.claims(summary('0.14.1', examples=RESTRICTED))[0], 0)
+        self.assertClaim('ran examples', summary('0.14.1', examples=['basic']))
+        self.edit('README.md', '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) |',
+                  '| 0.14.1 | restricted job (translation and proofs; no diff harness) |')
+        self.assertClaim('README claims no diff harness', summary('0.14.1', examples=RESTRICTED))
 
     def test_focused_selection_does_not_evidence_claim(self):
         self.assertClaim('ran examples', summary('0.15.2', examples=['atomics', 'threads']))
@@ -277,8 +285,8 @@ class Claims(Temp):
         self.assertClaim('not a README-supported version', summary('0.13.0'))
 
     def test_restricted_example_list_mismatch(self):
-        self.edit('README.md', '| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`,',
-                  '| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`, `slices`,')
+        self.edit('README.md', '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`,',
+                  '| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`, `slices`,')
         self.assertClaim('restricted examples')
 
     def test_full_claim_without_ci_job(self):
@@ -288,11 +296,12 @@ class Claims(Temp):
         self.assertClaim('README claims a full Zig 0.15.2 job')
 
     def test_supported_version_absent_from_ci(self):
-        self.edit('README.md', 'Supported: Zig **0.17.0** (in qualification),', 'Supported: Zig **0.13.0**, **0.17.0** (in qualification),')
+        self.edit('README.md', 'Supported: Zig **0.17.0** (default),', 'Supported: Zig **0.13.0**, **0.17.0** (default),')
         self.assertClaim('CI matrix runs')
 
     def test_restricted_prose_contradicting_row(self):
-        self.edit('README.md', "The 0.14.1 row uses CI's restricted examples", "The 0.15.2 row uses CI's restricted examples")
+        self.edit('README.md', "The 0.14.1 row uses CI's restricted examples;",
+                  "The 0.15.2 row uses CI's restricted examples and skips the differential harness;")
         self.assertClaim('skips the differential harness; its version row disagrees')
 
     def test_readme_headline_including_exclusions_fails(self):

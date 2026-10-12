@@ -41,7 +41,8 @@ which `resize`, `remap` and `free` never touch. -/
 def inv (own : FAssn) : FAllocInv := pinv P own
 
 /-- The translated vtable entries, as `RawVTable` fields. `alloc` reaches sync ops (the atomics on
-`addr_hint`); a sequential call is the scheduler's run of one thread (`PageObstruction.lean`). -/
+`addr_hint`); a sequential call is the scheduler's run of one thread (`PageObstruction.lean`), in
+an environment that no `alloc` step reads (`PageAlloc.alloc_run`). -/
 def vt : RawVTable where
   alloc c len k ra := fun m =>
     Sched.run Sched.soloEnv dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) m

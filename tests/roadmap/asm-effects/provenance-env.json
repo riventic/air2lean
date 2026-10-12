@@ -1,0 +1,38 @@
+{
+  "source_sha256": {
+    "asm_env.zig": "acdde128bf0008e87d5457ee3e798e7b469c5bc84f69c1f329557c0c31943643"
+  },
+  "air": {
+    "exporter": "zig-patch/air-json/json.zig of this branch (patched compilers from scripts/zig-air.sh)",
+    "target": "x86_64-linux",
+    "cpu": "x86_64+rdrnd",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false,
+    "filter": "asm_env.",
+    "note": "0.14.1 is not exported: its exporter has no inline asm (docs/air-json.md), and the 0.15+ clobber syntax does not parse there; the CPU lists rdrnd because the allowlisted `rdrand` needs it (ASM-09, `--assume-asm-cpu-features` is not passed)",
+    "target_flags": "-target x86_64-linux -mcpu=x86_64+rdrnd"
+  },
+  "air_sha256": {
+    "air-env/0.15.2/asm_env.copy.json": "4fee3cde2b416ae30360b483cc94d03e7fc7d31d5585ffd0e0c60e6666d22d2a",
+    "air-env/0.15.2/asm_env.elapsed.json": "742e17e35c2d671cf3936881eef2fb355485be2316cfd4b1ff0a41f95938b022",
+    "air-env/0.15.2/asm_env.fill.json": "707d131d9b73806837e3e0b82f8a242a3da186ce44a43da05e5b5c426d5d7b97",
+    "air-env/0.15.2/asm_env.loadm.json": "5fa89fcb99006e8c07ff58a5aa9fe73439fbd353894fde1567db3b66ecdd4368",
+    "air-env/0.15.2/asm_env.rand64.json": "ba0a40773abb7a45a48c0ad849c8c8adda7a559df978773d205ba89496c22e3a",
+    "air-env/0.15.2/asm_env.random.json": "ef0a9dcc759e868022a5eba707ec749efdd42a8368a4df7460d16df6b5150666",
+    "air-env/0.15.2/asm_env.ticks.json": "c8d551e86405b128214e97904e4890c25669418263a9037f39978c64c28f0b54",
+    "air-env/0.16.0/asm_env.copy.json": "8b50f4b2d692fa9101b7a6193d9bff6406ca4208d7796bd5e2859dcede58d897",
+    "air-env/0.16.0/asm_env.elapsed.json": "a4855395883b25457f90cb34b813fa9f5d8a1ba9236aeb173e95c5e088d7a1b2",
+    "air-env/0.16.0/asm_env.fill.json": "887b68a920475493dc2df034b73bd9b0130249a820f4b8d6272baa841e74aca6",
+    "air-env/0.16.0/asm_env.loadm.json": "820b25d28ea82d36f2e63010e1b01c4a2381604341046f9b1a2fdcd267804499",
+    "air-env/0.16.0/asm_env.rand64.json": "bf9ff23b9e433f77cdeebc1cc588b095616b89bd0c15416b5bcb2ec546c310ca",
+    "air-env/0.16.0/asm_env.random.json": "e6721ac1189cb5c1b719c11d8b91283d02ef05f807c1cf41fcb52f8dfe237f54",
+    "air-env/0.16.0/asm_env.ticks.json": "cb68a9bd35b81ab885e574a036a041a0017dd844938cd2970964aa9760140d75",
+    "air-env/0.17.0/asm_env.copy.json": "d4f042496f4b99f8968b2d877dd93f9bb93184984736f8933c41009c0c54e978",
+    "air-env/0.17.0/asm_env.elapsed.json": "51e5ace11496b4786d4d542382d52835dc693af8403e87b3a513fa36d46d5a39",
+    "air-env/0.17.0/asm_env.fill.json": "f803efcb677e8a974040553a9d540bc23154610170455b509abe39e886714222",
+    "air-env/0.17.0/asm_env.loadm.json": "c82e2b0de0985553a33d768597b71ab14af6652a654efc78ed0a8fb85a115123",
+    "air-env/0.17.0/asm_env.rand64.json": "c5fa5b2dee475bab8c4db28fe48dcadf20de244086024aeb99ffc2d3077371ed",
+    "air-env/0.17.0/asm_env.random.json": "8fe4bc77485b955d058cc19bf0f47e9590d042c6babd5eee15d7f65c3652ffc6",
+    "air-env/0.17.0/asm_env.ticks.json": "1416e40756e25e4e4e73481cbb8af096f8b408d1dd7b77cc531ba809c16f6d5d"
+  }
+}

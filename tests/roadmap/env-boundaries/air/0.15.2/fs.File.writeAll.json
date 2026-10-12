@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,10 +39,16 @@
  },
  "name": "fs.File.writeAll",
  "module": "std",
+ "src": {
+  "file": "fs/File.zig",
+  "module": "std",
+  "decl_line": 975
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -114,7 +123,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 9,
@@ -165,7 +175,8 @@
          "id": 15,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 3
+         "line": 3,
+         "column": 12
         },
         {
          "id": 16,
@@ -181,7 +192,8 @@
          "id": 17,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 3
+         "line": 3,
+         "column": 25
         },
         {
          "id": 18,
@@ -240,7 +252,8 @@
            "id": 23,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 9
           },
           {
            "id": 24,
@@ -256,7 +269,8 @@
            "id": 25,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 32
           },
           {
            "id": 26,
@@ -282,7 +296,8 @@
            "id": 28,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 38
           },
           {
            "id": 29,
@@ -577,7 +592,8 @@
            "id": 54,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 32
           },
           {
            "id": 55,
@@ -622,7 +638,8 @@
              "id": 57,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 4
+             "line": 4,
+             "column": 18
             },
             {
              "id": 58,
@@ -650,7 +667,8 @@
            "id": 61,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 15
           },
           {
            "id": 62,
@@ -682,7 +700,8 @@
            "id": 64,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 5
+           "line": 5,
+           "column": 5
           },
           {
            "id": 65,

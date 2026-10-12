@@ -166,10 +166,11 @@ def laneForms : List (String × List Key) :=
   [("a", [req "a" .nat]), ("b", [req "b" .nat]), ("u", [req "u" .marker]), ("v", [req "v" .obj])]
 
 def topKeys : List Key :=
-  [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, req "profile" .obj,
+  [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, opt "unchecked_ib" .arr,
+   req "profile" .obj,
    req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, opt "export" .obj,
-   opt "externs" .arr, req "params" .arr, req "ret" .nat, req "body" .arr, opt "globals" .arr,
-   req "types" .arr]
+   opt "externs" .arr, req "params" .arr, req "noalias" .arr, req "ret" .nat, opt "err_trace" .nat,
+   opt "err_trace_unresolved" .marker, req "body" .arr, opt "globals" .arr, req "types" .arr]
 
 /-- An `export fn`'s linker symbol and calling convention (`export`, G1). -/
 def exportKeys : List Key := [req "name" .str, req "cc" .str]
@@ -201,7 +202,8 @@ without an entry is accepted only as `"unsupported": true`, which `Normalize` re
 def instPayload (tag : String) : Option (List Key) :=
   let args := req "args" .arr
   if binTags.contains tag || unTags.contains tag || tyOpTags.contains tag ||
-      extraBinTags.contains tag || ["select", "mul_add", "aggregate_init"].contains tag then
+      extraBinTags.contains tag || ternaryTags.contains tag ||
+      ["select", "mul_add", "aggregate_init"].contains tag then
     some [args]
   else match tag with
   | "atomic_load" => some [args, req "order" .str]
@@ -216,7 +218,11 @@ def instPayload (tag : String) : Option (List Key) :=
   | "block" | "loop" => some [req "body" .arr]
   | "dbg_inline_block" => some [opt "src" .obj, req "body" .arr]
   | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
-    some [req "callee" .obj, args]
+    some [req "callee" .obj, args, opt "err_trace" .nat, opt "err_trace_unresolved" .marker]
+  -- Error return tracing (§Error return trace).
+  | "err_return_trace" | "ret_addr" => some []
+  | "set_err_return_trace" => some [args]
+  | "save_err_return_trace_index" => some [req "index" .nat, req "ptr_ty" .nat]
   | "dbg_var_ptr" | "dbg_var_val" | "dbg_arg_inline" => some [args, req "name" .str]
   | "br" | "switch_dispatch" => some [req "target" .nat, args]
   | "repeat" => some [req "target" .nat]
@@ -245,7 +251,9 @@ where
   unTags : List String := ["is_null", "is_non_null", "is_err", "is_non_err", "ret", "ret_safe",
     "ret_load", "neg", "is_named_enum_value", "is_null_ptr", "is_non_null_ptr", "tag_name",
     "error_name", "is_err_ptr", "is_non_err_ptr", "sqrt", "sin", "cos", "tan", "exp", "exp2",
-    "log", "log2", "log10", "floor", "ceil", "round", "trunc_float"]
+    "log", "log2", "log10", "floor", "ceil", "round", "trunc_float",
+    -- The `@errorFromInt` bound check (`Compat.isErrorsLen`; renamed in 0.16.0).
+    "cmp_lt_errors_len", "cmp_lte_errors_len"]
   tyOpTags : List String := ["not", "bitcast", "load", "intcast", "intcast_safe", "trunc",
     "slice_ptr", "slice_len", "array_to_slice", "clz", "ctz", "popcount", "byte_swap",
     "bit_reverse", "abs", "optional_payload", "wrap_optional", "unwrap_errunion_payload",
@@ -259,6 +267,9 @@ where
     "bit_cast", "bit_cast_safe", "int_cast", "int_cast_safe", "ptr_cast", "ptr_from_int",
     "int_from_ptr", "error_cast", "error_from_int", "int_from_error", "union_from_enum",
     "array_to_vector"]
+  /-- 0.14.1/0.15.2's runtime-index lane store (`Compat.isVectorStoreElem`): vector pointer,
+  index, lane value. -/
+  ternaryTags : List String := ["vector_store_elem"]
   extraBinTags : List String := ["add_with_overflow", "sub_with_overflow", "mul_with_overflow",
     "shl_with_overflow", "slice_elem_ptr", "ptr_elem_ptr", "ptr_add", "ptr_sub", "slice"]
 
@@ -364,6 +375,10 @@ def validate (j : Json) : Except String Unit := do
   for (t, i) in types.zipIdx do checkType s!"types[{i}]" t
   for p in (← items "AIR file" j "params") do
     unless Shape.nat.accepts p do throw "AIR file: params must be type ids"
+  for p in (← items "AIR file" j "noalias") do
+    unless Shape.nat.accepts p do throw "AIR file: noalias must be parameter indices"
+  for u in (← items "AIR file" j "unchecked_ib") do
+    unless Shape.str.accepts u do throw "AIR file: unchecked_ib must be strings"
   for i in (← items "AIR file" j "body") do checkInst "body:" i
   for (g, i) in (← items "AIR file" j "globals").zipIdx do
     let path := s!"globals[{i}]"

@@ -56,9 +56,10 @@ def Float.gt {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.lt b a
 def Float.ge {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.le b a
 
 /-- `@min`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign: `f16`/`f80`/`f128` (compiler_rt `fmin`) give `-0`. For `f32`/`f64` the target
-result depends on the operand order, so generated code calls `Float.minChk`, which throws
-`.unspecified`; the `+0` here is only a total-function default (`docs/floats.md` §+0 and −0). -/
+of different sign the target may return either (group D, every format: `llvm.minnum` leaves it
+open, x86_64 `minss` depends on the operand order, Zig 0.14.1 compiler_rt `fmin` does not order
+zeros), so generated code calls `Float.minChk`, which throws `.unspecified`; the zero here is
+only a total-function default (`docs/floats.md` §+0 and −0). -/
 def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan
@@ -71,8 +72,8 @@ def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   | _, _ => if Float.le a b then a else b
 
 /-- `@max`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign: `+0` for `f16`/`f80`/`f128` (compiler_rt `fmax`). For `f32`/`f64` generated
-code calls `Float.maxChk`, which throws `.unspecified` (`docs/floats.md` §+0 and −0). -/
+of different sign the target may return either (group D, as `Float.min`): generated code calls
+`Float.maxChk`, which throws `.unspecified`; `+0` here is only a total-function default. -/
 def Float.max {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan
@@ -114,8 +115,8 @@ def Float.toInt {fmt : FloatFmt} (s : Bool) (n : Nat) (safe : Bool) (x : Float f
   | .finite sn m e =>
     let mag : Nat := if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat
     let tv : Int := if sn then -(mag : Int) else (mag : Int)
-    let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
-    let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
+    let lo : Int := intLo s n
+    let hi : Int := intHi s n
     if tv < lo || tv > hi then
       if safe then throw .overflow else throw .illegal
     else pure (.ofInt n tv)
@@ -391,28 +392,23 @@ permitted, on every target. -/
 def Float.snanVaries {fmt : FloatFmt} (a b : Float fmt) : Bool :=
   (a.isSignalingNaN && !b.isNaN) || (b.isSignalingNaN && !a.isNaN)
 
-/-- Group D: real SSE `minss`/`maxss` give an order-and-sign-dependent result for `f32`/`f64`
-when one operand is `+0` and the other `-0` — confirmed on real hardware for both `@min` and
-`@max` (`tests/diff` sel 16/17 mismatches), unlike `Float.min`/`Float.max`'s own deterministic
-choice. `f16`/`f80`/`f128` keep that deterministic result (compiler_rt `fmin`/`fmax`, 0
-mismatches there). Group I (`Float.snanVaries`) also throws `.unspecified`. -/
+/-- Group D: `@min`/`@max` of `+0` and `-0` (either order) is `.unspecified` in every format.
+Zig's lowering (`llvm.minnum`/`maxnum`, LLVM LangRef) leaves the zero's sign open: x86_64
+`minss`/`maxss` depend on the operand order, aarch64 `fminnm` orders `-0 < +0`, and Zig 0.14.1
+compiler_rt `fmin`/`fmax` (`f16`/`f80`/`f128`) return an operand without ordering the zeros. A
+proof therefore covers both zeros (`Float.MinAllowed`). Group I (`Float.snanVaries`) also throws
+`.unspecified`. -/
 def Float.minChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
   if Float.snanVaries a b then throw .unspecified else
   match a.classify, b.classify with
-  | .finite sa 0 _, .finite sb 0 _ =>
-    match fmt with
-    | .f32 | .f64 => if sa != sb then throw .unspecified else pure (Float.min a b)
-    | .f16 | .f80 | .f128 => pure (Float.min a b)
+  | .finite sa 0 _, .finite sb 0 _ => if sa != sb then throw .unspecified else pure (Float.min a b)
   | _, _ => pure (Float.min a b)
 
 /-- `@max`'s group D and I guards: the same conditions as `minChk`. -/
 def Float.maxChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
   if Float.snanVaries a b then throw .unspecified else
   match a.classify, b.classify with
-  | .finite sa 0 _, .finite sb 0 _ =>
-    match fmt with
-    | .f32 | .f64 => if sa != sb then throw .unspecified else pure (Float.max a b)
-    | .f16 | .f80 | .f128 => pure (Float.max a b)
+  | .finite sa 0 _, .finite sb 0 _ => if sa != sb then throw .unspecified else pure (Float.max a b)
   | _, _ => pure (Float.max a b)
 
 /-- Group C: does `x`'s bit pattern encode an f80 "unnormal", pseudo-infinity or pseudo-NaN —

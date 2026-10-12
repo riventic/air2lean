@@ -8,6 +8,13 @@ mentions a version inside a longer literal (a diagnostic, a fixture path) and co
 keys and are not checked. The registry's versions must
 equal `compatibility.json`'s `zig.versions`, the version registry of the scripts and CI.
 
+The default version is written once, in `compatibility.json` (`zig.default`), and read through
+`scripts/compat.py default` (`scripts/zig-default.sh` in shell). The scripts, workflows and tests
+must not spell a version in a defaulting position (`${V:-0.16.0}`, `environ.get('V', '0.16.0')`,
+`default='0.16.0'`, `version="0.16.0"` keyword defaults); a test double or a check qualified on
+exactly one version says so with a `zig-pin` comment on the line. `Dialect.defaultVersion` must
+equal `zig.default`.
+
 Usage: scripts/version-literals.py [--root DIR]. Exit 1 with one line per violation.
 """
 import argparse
@@ -110,6 +117,11 @@ def violations(root):
             errors.append(f"{REGISTRY}: v{a}_{b}_{c} is spelled '{text}'")
         spelled.append(text)
     compat = json.loads((root / "compatibility.json").read_text(encoding="utf-8"))
+    declared = re.search(r"def defaultVersion : ZigVersion := \.v(\d+)_(\d+)_(\d+)\b",
+                         registry.read_text(encoding="utf-8"))
+    if not declared or ".".join(declared.groups()) != compat["zig"]["default"]:
+        errors.append(f"{REGISTRY}: defaultVersion is {'.'.join(declared.groups()) if declared else 'missing'}, "
+                      f"compatibility.json zig.default is {compat['zig']['default']}")
     expected = sorted(v["version"] for v in compat["zig"]["versions"])
     if sorted(spelled) != expected:
         errors.append(f"{REGISTRY}: ZigVersion registry {sorted(spelled)} differs from "
@@ -117,11 +129,51 @@ def violations(root):
     return errors
 
 
+# A version literal in a defaulting position of a script, workflow or test.
+LITERAL = r"""['"]?\d+\.\d+\.\d+['"]?"""
+DEFAULTING = re.compile(
+    r":-" + LITERAL +                                              # ${V:-0.16.0}
+    r"|\.get\([^()]*," + r"\s*" + LITERAL + r"\s*\)"                 # environ.get('V', '0.16.0')
+    r"|\bdefault\s*=\s*" + LITERAL +                              # default='0.16.0'
+    r"|\b\w*version\w*\s*=\s*" + LITERAL + r"\s*[,)]"               # def f(version="0.16.0")
+    r"|\|\|\s*" + LITERAL)                                         # x || '0.16.0'
+# Tests build fixtures with a version parameter (`def fixtures(version="0.16.0")`); there only the
+# environment defaults (shell `${V:-…}`, `environ.get`) are the default version.
+ENV_DEFAULT = re.compile(r":-" + LITERAL + r"|environ\.get\([^()]*," + r"\s*" + LITERAL + r"\s*\)")
+PIN = "zig-pin"
+SCANNED = ("scripts", "tools", ".github", "tests")
+SUFFIXES = {".sh", ".py", ".yml", ".yaml", ".toml"}
+SELF = {"scripts/version-literals.py", "scripts/zig-default.sh", "tests/roadmap/version-literals/test_version_literals.py", "tests/roadmap/support-matrix/test_support_matrix.py"}
+
+
+def defaulting(root):
+    errors = []
+    for top in SCANNED:
+        if not (root / top).is_dir():
+            continue
+        for path in sorted((root / top).rglob("*")):
+            rel = path.relative_to(root).as_posix()
+            if (path.suffix not in SUFFIXES or not path.is_file() or rel in SELF
+                    or "/golden/" in rel or "/air/" in rel or "/fixtures/" in rel):
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            for number, line in enumerate(lines, 1):
+                pattern = ENV_DEFAULT if top == "tests" else DEFAULTING
+                if pattern.search(line) and PIN not in line:
+                    errors.append(f"{rel}:{number}: version literal in a defaulting position; "
+                                  f"read zig.default (scripts/compat.py default, scripts/zig-default.sh) "
+                                  f"or mark a test pinned to one version with a `{PIN}` comment")
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     args = parser.parse_args()
-    errors = violations(args.root.resolve())
+    errors = violations(args.root.resolve()) + defaulting(args.root.resolve())
     for e in errors:
         print(e, file=sys.stderr)
     if not errors:

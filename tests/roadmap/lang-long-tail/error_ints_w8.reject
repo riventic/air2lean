@@ -1,0 +1,1 @@
+0.14.1 `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an error whose code is at least 2^7

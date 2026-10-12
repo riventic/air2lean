@@ -77,7 +77,8 @@ variable {w : Nat} {P : FAssn}
   have ha := a.isLt
   have hc : ((2 ^ w : Nat) : Int) = (2 : Int) ^ w := by push_cast; rfl
   have hp : 0 < 2 ^ w := Nat.two_pow_pos w
-  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte, BitVec.toNat_ofInt]
+  simp only [Zig.subSat, Zig.clamp, Zig.intLo_unsigned, Zig.intHi_unsigned, Zig.val,
+    Bool.false_eq_true, ↓reduceIte, BitVec.toNat_ofInt]
   generalize (2 : Int) ^ w = M at *
   generalize 2 ^ w = N at *
   subst hc

@@ -607,15 +607,21 @@ def source_hashes(root):
         result[str(path.relative_to(root))]=digest.hexdigest()
     return result
 
-def compare(root, examples, version, host, summary, schedule_receipts=(), build=None):
-    return compare_summary(root,examples,version,host,summary,schedule_receipts,build)[0]
+def compare(root, examples, version, host, summary, schedule_receipts=(), build=None, fresh_seed=None):
+    return compare_summary(root,examples,version,host,summary,schedule_receipts,build,fresh_seed)[0]
 
-def compare_summary(root, examples, version, host, summary, schedule_receipts=(), build=None):
+def compare_summary(root, examples, version, host, summary, schedule_receipts=(), build=None, fresh_seed=None):
     """Write the summary and return (exit code, summary dict).
 
     `build` is the (optimize mode, backend) of the native side when it is not the default
     ReleaseSafe/LLVM reference. ReleaseFast and ReleaseSmall remove the safety checks, so an
-    input on which the model throws is illegal behavior there and is excluded, not compared."""
+    input on which the model throws is illegal behavior there and is excluded, not compared.
+
+    `fresh_seed`: the inputs were regenerated with this seed (scripts/fresh-inputs.sh), so the
+    per-input exclusion pins, which name the committed inputs, do not apply: a model
+    `.illegal`/`.unspecified` result is an exclusion on any input (never a match), no pin
+    violation is computed, and the summary records the seed. Every other status is unchanged: a
+    value or panic disagreement is a mismatch."""
     exclude_ub=bool(build) and build[0] in ('ReleaseFast','ReleaseSmall')
     if not examples or len(set(examples))!=len(examples) or any(not IDENT.fullmatch(ex) for ex in examples):
         raise Invalid('invalid selected examples')
@@ -666,7 +672,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                     input_sha=hashlib.sha256(raw.encode()).hexdigest()
                     host_kinds=None if values_match else host_difference(native,model,allowed_host.get(fn))
                     status=classify(native,model,nkind,mkind,search,host_kinds is not None,values_match,exclude_ub,
-                                    input_sha in excluded)
+                                    fresh_seed is not None or input_sha in excluded)
                     bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search,exclude_ub)
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
@@ -686,7 +692,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                     emit(row)
                 if count==0:raise Invalid('empty function inputs')
                 observed=exploration.scope(ex,fn)['observed'];incomplete_search=bool(observed['capped'] or observed['bounded'])
-                for bucket,specs in fn_pins.items():
+                for bucket,specs in ({} if fresh_seed is not None else fn_pins).items():
                     pinned=specs.get(fn,{})
                     for sha in sorted(set(pinned)|set(per_input[bucket])):
                         lo,hi,_=pinned.get(sha,(0,0,None));actual=per_input[bucket][sha]
@@ -704,6 +710,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                          'counts':dict(totals),'legacy_counts':dict(legacy_totals),
                          'schedule_exploration':exploration.summary(),
                          'pin_violations':violations,'mutation_eligible':0 if setup_failures else eligible,
+                         **({'fresh_input_seed':fresh_seed} if fresh_seed is not None else {}),
                          'setup_failures':setup_failures,'cases_path':str(report_path),'cases_sha256':cases_digest.hexdigest(),'runner_runtime_sources':sources}
     atomic_json(summary,result)
     return (1 if setup_failures or totals[Status.MISMATCH.value] or legacy_totals['mismatch'] or violations else 0),result
@@ -739,6 +746,7 @@ def main():
     parser.add_argument('--optimize',default='',help='native build mode when not the ReleaseSafe reference')
     parser.add_argument('--backend',default='',help='native backend (llvm or stage2_x86_64)')
     parser.add_argument('--schedule-receipts',default='',help='space-separated scripts/schedules.py receipts')
+    parser.add_argument('--fresh-inputs',default='',help='the seed of regenerated inputs (no per-input pins)')
     args=parser.parse_args()
     try:
         if args.action=='init':
@@ -762,7 +770,7 @@ def main():
             value=result.get('mutation_eligible')
             if type(value) is not int or value<0:raise Invalid('invalid mutation accounting')
             print(value);return 0
-        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split(),(args.optimize,args.backend or 'llvm') if args.optimize else None)
+        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split(),(args.optimize,args.backend or 'llvm') if args.optimize else None,args.fresh_inputs or None)
         print(headline(result));return code
     except (Invalid,OSError,UnicodeError,RecursionError) as exc:
         if args.action!='eligible':summary_failure(args.summary,args.phase,str(exc),Failure.UNSUPPORTED if isinstance(exc,Unsupported) else Failure.SETUP)

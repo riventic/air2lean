@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.AutoArith
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Range
@@ -18,8 +19,10 @@ module.
   precondition (`ex_sep`, `lift_sep`).
 * **Step rules** (`@[fsym]`): pointer operations from the providers of `Ops.lean`, loads and
   stores of `pts`, the fields of a stored slice, the overflow-checked arithmetic of generated code.
-* **Providers from atoms**: `AddrOf`/`Reaches` of a precondition from one of its atoms
-  (`known`, `bshare`, an owned `pts` or region), up to associativity and commutativity of `⋆`.
+* **Providers** (`AddrOf`, `Reaches`, `Live`, `Active`): from one of the precondition's atoms
+  (`known`, an untagged `bshare`, an owned `pts` or region, an allocator's own state), or from the
+  whole precondition (a share whose tag is active, a ledger at its epoch), lifted by `K.of_within`.
+  Pointer `==` across two live blocks (`ptrEqAddr_live`).
 * **`Junk`** (the library's, `Full/AllocSpec.lean`): bytes an allocator gave up (padding, leaked
   frees); an `up` part is absorbed.
 * **`fsym_norm`** and **`fsym_arith`**: the simp sets for programs and side goals.
@@ -134,17 +137,35 @@ variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
     AtomFacts (apts p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
   rintro r ⟨-, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
+/-- Two separately owned nonempty regions of one block do not overlap (by offsets;
+`MemFacts.regions_apart` compares addresses, also across blocks). The premises come from the
+context (blocks) and the arithmetic solver (sizes). -/
+@[fsym_facts] theorem facts_regions_block {q : Ptr} {b : BlockId} {A' S' a' : Nat} {K' : BlockKind}
+    {cs : Array Byte} (hp : p.block = some b) (hq : q.block = some b) (hn : 0 < bs.size)
+    (hn' : 0 < cs.size) :
+    AtomFacts (up (regionIn p A S K a bs) ⋆ up (regionIn q A' S' K' a' cs))
+      (p.off.toNat + bs.size ≤ q.off.toNat ∨ q.off.toNat + cs.size ≤ p.off.toNat) := by
+  rintro r ⟨r₁, r₂, hd, rfl, h1, h2⟩
+  refine Classical.byContradiction fun hc => ?_
+  -- the later start lies in both
+  obtain ⟨x, hx1, hx2⟩ : ∃ x, (p.off.toNat ≤ x ∧ x < p.off.toNat + bs.size) ∧
+      (q.off.toNat ≤ x ∧ x < q.off.toNat + cs.size) := by
+    rcases Nat.le_total p.off.toNat q.off.toNat with h | h
+    · exact ⟨q.off.toNat, by omega, by omega⟩
+    · exact ⟨p.off.toNat, by omega, by omega⟩
+  obtain ⟨f1, e1, -⟩ := Owns.region (a := a) (S := S) hp (i := x - p.off.toNat) (by omega) r₁ h1
+  obtain ⟨f2, e2, -⟩ := Owns.region (a := a') (S := S') hq (i := x - q.off.toNat) (by omega) r₂ h2
+  rw [show p.off.toNat + (x - p.off.toNat) = x by omega] at e1
+  rw [show q.off.toNat + (x - q.off.toNat) = x by omega] at e2
+  rcases hd (b, x) with e | e <;> simp_all
+
 end Facts
 
 /-! ## Providers from atoms -/
 
 section Providers
 
-variable {b : BlockId} {A k : Nat} {P X R : FAssn}
-
-theorem AddrOf.of_atom (h : AddrOf b A X) (e : P = (X ⋆ R)) : AddrOf b A P := e ▸ h.sepL
-
-theorem Reaches.of_atom (h : Reaches b k X) (e : P = (X ⋆ R)) : Reaches b k P := e ▸ h.sepL
+variable {b : BlockId} {A k : Nat}
 
 /-- A nonempty owned byte range at `p` (in block `b`): the block's address. -/
 theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
@@ -158,30 +179,6 @@ theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
     obtain ⟨fc, hfc, he⟩ := erase_cell hc
     exact ⟨_, fc, hfc, by rw [he]⟩
 
-/-- A nonempty owned byte range at `p` (in block `b`): the block reaches its end. -/
-theorem Reaches.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
-    (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
-    Reaches b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
-  obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
-  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
-  rw [hpb] at hb'; cases hb'
-  obtain ⟨fc, hfc, -⟩ := erase_cell hc
-  obtain ⟨blk, hblk, -, hj, -⟩ := hh.block hfc
-  exact ⟨blk, hblk, by omega⟩
-
-/-- A typed value at `p` owns its bytes: its block reaches one past it. -/
-theorem Reaches.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
-    (hn : 0 < Enc.size T) : Reaches b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
-  Reaches.bytes hpb fun _ hp => by
-    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
-    exact ⟨A, S, K, bs, by omega, by omega, hb⟩
-
-/-- A nonempty region owns its bytes: its block reaches its end. -/
-theorem Reaches.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
-    (hpb : p.block = some b) (hpos : 0 < bs.size) :
-    Reaches b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
-  Reaches.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
-
 /-- A nonempty region: its block's address. -/
 theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
     (hpb : p.block = some b) (hpos : 0 < bs.size) : AddrOf b A (up (regionIn p A S K a bs)) :=
@@ -189,7 +186,134 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
 
 end Providers
 
-attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.pts Reaches.region
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share
+
+/-! ## Providers over the whole precondition
+
+A provider kind `K … P` (`AddrOf`, `Reaches`, `Live`, `Active`) has a lemma `K.of_within`: what
+an atom `X` of the precondition provides, the precondition provides (`Within X P`). `fsym` proves
+a provider goal by an atom lemma (`@[fsym_provider]` with the conclusion `K … X` of an atom `X`)
+on one of the precondition's parts, or by a lemma about the whole precondition (the conclusion
+`K … P` of a variable `P`), whose hypotheses (`Within X P`, providers, blocks, arithmetic) are
+solved in turn. -/
+
+/-- Every resource of `P` has the tag `t` active (`Act`): the root, or a ledger at its epoch whose
+authority is a part of `P` under an active parent. A share tagged `t` gives its block while `t`
+is active (`Holds.bshare`). -/
+def _root_.Zig.Full.Active (t : STag) (P : FAssn) : Prop := ∀ r, P r → Act r.gh.ls t
+
+/-- Every memory that holds `P` has block `b` live with at least `k` bytes: an owned byte below
+`k`, or a share at bound `k` whose tag is active. Two live blocks lie apart (pointer `==` across
+blocks, `ptrEqAddr_live`). -/
+def _root_.Zig.Full.Live (b : BlockId) (k : Nat) (P : FAssn) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size
+
+section Whole
+
+variable {b : BlockId} {A k : Nat} {t : STag} {P X : FAssn}
+
+theorem _root_.Zig.Full.AddrOf.of_within (h : AddrOf b A X) (hw : Within X P) : AddrOf b A P :=
+  fun m r rF hh hp => by obtain ⟨_, h'⟩ := hw r hp; exact h.sepL m r rF hh h'
+
+theorem _root_.Zig.Full.Reaches.of_within (h : Reaches b k X) (hw : Within X P) : Reaches b k P :=
+  fun m r rF hh hp => by obtain ⟨_, h'⟩ := hw r hp; exact h.sepL m r rF hh h'
+
+theorem _root_.Zig.Full.Active.of_within (h : Active t X) (hw : Within X P) : Active t P :=
+  fun r hp => by
+    obtain ⟨_, r₁, r₂, -, rfl, h1, -⟩ := hw r hp
+    exact (h r₁ h1).mono (Ghost.ls_add _ _)
+
+theorem _root_.Zig.Full.Live.of_within (h : Live b k X) (hw : Within X P) : Live b k P :=
+  fun m r rF hh hp => by
+    obtain ⟨_, r₁, r₂, hd, rfl, h1, -⟩ := hw r hp
+    exact h m r₁ _ (Holds.split hd hh) h1
+
+/-- The root tag is always active. -/
+theorem _root_.Zig.Full.Active.root : Active none P := fun _ _ => Act.root
+
+/-- An allocator's own state keeps its tag active (`FAllocInv.act`). -/
+theorem _root_.Zig.Full.Active.allocOwn (I : FAllocInv) : Active I.tag I.own := I.act
+
+/-- A ledger at its epoch under an active parent: its tag is active (`act_gauthP`). -/
+theorem _root_.Zig.Full.Active.gauthP {γ e : Nat} {M : GMap} {p : STag}
+    (hw : Within (gauthP γ e M p) P) (hp : Active p P) : Active (some (γ, e)) P :=
+  fun r hr => act_gauthP hw hr (hp r hr)
+
+/-- A share whose tag is active: its block is live and reaches the share's bound. -/
+theorem _root_.Zig.Full.Live.share {q : Frac} (hw : Within (bshare b q k t) P) (ha : Active t P) :
+    Live b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, hl, hk, -⟩ := hh.bshareW hw hp (ha r hp)
+  exact ⟨blk, hb, hl, hk⟩
+
+/-- A nonempty owned byte range at `p` (in block `b`): the block is live and reaches its end. -/
+theorem _root_.Zig.Full.Live.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
+    (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
+    Live b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
+  obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
+  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
+  rw [hpb] at hb'; cases hb'
+  obtain ⟨fc, hfc, -⟩ := erase_cell hc
+  obtain ⟨blk, hblk, hl, hj, -⟩ := hh.block hfc
+  exact ⟨blk, hblk, hl, by omega⟩
+
+/-- A nonempty region: its block is live and reaches its end. -/
+theorem _root_.Zig.Full.Live.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+    (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    Live b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
+  Live.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
+
+/-- A typed value at `p`: its block is live and reaches one past it. -/
+theorem _root_.Zig.Full.Live.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
+    (hn : 0 < Enc.size T) : Live b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
+  Live.bytes hpb fun _ hp => by
+    obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
+    exact ⟨A, S, K, bs, by omega, by omega, hb⟩
+
+/-- A live block reaches its bound (owned bytes, `Live.region`/`Live.pts`; shares, `Live.share`). -/
+theorem _root_.Zig.Full.Reaches.of_live (h : Live b k P) : Reaches b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, -, hk⟩ := h m r rF hh hp
+  exact ⟨blk, hb, hk⟩
+
+end Whole
+
+attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts Live.share
+  Reaches.of_live
+
+/-- `ptrEqAddr p q` of pointers into blocks `b` and `b'` at the blocks' addresses. -/
+theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : Block}
+    (hp : p.block = some b) (hb : m.blocks[b]? = some blk) (hq : q.block = some b')
+    (hb' : m.blocks[b']? = some blk') :
+    (ptrEqAddr p q).run m = pure (decide ((blk.addr : Int) + p.off = (blk'.addr : Int) + q.off), m) := by
+  obtain ⟨pb, po⟩ := p
+  obtain ⟨qb, qo⟩ := q
+  simp only at hp hq; subst hp hq
+  unfold ptrEqAddr
+  simp only [StateT.run_bind, ptrAddr_run hb, pure_bind, ptrAddr_run hb', StateT.run_pure]
+
+/-- **Pointer `==` of pointers into two live blocks** (possibly the same one): equal when the
+blocks and the offsets are. Both pointers are in bounds, or both are past the start (up to one
+past the end): two live blocks share no address (`Mem.LiveDisjoint.addr_ne`), but one block's end
+may be the next one's start. -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {k k' : Nat} {P : FAssn}
+    (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b k P) (hq : Live b' k' P)
+    (hk : (0 ≤ p.off ∧ p.off < k ∧ 0 ≤ q.off ∧ q.off < k') ∨
+      (0 < p.off ∧ p.off ≤ k ∧ 0 < q.off ∧ q.off ≤ k')) :
+    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
+  FTotalTriple.of_read fun m r rF hh hr hs => by
+    obtain ⟨blk, hb, hl, hsz⟩ := hp m r rF hh hr
+    obtain ⟨blk', hb', hl', hsz'⟩ := hq m r rF hh hr
+    rw [ptrEqAddr_blocks_run hpb hb hqb hb']
+    congr 2
+    by_cases hbb : b = b'
+    · subst hbb
+      rw [hb] at hb'; cases hb'
+      exact decide_eq_decide.mpr ⟨fun h => ⟨rfl, by omega⟩, fun h => by omega⟩
+    · have hne : ∀ x x', x < blk.bytes.size → x' < blk'.bytes.size → blk.addr + x ≠ blk'.addr + x' :=
+        fun x x' hx hx' => hs.2.2.1.addr_ne hbb hb hb' hl hl' hx hx'
+      refine decide_eq_decide.mpr ⟨fun h => ?_, fun h => absurd h.1 hbb⟩
+      rcases hk with ⟨h0, h1, h2, h3⟩ | ⟨h0, h1, h2, h3⟩
+      · exact absurd h (by have := hne p.off.toNat q.off.toNat (by omega) (by omega); omega)
+      · exact absurd h (by have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega); omega)
 
 /-! ## The fields of a stored slice -/
 

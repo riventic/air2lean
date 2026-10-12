@@ -303,6 +303,19 @@ theorem FTotalTriple.region_storeBytes {bs' : Array Byte} (hn : 0 < bs'.size) (h
   FTotalTriple.ofTotal_up (TotalTriple.region_storeBytes hn hb ho hfit) (Tame.storeBytes _ _ _ _)
     (SizeFree.region q a bs) (Keeps.storeBytes _ _ _ _)
 
+/-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of a nonempty region, up to
+one past its end. -/
+theorem FTotalTriple.region_ptrProject {k : Int} (hpos : 0 < bs.size) (hk0 : 0 ≤ k)
+    (hk : k ≤ bs.size) :
+    FTotalTriple (up (Zig.region q a bs)) (ptrProject q (·.add k))
+      (fun r => ⟪r = q.add k⟫ ⋆ up (Zig.region q a bs)) :=
+  FTotalTriple.of_read fun m r rF hh hp _ => by
+    obtain ⟨⟨A, S, K, hr⟩, hk', hg⟩ := hp
+    obtain ⟨b, hpb, h0, -⟩ := hr.2.2
+    obtain ⟨blk, hblk, hK⟩ := Auto.Reaches.region (a := a) hpb hpos m r rF hh ⟨hr, hk', hg⟩
+    exact ptrProject_add_run (inBounds_of hpb hblk h0 (by omega))
+      (inBounds_of (p := q.add k) hpb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
 end Bytes
 
 /-- A returned value, as a fact. -/
@@ -369,6 +382,7 @@ theorem FTotalTriple.errCode_bytes (hal : Nat.min al 2 ∣ a)
 theorem FTotalTriple.tryPayloadPtr_region {t : Option ErrName} (hal : Nat.min al 2 ∣ a)
     (heo : Nat.min al 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (hfit : (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size)
+    (hpo : (errUnionOffsets (Enc.size α) (Enc.align α)).2 ≤ bs.size)
     (ht : errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
       ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure t) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.tryPayloadPtr α al q)
@@ -377,12 +391,18 @@ theorem FTotalTriple.tryPayloadPtr_region {t : Option ErrName} (hal : Nat.min al
     match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2))) with
     | some e => pure (Except.error e : Except ErrName Ptr)
-    | none => pure (.ok (errPayloadPtr α q))) _
+    | none => (Except.ok <$> ptrProject q fun x =>
+        x.add ((errUnionOffsets (Enc.size α) (Enc.align α)).2 : Int) : MemM (Except ErrName Ptr))) _
   refine FTotalTriple.bind (FTotalTriple.errCode_bytes hal heo hfit) fun x =>
     FTotalTriple.lift fun hx => ?_
   subst hx
   rw [ht, liftM_pure, pure_bind]
-  cases t <;> exact FTotalTriple.pure_read rfl
+  cases t with
+  | some e => exact FTotalTriple.pure_read rfl
+  | none =>
+    rw [map_eq_pure_bind]
+    exact FTotalTriple.bind (FTotalTriple.region_ptrProject (by omega) (by omega) (by omega))
+      fun y => FTotalTriple.lift fun hy => FTotalTriple.pure_read (by subst hy; rfl)
 
 /-- **The error** of the bytes of an error union whose error code reads `e`. -/
 theorem FTotalTriple.errCodeAt_region {e : ErrName} (hal : Nat.min al 2 ∣ a)
@@ -429,13 +449,18 @@ theorem errCode_fit {bs : Array Byte} (hs : bs.size = Enc.size (Except ErrName �
     (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size := by
   rw [hs]; exact (errUnion_bounds _ _).1
 
+theorem errPayload_fit {bs : Array Byte} (hs : bs.size = Enc.size (Except ErrName α)) :
+    (errUnionOffsets (Enc.size α) (Enc.align α)).2 ≤ bs.size := by
+  have := (errUnion_bounds (Enc.size α) (Enc.align α)).2.1
+  rw [hs]; show _ ≤ errUnionSize _ _; omega
+
 /-- **Pointer-form `try`** on an owned error union: its payload pointer or its error. -/
 @[fsym] theorem FTotalTriple.tryPayloadPtr (hal : Nat.min al 2 ∣ a)
     (heo : Nat.min al 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1) :
     FTotalTriple (up (pts q a u)) (Zig.tryPayloadPtr α al q)
       (fun r => ⟪r = tryView α q u⟫ ⋆ up (pts q a u)) :=
   FTotalTriple.pts_read fun _ hs hd => by
-    have t := FTotalTriple.tryPayloadPtr_region (q := q) hal heo (errCode_fit hs)
+    have t := FTotalTriple.tryPayloadPtr_region (q := q) hal heo (errCode_fit hs) (errPayload_fit hs)
       (errUnion_decode_tag hd).1
     cases u <;> exact t
 
@@ -610,16 +635,19 @@ reaches past the union. -/
 /-- **`errSetOk`** on the bytes of an error union: its error code becomes 0. -/
 theorem FTotalTriple.errSetOk_region (hal : Nat.min al 2 ∣ a)
     (heo : Nat.min al 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1)
-    (hfit : (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size) :
+    (hfit : (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size)
+    (hpo : (errUnionOffsets (Enc.size α) (Enc.align α)).2 ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.errSetOk α al q)
       (fun r => ⟪r = errPayloadPtr α q⟫ ⋆ up (Zig.region q a
         (writeBytes bs (errUnionOffsets (Enc.size α) (Enc.align α)).1 (errBytes none)))) := by
   show FTotalTriple _ (do
     Zig.storeBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min al 2)
       (errBytes none)
-    pure (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).2)) _
+    ptrProject q (·.add ((errUnionOffsets (Enc.size α) (Enc.align α)).2 : Int))) _
+  have hw : (writeBytes bs (errUnionOffsets (Enc.size α) (Enc.align α)).1 (errBytes none)).size =
+      bs.size := writeBytes_size _ _ _ (by simpa [errBytes] using hfit)
   exact FTotalTriple.bind (FTotalTriple.region_storeBytes (by decide) hal heo hfit) fun _ =>
-    FTotalTriple.pure_read rfl
+    FTotalTriple.region_ptrProject (by omega) (by omega) (by omega)
 
 /-- An error union whose error code is 0, with any payload bytes: the result of `errSetOk`,
 until the payload is written (`errOkSlot_store`). -/
@@ -634,7 +662,7 @@ def errOkSlot (α : Type) [Enc α] (q : Ptr) (a : Nat) : FAssn :=
     FTotalTriple (up (pts q a u)) (Zig.errSetOk α al q)
       (fun r => ⟪r = errPayloadPtr α q⟫ ⋆ errOkSlot α q a) :=
   FTotalTriple.pts_bytes fun bs hs _ =>
-    (FTotalTriple.errSetOk_region hal heo (errCode_fit hs)).post fun _ _ h => by
+    (FTotalTriple.errSetOk_region hal heo (errCode_fit hs) (errPayload_fit hs)).post fun _ _ h => by
       obtain ⟨e, hr⟩ := sep_lift.mp h
       have hfit := errCode_fit (α := α) hs
       refine sep_lift.mpr ⟨e, _, sep_lift.mpr ⟨⟨?_, ?_⟩, hr⟩⟩
@@ -687,7 +715,7 @@ theorem FTotalTriple.errSetOk_ok {x : α} (hal : Nat.min al 2 ∣ a)
     FTotalTriple (up (pts q a (Except.ok x : Except ErrName α))) (Zig.errSetOk α al q)
       (fun r => ⟪r = errPayloadPtr α q⟫ ⋆ up (pts q a (Except.ok x : Except ErrName α))) :=
   FTotalTriple.pts_bytes fun bs hs hd =>
-    (FTotalTriple.errSetOk_region hal heo (errCode_fit hs)).post fun _ _ h => by
+    (FTotalTriple.errSetOk_region hal heo (errCode_fit hs) (errPayload_fit hs)).post fun _ _ h => by
       obtain ⟨e, hr⟩ := sep_lift.mp h
       have hfit := errCode_fit (α := α) hs
       exact sep_lift.mpr ⟨e, up_pts_of_region

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -44,6 +47,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "fba_aligned",
@@ -363,7 +367,7 @@
      "ty": 17,
      "callee": {
       "ty": 18,
-      "func": "mem.Allocator.alignedAlloc__anon_10825",
+      "func": "mem.Allocator.alignedAlloc__anon_10650",
       "module": "std",
       "instance_key": "48ad47c7aa487ac8b930deb35bfac9aece0d8434568307bf8fff4e4984bdeb9a",
       "noreturn": false
@@ -597,7 +601,7 @@
    "ty": 1,
    "callee": {
     "ty": 23,
-    "func": "mem.Allocator.free__anon_10820",
+    "func": "mem.Allocator.free__anon_10645",
     "module": "std",
     "instance_key": "fde0a0a562810486a104290bdb8c0ebff36357ba78287d3fa76bfdfc14a50130",
     "noreturn": false

@@ -243,6 +243,126 @@ class PortableGate(unittest.TestCase):
                     self.assertGreaterEqual(limits["portable_max_peak_rss_kib"], limits["max_peak_rss_kib"])
 
 
+CALIBRATION_SHA = perf.digest(ROOT / perf.CALIBRATION)
+
+
+def calibrated_measurement(scale=1.0, unit=5.0, proof_scale=None, modules=None, **overrides):
+    """A measurement whose every Lean time is `scale` times the reference one, calibration included."""
+    def workload(factor):
+        data = measured_workload(scale=factor)
+        if modules is not None:
+            data["modules"] = {name: {"seconds": seconds * factor, "peak_rss_kib": 1000} for name, seconds in modules.items()}
+        return data
+    data = measurement(basic=workload(scale), layout=workload(scale))
+    data["platform"] = {"system": "Linux", "machine": "aarch64"}  # not the reference platform
+    data["calibration"] = {"file": perf.CALIBRATION, "sha256": CALIBRATION_SHA, "runs": [unit * scale] * 3,
+                           "seconds": unit * scale}
+    for name, value in overrides.items():
+        data[name] = value
+    if proof_scale is not None:
+        for result in data["workloads"].values():
+            for phase in ("proof.cold", "proof.warm"):
+                result["phases"][phase]["seconds"] *= proof_scale
+    return data
+
+
+def calibrated_budgets(modules=None):
+    base = calibrated_measurement(modules=modules)
+    base["platform"] = dict(PLATFORM)
+    pending = pending_budgets()
+    for workload in pending["workloads"]:
+        workload["proof_modules"] = list(modules or ())
+    return perf.derive(pending, base)
+
+
+class NormalizedGate(unittest.TestCase):
+    """Proof time on any machine, as a multiple of the calibration run of the same measurement."""
+
+    def test_derive_records_calibration_ratios_and_hotspot_modules(self):
+        budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0, "Proofs.Basic.Gen": 0.5})
+        self.assertEqual(perf.validate_budgets(budgets), [])
+        self.assertEqual(budgets["calibration"]["baseline_seconds"], 5.0)
+        self.assertEqual(budgets["calibration"]["sha256"], CALIBRATION_SHA)
+        phases = budgets["workloads"][0]["budget"]["phases"]
+        self.assertEqual(phases["proof.cold"]["baseline_ratio"], 12.0)          # 60 s / 5 s
+        self.assertEqual(phases["proof.cold"]["max_ratio"], 24.0)               # x2
+        self.assertEqual(phases["proof.warm"]["max_ratio"], 2.2)                # 0.2 + 2 slack units (> 0.2 x 2)
+        self.assertNotIn("max_ratio", phases["parse"])
+        modules = budgets["workloads"][0]["budget"]["modules"]
+        self.assertEqual(list(modules), ["Proofs.Basic.Proofs"])               # only hotspots, >= 2 s
+        self.assertEqual(modules["Proofs.Basic.Proofs"]["max_ratio"], 12.0)    # 6 units x2
+
+    def test_a_uniformly_slower_machine_passes_and_a_proof_regression_fails(self):
+        budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0})
+        slow = calibrated_measurement(scale=4.0, modules={"Proofs.Basic.Proofs": 30.0})
+        self.assertEqual(perf.gate(budgets, slow, normalized=True), (0, []))
+        self.assertEqual(perf.gate(budgets, slow)[0], 1)                         # the reference limits are for the reference machine
+        code, findings = perf.gate(budgets, calibrated_measurement(scale=4.0, proof_scale=3.5, modules={"Proofs.Basic.Proofs": 30.0}), normalized=True)
+        self.assertEqual((code, kinds(findings)), (1, ["time-regression"]))
+        self.assertEqual({item["phase"] for item in findings}, {"proof.cold"})
+        self.assertIn("calibration units", findings[0]["message"])
+
+    def test_a_hotspot_module_regression_fails_on_its_own(self):
+        budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0})
+        worse = calibrated_measurement(modules={"Proofs.Basic.Proofs": 100.0})
+        code, findings = perf.gate(budgets, worse, normalized=True)
+        self.assertEqual((code, kinds(findings)), (1, ["time-regression"]))
+        self.assertTrue(all("Proofs.Basic.Proofs" in item["message"] for item in findings))
+        absent = calibrated_measurement(modules={"Proofs.Basic.Gen": 1.0})
+        self.assertEqual(perf.gate(budgets, absent, normalized=True)[0], 1)    # a budgeted hotspot is not silently dropped
+        self.assertEqual(perf.gate(budgets, calibrated_measurement(), normalized=True)[0], 1)  # no per-module run: fail closed
+
+    def test_a_partial_measurement_gates_only_its_workloads(self):
+        budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0})
+        data = calibrated_measurement(modules={"Proofs.Basic.Proofs": 30.0})
+        del data["workloads"]["layout"]
+        self.assertEqual(kinds(perf.gate(budgets, data, normalized=True)[1]), ["missing-workload"])
+        self.assertEqual(perf.gate(budgets, data, normalized=True, only_workloads=["basic"]), (0, []))
+        code, findings = perf.gate(budgets, data, normalized=True, only_workloads=["nope"])
+        self.assertEqual((code, kinds(findings)), (1, ["missing-workload"]))
+
+    def test_a_missing_or_foreign_calibration_fails_closed(self):
+        budgets = calibrated_budgets()
+        none = calibrated_measurement(); del none["calibration"]
+        foreign = calibrated_measurement(); foreign["calibration"]["sha256"] = "0" * 64
+        zero = calibrated_measurement(); zero["calibration"]["seconds"] = 0
+        for bad in (none, foreign, zero):
+            code, findings = perf.gate(budgets, bad, normalized=True)
+            self.assertEqual((code, kinds(findings)), (1, ["missing-calibration"]))
+        uncalibrated = recorded_budgets()
+        self.assertEqual(kinds(perf.gate(uncalibrated, calibrated_measurement(), normalized=True)[1]), ["missing-calibration"])
+
+    def test_the_translator_and_output_checks_still_apply(self):
+        budgets = calibrated_budgets()
+        data = calibrated_measurement()
+        data["workloads"]["basic"]["output"]["sha256"] = "b" * 64
+        data["workloads"]["basic"]["phases"]["parse"]["seconds"] = 100.0
+        self.assertEqual(kinds(perf.gate(budgets, data, normalized=True)[1]), ["output-changed", "time-regression"])
+
+    def test_validation_requires_ratios_and_the_recorded_calibration_file(self):
+        budgets = calibrated_budgets()
+        broken = copy.deepcopy(budgets)
+        del broken["workloads"][0]["budget"]["phases"]["proof.cold"]["max_ratio"]
+        self.assertTrue(any("max_ratio" in error for error in perf.validate_budgets(broken)))
+        changed = copy.deepcopy(budgets)
+        changed["calibration"]["sha256"] = "0" * 64
+        self.assertTrue(any("calibration file changed" in error for error in perf.validate_budgets(changed)))
+        loose = copy.deepcopy(budgets)
+        loose["normalized_tolerance"]["lean"]["time_ratio"] = 0.5
+        self.assertTrue(any("normalized_tolerance" in error for error in perf.validate_budgets(loose)))
+
+    def test_derive_refuses_a_measurement_of_another_calibration_file(self):
+        data = calibrated_measurement(); data["platform"] = dict(PLATFORM)
+        data["calibration"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "calibration"):
+            perf.derive(pending_budgets(), data)
+
+    def test_calibration_workload_needs_no_imports(self):
+        text = (ROOT / perf.CALIBRATION).read_text()
+        self.assertFalse([line for line in text.splitlines() if line.startswith("import ")])
+        self.assertGreater(text.count("theorem "), 500)
+
+
 class Baseline(unittest.TestCase):
     def test_limits_use_larger_of_ratio_and_slack(self):
         budgets = recorded_budgets()
@@ -393,6 +513,7 @@ class Record(unittest.TestCase):
             # Same platform as the committed baseline, so only the reference check can refuse.
             committed = perf.load_json(perf.BUDGETS)
             committed["reference_platform"] = data["platform"]
+            committed.pop("calibration", None)  # this measurement is translator-only, uncalibrated
             with self.assertRaisesRegex(ValueError, "differ from"):
                 perf.derive(committed, data, only=["basic"], allow_dirty=True)
             self.assertEqual(data["lean_num_threads"], "1")

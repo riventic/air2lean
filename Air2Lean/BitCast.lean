@@ -31,17 +31,23 @@ inductive BitShape where
   | intLanes (vector : Bool) (len lane : Nat)
   /-- `[len]bool` or `@Vector(len, bool)`: `Zig.BitCast.ofBools`. -/
   | boolLanes (vector : Bool) (len : Nat)
+  /-- Any other type with a logical bit representation, through its `Zig.Packed` instance
+  (`ZigLean/PackedRepr.lean`): a packed union, and an array or vector (at any nesting depth) of
+  floats, enums, packed structs or unions. -/
+  | value (bits : Nat)
   deriving Repr, BEq
 
 /-- `@bitSizeOf` of the shape in Zig 0.17 (arrays and vectors: `len * @bitSizeOf(E)`). -/
 def BitShape.bits : BitShape → Nat
-  | .int b | .float b | .packed b | .enum b _ => b
+  | .int b | .float b | .packed b | .enum b _ | .value b => b
   | .bool => 1
   | .intLanes _ n w => n * w
   | .boolLanes _ n => n
 
 /-- A type whose 0.17 `@bitCast` takes the logical-order path: an array, a vector or an enum
-(and `void`, which 0.17 newly accepts and the model rejects). -/
+(and `void`, which 0.17 newly accepts and the model rejects). Packed structs and unions, floats
+and `bool` without one of these on the other side keep the existing rules, which are the same
+bits (`packedScalarCast`). -/
 def logicalBitCastTy (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.array ..) | some (.vector ..) | some (.enum ..) | some .void => true
@@ -56,13 +62,24 @@ def logicalBitCastApplies (bitCast : ZigVersion.BitCast) (types : Array Ty) (src
 def logicalBitCastFailure (what : String) : String :=
   s!"a Zig 0.17 `@bitCast` {what} is outside the subset (logical bit order, docs/bitcast-semantics.md)"
 
+/-- Zig 0.17's `@bitSizeOf` of a type with a logical bit representation (`hasBitRepresentation`)
+that the model has: a packable type (`packedBits`), or an array (no sentinel) or vector of such
+types at any depth, `len * @bitSizeOf(E)` bits. -/
+partial def logicalBits (types : Array Ty) (id : TyId) : Option Nat :=
+  match types[id]? with
+  | some (.array len c false) | some (.vector len c) => (len * ·) <$> logicalBits types c
+  | _ => packedBits types id
+
 /-- The shape of `id` in a 0.17 `@bitCast`, or the diagnostic's description of why not. -/
 def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=
   let lanes (vector : Bool) (len : Nat) (child : TyId) : Except String BitShape :=
     match types[child]? with
     | some (.int _ w) => pure (.intLanes vector len w)
     | some .bool => pure (.boolLanes vector len)
-    | _ => throw s!"of an array or vector whose element is not an integer or `bool` (type {child})"
+    | _ => match logicalBits types child with
+      | some w => pure (.value (len * w))
+      | none => throw s!"of an array or vector whose element has no logical bit representation \
+          in the model (type {child}: a pointer, optional, sentinel-terminated array or `void`)"
   match types[id]? with
   | some (.int _ b) => pure (.int b)
   | some .bool => pure .bool
@@ -75,11 +92,17 @@ def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=
     match types[tag]? with
     | some (.int s b) => pure (.enum b s)
     | _ => throw s!"of an enum without an integer tag type (type {id})"
+  | some (.union _ "packed" none _) =>
+    match packedBits types id with
+    | some b => pure (.value b)
+    | none => throw s!"of a packed union without a modelled backing integer (type {id})"
   | some (.array len child false) => lanes false len child
   | some (.array ..) => throw s!"of a sentinel-terminated array (type {id})"
   | some (.vector len child) => lanes true len child
-  | _ => throw s!"to or from a type other than an integer, `bool`, float, packed struct, enum, \
-      or an array or vector of integers or `bool`s (type {id})"
+  | _ => throw s!"to or from a type other than an integer, `bool`, float, packed struct or \
+      union, enum, or an array or vector of these (type {id}; an `auto` or `extern` struct, \
+      tuple, tagged or `extern` union, pointer, optional or error type has no logical bit \
+      representation: Sema rejects its `@bitCast`)"
 
 /-- Both shapes of a 0.17 logical-order `@bitCast` from `src` to `dst`, with equal bit sizes. -/
 def logicalBitCastShapes (types : Array Ty) (src dst : TyId) :

@@ -21,7 +21,7 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 case_dir=tests/roadmap/big-endian
 src=$case_dir/big_endian.zig
-pairs=(S390x:s390x-linux:s390x X64:x86_64-linux:x86_64)
+pairs=(S390x:s390x-linux:s390x Mips64:mips64-linux:mips64 X64:x86_64-linux:x86_64)
 mode=${1:---check}
 case "$mode" in
   --export)
@@ -64,8 +64,12 @@ for pair in "${pairs[@]}"; do
   cmp "$work/BigEndian/$ns/Gen.lean" "$case_dir/BigEndian/$ns/Gen.lean"
   "${lean_cmd[@]}" -R "$work" -o "$work/BigEndian/$ns/Gen.olean" "$work/BigEndian/$ns/Gen.lean"
 done
-# The two translations differ only in the profile header, the namespace, the opened
-# big-endian instances and the byte order of the two bit-pointer accesses.
+# The two big-endian translations differ only in the profile header and the namespace.
+body_diff=$(diff "$case_dir/BigEndian/S390x/Gen.lean" "$case_dir/BigEndian/Mips64/Gen.lean" \
+  | grep '^[<>]' | grep -v -e 'air2lean-profile' -e 'BigEndian\.\(S390x\|Mips64\)$' || true)
+[ -z "$body_diff" ] || { echo "the s390x and mips64 translations differ: $body_diff" >&2; exit 1; }
+# The big- and little-endian translations differ only in the profile header, the namespace, the
+# opened big-endian instances and the byte order of the two bit-pointer accesses.
 diff "$case_dir/BigEndian/S390x/Gen.lean" "$case_dir/BigEndian/X64/Gen.lean" \
   | grep '^[<>]' | sed -E 's/^([<>]) .*air2lean-profile.*/\1 PROFILE/' > "$work/gen.diff" || true
 cmp "$work/gen.diff" "$case_dir/expected-gen.diff"
@@ -87,14 +91,18 @@ if [ "$mode" = --native ]; then
   for pair in "${pairs[@]}"; do
     arch=$(cut -d: -f3 <<<"$pair")
     bin="$work/native-$arch"
-    "$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe -target "$arch-linux-musl" \
+    abi=musl
+    [ "$arch" = mips64 ] && abi=muslabi64
+    "$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe -target "$arch-linux-$abi" \
       -femit-bin="$bin" "$case_dir/native.zig"
+    # mips64 runs through the Docker VM's qemu-mips64 binfmt handler (concurrency.sh).
+    [ "$arch" = mips64 ] && python3 "$case_dir/elf-abiversion.py" "$bin"
     var=AIR2LEAN_$(tr a-z A-Z <<<"$arch")_RUN
     if [ -n "${!var+set}" ]; then runner=${!var}
     elif [ "$host_arch" = "$arch" ] && [ "$(uname -s)" = Linux ]; then runner=
     else runner=docker; fi
     if [ "$runner" = docker ]; then
-      docker run --rm --platform "linux/$([ "$arch" = x86_64 ] && echo amd64 || echo "$arch")" \
+      docker run --rm --platform "linux/$([ "$arch" = s390x ] && echo s390x || echo amd64)" \
         -v "$work:/w:ro" alpine:3 sh -c "/w/native-$arch 2>&1" > "$work/native-$arch.txt"
     else
       # shellcheck disable=SC2086

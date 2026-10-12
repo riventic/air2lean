@@ -1,0 +1,287 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": true,
+  "export_stage": "analyzed-air"
+ },
+ "name": "error_tracing.traceIndex",
+ "module": "root",
+ "src": {
+  "file": "error_tracing.zig",
+  "module": "error_tracing",
+  "decl_line": 25
+ },
+ "params": [],
+ "noalias": [],
+ "ret": 0,
+ "err_trace": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "save_err_return_trace_index",
+   "ty": 0,
+   "index": 0,
+   "ptr_ty": 2
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "block",
+   "ty": 4,
+   "body": [
+    {
+     "id": 3,
+     "tag": "err_return_trace",
+     "ty": 1
+    },
+    {
+     "id": 4,
+     "tag": "is_non_null",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 3
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "tag": "cond_br",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 4
+      }
+     ],
+     "then": [
+      {
+       "id": 5,
+       "tag": "optional_payload",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 3
+        }
+       ]
+      },
+      {
+       "id": 6,
+       "tag": "br",
+       "ty": 6,
+       "target": 2,
+       "args": [
+        {
+         "inst": 5
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 7,
+       "tag": "dbg_stmt",
+       "ty": 3,
+       "line": 2,
+       "column": 42
+      },
+      {
+       "id": 8,
+       "tag": "ret_safe",
+       "ty": 6,
+       "args": [
+        {
+         "ty": 0,
+         "val": "99"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_var_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "t"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 13
+  },
+  {
+   "id": 12,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 13
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 4,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "builtin.StackTrace",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "index",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "instruction_addresses",
+     "ty": 8,
+     "offset": 8
+    }
+   ],
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  }
+ ]
+}

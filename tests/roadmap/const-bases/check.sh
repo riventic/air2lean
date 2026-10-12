@@ -2,7 +2,7 @@
 # Nested constant pointer bases (L06): retained translation, generated-client proofs and CLI
 # rejections. Needs a built translator and `lake build ZigLean ZigLean.Mem.ConstPtr`; runs no
 # compiler. `--native` additionally runs the source fixture with a stock stage2_x86_64 Zig on
-# x86_64 Linux (AIR2LEAN_ZIG_NATIVE).
+# x86_64 Linux (AIR2LEAN_ZIG_NATIVE), and llvm_correspondence.zig on LLVM and stage2_x86_64.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -11,6 +11,11 @@ if [ "${1:-}" = --native ]; then
   : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}"
   "$AIR2LEAN_ZIG_NATIVE" test "$here/const_bases.zig" -OReleaseSafe -fno-llvm -fno-lld \
     -target x86_64-linux-musl -mcpu=baseline
+  # LLVM correspondence: the misplaced base differs from its run-time projection exactly on LLVM.
+  for backend in -fllvm -fno-llvm; do
+    "$AIR2LEAN_ZIG_NATIVE" test "$here/llvm_correspondence.zig" -OReleaseSafe "$backend" \
+      -target x86_64-linux-musl -mcpu=baseline
+  done
   exit 0
 fi
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
