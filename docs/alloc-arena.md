@@ -194,9 +194,22 @@ claim on its bytes, tagged with the allocator's tag; two claims of one active wo
 make the ghost state invalid. Done: the library (`ZigLean/Sep/Full/Claims.lean`: `bclaim`,
 `bcrcpt`, `pclaim`, split/join, `Holds.bclaim_disjoint`, `FTriple.mintClaim`) and the kernel-checked
 regressions `tests/roadmap/sep-full/ClaimsCX.lean` (`overlap_invalid`; `arena_nodes_disjoint`: the
-O1 scenario is impossible). Next: `FAllocInv.granted` and the client token carry the claim (a
-client still gets exclusive bytes, now also the claim: `FAllocSpec` is not weakened), lend/return/
-revoke of claims, the FBA and page re-proofs, then `reset`.
+O1 scenario is impossible); `FAllocInv.granted` carries the claim (a client still gets exclusive
+bytes, now also the claim: `FAllocSpec` is not weakened); in `resize` the claims follow the bytes
+(`I.relBytes`, `I.newBytes`; [sep-full-state.md](sep-full-state.md) §Byte-range claims), so that
+the arena can grow a node with grants in place (O-G); the FBA and page allocators are re-proved by
+`fsym` with claims in their invariants.
+
+The arena's claims (`AllocArena/Core.lean`). The child gives each node with its claim tagged
+`CI.tag`. A used node keeps the claim on its header and lends the claim on its buffer as the
+arena's claim of epoch `e` when the node is pushed (`EUpd.plendC`, `push_cls`), keeping the receipt
+(`NodeCl`). The first node holds the lent claim on its unused tail (`TailCl`). `alloc` carves a
+grant's claim from it and drops the padding's claim. `free` or a shrink of the first node's last
+grant joins the claim back (`tailCl_join`). A growth carves the new bytes' claim from the tail. Any
+other `free` or shrink drops the released claim. A node grown in place gets the child's claim on
+the new bytes and lends it into the tail (`grow_cls`). A free-list node holds its whole claim
+(`FreeCl`). Next: `reset`, which revokes the receipts (`EUpd.prevokeC`) and gives the child back
+the claim on each whole node.
 
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A

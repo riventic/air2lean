@@ -438,9 +438,9 @@ why the size leaves the cells.
 
 **As implemented (step 7a; coordinator decision 2026-10-11).** One `resize` field, both
 directions (`ZigLean/Sep/Full/AllocSpec.lean`): the precondition is `I.own ⋆ (I.held p len k A S
-K q q' ⋆ relBytes p A S K n len tl)`, where `I.held` is the token and a part `q'` of the grant's
-extent share at the grant's end, and `relBytes` the bytes `tl` that a shrink releases (`[n, len)`;
-nothing for a growth). The client keeps the bytes it keeps. On success (`rresizePost`) the token
+K q q' ⋆ I.relBytes p A S K n len tl)`, where `I.held` is the token and a part `q'` of the grant's
+extent share at the grant's end, and `I.relBytes` the bytes `tl` that a shrink releases (`[n, len)`,
+with their claim, §Byte-range claims; nothing for a growth). The client keeps the bytes it keeps. On success (`rresizePost`) the token
 is at `n` (same address; size and kind labels within the kind's normal form), the share at the
 new end, and a growth hands over the new bytes `[len, n)` (`newBytes`); on failure the
 precondition comes back.
@@ -648,14 +648,26 @@ claim `[lo, lo + 2^64)` on: in place it stays, a moved mapping gets a fresh one.
 rules are `fsym`'s rules for `mmap` and `mremap` growth.
 
 **Use.** An allocator's grant carries the claim on its bytes tagged with the allocator's tag:
-`FAllocInv.granted` and `FAllocInv.held` hold `pclaim p p.off (p.off + n) I.tag` next to the
-grant's share, so `FAllocSpec` gives a client exclusive claims on its grants. The
-FixedBufferAllocator's invariant holds the claim on its free tail `[e, cap)` (a grant's claim is
-carved from it; the last grant's free or shrink joins it back), the page allocator's token the
-claim on the mapping from the grant's end on. `fsym` plans claims (`AutoClaims.lean`). An arena
-holds its nodes' claims (the child's tag), so its nodes are pairwise disjoint while the child's
-tag is active (`tests/roadmap/sep-full/ClaimsCX.lean`, `arena_nodes_disjoint`), lends its grants'
-claims tagged with its epoch, and `reset` revokes them like their shares.
+`FAllocInv.granted` holds `pclaim p p.off (p.off + n) I.tag` next to the grant's share, so
+`FAllocSpec` gives a client exclusive claims on its grants. The FixedBufferAllocator's invariant
+holds the claim on its free tail `[e, cap)` (a grant's claim is carved from it; the last grant's
+free or shrink joins it back), the page allocator's token the claim on the mapping from the
+grant's end on. `fsym` plans claims (`AutoClaims.lean`). An arena holds its nodes' claims (the
+child's tag), so its nodes are pairwise disjoint while the child's tag is active
+(`tests/roadmap/sep-full/ClaimsCX.lean`, `arena_nodes_disjoint`), lends its grants' claims tagged
+with its epoch, and `reset` revokes them like their shares.
+
+**Claims follow bytes in `resize`** (coordinator decision 2026-10-12). In the refined `resize`
+(§`FAllocSpec` refined) `FAllocInv.held` is the token and the share only. The bytes a shrink
+releases come with their claim (`I.relBytes`: `[n, len)`), and the new bytes of a growth come with
+theirs (`I.newBytes`: `[len, n)`). The client keeps the claim on the bytes it keeps. If `held`
+carried the whole claim instead, an arena could not grow a node in place while the node has
+grants: the node's buffer claim is lent to the grants, so the arena holds only its receipt, and a
+receipt and the parent world's claim on one byte cannot both hold (O-G, `docs/alloc-arena.md`).
+**Not a weakening:** `FAllocInv.resize_whole_of` derives, from the refined triple, the form in
+which `held` carries the whole claim before and after (`heldW`, `rresizePostW`). That form asks the
+client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
+splits and joins the claim along with the bytes.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 

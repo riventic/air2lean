@@ -546,5 +546,89 @@ theorem noCl_bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : NoCl (ba
 theorem noCl_bshare (b : BlockId) (q : Frac) (k : Nat) (t : STag) : NoCl (bshare b q k t) := by
   rintro _ ⟨-, -, -, hg⟩ b' x; rw [hg]; rfl
 
+/-! ## Claims and receipts of a pointer's block -/
+
+/-- A receipt for the claim on the part of `p`'s block from `lo` to `hi`, lent as tagged
+`(γ, e)`. -/
+def pcrcpt (p : Ptr) (lo hi γ e : Nat) : FAssn :=
+  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bcrcpt b lo hi γ e
+
+section PtrClaims
+
+variable {p p' : Ptr} {b : BlockId} {lo m hi γ e : Nat} {t : STag}
+
+theorem pclaim_eq (hb : p.block = some b) : pclaim p lo hi t = bclaim b lo hi t := by
+  funext r; apply propext; constructor
+  · rintro ⟨b', h⟩; obtain ⟨hb', h⟩ := sep_lift.mp h; rw [hb] at hb'; cases hb'; exact h
+  · exact fun h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩
+
+theorem pcrcpt_eq (hb : p.block = some b) : pcrcpt p lo hi γ e = bcrcpt b lo hi γ e := by
+  funext r; apply propext; constructor
+  · rintro ⟨b', h⟩; obtain ⟨hb', h⟩ := sep_lift.mp h; rw [hb] at hb'; cases hb'; exact h
+  · exact fun h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩
+
+/-- A claim names its block, not its pointer. -/
+theorem pclaim_rebase (h : p.block = p'.block) : pclaim p lo hi t = pclaim p' lo hi t := by
+  simp only [pclaim, h]
+
+theorem pcrcpt_rebase (h : p.block = p'.block) : pcrcpt p lo hi γ e = pcrcpt p' lo hi γ e := by
+  simp only [pcrcpt, h]
+
+/-- A claim without a block holds nowhere. -/
+theorem pclaim_none (hb : p.block = none) {r : Res} : ¬ pclaim p lo hi t r := by
+  rintro ⟨b, h⟩; rw [hb] at h; cases (sep_lift.mp h).1
+
+theorem pcrcpt_none (hb : p.block = none) {r : Res} : ¬ pcrcpt p lo hi γ e r := by
+  rintro ⟨b, h⟩; rw [hb] at h; cases (sep_lift.mp h).1
+
+/-- **Split and join** of a pointer's claim (`bclaim_split`). -/
+theorem pclaim_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
+    (pclaim p lo m t ⋆ pclaim p m hi t) = pclaim p lo hi t := by
+  cases hb : p.block with
+  | some b => rw [pclaim_eq hb, pclaim_eq hb, pclaim_eq hb, bclaim_split h1 h2]
+  | none =>
+    funext r; apply propext
+    exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pclaim_none hb h).elim, fun h => (pclaim_none hb h).elim⟩
+
+theorem pcrcpt_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
+    (pcrcpt p lo m γ e ⋆ pcrcpt p m hi γ e) = pcrcpt p lo hi γ e := by
+  cases hb : p.block with
+  | some b => rw [pcrcpt_eq hb, pcrcpt_eq hb, pcrcpt_eq hb, bcrcpt_split h1 h2]
+  | none =>
+    funext r; apply propext
+    exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pcrcpt_none hb h).elim, fun h => (pcrcpt_none hb h).elim⟩
+
+/-- A claim owns no bytes and no knowledge (`EUpd.drop` forgets it). -/
+theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+
+theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+
+end PtrClaims
+
+/-- **Lend a pointer's claim** (`EUpd.lendC`). -/
+theorem EUpd.plendC {γ e lo hi : Nat} {M : GMap} {t : STag} {p : Ptr} :
+    EUpd (gauthP γ e M t ⋆ pclaim p lo hi t)
+      (gauthP γ e M t ⋆ (pclaim p lo hi (some (γ, e)) ⋆ pcrcpt p lo hi γ e)) := by
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => ⟪p.block = some b⟫ ⋆
+    (gauthP γ e M t ⋆ bclaim b lo hi t)) fun r h => ?_) (EUpd.exAll fun b => EUpd.lift fun hb => ?_)
+  · obtain ⟨b, h⟩ := sep_ex.mp (sep_comm h)
+    obtain ⟨hb, h⟩ := sep_lift.mp (sep_assoc h)
+    exact ⟨b, sep_lift.mpr ⟨hb, sep_comm h⟩⟩
+  · refine EUpd.trans EUpd.lendC (EUpd.of_imp fun _ h => ?_)
+    rw [pclaim_eq hb, pcrcpt_eq hb]; exact h
+
+/-- **Revoke a pointer's claim receipt** of a past epoch (`EUpd.revokeC`). -/
+theorem EUpd.prevokeC {γ e e' lo hi : Nat} {M : GMap} {t : STag} {p : Ptr} (he : e < e') :
+    EUpd (gauthP γ e' M t ⋆ pcrcpt p lo hi γ e) (gauthP γ e' M t ⋆ pclaim p lo hi t) := by
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => ⟪p.block = some b⟫ ⋆
+    (gauthP γ e' M t ⋆ bcrcpt b lo hi γ e)) fun r h => ?_) (EUpd.exAll fun b => EUpd.lift fun hb => ?_)
+  · obtain ⟨b, h⟩ := sep_ex.mp (sep_comm h)
+    obtain ⟨hb, h⟩ := sep_lift.mp (sep_assoc h)
+    exact ⟨b, sep_lift.mpr ⟨hb, sep_comm h⟩⟩
+  · refine EUpd.trans (EUpd.revokeC he) (EUpd.of_imp fun _ h => ?_)
+    rw [pclaim_eq hb]; exact h
+
 end Full
 end Zig

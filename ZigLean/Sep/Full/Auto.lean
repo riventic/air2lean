@@ -135,6 +135,12 @@ partial def unfoldAtom (e : Expr) : MetaM Expr := do
   | some e' => if e'.consumeMData.isLambda then return e else unfoldAtom e'
   | none => return e
 
+/-- `unfoldAtom` on each leaf of a separating conjunction. -/
+partial def unfoldLeaves (e : Expr) : MetaM Expr := do
+  let e := e.consumeMData.headBeta
+  if e.isAppOfArity sepN 2 then return mkSep (← unfoldLeaves e.appFn!.appArg!) (← unfoldLeaves e.appArg!)
+  unfoldAtom e
+
 /-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), or the
 concurrent `CTriple` (`conc`; `L` is the target type `Tgt`). -/
 structure Bk where
@@ -1906,7 +1912,8 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let swap (pf br : Expr) : TacticM (List MVarId) := do
       let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
         mkLambdaFVars #[x] (P.replace fun y => if y == a then some x else none)
-      let P' := (mkApp f br).headBeta
+      -- the branch's atoms unfolded (definitionally), so that its facts and existentials open
+      let P' := (mkApp f (← unfoldLeaves br)).headBeta
       let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
       let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P', Q])
       g.assign (← mkAppM ``EUpd.trans #[← mkAppM ``atom_eq #[e], g2])
@@ -1929,6 +1936,8 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
       g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppM ``eupd_lift_pre #[k]])
       let (h, g2) ← k.mvarId!.intro `h
       let g2 ← destruct g2 h
+      -- a block fact of a state atom opened late (a claim in a decided `if`) names a known block
+      let g2 ← unifyBlocks g2
       return ← g2.withContext (closeEntail g2)
     else
       let F := a.appArg!

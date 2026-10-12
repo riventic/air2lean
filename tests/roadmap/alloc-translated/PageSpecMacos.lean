@@ -45,7 +45,7 @@ theorem resize_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Na
     (q q' : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (inv own).fits n.toNat k)
     (hpos : 0 < s.len.toNat) (hq : q'.val ≤ q.val) (hqq : n.toNat < s.len.toNat → q' = q) :
     FTotalTriple (own ⋆ ((inv own).held s.ptr s.len.toNat k A S K q q' ⋆
-      FAllocInv.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (inv own).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (vt.resize c s k n ra) ((inv own).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl) := by
   fsym
 

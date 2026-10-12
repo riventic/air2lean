@@ -11,7 +11,7 @@ regions without bytes (`docs/proof-automation.md` §Planner extensions):
   tag that covers it (`claim_split3`, bounds by the arithmetic solver);
 * when no claim of the state covers it, **adjacent claims** of the state are joined first
   (`claim_join`);
-* **leftover claims** are dropped (`claim_drop`, `@[fsym_drop]`): a claim owns no bytes, and a
+* **leftover claims** are dropped (`claim_drop`, `pclaim_drop`, `@[fsym_drop]`): a claim owns no bytes, and a
   dropped claim is never minted again, so dropping one only forgets that its bytes are exclusive.
 
 `pclaim p lo hi t` unfolds to `bclaim b lo hi t` with the fact `p.block = some b`. Lending,
@@ -45,7 +45,12 @@ theorem claim_drop {R : FAssn} : EUpd (bclaim b lo hi t ⋆ R) R :=
 
 end Rules
 
-attribute [fsym_drop] claim_drop
+/-- **Drop a pointer's claim** (one whose block the state has not opened, e.g. the released
+bytes' claim of a shrink, `FAllocInv.relBytes`). -/
+theorem pclaim_drop {p : Ptr} {lo hi : Nat} {t : STag} {R : FAssn} : EUpd (pclaim p lo hi t ⋆ R) R :=
+  EUpd.trans (EUpd.of_imp fun _ h => sep_comm h) (EUpd.drop fun _ h => pclaim_ghost h)
+
+attribute [fsym_drop] claim_drop pclaim_drop
 
 namespace Auto
 
