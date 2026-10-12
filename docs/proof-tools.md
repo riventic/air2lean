@@ -374,7 +374,8 @@ vacuously.
 
 `Proofs/Lists/Bounded.lean` proves `sum_loop_within`: the generated `sum` loop over
 `xs.length` items exits within `xs.length + 1` body runs with the sum. `sum_loop_total` is
-the total triple it implies, and `sum_total` is the function-level total triple for `sum`.
+the total triple it implies; the function-level total triple for `sum` is
+`Lists.Linked.sum_total` (`Proofs/Lists/Linked.lean`, full-state logic).
 `sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
 count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
 Proofs.Lists.Bounded`.
