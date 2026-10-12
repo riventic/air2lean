@@ -136,6 +136,15 @@ nonvacuity_witness exit_within_total :=
   ⟨emp, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
     Mem.seq_default, trivial⟩
 
+/-- A bound over a variable: `n + 1` body runs, for every `n`. -/
+theorem exit_within_sym (P : Assn) (n : Nat) :
+    TotalTripleWithin (n + 1) P exitBody id () (fun _ _ => P) :=
+  (exit_within P).mono (Nat.le_add_left 1 n)
+
+nonvacuity_witness exit_within_sym :=
+  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
+    Mem.seq_default, trivial⟩
+
 /-- The spinning loop has no counted run. -/
 theorem spin_no_run : ∀ s m k e s' m', ¬ LoopRuns spinBody id s m k e s' m' := by
   intro s m k e s' m' h
