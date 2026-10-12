@@ -218,12 +218,12 @@
     "error_ints_w8/0.17.0": "238ca4781be6fdcdc8959bcecc3bbab4be7597e92bc327c7e91b5831e4a5211c"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
+  "exporter_sha256": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
   "patched_compiler_sha256": {
-    "0.14.1": "a377ade7ec4d68023962947c9361a3c3930295fb3ae31f8160d3405a325da995",
-    "0.15.2": "13d033d127f6537c46491b7876e209b6ec5ae42cdd9815c76b691c57d3bae50c",
-    "0.16.0": "7f9177f5e1ab290e153e501b1beda1acd19bc7cc384da70a6f7ce113ed4206bc",
-    "0.17.0": "c69e790ff5eaec8bc6597d78598c71e74187c0d80b2de7579f415d497595268f"
+    "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
+    "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
+    "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c",
+    "0.17.0": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
   },
   "qualification": "Compiler exports of every function of each fixture source with patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter, x86_64-linux ReleaseSafe. They are the translator's evidence for the rows named in `sources`; other shapes are not covered.",
   "sources": {
