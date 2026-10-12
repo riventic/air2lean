@@ -3863,6 +3863,27 @@ def checkLoadBuffering (funcs : Array Func) : Except String Unit := do
         another location (load buffering) is outside the model, which has no promises; pass \
         --assume-no-lb to assume the compiled code shows no load buffering (premise ORD-02)"
 
+/-- Reject an allowlisted asm block whose CPU feature (`AsmAllowEntry.features`) the profile does
+not list: the encoding then runs as another instruction (`lzcnt` as `bsr`) or faults (#UD), so
+the entry's semantics does not hold on a CPU that matches the profile. A block that the device
+contract declares is that contract's. `--assume-asm-cpu-features` skips this check (premise
+ASM-09). -/
+def checkAsmCpuFeatures (funcs : Array Func) (profile : BuildProfile)
+    (device : Option DeviceContract := none) : Except String Unit := do
+  for f in funcs do
+    for i in f.allInsts do
+      let .asm source _ clobbers outputs inputs := i.op | continue
+      let some entry := i.op.asmAllowEntry? f.dialect.arch | continue
+      if (device.bind (·.asm? source (asmConstraints outputs inputs) clobbers.toList)).isSome then continue
+      let missing := entry.features.filter (!profile.features.contains ·)
+      unless missing.isEmpty do
+        throw s!"{f.name}: inst {i.id}: asm {source.quote} needs the CPU feature(s) \
+          {missing} (Air2Lean/AsmAllowlist.lean), which the profile's CPU '{profile.cpu}' does \
+          not list (features {profile.features.toList}): on a CPU without them the encoding \
+          runs as another instruction or faults (#UD). Export for a CPU with the feature \
+          (-mcpu), or pass --assume-asm-cpu-features to assume that the running CPU has it \
+          (premise ASM-09)"
+
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
 inductive SpawnSemantics where

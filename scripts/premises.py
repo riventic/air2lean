@@ -603,7 +603,8 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
 
 
 # Translator flags that are admission opt-ins, by the name the header records (`admission`).
-ADMISSION_FLAGS = {"--allow-unqualified-build-mode": "unqualified-build-mode", "--assume-no-libc": "no-libc"}
+ADMISSION_FLAGS = {"--allow-unqualified-build-mode": "unqualified-build-mode", "--assume-no-libc": "no-libc",
+                   "--assume-asm-cpu-features": "asm-cpu-features"}
 
 
 def example_admissions(lean: LeanFile) -> list[str]:

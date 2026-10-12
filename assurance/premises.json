@@ -58,7 +58,8 @@
   },
   "admissions": {
     "unqualified-build-mode": [],
-    "no-libc": ["MTH-05"]
+    "no-libc": ["MTH-05"],
+    "asm-cpu-features": ["ASM-09"]
   },
   "float_semantics": {
     "ieee": [],

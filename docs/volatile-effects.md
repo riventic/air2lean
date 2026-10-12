@@ -174,6 +174,13 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the single reviewed data file: template, ordered constraints (outputs, then inputs), clobbers
    and target architecture. A legacy profile without a target is the x86_64 reference model
    (PRF-01). Each entry records its reason and a reviewer note naming the fixture that needs it.
+   An entry also names the CPU `features` it needs beyond the baseline (`lzcnt`, `popcnt`,
+   `rdrnd`). The translator derives support from `profile.features` and rejects a block whose
+   feature the profile lacks (on a CPU without LZCNT the `lzcnt` encoding runs as `bsr`).
+   `--assume-asm-cpu-features` admits it: the running CPU has the feature (premise ASM-09, the
+   admission `asm-cpu-features` in the header). The legacy profile lists no features, so
+   `examples/asm` (schema-11 goldens) passes the flag in its `translate.args`; `asm_env` is
+   exported with `-mcpu=x86_64+rdrnd`.
 
    | Template | Constraints | Clobbers | Target | Semantics | Faults | Fixture |
    | --- | --- | --- | --- | --- | --- | --- |

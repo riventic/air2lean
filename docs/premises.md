@@ -98,7 +98,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) |
 | OS page mapping | [OSM-01](#osm-01) |
@@ -745,8 +745,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is zero (#DE); `bswap`, `lzcnt` and `popcnt` never. The generated code guards the opaque with
   `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
   guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
-  instruction's whole fault set on the target CPU, and the CPU has the instruction (`popcnt`
-  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`). `scripts/claims.py` lists ASM-04
+  instruction's whole fault set on the target CPU. That the CPU has the instruction (`popcnt`
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is no longer part of ASM-04: each
+  entry declares its `features`, the translator rejects a block whose features the profile lacks
+  (`checkAsmCpuFeatures`), and ASM-09 admits them. `scripts/claims.py` lists ASM-04
   in the `premises` of every such goal.
 - Derived from: implied by ASM-01.
 - Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
@@ -762,7 +764,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   width, in output order. The instruction touches no memory and writes only its outputs and
   clobbers. No relation between reads is claimed (no monotonic counter, no randomness), and a
   failed `rdrand` returns one of the oracle's values. The entry's fault condition and the CPU's
-  support for the instruction are ASM-04 (`rdtsc` under CR4.TSD, `rdrand` without RDRAND).
+  support for the instruction are ASM-04 (`rdtsc` under CR4.TSD) and ASM-09 (`rdrand` without RDRAND).
 - Derived from: tokens `Asm.envWord`; implies ASM-04.
 - Sources: [volatile-effects.md](volatile-effects.md#inline-asm), `Air2Lean/AsmAllowlist.lean`,
   `tests/roadmap/asm-effects/AsmEnv/Proofs.lean`.
@@ -784,6 +786,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: tokens `Asm.readRegion`, `Asm.writeRegion`, `Asm.movePtr`; implies ASM-03.
 - Sources: [generated-code.md](generated-code.md#memory-regions-and-environment-reads-a01),
   `Air2Lean/AsmAllowlist.lean`, `Proofs/Asm/Effects.lean`.
+
+<a id="asm-09"></a>
+### ASM-09 — The running CPU has the asm features that the profile lacks
+
+- Kind: environment.
+- Statement: An allowlisted asm entry names the CPU features it needs (`features`: `lzcnt`,
+  `popcnt`, `rdrnd`). The translator derives support from the profile's `features` and rejects
+  an asm block with a missing one (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
+  `bsr`, so `lzcnt(1)` would be 0, not 63). `--assume-asm-cpu-features` skips the check and states
+  that the CPU that runs the program has the features, although the profile's CPU does not list
+  them. The header records the admission `asm-cpu-features`.
+- Derived from: a reached generated module whose header records the admission `asm-cpu-features`
+  (`assurance/premises.json` `admissions`).
+- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
+  [research/A02.md](research/A02.md).
 
 ## Core runtime semantics
 
