@@ -29,6 +29,15 @@ Use an isolated worktree and preserve the dirty primary. Lean runs go through `s
 
 ## Current state (2026-10-12)
 
+**Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof framework", "Coordination"):
+
+1. Merge the open PRs that are ready. PRs that add proof machinery outside the framework (#166, #177, #178) are held until they are restated in it.
+2. Land the full-state logic, `fsym` and the translated allocators (`codex/alloc-arena-proof`) on main, with persistent const-global knowledge (`codex/const-global-know`).
+3. Migrate every legacy-layer client to the full-state logic (`codex/one-logic` for sequential code, `codex/one-logic-csl` for threads, termination and cost) and delete the legacy layer.
+4. Restructure the directories on top of the one framework.
+
+Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`, local).
+
 The register below still counts **37 complete, 42 partial, 1 open and 9 research**. The open batch PRs change these counts when they merge; each PR updates its own rows.
 
 ### Merged to main on 2026-10-11/12
@@ -88,7 +97,7 @@ Weaknesses found while implementing the register. They come before new features 
 
 ### Remaining order
 
-Architecture work (above) runs alongside: the one proof logic and const-global knowledge before M01–M04, the directory cleanup after the legacy layer is gone.
+After the current goal; the parked architecture tracks resume first where they fix soundness (encode/decode exactness, Canon certificates).
 
 1. Residuals of merged batches: Q01 (floats, threads, allocators and generics in the program generator), I08 (macOS containment beyond sampling), I06 (relational strength), V06 (per-goal contracts and a theorem-side check); then X01 (C via translate-c).
 2. After the arena allocator: M01–M04, C01, C07.
