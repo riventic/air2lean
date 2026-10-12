@@ -436,7 +436,8 @@ def openFnTypes (decls : Array InterfaceDecl) (funcs : Array Func) : Except Stri
       | none, none => #[]
     if tys.isEmpty then
       throw s!"model registry: interface '{d.interface}' names no struct of the program with function-pointer fields"
-    let used := tys.filter called.contains
+    -- Fields of one type (a vtable's `start` and `stop`) open it once.
+    let used := tys.toList.eraseDups.toArray.filter called.contains
     if used.isEmpty then
       throw s!"model registry: interface '{d.interface}' opens no call through a pointer of the program"
     for tn in used do

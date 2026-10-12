@@ -61,8 +61,8 @@ def main(exe):
             assert "Zig.callC (Zig.extCall (Ext.call0 " in text and "throw .illegal)" not in text
             assert re.search(r"^def push \[Ext\] ", text, re.M) and "def dispatch [Ext] :" in text
             assert text.splitlines()[1].startswith("-- air2lean-interfaces: ")
-            # Only the open arm differs: the rest of the module is unchanged.
-            assert text.count("\n") > closed.count("\n")
+            # Every closed arm's chain is kept: the open module only replaces its last arm.
+            assert closed.count("if ") == text.count("if ")
             # A closure allocator is tested first; only another pointer calls the environment.
             result = run(exe, mix, out, "--prefix", "mix.", *translated,
                          "--model-registry", registry(tmp, ALLOC))

@@ -564,15 +564,11 @@ partial def memoryFunctions (funcs : Array Func) (externalMemory : Array String 
     if next.isEmpty then mem else go (mem ++ next)
   go (externalMemory ++ funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
 
-/-- The index of the open function type (`Func.openFnTys`) of an indirect call through
-`callee`, if any: the call's last arm calls the environment (`docs/interfaces.md`). -/
-def Func.openCallIndex? (f : Func) (callee : Val) : Option Nat :=
-  (f.calleeValFnTy? callee).bind f.openFnTys.idxOf?
-
-/-- `f` calls through a pointer of an open interface's function type. -/
+/-- `f` calls through a pointer of an open interface's function type (`Func.openFnTys`): the
+call's last arm calls the environment (`docs/interfaces.md`). -/
 def Func.hasOpenCall (f : Func) : Bool :=
   !f.openFnTys.isEmpty && f.allInsts.any fun i => match i.op with
-    | .call v _ => (f.openCallIndex? v).isSome
+    | .call v _ => (f.calleeValFnTy? v).any f.openFnTys.contains
     | _ => false
 
 /-- `f` has a sync op itself: an atomic op, a call to `Thread.spawn`/`.join`, or a call into

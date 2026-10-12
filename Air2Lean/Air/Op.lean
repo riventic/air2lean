@@ -114,18 +114,23 @@ def Ty.head : Ty → Ty
 
 /-- `a` and `b` are the same type although the exporter gave it two ids (Zig 0.17.0 interns
 `*align(8) T` and `*T` apart even where the alignments agree): equal heads and layouts and,
-pairwise, the same children. A pair met again on the path is assumed equal (the two regular
-trees are bisimilar); unknown ids and exhausted fuel compare unequal. -/
-partial def sameTyUpToIds {L : Type} [BEq L] (types : Array Ty) (layouts : Array L) (a b : TyId)
-    (fuel : Nat := 256) (path : List (TyId × TyId) := []) : Bool :=
-  a == b || path.contains (a, b) || (fuel != 0 &&
-    match types[a]?, types[b]? with
-    | some ta, some tb =>
-      ta.head == tb.head && layouts[a]? == layouts[b]? &&
-        (childTys ta).size == (childTys tb).size &&
-        ((childTys ta).zip (childTys tb)).all fun (x, y) =>
-          sameTyUpToIds types layouts x y (fuel - 1) ((a, b) :: path)
-    | _, _ => false)
+pairwise, the same children. Each pair is compared once and assumed equal from then on; any
+mismatch makes the answer `false`, so `true` is a bisimulation of the two regular trees (linear
+in the pairs, not in the paths). Unknown ids and an exhausted budget compare unequal. -/
+def sameTyUpToIds {L : Type} [BEq L] (types : Array Ty) (layouts : Array L) (a b : TyId)
+    (budget : Nat := 4096) : Bool := Id.run do
+  let mut seen : Array (TyId × TyId) := #[]
+  let mut todo : List (TyId × TyId) := [(a, b)]
+  for _ in [:budget] do
+    let (x, y) :: rest := todo | return true
+    todo := rest
+    if x == y || seen.contains (x, y) then continue
+    seen := seen.push (x, y)
+    let (some tx, some ty) := (types[x]?, types[y]?) | return false
+    unless tx.head == ty.head && layouts[x]? == layouts[y]? &&
+        (childTys tx).size == (childTys ty).size do return false
+    todo := ((childTys tx).zip (childTys ty)).toList ++ todo
+  return todo.isEmpty
 
 /-- `id` holds a pointer, at any depth; unknown types and exhausted fuel count as pointers
 (fail closed). -/
