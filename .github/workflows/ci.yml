@@ -2652,6 +2652,16 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: lake build
 
+      # T04 weak ordering (docs/weak-ordering.md): this row's version natively on aarch64-macos.
+      - name: macOS weak-ordering litmus tests (T04)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          v='${{ matrix.zig }}'
+          python3 scripts/weak-ordering.py observe --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/weak-aarch64-macos-none-$v.txt"
+          python3 scripts/weak-ordering.py check "$RUNNER_TEMP/weak-aarch64-macos-none-$v.txt"
+
       # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
       # overrides, translated, built and differentially tested against native Zig (host-listed
       # float differences count as `host`, scripts/diff.sh). Never writes a tracked file: a
@@ -2888,6 +2898,20 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: lake build
 
+      # T04 weak ordering (docs/weak-ordering.md): the litmus tests natively for every version;
+      # each observed outcome, and each committed observation, must be an outcome of the model's
+      # atomics (tests/roadmap/weak-ordering/Litmus.lean).
+      - name: aarch64-linux weak-ordering litmus tests (T04)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/weak"
+          for v in 0.17.0 0.16.0 0.15.2 0.14.1; do
+            python3 scripts/weak-ordering.py observe --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+              --target aarch64-linux-gnu --output "$RUNNER_TEMP/weak/aarch64-linux-gnu-$v.txt"
+          done
+          python3 scripts/weak-ordering.py check "$RUNNER_TEMP"/weak/*.txt tests/roadmap/weak-ordering/observed/*.txt
+          python3 tests/roadmap/weak-ordering/test_weak.py
       # Fresh native AIR export, compared with the goldens, translated, built and differentially
       # tested against stock Zig on this host. Never writes a tracked file.
       - name: aarch64-linux golden AIR, translate, differential test (0.17.0)

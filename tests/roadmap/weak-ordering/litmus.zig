@@ -68,7 +68,7 @@ const tests = [_]Test{
         &.{ ld(x, 0, rlx), ld(x, 1, rlx) },
     } },
     .{ .name = "wrc", .variant = "release_acquire", .regs = 3, .threads = &.{
-        &.{st(x, 1, rlx)},
+        &.{st(x, 1, .release)},
         &.{ ld(x, 0, .acquire), st(y, 1, .release) },
         &.{ ld(y, 1, .acquire), ld(x, 2, rlx) },
     } },
@@ -118,7 +118,7 @@ fn runTest(comptime t: Test) !void {
     }
     for (handles) |h| h.join();
     // Outcome histogram: every register is 0, 1 or 2 (base 3).
-    var counts = [_]u32{0} ** 81;
+    var counts: [81]u32 = @splat(0);
     for (0..rounds) |i| {
         var key: usize = 0;
         for (0..t.regs) |r| key = key * 3 + @min(regs[r][i], 2);
