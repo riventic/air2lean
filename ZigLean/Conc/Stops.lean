@@ -1,6 +1,7 @@
 import Lean
 import ZigLean.Conc.Logic
 import ZigLean.Conc.Progress
+import ZigLean.Conc.PtrAtomic
 import ZigLean.Mem.Halts
 
 /-!
@@ -196,6 +197,14 @@ theorem spinLoopHint' {Q : Unit → Mem → Nat → Prop} (hle : 1 ≤ B)
     (h : ∀ m', R m' → Q () m' (B - 1)) : Stops R dispatch (Zig.spinLoopHint : ConcM Tgt Unit) Q m B :=
   sync rfl hle fun _ m' hr => h m' hr
 
+/-- Fail closed: a futex wait has no turn budget, whatever the budget: its turns depend on
+another thread's wake (a retry loop around it can starve). -/
+theorem not_wait {p : Ptr} {e : BitVec 32} {Q : Unit → Mem → Nat → Prop} :
+    ¬ Stops R dispatch (ConcM.sync (Tgt := Tgt) (.wait p e)) Q m B := by
+  intro h
+  obtain ⟨c, hc, -⟩ := Turns.step_inv (h (B + 1) (by omega)) (by intro _ h; cases h)
+  simp [opCost] at hc
+
 /-! ### The body monad of a concurrent function (`CM`) -/
 
 theorem liftM' {x : MemM α} {s : σ} {Q : α × σ → Mem → Nat → Prop} (hx : x.Halts)
@@ -360,7 +369,21 @@ macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.spa
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.joinC'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.pickC'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_reducible apply Stops.runLift)
-macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadC Zig.atomicStoreC Zig.atomicRmwC Zig.cmpxchgC Zig.atomicLoadAsC Zig.atomicStoreAsC Zig.atomicRmwAsC Zig.cmpxchgAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicStoreC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicRmwC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicStoreAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicRmwAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgWeakC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgWeakAsC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadPtrC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicStorePtrC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicXchgPtrC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgPtrC)
+macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.cmpxchgWeakPtrC)
 
 open Lean Elab Tactic Meta in
 /-- Beta-reduce the head of the goal (a continuation applied to its arguments). -/

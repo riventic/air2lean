@@ -1,4 +1,5 @@
 import ZigLean.Mem.Thread
+import ZigLean.Mem.AtomicPtr
 import Lean
 
 /-!
@@ -181,6 +182,14 @@ instance : EncHalts Ptr where
       · exact Result.Halts.throw' _
     · exact Result.Halts.bind' (intOfBytes_halts _ _ _) fun _ => Result.Halts.pure' _
     · exact Result.Halts.throw' _
+
+instance : EncHalts (Option Ptr) where
+  decode_halts bs := by
+    show (if bs.extract 0 8 == Array.replicate 8 (.int 0) then pure none
+      else some <$> (Enc.decode bs : Result Ptr) : Result (Option Ptr)).Halts
+    split
+    · exact Result.Halts.pure' _
+    · exact Result.Halts.map' (EncHalts.decode_halts bs)
 
 theorem decodeLoad_halts {T : Type} [Enc T] [EncHalts T] (blocks : Array Block) (bs : Array Byte) :
     (decodeLoad (α := T) blocks bs).Halts := by
@@ -390,5 +399,23 @@ macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicLoad
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicStoreAt_halts _ _ _ _ _)
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicRmwAt_halts _ _ _ _ _ _ _)
 macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact cmpxchgAt_halts _ _ _ _ _ _ _)
+
+/-! ### Pointer atomics (`ZigLean/Mem/AtomicPtr.lean`) -/
+
+theorem atomicLoadPtrAt_halts (α : Type) [Enc α] [EncHalts α] (c : Nat) (ord : AtomicOrder)
+    (a : Nat) (p : Ptr) : (atomicLoadPtrAt α c ord a p).Halts := by
+  unfold atomicLoadPtrAt observe acquireClock
+  halts
+  all_goals first
+    | exact EncHalts.decode_halts (α := α) _
+    | exact MemM.Halts.lift' (EncHalts.decode_halts (α := α) _)
+    | exact MemM.Halts.throw' _
+
+theorem atomicStorePtrAt_halts {α : Type} [Enc α] (c : Nat) (ord : AtomicOrder) (a : Nat)
+    (p : Ptr) (v : α) : (atomicStorePtrAt c ord a p v).Halts := by
+  unfold atomicStorePtrAt insertMsg observe; halts
+
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicLoadPtrAt_halts _ _ _ _ _)
+macro_rules | `(tactic| halts_leaf) => `(tactic| with_reducible exact atomicStorePtrAt_halts _ _ _ _ _)
 
 end Zig
