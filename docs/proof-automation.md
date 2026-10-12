@@ -1,8 +1,9 @@
 # Proof automation: the symbolic executor `fsym`
 
 `fsym` proves a triple about generated code in the full-state logic (`FTotalTriple P c Q`,
-`FTriple P c Q` or `L.T P c Q` for any `FLogic`, [sep-full-state.md](sep-full-state.md)) by
-walking the program. A proof about a module supplies its invariant and the statement, and
+`FTriple P c Q` or `L.T P c Q` for any `FLogic`, [sep-full-state.md](sep-full-state.md)), or
+about a concurrent function read in the caller's thread (`CTriple P x Q`), by walking the
+program. A proof about a module supplies its invariant and the statement, and
 nothing else: the generated code is walked by general rules from the library (CLAUDE.md,
 "General tactics over module-specific ones").
 
@@ -20,11 +21,12 @@ The users are the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba/Al
 all four `FAllocSpec` fields, including the refined `resize` field) and the translated
 `PageAllocator` (`tests/roadmap/alloc-translated/PageSpec.lean` for x86_64-linux and
 `PageSpecMacos.lean` for aarch64-macos: `free`, refined `resize`, `remap`; the invariant is
-`PageTok.lean`; `PageAlloc.lean` closes `alloc`'s final update with `fsym_entail`). The page
+`PageTok.lean`; `PageAlloc.lean` proves the concurrent `alloc` with the `CTriple` backend). The page
 proofs walk the generated code down to the OS mapping primitives (`mmap`, `munmap`, `mremap`,
 premise OSM-01) with the library rules of `ZigLean/Sep/Full/Mmap.lean`. Small library-only
 examples are in `tests/roadmap/sep-auto/` (CI: the `lean` part, step "Full-state separation
-logic").
+logic"; `Conc.lean` for the concurrent backend: atomics, an indirect call through a table, a loop
+with its invariant).
 
 | Proof | heartbeats (default budget 200k) |
 | --- | --- |
@@ -32,14 +34,16 @@ logic").
 | FBA `resize` (refined) | 57k |
 | FBA `remap` | 70k |
 | FBA `free` | 21k |
-| page (linux) `free` / `resize` / `remap` | 13k / 76k / 85k |
-| page (macOS) `free` / `resize` / `remap` | 13k / 75k / 55k |
+| page (linux) `free` / `resize` / `remap` | 13k / 78k / 85k |
+| page (macOS) `free` / `resize` / `remap` | 13k / 78k / 55k |
+| page `alloc` (concurrent, `CTriple`) | 141k |
 
 FBA `Full.lean` is 139 lines, of which the proofs are four `fsym` calls (the handwritten version
 was 1025 lines); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
 on a loaded machine (load average about 17): FBA 66 s, each page spec 17 s, one theorem at a time
 (`-j1`). The cost is `omega`: about 870 calls per page spec, a third of them case-split probes for
-truncated subtractions.
+truncated subtractions; failed probes are cheap (about 90 heartbeats each), the cost is spread over
+many successful calls with 20 to 30 facts.
 
 ## Modules
 
@@ -52,6 +56,9 @@ truncated subtractions.
   providers from atoms (`AddrOf`, `Reaches`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
   lemmas (masks, overflow bits, shifts, no-wrap rewrites, atoms for `omega`).
+* `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
+  pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
+  `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
 
 ## How it works
@@ -102,6 +109,30 @@ truncated subtractions.
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
 
+## The concurrent backend (`CTriple`)
+
+A goal `CTriple P x Q` (a concurrent function read in one thread, `ZigLean/Sep/Full/Conc.lean`)
+is walked like a sequential one, by the `C.*` counterparts of the structural steps:
+
+* the body monad `CM` is normalized (`CNorm`, the atomic ops of `CM` as an oracle pick and a
+  `MemM` op), and `ConcM.liftMem` is pushed through the `MemM` layer (`liftMem_bind`), so a
+  generated `MemM` callee is walked command by command;
+* a `ConcM.liftMem c` command is executed by a sequential rule about `c`: total (`@[fsym]`) or
+  partial (`FTriple`: the atomic rules, `CTriple` being partial correctness); an oracle pick
+  takes the choice `0` (`C.pick`);
+* a concurrent command (a call through a table, a loop) is executed by a `CTriple` rule given
+  to `fsym [h]`: its command may be a definition that unfolds to the program's (`t.call f a` or
+  `(CVTable.dispatch t fns).alloc …` to the generated chain): `CTriple.tableCall`'s reading;
+  a loop is `CTriple.loop` with its invariant, whose body `∀ s, CTriple (inv s) (body.run s) …`
+  is again `fsym`;
+* a generated indirect call `if f == c₁ then x₁ else … else throw .illegal` is folded into
+  `callIndirect f [(c₁, x₁), …]` before the body is normalized (`callIndirect_fold_one`/`cons`)
+  and its arms' common continuation is pulled out (`pullIndirect`), so it is one command; with no
+  rule for it, the arm that the facts select is walked (`C.callIndirect_pos`/`_neg`), else both
+  cases.
+
+Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
+
 ## The arithmetic solver
 
 Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, also the tactic
@@ -116,10 +147,11 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
    remainders by `2 ^ x` (bounds, multiples, `z % M = z` or `0` where `omega` shows so);
-4. runs `omega` on the facts. `omega` case-splits on every truncated subtraction, `Int.toNat`,
+4. adds `z % 2 ^ x = z % L % 2 ^ x` for a literal power of two `L = 2 ^ c` of the problem with
+   `x ≤ c` (`mod_pow_of_le`: `omega` reads `z % L`, not `z % 2 ^ x`), and runs `omega` on the facts. `omega` case-splits on every truncated subtraction, `Int.toNat`,
    `min` and `max`; a term whose case the split-free (linear) facts decide becomes an opaque
-   atom with a linear defining fact (`subAtom`, `toNatAtom`, `minAtom`, `maxAtom`), so no split
-   is explored for it;
+   atom with a linear defining fact (`subAtom`, also a subtraction truncated to `0`, `toNatAtom`,
+   `minAtom`, `maxAtom`), so no split is explored for it;
 5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
@@ -145,8 +177,8 @@ parallel; a run is identified by the option `fsym.run`).
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
-`trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment (and `trace.fsym`
-the total of the run). Every proof must stay under the default heartbeat budget. Lessons:
+`trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
+`trace.fsym.total` the total of the run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * A failed definitional unification of two programs unfolds them: compare heads and arguments.
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
@@ -155,11 +187,9 @@ the total of the run). Every proof must stay under the default heartbeat budget.
 
 ## Limits and next steps
 
-* Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`); rules are total
-  (`@[fsym]` takes `FTotalTriple` conclusions). The concurrent `CTriple` (arena, the page
-  allocator's `alloc`) is next: `PageAlloc.lean`'s walk of `alloc` is still a handwritten `CTriple`
-  proof over legacy steps (only its final update is `fsym_entail`). The legacy `TotalTriple`
-  layer is not a target (it is being phased out).
+* Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
+  `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
+  (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
 * Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are lifted
   inside the library from the legacy rules with the pinned bridge (`FTotalTriple.ofTotal`);
   partial-mapping steps are native.

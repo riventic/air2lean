@@ -1,10 +1,11 @@
-import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.AutoConc
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
 
-`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`) by walking
-the generated program `c` (`docs/proof-automation.md`):
+`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`), or
+`CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
+`AutoConc.lean`), by walking the generated program `c` (`docs/proof-automation.md`):
 
 * **Preconditions** are kept as a flat list of atoms. Definitions that build assertions from
   `⋆`, `⟪φ⟫` and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are
@@ -40,6 +41,7 @@ open Lean Meta Elab Tactic
 initialize registerTraceClass `fsym
 initialize registerTraceClass `fsym.arith
 initialize registerTraceClass `fsym.prof
+initialize registerTraceClass `fsym.total
 
 /-! ## Expressions -/
 
@@ -59,6 +61,16 @@ where
       if e.isAppOfArity sepN 2 then go (e.appFn!.appArg! :: e.appArg! :: rest) acc
       else if e.isConstOf empN then go rest acc
       else go rest (acc.push e)
+
+/-- The applications in a term (each once, outermost first). -/
+partial def subterms (e : Expr) : Array Expr :=
+  go e #[]
+where go (e : Expr) (acc : Array Expr) : Array Expr :=
+  match e with
+  | .app f a => go a (go f (if acc.contains e then acc else acc.push e))
+  | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+  | .mdata _ b => go b acc
+  | _ => acc
 
 def mkSep (a b : Expr) : Expr := mkApp2 (mkConst sepN) a b
 
@@ -120,22 +132,50 @@ partial def unfoldAtom (e : Expr) : MetaM Expr := do
   | some e' => if e'.consumeMData.isLambda then return e else unfoldAtom e'
   | none => return e
 
-/-- A goal `L.T P c Q`: `(L, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals are restated. -/
-def view (g : MVarId) : MetaM (MVarId × Expr × Expr × Expr × Expr × Expr) := do
+/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), or the
+concurrent `CTriple` (`conc`; `L` is the target type `Tgt`). -/
+structure Bk where
+  conc : Bool
+  L : Expr
+  deriving Inhabited
+
+/-- Partial correctness: partial (`FTriple`) rules apply too. -/
+def Bk.part (B : Bk) : Bool := B.conc || B.L.isConstOf ``FLogic.partial
+
+/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, with
+the same arguments). -/
+def Bk.nm (B : Bk) (n : Name) : Name :=
+  if B.conc then n.getPrefix ++ `C ++ .mkSimple n.getString! else n
+
+/-- A goal `L.T P c Q` or `CTriple P c Q`: `(B, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals
+are restated as `L.T`. -/
+def view (g : MVarId) : MetaM (MVarId × Bk × Expr × Expr × Expr × Expr) := do
   let t ← instantiateMVars (← g.getType)
   let t := t.consumeMData
   if t.isAppOfArity ``FLogic.T 5 then
     let a := t.getAppArgs
-    return (g, a[0]!, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+    return (g, ⟨false, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+  if t.isAppOfArity ``CTriple 5 then
+    let a := t.getAppArgs
+    return (g, ⟨true, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
   for (k, L) in [(``FTotalTriple, ``FLogic.total), (``FTriple, ``FLogic.partial)] do
     if t.isAppOfArity k 4 then
       let a := t.getAppArgs
       let L := mkConst L
       let g' ← g.replaceTargetDefEq (mkAppN (mkConst ``FLogic.T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
-      return (g', L, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
-  throwError "fsym: expected an FTotalTriple, FTriple or FLogic.T goal{indentExpr t}"
+      return (g', ⟨false, L⟩, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
+  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T or CTriple goal{indentExpr t}"
 
-def mkT (L α P c Q : Expr) : Expr := mkAppN (mkConst ``FLogic.T) #[L, α, P, c, Q]
+def mkT (B : Bk) (α P c Q : Expr) : Expr :=
+  mkAppN (mkConst (if B.conc then ``CTriple else ``FLogic.T)) #[B.L, α, P, c, Q]
+
+/-- The kind of a rule's conclusion: a total (`FTotalTriple`) or partial (`FTriple`) triple of a
+`MemM` command, or a `CTriple` of a concurrent one; `(kind, command)`. -/
+def ruleConcl? (concl : Expr) : Option (Name × Expr) :=
+  if concl.isAppOfArity ``FTotalTriple 4 then some (``FTotalTriple, concl.getArg! 2)
+  else if concl.isAppOfArity ``FTriple 4 then some (``FTriple, concl.getArg! 2)
+  else if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
+  else none
 
 /-- The head of a command or an atom, through `StateT.lift` and `up`: a cheap filter before
 unification (which may unfold definitions). -/
@@ -154,7 +194,15 @@ partial def headKey (e : Expr) : Name :=
 partial def unifyKeyed (a b : Expr) : MetaM Bool := do
   let ka := headKey a
   let kb := headKey b
-  if ka != kb && ka != .anonymous && kb != .anonymous then return false
+  if ka != kb && ka != .anonymous && kb != .anonymous then
+    -- values (words, numbers, flags) of different heads may still be equal by unfolding
+    -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
+    -- ground values only: a pattern with metavariables must not be matched by unfolding
+    if (← instantiateMVars a).hasExprMVar || (← instantiateMVars b).hasExprMVar then return false
+    let ty ← whnfR (← inferType a)
+    unless ty.isAppOfArity ``BitVec 1 || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool do
+      return false
+    return ← isDefEq a b
   let a := a.consumeMData
   let b := b.consumeMData
   if let .const ca _ := a.getAppFn then
@@ -239,11 +287,13 @@ structure RunCaches where
   prog : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
   /-- The registered rules with the head of their command (`headKey`). -/
   rules : IO.Ref (Option (Array (Name × Name)))
+  /-- The simp context that folds generated indirect calls (concurrent bodies). -/
+  fold : IO.Ref (Option Simp.Context)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
-           rules := ← IO.mkRef none }
+           rules := ← IO.mkRef none, fold := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -287,7 +337,9 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let h0 ← IO.getNumHeartbeats
   let r ← omegaRaw' facts ty
-  trace[fsym.prof] "raw {((← IO.getNumHeartbeats) - h0) / 1000} {facts.size} {r.isSome}"
+  let d := ((← IO.getNumHeartbeats) - h0) / 1000
+  trace[fsym.prof] "raw {d} {facts.size} {r.isSome}"
+  if d > 1000 then trace[fsym.prof] "slow omega {ty} from {← facts.mapM inferType}"
   return r
 where
   omegaRaw' (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
@@ -368,7 +420,11 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
         if x.isAppOfArity ``HSub.hSub 6 then
           match ← decide (← mkAppM ``LE.le #[b, a]) with
           | some h => pure (some (mkApp2 (mkConst ``subAtom) a b, ← mkAppM ``subAtom_add #[h]))
-          | none => pure none
+          | none =>
+            -- truncated to zero
+            match ← decide (← mkAppM ``LE.le #[a, b]) with
+            | some h => pure (some (mkApp2 (mkConst ``subAtom) a b, ← mkAppM ``subAtom_zero #[h]))
+            | none => pure none
         else
           let isMin := x.isAppOfArity ``Min.min 4
           let c := if isMin then ``minAtom else ``maxAtom
@@ -409,6 +465,22 @@ where
   go (e : Expr) (acc : Array Expr) : Array Expr :=
     let acc := if e.isAppOfArity ``HAnd.hAnd 6 && (e.getArg! 0).isConstOf ``Nat && !acc.contains e
       then acc.push e else acc
+    match e with
+    | .app f a => go a (go f acc)
+    | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+    | .mdata _ b | .proj _ _ b => go b acc
+    | _ => acc
+
+/-- The literal powers of two `L` of the remainders `z % L` of natural numbers in `e`. -/
+partial def litPowMods (e : Expr) : Array Nat :=
+  go e #[]
+where
+  go (e : Expr) (acc : Array Nat) : Array Nat :=
+    let acc := if e.isAppOfArity ``HMod.hMod 6 && (e.getArg! 0).isConstOf ``Nat then
+        match e.appArg!.nat? with
+        | some c => if c > 1 && c &&& (c - 1) == 0 && !acc.contains c then acc.push c else acc
+        | none => acc
+      else acc
     match e with
     | .app f a => go a (go f acc)
     | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
@@ -511,9 +583,24 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
   let mut mods := #[]
   for e in srcs ++ (← out.mapM inferType) do
     for x in (powTerms e).2 do unless mods.contains x do mods := mods.push x
+  -- literal power-of-two moduli (`z % 4096`)
+  let mut lits : Array Nat := #[]
+  for e in srcs do
+    for c in litPowMods e do
+      unless lits.contains c do lits := lits.push c
   for m in mods do
     let z := m.appFn!.appArg!
     let M := m.appArg!
+    -- through a larger literal power of two `L = 2 ^ c` (`x ≤ c`): `z % 2 ^ x = z % L % 2 ^ x`
+    for L in lits do
+      let c := L.log2
+      let x := M.getAppArgs[5]!
+      let base := facts ++ out
+      let some hx ← probe (mkApp2 (mkConst `fsym.modlit) m (mkNatLit L)) base.size
+          (omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit c])) | continue
+      let hM ← mkDecideProof (← mkEq (mkNatLit L) (← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit c]))
+      out := out.push (← mkAppOptM ``mod_pow_of_le #[z, x, mkNatLit c, mkNatLit L, hM, hx])
+      out := out.push (← mkAppM ``Nat.mod_le #[← mkAppM ``HMod.hMod #[z, mkNatLit L], M])
     let pos ← mkAppM ``Nat.two_pow_pos #[M.getAppArgs[5]!]
     out := out.push (← mkAppM ``Nat.mod_lt #[z, pos])
     out := out.push (← mkAppM ``Nat.mod_le #[z, M])
@@ -716,6 +803,13 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     if ← closeWith g (← `(tactic| decide)) then return []
   if let some (_, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
+  -- `x ≤ x` (a carved region that starts where the state's does)
+  if t.isAppOfArity ``LE.le 4 then
+    let ty := t.getArg! 0
+    if ty.isConstOf ``Nat || ty.isConstOf ``Int then
+      if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
+        g.assign (← mkAppM (if ty.isConstOf ``Nat then ``Nat.le_refl else ``Int.le_refl) #[t.getArg! 2])
+        return []
   if ← arithCore g quick then return []
   unless quick do
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
@@ -990,7 +1084,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let P' := (mkApp f br).headBeta
     let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
-    g.assign (← mkAppOptM ``pre_eq #[L, α, P, P', Q, c, e, g2])
+    g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, P', Q, c, e, g2])
     return ← normPre g2.mvarId! (fuel - 1)
   let isFact (a : Expr) := a.isAppOfArity liftN 1 || a.isAppOfArity exN 2
   let facts := ats.filter isFact
@@ -1002,13 +1096,13 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
   let g ← if P2 == P then pure g else do
     let e ← acEq Pu P2
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P2 c Q)
-    let pf ← mkAppOptM ``pre_eq #[L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
+    let pf ← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
     g.assign pf
     pure g2.mvarId!
   if facts.isEmpty then return ← unifyBlocks g
   let a := facts[0]!
   if a.isAppOfArity liftN 1 then
-    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.lift_sep _ fun h => ?_)) g
+    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``lift_sep)) _ fun h => ?_)) g
       | throwError "fsym: lift"
     let lctx ← g'.withContext getLCtx
     let g' ← match lctx.lastDecl with
@@ -1017,7 +1111,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     normPre g' (fuel - 1)
   else
     let n := match a.appArg!.consumeMData with | .lam n .. => n | _ => `x
-    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.ex_sep _ fun x => ?_)) g
+    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``ex_sep)) _ fun x => ?_)) g
       | throwError "fsym: ex"
     let lctx ← g'.withContext getLCtx
     let g' ← match lctx.lastDecl with
@@ -1049,7 +1143,26 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
       if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
       (← caches).prog.set (some (ctx, procs))
       pure (ctx, procs)
+  -- a concurrent body: generated indirect calls (tests `f == cᵢ` of pointers) are folded first
+  -- (`callIndirect_fold_one`/`cons`, which match the chain before `simp` rewrites its conditions)
+  let c0 := c
+  let (c, pre?) ← if L.conc && (c.find? fun e =>
+      e.isAppOfArity ``BEq.beq 4 && (e.getArg! 0).isConstOf ``Zig.Ptr).isSome then do
+      let fold ← match ← (← caches).fold.get with
+        | some f => pure f
+        | none => do
+          let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
+          let thms ← thms.addConst ``Full.callIndirect_fold_cons
+          let f ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+          (← caches).fold.set (some f); pure f
+      let (r, _) ← simp c fold
+      pure (r.expr, if r.expr == c then none else some r)
+    else pure (c, none)
   let (r, _) ← simp c ctx (simprocs := procs)
+  let r ← match pre? with
+    | some r0 => r0.mkEqTrans r
+    | none => pure r
+  let c := c0
   if r.expr == c then return g
   let newT := mkT L α P r.expr Q
   match r.proof? with
@@ -1061,7 +1174,7 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
 /-- Inline a command: a vtable projection, a generated function, a pure generated helper. -/
 partial def unfoldCmd (x : Expr) : MetaM (Option Expr) := do
   let x := x.consumeMData.headBeta
-  if x.isAppOfArity ``StateT.lift 5 then
+  if x.isAppOfArity ``StateT.lift 5 || x.isAppOfArity ``ConcM.liftMem 3 then
     let y := x.appArg!
     let some y' ← unfoldCmd y | return none
     return some (mkApp x.appFn! y')
@@ -1710,9 +1823,9 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let qats := atoms Qi
       -- block facts first
       for f in qats.filter (·.isAppOfArity liftN 1) do
-        let φ ← instantiateMVars f.appArg!
-        if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
-          discard <| solveBlock φ
+        for φ in ← conjuncts (← instantiateMVars f.appArg!) do
+          if (φ.eq?.map fun (_, l, _) => l.isAppOf ``Zig.Ptr.block).getD false then
+            discard <| solveBlock φ
       preassign st qats
       let Qi1 ← instantiateMVars Qi
       let (Qi2, pQ2) ← instQ Qi1
@@ -1943,7 +2056,22 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
 
 /-! ## Rules -/
 
-/-- Try a rule on the command `x` of `x >>= f`. Returns the continuation goal and side goals. -/
+/-- The command of `x` that sequential rules are about: `c` of a `ConcM.liftMem c`. -/
+def memCmd? (x : Expr) : Option Expr :=
+  if x.isAppOfArity ``ConcM.liftMem 3 then some x.appArg! else none
+
+/-- Unfold the command `cmd` of a `CTriple` rule until its head is that of the program's command
+`x` (a table call `t.call f a` or `(CVTable.dispatch t fns).alloc …` is an indirect call). -/
+partial def unfoldToHead (cmd x : Expr) (fuel : Nat := 6) : MetaM Expr := do
+  if fuel == 0 || headKey cmd == headKey x then return cmd
+  match ← unfold1 cmd with
+  | some c' => unfoldToHead c' x (fuel - 1)
+  | none => return cmd
+
+/-- Try a rule on the command `x` of `x >>= f`. Returns the continuation goal and side goals.
+A sequential rule is total (`FTotalTriple`, every backend) or partial (`FTriple`, the partial
+backends); in the concurrent backend it executes a `ConcM.liftMem c` command (about `c`), and a
+`CTriple` rule a concurrent command. -/
 def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId × List MVarId)) :=
   g.withContext do
   let s ← saveState
@@ -1951,10 +2079,25 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let (_, L, α, P, _, Q) ← view g
     let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
-    unless concl.isAppOfArity ``FTotalTriple 4 do s.restore; return none
+    let some (kind, cmd) := ruleConcl? concl | do
+      trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
     let ca := concl.getAppArgs
-    let (β, P₀, cmd, Q₀) := (ca[0]!, ca[1]!, ca[2]!, ca[3]!)
-    unless ← unifyKeyed cmd x do s.restore; return none
+    let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
+    -- the command the rule is about, and whether the rule applies in this backend
+    let target? : Option Expr :=
+      if kind == ``CTriple then (if L.conc && (memCmd? x).isNone then some x else none)
+      else if L.conc then memCmd? x
+      else if kind == ``FTriple && !L.part then none
+      else some x
+    let some tx := target? | s.restore; return none
+    if kind == ``CTriple then
+      let cmd ← unfoldToHead (← instantiateMVars cmd) tx
+      unless headKey cmd == headKey tx do s.restore; return none
+      unless ← isDefEq cmd tx do
+        trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
+        s.restore; return none
+    else
+      unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
     let P₀i ← instantiateMVars P₀
     let whole := P₀i.isMVar
@@ -2012,24 +2155,36 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         unless ← isProp (← inferType a) do
           trace[fsym] "rule {rule}: undetermined {a}"
           s.restore; return none
-    let r ← instantiateMVars (mkAppN rule args)
+    let mut r ← instantiateMVars (mkAppN rule args)
     let Q₀ ← instantiateMVars Q₀
     let P₀ ← instantiateMVars P₀
+    -- the rule in the backend's kind: `FTotalTriple` (sequential, total), `FTriple` (`P.step`,
+    -- `C.step`) or `CTriple` (`C.stepC`)
+    let mut kind := kind
+    if L.conc && kind == ``FTotalTriple then
+      r ← mkAppM ``FTotalTriple.toPartial #[r]; kind := ``FTriple
+    let (stepN, stepAllN) :=
+      if kind == ``CTriple then (``C.stepC, ``C.stepAllC)
+      else if L.conc then (``C.step, ``C.stepAll)
+      else if kind == ``FTriple then (``P.step, ``P.stepAll)
+      else (``step, ``stepAll)
     let kTy ← withLocalDeclD `v β fun v => do
       let pre := if whole then mkApp Q₀ v |>.headBeta else mkSep (mkApp Q₀ v |>.headBeta) R
       mkForallFVars #[v] (mkT L α pre (mkApp f v).headBeta Q)
     let k ← mkFreshExprSyntheticOpaqueMVar kTy
     if let some hE := planned then
       let Q₀R ← withLocalDeclD `v β fun v => do mkLambdaFVars #[v] (mkSep (mkApp Q₀ v).headBeta R)
-      let r' ← mkAppM ``FTotalTriple.eupd #[hE, ← mkAppOptM ``FTotalTriple.frame #[none, P₀, R, Q₀, x, r]]
-      g.assign (← mkAppOptM ``stepAll #[L, β, α, P, Q, x, f, Q₀R, r', k])
+      let fr ← if kind == ``CTriple then mkAppOptM ``CTriple.frame #[none, none, P₀, R, Q₀, tx, r]
+        else mkAppOptM (kind ++ `frame) #[none, P₀, R, Q₀, tx, r]
+      let r' ← mkAppM (kind ++ `eupd) #[hE, fr]
+      g.assign (← mkAppOptM stepAllN #[L.L, β, α, P, Q, tx, f, Q₀R, r', k])
     else if whole then
-      g.assign (← mkAppOptM ``stepAll #[L, β, α, P, Q, x, f, Q₀, r, k])
+      g.assign (← mkAppOptM stepAllN #[L.L, β, α, P, Q, tx, f, Q₀, r, k])
     else
       let e ← acEq P (mkSep P₀ R)
       let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep P₀ R) (← mkAppM ``Bind.bind #[x, f]) Q)
-      g.assign (← mkAppOptM ``pre_eq #[L, α, P, mkSep P₀ R, Q, none, e, g2])
-      g2.mvarId!.assign (← mkAppOptM ``step #[L, β, α, P₀, R, Q, x, f, Q₀, r, k])
+      g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, mkSep P₀ R, Q, none, e, g2])
+      g2.mvarId!.assign (← mkAppOptM stepN #[L.L, β, α, P₀, R, Q, tx, f, Q₀, r, k])
     let n := match f.consumeMData with | .lam n .. => n | _ => `v
     let (_, k') ← k.mvarId!.intro n
     return some (k', left)
@@ -2048,11 +2203,14 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
         let key ← withNewMCtxDepth do
           let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
           let concl ← whnfR concl
-          pure (if concl.isAppOfArity ``FTotalTriple 4 then headKey (concl.getArg! 2) else .anonymous)
+          -- a `CTriple` rule's command may unfold to the program's (`unfoldToHead`): any key
+          pure (match ruleConcl? concl with
+            | some (k, c) => if k == ``CTriple then .anonymous else headKey c
+            | none => .anonymous)
         k := k.push (key, n)
       (← caches).rules.set (some k)
       pure k
-  let kx := headKey x
+  let kx := headKey ((memCmd? x).getD x)
   let mut out := user
   for (key, n) in keyed do
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
@@ -2061,17 +2219,50 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
 
 /-! ## The walk -/
 
-/-- The applications in a term (each once, outermost first). -/
-partial def subterms (e : Expr) : Array Expr :=
-  go e #[]
-where go (e : Expr) (acc : Array Expr) : Array Expr :=
-  match e with
-  | .app f a => go a (go f (if acc.contains e then acc else acc.push e))
-  | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
-  | .mdata _ b => go b acc
-  | _ => acc
+
+/-- Rewrite the command `x` of the program `c` (`x >>= f` or `x`) by `eq : x = x'`. -/
+def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId := do
+  let mot ← withLocalDeclD `z (← inferType x) fun z => do
+    let c' := if c.isAppOfArity ``Bind.bind 6 && c.getArg! 4 == x then
+        mkAppN c.getAppFn (c.getAppArgs.set! 4 z) else z
+    mkLambdaFVars #[z] (mkT L α P c' Q)
+  g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
 mutual
+/-- An indirect call `callIndirect f ((p, y) :: arms)` that no rule covers: `y` if the facts show
+`f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is `throw .illegal`, which
+must be unreachable. -/
+partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array Expr)
+    (extra : Array Syntax) (fuel : Nat) : TacticM (List MVarId) := g.withContext do
+  let a := x.getAppArgs
+  let (β, fp, arms) := (a[0]!, a[3]!, a[4]!)
+  if arms.isAppOfArity ``List.nil 1 then
+    let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp]
+    let g' ← rewriteCmd g L α P Q c x (← inferType e).appArg! e
+    return ← walk g' user extra (fuel - 1)
+  unless arms.isAppOfArity ``List.cons 3 do return [g]
+  let hd := arms.getArg! 1
+  let rest := arms.getArg! 2
+  let (p, y) := (hd.getArg! 2, hd.getArg! 3)
+  if let some h ← proveEq fp p then
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, h]
+    return ← walk (← rewriteCmd g L α P Q c x y e) user extra (fuel - 1)
+  let eqT ← mkEq fp p
+  -- `f ≠ p` (a pointer literal of another function, or by the facts)
+  let hn ← mkFreshExprMVar (mkNot eqT)
+  if ← arith hn.mvarId! (quick := true) <||> closeWith hn.mvarId! (← `(tactic| decide)) then
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, ← instantiateMVars hn]
+    return ← walk (← rewriteCmd g L α P Q c x (← inferType e).appArg! e) user extra (fuel - 1)
+  let (sp, sn) ← g.byCases eqT `hf
+  let gp ← sp.mvarId.withContext do
+    let e ← mkAppOptM ``C.callIndirect_pos #[L.L, β, fp, p, y, rest, Expr.fvar sp.fvarId]
+    rewriteCmd sp.mvarId L α P Q c x y e
+  let gn ← sn.mvarId.withContext do
+    let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, rest, Expr.fvar sn.fvarId]
+    rewriteCmd sn.mvarId L α P Q c x (← inferType e).appArg! e
+  let gp ← destruct gp sp.fvarId
+  return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
+
 /-- Split on a variable of an inductive type and walk each case. -/
 partial def casesWalk (g : MVarId) (d : Expr) (user : Array Expr := #[]) (extra : Array Syntax := #[])
     (fuel : Nat := 0) : TacticM (List MVarId) := do
@@ -2098,7 +2289,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   trace[fsym] "pre done {← g.getType}"
   let g ← simpProg g extra
   trace[fsym.prof] "pre {(h1-h0)/1000} prog {((← IO.getNumHeartbeats)-h1)/1000}"
-  trace[fsym] "prog done"
+  trace[fsym] "prog done {(← g.getType)}"
   g.withContext do
   let (g, L, α, P, c, Q) ← view g
   let c := c.consumeMData
@@ -2106,13 +2297,13 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
     let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, (mkApp Q v).headBeta])
-    g.assign (← mkAppOptM ``ret #[L, none, P, Q, v, h])
+    g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
     return ← closeEntail h.mvarId!
   -- panic: the branch must be unreachable
   if isThrow c then
     let s ← saveState
     try
-      let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.of_false _ ?_)) g | throwError "x"
+      let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``of_false)) _ ?_)) g | throwError "x"
       if ← closeWith g' (← `(tactic| contradiction)) then return []
       if ← arithCore g' then return []
       s.restore
@@ -2139,6 +2330,15 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     for sub in subterms cond' do
       if let some m ← matchMatcherApp? sub (alsoCasesOn := true) then
         if let some d := m.discrs.find? (·.isFVar) then found := some d; break
+    -- a variable of an enumeration-like type (`Option`, `Except`, …) of the condition that the
+    -- state matches on too (`match h with …` of an invariant): its cases decide both
+    if found.isNone then
+      let Pi ← instantiateMVars P
+      for d in (Lean.collectFVars {} cond').fvarIds do
+        unless Pi.containsFVar d do continue
+        let .const tn _ := (← whnfD (← d.getType)).getAppFn | continue
+        let some (.inductInfo ii) := (← getEnv).find? tn | continue
+        if ii.ctors.length ≥ 2 && !ii.isRec then found := some (.fvar d); break
     trace[fsym] "branch on {cond'}: split variable {found}"
     if let some d := found then
       return ← casesWalk g d user extra fuel
@@ -2159,8 +2359,12 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
-      let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.bind_pure _ ?_)) g | throwError "fsym"
+      let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``bind_pure)) _ ?_)) g | throwError "fsym"
       return ← walk g' user extra (fuel - 1)
+  -- an atomic op's oracle choice: `0` in one thread
+  if L.conc && x.isAppOfArity ``ConcM.sync 2 && (x.getArg! 1).isAppOf ``SyncOp.pick then
+    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.C.pick _ ?_)) g | throwError "fsym: pick"
+    return ← walk g' user extra (fuel - 1)
   let h2 ← IO.getNumHeartbeats
   -- the first rule whose side goals are all proved; else the first that applies
   let mut partial? : Option (Tactic.SavedState × MVarId × List MVarId) := none
@@ -2193,6 +2397,9 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let some (_, k, left) := partial? | return [g]
     return left ++ (← walk k user extra (fuel - 1))
   trace[fsym.prof] "norule {((← IO.getNumHeartbeats)-h2)/1000}"
+  -- an indirect call that no rule covers: the arm that the function pointer selects
+  if L.conc && x.isAppOfArity ``Full.callIndirect 5 then
+    return ← indirectWalk g L α P c Q x user extra fuel
   if let some x' ← unfoldCmd x then
     let c' ← mkAppM ``Bind.bind #[x', f]
     let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
@@ -2215,18 +2422,19 @@ elab "fsym_entail" : tactic => do
 syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
 
 @[tactic fsymTac] def evalFsym : Tactic := fun stx => do
-  let args : Array Syntax := match stx[1].getOptional? with
-    | some s => s[1].getSepArgs
-    | none => #[]
+  -- `(" [" term,* "]")?`: the optional node holds the three parts (none if absent)
+  let args : Array Syntax := if stx[1].getNumArgs == 3 then stx[1][1].getSepArgs else #[]
   let mut user := #[]
   let mut extra := #[]
   for a in args do
     let e ← elabTerm a none
     let ty ← instantiateMVars (← inferType e)
-    let (_, _, concl) ← forallMetaTelescopeReducing ty
-    if (← whnfR concl).isAppOfArity ``FTotalTriple 4 then user := user.push e
+    -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
+    let (_, _, concl) ← forallMetaTelescope ty
+    if (ruleConcl? (← whnfR concl)).isSome then user := user.push e
     else extra := extra.push a
-  let g ← getMainGoal
+  -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
+  let (_, g) ← (← getMainGoal).intros
   -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
   let g ← g.withContext do
     let mut g := g
@@ -2241,7 +2449,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     discard <| arithSimpCtx
     let h0 ← IO.getNumHeartbeats
     let gs ← walk g user extra 400
-    trace[fsym] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
+    trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
     replaceMainGoal gs
 
 end Zig.Full.Auto
