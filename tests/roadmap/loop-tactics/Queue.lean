@@ -33,15 +33,13 @@ open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
 def node (p : Ptr) (v : BitVec 32) (q : Option Ptr) : FAssn :=
   up (pts p 8 q) ⋆ up (pts (p.add 8) 4 v)
 
-/-- The queue from `hd` holds `xs`. -/
-def list : Option Ptr → List (BitVec 32) → FAssn
-  | hd, [] => ⟪hd = none⟫
-  | hd, v :: vs => FAssn.ex fun p => FAssn.ex fun q => ⟪hd = some p⟫ ⋆ (node p v q ⋆ list q vs)
-
 /-- The segment from `hd` to `tl` holds `ys`; its last node points to `tl`. -/
 def lseg : Option Ptr → Option Ptr → List (BitVec 32) → FAssn
   | hd, tl, [] => ⟪hd = tl⟫
   | hd, tl, v :: vs => FAssn.ex fun p => FAssn.ex fun q => ⟪hd = some p⟫ ⋆ (node p v q ⋆ lseg q tl vs)
+
+/-- The queue from `hd` holds `xs`: the segment that ends at `null`. -/
+abbrev list (hd : Option Ptr) (xs : List (BitVec 32)) : FAssn := lseg hd none xs
 
 theorem lseg_snoc {q : Option Ptr} {p : Ptr} {v : BitVec 32} :
     ∀ {hd : Option Ptr} {ys : List (BitVec 32)} {r : Res},
@@ -54,11 +52,6 @@ theorem lseg_snoc {q : Option Ptr} {p : Ptr} {v : BitVec 32} :
     obtain ⟨q', h⟩ := sep_ex.mp h
     obtain ⟨hp, h⟩ := sep_lift.mp (sep_assoc h)
     exact ⟨p', q', sep_lift.mpr ⟨hp, sep_mono_right (fun _ => lseg_snoc) (sep_assoc h)⟩⟩
-
-theorem lseg_none : ∀ {hd : Option Ptr} {ys : List (BitVec 32)} {r : Res},
-    lseg hd none ys r → list hd ys r
-  | _, [], _, h => h
-  | _, _ :: _, _, ⟨p, q, h⟩ => ⟨p, q, sep_mono_right (fun _ => sep_mono_right fun _ => lseg_none) h⟩
 
 
 /-- The visited prefix `ys` is a segment, the rest `zs` (`n` items) a queue at the cursor. -/
@@ -97,7 +90,7 @@ theorem sum_step (hd : Option Ptr) (xs : List (BitVec 32)) (hlen : xs.length ≤
     refine (step_nil t _).post fun r x h => ?_
     obtain ⟨hr, h'⟩ := sep_lift.mp h
     subst hr
-    exact floopNext_exit rfl (sep_lift.mpr ⟨⟨rfl, by simpa [hxs] using hsum⟩, by simpa [hxs] using lseg_none h'⟩)
+    exact floopNext_exit rfl (sep_lift.mpr ⟨⟨rfl, by simpa [hxs] using hsum⟩, by simpa [hxs] using h'⟩)
   | cons z zs =>
     refine FTotalTriple.pre (P := FAssn.ex fun p => FAssn.ex fun q =>
       ⟪sp = some p⟫ ⋆ (node p z q ⋆ (lseg hd sp ys ⋆ list q zs))) ?_ fun _ h => by
@@ -154,9 +147,9 @@ def plist : Option Ptr → List (BitVec 32) → Assn
       ⌜hd = some p⌝ ∗ ((pts p 8 q ∗ pts (p.add 8) 4 v) ∗ plist q vs)
 
 theorem up_plist : ∀ (hd : Option Ptr) (xs : List (BitVec 32)) (r : Res), up (plist hd xs) r ↔ list hd xs r
-  | _, [], _ => by simp only [plist, list]; rw [up_lift, up_emp]; rfl
+  | _, [], _ => by simp only [plist, list, lseg]; rw [up_lift, up_emp]; rfl
   | hd, v :: vs, r => by
-    simp only [plist, list, up_ex, FAssn.ex]
+    simp only [plist, list, lseg, up_ex, FAssn.ex]
     refine exists_congr fun p => exists_congr fun q => ?_
     rw [up_lift, Full.sep_lift]
     refine and_congr_right fun _ => ⟨fun h => ?_, fun h => ?_⟩

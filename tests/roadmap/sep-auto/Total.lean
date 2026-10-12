@@ -122,9 +122,15 @@ example (P : FAssn) (s : L) (h : 0 < s.i.toNat) : True := by
       unfold awayLoop gap; fsym
   trivial
 
+/-- Without a measure the reset loop's step holds (the bound is kept) … -/
+theorem reset_step (P : FAssn) (s : L) :
+    FTotalTriple P (resetLoop.run s)
+      (fun r => if (fun b : Bool => b) r.1 then ⟪r.2.n = s.n⟫ ⋆ P else P) := by
+  unfold resetLoop; fsym
+
 set_option linter.unusedVariables false in
-/-- A reset raises the distance to the bound: the step is rejected (the loop runs forever when
-`n > 7`). -/
+/-- … but a reset raises the distance to the bound: with it the step is rejected (from `i ≤ 7`
+the loop runs forever when `n > 7`). -/
 example (P : FAssn) (s : L) : True := by
   fail_if_success
     have : FTotalTriple P (resetLoop.run s)
