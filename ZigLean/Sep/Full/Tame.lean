@@ -202,7 +202,7 @@ theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {L : Nat} {b : BlockId} {blk 
   unfold Mem.mappingRoom at h
   simp only [Bool.and_eq_true, Array.all_eq_true] at h
   obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp ho
-  have := h.2 j (by simpa using hi)
+  have := h.1.2 j (by simpa using hi)
   simp only [Array.getElem_zipIdx, Bool.or_eq_true, beq_iff_eq] at this
   exact this.resolve_left (by simpa using hj)
 

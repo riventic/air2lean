@@ -160,8 +160,8 @@ def boolLane (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.MM boolLaneLocals boolLaneExit).run' { (default : boolLaneLocals) with v := s1, local46 := s46 }
-  Zig.free s1
   Zig.free s46
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -234,8 +234,8 @@ def u24Lane (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     let i29 ← pure (Zig.addWrap i27 i28)
     let i30 ← Zig.intCast false false 32 i29
     pure (.ret i30)) : Zig.MM u24LaneLocals u24LaneExit).run' { (default : u24LaneLocals) with v := s2, local22 := s22 }
-  Zig.free s2
   Zig.free s22
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -436,8 +436,8 @@ def u3Lane (p0 : BitVec 32) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.MM u3LaneLocals u3LaneExit).run' { (default : u3LaneLocals) with v := s2, local67 := s67 }
-  Zig.free s2
   Zig.free s67
+  Zig.free s2
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -498,8 +498,8 @@ def u9Lane (p0 : BitVec 16) (p1 : BitVec 16) (p2 : BitVec 16) : Zig.MemM (BitVec
     let i44 ← pure (Zig.shl i20 (36 : BitVec 6))
     let i45 ← pure (i43 ||| i44)
     pure (.ret i45)) : Zig.MM u9LaneLocals u9LaneExit).run' { (default : u9LaneLocals) with v := s3, local27 := s27 }
-  Zig.free s3
   Zig.free s27
+  Zig.free s3
   match e with
   | .ret v => pure v
 

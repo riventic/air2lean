@@ -45,9 +45,10 @@ inductive Error where
   (`SIGFPE`), it is not a Zig panic. A proof of "never throws" shows that the code never runs
   the instruction on such an input (`Zig.asmTrap`). -/
   | trap
-  /-- The call stack is exhausted: a frame does not fit in the stack budget that the
-  environment selected (`Mem.stackLimit`, `Zig.enterFrame`, MM-5), or a stack block finds no room
-  in the address space (`Zig.alloc`, O-H). Native code overflows its stack (a signal, not a
+  /-- The call stack is exhausted: a frame or a stack block does not fit in the thread's stack
+  budget that the environment selected (`Mem.withStack`, `Zig.enterFrame`, `Zig.alloc .stack`,
+  MM-5, MM-18), or a block without an allocator finds no room in the address space (`Zig.alloc`,
+  O-H). Native code overflows its stack (a signal, not a
   panic); the model makes it an outcome of its own. A partial-correctness statement treats it as
   it treats a run that does not terminate (premise STK-01); a total one excludes it. -/
   | stackOverflow

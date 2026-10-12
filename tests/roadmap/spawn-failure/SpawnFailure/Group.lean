@@ -55,13 +55,6 @@ theorem writeWorker_spec {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (v : 
     fun _ _ h => ?_
   rwa [wr] at h
 
-/-- `free` of the first block. -/
-theorem free_front {R : FAssn} {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32}
-    (hxb : x.block = some b) (hx0 : x.off = 0) :
-    FTTriple (flagA x A b w ⋆ R) (Zig.free x) (fun _ => R) :=
-  (FTTriple.free' hxb (LawfulEnc.size_encode_u32 w) hx0 (by decide)).frame.post
-    fun _ _ h => sep_emp.mp (sep_comm h)
-
 /-- The pure fact of a framed load's post. -/
 theorem lift_l {φ : Prop} {P Q : FAssn} {r : Res} (h : ((⟪φ⟫ ⋆ P) ⋆ Q) r) : φ ∧ (P ⋆ Q) r :=
   sep_lift.mp (sep_assoc h)
@@ -681,12 +674,14 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   subst r₁
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  -- The frees.
-  refine WP.bind (WP.liftMem_fowned (free_front hxb hx0) ho₈ hc₈ (by rw [ht₈]; exact htl)
-    (by rw [upd_self]; exact hF₈) fun _ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
+  -- The frees, in reverse order of allocation (MM-18): the group, then `out`.
+  refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hgb hbs hg0 (by decide)) ho₈ hc₈
+    (by rw [ht₈]; exact htl) (by rw [upd_self]; exact sep_comm hF₈)
+    fun _ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
   rw [upd_upd] at ho₉
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (A := Ag) (K := .stack) hgb hbs hg0 (by decide)) ho₉ hc₉
-    (by rw [ht₉, ht₈]; exact htl) (by rw [upd_self]; exact hq₉) fun _ m₁₀ _ _ _ _ _ ht₁₀ => ?_)
+  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hxb (LawfulEnc.size_encode_u32 v) hx0
+    (by decide)) ho₉ hc₉ (by rw [ht₉, ht₈]; exact htl) (by rw [upd_self]; exact hq₉)
+    fun _ m₁₀ _ _ _ _ _ ht₁₀ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hsp => hja r ?_ hsp⟩
   rwa [ht₁₀, ht₉, ht₈] at hr
 

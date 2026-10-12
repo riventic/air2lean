@@ -237,6 +237,13 @@ theorem free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : Block
     FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
   (FTTotalTriple.free hpb hS h0 hpos hK).toPartial
 
+/-- `free'` of the block in front of a frame `R`: the frame stays. -/
+theorem free_front {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
+    FTTriple ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (free p) (fun _ => R) :=
+  (free' hpb hS h0 hpos hK).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
+
 /-- A store of the bytes `bs'` at byte `k` of a thread's block, whose full extent it owns. -/
 theorem storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
     {k a : Nat} (bs' : Array Byte) (hpb : p.block = some b) (hq : q = p.add k) (hn : 0 < bs'.size)

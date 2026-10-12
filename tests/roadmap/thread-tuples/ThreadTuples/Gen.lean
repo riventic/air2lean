@@ -169,9 +169,9 @@ def atomicShared (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
           let i35 ← pure ((.ok i34) : Except Zig.ErrName (BitVec 32))
           pure (.ret i35))
         | e => pure e))) : Zig.CM Tgt atomicSharedLocals atomicSharedExit).run' { (default : atomicSharedLocals) with left := s5, shared := s2, right := s7 }
-  Zig.free s5
-  Zig.free s2
   Zig.free s7
+  Zig.free s2
+  Zig.free s5
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -352,9 +352,9 @@ def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (
         let _i30 ← Zig.groupCancelC i7 p0
         let i31 ← pure ((.ok i29) : Except Zig.ErrName (BitVec 32))
         pure (.ret i31)))) : Zig.CM Tgt groupMixedLocals groupMixedExit).run' { (default : groupMixedLocals) with group := s7, out := s3, other := s5 }
-  Zig.free s7
-  Zig.free s3
   Zig.free s5
+  Zig.free s3
+  Zig.free s7
   match e with
   | .ret v => pure v
 
@@ -390,8 +390,8 @@ def mixed (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName 
       let i17 ← pure (Zig.addWrap i14 i16)
       let i18 ← pure ((.ok i17) : Except Zig.ErrName (BitVec 32))
       pure (.ret i18))) : Zig.CM Tgt mixedLocals mixedExit).run' { (default : mixedLocals) with out := s2, other := s4 }
-  Zig.free s2
   Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 

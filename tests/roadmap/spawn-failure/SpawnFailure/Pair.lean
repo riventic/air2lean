@@ -24,7 +24,7 @@ The proof is in the full-state concurrent separation logic (`docs/sep-threads.md
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn SpawnFailure
-open SpawnFailure.Group (flagA KidA writeWorker_spec free_front lift_l start)
+open SpawnFailure.Group (flagA KidA writeWorker_spec lift_l start)
 
 namespace SpawnFailure.Pair
 
@@ -400,13 +400,13 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     refine WP.bind (WP.callRC_ok rfl ?_)
     simp only [StateT.run_pure]
     refine WP.pure' ?_
-    refine WP.bind (WP.liftMem_fowned (free_front (R := flagA s3 Ar kr 0) hlb hl0)
-      (ho₅.current 0) rfl (by rw [hsz₅]; decide)
-      (by rw [hown₅, ← rsum_comm hdLR]
-          exact ⟨hL, hR, hdLR, rfl, hLa, hRa⟩)
+    -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
+    refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb (LawfulEnc.size_encode_u32 0) hr0
+      (by decide)) (ho₅.current 0) rfl (by rw [hsz₅]; decide)
+      (by rw [hown₅]; exact ⟨hR, hL, hdLR.symm, rfl, hRa, hLa⟩)
       fun _ m₆ r₆ _ ho₆ hq₆ hc₆ ht₆ => ?_)
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (A := Ar) (K := .stack) hrb
-      (LawfulEnc.size_encode_u32 0) hr0 (by decide)) ho₆ hc₆
+    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 0) hl0
+      (by decide)) ho₆ hc₆
       (by rw [ht₆]; show 0 < m₅.threads.size; rw [hsz₅]; decide) (by rw [upd_self]; exact hq₆)
       fun _ m₇ _ _ _ _ _ ht₇ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc hc0, rfl⟩, joined_of ?_ fun i h0 hlt => ?_⟩
@@ -512,13 +512,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp only []
     refine WP.pure' ?_
     have hsz₁₀ : m₁₀.threads.size = 2 := by rw [hth₁₀, Array.size_setIfInBounds, hsz₉]
-    refine WP.bind (WP.liftMem_fowned (free_front (R := flagA s3 Ar kr 0) hlb hl0)
-      ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide)
-      (by rw [upd_self, rsum_comm hd]; exact ⟨hk1, hR, hd.symm, rfl, hka1, hRa⟩)
+    -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
+    refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb (LawfulEnc.size_encode_u32 0) hr0
+      (by decide)) ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide)
+      (by rw [upd_self]; exact ⟨hR, hk1, hd, rfl, hRa, hka1⟩)
       fun _ m₁₁ r₁₁ _ ho₁₁ hq₁₁ hc₁₁ ht₁₁ => ?_)
     rw [upd_upd] at ho₁₁
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (A := Ar) (K := .stack) hrb
-      (LawfulEnc.size_encode_u32 0) hr0 (by decide)) ho₁₁ hc₁₁
+    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 v) hl0
+      (by decide)) ho₁₁ hc₁₁
       (by rw [ht₁₁, hsz₁₀]; decide) (by rw [upd_self]; exact hq₁₁) fun _ m₁₂ _ _ _ _ _ ht₁₂ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc₂ hc0, rfl⟩, joined_of ?_ fun i hi0 hlt => ?_⟩
     · rw [ht₁₂, ht₁₁, hth₁₀, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi₉.t0
@@ -696,13 +697,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   rw [upd_upd] at ho₁₆
   simp only []
   refine WP.pure' ?_
-  -- The frees.
-  refine WP.bind (WP.liftMem_fowned (free_front (R := flagA s3 Ar kr (addWrap v 1)) hlb hl0)
-    ho₁₆ hc₁₆ (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact hA₁₆)
+  -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
+  refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb
+    (LawfulEnc.size_encode_u32 (addWrap v 1)) hr0 (by decide)) ho₁₆ hc₁₆
+    (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact sep_comm hA₁₆)
     fun _ m₁₇ r₁₇ _ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)
   rw [upd_upd] at ho₁₇
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (A := Ar) (K := .stack) hrb
-    (LawfulEnc.size_encode_u32 _) hr0 (by decide)) ho₁₇ hc₁₇
+  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 v) hl0
+    (by decide)) ho₁₇ hc₁₇
     (by rw [ht₁₇, ht₁₆, ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact hq₁₇)
     fun _ m₁₈ _ _ _ _ _ ht₁₈ => ?_)
   refine WP.pure' ⟨.inl rfl, fun r hr hs => hja r ?_ hs⟩
