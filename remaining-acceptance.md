@@ -255,6 +255,8 @@ Classification: research.
 
 separate memory-order semantics, including a qualified SC order and the actual requirements of unordered operations. Acceptance: litmus proofs distinguish relaxed, acquire-release and SC outcomes. Stronger rules never remove an outcome permitted by the chosen target model without justification.
 
+Research progress: Design and recommendation in [docs/research/C10.md](docs/research/C10.md): `seq_cst` as a scheduler-order SC with two floors (an SC read reads at or after the newest SC message of its location, an SC write goes after it; no new happens-before edges), checked against an executable RC11 oracle over a litmus family, and an LLVM-faithful `unordered` load and store in every allocator mode (Zig has no fence in 0.14.1 to 0.17.0, and rejects `unordered` RMW/`cmpxchg`). Evidence: `tests/roadmap/sc-order` (native litmus on aarch64-macos, aarch64-linux and x86_64-linux under Rosetta, and `Sc.lean`, which shows the model produces the SC-forbidden outcomes of `sb`, `2+2w` and `iriw` with `seq_cst` and cannot tell `seq_cst` from release/acquire, ORD-03). Remaining: the whole implementation; premises ORD-07/ORD-08 to be assigned.
+
 ## C11 — Weak CAS and message precision
 
 Classification: complete.
