@@ -44,11 +44,6 @@ theorem pts_iff_region {v : T} {h : Heap} :
   ⟨fun ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ => ⟨bs, hs, hv, A, S, K, ha, hK, hb⟩,
     fun ⟨bs, hs, hv, A, S, K, ha, hK, hb⟩ => ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩⟩
 
-/-- An aligned part: byte `o` of an `a`-aligned address is `b`-aligned if `b` divides `a` and `o`. -/
-theorem mod_add_dvd {A x : Nat} (ha : (A + x) % a = 0) (hb : b ∣ a) (ho : b ∣ o) :
-    (A + x + o) % b = 0 :=
-  Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hb (Nat.dvd_of_mod_eq_zero ha)) ho)
-
 end Bytes
 
 namespace Full

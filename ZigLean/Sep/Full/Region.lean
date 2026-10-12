@@ -169,10 +169,6 @@ end FTotalTriple
 The native rules of owned bytes (`Ops.lean`: `load_bytesAt`, `store_bytesAt`, `memset_bytesAt`,
 `memmove_bytesAt`) with the region's alignment and kind. -/
 
-theorem mod_dvd_add {A x a al o : Nat} (hA : (A + x) % a = 0) (hal : al ∣ a) (halo : al ∣ o) :
-    (A + x + o) % al = 0 :=
-  Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hA)) halo)
-
 namespace FTotalTriple
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
@@ -217,7 +213,7 @@ undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
       (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) := by
   rw [Ptr.elem_eq]
   exact region_of' fun hA hK => store_bytesAt v (by rw [LawfulEnc.size_encode]; exact hpos)
-    (by rw [LawfulEnc.size_encode]; exact ho) (mod_dvd_add hA hal halo) hK
+    (by rw [LawfulEnc.size_encode]; exact ho) (mod_add_dvd hA hal halo) hK
 
 /-- **Load of an item that a store wrote** (at item `i`, byte `o`): its value. -/
 @[fsym] theorem regionLoadWritten {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al o : Nat} {v : T}
@@ -229,7 +225,7 @@ undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
   have hw := LawfulEnc.size_encode v
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
   rw [Ptr.elem_eq, hoi]
-  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_dvd_add hA hal halo) ?_
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
   have e := extract_writeBytes bs o (Enc.encode v) (by omega)
   rw [hw] at e
   rw [e]; exact LawfulEnc.decode_encode v
@@ -244,7 +240,7 @@ with `Ptr.add`). -/
   have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
   rw [e]
   exact region_of' fun hA hK => store_bytesAt v (by rw [LawfulEnc.size_encode]; exact hpos)
-    (by rw [LawfulEnc.size_encode]; exact ho) (mod_dvd_add hA hal halo) hK
+    (by rw [LawfulEnc.size_encode]; exact ho) (mod_add_dvd hA hal halo) hK
 
 /-- **Load of an item that a store wrote**, through a pointer formed with `Ptr.add`. -/
 @[fsym] theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : Nat} {v : T}
@@ -256,7 +252,7 @@ with `Ptr.add`). -/
   have hw := LawfulEnc.size_encode v
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
   subst hko
-  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_dvd_add hA hal halo) ?_
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
   have e := extract_writeBytes bs o (Enc.encode v) (by omega)
   rw [hw] at e
   rw [e]; exact LawfulEnc.decode_encode v
@@ -300,8 +296,8 @@ region `d`: the model's checks pass (equal counts; no overlap, by separation). -
   obtain ⟨r₁, r₂, hd, rfl, ⟨⟨hA, hK, hb₁⟩, hk₁, hg₁⟩, ⟨⟨hA', hK', hb₂⟩, hk₂, hg₂⟩⟩ := hp
   have t := memmove_bytesAt (d := d) (s := s) (k := 0) (j := 0) (A := A) (S := S) (K := K)
     (A' := A') (S' := S') (K' := K') (bd := bd) (bsrc := bsrc) (sz := sz) (da := da) (sa := sa)
-    (n := n) (by omega) (by omega) (mod_dvd_add hA hda (Nat.dvd_zero _))
-    (mod_dvd_add hA' hsa (Nat.dvd_zero _)) hK
+    (n := n) (by omega) (by omega) (mod_add_dvd hA hda (Nat.dvd_zero _))
+    (mod_add_dvd hA' hsa (Nat.dvd_zero _)) hK
   simp only [Int.natCast_zero, Ptr.add_zero, Nat.zero_add] at t
   refine ⟨_, _, ec ▸ t, ⟨r₁, r₂, hd, rfl, ⟨hb₁, hk₁, hg₁⟩, ⟨hb₂, hk₂, hg₂⟩⟩, fun _ _ h => ?_⟩
   obtain ⟨q₁, q₂, hdq, rfl, ⟨hq₁, hk₁', hg₁'⟩, ⟨hq₂, hk₂', hg₂'⟩⟩ := h
