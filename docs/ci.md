@@ -50,6 +50,27 @@ other step.
   stats them from threads that the reducer did not attribute to git; and any edit of a `test`
   step changed every test row's key.
 
+### After PR #153 (2026-10-12)
+
+| run | event | wall | runner min (macOS) | queue max / sum | golden 0.15.2 / 0.17.0 / 0.14.1 | macOS rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| 38220406483 | merge_group (#149, docs only) | 29.5 | 286 (53) | 6.2 / 43 | 9.3 / 10.0 / 4.5 | 14.6-20.3 |
+| 38221218328 | pull_request (#151, 94 Lean files) | 51.0 | 370 (61) | 18.9 / 215 | 10.0 / 10.3 / 6.9 | 17.5-21.6 |
+| before: 38182713444, 38180914212 | dispatch, PR | 26.6-30.8 | 332-343 (60-66) | 6-12 / 36-51 | 18.0-20.6 / 17.2-19.5 / 7.1-7.5 | 17.6-24.2 |
+
+- Golden rows of 0.15.2 and 0.17.0: 17-21 min to 9-10 min. Part of it is PR #152 (in-job
+  parallelism, merged just before): the 0.16.0 golden row, untraced before and after, went from
+  15 to 9 min; the rest is dropping the tracer (`commit_bound`).
+- The narrowed rows (mutation, build modes, lean of 0.14.1/0.15.2/0.17.0) are reusable for
+  changes outside their directories; a `merge_group` run still executes them (see
+  [reuse in the merge queue](#reuse-in-the-merge-queue)).
+- macOS: both runs above restored a `main` entry from before `ci-cache.yml` rebuilt it with
+  `Proofs` (08:02Z), or changed Lean sources, so their proof builds (7-13 min) were legitimate;
+  the recipe-keyed entry is now restored (run 38221218328 hit the new key prefix).
+- Wall time is set by the 20-slot queue: run 38221218328 waited 215 job-minutes. One run alone
+  needs at least runner-minutes / 20 = 14-18 min; its critical path (build-ahead 2 min, then the
+  longest of `receipt`, `audit`, `lean` 0.16.0 and a mutation shard, 15-18 min) is about the same.
+
 ## Design overview
 
 1. **Merge queue gates every merge with the full CI.** `main` requires the single status
