@@ -1,6 +1,6 @@
 # Roadmap handoff
 
-This handoff finishes the existing eight-closeout batch and preserves the broader roadmap. All eight closeouts are merged at feature integration head `5f7f547ed885d56624c9536c90e2b0d60e901568`. The register has **89 requirements: 37 complete, 42 partial, 1 open and 9 research**. The other 52 requirements remain incomplete even where a useful bounded feature has shipped.
+This handoff finishes the existing eight-closeout batch and preserves the broader roadmap. All eight closeouts are merged at feature integration head `5f7f547ed885d56624c9536c90e2b0d60e901568`. The register has **89 requirements: 39 complete, 40 partial, 1 open and 9 research**. The other 52 requirements remain incomplete even where a useful bounded feature has shipped.
 
 The repository translates a supported subset of Zig into Lean, supplies executable memory/concurrency models and kernel-checked proofs, and compares selected generated computations with compiled Zig. This batch improves error/outcome reporting, ABI/storage behavior, deadlines, sentinel allocation, byte permutations and a bounded RwLock snapshot client. Use the [README](https://github.com/riventic/air2lean/blob/main/README.md) to start, [PLAN](https://github.com/riventic/air2lean/blob/main/PLAN.md) for implemented milestones and [coverage](https://github.com/riventic/air2lean/blob/main/docs/coverage.md) for supported domains.
 
@@ -38,7 +38,7 @@ Use an isolated worktree and preserve the dirty primary. Lean runs go through `s
 
 Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`, local).
 
-The register below still counts **37 complete, 42 partial, 1 open and 9 research**. The open batch PRs change these counts when they merge; each PR updates its own rows.
+The register below still counts **39 complete, 40 partial, 1 open and 9 research**. The open batch PRs change these counts when they merge; each PR updates its own rows.
 
 ### Merged to main on 2026-10-11/12
 
