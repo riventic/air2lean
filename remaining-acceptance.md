@@ -1,7 +1,10 @@
 # Remaining acceptance — portable companion
 
-All 89 IDs, order, classifications and remaining acceptance statements are retained. Counts are 44 complete, 35 partial, 1 open and 9 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All <!-- register:total -->89<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->44 complete, 35 partial, 1 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
+The sections below are generated from `assurance/register/<ID>.md` (`scripts/register.py generate`); edit those files, not the sections.
+
+<!-- register:acceptance:begin -->
 ## T01 — Explicit target and build profiles
 
 Classification: complete.
@@ -252,6 +255,8 @@ Classification: research.
 
 separate memory-order semantics, including a qualified SC order and the actual requirements of unordered operations. Acceptance: litmus proofs distinguish relaxed, acquire-release and SC outcomes. Stronger rules never remove an outcome permitted by the chosen target model without justification.
 
+Research progress: Design and recommendation in [docs/research/C10.md](docs/research/C10.md): `seq_cst` as a scheduler-order SC with two floors (an SC read reads at or after the newest SC message of its location, an SC write goes after it; no new happens-before edges), checked against an executable RC11 oracle over a litmus family, and an LLVM-faithful `unordered` load and store in every allocator mode (Zig has no fence in 0.14.1 to 0.17.0, and rejects `unordered` RMW/`cmpxchg`). Evidence: `tests/roadmap/sc-order` (native litmus on aarch64-macos, aarch64-linux and x86_64-linux under Rosetta, and `Sc.lean`, which shows the model produces the SC-forbidden outcomes of `sb`, `2+2w` and `iriw` with `seq_cst` and cannot tell `seq_cst` from release/acquire, ORD-03). Remaining: the whole implementation; premises ORD-07/ORD-08 to be assigned.
+
 ## C11 — Weak CAS and message precision
 
 Classification: complete.
@@ -273,6 +278,8 @@ Research progress: Design and recommendation in [docs/research/C12.md](docs/rese
 Classification: research.
 
 explicit scheduler and memory-progress assumptions, total-correctness rules, variants and liveness reasoning. Treat deadlock, starvation and divergence as distinct properties. Acceptance: prove a task completion or shutdown theorem under stated assumptions; bounded fuel exhaustion is not presented as evidence of termination.
+
+Research progress: Design and recommendation in [docs/research/C13.md](docs/research/C13.md): termination of waiting code is credits (own progress) plus one scheduler premise, weak fairness of ready threads (proposed SCH-01, superseding the client-specific THR-09 `Cooperative`), applied once in the adequacy theorem; waiting iterations (futex retry, join, `WaitGroup`) are justified by a non-mintable wait token with a level, lock-free CAS loops by HMRS credit transfer; no futex fairness is assumed (spurious returns and wake choice stay adversarial) and starvation freedom of one waiter is not claimed. Native probe (`docs/research/c13-probe`): a futex mutex of the `Io.Mutex` algorithm lets a relocking thread take 96% of the acquisitions on aarch64-macos and x86_64-linux, and a futex wait returns with `EINTR` unwoken. Remaining: everything beyond the design (`WeakFair` on the trace, wait-token resource, rules, clients); the futex counterexample is an argument, not yet a checked theorem.
 
 ## C14 — Reader writer locks and reusable synchronization contracts
 
@@ -395,6 +402,8 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 Classification: research.
 
 selected verified instruction semantics or qualified contracts; optional architecture-specific backends, including ARM, only with matching register/effect rules. Acceptance: an instruction's behavior is proved or marked as an assumption. Wrapper proofs and instruction proofs are reported separately.
+
+Research progress: Design and recommendation in [docs/research/A02.md](docs/research/A02.md): an instruction-semantics library (`ZigLean/Isa`) keyed by the decoded instruction, replacing the opaque `airAsm_<hash>` for covered blocks, with the template decoded and its register footprint checked in the translator, each instruction anchored to a formal ISA specification (Sail Arm/ASL extraction where it extracts, cross-model vectors for x86) and to native execution on real CPUs, the assembler checked by an assemble-and-disassemble row (proposed ASM-07/ASM-08) and the CPU requirement derived from `profile.features` (admission ASM-09); x86_64 migrates the 19 allowlist entries first, aarch64 follows. `tests/roadmap/asm-semantics/check.sh` records native observations of 0.17.0 (x86_64 under Rosetta, aarch64 on the host): `lzcnt`'s encoding runs as `bsr` without LZCNT (`bsr(1)=0` against `lzcnt(1)=63`), aarch64 `udiv` by zero is `0` where x86 `divl` traps, `cntvct_el0` is an EL0 environment read, and at the baseline CPU the self-hosted x86_64 backend rejects `lzcnt`/`popcnt`/`rdrand` that LLVM assembles (upstream row 05). Finding: the baseline `asm_env` profile has no `rdrnd`/`popcnt`/`lzcnt` feature although the allowlist accepts them (ASM-04's CPU half is not derived from the profile). Remaining: all phases (decoder, x86_64 and aarch64 semantics, anchors, std crypto client).
 
 ## A03 — End-to-end assembly testing
 
@@ -749,3 +758,4 @@ Classification: open.
 verify C programs through stock `zig translate-c` and the existing Zig route; state the trust added by translate-c and the libc headers. Acceptance: every corpus file is translated and `#guard`-checked or rejected by a named, documented gate; every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; known compiler bugs are gated or avoided by a qualified Zig version; the heavy coverage run is reproducible and CI checks its record (docs/c-frontend.md).
 
 Baseline ([PR129](https://github.com/riventic/air2lean/pull/129)): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+<!-- register:acceptance:end -->

@@ -40,6 +40,7 @@ class Scratch(unittest.TestCase):
             (self.root/rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT/rel, self.root/rel)
         shutil.copytree(ROOT/'coverage', self.root/'coverage')
+        shutil.copytree(ROOT/'assurance/register', self.root/'assurance/register')
         for example in (ROOT/'examples').iterdir():
             if example.is_dir():
                 (self.root/'examples'/example.name).mkdir(parents=True)
@@ -112,8 +113,7 @@ class Stale(Scratch):
         self.assertEqual(cells, {v: 'yes' if v == '0.16.0' else '—' for v in cells})
 
     def test_register_status_change_is_stale(self):
-        self.edit('ROADMAP.md', '| Q01 | Generated program and parser fuzzing | partial |',
-                  '| Q01 | Generated program and parser fuzzing | complete |')
+        self.edit('assurance/register/Q01.md', 'status: partial', 'status: complete')
         self.assertProblem('docs/support-matrix.md: generated region is stale')
         reg = MATRIX['register'](self.root)
         complete = sum(row['status'] == 'complete' for row in reg)

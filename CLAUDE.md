@@ -93,6 +93,11 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - After merging `main`, run `scripts/regen.sh`: it regenerates every generated file in order
   (`--pr` skips the whole-tree files). Do not write private regeneration scripts; fix or extend
   `scripts/regen.py` instead.
+- **The requirement register is data.** Never hand-edit the register table, the counts or the
+  acceptance sections in `ROADMAP.md` / `remaining-acceptance.md` (between `register:` markers).
+  Edit `assurance/register/<ID>.md` (status, row, acceptance), then run
+  `scripts/register.py generate`. A branch that already edited the markdown converts with
+  `scripts/register.py import` (docs/ci.md#requirement-register).
 - On the dev Mac, set `AIR2LEAN_CAS_DIR=$HOME/.cache/air2lean/cas`: worktrees then share patched
   compilers (`scripts/zig-air.sh <version>`), Lean build outputs and AIR exports. Unset (CI), nothing
   is cached. See [docs/build-cache.md](docs/build-cache.md).
