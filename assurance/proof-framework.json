@@ -86,6 +86,12 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "FnSpec",
+      "module": "ZigLean.Sep.Full.Dispatch",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (FnSpec, framework-approvals.md)"
+    },
+    {
       "name": "FutexSpec",
       "module": "ZigLean.Conc.Spec.Futex",
       "status": "legacy-to-retire"
@@ -475,9 +481,6 @@
       "path": "Proofs/Lists/Sep.lean"
     },
     {
-      "path": "Proofs/Slices/Sep.lean"
-    },
-    {
       "path": "Proofs/Sync/Handoff.lean"
     },
     {
@@ -747,6 +750,10 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
+      "path": "tests/roadmap/strength-log/ProofsSlices.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
     },
     {
@@ -775,15 +782,6 @@
     },
     {
       "path": "tutorials/memory-safety/Solution.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Main.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Negative.lean"
-    },
-    {
-      "path": "tutorials/mutable-arrays/Solution.lean"
     }
   ]
 }

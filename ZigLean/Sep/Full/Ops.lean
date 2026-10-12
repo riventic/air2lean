@@ -500,6 +500,32 @@ theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K' : BlockKind} {b
   obtain ⟨b, blk, hacc, -⟩ := (Holds.split hd hh).bytesAt_access h1 hpos hkd had
   simp [Zig.memmove, h0, zig_unfold, hacc]
 
+/-- **`@memmove`** of `n` items of `sz` bytes from byte `j` to byte `k` of the same owned bytes,
+not of a `const` global: the ranges may overlap (the bytes are read before they are written). -/
+theorem memmove_bytesAt_self {sz da sa j : Nat} {n : BitVec 64}
+    (hkd : k + n.toNat * sz ≤ bs.size) (hjs : j + n.toNat * sz ≤ bs.size)
+    (had : (A + q.off.toNat + k) % da = 0) (has : (A + q.off.toNat + j) % sa = 0)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt q A S K bs)) (Zig.memmove sz da sa (q.add k) (q.add j) n)
+      (fun _ => up (bytesAt q A S K (writeBytes bs k (bs.extract j (j + n.toNat * sz))))) := by
+  by_cases h0 : n.toNat = 0 ∨ sz = 0
+  · have e : n.toNat * sz = 0 := by rcases h0 with h | h <;> simp [h]
+    rw [e, Nat.add_zero, show bs.extract j j = #[] from Array.eq_empty_of_size_eq_zero (by simp; omega),
+      writeBytes_empty (by omega)]
+    exact of_run fun m r rF hh hp hs =>
+      ⟨(), m, r, by simp [Zig.memmove, h0, zig_unfold], hh, hp, hs⟩
+  have hpos : 0 < n.toNat * sz := Nat.mul_pos (by omega) (by omega)
+  have ht : FTotalTriple (up (bytesAt q A S K bs))
+      (Zig.loadBytes (q.add j) (n.toNat * sz) sa >>= fun x => Zig.storeBytes (q.add k) da x)
+      (fun _ => up (bytesAt q A S K (writeBytes bs k (bs.extract j (j + n.toNat * sz))))) :=
+    bind (loadBytes_bytesAt hpos hjs has) fun _ => lift fun hx => by
+      subst hx
+      exact storeBytes_bytesAt (by simp only [Array.size_extract]; omega)
+        (by simp only [Array.size_extract]; omega) had hK
+  refine of_runEq fun m r rF hh hp hs => ⟨_, m, ?_, hh, hs, ht⟩
+  obtain ⟨b, blk, hacc, -⟩ := hh.bytesAt_access hp hpos hkd had
+  simp [Zig.memmove, h0, zig_unfold, hacc]
+
 end OwnedBytes
 
 /-- An owned typed value is owned bytes that decode to it (`pts`). -/
