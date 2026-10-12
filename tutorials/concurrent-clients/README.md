@@ -39,8 +39,9 @@ lake env lean tutorials/concurrent-clients/Main.lean
 ```
 
 [`Main.lean`](Main.lean) combines the two into `finished_run_returns_four`: every run that the
-scheduler finishes succeeds and returns 4. The error case is refuted by `mutexCounter_safe`,
-the value fixed by `mutexCounter_spec`.
+scheduler finishes succeeds and returns 4, unless its stack overflowed (`.stackOverflow`, which
+every partial statement allows: [STK-01](../../docs/premises.md#stk-01)). Every other error is
+refuted by `mutexCounter_safe`, the value fixed by `mutexCounter_spec`.
 
 ## Exercise
 
