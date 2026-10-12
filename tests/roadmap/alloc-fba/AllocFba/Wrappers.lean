@@ -10,8 +10,8 @@ the allocator through the `Allocator` value's vtable (`vtR`: persistent knowledg
 vtable). Each contract below holds for **every allocator invariant `I`** whose vtable entries
 satisfy their `FAllocSpec` triples at the wrapper's alignment (the hypotheses `hA`, `hF`): the
 wrapper's own code (the zero-length case, the length overflow check, the `@memset(_, undefined)` of
-fresh and freed memory, the `@alignCast` check, `@returnAddress()`, the sentinel's `len + 1` on
-`free`) is walked by `fsym`, and the
+fresh and freed memory, the `@alignCast` check, `@returnAddress()`, the `@memcpy` of `dupe` and
+its aliasing check, the sentinel's `len + 1` on `free`) is walked by `fsym`, and the
 vtable call is the entry's triple. The `…_of` corollaries take the triples from `FAllocSpec` of
 the translated `FixedBufferAllocator` entries (`impl`), for every invariant, in particular
 `FBA.fallocSpec`'s.
@@ -60,6 +60,30 @@ theorem create_spec (hfit : I.fits (4 : BitVec 64).toNat 2)
     FTotalTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
       (fun r => I.own ⋆ (I.allocResult 2 4 r ⋆ vtR vtp fns.toList)) := by
   fsym [hA]
+
+/-- **`a.dupe(u8, s)`** of a nonempty source region (of any provenance): a fresh grant with a
+copy of its bytes, or `error.OutOfMemory` and nothing; the source stays. The `@memcpy` aliasing
+check passes because the grant and the source are owned separately (`MemFacts.regions_apart`);
+no premise about the placement is needed. -/
+theorem dupe_spec (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hfit : I.fits s.len.toNat 0)
+    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
+      FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
+        (I.allocPost len.toNat 0)) :
+    FTotalTriple (I.own ⋆ (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))
+      (mem_Allocator_dupe__anon_63991a21d32c ⟨ctx, vtp⟩ s)
+      (fun r => I.own ⋆ (I.bytesResult 0 s.len bs r ⋆
+        (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) := by
+  fsym [hA, mulWithOverflow_one]
+
+/-! `realloc` (`reallocAdvanced__anon_0df1`, `realloc__anon_af0c`) and `allocSentinel`
+(`__anon_79cb`) wait on the engine (`~/.cache/air2lean/handoffs/codex__fsym-engine.md`):
+the walk of both reaches the returns, and what is left is the return entailment of a grant whose
+bytes changed after the allocation (the `@memset(_, undefined)` of the fresh bytes, the
+`@memcpy` of the moved prefix, the stored sentinel). Its token `I.tok p bs.size …` still names
+the size of the allocation's existential `bs`, so the postcondition's grant `I.granted p k ?bs'`
+gets `?bs' := bs` from the token before the region is planned (request #12, mechanism M2), and
+the region's `n + 1` bytes match the postcondition's only up to arithmetic (request #20). -/
 
 /-! ## Release -/
 
@@ -116,6 +140,14 @@ theorem create_of (hfit : I.fits (4 : BitVec 64).toNat 2) :
     FTotalTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
       (fun r => I.own ⋆ (I.allocResult 2 4 r ⋆ vtR vtp fns.toList)) :=
   create_spec ctx vtp I hfit fun len ra h1 h2 => h.alloc len 2 ra h1 (by decide) h2
+
+theorem dupe_of (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hfit : I.fits s.len.toNat 0) :
+    FTotalTriple (I.own ⋆ (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))
+      (mem_Allocator_dupe__anon_63991a21d32c ⟨ctx, vtp⟩ s)
+      (fun r => I.own ⋆ (I.bytesResult 0 s.len bs r ⋆
+        (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) :=
+  dupe_spec ctx vtp I s bs hlen hpos hfit fun len ra h1 h2 => h.alloc len 0 ra h1 (by decide) h2
 
 theorem free_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) :
     FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))
