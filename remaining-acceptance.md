@@ -1,7 +1,10 @@
 # Remaining acceptance — portable companion
 
-All 89 IDs, order, classifications and remaining acceptance statements are retained. Counts are 37 complete, 42 partial, 1 open and 9 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All <!-- register:total -->89<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->37 complete, 42 partial, 1 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
+The sections below are generated from `assurance/register/<ID>.md` (`scripts/register.py generate`); edit those files, not the sections.
+
+<!-- register:acceptance:begin -->
 ## T01 — Explicit target and build profiles
 
 Classification: complete.
@@ -741,3 +744,4 @@ Classification: open.
 verify C programs through stock `zig translate-c` and the existing Zig route; state the trust added by translate-c and the libc headers. Acceptance: every corpus file is translated and `#guard`-checked or rejected by a named, documented gate; every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; known compiler bugs are gated or avoided by a qualified Zig version; the heavy coverage run is reproducible and CI checks its record (docs/c-frontend.md).
 
 Baseline ([PR129](https://github.com/riventic/air2lean/pull/129)): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+<!-- register:acceptance:end -->

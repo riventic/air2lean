@@ -16,6 +16,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import register as register_data  # noqa: E402
 GENERATOR = 'scripts/support-matrix.py'
 # Every committed input; tests copy exactly these into a scratch root.
 SOURCES = [
@@ -25,7 +27,7 @@ SOURCES = [
     'Air2Lean/Air/Dialect.lean', 'Air2Lean/Main.lean', 'Air2Lean/Diagnose.lean',
     '.github/workflows/ci.yml',
 ]
-SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions']
+SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions', 'assurance/register/*.md']
 DEFAULT_SCRIPTS = ['scripts/check.sh', 'scripts/mutate.sh', 'scripts/translate.sh']
 # scripts/doctor.sh delegates to scripts/doctor.py, whose default is the release metadata's.
 DEFAULT_METADATA = 'compatibility.json'
@@ -165,18 +167,16 @@ def coverage(root):
 
 
 def register(root):
-    rows = []
-    for line in read(root, 'ROADMAP.md').splitlines():
-        m = re.match(r'\| ([A-Z]\d\d) \| ([^|]+) \| (\w+) \|', line)
-        if m:
-            rows.append({'id': m.group(1), 'name': m.group(2).strip(), 'status': m.group(3)})
-    if not rows: raise Stale('ROADMAP.md: requirement register not found')
-    for row in rows:
-        if row['status'] not in STATUSES:
-            raise Stale(f'ROADMAP.md: {row["id"]} has unknown status {row["status"]!r}')
-        if row['id'][0] not in AREAS:
-            raise Stale(f'ROADMAP.md: {row["id"]} has an unknown area prefix')
-    return rows
+    try:
+        recs = register_data.load(root)
+    except ValueError as e:
+        raise Stale(str(e)) from e
+    for rec in recs:
+        if rec['status'] not in STATUSES:
+            raise Stale(f'{rec["id"]} has unknown status {rec["status"]!r}')
+        if rec['id'][0] not in AREAS:
+            raise Stale(f'{rec["id"]} has an unknown area prefix')
+    return [{'id': r['id'], 'name': r['title'], 'status': r['status']} for r in recs]
 
 
 def lean_string(root, rel, name):

@@ -299,6 +299,8 @@ STEPS = [
                       'tests/roadmap/try-pointers/integration-qualification.json'], step_pins),
     ('premises', 'tree', ['docs/premise-index.md'],
      simple([PY, '-B', 'scripts/premises.py', 'check'], [PY, '-B', 'scripts/premises.py', 'write'])),
+    ('register', 'pr', ['ROADMAP.md and remaining-acceptance.md (marked regions)'],
+     simple([PY, 'scripts/register.py', 'check'], [PY, 'scripts/register.py', 'generate'])),
     ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
     ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
