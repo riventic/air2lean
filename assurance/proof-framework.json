@@ -9,7 +9,8 @@
     {
       "name": "CAllocSpec",
       "module": "ZigLean.Sep.Full.Dispatch",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "CTriple",
@@ -64,17 +65,20 @@
     {
       "name": "FTTReturns",
       "module": "ZigLean.Sep.Full.Thread",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "FTTotalTriple",
       "module": "ZigLean.Sep.Full.Thread",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "FTTriple",
       "module": "ZigLean.Sep.Full.Thread",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "FTotalTriple",
@@ -154,7 +158,8 @@
     {
       "name": "TotalTripleIn",
       "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "TotalTripleWithin",
@@ -179,7 +184,8 @@
     {
       "name": "Within",
       "module": "ZigLean.Sep.Full.Extent",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "WithinSpec",
@@ -192,67 +198,78 @@
       "tactic": "arena_bounds",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_free",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_free_checked",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_free_tail",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_loadBuf",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_prefix",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_remap",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_resize",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_resize_checked",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_resize_tail",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "arena_toInt",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "blkat_alloc",
@@ -300,25 +317,29 @@
       "tactic": "fsym",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Auto",
-      "status": "target"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "fsym_arith",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Auto",
-      "status": "target"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "fsym_entail",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Auto",
-      "status": "target"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "fsym_fact",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.AutoRules",
-      "status": "target"
+      "status": "target",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "gen_norm",
@@ -474,7 +495,8 @@
       "tactic": "unroll_solo",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Unroll",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "vc_gen",
@@ -492,7 +514,8 @@
       "tactic": "within",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Extent",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "tactic": "word_step",
@@ -656,43 +679,52 @@
       "path": "ZigLean/Sep/Full/Atomic.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/AutoClaims.lean"
+      "path": "ZigLean/Sep/Full/AutoClaims.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/AutoRules.lean"
+      "path": "ZigLean/Sep/Full/AutoRules.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Conc.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Dispatch.lean"
+      "path": "ZigLean/Sep/Full/Dispatch.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ghost.lean"
+      "path": "ZigLean/Sep/Full/Ghost.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Logic.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Mmap.lean"
+      "path": "ZigLean/Sep/Full/Mmap.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ops.lean"
+      "path": "ZigLean/Sep/Full/Ops.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Pinned.lean"
+      "path": "ZigLean/Sep/Full/Pinned.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Strength.lean"
+      "path": "ZigLean/Sep/Full/Strength.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Tame.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/ThreadBridge.lean"
+      "path": "ZigLean/Sep/Full/ThreadBridge.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Toy.lean"
@@ -770,7 +802,8 @@
       "path": "tests/roadmap/address-reuse/Kernel.lean"
     },
     {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean"
+      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
@@ -839,10 +872,12 @@
       "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
     },
     {
-      "path": "tests/roadmap/memory-hardening/NoRoom.lean"
+      "path": "tests/roadmap/memory-hardening/NoRoom.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "tests/roadmap/one-logic/Strength.lean"
+      "path": "tests/roadmap/one-logic/Strength.lean",
+      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "tests/roadmap/outcome-taxonomy/Taxonomy.lean"
