@@ -206,12 +206,6 @@ theorem toInt_eq_div (x : BitVec w) :
 theorem val_true (a : BitVec w) : Zig.val true a = a.toInt := rfl
 theorem val_false (a : BitVec w) : Zig.val false a = (a.toNat : Int) := rfl
 
-/-- The value of `BitVec.ofInt m v` (the result of an `@intCast`) as an integer, without
-`Int.toNat`. -/
-theorem toNat_ofInt_emod (m : Nat) (v : Int) : ((BitVec.ofInt m v).toNat : Int) = v % 2 ^ m := by
-  have hp := Nat.two_pow_pos m
-  rw [BitVec.toNat_ofInt, Int.toNat_of_nonneg (Int.emod_nonneg _ (by omega))]; norm_cast
-
 /-- `@truncate`: the low `m` bits. -/
 theorem toNat_trunc {m : Nat} (a : BitVec w) : (Zig.trunc m a).toNat = a.toNat % 2 ^ m :=
   BitVec.toNat_setWidth m a

@@ -197,8 +197,8 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    (`toInt_eq_div`; a division by a literal for a literal width, which `omega` reads without a
    case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
    (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
-   fits. `@intCast` of either signedness steps by `intCast_step` (its value `r.toNat` as an
-   integer);
+   fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),

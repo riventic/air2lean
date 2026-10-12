@@ -367,12 +367,10 @@ result is stated by its value (the arithmetic solver reads a signed one, `r.toIn
     (h : (if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
       Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) :
     FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
-      (fun r : BitVec m => ⟪(r.toNat : Int) = Zig.val s₁ a % 2 ^ m⟫ ⋆ P) := by
+      (fun r : BitVec m => ⟪r.toNat = (BitVec.ofInt m (Zig.val s₁ a)).toNat⟫ ⋆ P) := by
   have e : Zig.intCast s₁ s₂ m a = pure (BitVec.ofInt m (Zig.val s₁ a)) := by
     simp only [Zig.intCast, h, and_self, ↓reduceIte]
-  rw [e]
-  exact (FTotalTriple.ret (Q := fun r : BitVec m => ⟪(r.toNat : Int) = Zig.val s₁ a % 2 ^ m⟫ ⋆ P) _).pre
-    fun _ hp => sep_lift.mpr ⟨toNat_ofInt_emod m _, hp⟩
+  rw [e]; exact read_val rfl
 
 end Arith
 

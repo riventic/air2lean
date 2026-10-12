@@ -101,6 +101,14 @@ theorem intCast_signed_fits (P : FAssn) (a : BitVec 64) (h1 : -128 ≤ a.toInt) 
   fsym
 
 open Zig.Full Zig.Full.FAssn in
+/-- After a narrowing unsigned `@intCast`, the result's value is the operand's (an equation in
+the context, usable beyond `omega`). -/
+theorem intCast_then_eq (P : FAssn) (a : BitVec 64) (h : a.toNat < 256) :
+    FTotalTriple P (do let r ← (StateT.lift (Zig.intCast false false 8 a) : MemM (BitVec 8)); pure r.toNat)
+      (fun v => ⟪v = a.toNat⟫ ⋆ P) := by
+  fsym
+
+open Zig.Full Zig.Full.FAssn in
 /-- An unsigned value cast to a signed type that holds it. -/
 theorem intCast_to_signed (P : FAssn) (a : BitVec 8) (h : a.toNat < 100) :
     FTotalTriple P (StateT.lift (Zig.intCast false true 8 a) : MemM (BitVec 8))
