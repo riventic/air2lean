@@ -82,6 +82,8 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   CI part the PR touches locally (including x86_64-linux under Rosetta); then merge it at once
   (`gh pr merge <N> --admin --merge`), one PR at a time. CI still runs on every PR and on `main`
   as a warning; a red result after merge is fixed forward immediately.
+- Every executing CI part runs in a restricted checkout that withholds undeclared files, and the
+  nightly run executes everything unrestricted (docs/ci.md#restricted-checkout).
 - **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
   inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
   merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
