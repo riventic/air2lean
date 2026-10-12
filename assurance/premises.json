@@ -65,6 +65,7 @@
     "ZigLean.ReprCast": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLemmas": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
+    "ZigLean.ResultRun": ["SEM-01"],
     "ZigLean.Range": ["SEM-01"],
     "ZigLean.Loop": ["SEM-03"],
     "ZigLean.RecTemplate": ["SEM-03"],
