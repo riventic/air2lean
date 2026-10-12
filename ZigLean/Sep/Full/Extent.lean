@@ -384,8 +384,8 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     {c c' : ECell} {gF : Ghost} (hok : GOk m (L.add (Ghost.atExt b c)) gF)
     (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ECell.StepE ls c c') :
     GOk m (L.add (Ghost.atExt b c')) gF := by
-  obtain ⟨⟨⟨hv, hx⟩, N, hN⟩, ht⟩ := hok
-  have hV : Ghost.Valid ((L.add (Ghost.atExt b c)).add gF) := ⟨hv, hx⟩
+  obtain ⟨⟨⟨hv, hx, hcv⟩, N, hN⟩, ht, hcf⟩ := hok
+  have hV : Ghost.Valid ((L.add (Ghost.atExt b c)).add gF) := ⟨hv, hx, hcv⟩
   have eled : ((L.add (Ghost.atExt b c')).add gF).led = ((L.add (Ghost.atExt b c)).add gF).led := by
     funext γ; simp [Ghost.add, Ghost.atExt]
   have eep : ((L.add (Ghost.atExt b c')).add gF).ls = ((L.add (Ghost.atExt b c)).add gF).ls := by
@@ -399,8 +399,11 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     (fun γ e p h => Ghost.ls_add _ _ _ _ _ (Ghost.ls_add _ _ _ _ _ h)) hV.uniq
   have hb := hst.ok (by rw [← eb]; exact (hx b).1) (by rw [← eb]; exact (hx b).2)
     (by rw [← eb]; exact ht b)
-  refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_⟩, N, fun γ hγ => ⟨by rw [eled]; exact (hN γ hγ).1,
-    fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_⟩
+  have ecl : ((L.add (Ghost.atExt b c')).add gF).cl = ((L.add (Ghost.atExt b c)).add gF).cl := by
+    funext x y; simp
+  refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_, hcv.congr ecl eep⟩, N, fun γ hγ =>
+    ⟨by rw [eled]; exact (hN γ hγ).1, fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_,
+    hcf.congr ecl⟩
   · rw [eep]
     by_cases e : x = b
     · subst e; rw [eb]; exact ⟨hb.1, hb.2.1⟩
@@ -463,9 +466,9 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
-    hh.knowF, ⟨hg, ht m hh.ghost.2⟩⟩, hp'⟩
+    hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.congr (by funext x y; simp [xc])⟩⟩, hp'⟩
 
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
@@ -675,7 +678,7 @@ theorem EUpd.weaken {t : STag} (h : k' ≤ k) : EUpd (bshare b q k t) (bshare b 
 
 /-- The claims of a held resource are true. -/
 theorem Holds.extTrue {m : Mem} {r rF : Res} (hh : Holds m r rF) : ExtTrue m r.gh :=
-  ExtTrue.of_add hh.ghost.2
+  ExtTrue.of_add hh.ghost.2.1
 
 theorem Holds.claims {m : Mem} {r rF : Res} {P R : FAssn} (hh : Holds m r rF) (h : (P ⋆ R) r) :
     ∃ r₁, P r₁ ∧ ExtTrue m r₁.gh := by
@@ -688,7 +691,7 @@ theorem Holds.bshare {t : STag} {m : Mem} {r rF : Res} {R : FAssn} (hh : Holds m
     (h : (bshare b q k t ⋆ R) r) (ha : Act r.gh.ls t := by exact Act.root) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size ∧
       blk.kind.mappedLo < blk.bytes.size := by
-  have ht := hh.ghost.2 b
+  have ht := hh.ghost.2.1 b
   obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := h
   have hle : (r₁.gh.extent b).Le (((r₁.gh.add r₂.gh).add rF.gh).extent b) :=
     (ECell.le_add _ _).trans (ECell.le_add _ _)

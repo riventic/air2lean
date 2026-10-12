@@ -43,13 +43,14 @@ theorem Ghost.ok_exts_change {E E' : BlockId → Option (Nat × BlockKind)} {gF 
     (hd : ∀ b, (E' b).isSome → (gF.extent b).Dormant gF.ls) : Ghost.Ok (Ghost.exts E') gF := by
   have hep : ((Ghost.exts E).add gF).ls = gF.ls := Ghost.ls_exts_add
   have hvF : ∀ b, (gF.extent b).Valid ∧ (gF.extent b).TagOk gF.ls := fun b => by
-    have hv := hok.1.2 b
+    have hv := hok.1.2.1 b
     have hle : (gF.extent b).Le (((Ghost.exts E).add gF).extent b) := ECell.le_add' _ _
     refine ⟨ECell.Valid.of_add (b := (Ghost.exts E).extent b) ?_,
       ECell.TagOk.of_le (ls' := ((Ghost.exts E).add gF).ls)
         (fun _ _ _ h => by rw [hep]; exact h) hok.1.uniq hle hv.2⟩
     rw [ECell.add_comm]; exact hv.1
-  refine ⟨⟨fun γ => ?_, fun b => ?_⟩, ?_⟩
+  refine ⟨⟨fun γ => ?_, fun b => ?_, hok.1.2.2.congr (by rw [Ghost.exts_add_cl, Ghost.exts_add_cl])
+    (by rw [Ghost.ls_exts_add, Ghost.ls_exts_add])⟩, ?_⟩
   · have := hok.1.1 γ; simpa [Ghost.add, Ghost.exts] using this
   · rw [Ghost.ls_exts_add]
     by_cases hb : (E' b).isSome
@@ -192,7 +193,8 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     rwa [Ghost.ls_exts_add] at this
   obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
   refine ⟨hdisj, hmatch, Know.sub_none _,
-    hh.knowF.trans (KMono.set hb ha hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_⟩⟩
+    hh.knowF.trans (KMono.set hb ha hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
+      (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by simp only [reblockRes]; rw [hrg, Ghost.exts_add_cl, Ghost.exts_add_cl])⟩⟩
   · -- no frame claim on `b` (the only block of the new extents)
     have : x = b := Classical.byContradiction fun hne => by simp [extOne, hne] at hx
     subst this; exact hdorm
@@ -212,7 +214,7 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
           exact ⟨nb, hb', hl, rfl, rfl, hlo⟩
         · cases hp'
       · rw [hdorm.req_auth1 hk']; exact ⟨nb, hb', hl, Nat.zero_le _, hlo⟩
-    · have ht := hh.ghost.2 x
+    · have ht := hh.ghost.2.1 x
       rw [hrg] at ht
       have e1 : (Ghost.add (Ghost.exts (extOne b nb.bytes.size nb.kind)) rF.gh).extent x = rF.gh.extent x := by
         simp [Ghost.add, Ghost.exts, extOne, hx]
@@ -288,7 +290,7 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
   have hok := hh.ghost.1
   rw [hrg] at hok
   -- the cell of `b` before and after
-  have hvb := hok.1.2 b
+  have hvb := hok.1.2.1 b
   have ecb : ∀ c : ECell, ((Ghost.atExt b c).add rF.gh).extent b = c.add (rF.gh.extent b) := by
     intro c; simp [Ghost.add, Ghost.atExt]
   have ecx : ∀ (c : ECell) x, x ≠ b → ((Ghost.atExt b c).add rF.gh).extent x = rF.gh.extent x := by
@@ -299,13 +301,14 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
   obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
   refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hbs), ?_⟩
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
-  refine ⟨⟨⟨fun γ => ?_, fun x => ?_⟩, ?_⟩, fun x => ?_⟩
+  refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.congr (by funext x y; simp) (by rw [els, els])⟩, ?_⟩,
+    fun x => ?_, (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by rw [hrg]; funext x y; simp)⟩
   · have := hok.1.1 γ; simpa [Ghost.add, Ghost.atExt] using this
   · show ((((Ghost.atExt b _).add rF.gh).extent x).Valid ∧ _)
     rw [els]
     by_cases hx : x = b
     · subst hx; rw [ecb, he]; exact ⟨he ▸ hv', hvb.2⟩
-    · have := hok.1.2 x; rw [ecx _ _ hx, els] at this; rw [ecx _ _ hx]; exact this
+    · have := hok.1.2.1 x; rw [ecx _ _ hx, els] at this; rw [ecx _ _ hx]; exact this
   · obtain ⟨N, hN⟩ := hok.2
     refine ⟨N, fun γ hγ => ⟨?_, fun x e k => ?_, fun γ' e' M e => ?_⟩⟩
     · have := (hN γ hγ).1; simpa [Ghost.add, Ghost.atExt] using this
@@ -315,7 +318,7 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
       · rw [ecx _ _ hx] at this ⊢; exact this
     · have := (hN γ hγ).2.2 γ' e' M e; simpa [Ghost.add, Ghost.atExt] using this
   · show ECell.TrueIn _ _ _ _
-    have ht := hh.ghost.2 x
+    have ht := hh.ghost.2.1 x
     rw [hrg] at ht
     change ECell.TrueIn _ m _ _ at ht
     rw [els] at ht ⊢
@@ -345,6 +348,7 @@ theorem exts_extOne (b : BlockId) (S : Nat) (K : BlockKind) :
   ext1
   · funext γ; simp [Ghost.atExt, Ghost.exts]
   · funext x; simp only [Ghost.atExt, Ghost.exts, extOne]; split <;> simp_all
+  · funext x y; simp [Ghost.atExt, Ghost.exts]
 
 /-- After a step that makes no byte of `b` live, `reblockRes` is `nb`'s full extent. -/
 theorem reblockRes_bext {m m' : Mem} {b : BlockId} {nb : Block}
@@ -553,8 +557,8 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
   have e2 : shapes m' = shapes m := by simp only [shapes, ha]
   have e3 : m'.kn = m.kn := by funext x A; simp only [Mem.kn, hb]
-  obtain ⟨hd, hm, hk, hkF, hg, ht⟩ := hh
-  refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_⟩
+  obtain ⟨hd, hm, hk, hkF, hg, ht, hcf⟩ := hh
+  refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx)⟩
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
