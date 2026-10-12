@@ -39,4 +39,12 @@ mkdir -p "$work/AsmEnv"
 cmp "$work/AsmEnv/Gen.lean" tests/roadmap/asm-effects/AsmEnv/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/AsmEnv/Gen.olean" "$work/AsmEnv/Gen.lean"
 "${lean_cmd[@]}" -R tests/roadmap/asm-effects tests/roadmap/asm-effects/AsmEnv/Proofs.lean
+python3 -B tests/roadmap/callbacks/mutants.py generate asm-env "$work/mutants" | while IFS=: read -r name module proofs; do
+  mroot="$work/mutants/$name"
+  "${lean_cmd[@]}" -R "$mroot" -o "$mroot/${module%.lean}.olean" "$mroot/$module"
+  cp "tests/roadmap/asm-effects/$proofs" "$mroot/$proofs"
+  status=0
+  LEAN_PATH="$mroot:$LEAN_PATH" "${lean_cmd[@]}" -R "$mroot" "$mroot/$proofs" > "$mroot/log" 2>&1 || status=$?
+  python3 -B tests/roadmap/callbacks/mutants.py classify "$name" "$status" "$mroot/log" "$mroot/$proofs"
+done
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/asm-effects/test_env_cli.py "$translator"

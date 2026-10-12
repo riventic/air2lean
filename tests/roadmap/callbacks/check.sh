@@ -53,5 +53,18 @@ cp "$here/Callbacks/Proofs.lean" "$here/Callbacks/AsyncProofs.lean" "$work/Callb
 # The assumed foreign callback is the only reported assumption.
 python3 -B scripts/external-contracts.py --check --expect-assumptions=extern:ext_visit \
   "$work/Callbacks/Gen.lean" > "$work/contracts.json"
+# Semantic mutants of the retained translations: the unchanged proofs must reject each one.
+python3 -B "$here/mutants.py" --self-test
+python3 -B "$here/mutants.py" generate callbacks "$work/mutants" | while IFS=: read -r name module proofs; do
+  mroot="$work/mutants/$name"
+  for m in Callbacks/Gen.lean Callbacks/Async.lean; do
+    [ -f "$mroot/$m" ] || cp "$here/$m" "$mroot/$m"
+    "${lean_cmd[@]}" -R "$mroot" -o "$mroot/${m%.lean}.olean" "$mroot/$m"
+  done
+  cp "$here/$proofs" "$mroot/$proofs"
+  status=0
+  LEAN_PATH="$mroot:$LEAN_PATH" "${lean_cmd[@]}" -R "$mroot" "$mroot/$proofs" > "$mroot/log" 2>&1 || status=$?
+  python3 -B "$here/mutants.py" classify "$name" "$status" "$mroot/log" "$mroot/$proofs"
+done
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 echo "callbacks: ok"
