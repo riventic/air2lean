@@ -193,7 +193,8 @@ proof lines. Statements are unchanged.
 
 The reduction is 47% overall. Separation bookkeeping (memory threading, disjointness, frame
 heaps, run equations) disappears entirely. What remains in `reverse_step` is the list-index
-arithmetic of the invariant. `ArrayClients.lean` keeps its manual proofs as evidence for the
+arithmetic of the invariant. (`Proofs/Slices/Sep.lean` has since moved to the full-state logic:
+`fsym` alone proves `bump_spec` and the body of the `reverse` loop.) `ArrayClients.lean` keeps its manual proofs as evidence for the
 reassembly interface; `StepClients.lean` proves the same statements with the tactics.
 
 The scenarios of the retired `Steps.lean` regressions are `fsym` regressions in the

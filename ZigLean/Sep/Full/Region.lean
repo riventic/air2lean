@@ -226,19 +226,25 @@ theorem Keeps.memset {D : BlockId → Prop} {β : Type} [Enc β] (a : Nat) (p : 
     · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
     · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
 
+/-- `@memmove` keeps every block (it stores into one live block). -/
+theorem Keeps.memmove {D : BlockId → Prop} (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
+    Keeps D (Zig.memmove size da sa d s n) := by
+  unfold Zig.memmove
+  split
+  · exact Keeps.pure' _
+  · refine Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
+      Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
+        Keeps.bind (Keeps.loadBytes _ _ _ _) fun _ => Keeps.storeBytes _ _ _ _
+    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
+    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
+
 /-- `@memcpy` keeps every block (it stores into one live block). -/
 theorem Keeps.memcpy {D : BlockId → Prop} (size da sa : Nat) (d s : Ptr) (n m : BitVec 64) :
     Keeps D (Zig.memcpy size da sa d s n m) := by
-  unfold Zig.memcpy Zig.memmove
+  unfold Zig.memcpy
   split
   · exact Keeps.of_keepsExt fun _ _ _ h => by cases h
-  · split
-    · exact Keeps.pure' _
-    · refine Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-        Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-          Keeps.bind (Keeps.loadBytes _ _ _ _) fun _ => Keeps.storeBytes _ _ _ _
-      · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
-      · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
+  · exact Keeps.memmove _ _ _ _ _ _
 
 namespace FTotalTriple
 

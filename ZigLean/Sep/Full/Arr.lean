@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.AutoRules
-import ZigLean.Sep.Full.Strength
+import ZigLean.Sep.Full.Region
 
 /-!
 # Arrays in the full-state logic (`docs/sep-full-state.md`, Plan A library lane A1)
@@ -14,7 +13,9 @@ import ZigLean.Sep.Full.Strength
   `EUpd.arr_join`, `EUpd.arr_unfocus`, which read the block's labels from the memory (`Res.fix`):
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
-  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array.
+  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array;
+  `arr_ptrProject` (the pointer to an item, one past the end included), `arr_memset` (all
+  items) and `arr_memmove` (ranges that may overlap); `facts_arr` (`@[fsym_facts]`).
 -/
 
 namespace Zig
@@ -363,10 +364,53 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
 
+/-- An array: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_arr :
+    Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-- **Pointer to item `i ≤ vs.length`** of an owned array (one past the end included; `ptr_add`,
+`ptr_elem_ptr`, `slice_elem_ptr`): the memory is unchanged. The item size of generated code is a
+literal (`hsz`). -/
+@[fsym] theorem FTotalTriple.arr_ptrProject {i : BitVec 64} {size : Nat} (hsz : size = Enc.size T)
+    (hi : i.toNat ≤ vs.length) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.ptrProject p (·.elem size i))
+      (fun r => ⟪r = p.elem size i⟫ ⋆ up (Zig.arr p vs)) :=
+  FTotalTriple.of_read fun _ _ _ hh hp _ =>
+    have ⟨_, hp', hm⟩ := up_fix (SizeFree.arr p vs) hh hp
+    hsz ▸ arr_ptrProject_run hp'.1 hm hi
+
+/-- **`@memset`** of all items of an array to `w`. Lifted from the run lemma `arr_memset_run`
+through the bridge `FTotalTriple.ofTotal_up`, as `Ops.lean` lifts `load`/`store`; native rules
+replace the bridges in Plan A, A6. -/
+@[fsym] theorem FTotalTriple.arr_memset [LawfulEnc T] {a : Nat} {n : BitVec 64} (hn : 0 < Enc.size T)
+    (ha : a ∣ Enc.align T) (hlen : n.toNat = vs.length) (w : T) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.memset a p n (some w))
+      (fun _ => up (Zig.arr p (List.replicate vs.length w))) :=
+  FTotalTriple.ofTotal_up (fun _ _ _ hd hm hp hs =>
+      have ⟨m', hr, hs', h', hd', hm', hp'⟩ := arr_memset_run hp hm hd hn ha hlen hs w
+      ⟨(), m', h', hr, hd', hm', hp', hs'⟩)
+    (Tame.memset a p n (some w)) (SizeFree.arr p vs) (Keeps.memset a p n (some w))
+
+/-- **`@memmove`** of `n` items from item `s` to item `d` of one array: the items are read before
+they are written, so the ranges may overlap (`copyItems`). Lifted like `arr_memset`; the item
+size is a literal (`hsz`). -/
+@[fsym] theorem FTotalTriple.arr_memmove {a size : Nat} {d s n : BitVec 64} (hsz : size = Enc.size T)
+    (hn : 0 < Enc.size T) (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T)
+    (hdn : d.toNat + n.toNat ≤ vs.length) (hsn : s.toNat + n.toNat ≤ vs.length) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.memmove size a a (p.elem size d) (p.elem size s) n)
+      (fun _ => up (Zig.arr p (copyItems vs d.toNat s.toNat n.toNat))) := by
+  subst hsz
+  exact FTotalTriple.ofTotal_up (fun _ _ _ hd' hm hp hst =>
+      have ⟨m', hr, hst', h', hd'', hm', hp'⟩ := arr_memmove_run hp hm hd' hn ha hs hdn hsn hst
+      ⟨(), m', h', hr, hd'', hm', hp', hst'⟩)
+    (Tame.memmove _ _ _ _ _ _) (SizeFree.arr p vs) (Keeps.memmove _ _ _ _ _ _)
+
 end Rules
 
--- The bound of an item of a literal array (`[x, y, z].length`) is arithmetic for `omega`.
-attribute [fsym_arith] List.length_cons List.length_nil
+-- The bound of an item of a literal array (`[x, y, z].length`), or of an array after a store
+-- (`(vs.set i w).length`), is arithmetic for `omega`.
+attribute [fsym_arith] List.length_cons List.length_nil List.length_set
 
 end Full
 end Zig

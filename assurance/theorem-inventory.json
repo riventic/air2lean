@@ -34,28 +34,28 @@
       "module": "Proofs.Slices.Sep",
       "example": "slices",
       "scope": "sequential",
-      "domain": "`Triple` for every counter value `x` with `x + 1 < 2^32` (no overflow): `bump` returns `x + 1` and stores it"
+      "domain": "`FTotalTriple` (one thread: `Mem.FSeq`) for every counter value `x` with `x + 1 < 2^32` (no overflow): `bump` returns `x + 1` and stores it"
     },
     {
       "name": "copyWithin_spec",
       "module": "Proofs.Slices.Sep",
       "example": "slices",
       "scope": "sequential",
-      "domain": "`Triple` for every `u32` slice and every `d s n` with both ranges in bounds (they can overlap): the items are `copyItems vs d s n` after"
+      "domain": "`FTotalTriple` for every `u32` slice and every `d s n` with both ranges in bounds (they can overlap): it returns, the items are `copyItems vs d s n` after"
     },
     {
       "name": "fill_sep",
       "module": "Proofs.Slices.Sep",
       "example": "slices",
       "scope": "sequential",
-      "domain": "`Triple` for every `u8` slice whose length matches `vs` and every value `v`: every item is `v` after"
+      "domain": "`FTotalTriple` for every `u8` slice whose length matches `vs` and every value `v`: it returns, every item is `v` after"
     },
     {
       "name": "reverse_spec",
       "module": "Proofs.Slices.Sep",
       "example": "slices",
       "scope": "sequential",
-      "domain": "`Triple` for every `u32` slice whose length matches `vs`: the items in the other order after"
+      "domain": "`FTotalTriple` for every `u32` slice whose length matches `vs`: the loop ends, the items are in the other order after"
     },
     {
       "name": "Lists.push_spec",
