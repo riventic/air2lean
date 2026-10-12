@@ -760,7 +760,7 @@ theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a 
   split <;> rfl
 
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
-  evalStep Sink.isFormation
+  evalStep Sink.isFormation Bool.false_eq_true
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
