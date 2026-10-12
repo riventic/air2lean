@@ -720,17 +720,17 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   refine WP.pure' ?_
   -- The frees.
   have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := ctxF s6 k1 A1 s2 a ⋆ (ctxF s11 k2 A2 s4 b ⋆
-    flagF s4 ky Ay b)) hxb (enc_u32 a) hx0 (by decide)).pre fun _ h => sep_lcomm (sep_assoc h))
+  -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
+  refine WP.bind (WP.liftMem_fowned ((free_front (R := (ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆
+    flagF s4 ky Ay b) h2b (ctxBytes_size s4 b) h20 (by decide)).pre fun _ h => sep_lcomm h)
     ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := ctxF s6 k1 A1 s2 a ⋆ ctxF s11 k2 A2 s4 b)
-    hyb (enc_u32 b) hy0 (by decide)).pre
-    fun _ h => sep_lcomm (sep_mono (fun _ h => h) (fun _ h => sep_comm h) h))
+  refine WP.bind (WP.liftMem_fowned ((free_front (R := flagF s2 kx Ax a ⋆ flagF s4 ky Ay b)
+    h1b (ctxBytes_size s2 a) h10 (by decide)).pre fun _ h => sep_assoc h)
     ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ => ?_)
-  refine WP.bind (WP.liftMem_fowned (free_front (R := ctxF s11 k2 A2 s4 b) h1b (ctxBytes_size s2 a) h10
-    (by decide)) ho₂₂ hc₂₂ (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂
+  refine WP.bind (WP.liftMem_fowned ((free_front (R := flagF s2 kx Ax a) hyb (enc_u32 b) hy0
+    (by decide)).pre fun _ h => sep_comm h) ho₂₂ hc₂₂ (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂
     fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' h2b (ctxBytes_size s4 b) h20 (by decide))
+  refine WP.bind (WP.liftMem_fowned (FTTriple.free' hxb (enc_u32 a) hx0 (by decide))
     ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ ht₂₄ => ?_)
   refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
   rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr

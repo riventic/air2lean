@@ -515,7 +515,7 @@ theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Tame (Zig.store a
 
 theorem alloc (kind : BlockKind) (size align : Nat) : Tame (Zig.alloc kind size align) :=
   of_eq fun m v m' h => by
-    cases hroom : m.roomFor size align
+    cases hroom : m.allocOk kind size align
     · rw [alloc_run_noRoom m hroom] at h; cases h
     rw [alloc_run_eq m hroom] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
@@ -627,7 +627,7 @@ theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Keeps D (Zig.stor
 
 theorem alloc (kind : BlockKind) (size align : Nat) : Keeps D (Zig.alloc kind size align) :=
   of_keepsExt fun m v m' h => by
-    cases hroom : m.roomFor size align
+    cases hroom : m.allocOk kind size align
     · rw [alloc_run_noRoom m hroom] at h; cases h
     rw [alloc_run_eq m hroom] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h

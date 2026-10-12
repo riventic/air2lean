@@ -90,8 +90,9 @@ theorem rawAlloc_asOracle (m : Mem) (n align : Nat) (hn : n < unboundedAllocByte
     cases hr : m.roomFor n align
     · rfl
     · simp only [↓reduceIte, StateT.run_map]
-      rw [alloc_run_eq ({ m with allocs := m.allocs + 1 } : Mem) hr,
-        alloc_run_eq ({ m with allocPolicy := m.allocPolicy.asOracle, allocs := m.allocs + 1 } : Mem) hr]
+      rw [alloc_run_eq (kind := .heap) ({ m with allocs := m.allocs + 1 } : Mem) hr,
+        alloc_run_eq (kind := .heap)
+          ({ m with allocPolicy := m.allocPolicy.asOracle, allocs := m.allocs + 1 } : Mem) hr]
       rfl
 
 /-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
