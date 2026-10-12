@@ -37,7 +37,7 @@ const compat = @import("compat.zig");
 /// The child's output text: the rendered ok-payload or the panic kind. Any length (a result
 /// with the input buffers can be long); `writeResult` frees it.
 pub const OutcomeKind = enum { value, error_return, native_panic, native_signal, native_harness_failure, input_failure };
-var metadata_writer: ?*std.Io.Writer = null;
+var metadata_writer: ?*compat.Writer = null;
 
 pub const Outcome = union(enum) {
     ok: struct { payload: []u8, kind: OutcomeKind },
@@ -266,6 +266,16 @@ pub const panic = struct {
     pub fn copyLenMismatch() noreturn {
         reportPanic("copyLenMismatch");
     }
+    // Zig 0.14.1's names (0.15.2 renamed or merged them); later versions do not look them up.
+    pub fn castTruncatedData() noreturn {
+        reportPanic("castTruncatedData");
+    }
+    pub fn negativeToUnsigned() noreturn {
+        reportPanic("negativeToUnsigned");
+    }
+    pub fn memcpyLenMismatch() noreturn {
+        reportPanic("memcpyLenMismatch");
+    }
     pub fn memcpyAlias() noreturn {
         reportPanic("memcpyAlias");
     }
@@ -445,23 +455,24 @@ fn renderResult(
     rendering_allocator: std.mem.Allocator,
     fd: std.posix.fd_t,
 ) !void {
-    var aw: std.Io.Writer.Allocating = .init(rendering_allocator);
+    var aw: compat.Allocating = .init(rendering_allocator);
     defer aw.deinit();
+    const w = compat.allocatingWriter(&aw);
     // One typed byte on the private pipe; it is removed from the legacy JSON payload.
-    try aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V');
+    try w.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V');
     render_bufs = bufs orelse &.{};
-    try renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw);
+    try renderPayload(@TypeOf(raw), w, quote_wide, raw);
     if (bufs) |bs| {
-        try aw.writer.writeAll(",\"bufs\":[");
+        try w.writeAll(",\"bufs\":[");
         for (bs, 0..) |b, i| {
-            if (i > 0) try aw.writer.writeAll(",");
-            try aw.writer.writeAll("\"");
-            for (b) |byte| try aw.writer.print("{x:0>2}", .{byte});
-            try aw.writer.writeAll("\"");
+            if (i > 0) try w.writeAll(",");
+            try w.writeAll("\"");
+            for (b) |byte| try w.print("{x:0>2}", .{byte});
+            try w.writeAll("\"");
         }
-        try aw.writer.writeAll("]");
+        try w.writeAll("]");
     }
-    if (test_alloc) |ta| try aw.writer.print(",\"live\":{d}", .{ta.live.items.len});
+    if (test_alloc) |ta| try w.print(",\"live\":{d}", .{ta.live.items.len});
     writeAll(fd, aw.written());
 }
 
@@ -490,7 +501,7 @@ pub fn forkCallBufsWithRenderingAllocator(
         // Keep the original fault signal observable; the parent uses C/R for its phase.
         const crash_defaults = std.posix.Sigaction{
             .handler = .{ .handler = std.posix.SIG.DFL },
-            .mask = std.posix.sigemptyset(),
+            .mask = compat.emptySigset(),
             .flags = 0,
         };
         std.debug.updateSegfaultHandler(&crash_defaults);
@@ -691,7 +702,7 @@ pub fn forEachMemLine(
             const bufs = try a.alloc(Buf, bufsJ.len);
             defer a.free(bufs);
             for (bufsJ, bufs) |bj, *b| {
-                b.* = try a.alignedAlloc(u8, comptime .fromByteUnits(16), bj.array.items.len);
+                b.* = try a.alignedAlloc(u8, compat.alignment(16), bj.array.items.len);
                 for (bj.array.items, b.*) |x, *byte| byte.* = @intCast(x.integer);
             }
             defer for (bufs) |b| a.free(b);

@@ -119,7 +119,11 @@ file with its profile header. Without the integration variant it retains raw Gen
 comparison. Historical provenance and raw retained AIR/Gen hashes remain unchanged.
 Fresh AIR, generated Lean and diagnostics stay under
 `RUNNER_TEMP`; this gate adds no artifact upload. Zig 0.14/0.15 exporter API source inspection and synthetic profile
-checks are the current boundary, pending actual export/native qualification on those versions.
+checks were the boundary until the 0.14.1, 0.15.2 and 0.17.0 exports: `air-fresh/<version>` and
+`aliases/air-fresh/<version>` hold them, and each translates body-identically to the retained
+module (`compiler-qualification.json`, `versions`). `lifetimes/` adds a union freed by its
+cleanup and payload pointers shared by threads, and runs the native tests of all three sources on
+x86_64-linux for every version (`lifetimes/README.md`).
 
 Compiler-free provenance regressions:
 
@@ -129,10 +133,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/try-poin
 
 Current finite-error storage integration keeps every retained AIR file and
 `provenance.json` unchanged. The historical generated file is retained at
-`origin/TryPointers/Gen.lean`; `emitter-integration.json` binds that identity, the
-current emitter, and the exact current generated file as inputs only. The gate
-cannot rewrite the historical receipt in this mode. Both retained and fresh output
-comparisons still compare the full body with current `TryPointers/Gen.lean`.
+`origin/TryPointers/Gen.lean`; `emitter-integration.json` binds that identity and the
+exact current generated file as inputs only. It pins the output, not the translator source
+(no `Air2Lean/Emit.lean` hash): `check.sh` re-translates the retained AIR with the current
+translator and compares the full body with current `TryPointers/Gen.lean`, and
+`scripts/gen-integrity.py` regenerates it, so any emitter change that alters the output fails
+there. The gate cannot rewrite the historical receipt in this mode. Both retained and fresh
+output comparisons compare the full body with current `TryPointers/Gen.lean`.
 Current generated pointer operations enforce the AIR domain `Bad`/`Other`.
 The generated-program ownership contracts therefore require any present error to
 belong to that domain; payload addresses, full-object/tag reads, frame ownership,

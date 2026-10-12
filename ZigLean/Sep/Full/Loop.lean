@@ -19,7 +19,7 @@ of a buffer); a measure on the locals is `FTotalTriple.loop_measure`.
 
 Each is a rule, not a template or tactic (docs/proof-framework.md): it takes the body's step as a
 triple, which a client proves with `fsym`, and never mentions the frame. They replace the legacy
-`ZigLean/Sep/Loop.lean` and `ZigLean/Sep/LoopTemplate.lean`.
+`ZigLean/Sep/Loop.lean` and its loop templates (deleted).
 -/
 
 namespace Zig

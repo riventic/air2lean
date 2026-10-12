@@ -737,7 +737,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
 theorem addSat_toNat (a b : BitVec 64) :
     (Zig.addSat false a b).toNat = min (a.toNat + b.toNat) (2 ^ 64 - 1) := by
   unfold Zig.addSat Zig.clamp Zig.val
-  simp only [Bool.false_eq_true, ↓reduceIte]
+  simp only [Bool.false_eq_true, ↓reduceIte, Zig.intLo_unsigned, Zig.intHi_unsigned]
   rw [BitVec.toNat_ofInt]
   have ha := a.isLt; have hb := b.isLt
   omega

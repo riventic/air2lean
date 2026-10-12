@@ -43,7 +43,7 @@ CHECK
   python3 tests/roadmap/dispatch/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'dispatch synthetic and kernel-proof regressions passed'; exit 0; fi
-version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}
+version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
 zig_air=${AIR2LEAN_DISPATCH_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_DISPATCH_ZIG_STOCK:-zig}
 case "$version" in 0.14.1|0.15.2|0.16.0) ;; *) echo "unsupported dispatch profile: $version" >&2; exit 2;; esac
@@ -52,8 +52,11 @@ case "$version" in 0.14.1|0.15.2|0.16.0) ;; *) echo "unsupported dispatch profil
 # Native behavior and exporter/translator behavior must both be exercised; neither is optional.
 "$zig_stock" test tests/roadmap/dispatch/source.zig -OReleaseSafe
 mkdir -p "$work/air"
+# As scripts/check.sh: aarch64-linux AIR is exported for the baseline CPU (no `fullfp16`).
+mcpu=''
+if [ "$(uname -s)-$(uname -m)" = Linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
 ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER=source. "$zig_air" \
-  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing tests/roadmap/dispatch/source.zig
+  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $mcpu tests/roadmap/dispatch/source.zig
 python3 tests/roadmap/dispatch/native_checks.py "$work/air" "$version" "$work/native-checks.lean"
 .lake/build/bin/air2lean "$work/air" -o "$work/native.lean" --namespace DispatchNative --prefix source.
 cat "$work/native-checks.lean" >> "$work/native.lean"

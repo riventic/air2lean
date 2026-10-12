@@ -81,8 +81,7 @@ variable {n : Nat}
 
 /-- The range condition of `@intCast`, as in its definition. -/
 @[vc_contract] theorem intCast_range (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) :
-    ((if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
-      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) →
+    (Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) →
     ∃ v, Zig.intCast s₁ s₂ m a = pure v ∧ v = BitVec.ofInt m (Zig.val s₁ a) := fun h =>
   ⟨_, by simp only [Zig.intCast, h, and_self, ↓reduceIte], rfl⟩
 
@@ -151,11 +150,15 @@ variable {n : Nat} {P : FAssn}
 
 /-- `@intCast` in range (`Zig.Full.Auto.intCast_widen_step` covers unsigned widening). -/
 @[fsym] theorem intCast_range_step (s₁ s₂ : Bool) (m : Nat) (a : BitVec n)
-    (h : (if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
-      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int)) :
+    (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) :
     FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
       (fun v => ⟪v = BitVec.ofInt m (Zig.val s₁ a)⟫ ⋆ P) :=
   result_step (intCast_range s₁ s₂ m a) h
+
+-- The integer range bounds of a known signedness and width, for the side goals of
+-- `intCast_range_step` (and `clamp`).
+attribute [fsym_arith] Zig.intLo_unsigned Zig.intHi_unsigned Zig.intLo_signed_succ
+  Zig.intHi_signed_succ Zig.intLo_zero Zig.intHi_zero
 
 @[fsym] theorem index_step {α : Type} (a : Array α) (i : usize) (h : i.toNat < a.size) :
     FTotalTriple P (StateT.lift (Zig.index a i) : MemM α)

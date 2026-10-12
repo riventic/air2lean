@@ -229,11 +229,17 @@ def load_manifest(path):
         if not isinstance(root['goals'], list):
             raise Invalid('goals must be a list')
         for goal in root['goals']:
-            obj(goal, ('theorem', 'strength', 'domain'))
+            obj(goal, ('theorem', 'strength', 'domain'), ('outcomes',))
             string(goal['theorem'])
             string(goal['domain'])
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
                 raise Invalid('invalid theorem strength')
+            if 'outcomes' in goal:
+                obj(goal['outcomes'], ('admits',))
+                try:
+                    outcomes.contract_admits(goal['strength'], goal['outcomes']['admits'])
+                except ValueError as error:
+                    raise Invalid(f'goal {goal["theorem"]}: {error}')
     return manifest, raw, limits
 
 
@@ -263,7 +269,8 @@ def validate_profile(profile):
             or triple[2].split('.')[0] != profile['abi']):
         raise Invalid('profile requires a supported architecture/OS and matching ABI')
     if (profile['name'] != 'abi64-le-v1' or type(profile['pointer_bits']) is not int or profile['pointer_bits'] != 64
-            or profile['endian'] != 'little' or type(profile['error_set_bits']) is not int or profile['error_set_bits'] != 16
+            or profile['endian'] != 'little' or type(profile['error_set_bits']) is not int
+            or not 0 < profile['error_set_bits'] <= 32
             or profile['float_mode'] != 'per-instruction' or profile['error_layout'] != 'type-table'
             or profile['export_stage'] != 'analyzed-air'
             or profile['build_mode'] not in ('Debug', 'ReleaseSafe', 'ReleaseFast', 'ReleaseSmall')):
@@ -862,22 +869,71 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
-def trivial_conclusion(theorem, definition):
-    """The reason an audited conclusion that names the root still states no result about it, else None.
+def self_relation(theorem, definition):
+    """How an audited equation relates the generated root to itself, from the kernel statement, else None.
 
-    The audit records an equation's right-hand side and no other argument. An `Eq` whose right-hand
-    side is the generated root itself (`root x = root x`, or `root x = root y`) relates the root to
-    itself and fixes no value; the audit omits the left-hand side, so a genuine relational property
-    (commutativity, idempotence) cannot be told apart and is not credited either (fail closed). A `True` conclusion never gets here (it does not reference the root).
-    Other conclusions are left to the derived strength: they are not called trivial without evidence."""
+    Both sides of an `Eq` conclusion are recorded (`statement.args`: type, left, right). When both
+    apply the root, the equation fixes no result: `reflexive` when the applications are identical
+    (`root x = root x`), otherwise a relational property between runs of the root. The relation is
+    named when it can be read off the arguments: `commutative` (two arguments swapped),
+    `argument_permutation`, `self_composition` (an argument is itself an application of the root,
+    e.g. idempotence), `state_relation` (same arguments, other runners or initial states) or
+    `other_arguments`. Returns (kind, left arguments, right arguments)."""
+    statement = theorem.get('statement')
+    args = statement.get('args') if isinstance(statement, dict) else None
+    head = statement.get('head') if isinstance(statement, dict) else None
+    if not (isinstance(args, list) and len(args) == 3 and isinstance(head, dict) and head.get('name') == 'Eq'):
+        return None
+    left, right = args[1], args[2]
+    if not all(isinstance(side, dict) and side.get('fn') == definition for side in (left, right)):
+        return None
+    same = lambda key: left.get(key) == right.get(key)
+    if same('args') and same('peeled') and same('extra'):
+        return 'reflexive', left.get('args'), right.get('args')
+    la, ra = left.get('args') or [], right.get('args') or []
+    canonical = lambda atoms: sorted(json.dumps(a, sort_keys=True) for a in atoms)
+    differing = [i for i, (x, y) in enumerate(zip(la, ra)) if x != y]
+    if len(la) == len(ra) and len(differing) == 2 and la[differing[0]] == ra[differing[1]] \
+            and la[differing[1]] == ra[differing[0]]:
+        kind = 'commutative'  # exactly two arguments swapped
+    elif len(la) == len(ra) and la != ra and canonical(la) == canonical(ra):
+        kind = 'argument_permutation'
+    elif any(isinstance(a, dict) and definition in (a.get('open'), a.get('closed')) for a in la + ra):
+        kind = 'self_composition'
+    elif la == ra:
+        kind = 'state_relation'
+    else:
+        kind = 'other_arguments'
+    return kind, la, ra
+
+
+def trivial_conclusion(theorem, definition):
+    """(binding, reason, relation) of an audited conclusion that names the root yet states no result, else None.
+
+    `trivial_conclusion`: an `Eq` relating the generated root to itself with identical arguments
+    (`root x = root x`) fixes no value. `relational_property`: both sides apply the root to different
+    arguments or states (`root a b = root b a`): the property is interpreted and reported with its
+    relation, but it constrains the root against itself, not against a specification, so it is never
+    a direct goal and is refused for functional levels (fail closed). A conclusion without the
+    statement structure falls back to the recorded right-hand side. Other conclusions are left to the
+    derived strength: they are not called trivial without evidence."""
+    relation = self_relation(theorem, definition)
+    if relation is not None and relation[0] != 'reflexive':
+        kind = relation[0]
+        return ('relational_property',
+                f'relational property ({kind}): the equation relates the generated root {definition} to itself under '
+                'different arguments or states and fixes no result; it is reported but never counted as direct or '
+                'functional (state the result against a specification)',
+                {'kind': kind, 'left_arguments': relation[1], 'right_arguments': relation[2]})
     shape = theorem.get('conclusion')
     if not isinstance(shape, dict):
         return None
     args = shape.get('args')
-    if shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1 and isinstance(args[0], dict) \
-            and args[0].get('head') == definition:
-        return (f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
-                '(a relational property such as commutativity is not credited either; state the result against a specification)')
+    if relation is not None or (shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1
+                                and isinstance(args[0], dict) and args[0].get('head') == definition):
+        return ('trivial_conclusion',
+                f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
+                '(state the result against a specification)', None)
     return None
 
 
@@ -951,11 +1007,14 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
         else:
             found = assess_goal(theorem, root, definition, bundle['nodes'], gen_modules, bundle['theorems'])
             binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
+            relation = None
             if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
-                binding, reason = 'trivial_conclusion', trivial
+                binding, reason, relation = trivial
             row.update(binding=binding, reason=reason)
-            if binding == 'trivial_conclusion':
+            if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
+                if relation:
+                    row['relation'] = relation
             elif binding == 'direct':
                 row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
@@ -1101,6 +1160,11 @@ def coverage_level(record, require_export=False):
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
+    for goal in direct:  # Other goals already block, and their contracts are unbacked.
+        contract = goal.get('outcome_contract') or {}  # Absent only in hand-built records, never in coverage().
+        if contract.get('status') == 'refuted':
+            blockers.append(f'goal {goal["theorem"]}: outcome contract refuted ({contract["reason"]}; '
+                            f'admits {", ".join(contract["admits"])})')
     for goal in direct:
         if not strength_supported(goal):
             caps = '; '.join(goal.get('caps') or [])
@@ -1208,6 +1272,8 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
         exclusions = list(root['exclusions']) + diff_exclusions
         if bundle is not None:
             exclusions += [f'proof receipt {k}: {v}' for k, v in bundle['trust'].items() if v and v != 'selected compiled Lean theorem dependency policy only']
+        for goal in goals:  # The outcome contract of each goal, judged against the sampled outcomes.
+            goal['outcome_contract'] = outcomes.contract(goal['strength'], (goal.get('outcomes') or {}).get('admits'), counts)
         record = {'id': root['id'], 'function': root['function'], 'input_validation': evidence['input_validation'],
                   'stages': stages, 'goals': goals,
                   'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'scope': g.get('scope'),
@@ -1239,14 +1305,19 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'from the audited conclusion head (Zig triples, Returns, exact-success equations), capped at safety '
                       'without a non-vacuity witness and, for partial correctness, without a liveness witness '
                       '(ZigLean/Witness.lean); an unclassified conclusion derives none. An equation whose right-hand side is the generated root itself '
-                      '(`root x = root x`) is a trivial_conclusion: it names the root but fixes no result, so it is not '
-                      'a direct goal and cannot reach proved_scoped.',
+                      '(`root x = root x`) is a trivial_conclusion and a relational property between runs of the root (`root a b = '
+                      'root b a`) a relational_property, reported with its relation: they name the root but fix no result, '
+                      'so they are not direct goals and cannot reach proved_scoped.',
                       'The domain is derived from the kernel type: a fixed or derived root argument or initial state, a '
                       'repeated variable or a hypothesis over a quantified argument makes it scoped, which caps the root at '
                       'proved_scoped; a scoped goal must declare its domain as `scoped: ...`.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal over a universal domain; correct_if_returns needs a partial goal '
                       'with a liveness witness, full verification requires total_correctness.',
+                      'Each goal carries an outcome contract (scripts/outcomes.py): the outcomes it admits, by default values and error '
+                      'returns, or the `outcomes.admits` the manifest declares (never an outcome its strength rules out or an '
+                      'incomplete-evidence class). Sampled outcomes outside it refute the contract and block functional levels; '
+                      'incomplete evidence leaves it unassessed; evidence never proves it.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
                       'analyzed and exported pass only from an I07 artifact manifest whose source, compiler_patch, air and '
                       'profile links recompute to the recorded digests and whose air/source files include this root\'s '
@@ -1271,6 +1342,7 @@ def coverage_text(result):
             lines.append(f'  {name:<11} {entry["status"]:<8} {entry.get("reason", entry.get("code", ""))}')
         for goal in root['goals']:
             lines.append(f'  goal {goal["theorem"]} [{goal["strength"]}] domain: {goal["domain"]} -> {goal["binding"]}')
+            lines.append(f'    outcome contract: {goal["outcome_contract"]["status"]} (admits {", ".join(goal["outcome_contract"]["admits"])})')
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
@@ -1448,6 +1520,8 @@ def audit_goal(root, goal, theorems, nodes, modules):
     if binding == 'wrapper_or_unrelated' and found['binding'] == 'direct':
         return dict(row, status='unbound_generated',
                     reason=f'audited {definition} is not defined in the committed generated module {modules["generated"]}')
+    if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
+        binding, reason, _ = trivial
     if binding != 'direct':
         return dict(row, status=binding, reason=reason)
     if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):

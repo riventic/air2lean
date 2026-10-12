@@ -216,15 +216,15 @@ theorem air2lean_model_2_evidence : air2lean_model_2_contract.Holds .total [Zig.
 /-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
 def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
-structure posix_errno__anon_1Locals where
+structure posix_errno__anon_c57b4435c781Locals where
   deriving Inhabited
 
-inductive posix_errno__anon_1Exit where
+inductive posix_errno__anon_c57b4435c781Exit where
   | ret (v : os_linux_E__enum_1)
   | br5 (v : Bool)
   | br2 (v : BitVec 64)
 
-def posix_errno__anon_1 (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
+def posix_errno__anon_c57b4435c781 (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
   let e ← ((do
     let i1 ← pure (p0)
     match ← ((do
@@ -236,18 +236,18 @@ def posix_errno__anon_1 (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
           let i8 ← pure (Zig.lt true i7 (0 : BitVec 64))
           pure (.br5 i8))
         else (do
-          pure (.br5 false))) : Zig.M posix_errno__anon_1Locals posix_errno__anon_1Exit) with
+          pure (.br5 false))) : Zig.M posix_errno__anon_c57b4435c781Locals posix_errno__anon_c57b4435c781Exit) with
       | .br5 v5 => (do
         if v5 then (do
           let i12 ← Zig.sub true (0 : BitVec 64) i1
           pure (.br2 i12))
         else (do
           pure (.br2 (0 : BitVec 64))))
-      | e => pure e) : Zig.M posix_errno__anon_1Locals posix_errno__anon_1Exit) with
+      | e => pure e) : Zig.M posix_errno__anon_c57b4435c781Locals posix_errno__anon_c57b4435c781Exit) with
     | .br2 v2 => (do
       let i15 ← Zig.enumOf (os_linux_E__enum_1.ofInt? (Zig.val true v2))
       pure (.ret i15))
-    | e => pure e) : Zig.M posix_errno__anon_1Locals posix_errno__anon_1Exit).run' (default : posix_errno__anon_1Locals)
+    | e => pure e) : Zig.M posix_errno__anon_c57b4435c781Locals posix_errno__anon_c57b4435c781Exit).run' (default : posix_errno__anon_c57b4435c781Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -261,7 +261,7 @@ inductive posix_closeExit where
 def posix_close (p0 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
     let i1 ← Zig.callM (air2lean_model_0 p0)
-    let i2 ← Zig.callR (posix_errno__anon_1 i1)
+    let i2 ← Zig.callR (posix_errno__anon_c57b4435c781 i1)
     if i2 == os_linux_E__enum_1.BADF then (do
       throw .unreachable)
     else (do
@@ -320,7 +320,7 @@ def posix_read.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_readLocals
     let i15 ← Zig.intCast false false 31 i14
     let i16 ← Zig.intCast false false 64 i15
     let i17 ← Zig.callM (air2lean_model_1 p0 i11 i16)
-    let i18 ← Zig.callR (posix_errno__anon_1 i17)
+    let i18 ← Zig.callR (posix_errno__anon_c57b4435c781 i17)
     if i18 == os_linux_E__enum_1.SUCCESS then (do
       let i24 ← Zig.intCast false false 64 i17
       let i25 ← pure ((.ok i24) : Except Zig.ErrName (BitVec 64))
@@ -522,7 +522,7 @@ def posix_write.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_writeLoca
     let i15 ← Zig.intCast false false 31 i14
     let i16 ← Zig.intCast false false 64 i15
     let i17 ← Zig.callM (air2lean_model_2 p0 i11 i16)
-    let i18 ← Zig.callR (posix_errno__anon_1 i17)
+    let i18 ← Zig.callR (posix_errno__anon_c57b4435c781 i17)
     if i18 == os_linux_E__enum_1.SUCCESS then (do
       let i24 ← Zig.intCast false false 64 i17
       let i25 ← pure ((.ok i24) : Except Zig.ErrName (BitVec 64))

@@ -18,6 +18,7 @@ inactiveUnionField	panic
 corruptSwitch	panic
 sentinelMismatch	panic
 copyLenMismatch	panic
+memcpyLenMismatch	panic
 memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
@@ -25,3 +26,6 @@ panic	panic
 SIGFPE	trap
 unexpectedErrorCode	panic
 loadUninstantiableType	panic
+castTruncatedData	overflow
+negativeToUnsigned	overflow
+memcpyLenMismatch	panic

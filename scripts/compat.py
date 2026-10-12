@@ -3,6 +3,7 @@
 
   compat.py check   [--root DIR] [--json]   compare compatibility.json with its sources of truth
   compat.py release [--root DIR] [--out F]  print the metadata plus computed exporter checksums
+  compat.py default [--root DIR]            print zig.default, the default Zig version
 
 The sources of truth stay where they are: zig-patch/versions.toml (downloads and checksums),
 lean-toolchain, lakefile.toml, lake-manifest.json, the version lists of the workflow scripts and
@@ -19,7 +20,7 @@ import sys
 from pathlib import Path
 
 SCHEMA = 'air2lean-compatibility/1'
-KNOWN_HOSTS = ('x86_64-linux', 'aarch64-macos')
+KNOWN_HOSTS = ('x86_64-linux', 'aarch64-macos', 'aarch64-linux')
 # A pinned version is `qualified` or still `in-qualification` (CI runs it; not the default).
 STATUSES = ('qualified', 'in-qualification')
 SHA = re.compile(r'^[0-9a-f]{64}$')
@@ -57,6 +58,12 @@ def zig_version_tables(tables):
 
 def load(root):
     return json.loads((Path(root) / 'compatibility.json').read_text())
+
+
+def default_version(root=Path(__file__).resolve().parents[1]):
+    """zig.default of compatibility.json: the one place the default Zig version is written. Scripts
+    ask this (Python: here; shell: scripts/zig-default.sh) instead of spelling the version."""
+    return load(root)['zig']['default']
 
 
 def sha256_file(path):
@@ -157,9 +164,15 @@ def check(root):
     elif any(isinstance(e, dict) and e.get('version') == default and e.get('status') != 'qualified'
              for e in entries):
         errors.append('zig.default %r is not a qualified version' % default)
+    once = get(('zig', 'ci_once'))
+    if once not in pinned or not any(isinstance(e, dict) and e.get('version') == once
+                                     and e.get('status') == 'qualified'
+                                     and 'x86_64-linux' in (e.get('hosts') or []) for e in entries):
+        errors.append('zig.ci_once %r is not a qualified x86_64-linux version' % once)
+    dialect = text('Air2Lean/Air/Dialect.lean')
+    named = re.search(r'def defaultVersion : ZigVersion := \.v(\d+)_(\d+)_(\d+)\b', dialect)
+    expect('zig.default', default, '.'.join(named.groups()) if named else None, 'Air2Lean/Air/Dialect.lean')
     translate = text('scripts/translate.sh')
-    found = re.search(r'AIR2LEAN_ZIG_VERSION:-([0-9.]+)\}', translate)
-    expect('zig.default', default, found.group(1) if found else None, 'scripts/translate.sh')
 
     # Every hard-coded supported-version list agrees.
     common = text('scripts/workflow-common.sh')
@@ -243,11 +256,18 @@ def release(root):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('command', choices=('check', 'release'))
+    parser.add_argument('command', choices=('check', 'release', 'default'))
     parser.add_argument('--root', default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument('--json', action='store_true', help='check: machine-readable result')
     parser.add_argument('--out', help='release: write the manifest here instead of stdout')
     args = parser.parse_args(argv)
+    if args.command == 'default':
+        try:
+            print(default_version(args.root))
+        except (OSError, ValueError, KeyError) as exc:
+            print('error: compatibility.json has no usable zig.default: %s' % exc, file=sys.stderr)
+            return 1
+        return 0
     if args.command == 'check':
         errors = check(args.root)
         if args.json:

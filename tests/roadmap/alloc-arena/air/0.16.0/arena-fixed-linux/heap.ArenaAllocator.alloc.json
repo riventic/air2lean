@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -47,6 +50,7 @@
   2,
   1
  ],
+ "noalias": [],
  "ret": 3,
  "body": [
   {
@@ -4347,8 +4351,7 @@
           {
            "id": 426,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 427,
@@ -8499,8 +8502,7 @@
                   {
                    "id": 839,
                    "tag": "ret_addr",
-                   "ty": 1,
-                   "unsupported": true
+                   "ty": 1
                   },
                   {
                    "id": 840,
@@ -12386,8 +12388,7 @@
           {
            "id": 1222,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 1223,

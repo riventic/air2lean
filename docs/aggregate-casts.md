@@ -10,7 +10,9 @@ them.
 ## Representation casts
 
 A `bitcast` whose two types differ and that has an array (no sentinel), `extern` struct or
-`extern` union on either side translates to `Zig.reprCast T x` (`ZigLean/Mem/Repr.lean`):
+`extern` union on either side translates to `Zig.reprCast T x` (`ZigLean/Mem/Repr.lean`). A
+packed struct or union and another packed struct or union, a float or a `bool` of the same bit
+size cast through their bits (`packedScalarCast`, `Zig.Packed.bitCast`) in every version:
 
 1. Encode `x` with its `Zig.Enc` instance. Struct padding, the padding after a `uN` in its ABI
    slot (`u24` in 4 bytes), and the bits above a `uN` with `N % 8 ≠ 0` are undefined
@@ -23,12 +25,24 @@ or item would hold an undefined bit, the whole cast throws. An `extern` union ke
 so its undefined bytes throw only when a field read needs them.
 
 The checker accepts the cast when both sides are an integer, float, `bool`, packed struct,
-array, `extern` struct or `extern` union, every part has a guaranteed in-memory layout, and
-both sides have the same 0.16.0 `@bitSizeOf` (`reprBitSize`). For an array, the size is
-`(len-1)·8·@sizeOf(E) + @bitSizeOf(E)`; for an `extern` type, the ABI size in bits. It rejects
-casts that involve these parts at any depth: an `auto` struct, a tuple (no guaranteed layout,
-which Sema also rejects), a tagged or packed union, a slice, a vector, a sentinel array,
-error storage, or a pointer or optional pointer. Pointer-bearing repr casts are rejected (fail
+array, `extern` struct, `extern` union or vector, every part has a guaranteed in-memory layout,
+and both sides have the same 0.16.0 `@bitSizeOf` (`reprBitSize`). For an array, the size is
+`(len-1)·8·@sizeOf(E) + @bitSizeOf(E)`; for an `extern` type, the ABI size in bits; for a
+vector, `len·@bitSizeOf(lane)`. A vector's memory image is its bit-packed lanes
+(`Vec.packedEnc`, L09), as Zig 0.16.0's LLVM `bitCast` reinterprets it; `ZigLean/VecCast.lean`
+proves vector → integer is `Vec.packBits`, integer → vector splits the lanes, and the round trip.
+`[n]T` ↔ `@Vector(n, T)` is not a representation cast: lane `i` is item `i` for every item type
+(0.16.0 copies a padded item such as `u24` lane by lane), so it is translated lane-wise
+(`vectorLaneCast?`). An array and a vector of other item types are a representation cast only
+when the source's items fill whole bytes (otherwise 0.16.0 copies item by item into lanes of
+another type). A packed union is its bytes (its backing integer). It rejects casts that involve these parts at
+any depth: an `auto` struct, a tuple or a tagged union (no guaranteed layout, which Sema also
+rejects at the outer type in every version, `tests/roadmap/packed-casts/compile-errors`), a slice,
+a sentinel array, error storage, or a pointer or optional pointer. One exception follows Sema:
+Zig 0.14.1 and 0.15.2 check only the outer types, so an *array item* may be an `auto` struct or a
+tagged union (`ZigVersion.bitCastAutoItems`); its memory image is the exporter's layout, padding
+undefined and the tag included (`tests/roadmap/packed-casts/auto_items.zig`). An array of tuples
+stays rejected: the memory model has no tuple layout. Pointer-bearing repr casts are rejected (fail
 closed): the model's pointer bytes carry provenance and are not integer bits, so it could not
 give Zig's address there. It also rejects casts whose bit sizes differ. Enums, pointers and
 optionals on the outer side are rejected as before.
@@ -58,7 +72,7 @@ Its 8 bytes are zero (`optPtr_encode_null`). A wrapped pointer has the pointer's
 | Zig | Model | Null rule |
 |---|---|---|
 | `*T` → `?*T` (`@ptrCast`, coercion) | `optPtrWrap p = some p` (Lean coercion), any version | never null (`optPtrWrap_ne_null`) |
-| `@ptrCast(?*T)` → `*U` | `Zig.optPtrUnwrap` | null throws `.panic` (`optPtrUnwrap_null`); safe builds check before the cast |
+| `@ptrCast(?*T)` → `*U` | `Zig.optPtrUnwrap` | null throws `.illegal` (`optPtrUnwrap_null`); safe builds check before the cast (ordinary AIR, `.panic` first) |
 | `@intFromPtr(?*T)` | `Zig.optPtrAddr` | null is 0 (`optPtrAddr_null`) |
 | `@ptrFromInt(n)` to `?*T` | `Zig.optPtrFromAddr` | 0 is null (`optPtrFromAddr_zero`); `n ≠ 0` is `optPtrWrap <$> ptrFromAddr n` |
 
@@ -97,5 +111,10 @@ C/allowzero pointer and an optional slice, stay rejected.
 - `Checker.lean`: every accepted cast is accepted for 0.14.1, 0.15.2 and 0.16.0 and rejected
   for 0.17.0 or no version. It also checks the layout, bit-size and optional-pointer rejections.
 
-The native probe covers only the listed values on one host. Casts of auto structs, tuples,
-tagged and packed unions, vectors, sentinel arrays and error storage have no export.
+The native probe covers only the listed values on one host. Packed unions, floats and float
+arrays and vectors in casts, and arrays of `auto` structs and tagged unions (0.14.1, 0.15.2), are
+exported for every version in `tests/roadmap/packed-casts`, with kernel-checked results and native
+x86_64-linux outputs; casts of `auto` structs, tuples and tagged unions are compile errors there.
+Sentinel arrays and error storage in casts have no export. Vector casts are
+exported for 0.14.1-0.17.0 in `tests/roadmap/lang-long-tail` (`vector_casts.zig`, with
+`std.mem.eql`'s `mem.eqlBytes`), with native probes of every version.

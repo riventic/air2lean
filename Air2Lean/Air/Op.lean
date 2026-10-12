@@ -97,6 +97,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- `id` holds a pointer, at any depth; unknown types and exhausted fuel count as pointers
+(fail closed). -/
+partial def tyHoldsPtr (types : Array Ty) (id : TyId) (fuel : Nat := 256) : Bool :=
+  if fuel == 0 then true else
+  match types[id]? with
+  | some (.ptr ..) => true
+  | some ty => (childTys ty).any fun c => tyHoldsPtr types c (fuel - 1)
+  | none => true
+
 /-- A type without values (`noreturn`). A union field of this type can never be active: it
 adds no payload bytes, has no constructor in the translation, and every instruction or constant
 that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/
@@ -238,9 +247,11 @@ def Layout.laneBitPtr (l : Layout) : Bool :=
 def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
   (layouts[ty]?.map (·.laneBitPtr)).getD false
 
-/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+/-- The bit width of a lane that a lane pointer may address: an integer's or a float's bits (a
+float lane is its bits, `Zig.Packed (Float fmt)`), 1 for `bool`. -/
 def laneBits? : Ty → Option Nat
   | .int _ bits => some bits
+  | .float bits => some bits
   | .bool => some 1
   | _ => none
 
@@ -262,6 +273,13 @@ def Layout.bitPtrOffset (l : Layout) : Nat := if l.hostSize != 0 then l.bitOffse
 def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
   match types[id]? with
   | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
+
+/-- An optional of a C/allowzero pointer (`?*allowzero T`, `?[*c]T`): a flag after the payload,
+since the payload's address zero is a value. -/
+def optNullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.optional c) => nullablePtrTy types layouts c
   | _ => false
 
 /-- An ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr` in the model:
@@ -375,8 +393,9 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
+  | some "memcpyLenMismatch"
   | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
-  | some "unexpectedErrorCode" | some "loadUninstantiableType" => some ".panic"
+  | some "unexpectedErrorCode" | some "loadUninstantiableType" | some "invalidErrorCode" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -524,9 +543,8 @@ inductive Op where
   | isNull (a : Val)
   /-- `is_non_null`: true iff the optional `a` holds a value. -/
   | isNonNull (a : Val)
-  /-- Unwrap an optional's payload. Sema emits this only after an `is_non_null` check, so the
-  `null` case is statically unreachable — `Zig.optPayload` (`ZigLean/Basic.lean`) panics on it
-  anyway. -/
+  /-- Unwrap an optional's payload. Null is illegal behaviour: Sema's `is_non_null` check before
+  it is ordinary AIR, and `Zig.optPayload` (`ZigLean/Basic.lean`) checks it itself (`.illegal`). -/
   | optPayload (a : Val)
   /-- Wrap a value into `some`. -/
   | wrapOptional (a : Val)
@@ -616,6 +634,13 @@ inductive Op where
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/
   | errorName (a : Val)
+  /-- `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0), the check before `@errorFromInt`:
+  the code `a` is at most the compilation's error count (both tags compare `<=`, L10). Needs
+  the compilation's numbering (`Func.errorTable`). -/
+  | errorsLenLe (a : Val)
+  /-- `vector_store_elem` (Zig 0.14.1/0.15.2): `v[idx] = val` through the vector pointer `vptr`
+  with a runtime lane index (L09; `Zig.storeLaneAt`). -/
+  | vectorStoreElem (vptr idx val : Val)
   | structFieldVal (s : Val) (index : Nat)
   | aggregateInit (elems : Array Val)
   | call (callee : Val) (args : Array Val)
@@ -727,11 +752,48 @@ structure Func where
   externs : Array ExternDecl := #[]
   /-- `some`: an `export fn`, the definition of this linker symbol. -/
   exportDecl : Option ExportDecl := none
+  /-- The indices of the `noalias` parameters (`Air2Lean/Noalias.lean`). -/
+  noalias : Array Nat := #[]
+  /-- The export's `unchecked_ib` (`docs/air-json.md`): `"for_len"` when the compiler lowers an
+  unchecked `for` length mismatch to `unreach`. Hand-built functions have none. -/
+  uncheckedIb : Array String := #[]
   /-- `--allocator-model` of the run that parsed this function (`AllocatorModel`). -/
   allocatorModel : AllocatorModel := .std
   /-- The OS component of the profile's target triple (`linux`, `macos`); empty for a legacy
   profile. Selects the trusted OS model's ABI (`Zig.Os.Target`). -/
   targetOs : String := ""
+  /-- The compilation's error numbering, code `i + 1` = `errorTable[i]`, from the exporter's
+  `error-table.air2lean` beside the AIR files (`docs/air-json.md` §Error table, L10); `none`
+  without one. Integer/error casts translate only with it. -/
+  errorTable : Option (Array String) := none
+
+/-- A single or many pointer type through which an access is an ordinary memory access: not a
+slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and
+a field pointer of it is `Zig.ptrProjectNonnull` before 0.16) and not a bit-pointer into a packed
+field. The AIR semantics (`Air2Lean.Sem`) and its certificate fragment share this definition. -/
+def Func.plainPtr (f : Func) (t : TyId) : Bool :=
+  match f.types[t]?, f.layouts[t]? with
+  | some (.ptr size _ _), some l =>
+    (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
+  | _, _ => false
+
+/-- A plain slice type: not `volatile`, `allowzero`, bit-packed or with a sentinel (shared by
+`Air2Lean.Sem` and its certificate fragment). -/
+def Func.plainSlice (f : Func) (t : TyId) : Bool :=
+  match f.types[t]?, f.layouts[t]? with
+  | some (.ptr size _ _), some l =>
+    size == "slice" && !l.isVolatile && !l.allowzero && l.hostSize == 0 && !l.sentinel
+  | _, _ => false
+
+/-- The byte offset of field `idx` of the non-`packed` struct that a pointer of type `t` points
+to (shared by `Air2Lean.Sem` and its certificate fragment). -/
+def Func.fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat :=
+  match f.types[t]? with
+  | some (.ptr _ _ s) =>
+    match f.types[s]?, f.layouts[s]? with
+    | some (.struct _ layout _), some l => if layout == "packed" then none else l.offsets[idx]?
+    | _, _ => none
+  | _ => none
 
 /-- The width of every stored error code (`Dialect.errorSetBits`). -/
 abbrev Func.errorSetBits (f : Func) : Nat := f.dialect.errorSetBits

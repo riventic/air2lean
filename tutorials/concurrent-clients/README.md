@@ -85,6 +85,8 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-03](../../docs/premises.md#ord-03), [ORD-04](../../docs/premises.md#ord-04): the RC11
   approximation for atomics, no load buffering, `seq_cst` as `acq_rel`, weak CAS failure.
+- [ORD-06](../../docs/premises.md#ord-06): the compiled code's behaviours on the target are among the model's outcomes
+  (memory-model adequacy).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.

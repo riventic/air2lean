@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derived workspace that builds alternative translations without touching the checkout.
 
-  check-tree.py create DEST [--replace PATH=SOURCE ...]
+  check-tree.py create DEST [--replace PATH=SOURCE ...] [--host-goldens VERSION]
 
 Verification never writes a tracked file (docs/generated-code.md#check-trees). To build or
 differentially test a module other than the committed one (one Zig version's or host OS's
@@ -10,7 +10,15 @@ unignored untracked files, and the materialized whole-tree generated files), rep
 directory), and clones the checkout's Lake build caches (`.lake/build`, `tests/diff/.lake`) into
 it: Lake traces are content-based, so only the replaced modules and their dependents rebuild
 there. DEST is not a git checkout: run Lake, scripts/diff.sh and the Lean checks inside it,
-never git-based tools.
+never git-based tools. In a restricted CI checkout (docs/ci.md#restricted-checkout) the withheld
+files stay withheld in DEST: the placeholder, unreadable, never the checkout's file.
+
+`--host-goldens VERSION` replaces each example's `Proofs/<Ex>/Gen.lean` with the committed
+translation that scripts/check.sh compares on this host for Zig VERSION, when that is another
+file: `tests/golden/VERSION/<ex>/Gen-<os>-<arch>.lean`, else `Gen-<os>.lean`, else
+`tests/golden/VERSION/<ex>/Gen.lean` (os: `uname -s` in lower case, arch: `uname -m`). A run that
+tests committed translations without exporting AIR (the build-mode runs) thereby tests this
+host's translations, as check.sh does.
 
 Each run recreates DEST from scratch. DEST must be new or an earlier check tree (it holds a
 `.air2lean-check-tree.json` marker, written first), outside every tracked directory and cache.
@@ -41,6 +49,22 @@ def generated_paths(root):
     return module.paths(root)
 
 
+def withheld_files(root):
+    """{path: placeholder bytes} of the files a restricted CI checkout withholds (scripts/ci-reuse.py,
+    docs/ci.md#restricted-checkout): the check tree withholds them too, without reading them."""
+    git_dir = subprocess.run(['git', '-C', str(root), 'rev-parse', '--absolute-git-dir'], check=True,
+                             capture_output=True, text=True).stdout.strip()
+    state = Path(git_dir, 'air2lean-restricted.json')
+    if not state.is_file():
+        return {}
+    data = json.loads(state.read_text())
+    if data.get('discover'):  # scripts/ci-reuse.py restrict --discover keeps the checkout whole
+        return {}
+    placeholder = subprocess.run(['git', '-C', str(root), 'cat-file', 'blob', data['placeholder']], check=True,
+                                 capture_output=True).stdout
+    return dict.fromkeys(data['withheld'], placeholder)
+
+
 def clone_tree(source, destination):
     """Copy a build cache, as a copy-on-write clone where the file system supports one."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -48,6 +72,23 @@ def clone_tree(source, destination):
     if subprocess.run(['cp', '-R', flag, str(source), str(destination)], capture_output=True).returncode:
         shutil.rmtree(destination, ignore_errors=True)
         shutil.copytree(source, destination, symlinks=True)
+
+
+def host_goldens(version, root=ROOT, system=None, machine=None):
+    """`--replace` specs for this host's committed translations of Zig `version` (check.sh's
+    lookup order), for every example whose translation is not `Proofs/<Ex>/Gen.lean`."""
+    host_os = (system or platform.system()).lower()
+    arch = machine or platform.machine()
+    specs = []
+    for ex_dir in sorted((Path(root) / 'examples').iterdir()):
+        ex = ex_dir.name
+        golden = Path(root) / 'tests/golden' / version / ex
+        for name in (f'Gen-{host_os}-{arch}.lean', f'Gen-{host_os}.lean', 'Gen.lean'):
+            if (golden / name).is_file():
+                module = f'Proofs/{ex[0].upper()}{ex[1:]}/Gen.lean'
+                specs.append(f'{module}={golden / name}')
+                break
+    return specs
 
 
 def create(dest, replacements, root=ROOT):
@@ -81,8 +122,13 @@ def create(dest, replacements, root=ROOT):
                   replaced={path: dict(source=source, sha256=hashlib.sha256(data).hexdigest())
                             for path, (source, data) in replaced.items()})
     (dest / MARKER).write_text(json.dumps(marker, indent=2, sort_keys=True) + '\n')
+    withheld = withheld_files(root)
     for path in files:
-        if os.path.lexists(root / path):  # Else deleted in the working tree.
+        if path in withheld:
+            (dest / path).parent.mkdir(parents=True, exist_ok=True)
+            (dest / path).write_bytes(withheld[path])
+            os.chmod(dest / path, 0)
+        elif os.path.lexists(root / path):  # Else deleted in the working tree.
             (dest / path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / path, dest / path, follow_symlinks=False)
     for path, (_, data) in replaced.items():  # A new example's module need not exist yet.
@@ -101,9 +147,11 @@ def main(argv=None):
     make = sub.add_parser('create')
     make.add_argument('dest')
     make.add_argument('--replace', action='append', default=[], metavar='PATH=SOURCE')
+    make.add_argument('--host-goldens', metavar='VERSION',
+                      help="replace each example's module with this host's committed translation")
     args = parser.parse_args(argv)
     try:
-        create(args.dest, args.replace)
+        create(args.dest, args.replace + (host_goldens(args.host_goldens) if args.host_goldens else []))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1

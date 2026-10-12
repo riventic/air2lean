@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,14 +39,25 @@
  },
  "name": "tsc.sameTick",
  "module": "root",
+ "src": {
+  "file": "tsc.zig",
+  "module": "tsc",
+  "decl_line": 10
+ },
  "params": [],
+ "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "sameTick",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 23
   },
   {
    "id": 1,
@@ -72,7 +86,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 23
   },
   {
    "id": 4,
@@ -101,7 +116,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 7,
@@ -120,7 +136,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 9,

@@ -209,14 +209,20 @@ def claims(root, table):
         problems.append(f'README supports Zig {supported}; CI matrix runs {ci_versions}')
     if sorted(rows) != sorted(supported):
         problems.append(f'README version table rows {sorted(rows)} differ from supported {supported}')
-    full_claims = set()
+    full_claims, diff_claims = set(), set()
     for version, claim in rows.items():
         full, restricted, _ = MATRIX.ci_jobs(root, version)
         if claim['ci'].startswith('full job') and 'diff test' in claim['ci']:
             full_claims.add(version)
+            diff_claims.add(version)
             if not full:
                 problems.append(f'README claims a full Zig {version} job with a diff test; CI has none')
-        elif claim['ci'].startswith('restricted job') and 'no diff harness' in claim['ci']:
+        elif claim['ci'].startswith('restricted job'):
+            # A restricted row runs the listed examples; with the diff test its summary counts.
+            if 'diff test' in claim['ci']:
+                diff_claims.add(version)
+            elif 'no diff harness' not in claim['ci']:
+                problems.append(f'README Zig {version} CI claim {claim["ci"]!r} is not recognized')
             if full or not restricted:
                 problems.append(f'README claims a restricted Zig {version} job; CI has '
                                 f'{len(full)} full and {len(restricted)} restricted rows')
@@ -247,7 +253,7 @@ def claims(root, table):
         claim = rows.get(row['version'])
         if claim is None:
             problems.append(f'{label}: version is not a README-supported version'); continue
-        if row['version'] not in full_claims:
+        if row['version'] not in diff_claims:
             problems.append(f'{label}: README claims no diff harness for this version, '
                             'yet a differential summary exists')
             continue

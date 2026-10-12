@@ -1,0 +1,247 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "callbacks.runExternal",
+ "module": "root",
+ "src": {
+  "file": "callbacks.zig",
+  "module": "callbacks",
+  "decl_line": 42
+ },
+ "params": [
+  0,
+  1
+ ],
+ "noalias": [],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 18
+  },
+  {
+   "id": 3,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 4,
+    "func": "callbacks.viaOps",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "ty": 5,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 5,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "callbacks.ext_ops",
+   "module": "root",
+   "ty": 7,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 7,
+    "elems": [
+     {
+      "ty": 8,
+      "ptr": {
+       "global": 1,
+       "off": 0
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "ext_visit",
+   "module": "root",
+   "ty": 9,
+   "const": true,
+   "threadlocal": false,
+   "extern": true
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 10,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (*const callbacks.Ops, []const u32, *u32) bool"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "callbacks.Ops",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "visit",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 9,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*u32, u32) callconv(.c) bool"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}

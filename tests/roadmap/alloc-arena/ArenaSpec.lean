@@ -23,11 +23,13 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
   for the node and the part of the node's extent share that the arena keeps; the other used nodes
   (`rest`, a list of node records `NodeV`) and the free list (`Chain`): headers, tokens and
   shares, the free nodes with their whole buffers;
-* the child's state `CI.own`, `Junk` (bytes that frees which were not the last allocation leaked
-  back; the arena never touches them until `reset`), one receipt per grant (`Rcpts`) and the
-  shares that frees gave back (`Pool`).
+* the child's state `CI.own`, the junk `JunkAt jh` (bytes that frees which were not the last
+  allocation, shrinks and padding leaked back; the arena never touches them until `reset`), one
+  receipt per grant (`Rcpts`) and the shares that frees gave back (`Pool`).
 
-With no first node, `M` is empty. Every grant lies in the block of a used node, with that node's
+With no first node, `M` is empty. Every byte of a used node's buffer is in the junk's heap `jh`,
+in a grant, or in the first node's unused tail (`OV.Cov`), which `reset` needs to give each node
+back whole. Every grant lies in the block of a used node, with that node's
 address and kind labels, at a nonnegative offset (`GrantOk`). A token for the slice `(p, n)` with
 cell labels `A`, `K` is `gfrag γ e i (p, n, q, A, K)` for some grant id `i`, with the fraction `q`
 of the grant's extent share (tagged `(γ, e)`): it names exactly that region, so a token of the

@@ -8,7 +8,9 @@ It does not change either tool's proof or process-control semantics.
 To chain a receipt to source, AIR, compiler patch, runtime and profile identities, record an
 [artifact manifest](artifact-manifest.md) with `--receipt`; receipt schema 1 is unchanged.
 
-The receipt is not signed or authenticated. Its executor, source tree, installed Lean
+The receipt itself is not signed. `scripts/attest.py sign --receipt ATTEMPT` signs its files with
+a key the verifier trusts ([artifact-manifest.md](artifact-manifest.md#authentication), TRU-05);
+without that, it is not authenticated. Its executor, source tree, installed Lean
 library, Lake dependency validation and environment extractor are trusted local inputs.
 Hashes detect drift relative to a retained receipt; a caller able to forge the receipt
 and its entire evidence directory is outside that claim. Keep a trusted digest/reference

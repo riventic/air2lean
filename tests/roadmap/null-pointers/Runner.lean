@@ -12,10 +12,12 @@ private def illegal (x : Zig.MemM α) : IO Bool :=
   | _ => pure false
 
 private def addr (p : Zig.Ptr) : Zig.MemM Nat := do pure (← Zig.ptrAddr p).toNat
-/-- The address of a field pointer of address zero, or `illegal` where the compiler types it as a
-nonnullable pointer (Zig ≤0.15, `Zig.ptrProjectNonnull`; check.sh expects that only there). -/
-private def addrOrIllegal (x : Zig.MemM Zig.Ptr) : IO String := do
-  if ← illegal x then pure "illegal" else pure (toString (← observed (do addr (← x))))
+/-- The value, or the model's error (`illegal`, `panic`, ...). -/
+private def outcome (x : Zig.MemM Nat) : IO String :=
+  match (x.run {}).run with
+  | some (.ok (v, _)) => pure (toString v)
+  | some (.error e) => pure ((reprStr e).replace "Zig.Error." "")
+  | none => pure "divergence"
 private def bit (b : Bool) : Nat := if b then 1 else 0
 /-- A two-byte heap block holding 7, 9 (the native `byte2`). -/
 private def live2 : Zig.MemM Zig.Ptr := do
@@ -27,6 +29,12 @@ private def live2 : Zig.MemM Zig.Ptr := do
 private def slotWith (v : Zig.Ptr) : Zig.MemM Zig.Ptr := do
   let s ← Zig.alloc .heap 8 8
   letI : Zig.Enc Zig.Ptr := Zig.nullablePtrEnc
+  Zig.store 8 s v
+  pure s
+/-- A `?*allowzero u8` slot holding `v`: the payload, then the flag byte. -/
+private def optSlotWith (v : Option Zig.Ptr) : Zig.MemM Zig.Ptr := do
+  let s ← Zig.alloc .heap 16 8
+  letI : Zig.Enc (Option Zig.Ptr) := Zig.Enc.optionWith Zig.nullablePtrEnc
   Zig.store 8 s v
   pure s
 private def nodeWith (n : NullableNative.Node) : Zig.MemM Zig.Ptr := do
@@ -102,17 +110,15 @@ def main : IO Unit := do
     let live ← live2
     pure ((← NullableNative.cElem live 0).toNat, (← NullableNative.cElem live 1).toNat))
   IO.println s!"cElem {a} {b}"
-  let a ← addrOrIllegal (NullableNative.nextPtr Zig.Ptr.null)
   let b ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
     pure ((← addr (← NullableNative.nextPtr node)) - (← addr node)))
-  IO.println s!"nextPtr {a} {b}"
+  IO.println s!"nextPtr {b}"
   let a ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
     pure ((← addr (← NullableNative.valPtr node)) - (← addr node)))
   IO.println s!"valPtr {a}"
-  let a ← addrOrIllegal (NullableNative.allowzeroNextPtr Zig.Ptr.null)
-  IO.println s!"allowzeroNextPtr {a}"
+  IO.println s!"allowzeroNextPtr {← outcome (do addr (← NullableNative.allowzeroNextPtr Zig.Ptr.null))}"
   let (a, b) ← observed (do
     let live ← live2
     pure (← addr (← NullableNative.allowzeroAdd Zig.Ptr.null 0), (← addr (← NullableNative.allowzeroAdd live 1)) - (← addr live)))
@@ -128,8 +134,119 @@ def main : IO Unit := do
   let zeroOffset ← observed (NullableNative.addIsNull Zig.Ptr.null 0)
   let nonzero ← illegal (NullableNative.addIsNull Zig.Ptr.null 1)
   IO.println s!"addIsNull {bit zeroOffset} {if nonzero then "illegal" else "address"}"
-  -- Nonzero offsets from address zero that native code never executes (LLVM poison).
+  -- L05 completion: optionals of nullable pointers, unions, tuples, error unions, nullable
+  -- slices, bulk memory, parent recovery and a provenance-free offset.
+  let s0 : Option Zig.Ptr := some Zig.Ptr.null
+  let (a, b, c, d, e, f, g) ← observed (do
+    let live ← live2
+    pure (bit (← NullableNative.optIsNull none), bit (← NullableNative.optIsNull s0),
+      (← NullableNative.optUnwrap s0).toNat, bit (← NullableNative.optEq none s0),
+      bit (← NullableNative.optEq s0 s0), bit (← NullableNative.optEq none none),
+      bit (← NullableNative.optEq s0 (some live))))
+  IO.println s!"optional {a} {b} {c} {d} {e} {f} {g}"
+  let (a, b) ← observed (do
+    let live ← live2
+    let q ← NullableNative.optWrap live
+    pure (bit ((← NullableNative.optWrap Zig.Ptr.null) = none), (← addr (q.getD Zig.Ptr.null)) - (← addr live)))
+  IO.println s!"optWrap {a} {b}"
+  let (a, b, c) ← observed (do
+    let live ← live2
+    let slot ← optSlotWith (some live)
+    let a := bit ((← NullableNative.optStoreLoad slot none) = none)
+    let b ← addr ((← NullableNative.optStoreLoad slot s0).getD live)
+    pure (a, b, bit ((← NullableNative.optStoreLoad slot (some live)) = some live)))
+  IO.println s!"optStoreLoad {a} {b} {c}"
+  let (a, b) ← observed (do
+    pure ((← NullableNative.optPayloadPtr (← optSlotWith s0)).toNat,
+      (← NullableNative.optPayloadPtr (← optSlotWith none)).toNat))
+  IO.println s!"optPayloadPtr {a} {b}"
+  let (a, b) ← observed (do
+    pure (bit (← NullableNative.optCIsNull none), bit (← NullableNative.optCIsNull s0)))
+  IO.println s!"optC {a} {b}"
+  let (a, b) ← observed (do
+    let q ← NullableNative.optFromOrdinary none
+    pure (bit (q = none), ← addr (q.getD ⟨none, 1⟩)))
+  IO.println s!"optFromOrdinary {a} {b}"
+  let (a, b, c) ← observed (do
+    let live ← live2
+    let box ← Zig.alloc .heap 16 8
+    Zig.store 8 box (NullableNative.Box.ptr Zig.Ptr.null)
+    let a := (← NullableNative.boxPtr box).toNat
+    NullableNative.boxSet box live
+    let b := bit ((← NullableNative.boxPtr box).toNat = (← addr live))
+    Zig.store 8 box (NullableNative.Box.num 5#32)
+    pure (a, b, (← NullableNative.boxPtr box).toNat))
+  IO.println s!"box {a} {b} {c}"
+  let (a, b) ← observed (do
+    let live ← live2
+    pure ((← NullableNative.pairFirst Zig.Ptr.null).toNat,
+      bit ((← NullableNative.pairFirst live).toNat = (← addr live))))
+  IO.println s!"pair {a} {b}"
+  let (a, b, c, d) ← observed (do
+    let live ← live2
+    let a ← match ← NullableNative.errPtr false Zig.Ptr.null with
+      | .ok p => addr p
+      | .error _ => pure 99
+    let b ← match ← NullableNative.errPtr true live with
+      | .ok p => addr p
+      | .error _ => pure 99
+    let slot ← Zig.alloc .heap 16 8
+    let c := (← NullableNative.errStore slot Zig.Ptr.null).toNat
+    pure (a, b, c, bit ((← NullableNative.errStore slot live).toNat = (← addr live))))
+  IO.println s!"errPtr {a} {b} errStore {c} {d}"
+  let (a, b, c, d, e, f) ← observed (do
+    let live ← live2
+    let empty ← NullableNative.sliceAz Zig.Ptr.null 0 0
+    let part ← NullableNative.sliceAz live 1 2
+    let whole ← NullableNative.arrayAz Zig.Ptr.null
+    pure (← addr empty.ptr, empty.len.toNat, (← addr part.ptr) - (← addr live), part.len.toNat,
+      ← addr whole.ptr, whole.len.toNat))
+  IO.println s!"sliceAz {a} {b} {c} {d} arrayAz {e} {f}"
+  let (a, b, c, d, e, f) ← observed (do
+    let live ← live2
+    let empty ← NullableNative.sliceAz Zig.Ptr.null 0 0
+    NullableNative.memsetAz empty 1#8
+    NullableNative.memcpyAz empty empty
+    NullableNative.memsetAz (← NullableNative.sliceAz live 0 2) 5#8
+    let a := (← Zig.load (BitVec 8) 1 live).toNat
+    let b := (← Zig.load (BitVec 8) 1 (live.add 1)).toNat
+    Zig.store 1 (live.add 1) (6#8)
+    NullableNative.memcpyAz (← NullableNative.sliceAz live 0 1) (← NullableNative.sliceAz live 1 2)
+    let c := (← Zig.load (BitVec 8) 1 live).toNat
+    NullableNative.memsetC live 2 3#8
+    pure (a, b, c, (← Zig.load (BitVec 8) 1 live).toNat, (← Zig.load (BitVec 8) 1 (live.add 1)).toNat,
+      (← NullableNative.sliceC live 0 2).len.toNat))
+  IO.println s!"memsetAz {a} {b} memcpyAz {c} memsetC {d} {e} sliceC {f}"
+  let (a, b) ← observed (do
+    let parent ← Zig.alloc .heap 16 8
+    pure (bit ((← NullableNative.parentSecond (parent.add 8)) = parent),
+      ← addr (← NullableNative.parentFirst Zig.Ptr.null)))
+  IO.println s!"parent {a} {b}"
+  let zeroOffset ← observed (NullableNative.mmioIsNull 4096 0)
+  let wraps ← illegal (NullableNative.mmioIsNull 18446744073709551612 1)
+  IO.println s!"mmioIsNull {bit zeroOffset} {if wraps then "illegal" else "address"}"
+  IO.println s!"nullNextPtr {← outcome (do addr (← NullableNative.nextPtr Zig.Ptr.null))}"
+  -- Model only: nonzero offsets from address zero that native code never executes (LLVM poison;
+  -- Zig 0.17.0 checks the field pointer of a null C pointer first and panics).
+  let mut line := "model nonzeroFromNull"
   for (name, x) in [("cAdd", NullableNative.cAdd Zig.Ptr.null 1), ("cSub", NullableNative.cSub Zig.Ptr.null 1),
       ("cIndex", NullableNative.cIndex Zig.Ptr.null 3), ("valPtr", NullableNative.valPtr Zig.Ptr.null),
       ("allowzeroAdd", NullableNative.allowzeroAdd Zig.Ptr.null 1)] do
-    unless ← illegal x do throw (IO.userError s!"{name}: nonzero offset from address zero is not illegal")
+    line := line ++ s!" {name} {← outcome (do addr (← x))}"
+  IO.println line
+  -- Model only: illegal behaviour that no safety check catches, which native code runs as an
+  -- address or a wrapped value (LLVM poison) or a fault, and a premise-relative offset of a
+  -- provenance-free address no declared object covers (docs/null-pointers.md).
+  line := "model nullableIllegal"
+  for (name, x) in [("sliceAz", do addr (← NullableNative.sliceAz Zig.Ptr.null 1 1).ptr),
+      ("parentSecond", do addr (← NullableNative.parentSecond Zig.Ptr.null)),
+      ("parentSecondRaw", do addr (← NullableNative.parentSecond ⟨none, 8⟩)),
+      ("memsetAz", do NullableNative.memsetAz ⟨Zig.Ptr.null, 1⟩ 1#8; pure 0),
+      ("mmioIsNull", do pure (bit (← NullableNative.mmioIsNull 4096 1)))] do
+    line := line ++ s!" {name} {← outcome x}"
+  IO.println line
+  -- The native `case` runs (`check.sh --native`): each ends the process.
+  IO.println s!"case sliceCNull {← outcome (do pure (← NullableNative.sliceC Zig.Ptr.null 1 1).len.toNat)}"
+  IO.println s!"case memsetCNull {← outcome (do NullableNative.memsetC Zig.Ptr.null 0 1#8; pure 0)}"
+  IO.println s!"case optUnwrapNull {← outcome (do pure (← NullableNative.optUnwrap none).toNat)}"
+  IO.println s!"case memsetAzNull {← outcome (do NullableNative.memsetAz (← NullableNative.sliceAz Zig.Ptr.null 0 1) 1#8; pure 0)}"

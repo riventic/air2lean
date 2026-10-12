@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -44,6 +47,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "export": {
   "name": "fba_sentinel",
@@ -230,7 +234,7 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.allocSentinel__anon_26394",
+      "func": "mem.Allocator.allocSentinel__anon_26038",
       "module": "std",
       "instance_key": "79cb42d2660707fdb8dca6dd04bb7561980a5db6ba84af7087b4b3b384ead271",
       "noreturn": false
@@ -519,7 +523,7 @@
    "ty": 2,
    "callee": {
     "ty": 22,
-    "func": "mem.Allocator.free__anon_26398",
+    "func": "mem.Allocator.free__anon_26042",
     "module": "std",
     "instance_key": "4cd0e3a7c1bf15cb5b2da528ea2561750cefcd96bbc4d8cef0ebd7302e1d89d9",
     "noreturn": false

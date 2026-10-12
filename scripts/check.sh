@@ -19,7 +19,7 @@
 # Usage: check.sh
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
-#                         Default: 0.16.0
+#                         Default: zig.default of compatibility.json
 #   AIR2LEAN_ZIG_AIR      Patched zig (zig-patch/build.sh output). Default: zig-air-$AIR2LEAN_ZIG_VERSION/bin/zig
 #   AIR2LEAN_CI           If 1: fail when the committed translation differs from the new translator
 #                         output: tests/golden/<version>/<ex>/Gen.lean if it exists, else
@@ -71,7 +71,7 @@ trap 'workflow_interrupt 129' HUP
 trap 'workflow_interrupt 130' INT
 trap 'workflow_interrupt 143' TERM
 
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
+zig_version=${AIR2LEAN_ZIG_VERSION:-$(air2lean_default_zig_version "$repo_root")}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 [ -x "$zig_air" ] || {
   echo "error: patched zig not found/executable at $zig_air" >&2
@@ -86,6 +86,13 @@ report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
 # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
 # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
 namespace_of() { printf '%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"; }
+host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+host_arch=$(uname -m)
+# aarch64-linux AIR is exported for the baseline CPU (`generic`): the translator rejects a profile
+# with `fullfp16`, whose `f16` `@mulAdd` is fused (docs/floats.md §Targets), and the native
+# harness is built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
+mcpu=''
+if [ "$host_os-$host_arch" = linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
 
 if [ "${1:-}" = --example ]; then
   # Steps 1-2 for one example, run by scripts/par.py below. When the checkout's module is not
@@ -98,10 +105,13 @@ if [ "${1:-}" = --example ]; then
   # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
   # `uname -s` in lower case) replaces it on that host OS only: std code that the compiler picks
   # by OS (`std.Thread`'s implementation) is in the type table. The translation does not change
-  # (the translator emits only the types that the code uses).
+  # (the translator emits only the types that the code uses). A file in
+  # tests/golden/<version>/<ex>/air-<os>-<arch>/ (arch: `uname -m`) replaces it on that host
+  # only (aarch64-linux, whose AIR is the x86_64-linux AIR except where the target shows).
   golden_dir="tests/golden/$ex/air"
   version_dir="tests/golden/$zig_version/$ex/air"
-  os_dir="tests/golden/$zig_version/$ex/air-$(uname -s | tr '[:upper:]' '[:lower:]')"
+  os_dir="tests/golden/$zig_version/$ex/air-$host_os"
+  arch_dir="tests/golden/$zig_version/$ex/air-$host_os-$host_arch"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
 
@@ -117,7 +127,7 @@ if [ "${1:-}" = --example ]; then
   echo "== $ex: dumping AIR ==" >&2
   workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" \
     ${air_export[@]+"${air_export[@]}"} "$zig_air" \
-    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $mcpu "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
     echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2
@@ -148,7 +158,7 @@ if [ "${1:-}" = --example ]; then
     workflow_publish --overwrite "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
   fi
 
-  echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
+  echo "== $ex: checking against golden ($golden_dir, then $version_dir, $os_dir, $arch_dir) ==" >&2
   # A validated receipt permits the known schema-12 profile/schema-11 transition.
   # Target/profile failures are already fatal; observable AIR data remains compared.
   # The number of a generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
@@ -178,6 +188,7 @@ if [ "${1:-}" = --example ]; then
   add_dir "$golden_dir" "$cmp_dir/golden" golden
   add_dir "$version_dir" "$cmp_dir/golden" golden
   add_dir "$os_dir" "$cmp_dir/golden" golden
+  add_dir "$arch_dir" "$cmp_dir/golden" golden
   add_dir "$air_dir" "$cmp_dir/new" actual
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
@@ -186,14 +197,17 @@ if [ "${1:-}" = --example ]; then
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/ (then rename each <name>__anon_<n>.json to <name>__anon_N.json)" >&2
     echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
     echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
+    echo "hint: if only this host OS and architecture differ, copy just the differing files to $arch_dir/" >&2
     exit 1
   fi
 
   # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version on Linux (the
   # reference host), except a version with its own tests/golden/<version>/<ex>/Gen.lean, and a
   # host OS with its own tests/golden/<version>/<ex>/Gen-<os>.lean (std code that differs per
-  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/).
-  gen_golden="tests/golden/$zig_version/$ex/Gen-$(uname -s | tr '[:upper:]' '[:lower:]').lean"
+  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/), and a
+  # host with its own Gen-<os>-<arch>.lean (aarch64-linux's float rules, `docs/floats.md` §Targets).
+  gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os-$host_arch.lean"
+  [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os.lean"
   [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
   [ -f "$gen_golden" ] || gen_golden="Proofs/$Ex/Gen.lean"
   # Generated comparisons skip only the first-line profile record (host-specific: the target
