@@ -60,6 +60,9 @@ be stated, let alone proved.
 
 ## Proof side (`ZigLean/Sep/Full/Dispatch.lean`)
 
+The proof side belongs to the full-state framework and lands with it (`codex/alloc-arena-proof`,
+lane `codex/alloc-param`); this section is its design.
+
 * `callIndirect f arms d`: the generated chain with its last arm `d` (`throw .illegal` for a
   closed type, the environment's call for an open one). The fold lemmas read either form; one
   set of `fsym` rules (`callIndirect_pos`/`_neg`/`_nil`) walks both.
