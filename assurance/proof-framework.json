@@ -390,18 +390,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "rec_template",
-      "kind": "syntax",
-      "module": "ZigLean.RecTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "rec_template?",
-      "kind": "syntax",
-      "module": "ZigLean.RecTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_close",
       "kind": "syntax",
       "module": "ZigLean.Sep.Step",
@@ -515,12 +503,6 @@
       "tactic": "word_step",
       "kind": "syntax",
       "module": "tests.roadmap.dispatch-templates.Template",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "zig_range",
-      "kind": "syntax",
-      "module": "ZigLean.Range",
       "status": "legacy-to-retire"
     }
   ],
@@ -727,6 +709,9 @@
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {
+      "path": "ZigLean/Sep/Full/Try.lean"
+    },
+    {
       "path": "ZigLean/Sep/Full/Typed.lean"
     },
     {
@@ -839,16 +824,7 @@
       "path": "tests/roadmap/global-payload-pointers/Model.lean"
     },
     {
-      "path": "tests/roadmap/loop-tactics/Infer.lean"
-    },
-    {
       "path": "tests/roadmap/loop-tactics/Queue.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/Recursion.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/Template.lean"
     },
     {
       "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
