@@ -895,6 +895,12 @@ simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 
 attribute [fsym_arith] LawfulEnc.size_encode Array.size_append Array.size_extract BitVec.ofNat_eq_ofNat BitVec.toNat_and BitVec.toNat_sub BitVec.toNat_mul Nat.one_mul Nat.mul_one
+  Array.size_replicate
+
+/-- The size of written bytes (a region written after its allocation, or twice). -/
+@[fsym_arith] theorem _root_.Zig.Full.size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
+  simp [writeBytes]; omega
 
 attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_fst addWithOverflow_snd
   subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
