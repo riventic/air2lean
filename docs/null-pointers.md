@@ -49,7 +49,7 @@ stores through an `allowzero` pointer, so `allowzero` does not change the projec
 
 | Case | Zig 0.14.1–0.16.0 (native, aarch64-macos) | Model |
 | --- | --- | --- |
-| `&p.*.first` (offset 0), `p + 0`, `&p[0]`, `p - 0` from a null `[*c]T` | defined, address 0 (ReleaseSafe and Debug) | `Ptr.null` (0.14.1/0.15.2 `&p.*.first`, typed `*F`: `.illegal`) |
+| `&p.*.first` (offset 0), `p + 0`, `&p[0]`, `p - 0` from a null `[*c]T` | defined, address 0 (ReleaseSafe and Debug); Zig 0.17.0 checks `&p.*.f` of a C pointer (`is_non_null` in the AIR) and panics (`attempt to use null value`) | `Ptr.null` (0.14.1/0.15.2 `&p.*.first`, typed `*F`: `.illegal`; 0.17.0 `&p.*.f`: `.panic`) |
 | the same from `*allowzero T`/`[*]allowzero T` at address 0 | defined, address 0 | `Ptr.null` (0.14.1/0.15.2 `&p.first`, typed `*F`: `.illegal`) |
 | nonzero field offset, `p + n`, `&p[n]`, `p - n` (n ≠ 0) from address zero, C or `allowzero` | not address arithmetic: ReleaseSafe folds `(p + n) == null` to `p == null` (also for `allowzero`; 0.14.1 even in a `null_pointer_is_valid` function); Debug happens to yield `0 + offset` | `.illegal` |
 | load/store through a projection of address zero (C or `allowzero`) | segmentation fault; no safety check in ReleaseSafe or Debug (the langref calls a C-pointer dereference of address 0 safety-checked on hosted targets; these compilers emit no check) | `.illegal` (`Mem.access`) |
@@ -80,6 +80,42 @@ C/allowzero children from ordinary optional-pointer payload representation.
 C null tests lower to `is_null`/`is_non_null`, and the C-pointer payload operation
 retains the scalar C-pointer type (`Sema.zirOptionalPayload`). These source facts
 are not new compiler-execution or preservation evidence.
+
+## Address-zero projection policy
+
+The model follows each version's analyzed AIR; at address zero it says:
+
+| Projection from address zero | Model | Why |
+| --- | --- | --- |
+| offset 0 into a nullable result (`[*c]`, `allowzero`) | address zero | no `getelementptr` is emitted; native runs agree |
+| offset 0 into a nonnullable result (0.14.1/0.15.2 `&p.*.f` typed `*F`) | `.illegal` | a non-`allowzero` pointer must not be zero (illegal behaviour that no check catches: the compiler mistypes the field pointer, 0.16.0 keeps `allowzero`) |
+| a field of a null C pointer in 0.17.0 | `.panic` | Sema's `is_non_null` safety check, translated |
+| any nonzero offset | `.illegal` | `getelementptr inbounds` without an allocated object is poison; the native ReleaseSafe build folds `(p + n) == null` to `p == null` (`addIsNull`) |
+
+These are not over-approximations of the native result but the language's and the backend's
+verdict: the two `.illegal` rows are illegal behaviour that ReleaseSafe does not check, so a native
+run shows an address (0) where the model reports `.illegal`. Native diffs and outcome reports treat
+them as pinned illegal-behaviour exclusions (`native-transcript.py` maps exactly the two
+0.14.1/0.15.2 field-pointer lines `allowzeroNextPtr 0` and `nullNextPtr 0` to `illegal`), never as
+agreement or as a mismatch. The one remaining over-approximation is a nonzero offset from a nonzero
+provenance-free address (MMIO, a `@ptrFromInt` register window) outside a declared
+`--device-contract` window (L13/DEV-01, `docs/architecture-audit/memory-model.md` MM-3); it is
+not about address zero.
+
+## Fresh exports and native observations
+
+`tests/roadmap/null-pointers/air/<version>` and `air-reject/<version>` are the exports of
+`nullpointers.zig` (24 roots) and `reject.zig` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
+compilers (x86_64-linux, baseline, ReleaseSafe; `export.sh`, `provenance.json`,
+`test_provenance.py`; `COMPILER_FIXTURE_ROOTS`). `check.sh` translates each version, runs the
+model on the native `main`'s inputs and compares with `expected/<version>.txt` (26 native lines
+and one model-only line of the nonzero offsets from address zero), and checks both rejection roots
+of each version. `check.sh --native ZIG` runs `nullpointers.zig` with a stock Zig and compares its
+transcript with the same file. It passed for stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on
+x86_64-linux (linux/amd64 container) and aarch64-linux (linux/arm64 container), and for 0.15.2,
+0.16.0 and 0.17.0 on aarch64-macos (stock 0.14.1 does not link on this macOS). The 0.17.0 run ends
+with the null-field panic, its last line. `check.sh --export [VERSIONS]` checks that a patched
+compiler reproduces the committed export.
 
 ## Proof and regression evidence
 
@@ -112,77 +148,33 @@ are also compiler-exported and compared natively (below).
 Theorems apply to this model, with its existing compiler/export/normalization
 trust boundary; they are not AIR/backend preservation theorems.
 
-The scoped driver is sequential and requires supplied matching toolchains:
+The driver needs no compiler in its default mode:
 
 ```sh
-AIR2LEAN_NULL_ZIG_VERSION=0.16.0 \
-AIR2LEAN_NULL_ZIG_AIR=/path/to/patched-0.16.0/bin/zig \
-AIR2LEAN_NULL_ZIG_NATIVE=/path/to/shipping-0.16.0/zig \
-AIR2LEAN_NULL_TRANSLATOR=/path/to/air2lean \
-  tests/roadmap/null-pointers/check.sh
+lake build ZigLean air2lean ZigLean.Mem.NullLemmas
+tests/roadmap/null-pointers/check.sh                  # offline cases, mutant, 4 versions' exports
+tests/roadmap/null-pointers/check.sh --native ZIG     # a stock Zig on this host
+AIR2LEAN_ZIG_AIR=<dir of zig-air-<version>> tests/roadmap/null-pointers/check.sh --export [VERSIONS]
 ```
 
-The patched compiler must include the updated zero-constant exporter. Run the
-same driver for 0.14.1 and 0.15.2; it does not provision or build a Zig compiler.
-The driver builds the runtime/translator, checks imported theorem definitions,
-checks synthetic schema/checker rejections, elaborates twenty-seven generated semantic
-cases, kills an inverted-null-predicate mutant, exports 24 compiler-generated roots of
-`nullpointers.zig` (the original six plus storage, struct-field, array-item, projection,
-`allowzero`-projection and optional-conversion roots, and the `addIsNull` fold witness), compares
-25 native/Lean observation lines, and checks that the model is `.illegal` for five nonzero
-offsets from address zero that native code never executes, and checks two separate
-compiler-generated rejection roots (`optional`, a stored `?*allowzero u8`, replaced the
-former stored-`[*c]u8` root, which is now accepted). The six integer inputs include zero, small
-addresses and the maximum 64-bit address. Native dereference is exercised only
-with a live byte; invalid provenance/dead-block access is tested in the model.
+It builds the runtime and translator, elaborates twenty-seven generated semantic cases, kills an
+inverted-null-predicate mutant, translates the committed exports of every version and compares
+the model's lines with `expected/<version>.txt` (§Fresh exports), and checks the two rejection
+roots of each version (`optional`, a stored `?*allowzero u8`; `fixed`, a nonzero constant
+address). The six integer inputs include zero, small addresses and the maximum 64-bit address.
+Native dereference is exercised only with a live byte; invalid provenance and dead-block access
+are tested in the model. The `addIsNull` line records `illegal` natively because the ReleaseSafe
+build answers `true` for `(null + 1) == null`, which address arithmetic would answer `false`; it
+depends on LLVM's fold and is a witness, not a proof, of the undefined case.
 
-`native_decide` occurs only in generated regression fixtures, following the
-existing emitter-test convention. The shipped universal theorem definitions (eleven in `Null.lean`, thirteen in `NullLemmas.lean`)
-use kernel reductions and do not use `native_decide`, `sorry`, `admit` or axioms.
-The root serialized validation queue passed the complete driver at source
-revision `a63879e` on Zig 0.16.0 in 15.4 seconds (614 MiB peak memory), after
-building the updated patched exporter in 290 seconds (4422 MiB peak memory).
-The driver checked the runtime's five theorem definitions, nine semantic cases,
-one killed mutant, eight native observation lines, and two compiler rejection
-roots. The shared-predicate cleanup subsequently passed the complete gate at `e1d5123`
-in 19.7 seconds (740 MiB peak memory). The complete driver passed again at
-`8eb82fb` in 15.5 seconds (809 MiB peak memory), including the successful-type-check
-cache and both repeated-type per-value rejection regressions. The cache skips
-only previously successful type-graph checks; null constants, unsupported pointer
-constants and global-pointer alignment remain checked for every operand.
-
-These recorded driver runs predate the storage/aggregate/projection extension. The
-complete driver with that extension and the precise projection rule passed on
-aarch64-macos for Zig 0.16.0, 0.15.2 and 0.14.1 (patched exporters
-`/opt/dev/air2lean-build/zig-air-<version>`, shipping compilers `host-0.16.0`, `host-0.15.2`
-and `zig-aarch64-macos-0.14.1`; 39.5, 21.0 and 17.1 seconds, at most 1.7 GiB peak
-memory): 27 semantic cases, one killed mutant, 25 native/Lean lines and two compiler
-rejection roots. The lines are identical for 0.16.0; for 0.14.1 and 0.15.2 the driver expects
-`illegal` in place of the native address 0 for exactly the two field pointers of address zero
-(`nextPtr`, `allowzeroNextPtr`), the conservative `ptrProjectNonnull` case above. The `addIsNull` line records `illegal` natively because the
-ReleaseSafe build answers `true` for `(null + 1) == null`, which address arithmetic would answer
-`false`; it depends on LLVM's fold and is a witness, not a proof, of the undefined case.
-
-The recorded local toolchains were the worktree's
-`.lake/roadmap-null-zig16/bin/zig` (patched AIR exporter),
-`/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig` (shipping native compiler),
-and pinned Lean `leanprover/lean4:v4.34.0` at
-`/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean`.
-Both Zig invocations used `-OReleaseSafe -fno-error-tracing`, with no `-target`
-or `-mcpu` override. The run was on the root's arm64 macOS host using compiler
-defaults; the retained logs do not establish an exact CPU profile. Exported
-schema 11 target metadata is legacy/unverified. This observation set therefore
-does not qualify the model's reference x86_64-linux target or every host CPU.
-
-Local retained logs are
-`/opt/dev/air2lean/.lake/review-resume/roadmap/null-pointers-full-first.log` and
-`/opt/dev/air2lean/.lake/review-resume/roadmap/null-exporter16-build.log`.
-CI reruns the driver in the full nonmutation 0.16.0 Linux job with that job's
-fresh/cache-keyed patched exporter and separately pinned shipping host compiler.
-Linux CI execution results are pending. Full L05 remains open
-for optionals of nullable pointers, nullable pointers in unions/tuples/error-union
-payloads, nullable bulk memory/slicing/parent recovery, and the other deliberately rejected
-operations above; 25 finite observations are not a preservation theorem.
+`native_decide` occurs only in generated regression fixtures, following the existing emitter-test
+convention. The shipped universal theorem definitions (eleven in `Null.lean`, thirteen in
+`NullLemmas.lean`) use kernel reductions and do not use `native_decide`, `sorry`, `admit` or
+axioms. CI runs the default mode, `--export 0.16.0` with that job's patched compiler and
+`--native` with its stock 0.16.0 on x86_64-linux. Full L05 remains open for optionals of nullable
+pointers, nullable pointers in unions/tuples/error-union payloads, nullable bulk
+memory/slicing/parent recovery, and the other deliberately rejected operations above; finite
+observations are not a preservation theorem.
 
 The nullable mutation gate requires normal Lean exit 1 and exactly the three
 located `native_decide` evaluation refutations for `cNull` at 0, 1 and the maximum
