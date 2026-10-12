@@ -240,6 +240,18 @@ theorem Table.contract_of_fresh {C : (A → ConcM Tgt α) → Prop} (h : t.Fresh
 
 end Table
 
+/-- **The contract of an interface function** `g` (a callback, a vtable entry): every call
+`g a` meets the precondition `P a` and the postcondition `Q a`. Each interface states its own
+`P`/`Q` (plain assertions); logical variables are quantified outside (`∀ x, FnSpec (P x) (Q x)
+g`). A client assumes it of the function the call runs (`Table.contract_of_sel`/`_of_fresh`). -/
+def FnSpec (P : A → FAssn) (Q : A → α → FAssn) (g : A → ConcM Tgt α) : Prop :=
+  ∀ a, CTriple (P a) (g a) (Q a)
+
+/-- The call step of a contract. -/
+theorem FnSpec.call {P : A → FAssn} {Q : A → α → FAssn} {g : A → ConcM Tgt α}
+    (h : FnSpec P Q g) (a : A) : CTriple (P a) (g a) (Q a) :=
+  h a
+
 /-- **A call through a table, then a continuation**: the form of a generated call site after
 `conc_norm` (the continuation is pushed into every arm). -/
 theorem CTriple.tableCall {β : Type} {P : FAssn} {Q : α → FAssn} {S : β → FAssn}
@@ -643,6 +655,39 @@ theorem CVTable.dispatch_closure_env {t : AllocTables Tgt} {fns : VTableFns} {im
 
 /-- The four entries of a `std.mem.Allocator.VTable` in field order, for `vtR`/`vtOwn`. -/
 def _root_.Zig.VTableFns.toList (fns : VTableFns) : List Ptr := [fns.alloc, fns.resize, fns.remap, fns.free]
+
+/-! ## `std.Random`
+
+The second instance of the mechanism: `std.Random` is a context pointer and `fillFn :
+*const fn (*anyopaque, []u8) void`. Its calls go through a `Table` of the program's fill
+functions with the environment `EnvFn Tgt (Ptr × Slice) Unit` (the generated `Ext.call<i>` of the
+`fillFn` type); a client assumes the contract `∀ A S K bs, FnSpec (randomFillPre ctx R A S K bs)
+(randomFillPost R A S K) fill` of the function `fill` that the call runs (`Table.contract_of_sel`
+for a generator of the program, `Table.contract_of_fresh` for the environment's, premise
+EXT-05). -/
+
+/-- The precondition of `std.Random`'s `fillFn` with the context `ctx` and the generator's own
+resources `R` (its state), at the call's arguments `a`: the bytes `bs` of the slice `a.2`, of
+any block but a constant global's (which no fill can write). `A S K bs` are logical variables. -/
+def randomFillPre (ctx : Ptr) (R : FAssn) (A S : Nat) (K : BlockKind) (bs : Array Byte)
+    (a : Ptr × Slice) : FAssn :=
+  ⟪a.1 = ctx ∧ K ≠ .constGlobal ∧ bs.size = a.2.len.toNat⟫ ⋆ (R ⋆ up (bytesAt a.2.ptr A S K bs))
+
+/-- The postcondition of `fillFn`: it keeps `R` and fills the slice with integer bytes, touching
+nothing else. -/
+def randomFillPost (R : FAssn) (A S : Nat) (K : BlockKind) (a : Ptr × Slice) (_ : Unit) : FAssn :=
+  R ⋆ FAssn.ex fun vs : Array (BitVec 8) =>
+    ⟪vs.size = a.2.len.toNat⟫ ⋆ up (bytesAt a.2.ptr A S K (vs.map Byte.int))
+
+/-- The fill step of `std.Random`'s contract (an `fsym` rule: `fsym [FnSpec.randomFill h]`). -/
+theorem FnSpec.randomFill {fill : Ptr × Slice → ConcM Tgt Unit} {ctx : Ptr} {R : FAssn}
+    (h : ∀ A S K bs, FnSpec (randomFillPre ctx R A S K bs) (randomFillPost R A S K) fill)
+    (s : Slice) (A S : Nat) (K : BlockKind) (bs : Array Byte)
+    (hK : K ≠ .constGlobal) (hn : bs.size = s.len.toNat) :
+    CTriple (R ⋆ up (bytesAt s.ptr A S K bs)) (fill (ctx, s))
+      (fun _ => R ⋆ FAssn.ex fun vs : Array (BitVec 8) =>
+        ⟪vs.size = s.len.toNat⟫ ⋆ up (bytesAt s.ptr A S K (vs.map Byte.int))) :=
+  ((h A S K bs).call (ctx, s)).pre fun _ hr => sep_lift.2 ⟨⟨rfl, hK, hn⟩, hr⟩
 
 end Full
 end Zig
