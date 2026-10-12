@@ -119,6 +119,12 @@ class Generate(Scratch):
         self.assertEqual(code, 1)
         self.assertIn('register:table:begin/end', output)
 
+    def test_missing_inline_marker_is_an_error(self):
+        write(self.root / 'ROADMAP.md', self.text('ROADMAP.md').replace('<!-- register:incomplete -->', ''))
+        code, out = run('check', '--root', self.root)
+        self.assertEqual(code, 1)
+        self.assertIn('register:incomplete', out)
+
     def test_malformed_files_are_rejected(self):
         bad = {
             'unknown status': 'id: T01\ntitle: A\nstatus: done\nrow: r\n---\nb\n',
@@ -185,7 +191,12 @@ class Converter(Scratch):
         git('commit', '-qam', 'branch')
         # Meanwhile "main" changed X01 in the register; the import must not revert it.
         write_req(self.root, 'X01', 'C programs', 'partial', 'main moved on', 'Open.')
-        self.assertEqual(run('import', '--root', self.root, '--from', 'HEAD', '--base', base)[0], 0)
+        # ... and edited L02's row too: the branch wins, loudly.
+        write_req(self.root, 'L02', 'Bit operations', 'partial', 'main edit', FILES['L02'][3])
+        code, out = run('import', '--root', self.root, '--from', 'HEAD', '--base', base)
+        self.assertEqual(code, 0)
+        self.assertIn('L02 changed both on the branch and in assurance/register', out)
+        self.assertNotIn('X01 changed both', out)
         recs = {r['id']: r for r in REG['load'](self.root)}
         self.assertEqual(recs['L02']['row'], 'more, then done')
         self.assertTrue(recs['L02']['acceptance'].startswith('Needs less work.'))

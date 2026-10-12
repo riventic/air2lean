@@ -53,6 +53,7 @@ TABLE_HEADER = '| ID | Requirement | Status | Bounded status and remaining scope
 ROW = re.compile(r'^\| ([A-Z]\d\d) \| ([^|]+) \| (\w+) \| (.*) \|$', re.M)
 SECTION = re.compile(r'^## ([A-Z]\d\d) — ([^\n]*)\n\nClassification: (\w+)\.\n\n(.*?)(?=^## [A-Z]\d\d — |\Z)',
                      re.M | re.S)
+SECTION_START = re.compile(r'^## [A-Z]\d\d — ', re.M)
 COMMENT = re.compile(r'<!-- /?register:[a-z:-]+ -->\n?')
 
 
@@ -85,6 +86,8 @@ def validate(rec, source):
         raise ValueError(f'{source}: {rec["id"]} has a bad title')
     if not rec['row'] or rec['row'] != rec['row'].strip():
         raise ValueError(f'{source}: {rec["id"]} has an empty or unstripped row')
+    if SECTION_START.search(rec.get('acceptance', '')):
+        raise ValueError(f'{source}: {rec["id"]} acceptance text has a line that starts a "## <ID> — " section')
 
 
 def load(root=ROOT):
@@ -134,10 +137,11 @@ def replace_region(text, name, content, source):
     return pattern.sub(lambda m: m.group(1) + content + m.group(2), text)
 
 
-def replace_inline(text, values, source):
+def replace_inline(text, values, used):
     for name, value in values.items():
         pattern = re.compile(rf'(<!-- register:{name} -->).*?(<!-- /register:{name} -->)')
-        text = pattern.sub(lambda m: m.group(1) + value + m.group(2), text)
+        text, n = pattern.subn(lambda m: m.group(1) + value + m.group(2), text)
+        used[name] += n
     return text
 
 
@@ -145,10 +149,14 @@ def render_documents(root, recs):
     """{relative path: text the document must have}."""
     values = inline_values(recs)
     out = {}
+    used = collections.Counter()
     for rel, name, content in ((ROADMAP, 'table', render_table(recs)),
                                (ACCEPTANCE, 'acceptance', render_acceptance(recs))):
         text = (Path(root) / rel).read_text(encoding='utf-8')
-        out[rel] = replace_inline(replace_region(text, name, content, rel), values, rel)
+        out[rel] = replace_inline(replace_region(text, name, content, rel), values, used)
+    for name in values:
+        if not used[name]:
+            raise ValueError(f'no <!-- register:{name} --><!-- /register:{name} --> marker pair in {ROADMAP} or {ACCEPTANCE}')
     return out
 
 
@@ -215,6 +223,11 @@ def import_markdown(root, source=None, base=None):
     recs = read_markdown(root, source)
     old = read_markdown(root, base) if base else {}
     changed = [rid for rid in sorted(recs, key=sort_key) if recs[rid] != old.get(rid)]
+    for rid in changed:
+        path = Path(root) / REGISTER_DIR / f'{rid}.md'
+        if rid in old and path.exists() and parse_file(path) not in (old[rid], recs[rid]):
+            print(f'import: warning: {rid} changed both on the branch and in {REGISTER_DIR}; the branch version wins',
+                  file=sys.stderr)
     written = [rid for rid in changed if write_record(root, recs[rid])]
     print(f'import: {len(recs)} requirements read, {len(changed)} differ from the base, '
           f'{len(written)} register files written' + (': ' + ' '.join(written) if written else ''))

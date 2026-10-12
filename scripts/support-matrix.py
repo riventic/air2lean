@@ -171,11 +171,6 @@ def register(root):
         recs = register_data.load(root)
     except ValueError as e:
         raise Stale(str(e)) from e
-    for rec in recs:
-        if rec['status'] not in STATUSES:
-            raise Stale(f'{rec["id"]} has unknown status {rec["status"]!r}')
-        if rec['id'][0] not in AREAS:
-            raise Stale(f'{rec["id"]} has an unknown area prefix')
     return [{'id': r['id'], 'name': r['title'], 'status': r['status']} for r in recs]
 
 
@@ -377,7 +372,7 @@ def consistency(root):
               f'{counts["partial"]} partial, {counts["open"]} open and '
               f'{counts["research"]} research**')
     if header not in read(root, 'ROADMAP.md'):
-        problems.append(f'ROADMAP.md header does not state {header}')
+        problems.append(f'ROADMAP.md header does not state {header}; run scripts/register.py generate')
     # PLAN: history is marked historical; the open-work list repeats no completed work.
     plan = read(root, 'PLAN.md')
     if HISTORY_HEADING not in plan:
