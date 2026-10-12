@@ -26,9 +26,8 @@ what generated code that works on regions needs beyond the step rules of `AutoRu
   (`memsetUndef`), the store of an item (`regionStore`, and `regionStoreAdd` through a pointer
   that `ptrProject` formed with `Ptr.add`), the load of an item that a store wrote
   (`regionLoadWritten`, `regionLoadWrittenAdd`), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
-  overlap check passes by separation). They lift the region library's total triples
-  (`FTotalTriple.ofRegion`); the size label and the kind of a region's cells are labels
-  (`EUpd.relabel`).
+  overlap check passes by separation). They are the native rules of owned bytes (`Ops.lean`)
+  with the region's alignment and kind (`FTotalTriple.region_of`).
 -/
 
 namespace Zig
@@ -165,93 +164,46 @@ variable {P : FAssn} {w : Nat} {len i : BitVec w}
 
 end FTotalTriple
 
-/-! ## Lifting the region library -/
+/-! ## Byte operations on regions
 
-/-- A region whose cells carry some size label and some kind of `K`'s normal form: a size-free
-form of `regionIn` (`SizeFree`), for lifting the region library's total triples. -/
-def regionAny (p : Ptr) (A S : Nat) (K : BlockKind) (a : Nat) (bs : Array Byte) : Assn :=
-  fun h => ∃ A' S' K', (A' = A ∧ K'.norm = K.norm ∧ (A' + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal) ∧
-    bytesAt p A' S' K' bs h
-
-theorem regionAny_sizeFree {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} :
-    SizeFree (fun _ => none) (regionAny p A S K a bs) :=
-  SizeFree.bytesAt_ex fun _ _ K₀ _ K' ⟨h1, h2, h3, h4⟩ hk =>
-    ⟨h1, hk.trans h2, h3, fun e => h4 (by
-      have hn : K₀.norm = .constGlobal := by rw [← hk, e]; rfl
-      clear h1 h2 h3 h4 hk e; revert hn; cases K₀ <;> simp [BlockKind.norm])⟩
-
-theorem regionAny_of {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {h : Heap}
-    (hr : regionIn p A S K a bs h) : regionAny p A S K a bs h :=
-  ⟨A, S, K, ⟨rfl, rfl, hr.1, hr.2.1⟩, hr.2.2⟩
-
-/-- A `regionAny` is the region with its own labels, relabeled (`EUpd.relabel`). -/
-theorem EUpd.regionAny {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} :
-    EUpd (up (regionAny p A S K a bs)) (up (regionIn p A S K a bs)) := by
-  intro m r rF hh hp hs
-  obtain ⟨⟨A', S', K', ⟨rfl, hk, hal, hK⟩, hb⟩, hk2, hg⟩ := hp
-  exact EUpd.relabel (S := S') (S' := S) hk.symm m r rF hh ⟨⟨hal, hK, hb⟩, hk2, hg⟩ hs
-
-/-- **Lift a total triple of the region library** about one region, for every size label and
-kind of the region's normal form, to the full-state logic. -/
-theorem FTotalTriple.ofRegion {α : Type} {c : MemM α} {p : Ptr} {A S : Nat} {K : BlockKind}
-    {a : Nat} {bs : Array Byte} {φ : α → Prop} {Q : α → Array Byte}
-    (ht : ∀ S' K', K'.norm = K.norm → K' ≠ .constGlobal →
-      TotalTriple (regionIn p A S' K' a bs) c (fun v => ⌜φ v⌝ ∗ regionIn p A S' K' a (Q v)))
-    (hc : Tame c) (hk : Keeps (fun _ => False) c) :
-    FTotalTriple (up (regionIn p A S K a bs)) c (fun v => ⟪φ v⟫ ⋆ up (regionIn p A S K a (Q v))) := by
-  have ht' : TotalTriple (regionAny p A S K a bs) c
-      (fun v => ⌜φ v⌝ ∗ regionAny p A S K a (Q v)) := by
-    intro m hP hF hd hm hp hst
-    obtain ⟨A', S', K', ⟨rfl, hk, hal, hK⟩, hb⟩ := hp
-    obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := ht S' K' hk hK m hP hF hd hm ⟨hal, hK, hb⟩ hst
-    obtain ⟨hφ, hq⟩ := Zig.sep_lift.mp hq
-    exact ⟨v, m', hQ, hr, hd', hm', Zig.sep_lift.mpr ⟨hφ, ⟨A', S', K', ⟨rfl, hk, hq.1, hq.2.1⟩, hq.2.2⟩⟩, hs'⟩
-  have hl := FTotalTriple.ofTotal_up ht' hc regionAny_sizeFree hk
-  refine FTotalTriple.eupd_post (hl.pre fun r hr => up_imp (fun _ h => regionAny_of h) hr) fun _ => ?_
-  intro m r rF hh hp hs
-  obtain ⟨hφ, hp⟩ := up_lift.mp hp
-  obtain ⟨r', hh', hq⟩ := EUpd.regionAny m r rF hh hp hs
-  exact ⟨r', hh', sep_lift.mpr ⟨hφ, hq⟩⟩
-
-/-! ## Byte operations on regions -/
-
-/-- `@memset` keeps every block (it stores into one live block). -/
-theorem Keeps.memset {D : BlockId → Prop} {β : Type} [Enc β] (a : Nat) (p : Ptr) (n : BitVec 64)
-    (v : Option β) : Keeps D (Zig.memset a p n v) := by
-  unfold Zig.memset
-  split
-  · exact Keeps.pure' _
-  · refine Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-      Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ => Keeps.storeBytes _ _ _ _
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
-
-/-- `@memcpy` keeps every block (it stores into one live block). -/
-theorem Keeps.memcpy {D : BlockId → Prop} (size da sa : Nat) (d s : Ptr) (n m : BitVec 64) :
-    Keeps D (Zig.memcpy size da sa d s n m) := by
-  unfold Zig.memcpy Zig.memmove
-  split
-  · exact Keeps.of_keepsExt fun _ _ _ h => by cases h
-  · split
-    · exact Keeps.pure' _
-    · refine Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-        Keeps.bind (Keeps.of_keepsExt fun _ _ _ h => ?_) fun _ =>
-          Keeps.bind (Keeps.loadBytes _ _ _ _) fun _ => Keeps.storeBytes _ _ _ _
-      · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _
-      · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
+The native rules of owned bytes (`Ops.lean`: `load_bytesAt`, `store_bytesAt`, `memset_bytesAt`,
+`memmove_bytesAt`) with the region's alignment and kind. -/
 
 namespace FTotalTriple
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
 
+/-- **A rule on a region from the rule on its owned bytes**: the region's alignment and kind
+are facts of its labels, which the bytes keep. -/
+theorem region_of {α : Type} {c : MemM α} {φ : α → Prop} {Q : α → Array Byte}
+    (ht : (A + p.off.toNat) % a = 0 → K ≠ .constGlobal →
+      FTotalTriple (up (bytesAt p A S K bs)) c (fun v => ⟪φ v⟫ ⋆ up (bytesAt p A S K (Q v)))) :
+    FTotalTriple (up (regionIn p A S K a bs)) c (fun v => ⟪φ v⟫ ⋆ up (regionIn p A S K a (Q v))) :=
+  of_cases fun _ ⟨⟨hA, hK, hb⟩, hk, hg⟩ => ⟨_, _, ht hA hK, ⟨hb, hk, hg⟩, fun _ _ h => by
+    obtain ⟨hφ, hb', hk', hg'⟩ := sep_lift.mp h
+    exact sep_lift.mpr ⟨hφ, ⟨hA, hK, hb'⟩, hk', hg'⟩⟩
+
+/-- `region_of` for a step without a returned fact. -/
+theorem region_of' {α : Type} {c : MemM α} {Q : α → Array Byte}
+    (ht : (A + p.off.toNat) % a = 0 → K ≠ .constGlobal →
+      FTotalTriple (up (bytesAt p A S K bs)) c (fun v => up (bytesAt p A S K (Q v)))) :
+    FTotalTriple (up (regionIn p A S K a bs)) c (fun v => up (regionIn p A S K a (Q v))) :=
+  (region_of (φ := fun _ => True) fun hA hK =>
+    (ht hA hK).post fun _ _ h => sep_lift.mpr ⟨trivial, h⟩).post fun _ _ h => (sep_lift.mp h).2
+
 /-- **`@memset(region, undefined)`** of all `n` bytes of a region: the region's bytes become
 undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
 @[fsym] theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
     FTotalTriple (up (regionIn p A S K a bs)) (Zig.memset (α := BitVec 8) 1 p n none)
-      (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) :=
-  (ofRegion (φ := fun _ => True) (fun _ _ _ _ => TotalTriple.conseq (Region.memsetUndefIn hn)
-      (fun _ x => x) fun _ _ x => Zig.sep_lift.mpr ⟨trivial, x⟩)
-    (Tame.memset 1 p n none) (Keeps.memset 1 p n none)).post fun _ _ h => (sep_lift.mp h).2
+      (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) := by
+  have e : memsetBytes n.toNat (none : Option (BitVec 8)) = Array.replicate n.toNat .undef :=
+    Region.flatten_replicate_single _ _
+  have hs : (Array.replicate n.toNat Byte.undef).size = bs.size := by simp [hn]
+  refine region_of' fun _ hK => ?_
+  have t := memset_bytesAt (q := p) (k := 0) (al := 1) (A := A) (S := S) (bs := bs)
+    (n := n) (v := (none : Option (BitVec 8))) (by rw [e]; simp [Region.enc_size_byte])
+    (by rw [Region.enc_size_byte]; omega) (Nat.mod_one _) hK
+  simpa only [Int.natCast_zero, Ptr.add_zero, e, writeBytes_all hs] using t
 
 /-- **Store of an item** `v` at item `i` of a region (aligned to `al`): its bytes are `v`'s. -/
 @[fsym] theorem regionStore {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al : Nat} (v : T)
@@ -260,27 +212,8 @@ undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
     FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.elem (Enc.size T) i) v)
       (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) := by
   rw [Ptr.elem_eq]
-  exact (ofRegion (φ := fun _ => True) (fun _ _ _ _ => TotalTriple.conseq
-      (Region.storeItemIn v hpos ho hal halo) (fun _ x => x) fun _ _ x => Zig.sep_lift.mpr ⟨trivial, x⟩)
-    (Tame.store _ _ _) (Keeps.store _ _ _)).post fun _ _ h => (sep_lift.mp h).2
-
-/-- The load of an item at byte `o` of a region whose bytes there decode to `v`. -/
-theorem _root_.Zig.Region.loadItemIn {T : Type} [Enc T] {o al : Nat} {v : T} (hpos : 0 < Enc.size T)
-    (ho : o + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ o)
-    (hv : Enc.decode (bs.extract o (o + Enc.size T)) = (pure v : Result T)) :
-    TotalTriple (regionIn p A S K a bs) (Zig.load T al (p.add o))
-      (fun r => ⌜r = v⌝ ∗ regionIn p A S K a bs) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨hA, hK, hb⟩ := hp
-  have ha : (A + p.off.toNat + o) % al = 0 :=
-    Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hA)) halo)
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add o) (k := o) (n := Enc.size T)
-    (a := al) hb hm rfl hpos ho ha
-  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + o) (p.off.toNat + o + Enc.size T)) =
-      (pure v : Result T) := by rw [hx]; exact hv
-  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    Zig.sep_lift.mpr ⟨rfl, ⟨hA, hK, hb⟩⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  exact region_of' fun hA hK => store_bytesAt v (by rw [LawfulEnc.size_encode]; exact hpos)
+    (by rw [LawfulEnc.size_encode]; exact ho) (mod_add_dvd hA hal halo) hK
 
 /-- **Load of an item that a store wrote** (at item `i`, byte `o`): its value. -/
 @[fsym] theorem regionLoadWritten {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al o : Nat} {v : T}
@@ -292,8 +225,7 @@ theorem _root_.Zig.Region.loadItemIn {T : Type} [Enc T] {o al : Nat} {v : T} (hp
   have hw := LawfulEnc.size_encode v
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
   rw [Ptr.elem_eq, hoi]
-  refine ofRegion (fun _ _ _ _ => Region.loadItemIn hpos (by omega) hal halo ?_)
-    (Tame.load _ _ _) (Keeps.load _ _ _)
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
   have e := extract_writeBytes bs o (Enc.encode v) (by omega)
   rw [hw] at e
   rw [e]; exact LawfulEnc.decode_encode v
@@ -307,9 +239,8 @@ with `Ptr.add`). -/
       (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
   have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
   rw [e]
-  exact (ofRegion (φ := fun _ => True) (fun _ _ _ _ => TotalTriple.conseq
-      (Region.storeItemIn v hpos ho hal halo) (fun _ x => x) fun _ _ x => Zig.sep_lift.mpr ⟨trivial, x⟩)
-    (Tame.store _ _ _) (Keeps.store _ _ _)).post fun _ _ h => (sep_lift.mp h).2
+  exact region_of' fun hA hK => store_bytesAt v (by rw [LawfulEnc.size_encode]; exact hpos)
+    (by rw [LawfulEnc.size_encode]; exact ho) (mod_add_dvd hA hal halo) hK
 
 /-- **Load of an item that a store wrote**, through a pointer formed with `Ptr.add`. -/
 @[fsym] theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : Nat} {v : T}
@@ -321,8 +252,7 @@ with `Ptr.add`). -/
   have hw := LawfulEnc.size_encode v
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
   subst hko
-  refine ofRegion (fun _ _ _ _ => Region.loadItemIn hpos (by omega) hal halo ?_)
-    (Tame.load _ _ _) (Keeps.load _ _ _)
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
   have e := extract_writeBytes bs o (Enc.encode v) (by omega)
   rw [hw] at e
   rw [e]; exact LawfulEnc.decode_encode v
@@ -359,29 +289,19 @@ region `d`: the model's checks pass (equal counts; no overlap, by separation). -
         up (regionIn s A' S' K' a' bsrc)) := by
   have e : n = m := BitVec.eq_of_toNat_eq hm
   subst e
-  -- the legacy triple, for every labels of the two regions
-  have ht : TotalTriple (regionAny d A S K a bd ∗ regionAny s A' S' K' a' bsrc) (Zig.memcpy sz da sa d s n n)
-      (fun _ => regionAny d A S K a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * sz))) ∗
-        regionAny s A' S' K' a' bsrc) := by
-    intro mm hP hF hd hmm hp hst
-    obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨A₁, S₁, K₁, ⟨rfl, hk₁, hal₁, hK₁⟩, hb₁⟩,
-      ⟨A₂, S₂, K₂, ⟨rfl, hk₂, hal₂, hK₂⟩, hb₂⟩⟩ := hp
-    have hreg : (regionIn d A₁ S₁ K₁ a bd ∗ regionIn s A₂ S₂ K₂ a' bsrc) (h₁ ∪ h₂) :=
-      ⟨h₁, h₂, hd₁₂, rfl, ⟨hal₁, hK₁, hb₁⟩, ⟨hal₂, hK₂, hb₂⟩⟩
-    have ht0 := TotalTriple.memcpy_of (P := regionIn d A₁ S₁ K₁ a bd ∗ regionIn s A₂ S₂ K₂ a' bsrc)
-      (fun _ _ _ _ hp => Region.not_overlaps hnd hns hp)
-      (Region.memcpyIn (A := A₁) (S := S₁) (K := K₁) hnd hns hda hsa)
-    obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := ht0 mm _ hF hd hmm hreg hst
-    obtain ⟨q₁, q₂, hdq, rfl, hq₁, hq₂⟩ := hq
-    exact ⟨v, m', q₁ ∪ q₂, hr, hd', hm', ⟨q₁, q₂, hdq, rfl,
-      ⟨A₁, S₁, K₁, ⟨rfl, hk₁, hq₁.1, hq₁.2.1⟩, hq₁.2.2⟩, ⟨A₂, S₂, K₂, ⟨rfl, hk₂, hq₂.1, hq₂.2.1⟩, hq₂.2.2⟩⟩, hs'⟩
-  have hl := FTotalTriple.ofTotal_up ht (Tame.memcpy _ _ _ _ _ _ _)
-    (SizeFree.sep regionAny_sizeFree regionAny_sizeFree) (Keeps.memcpy _ _ _ _ _ _ _)
-  refine FTotalTriple.eupd_post (hl.pre fun r hr => ?_) fun _ => ?_
-  · exact up_imp (fun _ h => Zig.sep_mono (fun _ x => regionAny_of x) (fun _ x => regionAny_of x) h)
-      (sep_up hr)
-  · exact EUpd.trans (EUpd.of_imp fun _ h => up_sep h)
-      (EUpd.trans (EUpd.frame EUpd.regionAny) (EUpd.frameL EUpd.regionAny))
+  refine of_cases fun r hp => ?_
+  have hov := Region.not_overlaps hnd hns (sep_up hp).1
+  have ec : Zig.memcpy sz da sa d s n n = Zig.memmove sz da sa d s n := by
+    unfold Zig.memcpy; simp [hov]
+  obtain ⟨r₁, r₂, hd, rfl, ⟨⟨hA, hK, hb₁⟩, hk₁, hg₁⟩, ⟨⟨hA', hK', hb₂⟩, hk₂, hg₂⟩⟩ := hp
+  have t := memmove_bytesAt (d := d) (s := s) (k := 0) (j := 0) (A := A) (S := S) (K := K)
+    (A' := A') (S' := S') (K' := K') (bd := bd) (bsrc := bsrc) (sz := sz) (da := da) (sa := sa)
+    (n := n) (by omega) (by omega) (mod_add_dvd hA hda (Nat.dvd_zero _))
+    (mod_add_dvd hA' hsa (Nat.dvd_zero _)) hK
+  simp only [Int.natCast_zero, Ptr.add_zero, Nat.zero_add] at t
+  refine ⟨_, _, ec ▸ t, ⟨r₁, r₂, hd, rfl, ⟨hb₁, hk₁, hg₁⟩, ⟨hb₂, hk₂, hg₂⟩⟩, fun _ _ h => ?_⟩
+  obtain ⟨q₁, q₂, hdq, rfl, ⟨hq₁, hk₁', hg₁'⟩, ⟨hq₂, hk₂', hg₂'⟩⟩ := h
+  exact ⟨q₁, q₂, hdq, rfl, ⟨⟨hA, hK, hq₁⟩, hk₁', hg₁'⟩, ⟨⟨hA', hK', hq₂⟩, hk₂', hg₂'⟩⟩
 
 /-- `@memcpy` of a whole region onto a separate one of the same size: a copy of its bytes. -/
 @[fsym] theorem memcpyRegionsAll {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' sz da sa : Nat}
