@@ -343,7 +343,9 @@ NON_COMPILER_AIR = {
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
-    'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
+    'tests/roadmap/windows-target/air':
+        'x86_64-windows-gnu compiler exports of the fail-closed rules (check.sh, docs/windows-target.md), not this inventory',
+    'tests/roadmap/noreturn-variants/air-reject':'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',

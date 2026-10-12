@@ -355,7 +355,7 @@ def consistency(root):
         problems.append(f'Air2Lean/Main.lean help does not mark {default} as the default')
     if 'docs/support-matrix.md' not in help_text:
         problems.append('Air2Lean/Main.lean help does not point to docs/support-matrix.md')
-    for flag in sorted(set(re.findall(r'--[a-z][a-z-]*', usage_text))):
+    for flag in sorted(set(re.findall(r'--[a-z][a-z0-9-]*', usage_text))):
         if not re.search(rf'^\s+(?:-\w, )?{re.escape(flag)}(?![\w-])', help_text, re.M):
             problems.append(f'Air2Lean/Main.lean help does not describe {flag}')
     m = re.search(r'throw "usage: (air2lean --diagnostics-json[^"]*)"',

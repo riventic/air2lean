@@ -1179,6 +1179,15 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
 
+      # x86_64-windows-gnu fail-closed rules (docs/windows-target.md): recorded 0.17.0 exports;
+      # TLS, the std thread model and OS calls rejected, f80 x87 ops only with the admission.
+      - name: Windows target rules
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build air2lean
+          bash tests/roadmap/windows-target/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
@@ -1678,7 +1687,8 @@ jobs:
           bash tests/roadmap/lang-long-tail/check.sh --native
 
       # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
-      # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
+      # by the aarch64-linux and macos jobs) and the x86_64-windows-gnu results (recorded under
+      # Wine: local evidence, docs/windows-target.md) against the model, with kernel-checked layout
       # tables per profile; their vector images against L09's encoding (docs/aarch64-abi.md).
       - name: aarch64 ABI profile driver tests (T04)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
@@ -1697,6 +1707,8 @@ jobs:
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean x86_64-windows-gnu \
+            tests/roadmap/aarch64-abi/expected/0.16.0/x86_64-windows-gnu-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.16.0/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
@@ -1712,6 +1724,8 @@ jobs:
             tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-macos-none-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean x86_64-windows-gnu \
+            tests/roadmap/aarch64-abi/expected/0.15.2/x86_64-windows-gnu-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.15.2/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
@@ -1727,6 +1741,8 @@ jobs:
             tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-macos-none-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean x86_64-windows-gnu \
+            tests/roadmap/aarch64-abi/expected/0.14.1/x86_64-windows-gnu-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.14.1/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
@@ -1744,6 +1760,8 @@ jobs:
             tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-macos-none-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean x86_64-windows-gnu \
+            tests/roadmap/aarch64-abi/expected/0.17.0/x86_64-windows-gnu-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.17.0/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt" --skip f80x2
