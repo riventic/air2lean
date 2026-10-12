@@ -5,9 +5,10 @@ Two modes, combinable:
 
 * ``--import MOD --namespace NS``: write a temporary Lean file that imports ``ZigLean.VC`` and
   ``MOD`` and runs ``#vc_extract_all NS``. Every generated ``Zig.Result``/``Zig.MemM`` function
-  of ``NS`` is reported as ``extracted``, ``loop-request`` (an explicit invariant + variant is
-  required for the named loop/AIR instruction; nothing is guessed) or ``refused`` (with the
-  reason, e.g. a call without a ``@[vc_contract]``).
+  of ``NS`` is reported as ``extracted`` (a ``Result`` function), ``walk`` (a loop-free memory
+  function: ``vc_gen`` walks it with ``fsym`` on a full-state contract), ``loop-request`` (an
+  explicit invariant + variant is required for the named loop/AIR instruction; nothing is
+  guessed) or ``refused`` (with the reason, e.g. a call without a ``@[vc_contract]``).
 * ``FILE.lean``: check a contract file. Each ``vc_gen?`` in it reports the obligations of one
   contracted function, separated into safety, functional result, memory effect and error
   return, with the path conditions each one is under.
@@ -68,6 +69,8 @@ def describe(report: dict) -> list[str]:
     name, status = report["function"], report["status"]
     if status == "extracted":
         return [f"{name}: extracted as {report['program']}"]
+    if status == "walk":
+        return [f"{name}: memory function, walked by fsym on a full-state contract (vc_gen)"]
     if status == "refused":
         reason = " ".join(report["reason"].split())
         return [f"{name}: refused: {reason}"]

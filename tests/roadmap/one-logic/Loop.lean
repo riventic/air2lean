@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Loop
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # Loops in the full-state logic (`ZigLean/Sep/Full/Loop.lean`), library-only

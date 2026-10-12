@@ -1,6 +1,5 @@
 import Proofs.Layout.Gen
-import ZigLean.Sep.Triple
-import ZigLean.Sep.Witness
+import ZigLean.Sep.Full.AutoAll
 import ZigLean.Simp
 
 /-!
@@ -14,9 +13,14 @@ payload that a retag left undefined, `undef_*`, encodes as undefined bytes, so `
 (`LawfulEnc (Except ErrName α)`, `ZigLean/Mem/Lemmas.lean`). A write to the `const` global
 `table` throws `.illegal`. The `extern` union facts are general: `Zig.Raw.get_init`,
 `Zig.Raw.get_set` (`ZigLean/Mem/Lemmas.lean`).
+
+The triples are total, in the full-state logic, walked by `fsym` with the library's typed-value
+rules (`ZigLean/Sep/Full/Typed.lean`): a field read given the field's value, a tag and payload
+write through the bytes view (`up_pts_iff`). The strength log
+(`tests/roadmap/strength-log/ProofsLayout.lean`) gives back the legacy statements.
 -/
 
-open Layout Zig
+open Layout Zig Zig.Full FAssn
 
 /-- The hidden tag of `Num`: its `BitVec 1`. -/
 instance : LawfulEnc NumTag where
@@ -114,22 +118,9 @@ theorem Num.decode_int {bs : Array Byte} {x : BitVec 32} (h : (Enc.decode bs : R
 
 /-- `numInt` reads the payload of a `Num` that holds `int`. -/
 theorem numInt_spec (p : Ptr) (x : BitVec 32) :
-    Triple (pts p 4 (Num.int x)) (numInt p) (fun r => ⌜r = x⌝ ∗ pts p 4 (Num.int x)) := by
-  apply Triple.of_run
-  intro m hP hF hd hm hp hst
-  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
-  obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := id hp
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 0) (k := 0) (n := 4) (a := 4)
-    hb hmA (by simp [Ptr.add]) (by decide) (by rw [hs]; decide) (by simpa using ha)
-  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 0) (p.off.toNat + 0 + Enc.size (BitVec 32))) =
-      pure x := by
-    rw [show Enc.size (BitVec 32) = 4 from rfl, hx]; exact Num.decode_int hv
-  have hl2 := load_run (α := BitVec 32) hacc hv' (noRace_of_singleThread hstA.single _ _ _ _)
-  refine ⟨x, mA.recordAt b (p.off.toNat + 0) (Enc.size (BitVec 32)) .read, hP, ?_, hd, ?_,
-    sep_lift.mpr ⟨rfl, hp⟩, hstA.recordAt _ _ _ _⟩
-  · simp only [StateT.run, Ptr.add_zero] at hl hl2
-    simp [numInt, zig_unfold, hl, hl2, Num.tag]
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
+    FTotalTriple (up (pts p 4 (Num.int x))) (numInt p)
+      (fun r => ⟪r = x⟫ ⋆ up (pts p 4 (Num.int x))) := by
+  fsym [FTotalTriple.field_load0 (v := x) (hv := fun _ _ h => Num.decode_int h)]
 
 /-- A `Num` from its tag and payload bytes. -/
 theorem Num.decode_of_int {bs : Array Byte} {x : BitVec 32}
@@ -143,125 +134,77 @@ theorem Num.decode_of_int {bs : Array Byte} {x : BitVec 32}
     | .small => pure (Num.small (← Enc.decodeAt bs 0)) : Result Num) = _
   rw [ht, hx]; rfl
 
-/-- `setNum p true x` writes the tag `int` and the payload `x`: the old value does not matter. -/
-theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
-    Triple (pts p 4 n) (setNum p true x) (fun _ => pts p 4 (Num.int x)) := by
-  apply Triple.of_run
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, bs, ha, hs, -, hb, hK⟩ := hp
-  have hs8 : bs.size = 8 := hs
+/-- The tag `int` and the payload `x` written over any 8 bytes, in either order, are `Num.int x`. -/
+theorem Num.decode_set_int {bs : Array Byte} (hs : bs.size = 8) (x : BitVec 32) :
+    (Enc.decode (writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)) : Result Num) =
+        pure (Num.int x) ∧
+      (Enc.decode (writeBytes (writeBytes bs 0 (Enc.encode x)) 4 (Enc.encode NumTag.int)) : Result Num) =
+        pure (Num.int x) := by
   have ht1 : (Enc.encode NumTag.int).size = 1 := LawfulEnc.size_encode _
   have hx4 : (Enc.encode x).size = 4 := LawfulEnc.size_encode x
+  have hs₁ : (writeBytes bs 4 (Enc.encode NumTag.int)).size = 8 := by
+    rw [writeBytes_size _ _ _ (by omega), hs]
+  have hs₂ : (writeBytes bs 0 (Enc.encode x)).size = 8 := by
+    rw [writeBytes_size _ _ _ (by omega), hs]
+  refine ⟨Num.decode_of_int ?_ ?_, Num.decode_of_int ?_ ?_⟩
+  · have e := extract_writeBytes_disjoint (writeBytes bs 4 (Enc.encode NumTag.int)) 0
+      (Enc.encode x) 4 1 (by omega) (by omega) (by omega)
+    have e' := extract_writeBytes bs 4 (Enc.encode NumTag.int) (by omega)
+    rw [ht1] at e'
+    simp only [Enc.decodeAt]
+    rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e, e']
+    exact LawfulEnc.decode_encode _
+  · have e := extract_writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)
+      (by omega)
+    rw [hx4] at e
+    simp only [Enc.decodeAt]
+    rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e]
+    exact LawfulEnc.decode_encode x
+  · have e := extract_writeBytes (writeBytes bs 0 (Enc.encode x)) 4 (Enc.encode NumTag.int)
+      (by omega)
+    rw [ht1] at e
+    simp only [Enc.decodeAt]
+    rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e]
+    exact LawfulEnc.decode_encode _
+  · have e := extract_writeBytes_disjoint (writeBytes bs 0 (Enc.encode x)) 4
+      (Enc.encode NumTag.int) 0 4 (by omega) (by omega) (by omega)
+    have e' := extract_writeBytes bs 0 (Enc.encode x) (by omega)
+    rw [hx4] at e'
+    simp only [Enc.decodeAt]
+    rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e, e']
+    exact LawfulEnc.decode_encode x
+
+/-- `setNum p true x` writes the tag `int` and the payload `x`: the old value does not matter.
+The value is undecodable between the two stores, so they run on its bytes (`up_pts_iff`). -/
+theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
+    FTotalTriple (up (pts p 4 n)) (setNum p true x) (fun _ => up (pts p 4 (Num.int x))) := by
+  refine (FTotalTriple.ex fun bs => FTotalTriple.lift fun ⟨hs, _⟩ => ?_).pre
+    fun _ h => up_pts_iff.mp h
+  have hs8 : bs.size = 8 := hs
+  have ht : (Enc.encode NumTag.int).size = 1 := LawfulEnc.size_encode _
+  have hx : (Enc.encode x).size = 4 := LawfulEnc.size_encode x
   -- The compiler stores the tag and the payload in either order (disjoint bytes).
   first
   | -- Tag first (0.16.0, 0.15.2).
-      obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
-        (bs' := Enc.encode NumTag.int) hb hm hd rfl (by omega) (by omega) (Nat.mod_one _) hst hK
-      have hs₁ : (writeBytes bs 4 (Enc.encode NumTag.int)).size = 8 := by
-        rw [writeBytes_size _ _ _ (by omega), hs8]
-      obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
-        (bs' := Enc.encode x) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (by simpa using ha) hst₁ hK
-      refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
-      · have e₁ : (store 1 (p.add 4) NumTag.int).run m = pure ((), m₁) := hr₁
-        have e₂ : (store 4 (p.add 0) x).run m₁ = pure ((), m₂) := hr₂
-        simp only [StateT.run, Ptr.add_zero] at e₁ e₂
-        simp [setNum, zig_unfold, e₁, e₂]
-      · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
-      · apply Num.decode_of_int
-        · have e := extract_writeBytes_disjoint (writeBytes bs 4 (Enc.encode NumTag.int)) 0
-            (Enc.encode x) 4 1 (by omega) (by omega) (by omega)
-          have e' := extract_writeBytes bs 4 (Enc.encode NumTag.int) (by omega)
-          rw [ht1] at e'
-          simp only [Enc.decodeAt]
-          rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e, e']
-          exact LawfulEnc.decode_encode _
-        · have e := extract_writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)
-            (by omega)
-          rw [hx4] at e
-          simp only [Enc.decodeAt]
-          rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e]
-          exact LawfulEnc.decode_encode x
-  |   -- Payload first (0.14.1).
-    obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
-      (bs' := Enc.encode x) hb hm hd rfl (by omega) (by omega) (by simpa using ha) hst hK
-    have hs₁ : (writeBytes bs 0 (Enc.encode x)).size = 8 := by
-      rw [writeBytes_size _ _ _ (by omega), hs8]
-    obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
-      (bs' := Enc.encode NumTag.int) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (Nat.mod_one _) hst₁ hK
-    refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
-    · have e₁ : (store 4 (p.add 0) x).run m = pure ((), m₁) := hr₁
-      have e₂ : (store 1 (p.add 4) NumTag.int).run m₁ = pure ((), m₂) := hr₂
-      simp only [StateT.run, Ptr.add_zero] at e₁ e₂
-      simp [setNum, zig_unfold, e₁, e₂]
-    · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
-    · apply Num.decode_of_int
-      · have e := extract_writeBytes (writeBytes bs 0 (Enc.encode x)) 4 (Enc.encode NumTag.int)
-          (by omega)
-        rw [ht1] at e
-        simp only [Enc.decodeAt]
-        rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e]
-        exact LawfulEnc.decode_encode _
-      · have e := extract_writeBytes_disjoint (writeBytes bs 0 (Enc.encode x)) 4
-          (Enc.encode NumTag.int) 0 4 (by omega) (by omega) (by omega)
-        have e' := extract_writeBytes bs 0 (Enc.encode x) (by omega)
-        rw [hx4] at e'
-        simp only [Enc.decodeAt]
-        rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e, e']
-        exact LawfulEnc.decode_encode x
+    refine (?_ : FTotalTriple _ _ fun _ => up (Zig.region p 4
+        (writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)))).post
+      fun _ _ h => up_pts_of_region (by simp only [size_writeBytes, ht, hx, hs8]; rfl)
+        (Num.decode_set_int hs8 x).1 h
+    fsym
+    done
+  | -- Payload first (0.14.1).
+    refine (?_ : FTotalTriple _ _ fun _ => up (Zig.region p 4
+        (writeBytes (writeBytes bs 0 (Enc.encode x)) 4 (Enc.encode NumTag.int)))).post
+      fun _ _ h => up_pts_of_region (by simp only [size_writeBytes, ht, hx, hs8]; rfl)
+        (Num.decode_set_int hs8 x).2 h
+    fsym
 
 /-- `bump` adds 1 to the payload of an error union in memory (`ParseError!u8`: the error code
 at 0, the payload at 2). -/
 theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
-    Triple (pts p 2 (Except.ok x : Except ErrName (BitVec 8))) (bump p)
-      (fun _ => pts p 2 (Except.ok (x + 1) : Except ErrName (BitVec 8))) := by
-  apply Triple.of_run
-  intro m hP hF hd hm hp hst
-  let domain : ErrorDomain := { names := #["Empty", "TooBig"], unique := by decide, bounded := by decide }
-  let enc : Enc (Except ErrName (BitVec 8)) := errorUnionEnc domain inferInstance
-  have hpFinite : @pts (Except ErrName (BitVec 8)) enc p 2 (.ok x) hP := by
-    obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
-    refine ⟨A, S, K, bs, ha, hs, ?_, hb, hK⟩
-    have hlegacy : (Enc.errorUnionWith (inferInstance : Enc (BitVec 8))).decode bs =
-        pure (.ok x) := hv
-    change (errorUnionEnc domain (inferInstance : Enc (BitVec 8))).decode bs = pure (.ok x)
-    unfold errorUnionEnc
-    dsimp only [Enc.decode]
-    rw [hlegacy]
-    rfl
-  have hloadFinite : ∃ mA, (@load (Except ErrName (BitVec 8)) enc 2 p).run m =
-      pure (.ok x, mA) ∧ mA.heap = hP ∪ hF ∧ mA.Seq := by
-    letI : Enc (Except ErrName (BitVec 8)) := enc
-    exact pts_load_run hpFinite hm (by decide) hst
-  obtain ⟨mA, hl, hmA, hstA⟩ := hloadFinite
-  obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
-  have hs4 : bs.size = 4 := hs
-  have hpo : (errUnionOffsets (Enc.size (BitVec 8)) (Enc.align (BitVec 8))).2 = 2 := by decide
-  have heo : (errUnionOffsets (Enc.size (BitVec 8)) (Enc.align (BitVec 8))).1 = 0 := by decide
-  obtain ⟨hcode, hpay⟩ := errUnion_decode_ok hv
-  rw [hpo] at hpay
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 2) (k := 2) (n := 1) (a := 1)
-    hb hmA rfl (by decide) (by omega) (Nat.mod_one _)
-  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 2) (p.off.toNat + 2 + Enc.size (BitVec 8))) =
-      pure x := by
-    rw [show Enc.size (BitVec 8) = 1 from rfl, hx]; exact hpay
-  have hl2 := load_run (α := BitVec 8) hacc hv' (noRace_of_singleThread hstA.single _ _ _ _)
-  have hmB : (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read).heap = hP ∪ hF := by funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
-  have hx1 : (Enc.encode (x + 1)).size = 1 := LawfulEnc.size_encode _
-  obtain ⟨mC, hr₃, hstC, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p.add 2) (k := 2) (a := 1)
-    (bs' := Enc.encode (x + 1)) hb hmB hd rfl (by omega) (by omega) (Nat.mod_one _)
-    (hstA.recordAt _ _ _ _) hK
-  refine ⟨(), mC, h₃, ?_, hd₃, hm₃, ⟨A, S, K, _, ha, ?_, ?_, hb₃, hK⟩, hstC⟩
-  · have e₃ : (store 1 (p.add 2) (x + 1#8)).run
-        (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read) = pure ((), mC) := hr₃
-    have hpp : errPayloadPtr (BitVec 8) p = p.add 2 := by simp [errPayloadPtr, hpo]
-    have hpr := ptrProject_run (m := mA) (errPayloadPtr (BitVec 8)) rfl
-      (by simpa using bytesAt_inBounds hb hmA (k := 0) (by omega) (by omega))
-      (by rw [hpp]; exact bytesAt_inBounds hb hmA (k := 2) (by omega) (by omega))
-    simp only [StateT.run] at hl hl2 e₃ hpr
-    simp [bump, zig_unfold, hl, enc, domain, hpr, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
-  · rw [writeBytes_size _ _ _ (by omega)]; exact hs
-  · have := errUnion_decode_setPayload (bs := bs) (x + 1) hs hcode
-    rwa [hpo] at this
+    FTotalTriple (up (pts p 2 (Except.ok x : Except ErrName (BitVec 8)))) (bump p)
+      (fun _ => up (pts p 2 (Except.ok (x + 1) : Except ErrName (BitVec 8)))) := by
+  fsym
 
 /-- A write to the `const` table through `@constCast` throws `.illegal`: its block (3) is
 read-only. This holds for every placement: the item's address is aligned because the block is. -/
@@ -287,31 +230,23 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
   simp only [StateT.run] at hst hpr
   simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst, hpr, checkIndex]
 
-/-! ## Non-vacuity and liveness witnesses: one value in one block -/
+/-! ## Non-vacuity witnesses: one value in one block
+
+The triples are total: the return is part of the claim, so they need no liveness witness. -/
 
 nonvacuity_witness Num.decode_int := ⟨Enc.encode (Num.int 0), 0, Num.decode_encode_int 0, trivial⟩
 nonvacuity_witness Num.decode_of_int :=
   ⟨Enc.encode (Num.int 0), 0, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
 
-theorem numInt_pre : pts Witness.p0 4 (Num.int 0) (Witness.mem1 (Enc.encode (Num.int 0))).heap :=
-  Witness.mem1_pts (Num.size_encode _) (Num.decode_encode_int 0) (by decide) (by decide)
+theorem numInt_pre : Witness.FAdmit (up (pts Witness.p0 4 (Num.int 0))) :=
+  Witness.FAdmit.up
+    (Witness.mem1_pts (kind := .heap) (Num.size_encode _) (Num.decode_encode_int 0) (by decide) (by decide))
+    (Witness.mem1_fseq _ _ (by decide +kernel))
 
-nonvacuity_witness numInt_spec := ⟨Witness.p0, 0, Witness.Admit.of_heap numInt_pre (Witness.mem1_seq _ _)⟩
-liveness_witness numInt_spec :=
-  ⟨Witness.p0, 0,
-    Witness.Live.of_heap numInt_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+nonvacuity_witness numInt_spec := ⟨Witness.p0, 0, numInt_pre⟩
+nonvacuity_witness setNum_spec := ⟨Witness.p0, Num.int 0, 1, numInt_pre⟩
 
-nonvacuity_witness setNum_spec :=
-  ⟨Witness.p0, Num.int 0, 1, Witness.Admit.of_heap numInt_pre (Witness.mem1_seq _ _)⟩
-liveness_witness setNum_spec :=
-  ⟨Witness.p0, Num.int 0, 1,
-    Witness.Live.of_heap numInt_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+theorem bump_pre : Witness.FAdmit (up (pts Witness.p0 2 (Except.ok 0 : Except ErrName (BitVec 8)))) :=
+  Witness.FAdmit.up (Witness.mem1_pts' _ (by decide)) (Witness.mem1_fseq _ _ (by decide +kernel))
 
-theorem bump_pre : pts Witness.p0 2 (Except.ok 0 : Except ErrName (BitVec 8))
-    (Witness.mem1 (Enc.encode (Except.ok 0 : Except ErrName (BitVec 8)))).heap :=
-  Witness.mem1_pts' _ (by decide)
-
-nonvacuity_witness bump_ok_spec := ⟨Witness.p0, 0, Witness.Admit.of_heap bump_pre (Witness.mem1_seq _ _)⟩
-liveness_witness bump_ok_spec :=
-  ⟨Witness.p0, 0,
-    Witness.Live.of_heap bump_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+nonvacuity_witness bump_ok_spec := ⟨Witness.p0, 0, bump_pre⟩

@@ -205,151 +205,106 @@ frame, a store claiming the old value, a wrong array neighbor, and a rule for a 
 command. Steps on whole-array ownership `arr p xs` at a symbolic index wait for `Full/Arr`;
 `StepClients.lean` keeps the legacy tactics' generated array clients until then.
 
-## Loop templates and range conversions
+## Loops, recursion and range conversions
 
-Import `ZigLean.Sep.LoopTemplate` for the invariant/measure template,
-`ZigLean.RecTemplate` for recursive functions and `ZigLean.Range` for arithmetic-range lemmas.
-All three are optional modules.
+Generated loops are proved in the full-state logic with the loop rules of
+`ZigLean/Sep/Full/Loop.lean`; each body's step is a triple walked by `fsym`
+([proof-automation.md](proof-automation.md)). There is no loop template and no loop tactic:
 
-`LoopTemplate body again inv post` has one field, `step`: for every state `s` and
-measure `n`, one run of the body is a `TotalTriple` from `inv s n` to
-`loopNext again inv post n` (repeat with `inv s' n'` for some `n' < n`, or exit with
-`post e s'`). The measure is a ghost `Nat` carried by the invariant, so it can count
-remaining list nodes or queue items. For a measure `μ` on the locals, use
-`inv s n := ⌜n = μ s⌝ ∗ I s`. `LoopTemplate.total` proves the whole loop through
-`TotalTriple.loop_ghost` (strong induction on the measure). `LoopTemplate.partial` projects the
-`Triple`. `loopNext_repeat` and `loopNext_exit` prove the step's postcondition.
+* `FTotalTriple.loop_measure I μ post step`: total correctness with a measure `μ` on the locals.
+  `step` is one run of the body from `I s` that either repeats with `I s'` and `μ s' < μ s` or
+  exits with `post`.
+* `FTotalTriple.loop_ghost inv post step`: total correctness with a ghost measure `n` carried by
+  the invariant `inv s n` (`floopNext`), for loops whose progress no local counts, such as the
+  rest of a list.
+* `FTriple.loop inv post step`: partial correctness from the invariant alone (fixpoint
+  induction). `FTriple.admissible_fun` is the partial recursion rule for a `partial_fixpoint`
+  group in `MemM`.
 
-`loop_template inv post` applies to a `TotalTriple` or `Triple` goal on
-`(Zig.loop body again).run s` and leaves the named goals `step`, `entry`
-(`P h → ∃ n, inv s n h`), and `exit` (`post e s' h → Q (e, s') h`). `exit` is closed
-automatically when `post` already is the goal's postcondition. `loop_template?` additionally
-logs the remaining premises and their types. The partial form still requires a decreasing
-measure. A loop whose termination depends on a non-`Nat` argument must first define
-such a measure.
+A proved loop is a rule like any other: stated over `(@Zig.loop (MM σ) _ _ mb _ body again).run s`
+with the `MonoBind` proof `mb` as a parameter, `fsym [loop_rule]` uses it inside the enclosing
+body. That is how a nested loop is proved once and used by the outer step.
 
-`zig_range` rewrites fixed-width arithmetic with conditional lemmas: `toNat_add_of_lt`,
-`toNat_sub_of_le`, `toNat_mul_of_lt`, `toNat_setWidth_of_le`/`_of_lt`,
-`toNat_ofNat_of_lt`, `toInt_of_lt`, `toNat_ofInt_natCast`, checked
-`add`/`sub`/`mul` without overflow, and unsigned widening/narrowing `intCast`. Each range
-premise must follow from context by `assumption` or `omega`. When a premise does not, the
-term is left unchanged and the obligation remains visible. `sum_toNat_le` and
-`sum_toNat_lt` bound sums of fixed-width values (`l.length ≤ 2 ^ k` items of width `w` fit
-in `w + k` bits). These lemmas are ordinary theorems and use no `native_decide`.
+Range conversions are `fsym`'s step rules for checked arithmetic and unsigned `@intCast`
+(`add_step`, `sub_step`, `intCast_step`, …) and its arithmetic solver `fsym_arith`.
+`ZigLean/Range.lean` keeps the conditional lemmas and the sum bounds `sum_toNat_le` and
+`sum_toNat_lt` (`l.length ≤ 2 ^ k` items of width `w` fit in `w + k` bits) as ordinary
+theorems.
 
-`tests/roadmap/loop-tactics/Queue.lean` applies both tools to the generated `Lists.sum`
-from `examples/lists/lists.zig`, a walk over a singly linked queue from its head. `sum_total`
-is a `TotalTriple`: given the explicit capacity premise `xs.length ≤ 2 ^ 32`, `sum` returns
-the exact sum of the items without an overflow panic and leaves the queue unchanged. The
-proof uses a list-segment invariant, the node interface of `Proofs/Lists/Sep.lean`
-(`node_val_run`, `node_next_run`, `focus_mid`), and `zig_range`. It does not unfold `Zig.load`,
-byte encodings, blocks, or allocators. A `#guard_msgs` check fixes `loop_template?`'s report
-on that loop: exactly `step` and `entry` remain. `Template.lean` checks the report including
-`exit`, the partial form, rejection of non-loop goals, the necessity of a decreasing measure,
-and the `zig_range` conversions, including an undischarged premise.
-### Nested loops
-
-The translator emits an inner loop as `Zig.loop inner again'` inside the outer loop's body
-def, over the same locals. `LoopTemplate.run` turns the inner loop's template into its run
-from any state satisfying its invariant: it returns, preserves the frame and establishes the
-inner `post`. The outer `step` uses that run like any other step of its body, so the inner
-iterations are proved once.
+`Proofs/Lists/Linked.lean` proves the generated `Lists.sum` from `examples/lists/lists.zig`, a
+walk over a singly linked list from its head, once for every node owner `X`: the invariant is a
+list segment with the number of remaining nodes as the ghost measure (`loop_ghost`), and the
+body's steps are `fsym` walks over the nodes' fields. `tests/roadmap/loop-tactics/Queue.lean` is
+its instance at `X := fun _ => emp` with no proof of its own: given the explicit capacity premise
+`xs.length ≤ 2 ^ 32`, `sum` returns the exact sum of the items without an overflow panic and
+leaves the queue unchanged.
 
 `tests/roadmap/loop-tactics/nested/Proof.lean` proves the translated `pairs` of
 `tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
 `while (i < n)`) total: under the explicit premise that the result fits in `u64`, it returns
-and adds `0 + 1 + … + (n - 1)` to `*acc`. The proof uses `pts_load_run`/`pts_store_run` and
-`zig_range` lemmas and does not unfold `Zig.load`, `Zig.store`, encodings or blocks. The AIR
-is retained with its provenance in `nested/`; `nested/check.sh` retranslates it, compares
-the result with the committed `nested/Nested/Gen.lean` byte for byte, and checks the proof.
-
-### Bounded invariant and measure inference
-
-`loop_template?` without arguments, or `loop_template? _ post`, prints suggestions for the
-goal's loop and leaves the goal unchanged; it proves nothing. It unfolds the loop body once
-and follows only generated shapes: locals read by `(← get).f`, writes by
-`modify (fun s => { s with … })`, checked `Zig.add`/`Zig.sub` of a local by a literal, and
-`Zig.lt`/`le`/`gt`/`ge` guards. It reports the loop-carried locals (written by the body) and
-the unchanged ones. For an unsigned guard whose counter steps towards a bound that the loop
-does not change, it suggests the measure `bound - counter` (or `counter - bound`) and the
-bound invariant. Given `post`, it also suggests `post` with a bound from outside the loop
-replaced by the counter. It reports, and does not infer, measures for signed guards, counters
-that step away from their bound or are also reset, bounds the loop changes, and loops without
-a counter (such as list walks, which need a ghost measure). Nested loop bodies, calls and memory
-are not followed, and side premises such as overflow bounds are never inferred. `Infer.lean`
-and `nested/Proof.lean` fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
-`pairs` are the ones its invariants use.
-
-### Recursive functions
+and adds `0 + 1 + … + (n - 1)` to `*acc`. Both loops use `loop_measure`; the outer step's walk
+uses the inner loop's triple as a rule. The AIR is retained with its provenance in `nested/`;
+`nested/check.sh` retranslates it, compares the result with the committed
+`nested/Nested/Gen.lean` byte for byte, and checks the proof, including its legacy form by
+`toTotal_on`.
 
 A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
-`<fn>.eq_1` and no induction principle. Import `ZigLean.RecTemplate` (optional, Lean-only) for
-`rec_template μ unfolding f, g`. It proves a goal `∀ x₁ … xₖ, B` by strong induction on the
-`Nat` measure `μ` of its first `k` binders (the arity of `μ`). It leaves one goal, `step`,
-with `x₁ … xₖ` introduced and
-`ih : ∀ y₁ … yₖ, μ y₁ … yₖ < μ x₁ … xₖ → B[y/x]`. It rewrites the goal with each listed
-function's `eq_1`: the first application (and identical copies) becomes the generated body,
-whose recursive calls stay folded. Premises and ghost values after the first `k` binders stay in `B`
-and are quantified in `ih`. A mutually recursive group is specified as one conjunction (or
-over an index type such as `Sum`) with one measure, unfolding every member.
-`rec_template? …` also reports the remaining premise. The scaffold does not infer the
-measure. Each recursive call site discharges the decrease when it applies `ih`.
+`<fn>.eq_1` and no induction principle. `tests/roadmap/loop-tactics/Recursion.lean` proves the
+pure `Zig.Result` functions of `examples/recursion/recursion.zig` by well-founded induction on a
+`Nat` measure and the unfold equations: `gcd` (the second argument decreases by `a % b < b`),
+the mutual `isEven`/`isOdd` group (one conjunction, one measure) and `fact` (a range premise
+carried through the induction hypothesis).
 
-`tests/roadmap/loop-tactics/Recursion.lean` uses it on committed translations: `gcd`
-(self-recursive, the second argument decreases by `a % b < b`), the mutual `isEven`/`isOdd`
-group and `fact` (a range premise carried through `ih`). The memory-backed `Pointers.addDown`
-is not covered: it charges its frame to the stack budget (MM-5, `Zig.enterFrame`), and a
-`TotalTriple` over every memory does not hold under a small `Mem.stackLimit` until the
-separation layer carries the stack premise (STK-01).
+The scenarios of the retired template checks are `fsym` regressions in
+`tests/roadmap/sep-auto/`: `Total.lean` proves a countdown with `loop_measure`, rejects a step
+whose measure does not decrease (a counter stepping away from its bound, a reset counter) and
+shows that no measure makes the step of a body that always repeats (`spin_no_measure`);
+`Arith.lean` checks the range conversions and that a sum or narrowing cast without a range
+premise is not proved.
 
-Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range
-Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean`, then run
-`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template`, `Queue`, `Infer` and
-`Recursion`, and `tests/roadmap/loop-tactics/nested/check.sh`.
+Build with `lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
+ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean`, then run
+`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Queue` and `Recursion`, and
+`tests/roadmap/loop-tactics/nested/check.sh`.
 
-This is a bounded P03 contribution. Templates are sequential: concurrent loops (and
-termination under a scheduler) are out of scope. Invariant inference is the syntactic
-suggestion pass above and is never trusted. The recursion scaffold needs a user-given `Nat`
-measure and specification. `zig_range` performs only conditional rewriting and is not a
-general BitVec decision procedure. No ring-buffer example exists in `examples/`, and the
-modules add no exporter or native qualification.
+This is a bounded P03 contribution. The loop rules are sequential: concurrent loops (and
+termination under a scheduler) are out of scope. Invariants and measures are not inferred. The
+memory-backed recursive `Pointers.addDown` is not covered, and no ring-buffer example exists in
+`examples/`.
 
-### Dispatch-loop templates (L03)
+### Dispatch loops (L03)
 
-Import `ZigLean.Sep.DispatchTemplate` for labelled-switch state machines (`continue :sw`).
-The emitter turns one into `Zig.loop (f.loopN ..) f.againN`, with the selector in the locals
-field `dispatchValueN`. `DispatchTemplate body again sel inv μ post` has one premise per
-state: from the state-indexed invariant `inv k s` with `sel s = k`, one body run either
-dispatches to a state whose invariant `inv (sel s') s'` holds at a smaller measure, or exits
-with `post`. The measure `μ : σ → Nat × Nat` is ordered lexicographically (`DispatchLt`;
-`DispatchLt.data` and `DispatchLt.rank` build the two cases), usually as (unread data, state
-rank). `DispatchTemplate.total` proves the loop by well-founded induction. `DispatchSpec` is
-the same template with propositions for loops without memory.
+The emitter turns a labelled-switch state machine (`continue :sw`) into
+`Zig.loop (f.loopN ..) f.againN`, with the selector in the locals field `dispatchValueN`. One
+rule of `ZigLean/Sep/Full/Loop.lean` proves every such loop, `FTotalTriple.loop_dispatch sel inv
+data rank B post step`; a machine supplies:
 
-`dispatch_template inv μ post` applies to a `TotalTriple`, `Triple` or pure
-`∃ r, (Zig.loop body again).run s = pure r ∧ Q r` goal. It derives the selector from the
-generated `f.againN`, and rejects a loop whose locals have no `dispatchValueN` field (such as an
-ordinary loop) or an iterator that is not a generated `againN`. It leaves one goal `step.<state>`
-per constructor of an enum selector. For an integer selector, `states [v₁, …]` leaves
-`step.<vᵢ>` for each listed value and `step.other` for the rest. It also leaves `entry`, and
-`exit` unless `post` is the goal's postcondition. `dispatch_template?` reports these goals.
-`… using tac` runs `tac` on each state premise. If any fail, the error names those states and
-shows their premises, so a wrong invariant or measure is reported at the state where it breaks.
+* the invariant indexed by the selector's state, `inv k s` (one case per state);
+* the consumed data `data s` and the state's rank `rank k`, with a bound `B` above every rank: the
+  measure `B * data + rank` is the lexicographic order of (data, rank), so a transition that
+  consumes nothing must lower the rank. Tag the ranks `attribute [local fsym_arith] rank` so that
+  `fsym` reads their values;
+* the step premise, by a case split on the selector (`cases`) followed by `fsym`, which walks each
+  prong. An integer selector needs no split: `fsym` splits on the selector's tests and the
+  invariant excludes the other values.
 
 `tests/roadmap/dispatch-templates/TokenizerProof.lean` proves `countTokens` from
 `source.zig`, a tokenizer state machine (`start`/`ident`/`number`/`done`). It uses the
-translation of a fresh compiler export. `countTokens_total` shows that over a buffer `arr p xs`,
-the function returns the reference automaton's token count modulo `2 ^ 32` and leaves the buffer
-unchanged. Its measure is (unread bytes, state rank). `Template.lean` covers the per-state report,
-`using`, a wrong invariant (reported at `count`) and a measure without state rank (reported at
-`idle`), integer selectors and the rejected goals. `check.sh` also requires air2lean to reject the
-real exported AIR when one `switch_dispatch` target is changed to a block, an absent ID, or the
-dispatch itself.
+translation of a fresh compiler export. `countTokens_total` shows that over a buffer
+`up (arr p xs)`, the function returns the reference automaton's token count modulo `2 ^ 32` and
+leaves the buffer unchanged; `countTokens_total_legacy` is the legacy total triple through
+`FTotalTriple.toTotal_on`. The byte load is the library rule `FTotalTriple.arr_load`, the index
+check `checkIndex_of`, and the generated classifiers are rules proved against `alpha`/`digit` on
+all 256 bytes. `Template.lean` instantiates the rule for small machines with an enum and an
+integer selector, and shows that a wrong invariant (at `count`) and a rank that does not order the
+states (at `idle`) are not established by the walk, next to positive controls. `check.sh` also requires air2lean to reject
+the real exported AIR when one `switch_dispatch` target is changed to a block, an absent ID, or
+the dispatch itself.
 
-Invariants and measures are still written by hand. A labelled switch has only structured
-`continue :sw` dispatch, so the template implies nothing about unrestricted control flow.
+Invariants and measures are written by hand. A labelled switch has only structured
+`continue :sw` dispatch, so these proofs imply nothing about unrestricted control flow.
 Zig 0.16.0's `translate-c` demotes a C function that uses `goto` to an `extern` declaration
-("TODO goto"), so C goto state machines do not reach this template. The tokenizer proof names
+("TODO goto"), so C goto state machines do not reach this form. The tokenizer proof names
 the 0.16.0 translation's loop identifiers and is qualified only there.
 
 ## Model cost: allocation counts and counted loops (P06)
@@ -416,7 +371,8 @@ vacuously.
 
 `Proofs/Lists/Bounded.lean` proves `sum_loop_within`: the generated `sum` loop over
 `xs.length` items exits within `xs.length + 1` body runs with the sum. `sum_loop_total` is
-the total triple it implies, and `sum_total` is the function-level total triple for `sum`.
+the total triple it implies; the function-level total triple for `sum` is
+`Lists.Linked.sum_total` (`Proofs/Lists/Linked.lean`, full-state logic).
 `sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
 count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
 Proofs.Lists.Bounded`.

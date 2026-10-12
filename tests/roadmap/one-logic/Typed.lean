@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Typed
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # Typed values in the full-state logic (`ZigLean/Sep/Full/Typed.lean`), library-only

@@ -8,7 +8,7 @@ nothing else: the generated code is walked by general rules from the library (CL
 "General tactics over module-specific ones").
 
 ```lean
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -16,6 +16,12 @@ theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64)
       (fun _ => (finv ctx B).own) := by
   fsym
 ```
+
+`ZigLean.Sep.Full.AutoAll` is the one import of a proof: `fsym` with every rule of the library
+(arrays, typed values, error unions and optionals through pointers, regions, blocks, the
+allocator wrappers, the mapping primitives), the loop rules, the start memory and the claim
+witnesses. `tests/roadmap/one-logic/check.sh` fails when a library module that declares an `fsym`
+rule is not reached from it.
 
 The users are the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba/AllocFba/Full.lean`:
 all four `FAllocSpec` fields, including the refined `resize` field) and the translated
@@ -65,6 +71,11 @@ many successful calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
+  item stores and the read-back of a stored item, `@memcpy` between separate regions, the
+  pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
+  owned regions lie at disjoint address ranges; `@[fsym_facts]`: `fsym` adds it for a pair of
+  regions when it needs more facts, `MemFacts.pre` puts it in the context by hand).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
 
 ### Range laws
@@ -82,8 +93,10 @@ arithmetic solver. A head with a law is an atom (never unfolded). Regression:
   and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are unfolded;
   existentials and facts move into the context (conjunctions split, equations of a variable
   substituted, user definitions of facts unfolded; a term `t` that is not a variable, such as a
-  field of the locals, equated to a constructor application `C …` is replaced by it in the goal
-  and the facts, so a `match` on `t` reduces: `substCtor`). An assertion-level `if c then X else Y`
+  field of the locals, equated to a constructor application `C …` or to a closed value of a type
+  that is not arithmetic (`w.M = GMap.empty`) is replaced by it in the goal and the facts, so a
+  `match` on `t` reduces: `substCtor`; a test `o.isSome`/`o.isNone` of an optional adds its
+  constructor equation, `o = none` or `o = some a`: `opt_*`). An assertion-level `if c then X else Y`
   (`relBytes`, `newBytes`) takes the branch the facts decide; an undecided one stays an atom and
   is split at the next return.
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code,
@@ -100,7 +113,10 @@ arithmetic solver. A head with a law is an atom (never unfolded). Regression:
   more facts (a rule whose side goals fail, an undecided `if`, a reachable panic, a return the
   planner cannot close), the facts of the precondition's atoms that the context lacks are added
   (`pre_fact`) and the step is retried; so a pointer whose block the context does not know
-  (a field of a node, an argument) gets one from what the precondition owns at it. Block
+  (a field of a node, an argument) gets one from what the precondition owns at it. A facts
+  lemma may need the memory, or be about an ordered pair of atoms (`MemFacts X φ` with `X` an atom
+  or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
+  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart. Block
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`).
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. Commands of one head are unified argument by argument: a
@@ -201,7 +217,8 @@ parallel; a run is identified by the option `fsym.run`).
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
-  pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`.
+  pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
+  facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
 * A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
 * A new range resource to plan (split, join): its range law tagged `@[fsym_plan]`, and
   `@[fsym_drop]` for its atoms that may be forgotten. Another kind of planning (lending, a

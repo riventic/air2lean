@@ -77,6 +77,38 @@ theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : Me
     (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
   L.pre (L.lift t) fun _ h => sep_lift.mpr ⟨hX.sepL h, h⟩
 
+/-- The assertion `X`, held in a memory, implies the fact `φ` (a facts lemma, `@[fsym_facts]`):
+facts that need the memory or the whole ghost state, such as a token's grant in its authority's
+map (`gauthP γ e M t ⋆ gfrag γ e i g`, `gfrag_mem`) or two owned regions apart. `X` is one atom
+or a pair `X₁ ⋆ X₂` of atoms. Library lemmas: `facts_gfrag` (AutoConc), `MemFacts.regions_apart`
+(Full/Region). -/
+def _root_.Zig.Full.MemFacts (X : FAssn) (φ : Prop) : Prop :=
+  ∀ m r rF, Holds m r rF → X r → m.FSeq → φ
+
+theorem _root_.Zig.Full.MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X φ) :
+    MemFacts (X ⋆ R) φ := fun m _ _ hh hp hs => by
+  obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
+  exact h m r₁ _ (Holds.split hd hh) h1 hs
+
+/-- The facts of the precondition, as an update that keeps it. -/
+theorem _root_.Zig.Full.MemFacts.eupd {P : FAssn} {φ : Prop} (h : MemFacts P φ) : EUpd P (⟪φ⟫ ⋆ P) :=
+  fun m r rF hh hp hs => ⟨r, hh, sep_lift.mpr ⟨h m r rF hh hp hs, hp⟩⟩
+
+/-- An update of the precondition, in any logic (a return of `()` bound to the program). -/
+theorem pre_eupd (L : FLogic) {β : Type} {P P' : FAssn} {Q : β → FAssn} {c : MemM β}
+    (h : EUpd P P') (t : L.T P' c Q) : L.T P c Q :=
+  L.congr (fun _ _ => rfl) (L.bind (ret L (Q := fun _ => P') (v := ()) h) fun _ => t)
+
+/-- A memory fact of the precondition, in the context (any logic). -/
+theorem _root_.Zig.Full.MemFacts.pre (L : FLogic) {β : Type} {P : FAssn} {c : MemM β} {Q : β → FAssn}
+    {φ : Prop} (hX : MemFacts P φ) (t : φ → L.T P c Q) : L.T P c Q :=
+  pre_eupd L hX.eupd (L.lift t)
+
+/-- A fact of a part `X` of the precondition that needs the memory, in the context. -/
+theorem pre_mfact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
+    (hX : MemFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
+  MemFacts.pre L hX.sepL t
+
 section Facts
 
 variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
@@ -280,11 +312,37 @@ subtraction, which `omega` would case-split on). -/
   obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
   exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
 
+/-! Tests of an optional as constructor equations (facts of `if o != null`, `orelse`), so a
+`match o` of the precondition reduces (`destruct`, `substCtor`). -/
+
+theorem opt_isSome_true {α : Type _} {o : Option α} (h : o.isSome = true) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp h
+
+theorem opt_not_isSome {α : Type _} {o : Option α} (h : ¬o.isSome = true) : o = none :=
+  Option.not_isSome_iff_eq_none.mp h
+
+theorem opt_isSome_false {α : Type _} {o : Option α} (h : o.isSome = false) : o = none :=
+  Option.not_isSome_iff_eq_none.mp (by simp [h])
+
+theorem opt_isNone_true {α : Type _} {o : Option α} (h : o.isNone = true) : o = none :=
+  Option.isNone_iff_eq_none.mp h
+
+theorem opt_not_isNone {α : Type _} {o : Option α} (h : ¬o.isNone = true) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp (by cases o <;> simp_all)
+
+theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp (by cases o <;> simp_all)
+
 /-- A slice's end check (`s[start..][0..len]`) within the source's length. -/
 @[fsym] theorem checkSliceEnd_of {srcLen start len : BitVec 64} {extra : Nat}
     (h : start.toNat + len.toNat + extra ≤ srcLen.toNat) :
     FTotalTriple P (checkSliceEnd srcLen start len extra) (fun _ => P) := by
   unfold checkSliceEnd; rw [if_pos h]; exact FTotalTriple.ret (Q := fun _ => P) ()
+
+/-- An item index (`s[i]`, `&s[i]`) within the operand's length. -/
+@[fsym] theorem checkIndex_of {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    FTotalTriple P (checkIndex len i) (fun _ => P) := by
+  unfold checkIndex; rw [if_pos h]; exact FTotalTriple.ret (Q := fun _ => P) ()
 
 /-- A checked unsigned `%` by a nonzero divisor. -/
 @[fsym] theorem rem_step {a b : BitVec w} (h : b ≠ 0) :
@@ -301,6 +359,12 @@ subtraction, which `omega` would case-split on). -/
   have e : Zig.divTrunc false a b = pure (a / b) := by
     simp only [Zig.divTrunc, h, Bool.false_eq_true, ↓reduceIte]; rfl
   rw [e]; exact read_val BitVec.toNat_udiv
+
+/-- An unsigned `@intCast` whose value fits in the target width (widening always does). -/
+@[fsym] theorem intCast_step {n : Nat} {a : BitVec w} (h : a.toNat < 2 ^ n) :
+    FTotalTriple P (StateT.lift (Zig.intCast false false n a) : MemM (BitVec n))
+      (fun r => ⟪r.toNat = a.toNat⟫ ⋆ P) := by
+  rw [Zig.intCast_unsigned_of_lt h]; exact read_val (Zig.toNat_ofNat_of_lt h)
 
 end Arith
 

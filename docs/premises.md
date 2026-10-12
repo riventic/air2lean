@@ -747,7 +747,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   loops do not reduce in the kernel, so loop clients use runtime assertions,
   invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
   iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
@@ -842,7 +842,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (O-H, SEM-07). Every partial-correctness statement (`Triple`, `TTriple`, `FTriple`, `CTriple`,
   and the strict concurrent `run_safe`, which excludes every other error) reads `.stackOverflow`
   as it reads a run that does not terminate; a total-correctness statement excludes it, so one
-  that allocates shows room (`TotalTripleIn`). Regressions:
+  that allocates shows room (legacy `TotalTripleIn`; in the full-state logic, until room is a
+  resource, the start-memory run premise of `FTriple.run_init_ok`). Regressions:
   `tests/roadmap/memory-hardening/NoRoom.lean`, `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
@@ -1081,7 +1082,7 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   of all its bytes. Any other pointer (double free, inner pointer, stack, global, mapping or
   arena block) is `.illegal`. `malloc_size` returns the block's byte count (`0` for `null`) and
   is `.illegal` for other pointers, which is stricter than macOS.
-- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.OsMalloc`; tokens `Os.Darwin.malloc`,
+- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.Full.Malloc`; tokens `Os.Darwin.malloc`,
   `Os.Darwin.free`, `Os.Darwin.malloc_size`; implies SEM-02, ALC-02.
 - Sources: [os-threads.md](os-threads.md#malloc), `ZigLean/Os/Malloc.lean`, Zig 0.16.0
   `lib/std/heap.zig` (`c_allocator`).

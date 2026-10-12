@@ -222,8 +222,12 @@ free list) is not attempted.
   `ArenaSpecMacos.lean` for aarch64-macos, `ArenaSpecFixed.lean` for the patched arena):
   the arena's translated `free`, `resize` and `remap` meet `FAllocSpec`'s
   fields, e.g. `FLogic.partial.T (I.own ⋆ I.granted s.ptr k bs) (Sched.soloRun fuel free) (fun _ =>
-  I.own)` with `I = inv CI γ e ctx`, for every child invariant `CI`, epoch `e` and depth `fuel`,
-  from the generated code only. The invariant (`own`): the arena struct with `used_list`/`free_list`
+  I.own)` with `I = inv CI γ e ctx`, for every child `CI`, epoch `e` and depth `fuel`,
+  from the generated code only. **The child** (`Core.Child`) is the child allocator's invariant
+  together with its identity: the context pointer `cctx` and the vtable `vtp` with its entries
+  `fns`, which `alloc` and `reset` call. The invariant (`own`): the arena struct, whose first 16
+  bytes are the child allocator `(cctx, vtp)` (`Child.bytes`, the `std.mem.Allocator` encoding),
+  the child's vtable as persistent knowledge (`vtR vtp fns`), `used_list`/`free_list`
   as pointer-valued atomic words, the epoch ledger's authority `gauthP γ e M CI.tag` (`M`: the
   grants of this epoch, each with its lent fraction; empty without a first node; the ledger's
   parent is the child's tag), the first node (header words: `size` and `end_index` as integer
@@ -336,7 +340,7 @@ correction). No arena, FBA or page statement mentioned `vtR`. `vtR` changed type
 `Assn` under `up`, it is now an `FAssn`): the old exclusive predicate and its rules are `vtOwn`,
 `vtOwn_load`, `vtOwn_project` with unchanged statements, so a client written against
 `up (vtR …)` switches to `up (vtOwn …)` or to the persistent `vtR` (`vtR_intro`); the arena's
-planned `own ∋ up (vtR …)` becomes the persistent `vtR`.
+`own` holds the persistent `vtR CI.vtp CI.fns.toList` of its child (`Core.Child`).
 
 Not proved yet, in order:
 
@@ -351,10 +355,16 @@ Not proved yet, in order:
   call site tests the loaded function pointer against every allocator function of the program;
   with the child's vtable as persistent knowledge, `vtR`, it selects the child's entry),
   `Upd.issue` under a fresh id for each grant, `defer pushFreeList`. The child's specification
-  enters as `CAllocSpec (CVTable.dispatch tables fns) cctx CI` (`Full/Dispatch.lean`).
+  enters as `CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv`
+  (`Full/Dispatch.lean`), for the child `CI : Core.Child` that the invariant names.
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
   `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
-  calls the child's `free`/`resize`/`alloc`.
+  calls the child's `free`/`resize`/`alloc`. The bytes cannot be left out: revocation withdraws
+  only ghost state, and **no** `{I.own} reset(.free_all) {I'.own}` holds next to `FAllocSpec`s
+  `I`, `I'` with `I.own` true after `init` (kernel-checked, `ArenaObstruction.not_reset_own`: an
+  `alloc(8)`, `reset`, `alloc(8)` client would hold two separate grants that the run puts at one
+  byte of the child's buffer). How a client gives the grants back without tracking the grant map
+  is open (epoch-token fractions, coordinator design 2026-10-12).
 
 ## Legacy models
 

@@ -1,28 +1,40 @@
 import ZigLean.VC.Rules
+import ZigLean.Sep.Full.Auto
 import Lean
 
 /-!
 # Automatic VC extraction for loop-free generated functions
 
-`#vc_extract f` reflects the body of a generated, loop-free `Zig.Result`/`Zig.MemM` function
-into the typed VC AST of `ZigLean.VC.Result`/`ZigLean.VC.Mem` and adds three declarations next
-to `f` (for `Ns.f`):
+`#vc_extract f` reflects the body of a generated, loop-free `Zig.Result` function into the typed
+VC AST of `ZigLean.VC.Result` and adds three declarations next to `f` (for `Ns.f`):
 
-* `Ns.vc_f : ∀ xs, ResultProgram α` (or `MemProgram α`), the extracted program;
+* `Ns.vc_f : ∀ xs, ResultProgram α`, the extracted program;
 * `Ns.vc_f_source : ∀ xs, (vc_f xs).eval = f xs`, a kernel-checked equality with the
   generated function (the normalization proof produced by `simp`, then definitional
   unfolding of `eval`);
 * `Ns.vc_f_sound`, the existing `sound` theorem transported along that equality.
 
+A `Zig.MemM` function has no AST: its VCs are the walk of the symbolic executor `fsym`
+(`docs/proof-automation.md`) on a full-state contract, so `#vc_extract` only makes the
+fail-closed checks for it (status `walk`).
+
 Extraction fails closed. A generated loop (`Ns.f.loop<i>`, from AIR instruction `%i`) produces
 an explicit request for an invariant and a variant; no invariant is guessed. Self-recursion,
 an unknown operation, or a call without a `@[vc_contract]` is refused with its reason.
 
-`vc_gen` turns a contract goal `∃ v, f xs = pure v ∧ post v` or `Triple pre (f xs) post` into
-the extracted program's VC and splits it into separate goals tagged `safety_i`, `memory_i`,
-`result_i` or `error_i`. `vc_gen?` also logs that obligation report.
-`#vc_extract_all Ns` extracts every `Result`/`MemM` function in `Ns` and reports the outcome of
-each (extracted, loop request, or refusal); it never fails on a single function.
+`vc_gen` turns a contract goal into tagged obligations `safety_i`, `memory_i`, `result_i` or
+`error_i`:
+
+* `∃ v, f xs = pure v ∧ post v`: the extracted program's VC, split by one introduction rule per
+  constructor;
+* `FTotalTriple pre (f xs) post` or `FTriple pre (f xs) post`: `fsym`'s walk of `f` with the
+  library's step rules and the `@[vc_contract]` contracts; the goals the walk leaves are the
+  obligations, each tagged by where it comes from in the proof (a rule's side condition, a fact
+  of the postcondition at a return, a heap entailment, a reachable panic). A command that no rule
+  executes is refused.
+
+`vc_gen?` also logs that obligation report. `#vc_extract_all Ns` reports every `Result`/`MemM`
+function in `Ns` (extracted, walk, loop request or refusal); it never fails on a single function.
 Each report message also carries one machine-readable `vc-report {json}` line.
 -/
 
@@ -90,20 +102,25 @@ def LoopRequest.describe (r : LoopRequest) : String :=
   s!"invariant + variant required for loop `{r.loopDef}` at {at_}"
 
 def loopGuidance : String :=
-  "VC extraction does not guess invariants. For a memory loop, prove \
-  `(Zig.loop body again).run s` with `loop_template inv post` (goals `step`, `entry`, `exit`; \
-  `inv s n` carries the variant `n`) or `MemProgram.annotatedLoop`; for a `Result` loop use \
-  `Zig.loop_spec` (invariant `inv`, variant `m`). Register the proved function contract with \
-  `@[vc_contract]` so callers can use it."
+  "VC extraction does not guess invariants. For a memory loop, prove `(Zig.loop body again).run s` \
+  with `FTotalTriple.loop_ghost inv post` (the measure carried by `inv s n`) or `FTriple.loop inv \
+  post` (`ZigLean/Sep/Full/Loop.lean`); for a `Result` loop use `Zig.loop_spec` (invariant `inv`, \
+  variant `m`). Register the proved function contract with `@[vc_contract]` so callers can use it."
 
 /-- A machine-readable report line. -/
 def reportLine (j : Json) : String := "vc-report " ++ j.compress
 
 /-- The outcome of one extraction. -/
 inductive Outcome where
-  | ok (program source : Expr) (mem : Bool)
+  | ok (program source : Expr)
+  /-- A loop-free memory function: `vc_gen` walks it on a full-state contract. -/
+  | walk
   | loops (requests : Array LoopRequest)
   | refused (reason : MessageData)
+
+def recursiveReason (f : Name) : MessageData :=
+  m!"`{f}` is recursive; a recursive call needs an explicit measure and a separately proved \
+    contract, so no VC is extracted"
 
 /-! ## Normalization -/
 
@@ -113,6 +130,13 @@ def normLemmas : Array Name := #[
   ``StateT.run_modifyGet, ``run_ite, ``ite_bind, ``map_ite, ``bind_assoc, ``pure_bind,
   ``map_bind, ``map_pure, ``bind_map_left, ``bind_pure, ``run_throw_result, ``run_throw_mem,
   ``monadLift_self]
+
+/-- The right-hand side of `f`'s unfolding equation, applied like `e`. -/
+def unfoldOnce (f : Name) (e : Expr) : MetaM (Expr × Expr) := do
+  let some eqDef ← getUnfoldEqnFor? f (nonRec := true)
+    | throwError "`{f}` has no unfolding equation"
+  let unfold := mkAppN (mkConst eqDef e.getAppFn.constLevels!) e.getAppArgs
+  return (unfold, (← whnfR (← inferType unfold)).appArg!)
 
 /-- Unfold `f` once and remove the locals/exit plumbing of the generated body. -/
 def normalize (f : Name) (e : Expr) : MetaM Simp.Result := do
@@ -126,10 +150,7 @@ def normalize (f : Name) (e : Expr) : MetaM Simp.Result := do
   procs ← procs.add ``reduceIte false
   procs ← procs.add ``reduceDIte false
   -- Unfold `f` exactly once through its `eq_def`, so a recursive body stays finite.
-  let some eqDef ← getUnfoldEqnFor? f (nonRec := true)
-    | throwError "`{f}` has no unfolding equation"
-  let unfold := mkAppN (mkConst eqDef e.getAppFn.constLevels!) e.getAppArgs
-  let body := (← whnfR (← inferType unfold)).appArg!
+  let (unfold, body) ← unfoldOnce f e
   let (r, _) ← simp body ctx #[procs]
   return { expr := r.expr, proof? := some (← match r.proof? with
     | some p => mkEqTrans unfold p
@@ -138,8 +159,8 @@ def normalize (f : Name) (e : Expr) : MetaM Simp.Result := do
 /-! ## Contracts -/
 
 /-- The obligation category of a modular call's precondition. -/
-def callKind (thm : Name) (mem : Bool) : String :=
-  if (`Zig.VC.Prim).isPrefixOf thm then "safety" else if mem then "call-memory" else "call"
+def callKind (thm : Name) : String :=
+  if (`Zig.VC.Prim).isPrefixOf thm then "safety" else "call"
 
 /-- A contract applies only to its own operation: compare head constants before a reducible
 unification, so unrelated generated functions are never unfolded. -/
@@ -149,72 +170,56 @@ def sameHeadDefEq (pattern e : Expr) : MetaM Bool := do
   | some a, some b => if a == b then withReducible (isDefEq pattern e) else pure false
   | _, _ => pure false
 
-/-- Instantiate a `@[vc_contract]` theorem whose action is `e`. -/
-def contractCall? (e α : Expr) (mem : Bool) : MetaM (Option Expr) := do
+/-- Instantiate a `Result` `@[vc_contract]` theorem whose action is `e`. -/
+def contractCall? (e α : Expr) : MetaM (Option Expr) := do
   for thm in ← labelled `vc_contract do
     let r ← commitWhenSome? do
       let c ← mkConstWithFreshMVarLevels thm
-      -- A memory contract's conclusion is `Triple …`, a definition over a `∀`: do not unfold it.
-      let (ms, _, body) ← if mem then forallMetaTelescope (← inferType c)
-        else forallMetaTelescopeReducing (← inferType c)
+      let (ms, _, body) ← forallMetaTelescopeReducing (← inferType c)
       let body ← instantiateMVars body
       let head := e.getAppFn.constName?.getD .anonymous
-      let label := s!"{callKind thm mem}: {head} [{thm}]"
-      if mem then
-        unless body.isAppOfArity ``Zig.Triple 4 do return none
-        unless ← sameHeadDefEq (body.getArg! 2) e do return none
-        synthesizeRemaining ms
-        -- A memory contract must be an unconditional `Triple`; put conditions into `pre`.
-        unless ← ms.allM (·.mvarId!.isAssigned) do
-          throwError "`@[vc_contract]` theorem `{thm}` for `{head}` has hypotheses outside \
-            its `Triple`; state them in the precondition (`⌜φ⌝ ∗ P`) instead"
-
-        let pre ← instantiateMVars (body.getArg! 1)
-        let post ← instantiateMVars (body.getArg! 3)
-        let proof ← instantiateMVars (mkAppN c ms)
-        return some (mkAppN (mkConst ``MemProgram.call) #[α, mkStrLit label, e, pre, post, proof])
-      else
-        unless body.isAppOfArity ``Exists 2 do return none
-        let lam := body.getArg! 1
-        unless lam.isLambda do return none
-        let conj := lam.bindingBody!
-        unless conj.isAppOfArity ``And 2 do return none
-        let eq := conj.getArg! 0
-        unless eq.isAppOfArity ``Eq 3 do return none
-        let action := eq.getArg! 1
-        if action.hasLooseBVars then return none
-        unless ← sameHeadDefEq action e do return none
-        -- The trailing non-dependent hypotheses form the precondition (their conjunction).
-        let body ← instantiateMVars body
-        let mut count := 0
-        while count < ms.size do
-          let m := ms[ms.size - 1 - count]!
-          unless (← isProp (← inferType m)) && (body.find? (· == m)).isNone do break
-          count := count + 1
-        let args := ms.extract 0 (ms.size - count)
-        let hyps := ms.extract (ms.size - count) ms.size
-        synthesizeRemaining args
-        unless ← args.allM (·.mvarId!.isAssigned) do return none
-        let hypTypes ← hyps.mapM fun h => do instantiateMVars (← inferType h)
-        if hypTypes.any (fun t => (t.find? fun x => hyps.contains x).isSome) then return none
-        let summary ← instantiateMVars (mkLambda lam.bindingName! .default lam.bindingDomain!
-          (conj.getArg! 1))
-        let thmArgs ← instantiateMVars (mkAppN c args)
-        let pre := if hypTypes.isEmpty then Lean.mkConst ``True
-          else hypTypes.pop.foldr (fun t acc => mkApp2 (Lean.mkConst ``And) t acc) hypTypes.back!
-        let proof ← withLocalDeclD `pre pre fun hp => do
-          -- `pre` is `h₁ ∧ (h₂ ∧ …)`: project each hypothesis in order.
-          let mut projs := #[]
-          let mut rest := hp
-          for i in [0:count] do
-            if i + 1 == count then
-              projs := projs.push rest
-            else
-              projs := projs.push (mkProj ``And 0 rest)
-              rest := mkProj ``And 1 rest
-          mkLambdaFVars #[hp] (mkAppN thmArgs projs)
-        return some (mkAppN (mkConst ``ResultProgram.call)
-          #[α, mkStrLit label, e, pre, summary, proof])
+      let label := s!"{callKind thm}: {head} [{thm}]"
+      unless body.isAppOfArity ``Exists 2 do return none
+      let lam := body.getArg! 1
+      unless lam.isLambda do return none
+      let conj := lam.bindingBody!
+      unless conj.isAppOfArity ``And 2 do return none
+      let eq := conj.getArg! 0
+      unless eq.isAppOfArity ``Eq 3 do return none
+      let action := eq.getArg! 1
+      if action.hasLooseBVars then return none
+      unless ← sameHeadDefEq action e do return none
+      -- The trailing non-dependent hypotheses form the precondition (their conjunction).
+      let body ← instantiateMVars body
+      let mut count := 0
+      while count < ms.size do
+        let m := ms[ms.size - 1 - count]!
+        unless (← isProp (← inferType m)) && (body.find? (· == m)).isNone do break
+        count := count + 1
+      let args := ms.extract 0 (ms.size - count)
+      let hyps := ms.extract (ms.size - count) ms.size
+      synthesizeRemaining args
+      unless ← args.allM (·.mvarId!.isAssigned) do return none
+      let hypTypes ← hyps.mapM fun h => do instantiateMVars (← inferType h)
+      if hypTypes.any (fun t => (t.find? fun x => hyps.contains x).isSome) then return none
+      let summary ← instantiateMVars (mkLambda lam.bindingName! .default lam.bindingDomain!
+        (conj.getArg! 1))
+      let thmArgs ← instantiateMVars (mkAppN c args)
+      let pre := if hypTypes.isEmpty then Lean.mkConst ``True
+        else hypTypes.pop.foldr (fun t acc => mkApp2 (Lean.mkConst ``And) t acc) hypTypes.back!
+      let proof ← withLocalDeclD `pre pre fun hp => do
+        -- `pre` is `h₁ ∧ (h₂ ∧ …)`: project each hypothesis in order.
+        let mut projs := #[]
+        let mut rest := hp
+        for i in [0:count] do
+          if i + 1 == count then
+            projs := projs.push rest
+          else
+            projs := projs.push (mkProj ``And 0 rest)
+            rest := mkProj ``And 1 rest
+        mkLambdaFVars #[hp] (mkAppN thmArgs projs)
+      return some (mkAppN (mkConst ``ResultProgram.call)
+        #[α, mkStrLit label, e, pre, summary, proof])
     if r.isSome then return r
   return none
 where
@@ -284,7 +289,7 @@ def reflectResult (fuel : Nat) (e : Expr) : MetaM Expr := do
     if let (some n, some m) := (← evalNat (e.getArg! 0), ← evalNat (e.getArg! 3)) then
       if n ≤ m then
         return mkAppN (mkConst ``ResultProgram.widen) #[e.getArg! 0, e.getArg! 4, e.getArg! 3]
-  if let some p ← contractCall? e α false then return p
+  if let some p ← contractCall? e α then return p
   unsupported e
 where
   resultValueType (e : Expr) : MetaM Expr := do
@@ -294,57 +299,16 @@ where
     if ty.isAppOfArity ``Zig.Result 1 then return ty.getArg! 0
     throwError "expected a `Zig.Result` computation, got{indentExpr ty}"
 
-def reflectMem (fuel : Nat) (e : Expr) : MetaM Expr := do
-  let fuel + 1 := fuel | throwError "program too large for VC extraction"
-  let e := e.headBeta
-  let α ← memValueType e
-  if e.isAppOfArity ``Bind.bind 6 then
-    let β := e.getArg! 2
-    let px ← reflectMem fuel (e.getArg! 4)
-    let pk ← reflectCont (reflectMem fuel) β (e.getArg! 5)
-    return mkAppN (mkConst ``MemProgram.bind) #[β, α, px, pk]
-  if e.isAppOfArity ``Pure.pure 4 then
-    return mkAppN (mkConst ``MemProgram.ret) #[α, e.getArg! 3]
-  if e.isAppOfArity ``ite 5 then
-    let some b := boolCondition? (e.getArg! 1)
-      | throwError "branch condition is not a `Bool` test:{indentExpr (e.getArg! 1)}"
-    -- A literal condition left by exit dispatch selects its branch definitionally.
-    if b.isConstOf ``Bool.true then return ← reflectMem fuel (e.getArg! 3)
-    if b.isConstOf ``Bool.false then return ← reflectMem fuel (e.getArg! 4)
-    return mkAppN (mkConst ``MemProgram.branch)
-      #[α, b, ← reflectMem fuel (e.getArg! 3), ← reflectMem fuel (e.getArg! 4)]
-  if let some (_, err) := isThrow e then
-    let panic := mkAppN (mkConst ``ResultProgram.panic) #[α, err]
-    return mkAppN (mkConst ``MemProgram.lift) #[α, panic]
-  if e.isAppOfArity ``Zig.load 4 then
-    return mkAppN (mkConst ``MemProgram.load) #[e.getArg! 0, e.getArg! 1, e.getArg! 3, e.getArg! 2]
-  if e.isAppOfArity ``Zig.store 5 then
-    let T := e.getArg! 0
-    let some lawful ← synthInstance? (mkApp2 (mkConst ``Zig.LawfulEnc) T (e.getArg! 1))
-      | throwError "no `LawfulEnc` instance for the stored type{indentExpr T}"
-    return mkAppN (mkConst ``MemProgram.store)
-      #[T, e.getArg! 1, lawful, e.getArg! 3, e.getArg! 2, e.getArg! 4]
-  if e.isAppOfArity ``MonadLiftT.monadLift 5 || e.isAppOfArity ``MonadLift.monadLift 5 ||
-      e.isAppOfArity ``StateT.lift 5 || e.isAppOfArity ``liftM 5 then
-    let x := e.appArg!
-    let xty ← whnfR (← inferType x)
-    if xty.isAppOfArity ``ExceptT 3 then
-      return mkAppN (mkConst ``MemProgram.lift) #[α, ← reflectResult fuel x]
-  if let some p ← contractCall? e α true then return p
-  unsupported e
-where
-  memValueType (e : Expr) : MetaM Expr := do
-    let ty ← whnfR (← inferType e)
-    -- `Zig.MemM α` is `StateT Mem Result α`.
-    if ty.isAppOfArity ``StateT 3 then return ty.getArg! 2
-    if ty.isAppOfArity ``Zig.MemM 1 then return ty.getArg! 0
-    throwError "expected a `Zig.MemM` computation, got{indentExpr ty}"
-
 /-- `some true` for `Zig.MemM α`, `some false` for `Zig.Result α`. -/
 def monadOf (ty : Expr) : Option Bool :=
   if ty.isAppOfArity ``Zig.MemM 1 then some true
   else if ty.isAppOfArity ``Zig.Result 1 then some false
   else none
+
+/-- Whether `f`'s body (its unfolding equation, applied like `app`) calls `f`. -/
+def isRecursive (f : Name) (app : Expr) : MetaM Bool := do
+  let (_, body) ← unfoldOnce f app
+  return (body.find? fun s => s.isConstOf f).isSome
 
 /-- Extract the VC program of the application `app` of the generated function `f`. -/
 def extractApp (f : Name) (app : Expr) : MetaM Outcome := do
@@ -353,14 +317,14 @@ def extractApp (f : Name) (app : Expr) : MetaM Outcome := do
   let requests ← loopRequests f
   unless requests.isEmpty do return .loops requests
   try
+    if mem then
+      if ← isRecursive f app then return .refused (recursiveReason f)
+      return .walk
     let r ← normalize f app
-    if (r.expr.find? fun s => s.isConstOf f).isSome then
-      return .refused m!"`{f}` is recursive; a recursive call needs an explicit measure and a \
-        separately proved contract, so no VC is extracted"
-    let program ← if mem then reflectMem fuelLimit r.expr else reflectResult fuelLimit r.expr
-    let evalName := if mem then ``MemProgram.eval else ``ResultProgram.eval
-    let α ← if mem then reflectMem.memValueType r.expr else reflectResult.resultValueType r.expr
-    let eval := mkApp2 (mkConst evalName) α program
+    if (r.expr.find? fun s => s.isConstOf f).isSome then return .refused (recursiveReason f)
+    let program ← reflectResult fuelLimit r.expr
+    let α ← reflectResult.resultValueType r.expr
+    let eval := mkApp2 (mkConst ``ResultProgram.eval) α program
     unless ← isDefEq eval r.expr do
       return .refused m!"the reflected program of `{f}` does not evaluate to its \
         normalized body{indentExpr r.expr}"
@@ -368,7 +332,7 @@ def extractApp (f : Name) (app : Expr) : MetaM Outcome := do
       | some p => mkEqSymm p
       | none => mkEqRefl app
     let source ← mkExpectedTypeHint source (← mkEq eval app)
-    return .ok program source mem
+    return .ok program source
   catch ex => return .refused ex.toMessageData
 
 /-- Names of the three extracted declarations of `Ns.f`. -/
@@ -394,7 +358,7 @@ where
     forallTelescope info.type fun xs _ => do
       let app := mkAppN (mkConst f lvls) xs
       let out ← extractApp f app
-      let .ok program source mem := out | return out
+      let .ok program source := out | return out
       let (vcName, srcName, soundName) := vcNames f
       let progType ← mkForallFVars xs (← inferType program)
       let progValue ← mkLambdaFVars xs program
@@ -403,16 +367,14 @@ where
         hints := .abbrev, safety := .safe }
       modifyEnv (addNoncomputable · vcName)
       let vcApp := mkAppN (mkConst vcName lvls) xs
-      let evalName := if mem then ``MemProgram.eval else ``ResultProgram.eval
       let α := (← whnf (← inferType vcApp)).appArg!
-      let srcType ← mkEq (mkApp2 (mkConst evalName) α vcApp) app
+      let srcType ← mkEq (mkApp2 (mkConst ``ResultProgram.eval) α vcApp) app
       let srcValue ← mkExpectedTypeHint source srcType
       addDecl <| .thmDecl {
         name := srcName, levelParams := info.levelParams, type := ← mkForallFVars xs srcType,
         value := ← mkLambdaFVars xs srcValue }
       let srcApp := mkAppN (mkConst srcName lvls) xs
-      let soundValue ← mkLambdaFVars xs (← mkAppM
-        (if mem then ``MemProgram.sound_of else ``ResultProgram.sound_of) #[srcApp])
+      let soundValue ← mkLambdaFVars xs (← mkAppM ``ResultProgram.sound_of #[srcApp])
       addDecl <| .thmDecl {
         name := soundName, levelParams := info.levelParams,
         type := ← inferType soundValue, value := soundValue }
@@ -429,13 +391,19 @@ def loopsJson (f : Name) (requests : Array LoopRequest) : Json :=
       ("instruction", match r.instruction with | some i => toJson i | none => Json.null),
       ("request", "invariant + variant")]))]
 
+def walkMessage (f : Name) : MessageData :=
+  m!"`{f}` is a loop-free memory function: `vc_gen` walks it with the rules of `fsym` on an \
+    `FTotalTriple`/`FTriple` contract\n{reportLine (Json.mkObj
+      [("function", toJson f.toString), ("status", "walk")])}"
+
 /-- `#vc_extract f`: add `vc_f`, `vc_f_source` and `vc_f_sound`, or fail closed. -/
 elab "#vc_extract " id:ident : command => liftTermElabM do
   let f ← realizeGlobalConstNoOverloadWithInfo id
   match ← extractDecl f with
-  | .ok _ _ _ =>
+  | .ok _ _ =>
     let (vcName, srcName, soundName) := vcNames f
     logInfo m!"vc extraction for `{f}`: added `{vcName}`, `{srcName}`, `{soundName}`"
+  | .walk => logInfo (walkMessage f)
   | .loops requests =>
     throwError m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
   | .refused reason => throwError m!"vc extraction for `{f}` refused: {reason}"
@@ -457,13 +425,14 @@ elab "#vc_extract_all " id:ident : command => liftTermElabM do
   let ns := id.getId
   for f in ← generatedFunctions ns do
     let (vcName, _, _) := vcNames f
-    let out ← if (← getEnv).contains vcName then pure (.ok (mkConst vcName) (mkConst vcName) false)
+    let out ← if (← getEnv).contains vcName then pure (.ok (mkConst vcName) (mkConst vcName))
       else extractDecl f
     match out with
-    | .ok _ _ _ =>
+    | .ok _ _ =>
       logInfo m!"`{f}`: extracted `{vcName}`\n{reportLine (Json.mkObj
         [("function", toJson f.toString), ("status", "extracted"),
          ("program", toJson vcName.toString)])}"
+    | .walk => logInfo (walkMessage f)
     | .loops requests =>
       logWarning m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
     | .refused reason =>
@@ -471,26 +440,20 @@ elab "#vc_extract_all " id:ident : command => liftTermElabM do
         [("function", toJson f.toString), ("status", "refused"),
          ("reason", toJson (← reason.toString))])}"
 
-/-! ## Splitting a generated VC into tagged obligations -/
+/-! ## Splitting a generated `Result` VC into tagged obligations -/
 
 structure Obligation where
   goal : MVarId
   kind : Kind
   label : String
-  /-- How the extractor closed it, if it did (a matching hypothesis). -/
+  /-- How the extractor closed it, if it did. -/
   closedBy : Option String := none
 
 def stringLit : Expr → String
   | .lit (.strVal s) => s
   | _ => "call"
 
-/-- Kind of a call precondition, from the label written by `contractCall?`. -/
-def labelKind (label : String) : Kind :=
-  if label.startsWith "safety" then .safety
-  else if label.startsWith "memory" || label.startsWith "call-memory" then .memory
-  else .safety
-
-/-- `"safety: Zig.sub [thm]"` becomes `"Zig.sub precondition [thm]"`. -/
+/-- `"safety: Zig.sub [thm]"` becomes `"precondition of Zig.sub [thm]"`. -/
 def callLabel (label : String) : String :=
   match label.splitOn ": " with
   | [_, rest] => s!"precondition of {rest}"
@@ -499,29 +462,6 @@ def callLabel (label : String) : String :=
 def valueKind (value : Expr) : MetaM Kind := do
   let v ← whnfR value
   return if v.isAppOf ``Except.error then .error else .result
-
-/-- A hypothesis (possibly inside conjunctions or one definition unfolding) that proves `pattern`. -/
-def findHyp (pattern : Expr) : MetaM (Option Expr) := do
-  for d in ← getLCtx do
-    if d.isImplementationDetail then continue
-    if let some p ← search 64 2 d.type d.toExpr then return some p
-  return none
-where
-  /-- `steps` bounds the conjunction traversal, `unfolds` the definition unfoldings. -/
-  search (steps unfolds : Nat) (ty proof : Expr) : MetaM (Option Expr) := do
-    let steps + 1 := steps | return none
-    let ty := (← instantiateMVars ty).headBeta
-    if ty.getAppFn.constName? == pattern.getAppFn.constName? then
-      if ← isDefEq ty pattern then return some proof
-    let ty' ← whnfR ty
-    if ty'.isAppOfArity ``And 2 then
-      if let some p ← search steps unfolds (ty'.getArg! 0) (mkProj ``And 0 proof) then
-        return some p
-      return ← search steps unfolds (ty'.getArg! 1) (mkProj ``And 1 proof)
-    let unfolds + 1 := unfolds | return none
-    if let some ty'' ← unfoldDefinition? ty' then
-      return ← search steps unfolds ty'' proof
-    return none
 
 def setGoal (g : MVarId) (ty : Expr) : MetaM MVarId := g.replaceTargetDefEq ty
 
@@ -550,16 +490,6 @@ def split (fuel : Nat) (names : IO.Ref Nat) (g : MVarId) (fallback : Kind × Str
     let prog ← whnf (ty.getArg! 1)
     let g ← setGoal g (mkApp3 ty.getAppFn (ty.getArg! 0) prog (ty.getArg! 2))
     splitResult fuel names g prog
-  else if ty.isAppOfArity ``MemProgram.vc 4 then
-    let prog ← whnf (ty.getArg! 1)
-    let g ← setGoal g (mkApp4 ty.getAppFn (ty.getArg! 0) prog (ty.getArg! 2) (ty.getArg! 3))
-    splitMem fuel names g prog (ty.getArg! 3)
-  else if ty.isAppOfArity ``ensures 5 then
-    let g ← setGoal g ty
-    let value := ty.getArg! 3
-    let [r, m] ← applyNamed g ``ensures_intro | throwError "vc_gen: ensures_intro"
-    let rs ← split fuel names r (← valueKind value, "functional result")
-    return rs ++ (← split fuel names m (.memory, "memory effect"))
   else
     let g ← setGoal g ty
     return #[{ goal := g, kind := fallback.1, label := fallback.2 }]
@@ -600,7 +530,7 @@ where
       let [p, n] ← applyNamed g ``ResultProgram.call_intro | leaf g
       let i ← fresh names
       let (_, n) ← n.introN 2 [name "value" i, name "summary" i]
-      return #[{ goal := p, kind := labelKind label, label := callLabel label }] ++
+      return #[{ goal := p, kind := .safety, label := callLabel label }] ++
         (← split fuel names n (.result, "functional result"))
     | ``ResultProgram.bind =>
       let [n] ← applyNamed g ``ResultProgram.bind_intro | leaf g
@@ -610,73 +540,8 @@ where
       let i ← fresh names
       let (_, y) ← y.intro (name "branch" i)
       let (_, n) ← n.intro (name "branch" i)
-      return (← split fuel names y (.result, "functional result")) ++ (← split fuel names n (.result, "functional result"))
-    | _ => leaf g
-  splitMem (fuel : Nat) (names : IO.Ref Nat) (g : MVarId) (prog heap : Expr) :
-      MetaM (Array Obligation) := do
-    let fuel + 1 := fuel | throwError "vc_gen: VC too large"
-    let some c := prog.getAppFn.constName? | leaf g
-    match c with
-    | ``MemProgram.ret =>
-      let [n] ← applyNamed g ``MemProgram.ret_intro | leaf g
-      let k ← valueKind prog.appArg!
-      split fuel names n (if k == .error then (.error, "error return") else (.memory, "postcondition"))
-    | ``MemProgram.load =>
-      let T := prog.getArg! 0
-      let pattern ← mkAppM ``Zig.pts #[prog.getArg! 2, prog.getArg! 3, ← mkFreshExprMVar T, heap]
-      if let some owned ← findHyp pattern then
-        let [s, n] ← applyWith g ``MemProgram.load_intro owned | return ← leaf g
-        return #[{ goal := s, kind := .memory, label := "loaded type has positive size" }] ++
-          (← split fuel names n (.memory, "postcondition"))
-      let [s, o] ← applyNamed g ``MemProgram.load_intro_any | leaf g
-      return #[{ goal := s, kind := .memory, label := "loaded type has positive size" },
-        { goal := o, kind := .memory,
-          label := "owned cell for the load (no hypothesis names it), with its continuation" }]
-    | ``MemProgram.store =>
-      let [s, o, n] ← applyNamed g ``MemProgram.store_intro | leaf g
-      let T := prog.getArg! 0
-      let old ← mkFreshExprMVar T
-      let pattern ← mkAppM ``Zig.pts #[prog.getArg! 3, prog.getArg! 4, old, heap]
-      let mut owned : Obligation :=
-        { goal := o, kind := .memory, label := "owned cell for the store" }
-      if let some p ← findHyp pattern then
-        let pred := (← whnfR (← instantiateMVars (← o.getType))).appArg!
-        o.assign (← mkAppOptM ``Exists.intro #[none, some pred, some (← instantiateMVars old), some p])
-        owned := { owned with closedBy := some "hypothesis" }
-      let i ← fresh names
-      let (_, n) ← n.introN 2 [name "heap" i, name "stored" i]
-      return #[{ goal := s, kind := .memory, label := "stored type has positive size" }, owned] ++
-        (← split fuel names n (.memory, "postcondition"))
-    | ``MemProgram.read | ``MemProgram.write =>
-      let rule := if c == ``MemProgram.read then ``MemProgram.read_intro
-        else ``MemProgram.write_intro
-      let [s, o, n] ← applyNamed g rule | leaf g
-      let i ← fresh names
-      let n ← if c == ``MemProgram.write then
-          pure (← n.introN 2 [name "heap" i, name "stored" i]).2
-        else pure n
-      return #[{ goal := s, kind := .memory, label := "accessed type has positive size" },
-        { goal := o, kind := .memory, label := "owned annotated cell" }] ++
-        (← split fuel names n (.memory, "postcondition"))
-    | ``MemProgram.lift =>
-      let [n] ← applyNamed g ``MemProgram.lift_intro | leaf g
-      split fuel names n (.memory, "postcondition")
-    | ``MemProgram.call =>
-      let label := stringLit (prog.getArg! 1)
-      let [p, n] ← applyNamed g ``MemProgram.call_intro | leaf g
-      let i ← fresh names
-      let (_, n) ← n.introN 3 [name "value" i, name "heap" i, name "summary" i]
-      return #[{ goal := p, kind := labelKind label, label := callLabel label }] ++
-        (← split fuel names n (.memory, "postcondition"))
-    | ``MemProgram.bind =>
-      let [n] ← applyNamed g ``MemProgram.bind_intro | leaf g
-      split fuel names n (.memory, "postcondition")
-    | ``MemProgram.branch =>
-      let [y, n] ← applyNamed g ``MemProgram.branch_intro | leaf g
-      let i ← fresh names
-      let (_, y) ← y.intro (name "branch" i)
-      let (_, n) ← n.intro (name "branch" i)
-      return (← split fuel names y (.memory, "postcondition")) ++ (← split fuel names n (.memory, "postcondition"))
+      return (← split fuel names y (.result, "functional result")) ++
+        (← split fuel names n (.result, "functional result"))
     | _ => leaf g
   leaf (g : MVarId) : MetaM (Array Obligation) :=
     return #[{ goal := g, kind := .safety, label := "unsplit generated condition" }]
@@ -691,34 +556,211 @@ def programFor (app : Expr) : MetaM (Expr × Expr × Name) := do
     return (mkAppN (mkConst vcName lvls) app.getAppArgs,
       mkAppN (mkConst srcName lvls) app.getAppArgs, f)
   match ← extractApp f app with
-  | .ok program source _ => return (program, source, f)
+  | .ok program source => return (program, source, f)
+  | .walk => throwError "vc_gen: `{f}` is a memory function; state its contract as an \
+      `FTotalTriple` or `FTriple`"
   | .loops requests => throwError m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
   | .refused reason => throwError m!"vc extraction for `{f}` refused: {reason}"
+
+/-! ## Memory VCs: the walk of `fsym`
+
+A memory contract is a full-state triple. `vc_gen` makes the checks of extraction (loops,
+recursion), then runs `fsym`'s walk (`Zig.Full.Auto.walk`) with the library's step rules and the
+`@[vc_contract]` contracts (a `Result` contract through `result_step`). Every goal the walk
+leaves is an obligation; its kind comes from where it sits in the proof that the walk built:
+
+* under `imp_lift`, a fact of the postcondition at a return: `result`, or `error` if the
+  returned value is a Zig error;
+* an argument of a step rule or contract: its side condition, `memory` if the rule consumes a
+  resource (its precondition is not any `P`) or the contract is a memory contract, else `safety`;
+* an entailment `EUpd` that the planner could not close: `memory` (the heap postcondition);
+* a reachable `throw`: `safety`, as the goal `False` under the path conditions.
+
+A command that no rule executes is refused. -/
+
+/-- The `Result` contract `c : ∀ xs, ∃ v, x = pure v ∧ post v` as a step rule
+`∀ P xs, FTotalTriple P (StateT.lift x) (fun v => ⟪post v⟫ ⋆ P)` (`result_step`). -/
+def resultRule? (c : Expr) : MetaM (Option Expr) := do
+  forallTelescopeReducing (← inferType c) fun xs body => do
+    unless body.isAppOfArity ``Exists 2 do return none
+    let lam := body.getArg! 1
+    unless lam.isLambda && lam.bindingBody!.isAppOfArity ``And 2 do return none
+    let eq := lam.bindingBody!.getArg! 0
+    unless eq.isAppOfArity ``Eq 3 do return none
+    let x := eq.getArg! 1
+    if x.hasLooseBVars then return none
+    let α := lam.bindingDomain!
+    let post := mkLambda lam.bindingName! .default α (lam.bindingBody!.getArg! 1)
+    withLocalDeclD `P (mkConst ``Zig.Full.FAssn) fun P => do
+      let contract ← withLocalDeclD `h (mkConst ``True) fun h => mkLambdaFVars #[h] (mkAppN c xs)
+      let r ← mkAppOptM ``result_step
+        #[α, P, x, mkConst ``True, post, contract, mkConst ``True.intro]
+      return some (← mkLambdaFVars (#[P] ++ xs) r)
+
+/-- Whether the conclusion of `ty` (after its binders) is a full-state step rule. -/
+def isTripleRule (ty : Expr) : MetaM Bool :=
+  forallTelescope ty fun _ b => return (Zig.Full.Auto.ruleConcl? (← whnfR b)).isSome
+
+/-- The `@[vc_contract]` contracts as step rules (the primitive ones are `@[fsym]` rules already),
+except those about `f` itself; and the names of the memory contracts. -/
+def contractRules (f : Name) : MetaM (Array Expr × NameSet) := do
+  let mut out := #[]
+  let mut mems : NameSet := {}
+  for thm in ← labelled `vc_contract do
+    if (`Zig.VC.Prim).isPrefixOf thm then continue
+    let c ← mkConstWithFreshMVarLevels thm
+    let ty ← inferType c
+    if ← isTripleRule ty then
+      let about ← forallTelescope ty fun _ b => do
+        return (Zig.Full.Auto.ruleConcl? (← whnfR b)).map (·.2.getAppFn.constName?)
+      if about == some (some f) then continue
+      out := out.push c
+      mems := mems.insert thm
+    else if let some r ← resultRule? c then
+      out := out.push r
+  return (out, mems)
+
+/-- Where a residual goal sits in the proof. -/
+structure Owner where
+  rule : Option Name := none
+  fact : Bool := false
+  ret : Option Expr := none
+  deriving Inhabited
+
+/-- The owner of every residual goal in the proof `e`: its nearest enclosing step rule, contract
+or postcondition fact (`imp_lift`), and the value of the enclosing return. -/
+partial def owners (resid : Std.HashSet MVarId) (rules : NameSet) (e : Expr) (o : Owner) :
+    StateT (Std.HashMap MVarId Owner × Std.HashSet Expr) MetaM Unit := do
+  if (← get).2.contains e then return
+  modify fun s => (s.1, s.2.insert e)
+  match e with
+  | .mvar m =>
+    if resid.contains m then modify fun s => (s.1.insertIfNew m o, s.2)
+    -- a goal introduced under binders (`intro`, `byCases`) is a delayed assignment
+    else if let some d ← getDelayedMVarAssignment? m then
+      if resid.contains d.mvarIdPending then modify fun s => (s.1.insertIfNew d.mvarIdPending o, s.2)
+      else owners resid rules (← instantiateMVars (.mvar d.mvarIdPending)) o
+  | .app .. =>
+    let args := e.getAppArgs
+    let mut o := o
+    if e.getAppFn.isMVar then owners resid rules e.getAppFn o
+    if let .const c _ := e.getAppFn then
+      if c == ``Zig.Full.Auto.ret && args.size ≥ 5 then o := { ret := some args[4]! }
+      else if c == ``Zig.Full.Auto.imp_lift then o := { o with fact := true }
+      else if rules.contains c then o := { o with rule := some c, fact := false }
+    for a in args do owners resid rules a o
+  | .lam _ t b _ | .forallE _ t b _ => owners resid rules t o; owners resid rules b o
+  | .letE _ t v b _ => owners resid rules t o; owners resid rules v o; owners resid rules b o
+  | .mdata _ b | .proj _ _ b => owners resid rules b o
+  | _ => pure ()
+
+/-- Whether the step rule `c` consumes a resource: its precondition is not a variable. -/
+def consumes (c : Name) : MetaM Bool := do
+  forallTelescope (← inferType (← mkConstWithFreshMVarLevels c)) fun _ b => do
+    let b ← whnfR b
+    match Zig.Full.Auto.ruleConcl? b with
+    | some (k, _) =>
+      let pre := if k == ``Zig.Full.CTriple then b.getArg! 2 else b.getArg! 1
+      return !pre.isFVar
+    | none => return false
+
+/-- Classify the goals that the walk of `g₀` left. -/
+def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
+    TacticM (Array Obligation) := do
+  let contracts : NameSet := (← labelled `vc_contract).foldl (·.insert ·) {}
+  let rules : NameSet := (Zig.Full.Auto.fsymRuleExt.getState (← getEnv)).foldl
+    (·.insert ·) contracts
+  let resid := left.foldl (·.insert ·) ({} : Std.HashSet MVarId)
+  let pf ← Core.betaReduce (← instantiateMVars (.mvar g₀))
+  let ((), (own, _)) ← (owners resid rules pf {}).run ({}, {})
+  let mut out := #[]
+  for m₀ in left do
+    let o := own.getD m₀ {}
+    let ty₀ ← m₀.withContext do Core.betaReduce (← instantiateMVars (← m₀.getType))
+    let m ← m₀.replaceTargetDefEq ty₀
+    -- a triple the walk stopped at: not through `whnfR`, which would unfold the projection `FLogic.T`
+    let ty := ty₀.consumeMData
+    if ty.isAppOfArity ``Zig.Full.FLogic.T 5 then
+      let c := (ty.getArg! 3).consumeMData
+      if Zig.Full.Auto.isThrow c then
+        let [h] ← m.apply (← mkConstWithFreshMVarLevels ``Zig.Full.Auto.of_false)
+          | throwError "vc_gen: `of_false` does not apply to the reachable panic"
+        out := out.push { goal := h, kind := .safety, label := "panic/throw is unreachable" }
+        continue
+      let x := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
+      throwError "vc_gen: the walk stopped at the command{indentExpr x}\n(no `@[fsym]` rule or \
+        `@[vc_contract]` theorem executes it, or the step budget ran out)"
+    if ty.isAppOfArity ``Zig.Full.EUpd 2 then
+      out := out.push { goal := m, kind := .memory, label := "heap postcondition" }
+      continue
+    -- the walk splits on a side condition `φ` it cannot decide and walks both cases; in the
+    -- case `hc : ¬φ` the goal is `φ`, which is equivalent to `φ` without `hc` (`(¬φ → φ) ↔ φ`)
+    let m ← m.withContext do
+      let mut found := none
+      for d in ← getLCtx do
+        if d.isImplementationDetail then continue
+        let t := (← instantiateMVars d.type).consumeMData
+        if t.isAppOfArity ``Not 1 && t.appArg! == ty then found := some d.fvarId; break
+      let some d := found | pure m
+      try m.clear d catch _ => pure m
+    if o.fact then
+      let k ← match o.ret with | some v => valueKind v | none => pure .result
+      let label := if k == .error then "error return" else "functional result"
+      out := out.push { goal := m, kind := k, label := label }
+    else if let some r := o.rule then
+      let (kind, label) ←
+        if r == ``result_step then pure (.safety, "precondition of a `Result` call")
+        else if contracts.contains r then
+          pure (if mems.contains r then .memory else .safety, s!"precondition of `{r}`")
+        else pure (if ← consumes r then .memory else .safety, s!"side condition of `{r}`")
+      out := out.push { goal := m, kind := kind, label := label }
+    else
+      out := out.push { goal := m, kind := .safety, label := "side condition" }
+  return out
+
+/-- The checks of extraction for the generated function of a memory goal's program `c`. -/
+def memFunction (c : Expr) : MetaM Name := do
+  let some f := c.getAppFn.constName?
+    | throwError "vc_gen: the program is not an application of a generated function{indentExpr c}"
+  match ← extractApp f c with
+  | .walk => return f
+  | .ok .. => throwError "vc_gen: `{f}` is not a memory function"
+  | .loops requests => throwError m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
+  | .refused reason => throwError m!"vc extraction for `{f}` refused: {reason}"
+
+/-- `vc_gen` on a full-state triple: the walk of `fsym`, with the residual goals classified. -/
+def memVc (g : MVarId) (ty : Expr) : TacticM (Name × Array Obligation) := do
+  let f ← memFunction (ty.getArg! 2)
+  let (user, mems) ← contractRules f
+  -- `ensures` is a fact and a heap part: unfold it so the walk sees both
+  let g ← g.replaceTargetDefEq (← deltaExpand ty (· == ``ensures))
+  let left ← Zig.Full.Auto.withRunCaches do
+    discard <| Zig.Full.Auto.arithSimpCtx
+    Zig.Full.Auto.walk g user #[] 400
+  return (f, ← memObligations g left mems)
 
 def runVcGen (report : Bool) : TacticM Unit := do
   let g ← getMainGoal
   g.withContext do
   let before := (← getLCtx).getFVarIds
-  let ty ← whnfR (← instantiateMVars (← g.getType))
-  let (f, gens) ← if ty.isAppOfArity ``Exists 2 then do
+  let ty0 ← instantiateMVars (← g.getType)
+  let ty ← whnfR ty0
+  let (f, obls) ← if ty.isAppOfArity ``Exists 2 then do
       let lam := ty.getArg! 1
       unless lam.isLambda && lam.bindingBody!.isAppOfArity ``And 2 do
         throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v`"
       let eq := lam.bindingBody!.getArg! 0
       unless eq.isAppOfArity ``Eq 3 do throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v`"
       let (_, src, f) ← programFor (eq.getArg! 1)
-      pure (f, ← applyWith g ``result_intro src)
-    else if ty.isAppOfArity ``Zig.Triple 4 then do
-      let (_, src, f) ← programFor (ty.getArg! 2)
-      let [o] ← applyWith g ``triple_intro src
-        | throwError "vc_gen: triple_intro"
-      let (_, o) ← o.introN 2 [`heap, `pre]
-      pure (f, [o])
-    else throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v` or `Triple pre (f xs) post`"
-  let mut obls := #[]
-  let names ← IO.mkRef 0
-  for gen in gens do
-    obls := obls ++ (← split fuelLimit names gen (.result, "functional result"))
+      let names ← IO.mkRef 0
+      let mut obls := #[]
+      for gen in ← applyWith g ``result_intro src do
+        obls := obls ++ (← split fuelLimit names gen (.result, "functional result"))
+      pure (f, obls)
+    else if ty0.isAppOfArity ``Zig.Full.FTotalTriple 4 || ty0.isAppOfArity ``Zig.Full.FTriple 4 then
+      memVc g ty0
+    else throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v`, `FTotalTriple pre (f xs) post` \
+      or `FTriple pre (f xs) post`"
   -- Number the open obligations by kind, so `case safety_1 => …` addresses one.
   let mut counts : Std.HashMap String Nat := {}
   let mut open_ := #[]
@@ -736,7 +778,7 @@ def runVcGen (report : Bool) : TacticM Unit := do
       let t ← instantiateMVars (← o.goal.getType)
       let hyps ← (← getLCtx).foldlM (init := #[]) fun acc d => do
         if before.contains d.fvarId || d.isImplementationDetail then return acc
-        return acc.push s!"{d.userName} : {← ppExpr (← instantiateMVars d.type)}"
+        return acc.push s!"{d.userName.eraseMacroScopes} : {← ppExpr (← instantiateMVars d.type)}"
       return (toString (← ppExpr t), hyps)
     let status := match o.closedBy with | some by_ => s!" (closed by {by_})" | none => ""
     let givenText := String.join (given.toList.map fun h => s!"\n    {h}")
@@ -753,8 +795,10 @@ def runVcGen (report : Bool) : TacticM Unit := do
 
 end Zig.VC.Extract
 
-/-- Replace a contract goal about a loop-free generated function by its tagged VC obligations. -/
-elab "vc_gen" : tactic => Zig.VC.Extract.runVcGen false
+/-- `vc_gen`: replace a contract goal about a loop-free generated function by its tagged VC
+obligations (for a full-state triple, the goals that the walk of `fsym` leaves). `vc_gen?` also
+logs the obligation report. -/
+syntax (name := vcGen) ("vc_gen" <|> "vc_gen?") : tactic
 
-/-- `vc_gen`, also logging the obligation report. -/
-elab "vc_gen?" : tactic => Zig.VC.Extract.runVcGen true
+@[tactic vcGen] def Zig.VC.Extract.evalVcGen : Tactic := fun stx =>
+  Zig.VC.Extract.runVcGen (stx.find? (·.isToken "vc_gen?")).isSome

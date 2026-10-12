@@ -58,48 +58,39 @@
   },
   {
     "function": "Pointers.addTo",
-    "program": "Pointers.vc_addTo",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Pointers.bumpOpt",
-    "reason": "no VC rule or `@[vc_contract]` theorem for `Zig.optIsSome`:\n  Zig.optIsSome (BitVec 32) p0",
-    "status": "refused"
+    "status": "walk"
   },
   {
     "function": "Pointers.copyJob",
-    "reason": "no `LawfulEnc` instance for the stored type\n  Pointers.Job",
-    "status": "refused"
+    "status": "walk"
   },
   {
     "function": "Pointers.delay",
-    "program": "Pointers.vc_delay",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Pointers.dueOf",
-    "program": "Pointers.vc_dueOf",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Pointers.maxPtr",
-    "program": "Pointers.vc_maxPtr",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Pointers.same",
-    "program": "Pointers.vc_same",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Pointers.setOpt",
-    "reason": "no `LawfulEnc` instance for the stored type\n  Option (BitVec 32)",
-    "status": "refused"
+    "status": "walk"
   },
   {
     "function": "Pointers.setOptJob",
-    "reason": "no VC rule or `@[vc_contract]` theorem for `Zig.optSetSome`:\n  Zig.optSetSome Pointers.Job p0",
-    "status": "refused"
+    "status": "walk"
   },
   {
     "function": "Pointers.sumTo",
@@ -114,8 +105,7 @@
   },
   {
     "function": "Pointers.swap",
-    "program": "Pointers.vc_swap",
-    "status": "extracted"
+    "status": "walk"
   },
   {
     "function": "Errors.digitOrZero",
@@ -229,76 +219,7 @@
   },
   {
     "function": "Pointers.addTo",
-    "obligations": [
-      {
-        "case": "memory_1",
-        "closed_by": null,
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap"
-        ],
-        "goal": "0 < Enc.size (BitVec 64)",
-        "kind": "memory",
-        "label": "loaded type has positive size"
-      },
-      {
-        "case": "safety_1",
-        "closed_by": null,
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap"
-        ],
-        "goal": "32 ≤ 64",
-        "kind": "safety",
-        "label": "unsigned cast widens"
-      },
-      {
-        "case": "safety_2",
-        "closed_by": null,
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap"
-        ],
-        "goal": "old.toNat + (BitVec.setWidth 64 delta).toNat < 2 ^ 64",
-        "kind": "safety",
-        "label": "unsigned addition does not overflow"
-      },
-      {
-        "case": "memory_2",
-        "closed_by": null,
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap"
-        ],
-        "goal": "0 < Enc.size (BitVec 64)",
-        "kind": "memory",
-        "label": "stored type has positive size"
-      },
-      {
-        "case": "memory_3",
-        "closed_by": "hypothesis",
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap"
-        ],
-        "goal": "∃ old, pts p 8 old heap",
-        "kind": "memory",
-        "label": "owned cell for the store"
-      },
-      {
-        "case": "memory_4",
-        "closed_by": null,
-        "given": [
-          "heap : Heap",
-          "pre : pts p 8 old heap",
-          "heap1 : Heap",
-          "stored1 : pts p 8 (old + BitVec.setWidth 64 delta) heap1"
-        ],
-        "goal": "pts p 8 (old + BitVec.setWidth 64 delta) heap1",
-        "kind": "memory",
-        "label": "postcondition"
-      }
-    ],
+    "obligations": [],
     "status": "obligations"
   }
 ]
