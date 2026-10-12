@@ -123,6 +123,15 @@ const Compat = struct {
         }
     };
 
+    /// `std.builtin.StackTrace` (`std.lang` in 0.17.0), or null while it is not resolved.
+    fn stackTraceType(zcu: *Zcu) ?Type {
+        const index = if (v17)
+            zcu.std_lang_decl_values.get(.StackTrace)
+        else
+            zcu.builtin_decl_values.get(.StackTrace);
+        return if (index == .none) null else Type.fromInterned(index);
+    }
+
     /// `Air.extra` is a slice in 0.14.1 and an array list in 0.15.2+.
     fn extra(air: *const Air) []const u32 {
         return if (v14) air.extra else air.extra.items;
@@ -711,6 +720,15 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
+        // The hidden error-return-trace parameter (§Error return trace): its type
+        // `?*StackTrace`, or `unresolved` when that type is not resolved yet.
+        if (w.takesErrTrace(fn_ty)) {
+            try w.field("err_trace");
+            if (Compat.stackTraceType(zcu)) |stack_trace| {
+                const ptr = try w.pt.singleMutPtrType(stack_trace);
+                try w.writeTypeRef(try w.pt.optionalType(ptr.toIntern()));
+            } else try w.j.write("unresolved");
+        }
         // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
         // program can resolve to (docs/air-json.md §Extern calls).
         if (w.exportedName(owner_nav)) |symbol| {
@@ -747,6 +765,16 @@ const W = struct {
         }
         try w.j.endArray();
         try w.j.endObject();
+    }
+
+    /// Whether a function of type `fn_ty` (or a pointer to one) takes the error return trace as a
+    /// hidden parameter: the backends' rule (`codegen/llvm.zig`, `fn_info.cc == .auto and
+    /// comp.config.any_error_tracing`), not the per-module `error_tracing` flag.
+    fn takesErrTrace(w: *W, fn_ty: Type) bool {
+        const zcu = w.pt.zcu;
+        const ty = if (fn_ty.zigTypeTag(zcu) == .pointer) fn_ty.childType(zcu) else fn_ty;
+        const info = zcu.typeToFunc(ty) orelse return false;
+        return info.cc == .auto and zcu.comp.config.any_error_tracing;
     }
 
     /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
@@ -1029,6 +1057,25 @@ const W = struct {
                 try w.field("callee");
                 try w.writeRef(pl_op.operand);
                 try w.writeArgs(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.args_len]));
+                // The callee also receives the caller's error return trace (§Error return trace).
+                if (w.takesErrTrace(w.air.typeOf(pl_op.operand, ip))) {
+                    try w.field("err_trace");
+                    try w.j.write(true);
+                }
+            },
+            // Error return tracing (`docs/air-json.md` §Error return trace): the current trace,
+            // its replacement, a load of one of its fields, and the return address.
+            .err_return_trace, .ret_addr => {},
+            .set_err_return_trace => try w.writeArgs(&.{w.data(inst).un_op}),
+            .save_err_return_trace_index => {
+                const ty_pl = w.data(inst).ty_pl;
+                const struct_ty = Compat.tyPlType(ty_pl);
+                try w.field("index");
+                try w.j.write(ty_pl.payload);
+                // The pointer to that field that the backends load through
+                // (`airSaveErrReturnTraceIndex`): the field at its natural alignment.
+                try w.field("ptr_ty");
+                try w.writeTypeRef(try w.pt.singleMutPtrType(struct_ty.fieldType(ty_pl.payload, zcu)));
             },
             .dbg_var_ptr, .dbg_var_val, .dbg_arg_inline => {
                 const pl_op = w.data(inst).pl_op;
