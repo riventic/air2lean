@@ -114,12 +114,12 @@
     "air/0.17.0/nullpointers.valPtr.json": "6f73e207c04dbb2cf1412500d50ee4d4e708b27a261c84c42f848e35d9fca132"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "3f3c7375a5d4c9c40ec95606f4c8a243da8ca784d3000cc3d62887f9ea1799f2",
+  "exporter_sha256": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
   "patched_compiler_sha256": {
-    "0.14.1": "19cd4fb06a4cbad3efa53dc6038545d71d2f126e820f0f6364fe352b9c65ee8c",
-    "0.15.2": "1f8c933d87678c8bac7e597687bc61458f58357c31c3d6968802a7be781a03c9",
-    "0.16.0": "a2b9bd08c3fc2d6b06f551be801bc9f1e3cfae77c8ca1e3d3a10e5dc4191d9f8",
-    "0.17.0": "755b29ffe6f8ba19beb385831dd85fe74a1dbb0f36eb17e6224f072fbbe57430"
+    "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
+    "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
+    "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c",
+    "0.17.0": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
   },
   "qualification": "Compiler exports of nullpointers.zig and reject.zig by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; check.sh translates each and compares the model with expected/<version>.txt, which check.sh --native compares with native runs.",
   "sources": {

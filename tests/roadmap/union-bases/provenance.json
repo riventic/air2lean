@@ -76,15 +76,15 @@
   "command": "ZIG_AIR_JSON_DIR=<dir>/<version> ZIG_AIR_JSON_FILTER=<source>. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl -mcpu=baseline <source>.zig (export.sh)",
   "exporter_sha256": {
     "identity.zig": "a03eea3791f047909d370569c24c65d8be0ffae662968cd3000b01c39a970f7e",
-    "json.zig": "3f3c7375a5d4c9c40ec95606f4c8a243da8ca784d3000cc3d62887f9ea1799f2",
+    "json.zig": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
     "pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
   },
   "note": "Each compiler is zig-patch/build.sh <version> from this tree's exporter (exporter_sha256); patched_compiler_sha256 hashes bin/zig-unlocked behind the AIR-only lock wrapper.",
   "patched_compiler_sha256": {
-    "0.14.1": "19cd4fb06a4cbad3efa53dc6038545d71d2f126e820f0f6364fe352b9c65ee8c",
-    "0.15.2": "1f8c933d87678c8bac7e597687bc61458f58357c31c3d6968802a7be781a03c9",
-    "0.16.0": "a2b9bd08c3fc2d6b06f551be801bc9f1e3cfae77c8ca1e3d3a10e5dc4191d9f8",
-    "0.17.0": "755b29ffe6f8ba19beb385831dd85fe74a1dbb0f36eb17e6224f072fbbe57430"
+    "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
+    "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
+    "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c",
+    "0.17.0": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
   },
   "sources": {
     "union_bases.zig": "dff6dd428ee9658207919e6cfac239e7b89b49ae5dd1a5596af8e62c38327cbd",
