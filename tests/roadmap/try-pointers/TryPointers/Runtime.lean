@@ -1,6 +1,4 @@
 import TryPointers.Gen
-import ZigLean.Sep.Try
-import ZigLean.Sep.Discard
 
 open Zig
 

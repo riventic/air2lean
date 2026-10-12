@@ -1813,7 +1813,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.Try ZigLean.Sep.Discard
+          lake build ZigLean.Sep.Full.Try
           python3 -m unittest discover -s tests/roadmap/try-pointers -v
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/check.sh --check-qualification
@@ -1837,7 +1837,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.TryAlias
+          lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
           bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/aliases/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")

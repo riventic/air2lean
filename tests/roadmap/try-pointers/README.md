@@ -33,20 +33,22 @@ Own-target branches retain the block's continuation. Target
 membership is prepared once per emission context, including bare public contexts.
 Void and nonvoid nested-branch runtime fixtures retain original error names and values.
 Existing layout/encoding
-checks still apply: these ownership and alias rules (`Sep/Try.lean`, `Sep/TryAlias.lean`)
+checks still apply: these ownership and alias rules (`ZigLean/Sep/Full/Try.lean`)
 cover the default two-byte error code only (the `…W` operations emitted for another
 `--error-limit` width have no ownership rules), a 64-bit
 little-endian pointer ABI, and payload offsets from `errUnionOffsets`. Unmodeled error
 unions, volatile/allowzero pointers and unsupported layouts remain rejected. No claim
 is made for representations that erase the error tag, or other target ABIs.
 
-`ZigLean/Sep/Try.lean` provides a universal sequential-memory ownership rule for the
-tag-only helper. Generated functions can additionally require whole-object raw ownership
-for the preceding discarded read (`ZigLean/Sep/Discard.lean`). The tag rule owns
-only aligned tag bytes, preserves heap/frame bytes and `Mem.Seq`, and returns the exact
-payload address or original error name. Framing retains payload/cleanup ownership;
-`Triple.bind` supplies the obligations for subsequent writes and cleanup. Access records
-may change because the tag read participates in the existing race model.
+`ZigLean/Sep/Full/Try.lean` provides the total full-state read rules (`FTotalTriple`) for the
+tag-only helper and for the preceding discarded read, over readable bytes (`ReadAt`: owned
+bytes of any block kind, or the persistent bytes of a `const` global). The tag rule needs
+only the aligned tag bytes (`TryPointers/Proofs.lean`: `errorTag`, `readableBytes`), keeps
+them and any frame, and returns the exact payload address or original error name.
+Framing retains payload/cleanup ownership; `FTotalTriple.bind` supplies the obligations for
+subsequent writes and cleanup. Access records may change because the tag read participates
+in the existing race model. The legacy statements of these theorems follow from the new ones
+(`tests/roadmap/strength-log/TryPointers.lean`).
 
 The local Zig 0.14.1, 0.15.2 and 0.16.0 `Air.zig` and `Sema.zig` sources were inspected:
 all use `ty_pl` plus `TryPtr { ptr, body_len }`; result pointer flags preserve constness,
@@ -61,7 +63,7 @@ command's provenance, rather than facts independently recovered from its AIR.
 Only the root's serialized compiler queue should run the following commands:
 
 ```sh
-lake build Air2Lean.Check Air2Lean.Emit air2lean ZigLean.Sep.Try ZigLean.Sep.Discard
+lake build Air2Lean.Check Air2Lean.Emit air2lean ZigLean.Sep.Full.Try
 AIR2LEAN_ZIG_AIR=/qualified/patched/zig bash tests/roadmap/try-pointers/check.sh --export tests/roadmap/try-pointers/air/0.16.0
 .lake/build/bin/air2lean tests/roadmap/try-pointers/air/0.16.0 -o tests/roadmap/try-pointers/TryPointers/Gen.lean --namespace TryPointers --prefix try_pointers.
 python3 tests/roadmap/try-pointers/check-artifacts.py --record
@@ -141,16 +143,18 @@ runtime qualification of this caller update remain ROOT's responsibility.
 
 ## Aliasing and cleanup rules
 
-The tag-only rule above does not say what a payload alias observes. `ZigLean/Sep/TryAlias.lean`
-(not imported by the `ZigLean` runtime umbrella) owns the whole typed union `pts p a u`:
-every pointer try on `p` returns `tryView α p u` (the same payload address, or the original
-error); a load through any such address reads the payload in place; a store through it turns
-`pts p a (.ok x)` into `pts p a (.ok y)` without writing the tag. `tryAliasWriteRead` is the
-two-alias composition. Side conditions are explicit: `Nat.min a 2 ∣ a` and divides the tag
-offset, and the payload access alignment divides `a` and the payload offset.
+The tag-only rule above does not say what a payload alias observes. The `@[fsym]` rules of
+`ZigLean/Sep/Full/Try.lean` and `Full/Typed.lean` (not imported by the `ZigLean` runtime
+umbrella) own the whole typed union `up (pts p a u)`: every pointer try on `p` returns
+`tryView α p u` (the same payload address, or the original error); a load through any such
+address reads the payload in place (`errPayload_load`); a store through it turns
+`pts p a (.ok x)` into `pts p a (.ok y)` without writing the tag (`errPayload_store`). Side
+conditions are explicit: `Nat.min a 2 ∣ a` and divides the tag offset, and the payload access
+alignment divides `a` and the payload offset.
 
 `TryPointers/AliasProofs.lean` applies these rules to the actual retained generated
-definitions (compiler-exported AIR, unchanged Gen):
+definitions (compiler-exported AIR, unchanged Gen): each theorem is `fsym` on each shape of
+the union.
 
 | Definition | Rule |
 |---|---|
@@ -179,12 +183,12 @@ hand-written-AIR translation. `aliases/TryAliases/Proofs.lean` proves:
 These are a caller-held payload pointer, a shared cleanup counter (the native call sequence
 ends at 3), `writeAlias` errors, `coldPayload` success and cleanup overflow.
 `try_aliases.zig` has the matching native tests. The cases are finite. Remaining exclusions:
-concurrent aliases (the rules need `Mem.Seq`), overlapping
+concurrent aliases (the rules need `Mem.FSeq`), overlapping
 but unequal union objects, aliases through casts or different element types, cleanup that frees
 the union, and payloads wider than one byte in the generated cleanup rules.
 
 ```sh
-lake build ZigLean.Sep.TryAlias
+lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
 python3 tests/roadmap/try-pointers/aliases/check-artifacts.py
 bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
 AIR2LEAN_ZIG_NATIVE=/qualified/stock/zig bash tests/roadmap/try-pointers/aliases/check.sh --native

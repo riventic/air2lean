@@ -909,9 +909,11 @@ theorem ReadAt.shift {o n : Nat} (h : ReadAt p a bs P) (hal : al ∣ a) (ho : al
     · simp only [Array.size_extract] at hi
       rw [e, Nat.add_assoc, hx (o + i) (by omega), Array.getElem_extract]
 
-/-- **Owned bytes of any block kind** are readable. -/
-theorem ReadAt.bytesAt {A S : Nat} {K : BlockKind} (hA : (A + p.off.toNat) % a = 0)
-    (hpos : 0 < bs.size) : ReadAt p a bs (up (Zig.bytesAt p A S K bs)) := fun m r rF hh hp => by
+/-- **Part of owned bytes of any block kind** is readable: `n` bytes at byte `o`, aligned to
+`al` at the block address `A` the bytes carry. -/
+theorem ReadAt.bytesAt_part {A S o n : Nat} {K : BlockKind} (hA : (A + p.off.toNat + o) % al = 0)
+    (hn : 0 < n) (hfit : o + n ≤ bs.size) :
+    ReadAt (p.add o) al (bs.extract o (o + n)) (up (Zig.bytesAt p A S K bs)) := fun m r rF hh hp => by
   obtain ⟨⟨b, hpb, h0, hbs⟩, -, -⟩ := hp
   have cell : ∀ i, i < bs.size → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
       blk.kind.mappedLo ≤ p.off.toNat + i ∧ blk.addr = A ∧
@@ -928,11 +930,35 @@ theorem ReadAt.bytesAt {A S : Nat} {K : BlockKind} (hA : (A + p.off.toNat) % a =
     simp only [Cell.norm, hc] at hbyte
     refine ⟨blk, hb, hl, hlo, by rw [← ha, hc], ?_⟩
     rw [Array.getElem?_eq_getElem hx', hbyte]
-  obtain ⟨blk, hblk, hl, hlo, hA', -⟩ := cell 0 hpos
-  refine ⟨b, blk, hpb, hblk, hl, h0, by simpa using hlo, by rw [hA']; exact hA, fun i hi => ?_⟩
-  obtain ⟨blk', hb', -, -, -, hx⟩ := cell i hi
+  have e : (p.add o).off.toNat = p.off.toNat + o := by simp only [Ptr.add]; omega
+  obtain ⟨blk, hblk, hl, hlo, hA', -⟩ := cell o (by omega)
+  refine ⟨b, blk, hpb, hblk, hl, by simp only [Ptr.add]; omega, by rw [e]; exact hlo,
+    by rw [e, hA', ← Nat.add_assoc]; exact hA, fun i hi => ?_⟩
+  simp only [Array.size_extract] at hi
+  obtain ⟨blk', hb', -, -, -, hx⟩ := cell (o + i) (by omega)
   rw [hblk] at hb'; cases hb'
-  rw [hx, getElem!_pos bs i hi]
+  rw [e, Nat.add_assoc, hx, getElem!_pos bs (o + i) (by omega), Array.getElem_extract]
+
+/-- **Owned bytes of any block kind** are readable. -/
+theorem ReadAt.bytesAt {A S : Nat} {K : BlockKind} (hA : (A + p.off.toNat) % a = 0)
+    (hpos : 0 < bs.size) : ReadAt p a bs (up (Zig.bytesAt p A S K bs)) := by
+  have h := ReadAt.bytesAt_part (p := p) (bs := bs) (S := S) (K := K) (o := 0) (n := bs.size)
+    (by simpa using hA) hpos (by omega)
+  simpa only [Int.natCast_zero, Ptr.add_zero, Nat.zero_add, Array.extract_size] using h
+
+/-- Owned bytes `bs` of any block kind at `p`, aligned to `a` (`region` without the kind
+restriction: what a read needs). -/
+def ownedBytes (p : Ptr) (a : Nat) (bs : Array Byte) : Assn := fun h =>
+  ∃ A S K, (A + p.off.toNat) % a = 0 ∧ Zig.bytesAt p A S K bs h
+
+theorem SizeFree.ownedBytes : SizeFree (fun _ => none) (Full.ownedBytes p a bs) :=
+  SizeFree.bytesAt_ex fun _ _ _ _ _ h _ => h
+
+/-- **Owned bytes** are readable. -/
+theorem ReadAt.ownedBytes (hpos : 0 < bs.size) : ReadAt p a bs (up (ownedBytes p a bs)) :=
+  fun m r rF hh hp => by
+    obtain ⟨⟨A, S, K, hA, hb⟩, hk, hg⟩ := hp
+    exact ReadAt.bytesAt hA hpos m r rF hh ⟨hb, hk, hg⟩
 
 /-- **An owned region** is readable. -/
 theorem ReadAt.region (hpos : 0 < bs.size) : ReadAt p a bs (up (Zig.region p a bs)) :=
