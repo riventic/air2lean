@@ -197,6 +197,8 @@ partial def unifyKeyed (a b : Expr) : MetaM Bool := do
   if ka != kb && ka != .anonymous && kb != .anonymous then
     -- values (words, numbers, flags) of different heads may still be equal by unfolding
     -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
+    -- ground values only: a pattern with metavariables must not be matched by unfolding
+    if (← instantiateMVars a).hasExprMVar || (← instantiateMVars b).hasExprMVar then return false
     let ty ← whnfR (← inferType a)
     unless ty.isAppOfArity ``BitVec 1 || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool do
       return false
@@ -469,6 +471,22 @@ where
     | .mdata _ b | .proj _ _ b => go b acc
     | _ => acc
 
+/-- The literal powers of two `L` of the remainders `z % L` of natural numbers in `e`. -/
+partial def litPowMods (e : Expr) : Array Nat :=
+  go e #[]
+where
+  go (e : Expr) (acc : Array Nat) : Array Nat :=
+    let acc := if e.isAppOfArity ``HMod.hMod 6 && (e.getArg! 0).isConstOf ``Nat then
+        match e.appArg!.nat? with
+        | some c => if c > 1 && c &&& (c - 1) == 0 && !acc.contains c then acc.push c else acc
+        | none => acc
+      else acc
+    match e with
+    | .app f a => go a (go f acc)
+    | .lam _ t b _ | .forallE _ t b _ => go b (go t acc)
+    | .mdata _ b | .proj _ _ b => go b acc
+    | _ => acc
+
 /-- The widths `w` of the terms `x.toNat` (`x : BitVec w`, `w` a literal) of `e`. -/
 partial def bvWidths (e : Expr) : Array Nat :=
   go e #[]
@@ -568,10 +586,8 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
   -- literal power-of-two moduli (`z % 4096`)
   let mut lits : Array Nat := #[]
   for e in srcs do
-    for x in subterms e do
-      if x.isAppOfArity ``HMod.hMod 6 && (x.getArg! 0).isConstOf ``Nat then
-        if let some c := x.appArg!.nat? then
-          if c > 1 && c &&& (c - 1) == 0 && !lits.contains c then lits := lits.push c
+    for c in litPowMods e do
+      unless lits.contains c do lits := lits.push c
   for m in mods do
     let z := m.appFn!.appArg!
     let M := m.appArg!
@@ -2187,7 +2203,10 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
         let key ← withNewMCtxDepth do
           let (_, _, concl) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels n))
           let concl ← whnfR concl
-          pure (match ruleConcl? concl with | some (_, c) => headKey c | none => .anonymous)
+          -- a `CTriple` rule's command may unfold to the program's (`unfoldToHead`): any key
+          pure (match ruleConcl? concl with
+            | some (k, c) => if k == ``CTriple then .anonymous else headKey c
+            | none => .anonymous)
         k := k.push (key, n)
       (← caches).rules.set (some k)
       pure k
@@ -2299,22 +2318,18 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       let eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[cond, inst, h, none, t, e]
       let f ← withLocalDeclD `c (← inferType c) fun x => mkLambdaFVars #[x] (mkT L α P x Q)
       g.replaceTargetEq (mkT L α P (if pos then t else e) Q) (← mkCongrArg f eq)
-    -- a condition that matches on a variable (an error union's tag): split the variable (the
-    -- arithmetic does not decide a `match` on a variable)
-    let mut found : Option Expr := none
-    let cond' ← instantiateMVars cond
-    for sub in subterms cond' do
-      if let some m ← matchMatcherApp? sub (alsoCasesOn := true) then
-        if let some d := m.discrs.find? (·.isFVar) then found := some d; break
-    if let some d := found then
-      trace[fsym] "branch on {cond'}: split variable {d}"
-      return ← casesWalk g d user extra fuel
     let hp ← mkFreshExprMVar cond
     if ← arith hp.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hp) true) user extra (fuel - 1)
     let hn ← mkFreshExprMVar (mkNot cond)
     if ← arith hn.mvarId! (quick := true) then
       return ← walk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
+    -- a condition that matches on a variable (an error union's tag): split the variable
+    let mut found : Option Expr := none
+    let cond' ← instantiateMVars cond
+    for sub in subterms cond' do
+      if let some m ← matchMatcherApp? sub (alsoCasesOn := true) then
+        if let some d := m.discrs.find? (·.isFVar) then found := some d; break
     -- a variable of an enumeration-like type (`Option`, `Except`, …) of the condition that the
     -- state matches on too (`match h with …` of an invariant): its cases decide both
     if found.isNone then

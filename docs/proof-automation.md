@@ -177,8 +177,8 @@ parallel; a run is identified by the option `fsym.run`).
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
-`trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment (and `trace.fsym`
-the total of the run). Every proof must stay under the default heartbeat budget. Lessons:
+`trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
+`trace.fsym.total` the total of the run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * A failed definitional unification of two programs unfolds them: compare heads and arguments.
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
