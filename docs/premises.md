@@ -100,7 +100,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -1012,6 +1012,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Sources: [external-models.md](external-models.md#callback-contracts-e02),
   `tests/roadmap/callbacks/Callbacks/AsyncProofs.lean`.
 
+<a id="ext-05"></a>
+### EXT-05 — Environment implementations of open interfaces
+
+- Kind: environment.
+- Statement: For an interface that the model registry declares open (`interfaces`), a call
+  through a pointer of one of its function types that is no function of the program runs the
+  environment's implementation at that pointer (`Ext.call<i>`, the same one for the whole run),
+  and that implementation meets the interface contract that the theorem assumes for it (for
+  `std.mem.Allocator`, `CAllocSpec` of the vtable's entries). An implementation in the program
+  is never covered by this premise: the dispatch runs its translated code. The pointers a
+  theorem names in its contract hypothesis are the environment's functions, not addresses
+  inside the program's blocks.
+- Derived from: tokens `extCall` (the open arm of a generated call, `Zig.extCall`).
+- Sources: [interfaces.md](interfaces.md), `Air2Lean/Emit.lean` (`emitExt`),
+  `tests/roadmap/interfaces`.
+
 ## OS page mapping
 
 <a id="osm-01"></a>
@@ -1289,7 +1305,7 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, ORD-06, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05, ORD-06 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04, ORD-06 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04, EXT-05, ORD-06 |
 | Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |
 | Native/WASM correspondence records (`scripts/wasm-correspondence.py`, [research/T05.md](research/T05.md)) | PRF-04, TRU-03 |
