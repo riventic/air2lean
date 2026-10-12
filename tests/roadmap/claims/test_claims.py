@@ -74,6 +74,10 @@ EXPECTED = {
     'ClaimFixture.cret_partial': ('correct-if-returned', 'partial_correctness'),
     'ClaimFixture.tret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.tret_partial': ('correct-if-returned', 'partial_correctness'),
+    # Not claims: a refutation, a wrapper definition and a conjunction (as their legacy forms).
+    'ClaimFixture.fdiverge_not_total': ('unclassified', None),
+    'ClaimFixture.fwrapped_total': ('unclassified', None),
+    'ClaimFixture.fpartial_and_returns': ('unclassified', None),
     'ClaimFixture.fret_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.fret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.fret_partial.returns': ('unclassified', None),

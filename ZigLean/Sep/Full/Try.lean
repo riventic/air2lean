@@ -24,6 +24,12 @@ The pointer forms of `try`, `catch`, `orelse` and `if (x) |*p|` that generated c
   **prefix decoding** of `T` (`PrefixDecode`): every encoding of the model has it, and a
   generated struct or union gets it from `decodeAt_extract`.
 * **Optional error sets `?E`**: `optionalErrorIsSome`.
+* **Readable bytes** (`ReadAt`): one provider for every way bytes can be read, owned bytes of
+  any block kind (`ReadAt.bytesAt`, `ReadAt.region`) and the persistent bytes of a `const` global
+  (`ReadAt.ofConst`), and the read rules over it: `loadBytes_of`, `loadDiscard_of`, and the
+  error code reads `tryPayloadPtr_of`, `errCodeAt_of`, `finiteTryPayloadPtr_of`,
+  `finiteErrCodeAt_of` from the two bytes of the code (`ReadAt.shift` cuts them out of a whole
+  union's bytes). These are native rules (no legacy lifting).
 
 `@[fsym]` rules are about owned values; the `…_region` and `…_some`/`…_ok` forms are for
 `fsym [r]`. Proof-only: not reachable from `ZigLean.lean`.
@@ -901,6 +907,227 @@ variable {d : ErrorDomain} {q : Ptr} {a al : Nat} {o : Option ErrName}
     exact FTotalTriple.pure_read rfl
 
 end OptionalError
+
+/-! ## Readable bytes: owned or `const`
+
+`ReadAt p a bs P`: every memory that holds `P` has the bytes `bs` at `p`, readable with
+alignment `a`. Owned bytes give it whatever their block's kind (`ReadAt.bytesAt`,
+`ReadAt.region`), and so do the persistent bytes of a `const` global (`ReadAt.ofConst`,
+`ReadAt.cbytesAt`); it frames (`sepL`, `sepR`) and cuts (`shift`). The read rules take it, so an
+owned read and a `const` read are one rule, and a read leaves `P` as it was. -/
+
+section Readable
+
+variable {p : Ptr} {a al : Nat} {bs : Array Byte} {P R : FAssn}
+
+/-- Every memory that holds `P` has the bytes `bs` at `p` in a live block, at or above its first
+live offset, at an address that keeps `p` aligned to `a`. -/
+def ReadAt (p : Ptr) (a : Nat) (bs : Array Byte) (P : FAssn) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧
+    blk.live = true ∧ 0 ≤ p.off ∧ blk.kind.mappedLo ≤ p.off.toNat ∧
+    (blk.addr + p.off.toNat) % a = 0 ∧ ∀ i (h : i < bs.size), blk.bytes[p.off.toNat + i]? = some bs[i]
+
+theorem ReadAt.sepL (h : ReadAt p a bs P) : ReadAt p a bs (P ⋆ R) := fun m _ rF hh hp => by
+  obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
+  exact h m r₁ _ (Holds.split hd hh) h1
+
+theorem ReadAt.sepR (h : ReadAt p a bs P) : ReadAt p a bs (R ⋆ P) := fun m r rF hh hp =>
+  h.sepL m r rF hh (sep_comm hp)
+
+theorem ReadAt.of_imp {P' : FAssn} (h : ReadAt p a bs P) (hp : ∀ r, P' r → P r) :
+    ReadAt p a bs P' := fun m r rF hh h' => h m r rF hh (hp r h')
+
+/-- **Part of readable bytes**: `n` bytes at byte `o`, with an alignment that divides both. -/
+theorem ReadAt.shift {o n : Nat} (h : ReadAt p a bs P) (hal : al ∣ a) (ho : al ∣ o)
+    (hfit : o + n ≤ bs.size) : ReadAt (p.add o) al (bs.extract o (o + n)) P :=
+  fun m r rF hh hp => by
+    obtain ⟨b, blk, hpb, hblk, hl, h0, hlo, ha, hx⟩ := h m r rF hh hp
+    have e : (p.add o).off.toNat = p.off.toNat + o := by simp only [Ptr.add]; omega
+    refine ⟨b, blk, hpb, hblk, hl, by simp only [Ptr.add]; omega, by rw [e]; omega, ?_,
+      fun i hi => ?_⟩
+    · rw [e, ← Nat.add_assoc]; exact mod_add_dvd ha hal ho
+    · simp only [Array.size_extract] at hi
+      rw [e, Nat.add_assoc, hx (o + i) (by omega), Array.getElem_extract]
+
+/-- **Part of owned bytes of any block kind** is readable: `n` bytes at byte `o`, aligned to
+`al` at the block address `A` the bytes carry. -/
+theorem ReadAt.bytesAt_part {A S o n : Nat} {K : BlockKind} (hA : (A + p.off.toNat + o) % al = 0)
+    (hn : 0 < n) (hfit : o + n ≤ bs.size) :
+    ReadAt (p.add o) al (bs.extract o (o + n)) (up (Zig.bytesAt p A S K bs)) := fun m r rF hh hp => by
+  obtain ⟨⟨b, hpb, h0, hbs⟩, -, -⟩ := hp
+  have cell : ∀ i, i < bs.size → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      blk.kind.mappedLo ≤ p.off.toNat + i ∧ blk.addr = A ∧
+      blk.bytes[p.off.toNat + i]? = some bs[i]! := by
+    intro i hi
+    have e := hbs (b, p.off.toNat + i)
+    rw [ite_eq_left ⟨rfl, by omega, by omega⟩, Nat.add_sub_cancel_left] at e
+    obtain ⟨fc, hfc, hc⟩ := erase_cell e
+    obtain ⟨blk, hb, hl, hx, hlo, ha, -⟩ := hh.block hfc
+    obtain ⟨c', hc', hn⟩ := hh.cellN hfc
+    obtain ⟨blk', hb', -, hx', rfl⟩ := Mem.heap_some hc'
+    rw [hb] at hb'; cases hb'
+    have hbyte := congrArg Cell.byte hn
+    simp only [Cell.norm, hc] at hbyte
+    refine ⟨blk, hb, hl, hlo, by rw [← ha, hc], ?_⟩
+    rw [Array.getElem?_eq_getElem hx', hbyte]
+  have e : (p.add o).off.toNat = p.off.toNat + o := by simp only [Ptr.add]; omega
+  obtain ⟨blk, hblk, hl, hlo, hA', -⟩ := cell o (by omega)
+  refine ⟨b, blk, hpb, hblk, hl, by simp only [Ptr.add]; omega, by rw [e]; exact hlo,
+    by rw [e, hA', ← Nat.add_assoc]; exact hA, fun i hi => ?_⟩
+  simp only [Array.size_extract] at hi
+  obtain ⟨blk', hb', -, -, -, hx⟩ := cell (o + i) (by omega)
+  rw [hblk] at hb'; cases hb'
+  rw [e, Nat.add_assoc, hx, getElem!_pos bs (o + i) (by omega), Array.getElem_extract]
+
+/-- **Owned bytes of any block kind** are readable. -/
+theorem ReadAt.bytesAt {A S : Nat} {K : BlockKind} (hA : (A + p.off.toNat) % a = 0)
+    (hpos : 0 < bs.size) : ReadAt p a bs (up (Zig.bytesAt p A S K bs)) := by
+  have h := ReadAt.bytesAt_part (p := p) (bs := bs) (S := S) (K := K) (o := 0) (n := bs.size)
+    (by simpa using hA) hpos (by omega)
+  simpa only [Int.natCast_zero, Ptr.add_zero, Nat.zero_add, Array.extract_size] using h
+
+/-- Owned bytes `bs` of any block kind at `p`, aligned to `a` (`region` without the kind
+restriction: what a read needs). -/
+def ownedBytes (p : Ptr) (a : Nat) (bs : Array Byte) : Assn := fun h =>
+  ∃ A S K, (A + p.off.toNat) % a = 0 ∧ Zig.bytesAt p A S K bs h
+
+theorem SizeFree.ownedBytes : SizeFree (fun _ => none) (Full.ownedBytes p a bs) :=
+  SizeFree.bytesAt_ex fun _ _ _ _ _ h _ => h
+
+/-- **Owned bytes** are readable. -/
+theorem ReadAt.ownedBytes (hpos : 0 < bs.size) : ReadAt p a bs (up (ownedBytes p a bs)) :=
+  fun m r rF hh hp => by
+    obtain ⟨⟨A, S, K, hA, hb⟩, hk, hg⟩ := hp
+    exact ReadAt.bytesAt hA hpos m r rF hh ⟨hb, hk, hg⟩
+
+/-- **An owned region** is readable. -/
+theorem ReadAt.region (hpos : 0 < bs.size) : ReadAt p a bs (up (Zig.region p a bs)) :=
+  fun m r rF hh hp => by
+    obtain ⟨⟨A, S, K, hA, -, hb⟩, hk, hg⟩ := hp
+    exact ReadAt.bytesAt hA hpos m r rF hh ⟨hb, hk, hg⟩
+
+/-- **The bytes of a `const` global** that a `ConstAt` provider gives are readable. -/
+theorem ReadAt.ofConst {φ : Nat → Array Byte → Prop} (h : ConstAt p φ P)
+    (hφ : ∀ A bs', φ A bs' → (A + p.off.toNat) % a = 0 ∧ bs' = bs) : ReadAt p a bs P :=
+  fun m r rF hh hp => by
+    obtain ⟨b, blk, bs', hpb, hblk, hk, hl, h0, -, h7, hx⟩ := h m r rF hh hp
+    obtain ⟨ha, rfl⟩ := hφ _ _ h7
+    exact ⟨b, blk, hpb, hblk, hl, h0, by rw [hk]; simp [BlockKind.mappedLo], ha, hx⟩
+
+/-- **Persistent `const` bytes** are readable. -/
+theorem ReadAt.cbytesAt {A : Nat} (hA : (A + p.off.toNat) % a = 0) (hpos : 0 < bs.size) :
+    ReadAt p a bs (Zig.Full.cbytesAt p A bs) :=
+  ReadAt.ofConst (ConstAt.cbytesAt hpos) fun _ _ ⟨e1, e2⟩ => ⟨e1 ▸ hA, e2⟩
+
+/-- The block, offset and bytes of a read that a provider allows. -/
+private theorem ReadAt.access {n : Nat} (h : ReadAt p al bs P) (hn : 0 < n) (hs : bs.size = n)
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) :
+    ∃ b blk, m.access p n al = pure (b, blk, p.off.toNat) ∧
+      blk.bytes.extract p.off.toNat (p.off.toNat + n) = bs := by
+  obtain ⟨b, blk, hpb, hblk, hl, h0, hlo, ha, hx⟩ := h m r rF hh hp
+  obtain ⟨hlt, -⟩ := Array.getElem?_eq_some_iff.mp (hx (n - 1) (by omega))
+  refine ⟨b, blk, access_of hpb hblk hl h0 (by omega) ha hlo, ?_⟩
+  apply Array.ext
+  · simp only [Array.size_extract]; omega
+  · intro i h1 h2
+    obtain ⟨_, he⟩ := Array.getElem?_eq_some_iff.mp (hx i h2)
+    simp only [Array.getElem_extract]; exact he
+
+/-- **Read of readable bytes**: owned or `const`, `P` stays. -/
+theorem FTotalTriple.loadBytes_of {n : Nat} (h : ReadAt p al bs P) (hn : 0 < n) (hs : bs.size = n) :
+    FTotalTriple P (Zig.loadBytes p n al) (fun x => ⟪x = bs⟫ ⋆ P) :=
+  FTotalTriple.of_run fun m r rF hh hp hst => by
+    obtain ⟨b, blk, hacc, hx⟩ := h.access hn hs hh hp
+    refine ⟨bs, m.recordAt b p.off.toNat n .read, r, ?_, ⟨hh.1, hh.2, hh.3, hh.4, hh.5⟩,
+      sep_lift.mpr ⟨rfl, hp⟩, ⟨hst.1.recordAt _ _ _ _, hst.2.1, hst.2.2⟩⟩
+    rw [loadBytes_run hacc (noRace_of_singleThread hst.1.single _ _ _ _), hx]
+
+/-- **An unused load** (`loadDiscardBytes`) of readable bytes. -/
+theorem FTotalTriple.loadDiscard_of {n : Nat} (h : ReadAt p al bs P) (hn : 0 < n)
+    (hs : bs.size = n) : FTotalTriple P (Zig.loadDiscardBytes n al p) (fun _ => P) :=
+  FTotalTriple.of_run fun m r rF hh hp hst => by
+    obtain ⟨b, blk, hacc, -⟩ := h.access hn hs hh hp
+    exact ⟨(), _, r, loadDiscardBytes_run hacc (noRace_of_singleThread hst.1.single _ _ _ _),
+      ⟨hh.1, hh.2, hh.3, hh.4, hh.5⟩, hp, ⟨hst.1.recordAt _ _ _ _, hst.2.1, hst.2.2⟩⟩
+
+variable {α : Type} [Enc α] {q : Ptr} {tb : Array Byte} {d : ErrorDomain}
+
+/-- **Pointer-form `try`** from the readable bytes `tb` of the error code at `q`. -/
+theorem FTotalTriple.tryPayloadPtr_of {t : Option ErrName}
+    (h : ReadAt (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min al 2) tb P)
+    (hs : tb.size = 2) (ht : errOfBytes tb = pure t) :
+    FTotalTriple P (Zig.tryPayloadPtr α al q)
+      (fun r => ⟪r = t.elim (.ok (errPayloadPtr α q)) .error⟫ ⋆ P) := by
+  show FTotalTriple _ (do
+    match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
+      2 (Nat.min al 2))) with
+    | some e => pure (Except.error e : Except ErrName Ptr)
+    | none => (Except.ok <$> ptrProject q (errPayloadPtr α) : MemM (Except ErrName Ptr))) _
+  refine FTotalTriple.bind (FTotalTriple.loadBytes_of h (by decide) hs) fun x =>
+    FTotalTriple.lift fun hx => ?_
+  subst hx
+  rw [ht, liftM_pure, pure_bind]
+  cases t with
+  | some e => exact FTotalTriple.pure_read rfl
+  | none =>
+    -- The code's bytes are readable, so the payload pointer is formed (MM-3).
+    rw [map_eq_pure_bind]
+    refine FTotalTriple.bind (FTotalTriple.of_read fun m r rF hh hp _ => ?_) fun y =>
+      FTotalTriple.lift fun hy => FTotalTriple.pure_read (by subst hy; rfl)
+    obtain ⟨b, blk, hacc, -⟩ := h.access (by decide) hs hh hp
+    exact errPayloadPtr_formed hacc
+
+/-- **The error** from the readable bytes `tb` of an error code that holds one. -/
+theorem FTotalTriple.errCodeAt_of {e : ErrName}
+    (h : ReadAt (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min al 2) tb P)
+    (hs : tb.size = 2) (ht : errOfBytes tb = pure (some e)) :
+    FTotalTriple P (Zig.errCodeAt α al q) (fun r => ⟪r = e⟫ ⋆ P) := by
+  show FTotalTriple _ (do
+    match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
+      2 (Nat.min al 2))) with
+    | some e => pure e
+    | none => throw .unspecified) _
+  refine FTotalTriple.bind (FTotalTriple.loadBytes_of h (by decide) hs) fun x =>
+    FTotalTriple.lift fun hx => ?_
+  subst hx
+  rw [ht, liftM_pure, pure_bind]
+  exact FTotalTriple.pure_read rfl
+
+/-- **Pointer-form `try`** with a finite error domain, from readable error code bytes. -/
+theorem FTotalTriple.finiteTryPayloadPtr_of {t : Option ErrName}
+    (h : ReadAt (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min al 2) tb P)
+    (hs : tb.size = 2) (ht : errOfBytes tb = pure t) (hdom : t.all d.names.contains = true) :
+    FTotalTriple P (Zig.finiteTryPayloadPtr d α al q)
+      (fun r => ⟪r = t.elim (.ok (errPayloadPtr α q)) .error⟫ ⋆ P) := by
+  unfold Zig.finiteTryPayloadPtr
+  refine FTotalTriple.bind (FTotalTriple.tryPayloadPtr_of h hs ht) fun x =>
+    FTotalTriple.lift fun hx => ?_
+  subst hx
+  have e : requireErrorUnion d (t.elim (.ok (errPayloadPtr α q)) .error) =
+      pure (t.elim (.ok (errPayloadPtr α q)) .error) := by
+    cases t with
+    | none => rfl
+    | some e =>
+      simp only [Option.all_some] at hdom
+      show (if d.names.contains e then _ else _) = _
+      simp only [hdom, ↓reduceIte]
+  rw [e]
+  exact FTotalTriple.pure_read rfl
+
+/-- **The error** with a finite error domain, from readable error code bytes. -/
+theorem FTotalTriple.finiteErrCodeAt_of {e : ErrName}
+    (h : ReadAt (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min al 2) tb P)
+    (hs : tb.size = 2) (ht : errOfBytes tb = pure (some e)) (hdom : d.names.contains e = true) :
+    FTotalTriple P (Zig.finiteErrCodeAt d α al q) (fun r => ⟪r = e⟫ ⋆ P) := by
+  unfold Zig.finiteErrCodeAt
+  refine FTotalTriple.bind (FTotalTriple.errCodeAt_of h hs ht) fun x =>
+    FTotalTriple.lift fun hx => ?_
+  subst hx
+  have e' : requireError d x = pure x := by unfold requireError; simp only [hdom, ↓reduceIte]
+  rw [e']
+  exact FTotalTriple.pure_read rfl
+
+end Readable
 
 end Full
 end Zig
