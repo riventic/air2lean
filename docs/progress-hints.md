@@ -84,6 +84,21 @@ it for any program under an unsatisfiable premise, it never implies an unconditi
 `EventuallyReturnsUnder.discharge` needs a proof that every oracle satisfies the premise.
 `stuck_not_eventuallyReturns` and `stuck_not_returnsWithin` refute both unconditional forms
 for a program that never returns.
+
+**Fork/join programs within a turn budget** (`ZigLean/Conc/Returns.lean`). `Proto.returnsWithin`
+turns a strict protocol proof (`Proto.run_safe`'s premises) and turn budgets into
+`ReturnsWithin B`, for every oracle. A thread's budget (`Stops`, `ZigLean/Conc/Stops.lean`) bounds
+its stops: one turn for a `yield`, `pick` (each atomic op), `choose`, `join` or `wake`, and
+`k + 2` for a `spawn` whose new thread keeps budget `k` (its own turn, the new thread's first
+turn, its budget). The budgets of all threads sum to `main`'s `B`; each turn takes at least one
+turn from it, the strict protocol rules out a deadlock, and every memory step between two stops
+has a result (`MemM.Halts`, `ZigLean/Mem/Halts.lean`). A thread is resumed in any memory with
+the blocks of a memory that satisfies the invariant (the rely `R`), so a budget may depend on
+memory the protocol keeps fixed. `stops` walks generated code with these rules; a module supplies
+the budgets, loop invariants and measures. A futex wait and a deferred task have no budget
+(`Stops.not_wait`): a retry around a wait can be starved, so such a client needs a fairness
+premise. `disjoint` returns within 6 turns, tight (`Proofs/Threads/Termination.lean`);
+`publishRead` (release/acquire publication and a join) within 6 (`Proofs/Atomics/Termination.lean`).
 `tests/roadmap/progress/Total.lean` checks the positive theorem families and a
 symbolic counterexample showing that readiness alone does not imply fair task
 selection. CI kernel-checks it with plain `lake env lean` in full non-mutation rows.

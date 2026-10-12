@@ -405,9 +405,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Thread.yield` and `spinLoopHint` are scheduling opportunities only. `yield`
   may return `SystemCannotYield`. No fence, happens-before edge or fairness follows. Total
-  results hold for the finite single-task client in `ZigLean.Conc.Total`; any other
-  termination claim names an explicit fairness premise such as THR-09.
-- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; tokens `spinLoopHint`, `threadYield`.
+  results hold for the finite single-task client in `ZigLean.Conc.Total` and for programs with
+  turn budgets (`ZigLean.Conc.Returns`: a strict protocol proof and per-thread budgets give a
+  bound uniform in the oracle, so no fairness is assumed; a futex wait or a deferred task has
+  no budget). Any other termination claim names an explicit fairness premise such as THR-09.
+- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`, `ZigLean.Conc.Stops`, `ZigLean.Conc.Returns`; tokens `spinLoopHint`, `threadYield`.
 - Sources: [progress-hints.md](progress-hints.md).
 
 <a id="thr-08"></a>
@@ -779,9 +781,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
-  budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
+  budget uniformly in the oracle (`Proto.returnsWithin` derives it from a strict protocol proof
+  and turn budgets; `MemM.Halts`: every memory step between two stops has a result). `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Stops`, `ZigLean.Conc.Returns`, `ZigLean.Mem.Halts`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
