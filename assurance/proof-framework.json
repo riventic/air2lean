@@ -597,6 +597,10 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
+      "path": "ZigLean/Sep/Full/Block.lean",
+      "approved": "coordinator 2026-10-12 (replaces Full/Toy's bridge use; native alloc/free Holds rules follow-up, Plan A6)"
+    },
+    {
       "path": "ZigLean/Sep/Full/Conc.lean"
     },
     {
@@ -675,9 +679,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/address-reuse/Kernel.lean"
     },
     {
       "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
