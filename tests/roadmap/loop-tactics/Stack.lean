@@ -98,6 +98,35 @@ theorem addDown_not_total (n : BitVec 32) (v : BitVec 64) (Q : Unit → Assn) :
     (by simp [noRoom, Witness.mem1]; rfl) (Witness.mem1_pts' v (by decide))
     ⟨(Witness.mem1_seq (Enc.encode v) .heap).single⟩ (addDown_overflow n v)
 
+/-! ## Mutants of the frame bracket
+
+The walk rejects a body that does not release its frame and a room one byte too small. -/
+
+-- Mutant `frame-not-released`: a body that enters a frame and returns without `leaveFrame`.
+example : True := by
+  fail_if_success
+    have : TotalTripleStk emp (enterFrame 0 >>= fun _ => pure ()) (fun _ => emp) (8 + frameBase) 0 := by
+      sep_step
+      sep_ret
+  trivial
+
+-- Mutant `room-one-byte-short`: the room does not hold the frame.
+example : True := by
+  fail_if_success
+    have : TotalTripleStk emp (enterFrame 0 >>= fun _ => leaveFrame 0 >>= fun _ => pure ())
+        (fun _ => emp) (frameBase - 1) 0 := by
+      sep_step
+      sep_step
+      sep_ret
+  trivial
+
+-- The unmutated bracket: one frame of room.
+example (P : Assn) : TotalTripleStk P (enterFrame 0 >>= fun _ => leaveFrame 0 >>= fun _ => pure ())
+    (fun _ => P) frameBase 0 := by
+  sep_step
+  sep_step
+  sep_ret
+
 end StackTest
 
 -- Only the standard axioms: no `sorryAx`, no `native_decide` (`Lean.ofReduceBool`).

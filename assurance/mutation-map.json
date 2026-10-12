@@ -1703,7 +1703,9 @@
       "note": "Extract.lean (CI) proves contracts of loop-free generated functions through vc_gen obligations, refutes the single goal a wrong tardiness contract leaves, and pins loop requests (invariant + variant) and refusals; report.json is the golden of scripts/vc-report.py. The Python mutants hide a Lean error or open obligations in that report."
     },
     "P03": {
-      "categories": [],
+      "categories": [
+        "invariant-transfer"
+      ],
       "negative_tests": [
         {
           "path": "tests/roadmap/loop-tactics/Template.lean",
@@ -1712,9 +1714,31 @@
         {
           "path": "tests/roadmap/loop-tactics/Template.lean",
           "anchor": "fail_if_success zig_range"
+        },
+        {
+          "path": "tests/roadmap/loop-tactics/Recursion.lean",
+          "anchor": "A recursion that does not shrink its argument: no measure is inferred."
+        },
+        {
+          "path": "tests/roadmap/loop-tactics/Stack.lean",
+          "anchor": "theorem addDown_not_total"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "frame-not-released",
+          "path": "tests/roadmap/loop-tactics/Stack.lean",
+          "category": "invariant-transfer",
+          "anchor": "-- Mutant `frame-not-released`"
+        },
+        {
+          "name": "room-one-byte-short",
+          "path": "tests/roadmap/loop-tactics/Stack.lean",
+          "category": "other",
+          "anchor": "-- Mutant `room-one-byte-short`"
+        }
+      ],
+      "note": "Mutated frame brackets (a body that does not release its frame, a room one byte short) must fail inside fail_if_success (Stack.lean, CI loop-tactics step); a recursion without a decreasing argument gets no inferred measure (Recursion.lean)."
     },
     "P04": {
       "categories": [],
