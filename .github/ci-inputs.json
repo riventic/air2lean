@@ -1,12 +1,33 @@
 {
-  "schema": "air2lean-ci-inputs/1",
-  "note": "Input declarations of the CI parts (docs/ci.md#1-input-hash-result-reuse, scripts/ci-reuse.py). Every traced execution checks that each workspace path it observed is covered; narrow a part with `scripts/ci-reuse.py suggest` over its uploaded trace observations.",
+  "schema": "air2lean-ci-inputs/2",
+  "note": "Input declarations of the CI parts (docs/ci.md#1-input-hash-result-reuse, scripts/ci-reuse.py). An executing part runs in a restricted checkout: every tracked file outside its declared inputs is withheld (present by name, unreadable), so a declaration that is too narrow fails the part instead of letting a result be reused for a change it read. `inputs` are content patterns, `exclude` removes paths from them; `defaults` apply to every part and `support` declares the restricted support jobs, whose inputs every part that needs them adds to its own.",
   "defaults": {
     "inputs": [
       "zig-patch/**",
       "**/.gitignore"
-    ],
-    "listings": []
+    ]
+  },
+  "support": {
+    "lake": {
+      "inputs": [
+        "*.lean",
+        "Air2Lean/**",
+        "ZigLean/**",
+        "Proofs/**",
+        "tools/**",
+        "lakefile.toml",
+        "lake-manifest.json",
+        "lean-toolchain",
+        "scripts/local-ci-steps.py"
+      ],
+      "note": "the root package and its proofs (lake build ZigLean Air2Lean air2lean Proofs AssuranceTools), the Lake cache pruning"
+    },
+    "zig-air": {
+      "inputs": [
+        "scripts/ci-cache.py"
+      ],
+      "note": "zig-patch/build.sh (zig-patch/** is a default input) and the cache key"
+    }
   },
   "parts": {
     "generated": {
@@ -18,28 +39,68 @@
       "note": "produces the generated-provenance artifact for the generated branch; binds HEAD (proof receipts)"
     },
     "test/0.16.0/golden": {
-      "commit_bound": true,
-      "note": "reads commit identity: the theorem-universe gate of the dispatch regressions binds its assumptions report to HEAD (scripts/assumptions.py verify_fresh); untraced"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations); README.md: the host-accounting claims of the full golden rows"
     },
     "test/0.16.0/lean": {
-      "commit_bound": true,
-      "note": "reads commit identity (git rev-parse HEAD: a freshness binding to the revision, run 38175631570); untraced"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "test/0.16.0/inputs": {
-      "commit_bound": true,
-      "note": "reads commit identity (release-record, manifest and generated-branch regressions run git on HEAD and fetch, run 38175631570); untraced, 14 min instead of 25 traced"
+      "inputs": [
+        "**"
+      ],
+      "note": "the whole tree: the support matrix (README.md, PLAN.md, ROADMAP.md, docs/support-matrix.md), build-mode records (README.md and every docs/*.md paragraph that names a release mode) and host-accounting gates read the documentation"
     },
     "test/0.16.0/native": {
-      "commit_bound": true,
-      "note": "reads commit identity (git rev-parse HEAD in two of its gates, run 38175631570); untraced"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "test/0.16.0/audit": {
-      "reuse": false,
-      "note": "untraced: under strace the theorem audit exceeded the 90-minute job limit (10-17 min untraced, run 38166335511)"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "docs/premises.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "test/0.16.0/receipt": {
-      "commit_bound": true,
-      "note": "reads commit identity (the proof receipt binds HEAD; `git checkout -- Proofs`); untraced, which also keeps the guarded audit inside its deadline"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "docs/premises.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "test/0.16.0/Debug": {
       "inputs": [
@@ -57,8 +118,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/ReleaseFast": {
       "inputs": [
@@ -76,8 +136,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/ReleaseSmall": {
       "inputs": [
@@ -95,12 +154,19 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.17.0/golden": {
-      "commit_bound": true,
-      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations); README.md: the host-accounting claims of the full golden rows"
     },
     "test/0.17.0/lean": {
       "inputs": [
@@ -111,7 +177,7 @@
         "ZigLean/**",
         "assurance/**",
         "case-studies/**",
-        "docs/**",
+        "docs/allocation-policy-report.json",
         "examples/**",
         "lake-manifest.json",
         "lakefile.toml",
@@ -121,12 +187,19 @@
         "tutorials/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer; docs/allocation-policy-report.json is the one docs/ file they read"
     },
     "test/0.15.2/golden": {
-      "commit_bound": true,
-      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations); README.md: the host-accounting claims of the full golden rows"
     },
     "test/0.15.2/lean": {
       "inputs": [
@@ -137,7 +210,7 @@
         "ZigLean/**",
         "assurance/**",
         "case-studies/**",
-        "docs/**",
+        "docs/allocation-policy-report.json",
         "lake-manifest.json",
         "lakefile.toml",
         "lean-toolchain",
@@ -146,12 +219,19 @@
         "tutorials/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer; docs/allocation-policy-report.json is the one docs/ file they read"
     },
     "test/0.14.1/golden": {
-      "commit_bound": true,
-      "note": "untraced: scripts/check.sh copies every tracked file into its check tree, so its content key is the whole tree and a record could only match an identical tree; tracing cost 1.4-1.9x (docs/ci.md#current-declarations)"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "README.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations); README.md: the host-accounting claims of the full golden rows"
     },
     "test/0.14.1/lean": {
       "inputs": [
@@ -168,8 +248,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/mutation/1": {
       "inputs": [
@@ -187,8 +266,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/mutation/2": {
       "inputs": [
@@ -206,8 +284,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/mutation/3": {
       "inputs": [
@@ -225,8 +302,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/mutation/4": {
       "inputs": [
@@ -244,8 +320,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "test/0.16.0/mutation/5": {
       "inputs": [
@@ -263,20 +338,40 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "tree_names": true,
-      "note": "narrowed from the traces of run 38187552806 (scripts/ci-reuse.py suggest, coarsened to top-level directories)"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
     "macos/0.17.0": {
-      "commit_bound": true,
-      "note": "untraced (no strace on macOS): reused only for the same commit"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "macos/0.16.0": {
-      "commit_bound": true,
-      "note": "untraced (no strace on macOS): reused only for the same commit"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "macos/0.15.2": {
-      "commit_bound": true,
-      "note": "untraced (no strace on macOS): reused only for the same commit"
+      "inputs": [
+        "**",
+        "docs/allocation-policy-report.json"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
     },
     "aarch64-linux": {
       "inputs": [
@@ -285,15 +380,7 @@
         "tests/roadmap/aarch64-abi/**",
         "tests/roadmap/vector-layouts/**"
       ],
-      "listings": [
-        ".",
-        "scripts",
-        "tests",
-        "tests/roadmap",
-        "tests/roadmap/aarch64-abi",
-        "tests/roadmap/aarch64-abi/limits"
-      ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 under the former tracer"
     },
     "build-modes-aarch64-linux": {
       "inputs": [
@@ -353,122 +440,14 @@
         "tests/roadmap/build-modes/reproducers/**",
         "zig-patch/**"
       ],
-      "listings": [
-        ".",
-        "Proofs",
-        "Proofs/Asm",
-        "Proofs/Atomics",
-        "Proofs/Basic",
-        "Proofs/Cancel",
-        "Proofs/Detach",
-        "Proofs/Errors",
-        "Proofs/Floatconv",
-        "Proofs/Floatops",
-        "Proofs/Floats",
-        "Proofs/Iogroup",
-        "Proofs/Layout",
-        "Proofs/Lists",
-        "Proofs/Options",
-        "Proofs/Pointers",
-        "Proofs/Provenance",
-        "Proofs/ProvenanceGap",
-        "Proofs/Recursion",
-        "Proofs/Slices",
-        "Proofs/Sync",
-        "Proofs/Threads",
-        "Proofs/Threadsync",
-        "Proofs/Variants",
-        "Proofs/Vectors",
-        "ZigLean",
-        "ZigLean/Conc",
-        "ZigLean/Conc/Spec",
-        "ZigLean/Env",
-        "ZigLean/External",
-        "ZigLean/Float",
-        "ZigLean/Mem",
-        "ZigLean/Os",
-        "ZigLean/Sep",
-        "ZigLean/Sep/Array",
-        "ZigLean/VC",
-        "ZigLean/Witnesses",
-        "examples",
-        "examples/asm",
-        "examples/atomics",
-        "examples/basic",
-        "examples/errors",
-        "examples/floatconv",
-        "examples/floatops",
-        "examples/floats",
-        "examples/iogroup",
-        "examples/layout",
-        "examples/lists",
-        "examples/options",
-        "examples/pointers",
-        "examples/recursion",
-        "examples/slices",
-        "examples/sync",
-        "examples/threads",
-        "examples/threadsync",
-        "examples/variants",
-        "examples/vectors",
-        "scripts",
-        "tests",
-        "tests/diff",
-        "tests/diff/asm",
-        "tests/diff/asm/inputs",
-        "tests/diff/atomics",
-        "tests/diff/atomics/inputs",
-        "tests/diff/basic",
-        "tests/diff/basic/inputs",
-        "tests/diff/errors",
-        "tests/diff/errors/inputs",
-        "tests/diff/floatconv",
-        "tests/diff/floatconv/inputs",
-        "tests/diff/floatops",
-        "tests/diff/floatops/inputs",
-        "tests/diff/floats",
-        "tests/diff/floats/inputs",
-        "tests/diff/iogroup",
-        "tests/diff/iogroup/inputs",
-        "tests/diff/layout",
-        "tests/diff/layout/inputs",
-        "tests/diff/libm",
-        "tests/diff/lists",
-        "tests/diff/lists/inputs",
-        "tests/diff/options",
-        "tests/diff/options/inputs",
-        "tests/diff/pointers",
-        "tests/diff/pointers/inputs",
-        "tests/diff/recursion",
-        "tests/diff/recursion/inputs",
-        "tests/diff/slices",
-        "tests/diff/slices/inputs",
-        "tests/diff/sync",
-        "tests/diff/sync/inputs",
-        "tests/diff/threads",
-        "tests/diff/threads/inputs",
-        "tests/diff/threadsync",
-        "tests/diff/threadsync/inputs",
-        "tests/diff/variants",
-        "tests/diff/variants/inputs",
-        "tests/diff/vectors",
-        "tests/diff/vectors/inputs"
-      ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)",
-      "tree_names": true
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 under the former tracer"
     },
     "bitops-native-arm": {
       "inputs": [
         "scripts/**",
         "tests/roadmap/bitops-native/**"
       ],
-      "listings": [
-        ".",
-        "tests",
-        "tests/roadmap",
-        "tests/roadmap/bitops-native"
-      ],
-      "note": "narrowed from the traces of runs 38166335511 and 38173731089 (scripts/ci-reuse.py suggest)"
+      "note": "narrowed from the traces of runs 38166335511 and 38173731089 under the former tracer"
     }
   }
 }

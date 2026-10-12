@@ -115,7 +115,8 @@ class Repo(unittest.TestCase):
         data = dict({'databaseId': 1, 'headSha': sha or self.head, 'status': 'completed', 'conclusion': 'success',
                      'event': 'push', 'workflowName': 'CI', 'url': 'https://example.invalid/run/1', 'jobs': [
                          {'name': name, 'steps': [{'name': step, 'conclusion': conclusion}
-                                                  for step, conclusion in steps.items()]}
+                                                  for step, conclusion in steps.items()],
+                          'conclusion': 'failure' if 'failure' in steps.values() else 'success'}
                          for name, steps in jobs.items()]}, **extra)
         path = self.base / ('run-%d.json' % len(list(self.base.glob('run-*.json'))))
         path.write_text(json.dumps(data))
@@ -187,7 +188,7 @@ class RecordTests(Repo):
         record = self.record(github_runs=[self.passing_run()])
         self.assertEqual(record['status'], 'complete')
         self.assertEqual(record['revision'], self.head)
-        self.assertEqual(record['summary'], {'passed': 4, 'failed': 0, 'missing': 0, 'unavailable': 0})
+        self.assertEqual(record['summary'], {'passed': 4, 'failed': 0, 'by-reference': 0, 'missing': 0, 'unavailable': 0})
         self.assertEqual(record['profile']['workflow_blob'], git(self.repo, 'rev-parse', 'HEAD:.github/workflows/ci.yml'))
         self.assertEqual(record['evidence'][0]['head_sha'], self.head)
         self.assertEqual(record['review']['reviewed_revisions'], {self.reviewed: 2})
@@ -235,6 +236,39 @@ class RecordTests(Repo):
                                         'Full only': 'skipped', 'Mutation check': 'skipped'}})
         record = self.record(github_runs=[stopped])
         self.assertEqual([g['status'] for g in record['gates'] if g['job'] == FULL], ['failed', 'failed'])
+
+    def test_reused_job_with_its_reference_is_passed_by_reference(self):
+        # docs/ci.md: a reused part's run uploads ci-reuse-ref-<key>, naming the run, job and key
+        # it passed by reference to; the record lists its gates as by-reference with them.
+        reused = self.run_json({FULL: {'Reuse a recorded result': 'success', 'Unit': 'skipped',
+                                       'Full only': 'skipped', 'Mutation check': 'skipped'},
+                                MUTATE: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'success'}},
+                               event='merge_group')
+        refs = self.base / 'refs' / 'ci-reuse-ref-k'
+        refs.mkdir(parents=True)
+        (refs / 'reference.json').write_text(json.dumps({
+            'schema': 'air2lean-ci-reuse/2', 'part': 'test/x', 'job_name': FULL, 'key': 'k' * 64, 'reused_in_run': 1,
+            'tested_commit': self.head, 'run_id': 42, 'run_url': 'u', 'job_id': 7, 'job_url': 'j'}))
+        # Without the producing run's JSON (or with a run where a gate failed) nothing is passed.
+        record = self.record(github_runs=[reused], reference_dirs=[self.base / 'refs'])
+        self.assertEqual([g['status'] for g in record['gates'] if g['job'] == FULL], ['missing', 'missing'])
+        failed = self.run_json({FULL: {'Unit': 'success', 'Full only': 'failure'}}, sha='0' * 40, databaseId=42)
+        record = self.record(github_runs=[reused], reference_dirs=[self.base / 'refs'], reference_runs=[failed])
+        self.assertEqual([g['status'] for g in record['gates'] if g['job'] == FULL], ['missing', 'missing'])
+        producing = self.run_json({FULL: {'Unit': 'success', 'Full only': 'success'}}, sha='0' * 40, databaseId=42,
+                                  event='merge_group')
+        record = self.record(github_runs=[reused], reference_dirs=[self.base / 'refs'], reference_runs=[producing])
+        gates = [g for g in record['gates'] if g['job'] == FULL]
+        self.assertEqual([g['status'] for g in gates], ['by-reference', 'by-reference'])
+        self.assertIn('run 42 job 7, input key ' + 'k' * 64, gates[0]['details'][0])
+        self.assertEqual(record['evidence'][0]['references'][0]['run_id'], 42)
+        self.assertEqual((record['status'], record['summary']['by-reference']), ('complete', 2))
+        self.assertEqual(rr.verify_record(self.repo, record), [])
+        record['evidence'][0]['references'] = []
+        self.assertTrue(any('by-reference without a reference' in p for p in rr.verify_record(self.repo, record)))
+        (refs / 'reference.json').write_text('{"schema": "other"}')
+        with self.assertRaises(rr.ReleaseError):
+            self.record(github_runs=[reused], reference_dirs=[self.base / 'refs'])
 
     def test_missing_gates_make_record_incomplete_until_declared_unavailable(self):
         only_full = self.run_json({FULL: {'Unit': 'success', 'Full only': 'success', 'Mutation check': 'skipped'}})

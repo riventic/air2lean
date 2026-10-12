@@ -1,15 +1,20 @@
 name: CI
 
-# docs/ci.md. Pull requests run the cheap set on GitHub's merge of the PR into main (the tree
-# this workflow file comes from): every part whose inputs changed (scripts/ci-reuse.py reuses
-# the rest by reference to the run that executed it). The merge queue
-# runs every part, without reuse, on the exact commit that main advances to: that `merge_group`
-# run is the commit's evidence. workflow_dispatch is a full run too (a commit that reached main
-# outside the queue). Pushes to main only warm the caches (.github/workflows/ci-cache.yml).
+# docs/ci.md. Pull requests run on GitHub's merge of the PR into main (the tree this workflow
+# file comes from), the merge queue on the exact commit that main advances to (that
+# `merge_group` run is the commit's evidence): every part whose input key changed executes in a
+# restricted checkout, the rest is reused by reference to the run that executed it
+# (scripts/ci-reuse.py; the queue only from runs on main). workflow_dispatch runs without reuse (a
+# commit that reached main outside the queue); the nightly schedule runs everything unrestricted.
+# Pushes to main only warm the caches (.github/workflows/ci-cache.yml).
 on:
   pull_request:
   merge_group:
   workflow_dispatch:
+  # Nightly on main: every part on the whole, unrestricted checkout, nothing reused or recorded
+  # (docs/ci.md#nightly-full-run).
+  schedule:
+    - cron: "17 2 * * *"
 
 # actions:read: the reuse decision looks records up through the Actions API.
 permissions:
@@ -30,9 +35,6 @@ jobs:
   generated:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -44,7 +46,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job generated --row "$AIR2LEAN_ROW"
 
@@ -71,12 +72,8 @@ jobs:
             printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
             exit 1
           fi
+          python3 scripts/ci-reuse.py check-restricted
 
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
   # The two provenance fixtures (assurance/provenance, assurance/provenance-gap): the pipeline
   # (patched 0.16.0 export, translation, stock-Zig native build, guarded proof receipt) twice on
@@ -86,9 +83,6 @@ jobs:
     needs: [lake, zig-air]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -100,7 +94,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job provenance --row "$AIR2LEAN_ROW"
 
@@ -184,12 +177,8 @@ jobs:
             printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
             exit 1
           fi
+          python3 scripts/ci-reuse.py check-restricted
 
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
   # The staleness checks of every generated file and record (scripts/preflight.sh, no Lean or Zig
   # build): a fast first signal. The test rows run each check again.
@@ -227,6 +216,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#restricted-checkout: the build sees only its declared inputs (support.lake in
+      # .github/ci-inputs.json), which every part that needs it adds to its input key.
+      - name: Restrict the checkout to the declared inputs
+        run: python3 scripts/ci-reuse.py restrict --support lake --seal
 
       - name: Restore the Lake build (root package)
         id: restore
@@ -279,6 +273,9 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      - name: No withheld file was read or changed
+        run: python3 scripts/ci-reuse.py check-restricted
+
   # The patched compiler of each x86_64-linux version, once per run: restored from main's cache
   # (key: exactly what zig-patch/build.sh reads for that version, scripts/ci-cache.py) or built,
   # and handed to the rows as an artifact. Only ci-cache.yml saves it, on main.
@@ -298,6 +295,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#restricted-checkout: the build sees only its declared inputs (support.zig-air in
+      # .github/ci-inputs.json), which every part that needs it adds to its input key.
+      - name: Restrict the checkout to the declared inputs
+        run: python3 scripts/ci-reuse.py restrict --support zig-air --seal
 
       - name: Patched zig cache key
         id: key
@@ -340,6 +342,9 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      - name: No withheld file was read or changed
+        run: python3 scripts/ci-reuse.py check-restricted
+
   # One row per (Zig version, part): scripts/ci-matrix.py derives the rows from
   # compatibility.json. Every step names its part in its `if`; a version has `golden` (pipeline,
   # diff test, proofs) and `lean` (version-dependent regressions) rows, and the default version
@@ -349,9 +354,6 @@ jobs:
     needs: [lake, zig-air, generated]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
@@ -470,8 +472,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
-      # tree by scripts/generated.py install. Before the reuse decision, so untraced: a traced
-      # step that reads one needs a whole-tree declaration (docs/ci.md).
+      # tree by scripts/generated.py install, before the reuse decision restricts the checkout;
+      # their digests are part of every test row's input key (docs/ci.md#the-key).
       - name: Download the generated files
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -481,9 +483,8 @@ jobs:
       - name: Install the generated files
         run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
 
-      # System packages that some parts run, installed before the traced steps (strace's seccomp
-      # filter sets no_new_privs, so sudo cannot run under the tracer). Their versions come from
-      # the runner image's apt sources, like the image itself (part of every key).
+      # System packages that some parts run. Their versions come from the runner image's apt
+      # sources, like the image itself (part of every key).
       - name: Install system packages
         if: ${{ matrix.part == 'inputs' || matrix.part == 'native' && !matrix.mutate || matrix.part == 'lean' && !matrix.mutate }}
         run: |
@@ -495,16 +496,26 @@ jobs:
             sudo apt-get install --no-install-recommends -y -qq qemu-user-static
           fi
 
-      # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
-      # run already recorded is reused (every later step is skipped and the summary names that
-      # run); otherwise the part runs, traced on Linux, and records its result when it passes.
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
       - name: Reuse a recorded result
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job test --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Offline compiler inventory regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -542,7 +553,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: python3 tests/roadmap/local-ci/test_cache.py
 
-      # docs/ci.md: input keys, trace coverage (incl. a real strace run), record lookup, and every
+      # docs/ci.md: input keys, the restricted checkout, record lookup, and every
       # part declared with every step after the reuse decision guarded.
       - name: CI result reuse regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -2322,19 +2333,11 @@ jobs:
             printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
             exit 1
           fi
+          python3 scripts/ci-reuse.py check-restricted
 
-      # Every workspace path that a traced step observed is inside the part's declared inputs
-      # (.github/ci-inputs.json); a record is written only after this passed.
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
       - name: Record the result for reuse
         if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
         run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
 
       - name: Upload the reuse record
@@ -2345,15 +2348,6 @@ jobs:
           path: ${{ runner.temp }}/ci-reuse/record.json
           if-no-files-found: error
           retention-days: 90
-
-      - name: Upload the trace observations
-        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() && env.AIR2LEAN_TRACE_DIR != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-trace-${{ env.AIR2LEAN_REUSE_KEY }}
-          path: ${{ runner.temp }}/ci-reuse/traces/
-          if-no-files-found: ignore
-          retention-days: 7
 
   # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
   # (assurance/target-matrix.json, docs/target-matrix.md): one row per version whose hosts include
@@ -2377,16 +2371,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
-      # run already recorded is reused (every later step is skipped and the summary names that
-      # run); otherwise the part runs, traced on Linux, and records its result when it passes.
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
       - name: Reuse a recorded result
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job macos --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
 
       # The stock aarch64-macos release of this row's version bootstraps zig-patch/build.sh and
       # builds the native probes/harnesses. sha256 from https://ziglang.org/download/index.json
@@ -2611,6 +2615,7 @@ jobs:
             printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
             exit 1
           fi
+          python3 scripts/ci-reuse.py check-restricted
 
       # L02: wide bit operations, native aarch64-macos (0.14.1 has no macOS patched compiler;
       # 0.17.0 has no wide bit-operation evidence yet).
@@ -2628,8 +2633,6 @@ jobs:
 
       - name: Record the result for reuse
         if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
         run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
 
       - name: Upload the reuse record
@@ -2657,25 +2660,32 @@ jobs:
   aarch64-linux:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
-      # run already recorded is reused (every later step is skipped and the summary names that
-      # run); otherwise the part runs, traced on Linux, and records its result when it passes.
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
       - name: Reuse a recorded result
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job aarch64-linux --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
 
       # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
       - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
@@ -2730,18 +2740,9 @@ jobs:
           path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
 
-      # Every workspace path that a traced step observed is inside the part's declared inputs
-      # (.github/ci-inputs.json); a record is written only after this passed.
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
       - name: Record the result for reuse
         if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
         run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
 
       - name: Upload the reuse record
@@ -2752,15 +2753,6 @@ jobs:
           path: ${{ runner.temp }}/ci-reuse/record.json
           if-no-files-found: error
           retention-days: 90
-
-      - name: Upload the trace observations
-        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() && env.AIR2LEAN_TRACE_DIR != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-trace-${{ env.AIR2LEAN_REUSE_KEY }}
-          path: ${{ runner.temp }}/ci-reuse/traces/
-          if-no-files-found: ignore
-          retention-days: 7
 
   # T06: the four optimize modes on LLVM, natively on aarch64-linux hardware, verified against the
   # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
@@ -2773,25 +2765,32 @@ jobs:
   build-modes-aarch64-linux:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
-      # run already recorded is reused (every later step is skipped and the summary names that
-      # run); otherwise the part runs, traced on Linux, and records its result when it passes.
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
       - name: Reuse a recorded result
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job build-modes-aarch64-linux --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Install stock zig 0.16.0 (aarch64-linux)
         if: ${{ !env.AIR2LEAN_REUSED }}
@@ -2873,18 +2872,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # Every workspace path that a traced step observed is inside the part's declared inputs
-      # (.github/ci-inputs.json); a record is written only after this passed.
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
       - name: Record the result for reuse
         if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
         run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
 
       - name: Upload the reuse record
@@ -2896,15 +2886,6 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Upload the trace observations
-        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() && env.AIR2LEAN_TRACE_DIR != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-trace-${{ env.AIR2LEAN_REUSE_KEY }}
-          path: ${{ runner.temp }}/ci-reuse/traces/
-          if-no-files-found: ignore
-          retention-days: 7
-
   # L02: the wide bit-operation corpus on native aarch64-linux hardware. No Lean here: the
   # native stream must equal the Lean stream recorded in the committed evidence, which the
   # `test` and `macos` jobs reproduce from fresh translations. Matrix-free (a native job of
@@ -2912,23 +2893,30 @@ jobs:
   bitops-native-arm:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
-    defaults:
-      run:
-        shell: bash scripts/ci-trace.sh {0}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # docs/ci.md#1-input-hash-result-reuse: on a pull request, a part whose input key a passing
-      # run already recorded is reused (every later step is skipped and the summary names that
-      # run); otherwise the part runs, traced on Linux, and records its result when it passes.
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
       - name: Reuse a recorded result
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
-          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job bitops-native-arm --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
 
       # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
       - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
@@ -2962,18 +2950,9 @@ jobs:
           done
           [ -z "$failed" ] || { echo "native aarch64-linux bit-operation mismatch on:$failed" >&2; exit 1; }
 
-      # Every workspace path that a traced step observed is inside the part's declared inputs
-      # (.github/ci-inputs.json); a record is written only after this passed.
-      - name: Declared inputs cover every observation
-        if: ${{ !env.AIR2LEAN_REUSED }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
-        run: python3 scripts/ci-reuse.py check-trace
 
       - name: Record the result for reuse
         if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
-        env:
-          AIR2LEAN_UNTRACED: "1"
         run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
 
       - name: Upload the reuse record
@@ -2984,15 +2963,6 @@ jobs:
           path: ${{ runner.temp }}/ci-reuse/record.json
           if-no-files-found: error
           retention-days: 90
-
-      - name: Upload the trace observations
-        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() && env.AIR2LEAN_TRACE_DIR != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-trace-${{ env.AIR2LEAN_REUSE_KEY }}
-          path: ${{ runner.temp }}/ci-reuse/traces/
-          if-no-files-found: ignore
-          retention-days: 7
 
   # The single status to require: green only when every job above succeeded (a skipped or
   # cancelled job fails it too). The split into rows must not let a missing job pass a merge.

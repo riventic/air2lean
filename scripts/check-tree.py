@@ -10,7 +10,8 @@ unignored untracked files, and the materialized whole-tree generated files), rep
 directory), and clones the checkout's Lake build caches (`.lake/build`, `tests/diff/.lake`) into
 it: Lake traces are content-based, so only the replaced modules and their dependents rebuild
 there. DEST is not a git checkout: run Lake, scripts/diff.sh and the Lean checks inside it,
-never git-based tools.
+never git-based tools. In a restricted CI checkout (docs/ci.md#restricted-checkout) the withheld
+files stay withheld in DEST: the placeholder, unreadable, never the checkout's file.
 
 Each run recreates DEST from scratch. DEST must be new or an earlier check tree (it holds a
 `.air2lean-check-tree.json` marker, written first), outside every tracked directory and cache.
@@ -39,6 +40,22 @@ def generated_paths(root):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.paths(root)
+
+
+def withheld_files(root):
+    """{path: placeholder bytes} of the files a restricted CI checkout withholds (scripts/ci-reuse.py,
+    docs/ci.md#restricted-checkout): the check tree withholds them too, without reading them."""
+    git_dir = subprocess.run(['git', '-C', str(root), 'rev-parse', '--absolute-git-dir'], check=True,
+                             capture_output=True, text=True).stdout.strip()
+    state = Path(git_dir, 'air2lean-restricted.json')
+    if not state.is_file():
+        return {}
+    data = json.loads(state.read_text())
+    if data.get('discover'):  # scripts/ci-reuse.py restrict --discover keeps the checkout whole
+        return {}
+    placeholder = subprocess.run(['git', '-C', str(root), 'cat-file', 'blob', data['placeholder']], check=True,
+                                 capture_output=True).stdout
+    return dict.fromkeys(data['withheld'], placeholder)
 
 
 def clone_tree(source, destination):
@@ -81,8 +98,13 @@ def create(dest, replacements, root=ROOT):
                   replaced={path: dict(source=source, sha256=hashlib.sha256(data).hexdigest())
                             for path, (source, data) in replaced.items()})
     (dest / MARKER).write_text(json.dumps(marker, indent=2, sort_keys=True) + '\n')
+    withheld = withheld_files(root)
     for path in files:
-        if os.path.lexists(root / path):  # Else deleted in the working tree.
+        if path in withheld:
+            (dest / path).parent.mkdir(parents=True, exist_ok=True)
+            (dest / path).write_bytes(withheld[path])
+            os.chmod(dest / path, 0)
+        elif os.path.lexists(root / path):  # Else deleted in the working tree.
             (dest / path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / path, dest / path, follow_symlinks=False)
     for path, (_, data) in replaced.items():  # A new example's module need not exist yet.

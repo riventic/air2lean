@@ -48,10 +48,12 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 
 - Run `/review` and `/simple` on every PR. Integrate work in batch PRs. Merge only when CI is green
   at the verified head commit.
-- **Merge through the merge queue** (docs/ci.md#coordinator-merge-flow): `gh pr merge <N> --merge
-  --auto` once `all-checks` is green on the PR head. The queue runs the full CI on the merge
-  result and advances `main` only when it is green; that `merge_group` run is the commit's
-  evidence. PR runs reuse unchanged parts' results; the queue never does.
+- **Merge through the merge queue** (docs/ci.md#coordinator-merge-flow), never by admin bypass:
+  enqueue once `all-checks` is green on the PR head. The queue runs CI on the merge result and
+  advances `main` only when it is green; that `merge_group` run is the commit's evidence. PR and
+  queue runs reuse a part's result only when its input key is unchanged, the queue only from runs
+  on `main`; every executing part runs in a restricted checkout that withholds undeclared files,
+  and a nightly run executes everything unrestricted (docs/ci.md#restricted-checkout).
 - **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
   inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
   merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
