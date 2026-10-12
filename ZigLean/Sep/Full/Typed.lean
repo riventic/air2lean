@@ -263,10 +263,5 @@ theorem FTotalTriple.cfield_load {T U : Type} [Enc T] [Enc U] {a b : Nat} {k : I
 
 end Const
 
-/-- The size of written bytes, for `fsym`'s arithmetic (a region written twice). -/
-@[fsym_arith] theorem size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
-    (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
-  simp [writeBytes]; omega
-
 end Full
 end Zig

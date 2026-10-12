@@ -12,7 +12,8 @@ full-state thread triple (`FTTriple`, `ZigLean/Sep/Full/Thread.lean`) with the s
 sequential program (`soloAt`), so the legacy bridge does the full-state part, and the legacy
 thread triple on the exact cells gives ownership and `StepIn`.
 
-The primitive rules of a thread (`FTTriple.alloc'`, `free'`, `storeAt`, `loadAt`, `ptrProjectAt`)
+The primitive rules of a thread (`FTTriple.alloc'`, `free'`, `storeAt`, `storeBytesAt`, `loadAt`,
+`ptrProjectAt`)
 are lifted here until their native versions exist; a block's bytes come with its full extent
 (`bext`), which pins its size and kind. This module is the only full-state module that imports the
 legacy layer; it goes when the native rules replace it.
@@ -247,6 +248,17 @@ theorem storeAt {T : Type} [Enc T] [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : Bl
     rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)]; omega
   exact FTTriple.drop ((ofBlock hpb (TTriple.storeAt w hq hn hk ha hK) (Tame.store a q w)).post
     fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h) fun _ _ h => h.1
+
+/-- A store of the bytes `bs'` at byte `k` of a thread's block, whose full extent it owns. -/
+theorem storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    {k a : Nat} (bs' : Array Byte) (hpb : p.block = some b) (hq : q = p.add k) (hn : 0 < bs'.size)
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.storeBytes q a bs')
+      (fun _ => up (bytesAt p A S K (writeBytes bs k bs')) ⋆ bext b S K) := by
+  have hpos : 0 < (writeBytes bs k bs').size := by rw [writeBytes_size _ _ _ (by omega)]; omega
+  exact FTTriple.drop ((ofBlock hpb (TTriple.storeBytesAt bs' hq hn hk ha hK)
+    (Tame.storeBytes q a bs' .write)).post fun _ _ h => ofBlock_post hpb hpos (fun _ h => h) h)
+    fun _ _ h => h.1
 
 /-- A load of `v` at byte `k` of a thread's block. -/
 theorem loadAt {T : Type} [Enc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
