@@ -68,8 +68,8 @@ many successful calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
-  owned regions lie at disjoint address ranges), put in the context by `MemFacts.pre` (`fsym`
-  does not yet add memory facts of atom pairs itself: `addFacts` covers single atoms only).
+  owned regions lie at disjoint address ranges; `@[fsym_facts]`: `fsym` adds it for a pair of
+  regions when it needs more facts, `MemFacts.pre` puts it in the context by hand).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
 
 ### Range laws

@@ -205,7 +205,7 @@ theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTrip
 /-- A fact of a part `X` of the precondition that needs the memory, in the context. -/
 theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
     CTriple (X ⋆ R) c Q :=
-  CTriple.eupd hX.eupd (CTriple.lift t)
+  CTriple.eupd hX.sepL.eupd (CTriple.lift t)
 
 /-- **An atomic op's oracle choice**: `0` in one thread. -/
 theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :

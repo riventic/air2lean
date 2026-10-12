@@ -80,30 +80,34 @@ theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : Me
 /-- The assertion `X`, held in a memory, implies the fact `φ` (a facts lemma, `@[fsym_facts]`):
 facts that need the memory or the whole ghost state, such as a token's grant in its authority's
 map (`gauthP γ e M t ⋆ gfrag γ e i g`, `gfrag_mem`) or two owned regions apart. `X` is one atom
-or a pair `X₁ ⋆ X₂` of atoms. -/
-def MemFacts (X : FAssn) (φ : Prop) : Prop := ∀ m r rF, Holds m r rF → X r → m.FSeq → φ
+or a pair `X₁ ⋆ X₂` of atoms. Library lemmas: `facts_gfrag` (AutoConc), `MemFacts.regions_apart`
+(Full/Region). -/
+def _root_.Zig.Full.MemFacts (X : FAssn) (φ : Prop) : Prop :=
+  ∀ m r rF, Holds m r rF → X r → m.FSeq → φ
 
-theorem AtomFacts.mem {X : FAssn} {φ : Prop} (h : AtomFacts X φ) : MemFacts X φ :=
-  fun _ r _ _ hx _ => h r hx
-
-theorem MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X φ) {m : Mem} {r rF : Res}
-    (hh : Holds m r rF) (hr : (X ⋆ R) r) (hs : m.FSeq) : φ := by
-  obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hr
+theorem _root_.Zig.Full.MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X φ) :
+    MemFacts (X ⋆ R) φ := fun m _ _ hh hp hs => by
+  obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
   exact h m r₁ _ (Holds.split hd hh) h1 hs
 
-/-- The facts of a part `X` of the precondition, as an update that keeps it. -/
-theorem MemFacts.eupd {X R : FAssn} {φ : Prop} (h : MemFacts X φ) : EUpd (X ⋆ R) (⟪φ⟫ ⋆ (X ⋆ R)) :=
-  fun _ r _ hh hp hs => ⟨r, hh, sep_lift.mpr ⟨h.sepL hh hp hs, hp⟩⟩
+/-- The facts of the precondition, as an update that keeps it. -/
+theorem _root_.Zig.Full.MemFacts.eupd {P : FAssn} {φ : Prop} (h : MemFacts P φ) : EUpd P (⟪φ⟫ ⋆ P) :=
+  fun m r rF hh hp hs => ⟨r, hh, sep_lift.mpr ⟨h m r rF hh hp hs, hp⟩⟩
 
 /-- An update of the precondition, in any logic (a return of `()` bound to the program). -/
 theorem pre_eupd (L : FLogic) {β : Type} {P P' : FAssn} {Q : β → FAssn} {c : MemM β}
     (h : EUpd P P') (t : L.T P' c Q) : L.T P c Q :=
   L.congr (fun _ _ => rfl) (L.bind (ret L (Q := fun _ => P') (v := ()) h) fun _ => t)
 
+/-- A memory fact of the precondition, in the context (any logic). -/
+theorem _root_.Zig.Full.MemFacts.pre (L : FLogic) {β : Type} {P : FAssn} {c : MemM β} {Q : β → FAssn}
+    {φ : Prop} (hX : MemFacts P φ) (t : φ → L.T P c Q) : L.T P c Q :=
+  pre_eupd L hX.eupd (L.lift t)
+
 /-- A fact of a part `X` of the precondition that needs the memory, in the context. -/
 theorem pre_mfact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
     (hX : MemFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
-  pre_eupd L hX.eupd (L.lift t)
+  MemFacts.pre L hX.sepL t
 
 section Facts
 
