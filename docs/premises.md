@@ -859,7 +859,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>

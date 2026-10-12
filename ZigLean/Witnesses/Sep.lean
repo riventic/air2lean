@@ -2,7 +2,6 @@ import ZigLean.Sep
 import ZigLean.Sep.Witness
 import ZigLean.Sep.Array.Reassemble
 import ZigLean.Sep.Cost
-import ZigLean.Sep.LoopTemplate
 
 /-!
 # Non-vacuity and liveness witnesses: separation-logic rules
@@ -247,40 +246,9 @@ nonvacuity_witness errUnion_decode_write :=
   ⟨BitVec 8, inferInstance, inferInstance, Enc.encode (Except.ok 0 : Except ErrName (BitVec 8)), 0,
     LawfulEnc.size_encode _, LawfulEnc.decode_encode _, 1, trivial⟩
 
-/-! ## Loops (`ZigLean/Sep/Cost.lean`, `ZigLean/Sep/LoopTemplate.lean`) -/
+/-! ## Loops (`ZigLean/Sep/Cost.lean`) -/
 
 nonvacuity_witness LoopRuns.run :=
   ⟨Unit, Unit, exitBody, fun _ => false, (), {}, 1, (), (), {}, LoopRuns.exit rfl rfl, trivial⟩
-
-/-- The template of a loop whose body leaves at once, with no bytes owned. -/
-theorem exitTemplate :
-    LoopTemplate exitBody (fun _ => false) (fun _ _ => emp) (fun _ _ => emp) :=
-  ⟨fun s _ => TotalTriple.ret (Q := loopNext (fun _ => false) (fun _ _ => emp) (fun _ _ => emp) _)
-    ((), s)⟩
-
-nonvacuity_witness LoopTemplate.step :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (), 0,
-    Admit.emp⟩
-nonvacuity_witness LoopTemplate.total :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Admit.of_empty ⟨0, rfl⟩⟩
-nonvacuity_witness LoopTemplate.partial :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Admit.of_empty ⟨0, rfl⟩⟩
-liveness_witness LoopTemplate.partial :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Live.of_total (exitTemplate.total ()) (Admit.of_empty ⟨0, rfl⟩)⟩
-
-nonvacuity_witness TotalTriple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h, Admit.emp⟩
-nonvacuity_witness Triple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h, Admit.emp⟩
-liveness_witness Triple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h,
-    Live.of_total (TotalTriple.loop_template (P := emp) (Q := fun _ => emp) _ _ exitTemplate
-      (fun _ h => ⟨0, h⟩) (fun _ _ _ h => h)) Admit.emp⟩
 
 end Zig.Witness
