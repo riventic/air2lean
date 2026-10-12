@@ -1,5 +1,6 @@
 import ZigLean.Sep.Try
 import ZigLean.Sep.Discard
+import ZigLean.Sep.Full.Try
 
 /-! Whole-object ownership rules for pointer-form try, aliasing and in-place payload updates.
 
@@ -11,69 +12,23 @@ never written: a payload store keeps it, so later pointer-tries on either alias 
 The error path neither reads nor writes payload bytes and leaves the union unchanged.
 
 Alignment is explicit: `Nat.min a 2 ∣ a` (tag access), `b ∣ a` and `b ∣ po` (payload
-access with alignment `b` at payload offset `po`). All rules require sequential memory. -/
+access with alignment `b` at payload offset `po`). All rules require sequential memory.
+
+`tryView`, `errTagOf`, `writeView` and `errUnion_decode_tag` are in `ZigLean/Sep/Full/Try.lean`. -/
 
 namespace Zig
 open Assn
 
-/-- The result of a pointer-form try on a union holding `u` at `p`. -/
-def tryView (α : Type) [Enc α] (p : Ptr) : Except ErrName α → Except ErrName Ptr
-  | .ok _ => .ok (errPayloadPtr α p)
-  | .error e => .error e
-
-/-- The error tag of a union value: `none` on success. -/
-def errTagOf {α : Type} : Except ErrName α → Option ErrName
-  | .ok _ => none
-  | .error e => some e
-
-/-- The union after a payload write of `y`: an error union is unchanged (no write happens). -/
-def writeView {α : Type} (y : α) : Except ErrName α → Except ErrName α
-  | .ok _ => .ok y
-  | .error e => .error e
-
 section ErrUnion
 
 variable {α : Type} [Enc α]
-
-private theorem errUnion_decode_eq {bs : Array Byte} {u : Except ErrName α}
-    (h : Enc.decode bs = pure u) :
-    errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
-        ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure (errTagOf u) ∧
-      ∀ x, u = .ok x → Enc.decode (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).2
-        ((errUnionOffsets (Enc.size α) (Enc.align α)).2 + Enc.size α)) = pure x := by
-  simp only [Enc.decode] at h
-  generalize errUnionOffsets (Enc.size α) (Enc.align α) = r at h ⊢
-  obtain ⟨eo, po⟩ := r
-  simp only at h ⊢
-  generalize ht : errOfBytes (bs.extract eo (eo + 2)) = r at h
-  generalize hq : (Enc.decode (bs.extract po (po + Enc.size α)) : Result α) = q at h
-  match r, q, h with
-  | (none : Option _), _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h
-  | some (.error _), _, h =>
-    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure] at h
-    cases h
-  | some (.ok none), none, h => simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure,
-      ExceptT.pure, Functor.map, ExceptT.map] at h
-  | some (.ok none), some (.error _), h =>
-    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Functor.map,
-      ExceptT.map] at h
-    cases h
-  | some (.ok none), some (.ok x), h =>
-    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Functor.map,
-      ExceptT.map] at h
-    cases h
-    exact ⟨rfl, fun y hy => by cases hy; rfl⟩
-  | some (.ok (some e)), _, h =>
-    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure] at h
-    cases h
-    exact ⟨rfl, fun y hy => by cases hy⟩
 
 theorem errUnion_decode_write [LawfulEnc α] {bs : Array Byte} {x : α}
     (hs : bs.size = Enc.size (Except ErrName α))
     (h : Enc.decode bs = pure (Except.ok x : Except ErrName α)) (y : α) :
     Enc.decode (writeBytes bs (errUnionOffsets (Enc.size α) (Enc.align α)).2 (Enc.encode y)) =
       pure (Except.ok y : Except ErrName α) := by
-  obtain ⟨htag, -⟩ := errUnion_decode_eq h
+  obtain ⟨htag, -⟩ := errUnion_decode_tag h
   obtain ⟨h1, h2, hd⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
   have hy := LawfulEnc.size_encode y
   have hsz : bs.size = errUnionSize (Enc.size α) (Enc.align α) := hs
@@ -106,7 +61,7 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
       errOfBytes tb = pure (errTagOf u) := by
   obtain ⟨A, S, K, bs, ha, hsz, hdec, hb, -⟩ := hp
   obtain ⟨h1, -, -⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
-  obtain ⟨htag, -⟩ := errUnion_decode_eq hdec
+  obtain ⟨htag, -⟩ := errUnion_decode_tag hdec
   obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
     (p := p) (q := p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (k := (errUnionOffsets (Enc.size α) (Enc.align α)).1) (n := 2) (a := Nat.min a 2) hb hm rfl
@@ -161,7 +116,7 @@ theorem pts_payload_load_run {p : Ptr} {a b : Nat} {x : α} {m : Mem} {h hF : He
     ∃ m', (load α b (errPayloadPtr α p)).run m = pure (x, m') ∧ m'.heap = h ∪ hF ∧ m'.Seq := by
   obtain ⟨A, S, K, bs, ha, hsz, hdec, hbs, -⟩ := hp
   obtain ⟨-, h2, -⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
-  obtain ⟨-, hpay⟩ := errUnion_decode_eq hdec
+  obtain ⟨-, hpay⟩ := errUnion_decode_tag hdec
   obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
     (p := p) (q := errPayloadPtr α p) (k := (errUnionOffsets (Enc.size α) (Enc.align α)).2)
     (n := Enc.size α) (a := b) hbs hm rfl hn (by rw [hsz]; exact h2) (dvd_add_off ha hb hpo)

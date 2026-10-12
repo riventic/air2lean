@@ -222,6 +222,7 @@
     "ZigLean.Sep.Full.Witness": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Arr": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Typed": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
+    "ZigLean.Sep.Full.Try": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Unroll": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.AutoAttr": [],
     "ZigLean.Sep.Full.AutoRules": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
