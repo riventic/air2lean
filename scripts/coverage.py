@@ -396,6 +396,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
+    # Open interfaces: closures of lists.zig, mix.zig and rnd.zig (interfaces/export.sh).
+    'tests/roadmap/interfaces/air/{version}/lists': 'tests/roadmap/interfaces/provenance.json',
+    'tests/roadmap/interfaces/air/{version}/mix': 'tests/roadmap/interfaces/provenance.json',
+    'tests/roadmap/interfaces/air/{version}/rnd': 'tests/roadmap/interfaces/provenance.json',
     # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
     'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
     'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
