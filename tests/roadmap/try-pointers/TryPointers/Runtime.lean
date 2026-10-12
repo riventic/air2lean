@@ -1,6 +1,7 @@
 import TryPointers.Gen
 import ZigLean.Sep.Try
 import ZigLean.Sep.Discard
+import ZigLean.Mem.ErrWidth
 
 open Zig
 
@@ -88,6 +89,72 @@ private def wholeObjectAlignment : MemM (Except ErrName Ptr) := do
   storeBytes (cell.add 8) 1 (errBytes none)
   TryPointers.payload64 cell
 
+-- The payload pointer is formed like every derived pointer (`ptrProject`, MM-3).
+private def payloadFormed : MemM Bool := do
+  let cell ← cell8 (.ok 7)
+  let tried ← tryPayloadPtr (BitVec 8) 2 cell
+  let set ← errSetOk (BitVec 8) 2 cell
+  pure (tried == .ok (cell.add 2) && set == cell.add 2)
+
+-- A `u16` reached through a cast to `*anyerror!u8`: the code fits, the payload pointer is
+-- one past the end (defined, as `getelementptr inbounds`), and the payload access is illegal.
+private def castCell16 : MemM Ptr := do
+  let cell ← alloc .heap 2 2
+  store 2 cell (0#16)
+  pure cell
+
+private def truncatedCast8Formed : MemM Bool := do
+  let cell ← castCell16
+  pure ((← tryPayloadPtr (BitVec 8) 2 cell) == .ok (cell.add 2))
+
+private def truncatedCast8 : MemM (BitVec 8) := do
+  let cell ← castCell16
+  match ← tryPayloadPtr (BitVec 8) 2 cell with
+  | .error _ => pure 0#8
+  | .ok q => load (BitVec 8) 1 q
+
+-- A `u64` reached through a cast to `*anyerror!u64`: the code after the payload is missing.
+private def truncatedCast64 : MemM (Except ErrName Ptr) := do
+  let cell ← alloc .heap 8 8
+  store 8 cell (0#64)
+  tryPayloadPtr (BitVec 64) 8 cell
+
+private def truncatedSet8 : MemM Ptr := do
+  let cell ← alloc .heap 1 2
+  errSetOk (BitVec 8) 2 cell
+
+-- A layout where only the formation check rejects: a 24-bit error code (4 bytes) and a
+-- synthetic payload alignment 3 put the payload at offset 6, past a 4-byte object that holds
+-- just the code. The code access succeeds; forming the payload pointer is illegal.
+private structure Align3
+
+private instance : Enc Align3 where
+  size := 1
+  align := 3
+  encode _ := #[.undef]
+  decode _ := pure ⟨⟩
+
+private def truncatedWideTry : MemM (Except ErrName Ptr) := do
+  let cell ← alloc .heap 4 4
+  storeBytes cell 4 (errBytesW 24 none)
+  tryPayloadPtrW 24 Align3 4 cell
+
+-- The same layout in an object large enough for the payload: formed.
+private def wideAlign3Formed : MemM Bool := do
+  let cell ← alloc .heap 8 4
+  storeBytes cell 4 (errBytesW 24 none)
+  pure ((← tryPayloadPtrW 24 Align3 4 cell) == .ok (cell.add 6))
+
+private def truncatedWideSet : MemM Ptr := do
+  let cell ← alloc .heap 4 4
+  errSetOkW 24 Align3 4 cell
+
+private def wideFormed : MemM Bool := do
+  let cell ← alloc .heap 8 4
+  let set ← errSetOkW 24 (BitVec 8) 4 cell
+  let tried ← tryPayloadPtrW 24 (BitVec 8) 4 cell
+  pure (tried == .ok (cell.add 4) && set == cell.add 4)
+
 private def readFootprints : MemM (Array Nat) := do
   let cell ← cell8 (.ok 7)
   let before := (← get).footprint.size
@@ -151,6 +218,23 @@ def main : IO Unit := do
     (some (.error .illegal))
   check "unused whole-object load retains bounds" (value truncatedObject) (some (.error .illegal))
   check "unused whole-object load retains alignment" (value wholeObjectAlignment) (some (.error .illegal))
+  check "pointer try and payload set form the payload pointer" (value payloadFormed)
+    (some (.ok true))
+  check "truncated object through a cast: payload pointer one past the end"
+    (value truncatedCast8Formed) (some (.ok true))
+  check "truncated object through a cast: payload access illegal" (value truncatedCast8)
+    (some (.error .illegal))
+  check "truncated payload-first object through a cast: code access illegal"
+    (value truncatedCast64) (some (.error .illegal))
+  check "truncated object through a cast: payload set illegal" (value truncatedSet8)
+    (some (.error .illegal))
+  check "payload pointer past a truncated object: try illegal" (value truncatedWideTry)
+    (some (.error .illegal))
+  check "payload pointer past a truncated object: set illegal" (value truncatedWideSet)
+    (some (.error .illegal))
+  check "payload pointer inside the object: try formed" (value wideAlign3Formed) (some (.ok true))
+  check "24-bit code: pointer try and payload set form the payload pointer" (value wideFormed)
+    (some (.ok true))
   check "whole read and tag read retain both footprints" (value readFootprints) (some (.ok #[4, 2]))
   check "discarded undefined bytes still record full read" (value discardedUndefined) (some (.ok #[4]))
   check "discarded read still rejects races" (value discardedRace) (some (.error .illegal))

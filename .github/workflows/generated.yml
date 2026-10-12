@@ -15,11 +15,13 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
-# contents: write pushes the `generated` branch only (main's ruleset does not cover it);
-# actions: read finds the CI run and downloads its artifacts; issues: write reports staleness.
+# contents: write fast-forwards the `generated` branch (its ruleset blocks only force pushes and
+# deletion) and creates/deletes `ci-evidence/<sha>` branches; actions: write finds the CI run,
+# downloads its artifacts and dispatches CI on a main commit that has no run; issues: write
+# reports staleness.
 permissions:
   contents: write
-  actions: read
+  actions: write
   issues: write
 
 concurrency:
@@ -40,10 +42,10 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      # Also on schedule: a commit whose CI run finished later (a workflow_dispatch run after an
-      # admin bypass) is published by the next scheduled run.
+      # A main commit without any CI run (it reached main by admin bypass, not through the queue)
+      # gets a full workflow_dispatch run here; the next scheduled run publishes it once green.
       - name: Publish the CI-produced files of every new main commit
-        run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push
+        run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push --dispatch
 
       - name: Every main commit has its entry
         run: python3 scripts/generated.py freshness --repo "$GITHUB_REPOSITORY"
@@ -53,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           title='generated branch is stale or failed to publish'
-          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). A main commit without a merge_group run (an admin bypass) needs a workflow_dispatch run of CI on it."
+          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). A main commit without a merge_group run (an admin bypass) gets a workflow_dispatch run of CI on branch ci-evidence/<sha> automatically; a failed one needs a human (gh run rerun)."
           number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"

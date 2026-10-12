@@ -133,6 +133,13 @@ structure RawFunc where
   /-- The hidden error-return-trace parameter (`err_trace`, §Error return trace): its type
   `?*StackTrace`, or `some none` for `err_trace_unresolved`. `Canon.errTraces` resolves it. -/
   errTrace : Option (Option TyId) := none
+  /-- The indices of the `noalias` parameters (`noalias`, schema 12; legacy schemas have none). -/
+  noalias : Array Nat := #[]
+  /-- `unchecked_ib`: the illegal behaviours that the patched compiler's Sema lowers to `unreach`
+  where it has no safety check (`zig-patch/<version>/hook.patch`); empty in older exports. -/
+  uncheckedIb : Array String := #[]
+  /-- `--allocator-model` of this parse (`AllocatorModel`). -/
+  allocatorModel : AllocatorModel := .std
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -184,7 +191,7 @@ def parseIntLit (fnName : String) (s : String) : Except String Int := do
     | some n => return (n : Int)
     | none => throw s!"{fnName}: not an integer literal: {s}"
 
-def parseTy (j : Json) : Except String Ty := do
+def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String Ty := do
   let k ← (← j.getObjVal? "k").getStr?
   match k with
   | "int" =>
@@ -215,7 +222,8 @@ def parseTy (j : Json) : Except String Ty := do
     return .optional child
   | "struct" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if name == "mem.Allocator" then return .allocator
+    -- `--allocator-model translated`: `mem.Allocator` is the ordinary struct `{ptr, vtable}`.
+    if name == "mem.Allocator" && allocatorModel == .std then return .allocator
     if name == "Thread" then return .thread
     if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
@@ -579,7 +587,13 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
           throw s!"{fnName}: null pointer constant has a nonzero offset"
         return .ptrNull tyId
       if let some k := optField ptrJ "unsupported" then
-        return .ptrOther tyId (← k.getStr?)
+        let kind ← k.getStr?
+        -- An integer address (`@ptrFromInt` at comptime): `off` is the address. `Check.lean`
+        -- rejects it exactly as `ptrOther` outside `--allocator-model translated`.
+        if kind == "int" then
+          if let some offJ := optField ptrJ "off" then
+            if let .ok addr := offJ.getNat? then return .ptrInt tyId addr
+        return .ptrOther tyId kind
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
     else if let some pJ := optField j "slice_ptr" then
       let .ptr "slice" _ child := ty
@@ -775,6 +789,16 @@ def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String 
   return { name, ty, isConst := ← bool "const",
            threadlocal := ← bool "threadlocal", isExtern := ← bool "extern", init }
 
+/-- `--allocator-model translated` translates `ret_addr` (`Op.retAddr`): drop the exporter's
+`unsupported` marker on that one tag, recursively. Every other marker stays. -/
+partial def admitRetAddr (body : Array RawInst) : Array RawInst :=
+  body.map fun i =>
+    { i with
+      unsupported := i.unsupported && i.tag != "ret_addr"
+      body := admitRetAddr i.body, thenBody := admitRetAddr i.thenBody,
+      elseBody := admitRetAddr i.elseBody,
+      cases := i.cases.map fun c => { c with body := admitRetAddr c.body } }
+
 /-- The identity fields every later decode step needs. -/
 def parseHeader (j : Json) : Except String (String × Nat × String) := do
   let name ← (← j.getObjVal? "name").getStr?
@@ -784,12 +808,13 @@ def parseHeader (j : Json) : Except String (String × Nat × String) := do
 
 /-- Decode everything but the profile, given an already validated (or, for diagnostics, a
 placeholder) profile. -/
-def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc := do
+def parseFuncWith (j : Json) (profile : BuildProfile) (allocatorModel : AllocatorModel := .std) :
+    Except String RawFunc := do
   let (name, schema, zigVersion) ← parseHeader j
   -- Deny by default: every key of a current-schema file is in the schema table.
   if schema ≥ 12 then Schema.validate j |>.mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
-  let types ← typesJ.mapM parseTy
+  let types ← typesJ.mapM (parseTy · allocatorModel)
   let version? := ZigVersion.ofString? zigVersion
   -- Zig 0.17.0 removed the `i0` type; one in a 0.17.0 file is a malformed export.
   if let some v := version? then
@@ -799,9 +824,16 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
   let params ← paramsJ.mapM Json.getNat?
+  let noalias ← match optField j "noalias" with
+    | some n => (← n.getArr?).mapM Json.getNat?
+    | none => pure #[]
+  for (p, k) in noalias.zipIdx do
+    unless p < params.size && (k == 0 || noalias[k - 1]! < p) do
+      throw s!"{name}: noalias: {p} is not a parameter index in increasing order"
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
+  let body := if allocatorModel == .translated then admitRetAddr body else body
   let globalsJ ← match optField j "globals" with
     | some g => g.getArr?
     | none => pure #[]
@@ -829,6 +861,9 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some ej => pure (some { name := ← (← ej.getObjVal? "name").getStr?,
                               cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
     | none => pure none
+  let uncheckedIb ← match optField j "unchecked_ib" with
+    | some u => (← u.getArr?).mapM Json.getStr?
+    | none => pure #[]
   return {
     schema
     version?
@@ -844,12 +879,15 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     externs
     exportDecl
     errTrace := ← errTraceField j
+    noalias
+    uncheckedIb
+    allocatorModel
   }
 
-def parseFunc (j : Json) : Except String RawFunc := do
+def parseFunc (j : Json) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
   let (name, schema, zigVersion) ← parseHeader j
   let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
-  parseFuncWith j profile
+  parseFuncWith j profile allocatorModel
 
 /-- The file with every identity replaced by its module-qualified key, and its identity
 records (`Identity.rewrite`). -/
@@ -858,12 +896,13 @@ def identify (j : Json) : Except String (Json × Array Identity.Record) :=
     s!"{(j.getObjValAs? String "name").toOption.getD "AIR file"}: {e}"
 
 /-- `parseFunc` after every identity becomes its module-qualified key (`Identity.rewrite`). -/
-def parseIdentifiedFunc (j : Json) : Except String RawFunc := do
+def parseIdentifiedFunc (j : Json) (allocatorModel : AllocatorModel := .std) :
+    Except String RawFunc := do
   let (j, identities) ← identify j
-  return { ← parseFunc j with identities }
+  return { ← parseFunc j allocatorModel with identities }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
-def parseFile (contents : String) : Except String RawFunc := do
-  parseIdentifiedFunc (← StrictJson.parse contents)
+def parseFile (contents : String) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
+  parseIdentifiedFunc (← StrictJson.parse contents) allocatorModel
 
 end Air2Lean.Raw

@@ -207,7 +207,7 @@ def version_rows(root):
         if full:
             ci = 'full job (pipeline, diff test, proofs)'
         elif restricted:
-            ci = 'restricted job (translation and proofs; no diff harness)'
+            ci = 'restricted job (pipeline, diff test, proofs on the listed examples)'
         else:
             ci = 'none'
         if shards: ci += f'; {len(shards)} mutation shards'

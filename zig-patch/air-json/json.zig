@@ -20,6 +20,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const Sema = @import("../Sema.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 const Identity = @import("identity.zig");
@@ -370,6 +371,40 @@ const Compat = struct {
         };
     }
 
+    /// Resolve the value of a non-extern global that a pointer constant names, so that its
+    /// `globals` entry has an `init`. `-fno-emit-bin` never lowers the global, so without this a
+    /// `const` such as `heap.PageAllocator.vtable` can stay type-resolved only, and its function
+    /// pointers unknown. This is the analysis Sema itself runs for a global's value (it registers
+    /// any error); a global whose value is already under analysis is left as it is.
+    fn ensureNavVal(pt: Zcu.PerThread, nav_index: InternPool.Nav.Index) void {
+        const zcu = pt.zcu;
+        const unit: InternPool.AnalUnit = .wrap(.{ .nav_val = nav_index });
+        if (zcu.analysis_in_progress.contains(unit)) return;
+        if (v16) {
+            const reason: Zcu.DependencyReason = .{ .src = zcu.navSrcLoc(nav_index), .type_layout_reason = undefined };
+            pt.ensureNavValUpToDate(nav_index, &reason) catch {};
+        } else {
+            pt.ensureNavValUpToDate(nav_index) catch {};
+        }
+    }
+
+    /// 0.16.0: resolve the layout of a struct, union or enum type before it is written, as
+    /// Sema does for a type whose layout is wanted. Otherwise a container that this function
+    /// has only behind a pointer (`heap.ArenaAllocator.Node` in `ArenaAllocator.init`) is
+    /// written without fields, while another function's export of the same type has them.
+    /// Before 0.16.0 the fields are always known; the layout stays as Sema left it.
+    fn ensureLayout(pt: Zcu.PerThread, ty: Type) void {
+        if (!v16) return;
+        const zcu = pt.zcu;
+        switch (zcu.intern_pool.indexToKey(ty.toIntern())) {
+            .struct_type, .union_type, .enum_type => {},
+            else => return,
+        }
+        if (zcu.analysis_in_progress.contains(.wrap(.{ .type_layout = ty.toIntern() }))) return;
+        const reason: Zcu.DependencyReason = .{ .src = ty.srcLoc(zcu), .type_layout_reason = .field_queried };
+        pt.ensureTypeLayoutUpToDate(ty, &reason) catch {};
+    }
+
     /// The `assembly` AIR instruction, normalized. 0.16.0 has a convenience `Air.unwrapAsm`;
     /// 0.15.2 has no such helper, and its extra-data order differs (outputs, inputs, output
     /// constraint/name pairs, input constraint/name pairs, source — 0.16.0 instead puts the
@@ -703,6 +738,14 @@ const W = struct {
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        // The illegal behaviours that the patched Sema (`<version>/hook.patch`) lowers to `unreach`
+        // where it has no safety check; absent without that patch.
+        if (@hasDecl(Sema, "air_json_unchecked_ib")) {
+            try w.field("unchecked_ib");
+            try w.j.beginArray();
+            for (Sema.air_json_unchecked_ib) |name| try w.j.write(name);
+            try w.j.endArray();
+        }
         try w.field("profile");
         try w.writeProfile(owner_nav);
         try w.field("name");
@@ -714,9 +757,18 @@ const W = struct {
         try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
-        const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
+        const fn_info = ip.indexToKey(fn_ty.toIntern()).func_type;
+        const param_types = fn_info.param_types.get(ip);
         w.param_types = param_types;
         for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
+        try w.j.endArray();
+        // The `noalias` parameters, as indices into `params` (the LLVM backend's `noalias`
+        // argument attribute). Only the first 32 parameters can be `noalias`.
+        try w.field("noalias");
+        try w.j.beginArray();
+        for (0..@min(param_types.len, 32)) |i| {
+            if (@as(u1, @truncate(fn_info.noalias_bits >> @as(u5, @intCast(i)))) != 0) try w.j.write(i);
+        }
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
@@ -1757,6 +1809,8 @@ const W = struct {
         try w.j.beginObject();
         switch (g) {
             .nav => |nav| {
+                const seen = Compat.navInfo(zcu, nav);
+                if (seen.init == null and !seen.is_extern) Compat.ensureNavVal(w.pt, nav);
                 const info = Compat.navInfo(zcu, nav);
                 const name = ip.getNav(nav).fqn.toSlice(ip);
                 const module = Identity.navModule(zcu, nav);
@@ -1793,6 +1847,8 @@ const W = struct {
     fn typeId(w: *W, ty: Type) Error!u32 {
         const gop = try w.ids.getOrPut(w.gpa, ty.toIntern());
         if (!gop.found_existing) {
+            // Before the type's entry and any pointer to it (`ptr_align`) are written.
+            Compat.ensureLayout(w.pt, ty);
             gop.value_ptr.* = @intCast(w.queue.items.len);
             try w.queue.append(w.gpa, ty.toIntern());
         }

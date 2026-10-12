@@ -13,7 +13,7 @@ C/allowzero pointer support.
 | Pointer → integer | `ptrAddr` observes the address; it does not dereference or revive a dead allocation. |
 | Null/non-null value tests | `ptrIsNull` compares the address with zero. It does not interpret a scalar pointer as `Option Ptr`. |
 | Nullable pointer equality/inequality | `ptrEqAddr` compares addresses, including zero. |
-| Nullable → nonnullable scalar pointer cast; C `p.?` | `ptrRequireNonNull` rejects zero with `.panic` and preserves a nonzero pointer. Being nonnull does not establish provenance, lifetime, bounds or alignment. |
+| Nullable → nonnullable scalar pointer cast; C `p.?` | `ptrRequireNonNull` rejects zero with `.illegal` (illegal behaviour that the op checks itself; Sema's null check before it is ordinary AIR and panics first) and preserves a nonzero pointer. Being nonnull does not establish provenance, lifetime, bounds or alignment. |
 | Direct load/store through a scalar nullable pointer | The existing `Mem.access`/`accessW` rules apply. Positive-size accesses require a real live block, bounds and alignment; stores also require writable storage. Source AIR safety guards remain part of the translation. |
 | Zero pointer constant | An explicit `ptr: {"null": true, "off": 0}` becomes `Val.ptrNull`; the checker requires a C/allowzero type, also inside an aggregate constant. Other integer-base constants remain rejected. |
 | Nullable pointer stored in memory (`*[*c]T`, global, escaping local) | Load/store of the pointer value itself use the storage dictionary `Zig.nullablePtrEnc`: `Ptr.null` is eight zero integer bytes (the bytes of a null `?*T`); other pointers, including one that reaches address zero by arithmetic on its provenance, keep their provenance fragments. Zero bytes from any source read back as null; undefined or other integer bytes stay `.unspecified`. The access premises are those of the storage location, never of address zero. |
@@ -53,7 +53,7 @@ stores through an `allowzero` pointer, so `allowzero` does not change the projec
 | the same from `*allowzero T`/`[*]allowzero T` at address 0 | defined, address 0 | `Ptr.null` (0.14.1/0.15.2 `&p.first`, typed `*F`: `.illegal`) |
 | nonzero field offset, `p + n`, `&p[n]`, `p - n` (n ≠ 0) from address zero, C or `allowzero` | not address arithmetic: ReleaseSafe folds `(p + n) == null` to `p == null` (also for `allowzero`; 0.14.1 even in a `null_pointer_is_valid` function); Debug happens to yield `0 + offset` | `.illegal` |
 | load/store through a projection of address zero (C or `allowzero`) | segmentation fault; no safety check in ReleaseSafe or Debug (the langref calls a C-pointer dereference of address 0 safety-checked on hosted targets; these compilers emit no check) | `.illegal` (`Mem.access`) |
-| `p.?` of a null `[*c]T` or `?*T`; `[*c]T` → `*T` coercion of null | safety panic (`attempt to use null value`, `cast causes pointer to be null`) | `.panic` |
+| `p.?` of a null `[*c]T` or `?*T`; `[*c]T` → `*T` coercion of null | safety panic (`attempt to use null value`, `cast causes pointer to be null`) | `.panic` (Sema's check, translated as AIR); the op alone, without the check: `.illegal` |
 
 The model is therefore exact for the defined cases and `.illegal` exactly where the backend
 treats the projection as undefined (LLVM poison) or the access faults, with one conservative
@@ -61,9 +61,8 @@ exception: Zig 0.14.1 and 0.15.2 type an offset-0 field pointer of address zero 
 nonnullable `*F` (`ptrProjectNonnull`), and the model makes it `.illegal` although the native
 code yields address zero; whether later uses of that `*F` are defined is not confirmed natively. An `allowzero` object at
 address zero (freestanding targets) is not modelled: a projection that would need it fails closed.
-The theorems `null_project_zero`, `null_add_zero`, `null_project`, `null_add_ne` and
-`null_project_nonnull` (`Null.lean`) and `ptrProjectNullable_same`, `ptrProjectNullable_ok`,
-`ptrProjectNullable_zero_illegal` and `ptrProjectNonnull_ok` (`NullLemmas.lean`) state the rule.
+The theorems `null_project_zero`, `null_project`, `null_project_nonnull` and
+`null_offset_access` (`Null.lean`) and `ptrProjectNonnull_ok` (`NullLemmas.lean`) state the rule.
 
 Compiler source inspection of 0.16.0 (`Sema.elemPtrOneLayerOnly`, `Type.elemPtrType`,
 `Type.fieldPtrType`, `Sema.analyzePtrArithmetic`, `Sema.coerceExtra`/`coerceCompatiblePtrs`)

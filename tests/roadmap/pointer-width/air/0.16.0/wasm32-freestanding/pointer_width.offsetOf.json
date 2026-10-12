@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "wasm32-freestanding-none",
@@ -29,10 +32,16 @@
  },
  "name": "pointer_width.offsetOf",
  "module": "root",
+ "src": {
+  "file": "pointer_width.zig",
+  "module": "pointer_width",
+  "decl_line": 48
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -79,7 +88,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 26
   },
   {
    "id": 6,
@@ -188,7 +198,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 16,
@@ -204,7 +215,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 46
   },
   {
    "id": 18,
@@ -230,7 +242,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 33
   },
   {
    "id": 21,
@@ -246,7 +259,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 31
   },
   {
    "id": 23,
@@ -265,7 +279,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 25,
