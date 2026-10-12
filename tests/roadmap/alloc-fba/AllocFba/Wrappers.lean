@@ -81,4 +81,47 @@ theorem destroy_spec (p : Ptr) (bs : Array Byte) (hbs : bs.size = 4)
       (mem_Allocator_destroy__anon_7fa4accb9a56 ⟨ctx, vtp⟩ p) (fun _ => I.own ⋆ vtR vtp fns.toList) := by
   fsym [hF]
 
+/-! ## For every allocator invariant of the translated `FixedBufferAllocator` entries -/
+
+section OfSpec
+
+variable {ctx vtp : Ptr} {I : FAllocInv} (h : FAllocSpec FLogic.total impl ctx I)
+include h
+
+theorem alloc_of (n : BitVec 64) (hfit : I.fits n.toNat 0) :
+    FTotalTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
+      (fun r => I.own ⋆ (I.sliceResult 0 n n.toNat r ⋆ vtR vtp fns.toList)) :=
+  alloc_spec ctx vtp I n hfit fun len ra h1 h2 => h.alloc len 0 ra h1 (by decide) h2
+
+theorem alignedAlloc_of (n : BitVec 64) (hfit : I.fits n.toNat 2) :
+    FTotalTriple (I.own ⋆ vtR vtp fns.toList)
+      (mem_Allocator_alignedAlloc__anon_48ad47c7aa48 ⟨ctx, vtp⟩ n)
+      (fun r => I.own ⋆ (I.sliceResult 2 n n.toNat r ⋆ vtR vtp fns.toList)) :=
+  alignedAlloc_spec ctx vtp I n hfit fun len ra h1 h2 => h.alloc len 2 ra h1 (by decide) h2
+
+theorem create_of (hfit : I.fits (4 : BitVec 64).toNat 2) :
+    FTotalTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
+      (fun r => I.own ⋆ (I.allocResult 2 4 r ⋆ vtR vtp fns.toList)) :=
+  create_spec ctx vtp I hfit fun len ra h1 h2 => h.alloc len 2 ra h1 (by decide) h2
+
+theorem free_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) :
+    FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s) (fun _ => I.own ⋆ vtR vtp fns.toList) :=
+  free_spec ctx vtp I s bs hlen fun s ra bs h1 h2 => h.free s 0 ra bs (by decide) h1 h2
+
+theorem destroy_of (p : Ptr) (bs : Array Byte) (hbs : bs.size = 4) :
+    FTotalTriple (I.own ⋆ (I.granted p 2 bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_destroy__anon_7fa4accb9a56 ⟨ctx, vtp⟩ p) (fun _ => I.own ⋆ vtR vtp fns.toList) :=
+  destroy_spec ctx vtp I p bs hbs fun s ra bs h1 h2 => h.free s 2 ra bs (by decide) h1 h2
+
+end OfSpec
+
+/-- The contracts for the translated `FixedBufferAllocator` itself (`FBA.fallocSpec`). -/
+example (ctx vtp : Ptr) (B : FBA.FBuf) (n : BitVec 64) (hfit : (FBA.finv ctx B).fits n.toNat 0) :
+    FTotalTriple ((FBA.finv ctx B).own ⋆ vtR vtp fns.toList)
+      (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
+      (fun r => (FBA.finv ctx B).own ⋆ ((FBA.finv ctx B).sliceResult 0 n n.toNat r ⋆
+        vtR vtp fns.toList)) :=
+  alloc_of (FBA.fallocSpec ctx B) n hfit
+
 end AllocFba.Wrappers
