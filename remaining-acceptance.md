@@ -274,6 +274,8 @@ Classification: research.
 
 explicit scheduler and memory-progress assumptions, total-correctness rules, variants and liveness reasoning. Treat deadlock, starvation and divergence as distinct properties. Acceptance: prove a task completion or shutdown theorem under stated assumptions; bounded fuel exhaustion is not presented as evidence of termination.
 
+Research progress: Design and recommendation in [docs/research/C13.md](docs/research/C13.md): termination of waiting code is credits (own progress) plus one scheduler premise, weak fairness of ready threads (proposed SCH-01, superseding the client-specific THR-09 `Cooperative`), applied once in the adequacy theorem; waiting iterations (futex retry, join, `WaitGroup`) are justified by a non-mintable wait token with a level, lock-free CAS loops by HMRS credit transfer; no futex fairness is assumed (spurious returns and wake choice stay adversarial) and starvation freedom of one waiter is not claimed. Native probe (`docs/research/c13-probe`): a futex mutex of the `Io.Mutex` algorithm lets a relocking thread take 96% of the acquisitions on aarch64-macos and x86_64-linux, and a futex wait returns with `EINTR` unwoken. Remaining: everything beyond the design (`WeakFair` on the trace, wait-token resource, rules, clients); the futex counterexample is an argument, not yet a checked theorem.
+
 ## C14 — Reader writer locks and reusable synchronization contracts
 
 Classification: partial.
