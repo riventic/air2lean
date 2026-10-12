@@ -2665,9 +2665,15 @@ Zig 0.14.1/0.15.2 also fold `&s.v[i]` for a vector *field* `v` of a packed struc
 field's bit offset, and miscompile stores through it (`docs/upstream/packed-vector-lane-ptr.md`).
 `CheckCtx.lanePtr` rejects the instruction form. -/
 private def checkLaneConstant (f : Func) (v : Val) : Except String Unit :=
+  -- Only a program with a vector field in a packed struct can form such a pointer.
+  let vectorField := f.types.any fun t => match t with
+    | .struct _ "packed" fs => fs.any fun (_, c) => match f.types[c]? with
+      | some (.vector ..) => true
+      | _ => false
+    | _ => false
   match v with
   | .ptrConst pty g _ =>
-    if laneBitPtrTy f.layouts pty then
+    if vectorField && laneBitPtrTy f.layouts pty then
       match (f.globals[g]?).bind (f.types[·.ty]?) with
       | some (.vector ..) => pure ()
       | _ => throw s!"{f.name}: a vector lane pointer into a global that is not a vector (a \
