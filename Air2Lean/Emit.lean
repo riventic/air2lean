@@ -3817,16 +3817,6 @@ def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
             out := out.push (name, lean, fields, exhaustive, bits)
   return out
 
-/-- The error names of the program (the names of its error sets), if a function reads one
-(`@errorName`). -/
-def errorNames (funcs : Array Func) : Array String :=
-  if !funcs.any (·.allInsts.any (·.op.isErrorName)) then #[]
-  else
-    let names := funcs.flatMap fun f => f.types.flatMap fun t => match t with
-      | .errorSet (some ns) => ns
-      | _ => #[]
-    (names.foldl (fun acc n => if acc.contains n then acc else acc.push n) #[]).qsort (· < ·)
-
 /-- The compilation's error numbering, if the export has one (L10): the exporter writes it when
 a function converts between errors and integers (`@intFromError`, `@errorFromInt`,
 `cmp_lt(e)_errors_len`), which `Check.lean` admits only with it. Every function of one export
@@ -3839,9 +3829,29 @@ def emitErrorTable (names : Array String) : String :=
   s!"/-- The compilation's error numbering (the exporter's `error-table.air2lean`): code `i + 1` \
     is `errorTable[i]`. -/\ndef errorTable : Array Zig.ErrName := #[{", ".intercalate (names.toList.map String.quote)}]"
 
+/-- The error names of the program (the names of its error sets), if a function reads one
+(`@errorName`). With the compilation's numbering (L10) they are its names in code order:
+`@errorFromInt` reaches errors that no error set of the program names. -/
+def errorNames (funcs : Array Func) : Array String :=
+  if !funcs.any (·.allInsts.any (·.op.isErrorName)) then #[]
+  else if let some table := errorTableOf funcs then table
+  else
+    let names := funcs.flatMap fun f => f.types.flatMap fun t => match t with
+      | .errorSet (some ns) => ns
+      | _ => #[]
+    (names.foldl (fun acc n => if acc.contains n then acc else acc.push n) #[]).qsort (· < ·)
+
 /-- `errorNameOf`: the name of each error of the program (`@errorName`), in the blocks from
-`first` on. An error that no error set of the program names throws `.unspecified`. -/
-def emitErrorNameOf (names : Array String) (first : Nat) : String :=
+`first` on. An error that no error set of the program names throws `.unspecified`. With the
+compilation's numbering (`numbered`), the blocks are in code order and the name is found by the
+error's position in `errorTable`, as the compiler's name table is indexed by the code. -/
+def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool := false) : String :=
+  if numbered then
+    String.intercalate "\n" ["def errorNameOf (e : Zig.ErrName) : Zig.Result Zig.Slice :=",
+      "  match errorTable.idxOf? e with",
+      s!"  | some k => pure ⟨⟨some ({first} + k), 0⟩, BitVec.ofNat 64 e.utf8ByteSize⟩",
+      "  | none => throw .unspecified"]
+  else
   let arms := names.toList.zipIdx.map fun (n, k) =>
     s!"  if e = {n.quote} then pure ⟨⟨some {first + k}, 0⟩, {n.toUTF8.size}⟩ else"
   String.intercalate "\n"
@@ -4453,7 +4463,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
         gs.push { label := s!"the name of {lean}.{f}", bytes := nameBytes f, align := 1 }) gs
       (gs, defs.push d)
   let errNames := errorNames funcs
-  let errDefs := if hasErrorName then [emitErrorNameOf errNames globals.size] else []
+  let errDefs := if hasErrorName then
+    [emitErrorNameOf errNames globals.size (numbered := errorTable.isSome)] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let translated := funcs.any (·.allocatorModel == .translated)

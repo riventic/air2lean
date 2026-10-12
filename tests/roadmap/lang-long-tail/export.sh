@@ -43,9 +43,17 @@ for version in "${versions[@]}"; do
     # <stem>.filter, if present: more AIR name prefixes (the std functions the fixture calls).
     filter="$stem."
     [ -f "$here/$stem.filter" ] && filter="$filter,$(paste -sd, "$here/$stem.filter")"
+    # <stem>.root, if present: the program to export instead of <stem>.zig, as an executable.
+    # The error numbering (error-table.air2lean) is per compilation, so a fixture whose model
+    # depends on it exports the compilation of its native probe, with the probe's flags.
+    if [ -f "$here/$stem.root" ]; then
+      mode_args=(build-exe "$here/$(cat "$here/$stem.root")")
+    else
+      mode_args=(build-obj "$here/$stem.zig")
+    fi
     ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER="$filter" \
-      "$root/zig-air-$version/bin/zig" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline "$here/$stem.zig"
+      "$root/zig-air-$version/bin/zig" "${mode_args[@]}" -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+      -target x86_64-linux -mcpu=baseline
     # Keep the call/function-value closure of the fixture's own functions: the filter also
     # matches std instances that only the compiler's panic and debug code reaches, and how many
     # depends on the version.
