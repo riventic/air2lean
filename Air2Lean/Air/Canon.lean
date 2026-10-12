@@ -667,6 +667,8 @@ private structure TraceWalk where
   next : InstId
   reg : Option (Val × TyId)
   subst : Std.HashMap InstId Val := {}
+  /-- The type of every instruction, the synthesized ones included. -/
+  tys : Std.HashMap InstId TyId := {}
 
 /-- `errTraces` (module doc, 7): error return tracing as data flow. Every function that the
 backends give the hidden trace parameter (`RawFunc.errTrace`: `cc == .auto` in a build with error
@@ -721,12 +723,13 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
       if i.unsupported then out := out.push i; continue
       match i.tag with
       | "ret_addr" =>
-        st := { st with subst := st.subst.insert i.id (.undef ((i.ty).getD 0)) }
+        let some ty := i.ty | throw s!"{f.name}: inst {i.id}: `ret_addr` without a type"
+        st := { st with subst := st.subst.insert i.id (.undef ty) }
       | "set_err_return_trace" =>
         unless top do
           throw s!"{f.name}: inst {i.id}: `set_err_return_trace` outside the top-level body"
         let some v := i.args[0]? | throw s!"{f.name}: inst {i.id}: `set_err_return_trace` needs an operand"
-        let some t := (match v with | .inst x => producers[x]? | _ => none)
+        let some t := (match v with | .inst x => st.tys[x]? | _ => none)
           | throw s!"{f.name}: inst {i.id}: `set_err_return_trace` of a constant"
         unless isPtr t do throw s!"{f.name}: inst {i.id}: `set_err_return_trace` of a non-pointer"
         st := { st with reg := some (v, t) }
@@ -744,12 +747,12 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
           | some (.optional c) =>
             let payload := st.next
             out := out.push (mk payload "optional_payload" c #[v])
-            st := { st with next := payload + 1 }
+            st := { st with next := payload + 1, tys := st.tys.insert payload c }
             pure (Val.inst payload)
           | some (.ptr "one" ..) => pure v
           | _ => throw s!"{f.name}: inst {i.id}: the error return trace is not a pointer"
         let field := st.next
-        st := { st with next := field + 1 }
+        st := { st with next := field + 1, tys := st.tys.insert field ptrTy }
         out := out.push (mk field "struct_field_ptr" ptrTy #[p] (some idx))
         out := out.push (mk i.id "load" ty #[.inst field])
       | _ =>
@@ -763,7 +766,7 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
           let (w, v) ← asOptional v t want st.next
           if let some w := w then
             out := out.push w
-            st := { st with next := st.next + 1 }
+            st := { st with next := st.next + 1, tys := st.tys.insert st.next want }
           i := { i with args := i.args.push v, errTrace := none }
         let (b, st1) ← walk false i.body st
         let (tb, st2) ← walk false i.thenBody st1
@@ -785,7 +788,8 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
         #[mk start "arg" t #[] (param := some f.params.size)], start + 1)
     | some none => throw unresolved
     | none => pure (f.params, none, #[], start)
-  let (body, _) ← walk true f.body { next, reg }
+  let tys := match reg with | some (.inst x, t) => producers.insert x t | _ => producers
+  let (body, _) ← walk true f.body { next, reg, tys }
   return { f with params, body := args ++ body, errTrace := none }
 
 /-- The seven rewrites (module doc). -/

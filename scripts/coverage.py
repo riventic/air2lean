@@ -250,10 +250,13 @@ def canon_resolved(text):
 # `Tag.name`, `.@"name"`) in them, nor in an Air.zig helper that returns a `Tag`, has no producer.
 # Every other non-backend file that builds AIR must be a reviewed post-hook stage, else the scan
 # does not decide; so does a tag computed from a name or an integer.
-AIR_BUILDERS = re.compile(r'air_instructions|\.addInst\(|addUnOp\(|addInstAsIndex')
+# The instruction list, or an `add*(` call on a Sema block (`block.addBinOp`, `child_block.addTyOp`,
+# `addInstAsIndex`, ...): over-inclusion only adds producers, which is the safe direction.
+AIR_BUILDERS = re.compile(r'air_instructions|[A-Za-z_]*block\.add[A-Z][A-Za-z]*\(|\.addInst\(|addInstAsIndex')
 BACKEND_DIRS = ('src/codegen/', 'src/arch/', 'src/link/')
-POST_HOOK_BUILDERS = ('src/Air/Legalize.zig',)  # legalization runs in the backends, after the hook
-COMPUTED_TAG = re.compile(r'@field\(\s*Air\.Inst\.Tag|stringToEnum\(\s*Air\.Inst\.Tag|'
+# Legalization and liveness run in the backends, after the hook; they rewrite or read AIR.
+POST_HOOK_BUILDERS = ('src/Air/Legalize.zig', 'src/Air/Liveness.zig', 'src/Liveness.zig')
+COMPUTED_TAG = re.compile(r'@field\(\s*(?:Air\.Inst\.|Air\.)?Tag\b|stringToEnum\(\s*(?:Air\.Inst\.|Air\.)?Tag\b|'
                           r'Tag\s*=\s*@enumFromInt|@as\(\s*(?:Air\.Inst\.)?Tag\s*,\s*@enumFromInt')
 
 
@@ -284,7 +287,8 @@ def producer_literals(source, cache):
         relative = str(p.relative_to(source))
         if relative.startswith(BACKEND_DIRS) or relative in POST_HOOK_BUILDERS or relative == 'src/Air.zig':
             continue
-        if AIR_BUILDERS.search(cache.text(p)):
+        # All of Sema is a producer, whatever builder spelling it uses.
+        if relative == 'src/Sema.zig' or relative.startswith('src/Sema/') or AIR_BUILDERS.search(cache.text(p)):
             producers.append(relative)
     if 'src/Sema.zig' not in producers:
         return None
@@ -293,9 +297,12 @@ def producer_literals(source, cache):
         if COMPUTED_TAG.search(cache.text(source / relative)):
             return None
         literals |= enum_literals(cache.tokens(source / relative))
-    # Air.zig helpers that return a tag (`fromCmpOp`) produce what their bodies name.
-    for body in tag_helper_bodies(cache.tokens(source / 'src/Air.zig')):
-        literals |= enum_literals(body)
+    # A helper that returns a tag (`Air.Inst.Tag.fromCmpOp`) produces what its body names, wherever
+    # it is defined (backends excluded: they run after the hook).
+    for p in sorted((source / 'src').rglob('*.zig')):
+        if not str(p.relative_to(source)).startswith(BACKEND_DIRS):
+            for body in tag_helper_bodies(cache.tokens(p)):
+                literals |= enum_literals(body)
     return literals
 
 
@@ -895,7 +902,7 @@ def generate(version, source, os_name='linux'):
             'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
                      'exporter': {'status': export_status, 'reason': export_reasons[export_status]},
-                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'unknown-tag-rejection', 'constructors': ops},
+                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'canon-resolved' if disposition == 'resolved-in-canon' else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},

@@ -234,7 +234,8 @@ becomes `optional_payload`, `struct_field_ptr` and `load`. The trace is ordinary
 `StackTrace` and its address buffer that Sema allocates), so `@errorReturnTrace().?.index` is
 modelled exactly. `ret_addr` is a machine address outside the memory model: the translator admits
 it only as the value of a `store` (as in `std.builtin.returnError`), where it writes undefined
-bytes, and rejects any other use. A call with the trace to a std function that the translator models
+bytes, and rejects any other use. A later read of those bytes is `.unspecified` in the model where
+the native program reads an address: the model never claims a value for a return address. A call with the trace to a std function that the translator models
 instead of translating (allocator, `Thread`) is rejected. Evidence: `tests/roadmap/error-tracing`.
 
 ## Ref

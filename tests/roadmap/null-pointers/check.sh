@@ -19,6 +19,7 @@ case "${1:-}" in
   --native)
     zig=${2:?usage: check.sh --native ZIG}
     version=$("$zig" version)
+    [ -f "$here/expected/$version.txt" ] || { echo "no expected/$version.txt: a release Zig of a supported version is required" >&2; exit 1; }
     cp "$here/nullpointers.zig" "$work/"
     "$zig" build-exe -OReleaseSafe -fno-error-tracing "$work/nullpointers.zig" -femit-bin="$work/native" \
       --cache-dir "$work/cache" --global-cache-dir "$work/global-cache"
