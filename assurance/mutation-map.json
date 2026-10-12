@@ -59,6 +59,14 @@
         {
           "path": "tests/roadmap/abi-probes/test_probe.py",
           "anchor": "def test_profiles_fail_closed"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_forbidden_outcomes_fail"
+        },
+        {
+          "path": "tests/roadmap/weak-ordering/test_weak.py",
+          "anchor": "def test_load_buffering_is_a_rejected_shape"
         }
       ],
       "mutants": []
@@ -80,6 +88,10 @@
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",
           "anchor": "def test_profile_mode_mismatch"
+        },
+        {
+          "path": "tests/roadmap/build-modes/stage2_rules.py",
+          "anchor": "def test_rejected_on_stage2_accepted_on_llvm"
         },
         {
           "path": "tests/roadmap/build-modes/test_build_modes.py",

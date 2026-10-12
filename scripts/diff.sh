@@ -66,6 +66,9 @@
 #   AIR2LEAN_DIFF_PREBUILT  Native side built by `diff.sh --build-only` (above). Unset: build here.
 #   AIR2LEAN_DIFF_ZIG_CACHE  Zig global cache dir for the stock-zig builds of this script (the
 #                       harnesses and libm). Unset: Zig's default. CI keeps one per build mode.
+#   AIR2LEAN_DIFF_FRESH_INPUTS  The seed of regenerated inputs (scripts/fresh-inputs.sh): the
+#                       per-input exclusion pins name the committed inputs, so they are not checked;
+#                       a model .illegal/.unspecified result is an exclusion, never a match.
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
 #                       (not `asm` on a host that is not x86_64, and not an example whose
 #                       examples/<ex>/zig-versions does not list the zig's version, as in check.sh).
@@ -512,14 +515,18 @@ for ex in $examples; do
     }
 
     unspecified_pins=$(pin_file "$ex" unspecified)
-    if ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
+    if [ -n "${AIR2LEAN_DIFF_FRESH_INPUTS:-}" ]; then
+      :  # Fresh inputs: the pins name the committed inputs (scripts/diff-report.py --fresh-inputs).
+    elif ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
       mismatch_found=1
       echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
         "$(pin_of "$fn" "$unspecified_pins") ($unspecified_pins)" >&2
     fi
 
     capped_pins=$(pin_file "$ex" capped)
-    if ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
+    if [ -n "${AIR2LEAN_DIFF_FRESH_INPUTS:-}" ]; then
+      :
+    elif ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
       mismatch_found=1
       echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
         "$(pin_of "$fn" "$capped_pins") ($capped_pins)" >&2
@@ -568,6 +575,7 @@ if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
     --root "$repo_root" --examples "$examples" --version "$zig_version" \
     --host "$(uname -s)-$(uname -m)" \
     ${AIR2LEAN_DIFF_OPTIMIZE:+--optimize "$AIR2LEAN_DIFF_OPTIMIZE" --backend "${AIR2LEAN_DIFF_BACKEND:-llvm}"} \
-    --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" || mismatch_found=1
+    --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" \
+    ${AIR2LEAN_DIFF_FRESH_INPUTS:+--fresh-inputs "$AIR2LEAN_DIFF_FRESH_INPUTS"} || mismatch_found=1
 fi
 [ "$mismatch_found" -eq 0 ]
