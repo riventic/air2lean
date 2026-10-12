@@ -184,17 +184,48 @@ def step_pins(check):
     check.sh and gen-integrity.py re-translate and compare the output itself."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
     pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
+                'format': 'l04-emitter-integration-inputs-v2',
                 'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
             'tests/roadmap/try-pointers/integration-qualification.json': {
                 'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}
+    # Fields a pin file no longer has (the v1 emitter pin) are dropped, so a format change is a regen.
+    obsolete = {'tests/roadmap/try-pointers/emitter-integration.json': ['current_emitter_sha256']}
     for rel, fields in pins.items():
         data = json.loads((ROOT / rel).read_text())
-        if all(data.get(k) == v for k, v in fields.items()):
+        if all(data.get(k) == v for k, v in fields.items()) and not any(k in data for k in obsolete.get(rel, [])):
             continue
         if check:
             raise Failed(rel + ' pins are stale')
+        for k in obsolete.get(rel, []):
+            data.pop(k, None)
         data.update(fields)
         write_if_changed(rel, (json.dumps(data, indent=2) + '\n').encode())
+
+
+LANG_LONG_TAIL = 'tests/roadmap/lang-long-tail'
+
+
+def step_lang_long_tail(check):
+    """tests/roadmap/lang-long-tail/provenance.json: the exporter hash and the patched compilers'
+    hashes the fixture exports were taken with. When the pins are stale, every fixture is
+    re-exported with the compilers built from this checkout (export.sh), then the record is
+    refreshed (test_provenance.py --refresh); a changed export is a reviewed diff."""
+    test = [PY, '-B', LANG_LONG_TAIL + '/test_provenance.py']
+    if ok(test):
+        return
+    if check:
+        raise Failed(LANG_LONG_TAIL + '/provenance.json is stale; run scripts/regen.sh --only lang-long-tail')
+    root = Path(tempfile.mkdtemp(prefix='air2lean-lang-long-tail-zig.'))
+    try:
+        for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+            (root / ('zig-air-' + version)).mkdir()
+            (root / ('zig-air-' + version) / 'bin').symlink_to(Path(cas.zig_air(ROOT, version)).parent)
+        env = dict(os.environ, AIR2LEAN_ZIG_AIR=str(root))
+        run(['bash', LANG_LONG_TAIL + '/export.sh'], env=env)
+        run(test + ['--refresh'], env=env)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    run(test)
 
 
 def step_claims(check):
@@ -317,6 +348,8 @@ STEPS = [
     ('coverage', 'tree', ['coverage/<version>.json'], step_coverage),
     ('pins', 'pr', ['tests/roadmap/try-pointers/emitter-integration.json',
                       'tests/roadmap/try-pointers/integration-qualification.json'], step_pins),
+    ('lang-long-tail', 'pr', [LANG_LONG_TAIL + '/provenance.json', LANG_LONG_TAIL + '/air/'],
+     step_lang_long_tail),
     ('premises', 'tree', ['docs/premise-index.md'],
      simple([PY, '-B', 'scripts/premises.py', 'check'], [PY, '-B', 'scripts/premises.py', 'write'])),
     ('register', 'pr', ['ROADMAP.md and remaining-acceptance.md (marked regions)'],
