@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,10 +118,16 @@
  },
  "name": "floats.dot",
  "module": "root",
+ "src": {
+  "file": "floats.zig",
+  "module": "floats",
+  "decl_line": 13
+ },
  "params": [
   0,
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -137,7 +146,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 1
+   "line": 1,
+   "column": 52
   },
   {
    "id": 3,
@@ -192,7 +202,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 1
+   "line": 1,
+   "column": 77
   },
   {
    "id": 9,
@@ -397,7 +408,8 @@
            "id": 28,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 1
+           "line": 1,
+           "column": 88
           },
           {
            "id": 29,
@@ -413,7 +425,8 @@
            "id": 30,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 1
+           "line": 1,
+           "column": 95
           },
           {
            "id": 31,
@@ -432,7 +445,8 @@
            "id": 32,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 1
+           "line": 1,
+           "column": 90
           },
           {
            "id": 33,
@@ -464,7 +478,8 @@
            "id": 35,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 1
+           "line": 1,
+           "column": 97
           },
           {
            "id": 36,
@@ -542,7 +557,8 @@
    "id": 43,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 1
+   "line": 1,
+   "column": 100
   },
   {
    "id": 44,
@@ -558,7 +574,8 @@
    "id": 45,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 1
+   "line": 1,
+   "column": 100
   },
   {
    "id": 46,

@@ -72,10 +72,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"),
   (#["legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call"],
     "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
-  (#["vector_store_elem"],
-    "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"),
-  (#["cmp_lt_errors_len", "cmp_lte_errors_len"],
-    "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"),
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["spirv_runtime_array_len"],
@@ -148,7 +144,8 @@ def errTraceTagReason : String :=
 /-- The reason a tag that reaches `normalizeOp` is rejected before decoding, if any. -/
 def stateTagReason? (tag : String) : Option String :=
   (runtimeTagReason? tag).orElse fun _ =>
-    if (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
+    -- `ret_addr` reaching here is the oracle op of `--allocator-model translated`.
+    if tag != "ret_addr" && (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
 
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
   if (runtimeNavGlobal? raw).isSome then return
@@ -169,6 +166,9 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter{markedTagGuidance raw.tag}"
   match raw.tag with
+  -- Reached only under `--allocator-model translated` (`Raw.admitRetAddr`); std mode keeps the
+  -- exporter's `unsupported` marker and rejects above.
+  | "ret_addr" => return .retAddr
   | "arg" =>
     let some p := raw.param
       | throw s!"{fnName}: inst {raw.id}: 'arg' needs 'param'"
@@ -363,6 +363,11 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy true a b
   | "tag_name" => let a ← arg1 fnName raw; return .tagName a
   | "error_name" => let a ← arg1 fnName raw; return .errorName a
+  | "cmp_lt_errors_len" | "cmp_lte_errors_len" => let a ← arg1 fnName raw; return .errorsLenLe a
+  | "vector_store_elem" =>
+    let [p, i, v] := raw.args.toList
+      | throw s!"{fnName}: inst {raw.id}: 'vector_store_elem' needs 3 args"
+    return .vectorStoreElem p i v
   | "struct_field_val" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -458,7 +463,7 @@ end
 /-- Every tag that `normalizeOp` decodes, in its arm order. `air2lean --print-op-table`
 probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/
 def decodedTags : Array String := #[
-  "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
+  "ret_addr", "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
   "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_exact", "div_ceil", "div_float",
   "rem", "mod", "min", "max", "add_with_overflow", "sub_with_overflow", "mul_with_overflow",
   "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
@@ -480,7 +485,8 @@ def decodedTags : Array String := #[
   "atomic_store_release", "atomic_store_seq_cst", "atomic_rmw", "cmpxchg_weak", "cmpxchg_strong",
   "slice_len", "slice_elem_val", "ptr_add", "ptr_sub", "ptr_elem_ptr", "slice_elem_ptr",
   "ptr_elem_val", "array_elem_val", "slice", "slice_ptr", "array_to_slice", "ptr_slice_len_ptr",
-  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name",
+  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name", "cmp_lt_errors_len", "cmp_lte_errors_len",
+  "vector_store_elem",
   "struct_field_val", "aggregate_init", "block", "dbg_inline_block", "loop", "br", "repeat",
   "cond_br", "switch_br", "loop_switch_br", "switch_dispatch", "try", "try_cold", "try_ptr",
   "try_ptr_cold", "ret", "ret_safe", "unreach", "trap", "dbg_stmt", "dbg_var_ptr", "dbg_var_val",
@@ -504,6 +510,23 @@ def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l
 
+/-- E02: the address of an `extern fn` (`&ext_visit`, a named `extern` global of function type)
+is a code address at the symbol's linker identity. It becomes the function block of the extern
+callee `extern:<symbol>` (`externSymbol?`), so it enters the callable-address table (`fnRefs`)
+like `&f` of a translated function, and `resolveExterns` binds it as it binds a direct extern
+call: to the program's `export fn` of that symbol or to a registry model, else the program is
+rejected (CALLEE_EXTERN_UNBOUND). A `noreturn` extern stays an extern global (rejected). -/
+def externCodeGlobal (types : Array Ty) (g : Global) : Global :=
+  match g.name, types[g.ty]? with
+  | some n, some (.other tn) =>
+    if g.isExtern && g.init.isNone && !g.threadlocal && tn.startsWith "fn (" &&
+        !tn.endsWith " noreturn" && (externSymbol? n).isNone then
+      let callee := "extern:" ++ n
+      { g with name := some callee, isExtern := false, isConst := true,
+               init := some (.func callee false) }
+    else g
+  | _, _ => g
+
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/
 def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
@@ -522,11 +545,32 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
   return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types, layouts, globals := raw.globals,
-           identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl }
+           body, types := raw.types, layouts,
+           globals := raw.globals.map (externCodeGlobal raw.types),
+           identities := raw.identities, externs := raw.externs, exportDecl := raw.exportDecl,
+           noalias := raw.noalias, uncheckedIb := raw.uncheckedIb,
+           allocatorModel := raw.allocatorModel, targetOs := BuildProfile.tripleOs raw.profile.targetTriple }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
+
+/-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any.
+Read by the translator and by `--diagnostics-json` alike. -/
+def readErrorTable (dir : System.FilePath) : IO (Option Raw.ErrorTableFile) := do
+  let path := dir / Raw.errorTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseErrorTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- `f` with the compilation's numbering, which must be of its Zig version and error width. -/
+def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
+  | none => pure f
+  | some t => do
+    unless t.zigVersion == toString f.dialect.version && t.errorSetBits == f.dialect.errorSetBits do
+      throw s!"{f.name}: {Raw.errorTableFileName} is of Zig {t.zigVersion} with {t.errorSetBits}-bit \
+        errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
+    pure { f with errorTable := some t.names }
 
 end Air2Lean

@@ -75,11 +75,12 @@ theorem intOfBytesOf_little (n : Nat) (bs : Array Byte) (t : Bool) :
 /-- The little-endian instance is the existing `Enc (BitVec n)` (`ZigLean/Mem/Enc.lean`). -/
 theorem intEncOf_little (n : Nat) : intEncOf .little n = (inferInstance : Enc (BitVec n)) := rfl
 
-/-- A float at order `o`: the bytes of its bits as an integer of the same width. -/
+/-- A float at order `o`: the bytes of its bits as an integer of the same width, a NaN's bits
+undefined (`Float.detMask`). -/
 @[instance_reducible] def floatEncOf (o : ByteOrder) (fmt : FloatFmt) : Enc (Float fmt) where
   size := intSize fmt.width
   align := intAlign fmt.width
-  encode v := (intEncOf o fmt.width).encode v.bits
+  encode v := padTo (intSize fmt.width) (o.arrange (maskedBytes v.bits v.detMask))
   decode bs := do pure ⟨← intOfBytesOf o fmt.width bs false⟩
 
 theorem floatEncOf_little (fmt : FloatFmt) :
@@ -147,6 +148,16 @@ theorem Vec.packedEncOf_little {α : Type} (n w : Nat) (toBits : α → BitVec w
     (ofBits : BitVec w → α) :
     Vec.packedEncOf .little n w toBits ofBits = Vec.packedEnc n w toBits ofBits := rfl
 
+/-- `@Vector(n, fW)` at order `o`: `Vec.packedEncOf` of the lanes' bits, a NaN lane's bits
+undefined (`Float.detMask`). -/
+@[reducible] def Vec.floatEncOf (o : ByteOrder) (fmt : FloatFmt) (n : Nat) : Enc (Vec (Float fmt) n) :=
+  { Vec.packedEncOf o n fmt.width Float.bits Float.mk with
+    encode v := padTo (packedVecLayout n fmt.width) (o.arrange
+      (maskedBytes (Vec.packBitsOf o fmt.width Float.bits v) (Vec.packBitsOf o fmt.width Float.detMask v))) }
+
+theorem Vec.floatEncOf_little (fmt : FloatFmt) (n : Nat) :
+    Vec.floatEncOf .little fmt n = (inferInstance : Enc (Vec (Float fmt) n)) := rfl
+
 /-! ## Bit-pointers
 
 The host of a bit-pointer is an integer of `hostSize` bytes at the profile's order; the field's
@@ -166,7 +177,7 @@ def loadBitsOf (o : ByteOrder) (α : Type) {n : Nat} [Packed α n] (hostSize ali
 def storeBitsOf (o : ByteOrder) {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat)
     (p : Ptr) (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
-  storeBytes p align (o.arrange (writeField (o.arrange bs) bitOffset (some (Packed.toBits v))))
+  storeBytes p align (o.arrange (writeField (o.arrange bs) bitOffset (Packed.defBits? v)))
 
 /-- `storeUndefBits` at order `o`. -/
 def storeUndefBitsOf (o : ByteOrder) (n hostSize align bitOffset : Nat) (p : Ptr) : MemM Unit := do
@@ -199,7 +210,7 @@ scoped instance (priority := 20000) encOptSlice : Enc (Option Slice) := optSlice
 scoped instance (priority := 20000) encVecBitVec {w n : Nat} : Enc (Vec (BitVec w) n) :=
   Vec.packedEncOf .big n w id id
 scoped instance (priority := 20000) encVecFloat {fmt : FloatFmt} {n : Nat} : Enc (Vec (Float fmt) n) :=
-  Vec.packedEncOf .big n fmt.width Float.bits Float.mk
+  Vec.floatEncOf .big fmt n
 end BigEndian
 
 end Zig

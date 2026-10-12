@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,9 +118,15 @@
  },
  "name": "basic.totalWeightedTardiness",
  "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 35
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -158,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -194,7 +204,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 9,
@@ -230,7 +241,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 13,
@@ -281,7 +293,8 @@
          "id": 19,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 5
+         "line": 5,
+         "column": 12
         },
         {
          "id": 20,
@@ -297,7 +310,8 @@
          "id": 21,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 5
+         "line": 5,
+         "column": 20
         },
         {
          "id": 22,
@@ -366,7 +380,8 @@
            "id": 28,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 9
           },
           {
            "id": 29,
@@ -382,7 +397,8 @@
            "id": 30,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 34
           },
           {
            "id": 31,
@@ -398,7 +414,8 @@
            "id": 32,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 39
           },
           {
            "id": 33,
@@ -527,7 +544,8 @@
            "id": 44,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 34
           },
           {
            "id": 45,
@@ -562,7 +580,8 @@
            "id": 47,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 14
           },
           {
            "id": 48,
@@ -594,7 +613,8 @@
            "id": 50,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 9
           },
           {
            "id": 51,
@@ -620,7 +640,8 @@
            "id": 53,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 18
           },
           {
            "id": 54,
@@ -729,7 +750,8 @@
            "id": 63,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 21
           },
           {
            "id": 64,
@@ -755,7 +777,8 @@
            "id": 66,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 11
           },
           {
            "id": 67,
@@ -787,7 +810,8 @@
            "id": 69,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 8
+           "line": 8,
+           "column": 5
           },
           {
            "id": 70,
@@ -798,7 +822,8 @@
            "id": 72,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 5
+           "line": 5,
+           "column": 29
           },
           {
            "id": 73,
@@ -814,7 +839,8 @@
            "id": 74,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 5
+           "line": 5,
+           "column": 31
           },
           {
            "id": 75,
@@ -887,7 +913,8 @@
    "id": 81,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 82,
@@ -903,7 +930,8 @@
    "id": 83,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 84,

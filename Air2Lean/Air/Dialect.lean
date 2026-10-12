@@ -35,6 +35,18 @@ def toString : ZigVersion → String
 
 instance : ToString ZigVersion := ⟨ZigVersion.toString⟩
 
+/-- The default version, the one the scripts and the CLI help name: `compatibility.json`'s
+`zig.default` (`scripts/version-literals.py` fails when they differ). -/
+def defaultVersion : ZigVersion := .v0_17_0
+
+/-- `all` as the CLI help lists it, the default marked: `0.17.0 (default), 0.16.0 and 0.15.2`. -/
+def helpList : String :=
+  let names := all.map fun v => if v == defaultVersion then s!"{v} (default)" else v.toString
+  match names.reverse with
+  | [] => ""
+  | [only] => only
+  | last :: before => ", ".intercalate before.reverse ++ " and " ++ last
+
 /-- The supported version spelled `s`, if any. -/
 def ofString? (s : String) : Option ZigVersion := all.find? (·.toString == s)
 
@@ -100,6 +112,12 @@ def buildModeRenames : ZigVersion → List (String × String)
   | v0_14_1 | v0_15_2 | v0_16_0 => []
   | v0_17_0 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
 
+/-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs or tagged
+unions is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the items too. -/
+def bitCastAutoItems : ZigVersion → Bool
+  | v0_14_1 | v0_15_2 => true
+  | v0_16_0 | v0_17_0 => false
+
 /-- Comptime lane pointers into bit-packed vectors have native evidence
 (`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.0 has none
 yet. -/
@@ -109,6 +127,13 @@ def lanePtrEvidence : ZigVersion → Bool
 
 /-- The versions with `lanePtrEvidence`, newest first. -/
 def lanePtrVersions : List ZigVersion := all.filter (·.lanePtrEvidence)
+
+/-- `@errorName` indexes the name table with the sign-extended error code, so a code with the
+error integer's top bit set reads out of bounds (`tests/roadmap/error-width`,
+`docs/upstream/zig-0.14.1-error-name-sign-extension.md`); fixed from 0.15.2. -/
+def errorNameSignExtends : ZigVersion → Bool
+  | v0_14_1 => true
+  | v0_15_2 | v0_16_0 | v0_17_0 => false
 
 /-- `Thread.spawn`'s `SpawnConfig` layout was audited for the fallible spawn policy
 (`docs/spawn-failure.md`). -/
@@ -139,21 +164,75 @@ def Endian.ofString? : String → Option Endian
   | "big" => some .big
   | _ => none
 
+/-- How a target lowers the float ops whose lowering differs between targets (`docs/floats.md`
+§Targets), at its baseline CPU (`-mcpu=baseline`, the CPU of the native differential test). -/
+inductive FloatRules where
+  /-- The reference (x86_64-linux): `f80` on the x87 and `@mulAdd` through compiler_rt (no FMA
+  instruction). The targets without rules of their own (s390x, mips64, wasm32) keep it. -/
+  | reference
+  /-- aarch64 (premise MTH-04): soft-float `f80` (`Zig.Float.softF80Chk`; `__divxf3`; before
+  0.16.0, `@sqrt` through `f64`) and the fused `fmadd` for `@mulAdd` on `f32`/`f64`. With
+  `fusedF16` (`fullfp16` in the baseline CPU: aarch64-macos `apple_m1`) also on `f16`; without
+  it (aarch64-linux `generic`) LLVM promotes an `f16` `@mulAdd` to an `f32` `fmadd` and rounds
+  back, the reference rule. -/
+  | aarch64 (fusedF16 : Bool)
+  deriving DecidableEq, Repr, Inhabited
+
 /-- A target that the memory model admits: the architecture and OS components of the Zig
-triple, with the pointer width and byte order the model takes for it (`docs/profiles.md`). -/
+triple, with the ABI facts that the model takes for it (`docs/profiles.md`). Integer and float
+sizes and alignments are the same on every qualified target (`Zig.intSize`/`Zig.intAlign`;
+`f80` and `f128` are 16/16); the exporter writes `c_longdouble` as the float of
+`longDoubleBits` bits. -/
 structure Target where
   arch : String
   os : String
   pointerBits : Nat
   endian : Endian
+  /-- `c_longdouble` (Zig's `cTypeBitSize(.longdouble)`). -/
+  longDoubleBits : Nat
+  floatRules : FloatRules := .reference
+  /-- The widest atomic integer in bits (Zig's `max_atomic_bits` at the baseline CPU: x86_64
+  has no `cx16`). The checker rejects a wider one. -/
+  atomicBits : Nat
+  /-- The Zig versions whose AIR is accepted for this target. aarch64: those with a native probe
+  record (`tests/roadmap/aarch64-abi/expected/<version>/`, `docs/aarch64-abi.md`), listed so that
+  a new version needs its own record. -/
+  versions : List ZigVersion := ZigVersion.all
+  /-- The accepted ABI components of the triple; empty: any. -/
+  abis : List String := []
+  /-- A native run of the vector-layouts probe (`tests/roadmap/vector-layouts/probe.zig`: lane
+  images, and loads/stores through comptime lane pointers) is checked against the model on this
+  target: x86_64-linux in the test job, aarch64-macos (L09's record) and aarch64-linux (the `load`
+  and `pad` rows of the T04 files). `Dialect.lanePtrBitPtrs` needs it. -/
+  lanePtrProbe : Bool := false
   deriving Repr, BEq
 
-/-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian
-(`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). -/
+/-- The Zig versions with T04 probe records for both aarch64 profiles. -/
+def Target.aarch64Probed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
+
+/-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian (s390x,
+mips64; `ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). wasm32
+rejects every atomic op (`Check.lean`). The two aarch64 targets are qualified separately
+(`docs/aarch64-abi.md`). -/
 def Target.qualified : List Target := [
-  ⟨"x86_64", "linux", 64, .little⟩, ⟨"aarch64", "macos", 64, .little⟩,
-  ⟨"s390x", "linux", 64, .big⟩,
-  ⟨"wasm32", "freestanding", 32, .little⟩, ⟨"wasm32", "wasi", 32, .little⟩]
+  { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
+    atomicBits := 64, lanePtrProbe := true },
+  { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
+    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed,
+    lanePtrProbe := true },
+  { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
+    floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
+    versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true },
+  { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
+    atomicBits := 64 },
+  -- MIPS64 n64 (`mips64-linux-muslabi64`, `mips64r2` baseline): `long double` is `f128` and
+  -- `@mulAdd` goes through compiler_rt as on the reference (no fused multiply-add at r2).
+  { arch := "mips64", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
+    atomicBits := 64 },
+  { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
+    longDoubleBits := 128, atomicBits := 32 },
+  { arch := "wasm32", os := "wasi", pointerBits := 32, endian := .little, longDoubleBits := 128,
+    atomicBits := 32 }]
 
 /-- The qualified target of an architecture and OS name, if any. -/
 def Target.find? (arch os : String) : Option Target :=
@@ -172,9 +251,11 @@ def Target.llvmBackend : String := "stage2_llvm"
 facts: no architecture, an `unverified` backend and build mode, 16-bit errors. -/
 structure Dialect where
   version : ZigVersion
-  /-- The target architecture (`x86_64`, `aarch64`, `s390x`, `wasm32`); empty for a legacy
+  /-- The target architecture (`x86_64`, `aarch64`, `s390x`, `mips64`, `wasm32`); empty for a legacy
   profile, whose reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
   arch : String := ""
+  /-- The target OS (`linux`, `macos`, …); empty for a legacy profile. -/
+  os : String := ""
   /-- The pointer size in bytes (`Zig.PtrWidth.bytes`): 8, or 4 on wasm32. -/
   ptrBytes : Nat := 8
   endian : Endian := .little
@@ -185,6 +266,11 @@ structure Dialect where
   /-- The build mode in its 0.16.0 spelling (`Debug`, `ReleaseSafe`, …); `unverified` for a
   legacy profile. -/
   buildMode : String := "unverified"
+  /-- `--assume-no-libc`: the program is linked without libc, so the `long double` libm routines
+  of a target whose `c_longdouble` is `f128` (`sqrtl`, `fmal`, `floorl`, …) are compiler_rt's.
+  The AIR profile records no `link_libc` fact; without this opt-in the checker rejects the `f128`
+  ops that call them (`docs/floats.md` §Targets). -/
+  noLibc : Bool := false
   deriving Repr, Inhabited, BEq
 
 namespace Dialect
@@ -196,18 +282,25 @@ def bigEndian (d : Dialect) : Bool := d.endian == .big
 
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
 
+/-- The qualified target; `none` for a legacy profile (the x86_64 reference model). -/
+def target? (d : Dialect) : Option Target := Target.find? d.arch d.os
+
+/-- The target's float rules; the reference for a legacy profile. -/
+def floatRules (d : Dialect) : FloatRules := (d.target?.map (·.floatRules)).getD .reference
+
 /-- The backend bit-packs vector lanes in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`,
 `tests/roadmap/vector-layouts`); other backends lay lanes out differently. -/
 def packedVectorLanes (d : Dialect) : Bool := d.backend == Target.llvmBackend
 
-/-- The architectures with native lane-pointer evidence (`tests/roadmap/vector-layouts`). -/
-def lanePtrArchs : List String := ["x86_64", "aarch64"]
-
 /-- `normalize` makes a comptime lane pointer into a bit-packed vector a bit-pointer into the
-vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on `lanePtrArchs`
-and only for the versions with `ZigVersion.lanePtrEvidence`. -/
+vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on the targets with
+`Target.lanePtrProbe` and only for the versions with `ZigVersion.lanePtrEvidence`. -/
 def lanePtrBitPtrs (d : Dialect) : Bool :=
-  d.packedVectorLanes && d.version.lanePtrEvidence && lanePtrArchs.contains d.arch
+  d.packedVectorLanes && d.version.lanePtrEvidence && (d.target?.any (·.lanePtrProbe))
+
+/-- The targets of `Target.lanePtrProbe`, for diagnostics. -/
+def lanePtrTargets : List String :=
+  Target.qualified.filterMap fun t => if t.lanePtrProbe then some s!"{t.arch}-{t.os}" else none
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
 instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`

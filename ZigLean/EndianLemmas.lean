@@ -8,8 +8,11 @@ import ZigLean.PackedLemmas
 Proof-only (it imports `ZigLean/Mem/Lemmas.lean` through `ZigLean.ReprCast`), so outside
 `ZigLean.lean`. For both byte orders (`Zig.ByteOrder`):
 
-* `intEncOf_lawful`, `floatEncOf_lawful`, `sliceEncOf_lawful`, `optSliceEncOf_lawful`: integers
-  of every width, floats of every format, slices and optional slices read back as stored;
+* `intEncOf_lawful`, `sliceEncOf_lawful`, `optSliceEncOf_lawful`: integers of every width,
+  slices and optional slices read back as stored; `floatEncOf_decode_encode`: so does a float
+  that is not a NaN;
+* `floatEncOf_nan_int`, `floatEncOf_decode_encode_nan`: a stored NaN's bytes are undefined, so
+  an integer or float read of them is `.unspecified` (`docs/architecture-audit/nan-bits.md`);
 * `Vec.packedEncOf_lawful`: a vector reads back as stored, whenever its lanes' bits do;
 * `readBits_arrange_writeField_same`/`_disjoint`: a bit-pointer store at either order reads back
   through a bit-pointer load, and leaves a disjoint field unchanged;
@@ -44,15 +47,64 @@ theorem intEncOf_lawful (o : ByteOrder) (n : Nat) : @LawfulEnc (BitVec n) (intEn
   have := intBytes_le_intSize n
   omega
 
-/-- Floats of every format read back as stored (their bits), at both orders. -/
-theorem floatEncOf_lawful (o : ByteOrder) (fmt : FloatFmt) :
-    @LawfulEnc (Float fmt) (floatEncOf o fmt) := by
-  letI := floatEncOf o fmt
-  have hl := intEncOf_lawful o fmt.width
-  refine ⟨fun v => @LawfulEnc.size_encode _ (intEncOf o fmt.width) hl v.bits, fun v => ?_⟩
-  show (do pure (⟨← intOfBytesOf o fmt.width (padTo (intSize fmt.width) (intBytesOf o v.bits)) false⟩ :
-    Float fmt)) = pure v
-  rw [intOfBytesOf_padTo]
+/-- A float's encoding has the size of the format's integer, at both orders. -/
+theorem floatEncOf_size_encode (o : ByteOrder) (fmt : FloatFmt) (v : Float fmt) :
+    ((floatEncOf o fmt).encode v).size = intSize fmt.width := by
+  have := intBytes_le_intSize fmt.width
+  show (padTo _ _).size = _
+  simp [padTo, maskedBytes]
+  omega
+
+/-- A float that is not a NaN reads back as stored (its bits), at both orders. -/
+theorem floatEncOf_decode_encode (o : ByteOrder) (fmt : FloatFmt) {v : Float fmt}
+    (h : v.isNaN = false) : (floatEncOf o fmt).decode ((floatEncOf o fmt).encode v) = pure v := by
+  show (do pure (⟨← intOfBytesOf o fmt.width
+    (padTo (intSize fmt.width) (o.arrange (maskedBytes v.bits v.detMask))) false⟩ : Float fmt)) =
+      pure v
+  rw [Float.maskedBytes_of_not_isNaN h, ← intBytesOf, intOfBytesOf_padTo]
+  rfl
+
+/-- A NaN's bytes are undefined, value and padding (`Float.detMask`): the model's canonical NaN
+stands for every NaN, and native code stores a target-specific one. -/
+theorem floatEncOf_encode_nan (o : ByteOrder) (fmt : FloatFmt) {v : Float fmt}
+    (h : v.isNaN = true) :
+    (floatEncOf o fmt).encode v = Array.replicate (intSize fmt.width) .undef := by
+  have := intBytes_le_intSize fmt.width
+  show padTo _ (o.arrange (maskedBytes v.bits v.detMask)) = _
+  rw [Float.maskedBytes_of_isNaN h]
+  cases o <;> simp [padTo, Nat.add_sub_cancel' this]
+
+/-- An integer read of bytes that are all undefined is `.unspecified`, at both orders. -/
+theorem intOfBytesOf_replicate_undef (o : ByteOrder) {n s : Nat} (trunc : Bool) (hn : 0 < n)
+    (hs : (n + 7) / 8 ≤ s) :
+    intOfBytesOf o n (Array.replicate s .undef) trunc = throw .unspecified := by
+  have h0 : 0 < (n + 7) / 8 := by omega
+  have hr : ∀ k, 0 < k → (Array.replicate k Byte.undef)[0]? = some .undef := fun k hk => by
+    simp [hk]
+  cases o with
+  | little => exact intOfBytes_undef trunc h0 (hr s (by omega))
+  | big =>
+    show intOfBytes n ((Array.replicate s Byte.undef).extract 0 ((n + 7) / 8)).reverse trunc = _
+    rw [show ((Array.replicate s Byte.undef).extract 0 ((n + 7) / 8)).reverse =
+      Array.replicate ((n + 7) / 8) .undef by simp [Array.extract_replicate]; omega]
+    exact intOfBytes_undef trunc h0 (hr _ h0)
+
+/-- **No NaN bits through memory.** Every integer read of a stored NaN's bytes, of any width
+that fits them, is `.unspecified`: the model's canonical NaN bits are not derivable (the
+counterexample of `docs/architecture-audit/nan-bits.md`). -/
+theorem floatEncOf_nan_int (o : ByteOrder) (fmt : FloatFmt) {v : Float fmt} (h : v.isNaN = true)
+    {n : Nat} (trunc : Bool) (hn : 0 < n) (hs : (n + 7) / 8 ≤ intSize fmt.width) :
+    intOfBytesOf o n ((floatEncOf o fmt).encode v) trunc = throw .unspecified := by
+  rw [floatEncOf_encode_nan o fmt h]
+  exact intOfBytesOf_replicate_undef o trunc hn hs
+
+/-- A stored NaN read back as a float is `.unspecified` too: the model cannot say which NaN the
+bytes hold (an over-approximation; `docs/floats.md` §NaN in memory). -/
+theorem floatEncOf_decode_encode_nan (o : ByteOrder) (fmt : FloatFmt) {v : Float fmt}
+    (h : v.isNaN = true) :
+    (floatEncOf o fmt).decode ((floatEncOf o fmt).encode v) = throw .unspecified := by
+  show (do pure (⟨← intOfBytesOf o fmt.width ((floatEncOf o fmt).encode v) false⟩ : Float fmt)) = _
+  rw [floatEncOf_nan_int o fmt h false (by cases fmt <;> decide) (intBytes_le_intSize _)]
   rfl
 
 /-- A slice reads back as stored: its pointer, then its length at order `o`. -/

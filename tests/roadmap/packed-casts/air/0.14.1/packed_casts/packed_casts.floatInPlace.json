@@ -1,0 +1,467 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "packed_casts.floatInPlace",
+ "module": "root",
+ "src": {
+  "file": "packed_casts.zig",
+  "module": "packed_casts",
+  "decl_line": 67
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 2,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "ty": 3,
+     "elems": [
+      {
+       "ty": 4,
+       "val": "0"
+      },
+      {
+       "ty": 5,
+       "uval": {
+        "ty": 6,
+        "val": "0"
+       }
+      },
+      {
+       "ty": 0,
+       "fbits": "0x0000"
+      },
+      {
+       "ty": 7,
+       "val": "false"
+      },
+      {
+       "ty": 8,
+       "enum": "0"
+      },
+      {
+       "ty": 9,
+       "val": "0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 6
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 10,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 6
+  },
+  {
+   "id": 6,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "ty": 2,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 12
+  },
+  {
+   "id": 8,
+   "tag": "struct_field_val",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 6
+    }
+   ],
+   "index": 2
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 15
+  },
+  {
+   "id": 10,
+   "tag": "mul",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 8
+    },
+    {
+     "ty": 0,
+     "fbits": "0x4000"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 10,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "inst": 10
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 13,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "ty": 2,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 13
+  },
+  {
+   "id": 15,
+   "tag": "struct_field_val",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 13
+    }
+   ],
+   "index": 2
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 17,
+   "tag": "ret_safe",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "packed_casts.r",
+   "module": "root",
+   "ty": 3,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 3,
+    "undef": true
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "packed_casts.R",
+   "module": "root",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 4
+    },
+    {
+     "name": "u",
+     "ty": 5
+    },
+    {
+     "name": "f",
+     "ty": 0
+    },
+    {
+     "name": "on",
+     "ty": 7
+    },
+    {
+     "name": "mode",
+     "ty": 8
+    },
+    {
+     "name": "pad",
+     "ty": 9
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "union",
+   "name": "packed_casts.U",
+   "module": "root",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "i",
+     "ty": 6
+    },
+    {
+     "name": "h",
+     "ty": 0
+    },
+    {
+     "name": "p",
+     "ty": 12
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "enum",
+   "name": "packed_casts.Mode",
+   "module": "root",
+   "tag": 13,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "off",
+     "value": "0"
+    },
+    {
+     "name": "low",
+     "value": "1"
+    },
+    {
+     "name": "high",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 5,
+   "bit_offset": 20,
+   "vector_index": null,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "packed_casts.Half",
+   "module": "root",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "lo",
+     "ty": 14
+    },
+    {
+     "name": "hi",
+     "ty": 14
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

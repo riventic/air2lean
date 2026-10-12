@@ -5,8 +5,8 @@ Every user-stated theorem whose checked dependency closure reaches `ZigLean.Floa
 which semantics it concerns: `ieee` (the model's IEEE 754 operation semantics),
 `compiler-rt@<zig versions>` (the ported compiler_rt helpers of those Zig versions) or
 `abstract-spec` (format, rounding and value facts that select no operation semantics).
-Every label also lists the target profiles (`targets`: `x86_64-linux`, `aarch64-macos`) whose
-float rules it holds for (docs/floats.md §Targets). Labels live in
+Every label also lists the target profiles (`targets`: `x86_64-linux`, `aarch64-macos`,
+`aarch64-linux`) whose float rules it holds for (docs/floats.md §Targets). Labels live in
 `assurance/float-semantics.json`. Every label concerns the Lean model only: a binary, native or
 shipped-compiler correspondence claim is rejected.
 
@@ -27,10 +27,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = Path('assurance/float-semantics.json')
 SEMANTICS = ('ieee', 'compiler-rt', 'abstract-spec')
-TARGETS = ('aarch64-macos', 'x86_64-linux')
-AARCH64 = 'aarch64-macos'
+TARGETS = ('aarch64-linux', 'aarch64-macos', 'x86_64-linux')
+AARCH64 = ('aarch64-linux', 'aarch64-macos')
 # The model functions that only an aarch64 translation calls (docs/floats.md §Targets). A
-# theorem that names one concerns aarch64 rules, so its label must list aarch64-macos. This is a
+# theorem that names one concerns aarch64 rules, so its label must list an aarch64 target. This is a
 # source check: a theorem stated for one target reaches both targets' rules through the target
 # detection (`floatopsTarget`) in its premise, so the dependency closure cannot decide it.
 AARCH64_ONLY = frozenset('Zig.Float.' + n for n in (
@@ -405,8 +405,8 @@ def check_sources(root=ROOT, registry=None):
             if candidate and key not in labeled:
                 problems.append(f'{key}: numerical theorem lacks a float-semantics label')
             entry = registry['theorems'].get(key)
-            if entry and A64_WORDS.search(body) and AARCH64 not in entry['targets']:
-                problems.append(f'{key}: uses an aarch64-only float rule but its label omits {AARCH64}')
+            if entry and A64_WORDS.search(body) and not set(AARCH64) & set(entry['targets']):
+                problems.append(f'{key}: uses an aarch64-only float rule but its label lists no aarch64 target')
     for key in sorted(labeled - declared):
         # A test module's theorem is named by its `lean -R` module (`BigEndian.Proofs::…`), which
         # this scan does not resolve; the compiled theorem-universe audit (F2) labels it and

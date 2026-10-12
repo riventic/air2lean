@@ -1,0 +1,11 @@
+code Alpha 146 Alpha true true
+code Beta 147 Beta true true
+code Gamma 148 Gamma true true
+nameOf 1 NoSpaceLeft
+nameOf 2 Overflow
+nameOf 3 InvalidUtf8
+nameOf 4 Utf8ExpectedContinuation
+nameOf 5 Utf8OverlongEncoding
+nameOf 6 Utf8EncodesSurrogateHalf
+nameOf 7 Utf8CodepointTooLarge
+nameOf 8 DiskQuota

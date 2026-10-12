@@ -64,9 +64,14 @@ MUTANTS = {
         '        if True:\n', OUTCOMES, 'REPORT', ('Outcomes.test_model_exclusion_needs_a_pin_for_its_input',)),
     # L13 (S7): a claim over an asm opaque carries the allowlist fault-condition premise.
     'claims-asm-fault-premise-dropped': (
-        'scripts/claims.py', "    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
-        "    return ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        'scripts/claims.py', "        found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
+        "        found = ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
         ('ClassifyTests.test_asm_closure_carries_fault_premise',)),
+    # C12: a concurrency claim must list the memory-model adequacy premise.
+    'claims-memory-model-premise-dropped': (
+        'scripts/claims.py', "    return [model['premise']] if set(model['concurrency']) & set(reached) else []\n",
+        "    return []\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_concurrency_claim_lists_memory_model_premise',)),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',
@@ -222,14 +227,15 @@ MUTANTS = {
         PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
-        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group'):\n",
-        "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'pull_request'):\n", RELEASE, 'rr',
+        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule'):\n",
+        "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule', 'pull_request'):\n",
+        RELEASE, 'rr',
         ('RecordTests.test_evidence_for_another_revision_is_refused',)),
     # Q08: a failed step must never be published as passed when other evidence passes.
     'release-record-failure-masked': (
         'scripts/release-record.py',
-        "            gate['status'] = 'failed' if 'failed' in statuses else 'passed' if statuses else 'missing'\n",
-        "            gate['status'] = 'passed' if statuses else 'missing'\n", RELEASE, 'rr',
+        "            gate['status'] = next((s for s in ('failed', 'passed', 'by-reference') if s in statuses), 'missing')\n",
+        "            gate['status'] = next((s for s in ('passed', 'by-reference') if s in statuses), 'missing')\n", RELEASE, 'rr',
         ('RecordTests.test_failures_and_skips_are_never_passed_or_hidden',
          'RecordTests.test_conflicting_evidence_fails_the_gate')),
     # Q08: every review ledger entry names the revision it reviewed.
@@ -407,7 +413,11 @@ def run_mutant(name, mutants=None):
     script, anchor, replacement, test, binding, kills = (mutants or MUTANTS)[name]
     control = run_tests(load_test_module(test), kills)
     if not control.wasSuccessful():
-        raise AssertionError(f'{name}: control does not pass its killing tests')
+        # Name each failing test and the last line of its traceback: a control failure is a
+        # finding about the test itself, and the run must say which assertion or error it was.
+        details = '; '.join(f'{case.id()}: {trace.strip().splitlines()[-1]}'
+                            for case, trace in control.failures + control.errors)
+        raise AssertionError(f'{name}: control does not pass its killing tests ({details})')
     module = load_test_module(test)
     setattr(module, binding, mutated_binding(getattr(module, binding), script, anchor, replacement))
     result = run_tests(module, kills)

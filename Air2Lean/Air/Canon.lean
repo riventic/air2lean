@@ -61,7 +61,11 @@ supported version, so one translation (and the proofs over it) serves all versio
    0.14.1 uses `bitcast` of a `u8` 0). Liveness marks these and their field/element pointers
    unused, so no code is generated for them. The pass drops them when nothing but other such
    pointers and debug instructions reads them; a read one is rejected by `Check.lean`.
-6. `sinkPastChecks`. Sema forms a pointer before the safety checks that guard it: `p[a..b]`
+6. `dropDeadRuntimeLanePtrs`. For `v[i] = x` with a runtime index into a vector whose lanes are
+   bit-packed, 0.14.1 and 0.15.2 make a lane pointer with `vector_index: "runtime"` that nothing
+   reads, then store with `vector_store_elem` through the vector pointer (L09). The pass drops
+   the unread lane pointer; a read one stays and is rejected.
+7. `sinkPastChecks`. Sema forms a pointer before the safety checks that guard it: `p[a..b]`
    is `ptr_add(p, a)`, then the bounds checks (`startGreaterThanEnd`, `outOfBounds`) and, for a
    C pointer, the null check (`unwrapNull`), then `slice`. LLVM's `getelementptr inbounds` out of
    its allocation is poison, illegal behaviour only when used, so the native program panics at
@@ -74,7 +78,7 @@ supported version, so one translation (and the proofs over it) serves all versio
    with `a` past the allocation panics natively); the pass is limited to nullable bases until
    the committed proofs that walk the current order (`Proofs/Slices` `subZ_start`/`subZ_oob`,
    `Proofs/Atomics/Stack`) are re-walked.
-7. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+8. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -602,6 +606,26 @@ def dropDeadAllocPlaceholders (f : RawFunc) : RawFunc := Id.run do
     if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
   return { f with body }
 
+/-- `dropDeadRuntimeLanePtrs` (module doc). For `v[i] = x` with a runtime index, Zig 0.14.1 and
+0.15.2 first make the lane pointer `&v[i]` (`ptr_elem_ptr`, a pointer type with
+`vector_index: "runtime"`) and then store with `vector_store_elem` through the vector pointer;
+Liveness marks the lane pointer unused, so no code is generated for it. The pass drops such a
+`ptr_elem_ptr` and its debug uses only if nothing else reads it; a read one stays, and
+`Check.lean` rejects its type. -/
+def dropDeadRuntimeLanePtrs (f : RawFunc) : RawFunc := Id.run do
+  -- Only 0.14.1/0.15.2 exports have a runtime lane pointer type.
+  unless f.layouts.any (·.runtimeLane) do return f
+  let all := flatten f.body
+  let read : Std.HashSet InstId := all.foldl (init := {}) fun s i =>
+    if isDbgTag i.tag then s else i.uses.foldl (·.insert ·) s
+  let dead : Std.HashSet InstId := all.foldl (init := {}) fun d i =>
+    if i.tag == "ptr_elem_ptr" && (i.ty.bind (f.layouts[·]?)).any (·.runtimeLane) && !read.contains i.id
+    then d.insert i.id else d
+  if dead.isEmpty then return f
+  let body := rewriteBody (body := f.body) fun i =>
+    if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
+  return { f with body }
+
 /-- `renumber` (module doc). -/
 def renumber (f : RawFunc) : RawFunc :=
   let all := flatten f.body
@@ -615,24 +639,25 @@ def renumber (f : RawFunc) : RawFunc :=
   { f with body }
 
 /-- Types whose parameter has no AIR `arg`: Zig still keeps their slot in the runtime
-function signature. Comptime parameters, in contrast, have no slot in `params`. -/
+function signature. Comptime parameters, in contrast, have no slot in `params`. This follows
+Zig's `Type.onePossibleValue` (0.14.1 to 0.17.0), which is null for every error set and error
+union: a one-name `error{A}` still has a runtime error code (L10), so its parameter has an `arg`.
+An enum has one value exactly when its integer tag has none (`u0`): a one-field `enum(u8)` does
+not. -/
 partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
   if seen.contains id then false else
   let recur := fun t => onePossibleValue types t (seen.push id)
   match types[id]? with
   | some .void | some (.int _ 0) => true
-  | some (.enum _ _ true fields) => fields.size == 1
-  | some (.errorSet (some names)) => names.size == 1
-  | some (.array len c _) | some (.vector len c) => len == 0 || recur c
+  | some (.enum _ tag _ _) => recur tag
+  -- `[0:s]T` holds its sentinel: Zig counts `len + 1` items.
+  | some (.array len c sentinel) => (len == 0 && !sentinel) || recur c
+  | some (.vector len c) => len == 0 || recur c
   | some (.struct _ _ fields) => fields.all (recur ·.2)
   | some (.tuple fields) => fields.all recur
-  | some (.union _ _ _ fields) => fields.size == 1 && fields.all (recur ·.2)
+  -- Zig requires the tag to have one value too: `union(enum(u8)) { a: void }` has a runtime tag.
+  | some (.union _ _ tag fields) => fields.size == 1 && tag.all recur && fields.all (recur ·.2)
   | some (.optional c) => types[c]? == some .noreturn
-  | some (.errorUnion set payload) =>
-    match types[set]? with
-    | some (.errorSet (some names)) =>
-      (names.isEmpty && recur payload) || (names.size == 1 && types[payload]? == some .noreturn)
-    | _ => false
   | _ => false
 
 private def argRanking (f : RawFunc) : Array Nat × Array Nat :=
@@ -683,24 +708,29 @@ private structure TraceWalk where
   /-- The type of every instruction, the synthesized ones included. -/
   tys : Std.HashMap InstId TyId := {}
 
-/-- `errTraces` (module doc, 7): error return tracing as data flow. Every function that the
+/-- `errTraces`: error return tracing as data flow. Every function that the
 backends give the hidden trace parameter (`RawFunc.errTrace`: `cc == .auto` in a build with error
 tracing) gets it as a last parameter; `set_err_return_trace` (only in the top-level body) replaces
 the current trace for the instructions after it; `err_return_trace` is the current trace (wrapped
 when it was set from a pointer); `save_err_return_trace_index` loads its field through the trace's
 pointer (`optional_payload`, `struct_field_ptr`, `load`, as `airSaveErrReturnTraceIndex`); a call
 whose callee takes the trace passes the current one as a last argument. `ret_addr` is an unknown
-machine address: the model stores it as undefined bytes, its only admitted use. -/
+machine address: the model stores it as undefined bytes, its only admitted use (under
+`--allocator-model translated` it stays the oracle op). -/
 partial def errTraces (f : RawFunc) : Except String RawFunc := do
   let all := flatten f.body
-  let traceUse (i : RawInst) := !i.unsupported && ((errTraceTags.lookup i.tag).isSome || i.errTrace.isSome)
+  -- Under `--allocator-model translated` `ret_addr` is the oracle op (`Op.retAddr`), left as is.
+  let oracleRet := f.allocatorModel == .translated
+  let traceUse (i : RawInst) :=
+    !i.unsupported && (((errTraceTags.lookup i.tag).isSome && !(oracleRet && i.tag == "ret_addr")) ||
+      i.errTrace.isSome)
   if f.errTrace.isNone && !all.any traceUse then return f
   let producers : Std.HashMap InstId TyId := all.foldl (init := {}) fun m i =>
     match i.ty with | some t => m.insert i.id t | none => m
   let unresolved := s!"{f.name}: the exporter could not resolve `std.builtin.StackTrace` for the \
     error return trace; re-export after a function that uses it is analysed, or without error tracing"
   for i in all do
-    if i.tag == "ret_addr" && !i.unsupported then
+    if i.tag == "ret_addr" && !i.unsupported && !oracleRet then
       let stores := all.filter fun u => u.uses.contains i.id
       unless stores.all fun u => (u.tag == "store" || u.tag == "store_safe") &&
           u.args[1]? == some (.inst i.id) && u.args[0]? != some (.inst i.id) do
@@ -736,6 +766,7 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
       if i.unsupported then out := out.push i; continue
       match i.tag with
       | "ret_addr" =>
+        if oracleRet then out := out.push i; continue
         let some ty := i.ty | throw s!"{f.name}: inst {i.id}: `ret_addr` without a type"
         st := { st with subst := st.subst.insert i.id (.undef ty) }
       | "set_err_return_trace" =>
@@ -846,13 +877,14 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
   let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
   { f with body := sinkBody (nullableFormation f tyOf) f.body }
 
-/-- The eight rewrites (module doc). -/
+/-- The rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
   let f ← errTraces f
-  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
+  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies
+    (dropDeadRuntimeLanePtrs (dropDeadAllocPlaceholders f))))
   let f := sinkPastChecks f
   validateRefs f
   pure (renumber f)

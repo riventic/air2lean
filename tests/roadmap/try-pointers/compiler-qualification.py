@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Gate for the L04 compiler-export qualification record (compiler-qualification.json).
 
-`air-fresh/0.16.0` and `aliases/air-fresh/0.16.0` are unmodified schema-12 exports of
-`try_pointers.zig` and `try_aliases.zig` from a patched 0.16.0 compiler. The retained schema-11
+`air-fresh/<version>` and `aliases/air-fresh/<version>` are unmodified schema-12 exports of
+`try_pointers.zig` and `try_aliases.zig` from patched 0.14.1, 0.15.2, 0.16.0 and 0.17.0 compilers
+(`versions`). The retained schema-11
 `air/` files and their `Gen.lean` stay as they are (their hashes are pinned by `provenance.json`
 and the integration manifests). This gate checks the fresh files' hashes, inventory, Linux/baseline
 ReleaseSafe profile and pointer-try tags, and, with `--translator`, that translating them gives
@@ -41,13 +42,13 @@ def tags_of(value, tags):
             tags_of(child, tags)
 
 
-def check_air(directory, entry):
+def check_air(directory, entry, version):
     files = sorted(directory.glob('*.json'))
     docs = [HELPERS['parse_json'](path.read_text()) for path in files]
     prefix = entry['name_prefix']
     if sorted(d['name'] for d in docs) != sorted(prefix + n for n in entry['functions']):
         raise ValueError(f'{prefix} AIR function inventory differs')
-    profiles = [HELPERS['fresh_linux_profile'](d, '0.16.0') for d in docs]
+    profiles = [HELPERS['fresh_linux_profile'](d, version) for d in docs]
     if any(p != profiles[0] for p in profiles):
         raise ValueError(f'{prefix} fresh AIR has mixed profiles')
     tags = set()
@@ -73,19 +74,20 @@ def translate_matches(translator, directory, entry, case):
                              + result.stderr.strip())
 
 
-def inspect(case=CASE, repo=REPO, fresh=None, translator=None):
+def inspect(case=CASE, repo=REPO, fresh=None, translator=None, fresh_version='0.16.0'):
     manifest = HELPERS['parse_json']((case / 'compiler-qualification.json').read_text())
     inventory = {}
     for key, entry in manifest['fixtures'].items():
         source = repo / entry['source']
         if digest(source) != entry['source_sha256']:
             raise ValueError(f'stale {key} source')
-        directory = Path(fresh) / key if fresh else case / entry['air_dir']
-        files = check_air(directory, entry)
-        if fresh is None:
-            inventory.update({str(p.relative_to(case)): digest(p) for p in files})
-        if translator is not None:
-            translate_matches(translator, directory, entry, case)
+        for version in ([fresh_version] if fresh else manifest['versions']):
+            directory = Path(fresh) / key if fresh else case / entry['air_dir'].format(version=version)
+            files = check_air(directory, entry, version)
+            if fresh is None:
+                inventory.update({str(p.relative_to(case)): digest(p) for p in files})
+            if translator is not None:
+                translate_matches(translator, directory, entry, case)
     if fresh is None and inventory != manifest['artifacts']:
         raise ValueError('stale or incomplete artifact inventory')
     return inventory
@@ -97,8 +99,10 @@ def record(case=CASE, repo=REPO):
     inventory = {}
     for entry in manifest['fixtures'].values():
         entry['source_sha256'] = digest(repo / entry['source'])
-        inventory.update({str(p.relative_to(case)): digest(p)
-                          for p in sorted((case / entry['air_dir']).glob('*.json'))})
+        for version in manifest['versions']:
+            directory = case / entry['air_dir'].format(version=version)
+            inventory.update({str(p.relative_to(case)): digest(p)
+                              for p in sorted(directory.glob('*.json'))})
     manifest['artifacts'] = inventory
     path.write_text(json.dumps(manifest, indent=2) + '\n')
 
@@ -107,12 +111,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--record', action='store_true')
     parser.add_argument('--fresh', type=Path, metavar='ROOT')
+    parser.add_argument('--fresh-version', default='0.16.0', help='the Zig version of --fresh')
     parser.add_argument('--translator', type=Path)
     args = parser.parse_args()
     try:
         if args.record:
             record()
-        inspect(fresh=args.fresh, translator=args.translator)
+        inspect(fresh=args.fresh, translator=args.translator, fresh_version=args.fresh_version)
     except (KeyError, OSError, ValueError, TypeError, subprocess.CalledProcessError) as error:
         raise SystemExit(str(error))
     print('pointer-try compiler export record passed')

@@ -92,15 +92,32 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · rename_i hc
         simp [pure, ExceptT.pure, ExceptT.mk] at h
         obtain ⟨rfl, rfl, rfl⟩ := h
-        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2, rfl⟩
+        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2.1, rfl⟩
+      · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
+        cases h
+
+/-- A successful access starts at or above its block's first live offset. -/
+theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
+  unfold Mem.access at h
+  split at h
+  · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+  · split at h
+    · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+    · split at h
+      · rename_i hc
+        simp [pure, ExceptT.pure, ExceptT.mk] at h
+        obtain ⟨rfl, rfl, rfl⟩ := h
+        exact hc.2.2.2.2
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
 theorem access_of {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
     (hb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live) (h0 : 0 ≤ p.off)
-    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0) :
+    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat := by first | simp_all [BlockKind.mappedLo] | omega) :
     m.access p n a = pure (b, blk, p.off.toNat) := by
-  simp [Mem.access, hb, hblk, hl, h0, hn, ha]
+  simp [Mem.access, hb, hblk, hl, h0, hn, ha, hlo]
 
 /-! ### Pointer formation (`ptrProject`, MM-3) -/
 
@@ -178,6 +195,13 @@ theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : proj
   simp only [ptrProject, StateT.run]
   rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
 
+/-- A pointer without a block (an `@ptrFromInt` address, the provenance-free result of an
+ambiguous `ptrFromAddr`, `Zig.undefPtr`) has no bounds: any nonzero offset from it is
+`.illegal` (MM-3), only the same pointer is formed. -/
+theorem ptrProject_blockless_add_illegal (m : Mem) (a : Int) {k : Int} (hk : k ≠ 0) :
+    (ptrProject ⟨none, a⟩ (·.add k)).run m = throw .illegal :=
+  ptrProject_illegal _ (by simp [Ptr.add]; omega) (by simp [Mem.inBounds])
+
 /-- Pointer formation never changes memory and keeps the base's block. -/
 theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
     (h : (ptrProject p project).run m = pure (q, m')) : q.block = p.block ∧ m' = m := by
@@ -206,6 +230,32 @@ theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
   split at h
   · cases h; exact ⟨rfl, rfl⟩
   · cases h
+
+/-- An error union's payload is first (offset 0) or follows the 2-byte error code at offset 0. -/
+theorem errUnionOffsets_payload (size align : Nat) :
+    (errUnionOffsets size align).2 = 0 ∨ errUnionOffsets size align = (0, 2) := by
+  unfold errUnionOffsets
+  split
+  · simp
+  · split
+    · simp
+    · have : align = 0 ∨ align = 1 := by omega
+      rcases this with h | h <;> simp [h, alignUp]
+
+/-- Once an access reached the error code of the error union at `p`, its payload pointer is
+formed (`tryPayloadPtr`, `errSetOk`): it is the base, or one past the 2-byte code at the base,
+so it lies in bounds of the code's block. -/
+theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
+    {r : BlockId × Block × Nat}
+    (h : m.access (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 a = pure r) :
+    (ptrProject p (errPayloadPtr α)).run m = pure (errPayloadPtr α p, m) := by
+  rcases errUnionOffsets_payload (Enc.size α) (Enc.align α) with h0 | he
+  · have hp : errPayloadPtr α p = p := by simp [errPayloadPtr, h0]
+    rw [hp]; exact ptrProject_same _ hp
+  · obtain ⟨b, blk, o⟩ := r
+    have h' : m.access p 2 a = pure (b, blk, o) := by simpa [he] using h
+    exact ptrProject_run _ rfl (by simpa using inBounds_of_access h' 0 (by omega))
+      (by simpa [errPayloadPtr, he] using inBounds_of_access h' 2 (by omega))
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
@@ -579,10 +629,11 @@ theorem access_write_same {m : Mem} {p q : Ptr} {a n' a' : Nat} {bs : Array Byte
     (m.write b blk o bs).access q n' a' =
       pure (b, { blk with bytes := writeBytes blk.bytes o bs }, o') := by
   obtain ⟨hpb, hblk, hl, h0, hn, _, rfl⟩ := access_eq hw
+  have hlo' := access_lo hq
   obtain ⟨hqb, -, -, h0', hn', ha', rfl⟩ := access_eq hq
   have hlt : b < m.blocks.size := by
     rcases Array.getElem?_eq_some_iff.mp hblk with ⟨h, _⟩; exact h
-  apply access_of hqb
+  refine access_of hqb ?_ ?_ ?_ ?_ ?_ hlo'
   · simp [Mem.write, hlt]
   · exact hl
   · exact h0'
@@ -594,8 +645,10 @@ theorem access_write_other {m : Mem} {q : Ptr} {n' a' : Nat} {bs : Array Byte}
     {b c : BlockId} {blk blk' : Block} {o o' : Nat}
     (hq : m.access q n' a' = pure (c, blk', o')) (hbc : b ≠ c) :
     (m.write b blk o bs).access q n' a' = pure (c, blk', o') := by
+  have hlo := access_lo hq
   obtain ⟨hqb, hblk', hl, h0, hn, ha, rfl⟩ := access_eq hq
   exact access_of hqb (by simp [Mem.write, Array.getElem?_setIfInBounds_ne hbc, hblk']) hl h0 hn ha
+    hlo
 
 /-! ## Typed access -/
 
@@ -750,6 +803,31 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         simp only [ExceptT.bindCont, Option.bind_some] at h
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
+
+/-- Inverts a successful `loadBytes`: the access succeeds and only the read is recorded. -/
+theorem loadBytes_inv {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs : Array Byte}
+    (h : (loadBytes p n a kind).run m = pure (bs, m')) :
+    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧ bs = blk.bytes.extract o (o + n) ∧
+      m' = m.recordAt b o n kind := by
+  simp only [loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
+    MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
+    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set,
+    MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
+  generalize hacc : m.access p n a = r at h
+  match r, hacc, h with
+  | none, _, h => simp at h
+  | some (.error _), _, h =>
+    simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
+  | some (.ok (b, blk, o)), hacc, h =>
+    simp only [ExceptT.bindCont, Option.bind_some] at h
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
+    match r, hr, h with
+    | some _, _, h => cases h
+    | none, hr, h =>
+      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure,
+        ExceptT.mk] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨b, blk, o, rfl, rfl, rfl⟩
 
 /-- A load of the bytes of a value of a lawful encoding decodes the value. -/
 @[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
@@ -1120,6 +1198,18 @@ theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat ×
     simp [Mem.globalAddr, h, List.getElem?_eq_getElem hj]
   · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
     simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
+
+/-- External storage at program start (L12): after the program's globals `gs`, block
+`gs.length + i` is the external block `ext[i]`, live, with its bytes and alignment, read-only
+unless it is writable. -/
+theorem Mem.ofGlobals_extern (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (ext : List ExternBlock) (i : Nat) :
+    (Mem.ofGlobals σ (gs ++ ext.map ExternBlock.global)).blocks[gs.length + i]? = ext[i]?.map fun b =>
+      { bytes := b.bytes, align := b.align, kind := if b.writable then .global else .constGlobal,
+        live := true, addr := Mem.globalAddr σ (gs ++ ext.map ExternBlock.global) (gs.length + i) } := by
+  rw [Mem.ofGlobals_getElem?, List.getElem?_append_right (by omega)]
+  simp only [Nat.add_sub_cancel_left, List.getElem?_map, Option.map_map]
+  rfl
 
 /-- A block at program start is aligned: its address is a multiple of its alignment, under every
 placement. -/

@@ -1,0 +1,290 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "tls_pointers.leakSlot",
+ "module": "root",
+ "src": {
+  "file": "tls_pointers.zig",
+  "module": "tls_pointers",
+  "decl_line": 58
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 7,
+   "tag": "store",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 3,
+     "elems": [
+      {
+       "ty": 4,
+       "val": "9"
+      },
+      {
+       "ty": 5,
+       "null": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "mine"
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 10,
+   "tag": "bitcast",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 6,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "inst": 10
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 13,
+   "tag": "bitcast",
+   "ty": 7,
+   "args": [
+    {
+     "ty": 6,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 8,
+   "args": [
+    {
+     "ty": 1,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "tls_pointers.current",
+   "module": "root",
+   "ty": 5,
+   "const": false,
+   "threadlocal": true,
+   "extern": false,
+   "init": {
+    "ty": 5,
+    "null": true
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "tls_pointers.Node",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "v",
+     "ty": 4,
+     "offset": 8
+    },
+    {
+     "name": "next",
+     "ty": 5,
+     "offset": 0
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "optional",
+   "child": 2,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 6,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

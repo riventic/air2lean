@@ -10,3 +10,5 @@ import ZigLean.Conc.Progress
 import ZigLean.Conc.Total
 import ZigLean.Conc.WeakCas
 import ZigLean.Conc.Tls
+import ZigLean.Conc.AtomicWord
+import ZigLean.Conc.Endian
