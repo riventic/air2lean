@@ -350,6 +350,41 @@ class Escape(Stubbed):
         self.assertEqual(code, safe.DESCENDANTS, output)
         self.assert_stopped()
 
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'needs a child subreaper (Linux)')
+    def test_escaped_scrubbed_orphan_between_samples_is_adopted_and_stopped(self):
+        # The descendant forks through a short-lived parent, calls setsid and drops the environment
+        # marker, and no sample runs after the fork (interval 1h): only the subreaper link reveals it.
+        code, output = self.finish(self.run_stub('setsid-double-scrubbed-orphan', '--sample-interval', '3600'))
+        self.assertEqual(code, safe.DESCENDANTS, output)
+        self.assert_stopped()
+
+    @unittest.skipIf(sys.platform.startswith('linux'), 'host can contain escapees')
+    def test_required_containment_refuses_hosts_without_a_subreaper(self):
+        code, output = self.finish(self.run_stub('ok', '--require-containment'))
+        self.assertEqual(code, safe.NO_CONTAINMENT, output)
+        self.assertFalse(self.ready.exists())
+        self.assertFalse(self.recorded())
+
+    def test_adopted_children_are_owned_without_parent_or_marker(self):
+        class Leader:
+            pid, returncode = 77777, None
+        t = 'Thu Oct  8 12:00:00 2026'
+        table = {77777: (1, t, 'leader'), 20: (os.getpid(), t, 'orphan'), 21: (20, t, 'its child'),
+                 22: (os.getpid() + 1, t, 'unrelated')}
+        original = safe._processes
+        try:
+            safe._processes = lambda: table
+            self.assertEqual(sorted(safe.Escapees(Leader, 'tok', adopting=False).scan()), [])
+            adopting = safe.Escapees(Leader, 'tok', adopting=True)
+            adopting.owned.clear()
+            table_waitpid, os.waitpid = os.waitpid, lambda pid, flags: (0, 0)
+            try:
+                self.assertEqual(sorted(adopting.scan()), [20, 21])
+            finally:
+                os.waitpid = table_waitpid
+        finally:
+            safe._processes = original
+
     def test_marker_and_parent_links_in_a_process_table(self):
         class Leader:
             pid, returncode = 10, None
