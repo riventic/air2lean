@@ -89,7 +89,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
-| Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
+| Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
@@ -520,6 +520,28 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   the model claims neither outcome. Only `.Xchg` is a pointer RMW.
 - Derived from: `ZigLean.Mem.AtomicPtr`, `ZigLean.Conc.PtrAtomic`, `ZigLean.Conc.PtrAtomicLemmas`; tokens `AtomicPtrVal`, `ptrValEq`, `*PtrAt`, `*PtrC`.
 - Sources: [pointer-atomics.md](pointer-atomics.md).
+
+<a id="ord-06"></a>
+### ORD-06 — Memory-model adequacy of the compiled code
+
+- Kind: trusted.
+- Statement: On the theorem's target, every behaviour of the compiled program is one of the
+  model's outcomes: the backend's lowering of plain accesses and atomics and the hardware memory
+  model (x86-TSO on x86_64, ARMv8 on aarch64) produce no outcome that the interleaving scheduler
+  with its happens-before race check (THR-01) and the RC11 approximation (ORD-01) exclude. Not
+  proved. The argument per target, and its bounded qualification evidence, are the `memory_model`
+  record of [assurance/premises.json](../assurance/premises.json): a race between plain accesses
+  is `.illegal`, so a theorem is about race-free executions (DRF-SC); the standard C11 mappings
+  to x86-TSO and ARMv8 are proved sound for RC11, and ORD-01 admits every RC11 outcome; RC11's
+  no-load-buffering axiom is ORD-02. LLVM's optimizer is assumed to respect the C++11 model.
+  Targets in the record's `unqualified` list (wasm32, s390x) reject atomics and threads, so no
+  theorem about them carries this premise.
+- Derived from: implied by THR-01 and ORD-01, so every concurrency theorem carries it.
+  `scripts/premises.py` (`check` and `compiled`) fails when a theorem or a report below whose
+  premises contain THR-01 or ORD-01 omits it; `scripts/claims.py` lists it in each concurrency
+  claim's `premises`.
+- Sources: [research/C12.md](research/C12.md), [std-models.md](std-models.md#thread-model),
+  [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
 
 ## Timers and clocks
 
@@ -1069,11 +1091,12 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
 | Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
 | Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
-| Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ALC-02, MTH-02 |
+| Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
-| Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, TRU-03 |
-| Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05 |
+| Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, ORD-06, TRU-03 |
+| Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05, ORD-06 |
 | Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03 |
 | Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |
+| Native/WASM correspondence records (`scripts/wasm-correspondence.py`, [research/T05.md](research/T05.md)) | PRF-04, TRU-03 |

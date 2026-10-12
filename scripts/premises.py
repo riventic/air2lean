@@ -5,7 +5,8 @@
 committed index is stale, a premise ID is undefined or unused, a runtime module or import
 has no premise mapping, or the catalogue is malformed. `write` regenerates the index.
 `explain` prints the derivation of one theorem. `compiled` applies the same tables to the
-kernel dependency graph written by scripts/assumptions.py. See docs/premises.md.
+kernel dependency graph written by scripts/assumptions.py. Both fail when a concurrency theorem
+or report omits the memory-model adequacy premise (`memory_model`, C12). See docs/premises.md.
 """
 from __future__ import annotations
 
@@ -117,9 +118,14 @@ def load_config(path: Path) -> dict:
         raise ValueError("unsupported premise configuration schema")
     for key in ("catalog", "index", "universal", "theorem_roots", "import_roots", "excluded", "generated_imports",
                 "generated_premises", "generated_markers", "profiles", "float_semantics", "source_axiom",
-                "runtime_modules", "rules", "implies"):
+                "runtime_modules", "rules", "implies", "memory_model"):
         if key not in config:
             raise ValueError(f"premise configuration lacks {key}")
+    model = config["memory_model"]
+    if (not isinstance(model, dict) or not isinstance(model.get("premise"), str)
+            or not isinstance(model.get("concurrency"), list) or not model["concurrency"]
+            or not isinstance(model.get("targets"), dict) or not isinstance(model.get("unqualified"), dict)):
+        raise ValueError("memory_model needs a premise, concurrency premises, targets and unqualified targets")
     for rule in config["rules"]:
         if set(rule) != {"premise", "scope", "pattern"} or rule["scope"] not in {"closure", "statement"}:
             raise ValueError(f"invalid premise rule: {rule}")
@@ -138,7 +144,38 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     found += [(f"runtime_modules.{m}", p) for m, ps in config["runtime_modules"].items() for p in ps]
     found += [(f"rules[{i}]", r["premise"]) for i, r in enumerate(config["rules"])]
     found += [(f"implies.{k}", p) for k, ps in config["implies"].items() for p in [k, *ps]]
+    model = config["memory_model"]
+    found += [("memory_model.premise", model["premise"])]
+    found += [("memory_model.concurrency", p) for p in model["concurrency"]]
     return found
+
+
+def memory_model_errors(config: dict, entries, where) -> list[str]:
+    """C12: every entry whose premises contain a concurrency premise lists the memory-model
+    adequacy premise. `where(entry)` names the entry in the message."""
+    model = config["memory_model"]
+    return [f"{where(e)} makes a concurrency claim without the memory-model adequacy premise "
+            f"{model['premise']}" for e in entries
+            if set(model["concurrency"]) & set(e["premises"]) and model["premise"] not in e["premises"]]
+
+
+def memory_model_record_errors(config: dict, reports: dict, root: Path) -> list[str]:
+    """The adequacy qualification record names its evidence, and every concurrency report of
+    docs/premises.md lists the premise itself (not only through `implies`)."""
+    model, errors = config["memory_model"], []
+    for target, entry in sorted(model["targets"].items()):
+        if not entry.get("hardware") or not entry.get("argument") or not entry.get("evidence"):
+            errors.append(f"memory_model.targets.{target} needs hardware, argument and evidence")
+        for path in entry.get("evidence", ()):
+            if not (root / path).exists():
+                errors.append(f"memory_model.targets.{target}: evidence {path} does not exist")
+    for target in sorted(set(model["targets"]) & set(model["unqualified"])):
+        errors.append(f"memory_model: {target} is both qualified and unqualified")
+    for name, ids in sorted(reports.items()):
+        reached = close(config, {p: [] for p in ids})
+        if set(model["concurrency"]) & set(reached) and model["premise"] not in ids:
+            errors.append(f"report {name!r} rests on a concurrency premise but does not list {model['premise']}")
+    return errors
 
 
 # ----------------------------------------------------------------------------- Lean source
@@ -752,6 +789,8 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)
     errors += index_errors
+    errors += memory_model_errors(config, entries, lambda e: f"{e['file']}: {e['theorem']}")
+    errors += memory_model_record_errors(config, reports, root)
     for entry in entries:
         for pid in entry["premises"]:
             if pid not in premises:
@@ -858,6 +897,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                     entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
     errors += markers.errors
+    errors += memory_model_errors(config, theorems, lambda t: t["name"])
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,

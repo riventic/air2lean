@@ -54,14 +54,43 @@ ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
 
 def premises_of(theorem: dict, claims) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
-    opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one.
-    None if the report lacks the closure (`opaque_dependencies`)."""
+    opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
+    the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None if the report
+    lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
     opaques = theorem.get('opaque_dependencies')
-    if not isinstance(opaques, list):
+    memory = memory_model_premises(theorem)
+    if not isinstance(opaques, list) or memory is None:
         return None
-    if not any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
-        return []
-    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
+    found = []
+    if any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
+        found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
+    return found + memory
+
+
+def memory_model_premises(theorem: dict) -> list[str] | None:
+    """[ORD-06] when the runtime modules the theorem's closure reaches carry a concurrency premise
+    (assurance/premises.json `memory_model`, closed under `implies`), else []. A concurrency claim
+    never hides behind a race-freedom statement: the claim names the adequacy premise. None if
+    the report lacks `runtime_modules` or one has no premise mapping (scripts/premises.py
+    check rejects such a module)."""
+    modules = theorem.get('runtime_modules')
+    config = premise_config()
+    if not isinstance(modules, list) or any(m not in config['runtime_modules'] for m in modules):
+        return None
+    via = {p: [] for m in modules for p in config['runtime_modules'].get(m, ())}
+    reached = PREMISES.close(config, via)
+    model = config['memory_model']
+    return [model['premise']] if set(model['concurrency']) & set(reached) else []
+
+
+_PREMISE_CONFIG = None
+
+
+def premise_config() -> dict:
+    global _PREMISE_CONFIG
+    if _PREMISE_CONFIG is None:
+        _PREMISE_CONFIG = PREMISES.load_config(ROOT / PREMISES.CONFIG)
+    return _PREMISE_CONFIG
 
 
 def load_heads(path: Path = HEADS_PATH) -> dict:
@@ -377,7 +406,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     if premises is None:
         return {**result, 'status': 'rejected',
-                'reason': 'assurance report lacks the dependency closure (opaque_dependencies); regenerate it'}
+                'reason': 'assurance report lacks the dependency closure (opaque_dependencies, runtime_modules); '
+                          'regenerate it'}
     declared = goal['strength']
     if declared not in ORDERED:
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
@@ -422,6 +452,7 @@ def _sibling(name, filename=None):
 
 OUTCOMES = _sibling('outcomes')
 MARKERS = _sibling('premise_markers')
+PREMISES = _sibling('premises')
 REPO = ROOT
 
 
@@ -495,7 +526,8 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                      '(ALC-09, IOM-01) under which a claim about a function with an Allocator or Io parameter '
                      'holds: the caller passes the model one. premises lists what an accepted goal rests on '
                      'beyond its type: an inline-asm opaque in the closure carries ASM-01, and ASM-04 (allowlist '
-                     'fault conditions) for a no-panic or guaranteed-return claim. Differential outcomes (when supplied) can only '
+                     'fault conditions) for a no-panic or guaranteed-return claim; a closure that reaches the '
+                     'scheduler or the atomics model carries ORD-06 (memory-model adequacy). Differential outcomes (when supplied) can only '
                      'refuse absence claims: capped, fuel-bounded, unsupported, unsupported-timer or unspecified '
                      'outcomes and observed failures reject a goal; error returns do not. Summaries must be bound to '
                      'the current tree (source/runner fingerprints and case hash) or the check fails. outcomes is '
