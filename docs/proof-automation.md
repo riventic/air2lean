@@ -65,6 +65,11 @@ many successful calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
+  item stores and the read-back of a stored item, `@memcpy` between separate regions, the
+  pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
+  owned regions lie at disjoint address ranges), put in the context by `MemFacts.pre` (`fsym`
+  does not yet add memory facts of atom pairs itself: `addFacts` covers single atoms only).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
 
 ### Range laws
