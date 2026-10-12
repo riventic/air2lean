@@ -1,0 +1,214 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_x86_64",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "union_bases.mixedLowPtr",
+ "module": "root",
+ "src": {
+  "file": "union_bases.zig",
+  "module": "union_bases",
+  "decl_line": 86
+ },
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 1,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 0,
+     "ptr": {
+      "global": 0,
+      "off": 5
+     }
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "union_bases.mixed",
+   "module": "root",
+   "ty": 3,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 3,
+    "utag": {
+     "ty": 4,
+     "enum": "1"
+    },
+    "uval": {
+     "ty": 5,
+     "elems": [
+      {
+       "ty": 6,
+       "val": "60"
+      },
+      {
+       "ty": 6,
+       "val": "61"
+      },
+      {
+       "ty": 6,
+       "val": "62"
+      },
+      {
+       "ty": 6,
+       "val": "63"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 6,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "union",
+   "name": "union_bases.Mixed",
+   "module": "root",
+   "layout": "auto",
+   "tag": 4,
+   "fields": [
+    {
+     "name": "res",
+     "ty": 7
+    },
+    {
+     "name": "raw",
+     "ty": 5
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "@typeInfo(union_bases.Mixed).@\"union\".tag_type.?",
+   "module": "root",
+   "tag": 8,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "res",
+     "value": "0"
+    },
+    {
+     "name": "raw",
+     "value": "1"
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 6,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 9,
+   "payload": 10,
+   "abi_size": 4,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Bad"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "array",
+   "len": 2,
+   "child": 6,
+   "sentinel": false,
+   "abi_size": 2,
+   "abi_align": 1
+  }
+ ]
+}

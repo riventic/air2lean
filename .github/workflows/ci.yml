@@ -1469,8 +1469,8 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: bash tests/roadmap/address-reuse/check.sh
 
-      # L06: nested constant pointer bases (ZigLean/Mem/ConstPtr.lean, proof-only): retained
-      # translation, generated-client proofs and CLI rejections; the native stage2_x86_64 run.
+      # L06: nested and union-member constant pointer bases (ZigLean/Mem/ConstPtr.lean,
+      # proof-only): retained translations, generated-client proofs and CLI rejections; native runs.
       - name: Nested constant pointer bases (L06)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
@@ -1480,6 +1480,10 @@ jobs:
           lake build ZigLean ZigLean.Mem.ConstPtr Air2Lean air2lean
           bash tests/roadmap/const-bases/check.sh
           bash tests/roadmap/const-bases/check.sh --native
+          # Union-member bases: per-version compiler exports, proofs, CLI rejections; the native
+          # run on stage2_x86_64 and LLVM.
+          bash tests/roadmap/union-bases/check.sh
+          bash tests/roadmap/union-bases/check.sh --native
 
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
