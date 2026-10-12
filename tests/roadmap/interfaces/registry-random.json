@@ -5,7 +5,7 @@
     {
       "interface": "std.Random",
       "struct": "Random",
-      "contract": "Zig.Full.RandomSpec",
+      "contract": "Zig.Full.randomFillPre",
       "premise": "EXT-05"
     }
   ]

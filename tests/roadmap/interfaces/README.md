@@ -35,11 +35,12 @@ standard axioms):
   environment's contract to a vtable of the program would prove a double-issuing closure
   allocator correct;
 - `RndSpec.lean`: `roll` returns 1 to 6 for every `std.Random` whose fill function meets the
-  library's `RandomSpec`: the same `Table`/`EnvFn` mechanism with the second interface's
-  contract;
+  library's `std.Random` contract (`FnSpec` with `randomFillPre`/`randomFillPost`): the same
+  `Table`/`EnvFn` mechanism with the second interface's contract;
 - `CallbacksSpec.lean`: E02's `callbacks.zig` (`tests/roadmap/callbacks`, its exports and
   per-version registries) with the callback type `Visitor` opened:
-  `evaluate` for every callback from the contract `VisitSpec` of the function the call runs,
+  `evaluate` for every callback from the contract (`FnSpec` with `visitPre`/`visitPost`) of the
+  function the call runs,
   and `sumVisit`'s dispatch meeting it by its translated code.
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

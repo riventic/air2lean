@@ -89,15 +89,21 @@ lane `codex/alloc-param`).
   calls, and a parameter for the others (`Ext` has no field for a type the program never calls
   through an open pointer); a fixed `.illegal` there would make the assumption unsatisfiable,
   and the theorem vacuous. `tests/roadmap/interfaces/Interfaces/{Lists,Mix}Spec.lean`.
-* Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own contract:
-  `std.Random`'s `fillFn` is the second instance: the library's `RandomSpec fill ctx R` (a
-  `CTriple` contract: with the generator's state `R`, it fills the slice with integer bytes and
-  touches nothing else), and `tests/roadmap/interfaces/Interfaces/RndSpec.lean` proves a die
-  roll in 1..6 for every generator from it. E02's call sites take the same translator path
-  (a `"function"` entry); its MemM `Contract.Holds.dispatch` is the closed reading
-  (`dispatch []` is `.illegal`), and `Interfaces/CallbacksSpec.lean` is E02's `callbacks.zig`
-  with its callback type opened: `evaluate` for every callback from a `CTriple` contract of the
-  function the call runs.
+* **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
+  (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
+  call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there
+  is no per-interface judgment. `CAllocSpec` (the allocator's four entries, `FAllocSpec` at
+  every depth) predates it and stays the allocator's bundled contract.
+* Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own `FnSpec`:
+  `std.Random`'s `fillFn` is the second instance: `∀ A S K bs, FnSpec (randomFillPre ctx R A S K
+  bs) (randomFillPost R A S K) fill` (with the generator's state `R`, it fills the slice with
+  integer bytes and touches nothing else; `FnSpec.randomFill` is its `fsym` step), and
+  `tests/roadmap/interfaces/Interfaces/RndSpec.lean` proves a die roll in 1..6 for every
+  generator from it. E02's call sites take the same translator path (a `"function"` entry); its
+  MemM `Contract.Holds.dispatch` is the closed reading (`dispatch []` is `.illegal`), and
+  `Interfaces/CallbacksSpec.lean` is E02's `callbacks.zig` with its callback type opened:
+  `evaluate` for every callback from the `FnSpec` (`visitPre`/`visitPost`) of the function the
+  call runs.
 
 ## Premise
 

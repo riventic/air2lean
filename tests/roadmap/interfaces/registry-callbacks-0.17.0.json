@@ -137,7 +137,7 @@
     {
       "interface": "Visitor",
       "function": "fn (*u32, u32) callconv(.c) bool",
-      "contract": "Interfaces.CallbacksSpec.VisitSpec",
+      "contract": "Interfaces.CallbacksSpec.visitPre",
       "premise": "EXT-05"
     }
   ]

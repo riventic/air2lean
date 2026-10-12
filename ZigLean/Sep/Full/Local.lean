@@ -89,7 +89,7 @@ theorem u8s_extract {vs : Array (BitVec 8)} (hn : 0 < vs.size) :
     simp [hn]
 
 /-- **A load of the first `u8` of a buffer of `u8`s** (the integer bytes that a `std.Random`
-fill leaves, `RandomSpec`) at the start of a block's bytes. -/
+fill leaves, `randomFillPost`) at the start of a block's bytes. -/
 @[fsym] theorem FTotalTriple.loadBlock_u8 {vs : Array (BitVec 8)} (hpb : p.block = some b)
     (hn : 0 < vs.size) (ha : (A + p.off.toNat) % al = 0) :
     FTotalTriple (up (bytesAt p A S K (vs.map Byte.int)) ⋆ bext b S K) (Zig.load (BitVec 8) al p)
