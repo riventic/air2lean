@@ -505,12 +505,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "vc_gen?",
-      "kind": "syntax",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "within",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Extent",
@@ -533,9 +527,6 @@
   "legacy_users": [
     {
       "path": "Proofs/Atomics/PtrPublish.lean"
-    },
-    {
-      "path": "Proofs/Cancel/Group.lean"
     },
     {
       "path": "Proofs/Iogroup/Counter.lean"
@@ -713,6 +704,9 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
+      "path": "ZigLean/Sep/Full/Region.lean"
+    },
+    {
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
@@ -733,7 +727,7 @@
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Wrappers.lean"
+      "path": "ZigLean/Sep/Full/Typed.lean"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
@@ -781,22 +775,10 @@
       "path": "ZigLean/Sep/Witness.lean"
     },
     {
-      "path": "ZigLean/VC/Extract.lean"
-    },
-    {
-      "path": "ZigLean/VC/Mem.lean"
-    },
-    {
-      "path": "ZigLean/VC/Rules.lean"
-    },
-    {
       "path": "ZigLean/Witnesses/Conc.lean"
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/VC.lean"
     },
     {
       "path": "tests/roadmap/address-reuse/Kernel.lean"
@@ -925,13 +907,7 @@
       "path": "tests/roadmap/try-pointers/aliases/TryAliases/Proofs.lean"
     },
     {
-      "path": "tests/roadmap/vcs/Clients.lean"
-    },
-    {
       "path": "tests/roadmap/vcs/Extract.lean"
-    },
-    {
-      "path": "tests/roadmap/vcs/Memory.lean"
     },
     {
       "path": "tools/Assurance.lean"
