@@ -912,10 +912,13 @@ const W = struct {
 
     /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
     /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
-    /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Tags
-    /// are compared by name: not every version has each.
+    /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Also
+    /// 0.14.1's `error_name`, which indexes the name table with the sign-extended code: only the
+    /// error count bounds the codes it reads. Tags are compared by name: not every version has
+    /// each.
     fn convertsErrorInt(w: *W, tag: Air.Inst.Tag, inst: Air.Inst.Index) bool {
         const name = @tagName(tag);
+        if (Compat.v14 and tag == .error_name) return true;
         for ([_][]const u8{ "int_from_error", "error_from_int", "cmp_lt_errors_len", "cmp_lte_errors_len" }) |t| {
             if (std.mem.eql(u8, name, t)) return true;
         }

@@ -584,6 +584,20 @@ structure CheckCtx where
   sentinelChecked : Array InstId := #[]
   /-- `Func.allocatorModel` (`--allocator-model`). -/
   allocatorModel : AllocatorModel := .std
+  /-- `Func.errorTable`: the compilation's error numbering, if the exporter wrote one. -/
+  errorTable : Option (Array String) := none
+
+/-- The compilation's error numbering is present and fits the `bits`-bit error integer: every
+integer/error cast and errors_len check needs it (L10, `docs/air-json.md` §Error table). -/
+def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Nat) (what : String) :
+    Except String Unit := do
+  let some names := table
+    | throw s!"{fnName}: {what} needs the compilation's error numbering, which the AIR export \
+        lacks (`error-table.air2lean`, written by the patched compiler after analysis; \
+        docs/air-json.md §Error table)"
+  unless names.size < 2 ^ bits do
+    throw s!"{fnName}: the error numbering has {names.size} errors, more than the \
+      {2 ^ bits - 1} codes of the {bits}-bit error integer"
 
 /-- The profile's `error_set_bits` (`Dialect.errorSetBits`); 16 in a bare context. -/
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
@@ -1237,7 +1251,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let sourceTy := cx.valTy? a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
-      cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
+      -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
+      -- compilation's numbering, which the exporter writes after analysis.
+      let intSide := if isError (cx.types[ty]?) then sourceTy.bind (cx.types[·]?) else cx.types[ty]?
+      unless intSide == some (.int false cx.errBits) do
+        cx.fail line s!"an integer/error cast to or from a type other than the error integer \
+          u{cx.errBits} is outside the subset"
+      checkErrorTable cx.fnName cx.errorTable cx.errBits "an integer/error cast"
+      return line
     if let some aty := sourceTy then
       let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
       -- Duplicate finite error-union IDs preserve the same symbolic decoder only
@@ -1774,6 +1795,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless blen.any (fun n => idx < n) do
           cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
       | _ => pure ()
+    pure line
+  | .errorsLenLe a =>
+    unless (cx.valTy? a).bind (cx.types[·]?) == some (.int false cx.errBits) do
+      cx.fail line s!"the errors_len check of an operand other than the error integer u{cx.errBits}"
+    checkErrorTable fnName cx.errorTable cx.errBits "the `@errorFromInt` errors_len check"
     pure line
   | .unionInit idx _ =>
     let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
@@ -2751,12 +2777,15 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
   -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
   -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
-  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
-  -- does not export the compilation's error count, so no code is known to stay below that bit.
-  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) then
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). The
+  -- export bounds the codes only with the compilation's error numbering
+  -- (`error-table.air2lean`, L10): every code is below that bit when the error count is.
+  let codesBelowSignBit := f.errorTable.any (·.size < 2 ^ (f.errorSetBits - 1))
+  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) && !codesBelowSignBit then
     throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
       error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
-      compilation's error codes; use Zig 0.15.2 or later"
+      compilation's error codes below it (no error-table.air2lean, or too many errors); use Zig \
+      0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2805,7 +2834,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
                          device, sentinelChecked := sentinelCheckedSlices insts,
-                         allocatorModel := f.allocatorModel }
+                         allocatorModel := f.allocatorModel, errorTable := f.errorTable }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -4187,7 +4216,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     localPaths := localPlacePaths f.types f.layouts insts
     device
     sentinelChecked := sentinelCheckedSlices insts
-    allocatorModel := f.allocatorModel }
+    allocatorModel := f.allocatorModel
+    errorTable := f.errorTable }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

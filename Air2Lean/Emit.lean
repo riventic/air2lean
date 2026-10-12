@@ -1892,7 +1892,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sliceFieldPtr _ p => if fc.isMemPtr p then #[p] else #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy _ a b => #[a, b]
-  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
+  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a | .errorsLenLe a => #[a]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
@@ -3827,12 +3827,12 @@ def errorNames (funcs : Array Func) : Array String :=
       | _ => #[]
     (names.foldl (fun acc n => if acc.contains n then acc else acc.push n) #[]).qsort (· < ·)
 
-/-- The compilation's error numbering, if a function converts between errors and integers
-(`@intFromError`, `@errorFromInt`, `cmp_lt(e)_errors_len`; L10). `Check.lean` requires every such
-function to have the exporter's table, and the tables of one program to agree. -/
+/-- The compilation's error numbering, if the export has one (L10): the exporter writes it when
+a function converts between errors and integers (`@intFromError`, `@errorFromInt`,
+`cmp_lt(e)_errors_len`), which `Check.lean` admits only with it. Every function of one export
+directory has the same table. -/
 def errorTableOf (funcs : Array Func) : Option (Array String) :=
-  if funcs.any (·.allInsts.any (·.op.convertsErrorInt)) then funcs.findSome? (·.errorTable)
-  else none
+  funcs.findSome? (·.errorTable)
 
 /-- `errorTable`: code `i + 1` is `errorTable[i]` (`Zig.intFromErrorIn`, `Zig.errorFromIntIn`). -/
 def emitErrorTable (names : Array String) : String :=
