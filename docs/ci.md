@@ -353,7 +353,9 @@ and the native wide bit-operation differential. What changes:
   check tree (5-10 min).
 - Every Lake cache key contains `hashFiles('.github/workflows/ci-cache.yml')` after the
   toolchain hash: the recipe that built the entry (which targets, which packages) is part of the
-  key, so an entry saved by an older recipe is never a hit for a newer one. Before, the macOS
+  key, so an entry saved by an older recipe is never a hit for a newer one (the `restore-keys`
+  prefix still restores the newest entry of any recipe as a warm start; Lake's content traces
+  rebuild what differs). Before, the macOS
   entry built by the old workflow without `Proofs` kept its key, `ci-cache.yml` skipped the
   build, and every macOS row rebuilt `Proofs`.
 - Patched compilers are cached under a key over exactly the inputs of `zig-patch/build.sh` for
