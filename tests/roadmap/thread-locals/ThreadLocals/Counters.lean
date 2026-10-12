@@ -55,7 +55,7 @@ theorem enc_zero : writeBytes (Array.replicate 4 .undef) 0 (Enc.encode (0 : BitV
   writeBytes_all (by simp [LawfulEnc.size_encode_u32])
 
 theorem sep_lcomm {P Q R : FAssn} {r : Res} (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
-  sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
+  sep_left_comm_eq P Q R ▸ h
 
 /-- The pure fact of a framed load's post. -/
 theorem lift_l {φ : Prop} {P Q : FAssn} {r : Res} (h : ((⟪φ⟫ ⋆ P) ⋆ Q) r) : φ ∧ (P ⋆ Q) r :=
