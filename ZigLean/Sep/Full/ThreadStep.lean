@@ -342,8 +342,9 @@ theorem throw (e : Error) : RunFp F m₀ (MonadExcept.throw e : MemM α) := rfl
 /-- `modify` by a change that keeps the record in front. -/
 theorem modify' {g : Mem → Mem} (hg : g (m₀.withFp F) = (g m₀).withFp F) :
     RunFp F m₀ (_root_.modify g : MemM PUnit) := by
-  show some (.ok ((), g (m₀.withFp F))) = some (.ok ((), (g m₀).withFp F))
-  rw [hg]
+  unfold RunFp
+  simp [_root_.modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run, hg]
+  rfl
 
 /-- A read of the memory, a change of it that keeps the record in front, then a step that reads
 the old memory only where the record does not matter. -/
@@ -423,14 +424,16 @@ theorem _root_.Zig.Mem.NoRevive.setBlock {m m' : Mem} {b : BlockId} {blk nb : Bl
       rw [dif_pos ⟨hlive hc.1, by omega, by omega⟩]; simp
     · exact absurd rfl h
   · have e1 : m'.heap (b', x) = m.heap (b', x) := by
-      unfold Mem.heap; rw [hget, if_neg e]
+      unfold Mem.heap; dsimp only; rw [hget, if_neg e]
     rwa [e1] at h
 
 /-- A new block at the end. -/
 theorem _root_.Zig.Mem.NoRevive.push {m m' : Mem} {x : Block} (hbs : m'.blocks = m.blocks.push x) :
     m.NoRevive m' := fun b o hb h => by
   have e : m'.heap (b, o) = m.heap (b, o) := by
-    unfold Mem.heap; rw [hbs, Array.getElem?_push_lt hb]
+    have e0 : m'.blocks[b]? = m.blocks[b]? := by
+      rw [hbs, Array.getElem?_push_lt hb, Array.getElem?_eq_getElem hb]
+    unfold Mem.heap; dsimp only; rw [e0]
   rwa [e] at h
 
 namespace ThreadLocal
