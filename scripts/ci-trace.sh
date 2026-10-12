@@ -21,9 +21,10 @@ for name in $(compgen -e); do
       [[ $name =~ $keep ]] || unset "$name" ;;
   esac
 done
-# The step's own status; strace exits with it (128+n for a signal). The reducer's pipe is closed
-# and waited for before strace exits, so <step>.json is complete when this returns.
-strace -f --seccomp-bpf -y -qq -s 65536 \
+# -q, not -qq: the reducer needs the exit lines (a later process can reuse a pid). The step's own
+# status; strace exits with it (128+n for a signal). The reducer's pipe is closed and waited for
+# before strace exits, so <step>.json is complete when this returns.
+strace -f --seccomp-bpf -y -q -s 65536 \
   -e trace=%file,getdents64,getdents,chdir,fchdir,clone,clone3,fork,vfork \
   -o "|python3 -I $tool reduce --workspace $GITHUB_WORKSPACE --out $dir/$step.json" \
   bash --noprofile --norc -eo pipefail "$script"

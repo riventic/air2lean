@@ -98,6 +98,39 @@ class Reduction(unittest.TestCase):
         self.assertEqual(out['gitdir_by_others'], ['.git/HEAD'])
         self.assertEqual(out['observed'], {})
 
+    def test_threads_and_children_run_their_parents_image_until_execve(self):
+        out = reduce([
+            '30 execve("/usr/bin/git", ["git", "status", "--porcelain"], 0x0 /* 1 var */) = 0',
+            '30 clone3({flags=CLONE_VM|CLONE_THREAD, ...} <unfinished ...>',
+            # git's index-preload thread, printed before the clone returns in its parent
+            '31 newfstatat(AT_FDCWD</w>, "/w/docs/x.md", {...}, AT_SYMLINK_NOFOLLOW) = 0',
+            '30 <... clone3 resumed>, 88) = 31',
+            '31 newfstatat(AT_FDCWD</w>, "/w/README.md", {...}, AT_SYMLINK_NOFOLLOW) = 0',
+            '40 execve("/usr/bin/bash", ["bash", "s.sh"], 0x0 /* 1 var */) = 0',
+            '40 clone(child_stack=NULL, flags=SIGCHLD <unfinished ...>',
+            # a forked shell redirects before it becomes git: that open is the shell's
+            '41 openat(AT_FDCWD</w>, "/w/scripts/a.py", O_RDONLY) = 3</w/scripts/a.py>',
+            '41 execve("/usr/bin/git", ["git", "status"], 0x0 /* 1 var */) = 0',
+            '41 newfstatat(AT_FDCWD</w>, "/w/scripts/b.py", {...}, 0) = 0',
+            '40 <... clone resumed>) = 41',
+            # a clone that never returns in the trace: its image stays unknown, so it counts
+            '50 openat(AT_FDCWD</w>, "/w/tests/t/run.py", O_RDONLY) = 3</w/tests/t/run.py>',
+        ])
+        self.assertEqual(out['observed'], {'scripts/a.py': ['read'], 'tests/t/run.py': ['read']})
+
+    def test_a_reused_pid_does_not_keep_the_old_image(self):
+        out = reduce([
+            '60 execve("/usr/bin/git", ["git", "status"], 0x0 /* 1 var */) = 0',
+            '60 +++ exited with 0 +++',
+            '70 execve("/usr/bin/bash", ["bash", "s.sh"], 0x0 /* 1 var */) = 0',
+            '70 clone(child_stack=NULL, flags=SIGCHLD <unfinished ...>',
+            '60 openat(AT_FDCWD</w>, "/w/scripts/a.py", O_RDONLY) = 3</w/scripts/a.py>',  # a new shell child
+            '60 +++ exited with 0 +++',
+            '70 <... clone resumed>) = 60',
+            '60 newfstatat(AT_FDCWD</w>, "/w/docs/x.md", {...}, 0) = 0',  # a third process, clone not yet seen
+        ])
+        self.assertEqual(out['observed'], {'docs/x.md': ['probe'], 'scripts/a.py': ['read']})
+
     def test_git_classes(self):
         self.assertEqual(cr.git_class(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard']), 'names')
         self.assertEqual(cr.git_class(['git', 'ls-files', '-s']), 'commit')
@@ -267,6 +300,30 @@ class Keys(unittest.TestCase):
         first = self.key('macos/0.16.0')
         self.commit()
         self.assertNotEqual(self.key('macos/0.16.0'), first)
+
+    def test_steps_of_other_rows_are_not_inputs(self):
+        part, workflow = 'test/0.16.0/mutation/1', self.root / '.github/workflows/ci.yml'
+        data = json.loads((self.root / '.github/ci-inputs.json').read_text())
+        data['parts'][part] = {'inputs': ['tests/roadmap/bitops-native/**']}  # not the workflow file
+        (self.root / '.github/ci-inputs.json').write_text(json.dumps(data))
+        self.commit()
+        text, anchor = workflow.read_text(), '      - name: Op effects table source checks\n'
+        self.assertIn(anchor, text)
+
+        def key_with_step(condition):
+            workflow.write_text(text.replace(anchor, '      - name: Added\n        if: %s\n        run: echo added\n\n'
+                                             % condition + anchor, 1))
+            self.commit()
+            return self.key(part)
+
+        first = self.key(part)
+        self.assertEqual(key_with_step("${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' }}"), first)
+        self.assertEqual(key_with_step("${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.0' }}"), first)
+        for condition in ("${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' }}",  # this row
+                          "${{ !env.AIR2LEAN_REUSED }}",                                 # every row
+                          "${{ !env.AIR2LEAN_REUSED && failure() }}",                    # a status function
+                          "${{ !env.AIR2LEAN_REUSED && env.OTHER == 'x' }}"):            # run-time state
+            self.assertNotEqual(key_with_step(condition), first, condition)
 
     def test_reuse_false_has_no_key(self):
         data = json.loads((self.root / '.github/ci-inputs.json').read_text())
