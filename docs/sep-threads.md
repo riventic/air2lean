@@ -143,14 +143,49 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
   end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
   as it is has its thread rule directly (`FTTotalTriple.of_read`). Each primitive then has one
-  statement, its thread rule (`FTTotalTriple.ofSeq` of the sequential proof and its locality),
-  and the `@[fsym]` sequential rule is `.toFTotalTriple` of it.
+  proof: its thread rule is `FTTotalTriple.ofSeq` of the sequential rule and its locality (or
+  the sequential rule is `.toFTotalTriple` of a thread rule proved directly).
+
+  Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
+  `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
+  `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
+  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `region_add`,
+  `regionIn_add`, `regionIn_start`.
 
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. Next: `Arr`, `Typed`,
-  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`; their locality must show
-  `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
+  `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
+  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
+  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
+  `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
+  `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
+  `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
+  its locality, statements unchanged; the pointer order and bounds checks read no byte, so their
+  thread rules are the proofs and the sequential rules are read from them. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
+  `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
+  an old block alive).
+
+  **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
+  check passes only if no recorded write to the global is concurrent with the reader. Every
+  write that is recorded went through `Mem.accessW` (or a mapping's kind check), which rejects a
+  `const` global, so no reachable memory has one; but `Mem.FConc` does not say so, and a thread
+  rule must hold in every `FConc` memory. Counterexample to `FTTotalTriple.cload` as stated: a
+  memory whose footprint has a write by thread 1 to a live `const` block, concurrent with thread
+  0, where thread 0 holds `cpts` of it (knowledge only: `Mem.kn` reads the blocks); the load
+  throws `.illegal`. A thread rule needs a memory invariant "no recorded write to a `const`
+  block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts.
+  Decided (coordinator): the invariant goes into `FConc`, proved preserved by every step.
+
+  **Open: `mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
+  `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a
+  recorded access, so the thread owns them only if every recorded access to those offsets
+  happened before its clock. The precondition holds the extent (`bext`) and at most the old
+  bytes; the extent is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
+  `S` (its `munmap` of the old tail, concurrent with thread 0) makes the post's ownership false.
+  A thread rule needs ownership of a whole extent (or of the mapping's claim, `Full/Claims`) to
+  cover every recorded access to the block's offsets past its end. Decided (coordinator): a
+  model fix, not a logic patch: bytes that a growth (or any revival) brings to life start with
+  no access history, as the bytes of a new block do (natively `mremap` maps new pages).
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
