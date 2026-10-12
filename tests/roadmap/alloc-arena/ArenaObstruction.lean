@@ -1,6 +1,7 @@
 import AllocArena.ArenaLinux
 import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.Unroll
+import ZigLean.Sep.Full.Reclaim
 
 /-!
 # Obstructions O-A, O-E and O-H (kernel-checked)
@@ -202,6 +203,120 @@ theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I
   rw [Witness.errOf_eq_some.mp client_illegal] at ht
   cases ht
 
+/-! ## Reset: revoking ghost state cannot withdraw a grant's bytes (`not_reset_own`)
+
+Can `reset` be specified with the arena's state alone as its precondition, so that a client
+with outstanding grants calls it without giving anything back and the epoch bump revokes those
+grants: `{I.own} reset {I'.own}` (`I'` the next epoch's invariant)? No, for any two invariants.
+A grant gives the client its bytes (`FAllocInv.granted`), exclusive cells in the client's part of
+the resource; the ledger bump and the revocation of receipts and claims (`Upd.bump`,
+`EUpd.revoke`, `EUpd.prevokeC`) withdraw only ghost state. The client below allocates 8 bytes,
+resets with `.free_all`, and allocates 8 bytes again. By the frame rule it still holds the first
+grant's bytes next to the second grant, so its triple (`reset_client_ct`) ends with two separate
+grants, while the kernel computes both to be byte 24 of the `FixedBufferAllocator`'s buffer
+(`reset_client_run`: the reset gave the node back, the child rewound and handed it out again).
+So a sound `reset` precondition must hand back every outstanding grant's bytes. (Over
+`page_allocator` the reset `munmap`s the node and a later store to the old grant is `.illegal`;
+the kernel run of that client needs more than the build's memory cap.)
+-/
+
+/-- `alloc` of 8 bytes, `reset(.free_all)`, `alloc` of 8 bytes. -/
+def resetClient : ConcM Tgt (Option Ptr × Option Ptr) := do
+  let p ← vt.alloc arena 8 0 0
+  let _ ← heap_ArenaAllocator_reset arena .free_all
+  let q ← vt.alloc arena 8 0 0
+  pure (p, q)
+
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+/-- The client's run: both allocations return byte 24 of the child's buffer. -/
+theorem reset_client_run :
+    (((Sched.soloRun 1000 resetClient).run mInit).run.map fun r => r.map (·.1)) =
+      some (.ok (some ⟨some 0, 24⟩, some ⟨some 0, 24⟩)) := by
+  unroll_solo 3
+
+/-- A grant of `I` at `p` of 8 bytes. -/
+def G8 (I : FAllocInv) (p : Ptr) : FAssn :=
+  FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 bs
+
+/-- What the client ends with: both grants, when both allocations succeed. -/
+def keeps (I I' : FAllocInv) : Option Ptr × Option Ptr → FAssn
+  | (some p, some q) => G8 I p ⋆ (G8 I' q ⋆ Any)
+  | _ => Any
+
+/-- A grant owns its first byte. -/
+theorem g8_owns {I : FAllocInv} {p : Ptr} {b : BlockId} (hb : p.block = some b) {r : Res}
+    (h : G8 I p r) : ∃ fc, r.heap (b, p.off.toNat) = some fc := by
+  obtain ⟨bs, h⟩ := h
+  obtain ⟨hbs, A, S, K, q, r₁, r₂, -, rfl, h1, -⟩ := Full.sep_lift.mp h
+  obtain ⟨fc, hx, -⟩ := Owns.region (i := 0) hb (by rw [hbs]; decide) r₁ h1
+  exact ⟨fc, by show (r₁.heap _).or _ = _; rw [← Nat.add_zero p.off.toNat, hx]; rfl⟩
+
+/-- **Two grants at one pointer are not separate.** -/
+theorem keeps_same {I I' : FAllocInv} {p : Ptr} {b : BlockId} (hb : p.block = some b) {r : Res}
+    (h : keeps I I' (some p, some p) r) : False := by
+  obtain ⟨r₁, r₂, hd, -, h1, r₃, r₄, -, rfl, h3, -⟩ := h
+  obtain ⟨_, e1⟩ := g8_owns hb h1
+  obtain ⟨_, e3⟩ := g8_owns hb h3
+  rcases hd (b, p.off.toNat) with e | e
+  · rw [e1] at e; cases e
+  · have e' : (r₃.heap (b, p.off.toNat)).or (r₄.heap (b, p.off.toNat)) = none := e
+    rw [e3] at e'; cases e'
+
+set_option maxRecDepth 20000 in
+/-- **The client meets its triple** under every two `FAllocSpec`s of the arena whose `fits`
+admit 8 bytes, and every `reset` triple from the first one's state to the second one's. -/
+theorem reset_client_ct (I I' : FAllocInv) (h : CAllocSpec vt arena I)
+    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0)
+    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own)) :
+    CTriple I.own resetClient (keeps I I') := by
+  refine CTriple.bind (h.alloc 8 0 0 (by decide) (by decide) h8) fun o => ?_
+  -- the rest of the client, with the first grant (or nothing) framed
+  have rest : ∀ R : FAssn, (∀ o' r, (I'.allocPost 8 0 o' ⋆ R) r → keeps I I' (o, o') r) →
+      CTriple (I.own ⋆ R) (do
+        let _ ← heap_ArenaAllocator_reset arena .free_all
+        let q ← vt.alloc arena 8 0 0
+        pure (o, q)) (keeps I I') := fun R hk =>
+    CTriple.bind (hres.frame (R := R)) fun _ =>
+      CTriple.bind ((h'.alloc 8 0 0 (by decide) (by decide) h8').frame (R := R)) fun o' =>
+        CTriple.ret' _ (hk o')
+  cases o with
+  | none =>
+    refine CTriple.pre (rest Any fun _ _ _ => trivial) fun r hr => ?_
+    exact sep_mono_right (fun _ _ => trivial) (sep_emp.mpr hr)
+  | some p =>
+    refine CTriple.pre (rest (G8 I p) fun o' r hr => ?_) fun r hr => hr
+    cases o' with
+    | none => trivial
+    | some q =>
+      exact sep_mono_right (fun _ h => sep_mono_right (fun _ _ => trivial) (sep_comm h))
+        (sep_comm hr)
+
+set_option maxRecDepth 100000 in
+/-- **Reset, kernel-checked: no `reset` triple with the arena's state as its precondition**
+(`{I.own} reset(.free_all) {I'.own}`) coexists with `FAllocSpec`s `I`, `I'` of the arena of
+which `I` holds after `init`: the client's triple (`reset_client_ct`) would end with two separate
+grants that the run (`reset_client_run`) puts at one byte. Revocation (the epoch bump) cannot
+withdraw a grant's bytes. -/
+theorem not_reset_own (I I' : FAllocInv) (h : CAllocSpec vt arena I)
+    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0)
+    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own)) :
+    ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
+  rintro ⟨r, rF, hh, ho⟩
+  have ht := reset_client_ct I I' h h' h8 h8' hres 1000 mInit r rF hh ho mInit_fseq
+  have hrun := reset_client_run
+  revert ht
+  cases e : ((Sched.soloRun 1000 resetClient).run mInit).run with
+  | none => rw [e] at hrun; cases hrun
+  | some x =>
+    rcases x with err | ⟨v, m'⟩
+    · rw [e] at hrun; cases hrun
+    · rw [e] at hrun
+      simp only [Option.map_some, Except.map, Option.some.injEq, Except.ok.injEq] at hrun
+      subst hrun
+      rintro ⟨r', -, hk, -⟩
+      exact keeps_same rfl hk
+
 -- `check.sh` requires only the standard axioms.
 #print axioms foreign_free_panics
 #print axioms oob_free_illegal
@@ -210,5 +325,6 @@ theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I
 #print axioms node_buf_low
 #print axioms aligned_index_ok
 #print axioms not_fallocSpec_arena
+#print axioms not_reset_own
 
 end AllocArena.ArenaObstruction

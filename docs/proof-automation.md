@@ -8,7 +8,7 @@ nothing else: the generated code is walked by general rules from the library (CL
 "General tactics over module-specific ones").
 
 ```lean
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -16,6 +16,12 @@ theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64)
       (fun _ => (finv ctx B).own) := by
   fsym
 ```
+
+`ZigLean.Sep.Full.AutoAll` is the one import of a proof: `fsym` with every rule of the library
+(arrays, typed values, error unions and optionals through pointers, regions, blocks, the
+allocator wrappers, the mapping primitives), the loop rules, the start memory and the claim
+witnesses. `tests/roadmap/one-logic/check.sh` fails when a library module that declares an `fsym`
+rule is not reached from it.
 
 The users are the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba/AllocFba/Full.lean`:
 all four `FAllocSpec` fields, including the refined `resize` field) and the translated

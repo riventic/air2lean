@@ -505,6 +505,11 @@ theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : 
     FTotalTriple P (checkSliceEnd srcLen start len extra) (fun _ => P) := by
   unfold checkSliceEnd; rw [if_pos h]; exact FTotalTriple.ret (Q := fun _ => P) ()
 
+/-- An item index (`s[i]`, `&s[i]`) within the operand's length. -/
+@[fsym] theorem checkIndex_of {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
+    FTotalTriple P (checkIndex len i) (fun _ => P) := by
+  unfold checkIndex; rw [if_pos h]; exact FTotalTriple.ret (Q := fun _ => P) ()
+
 /-- A checked unsigned `%` by a nonzero divisor. -/
 @[fsym] theorem rem_step {a b : BitVec w} (h : b ≠ 0) :
     FTotalTriple P (StateT.lift (Zig.rem false a b) : MemM (BitVec w))

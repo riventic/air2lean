@@ -1073,6 +1073,15 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 2, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # FAllocSpec is not vacuous: no double issue, no trapping free.
+          lake env lean tests/roadmap/sep-full/AllocNeg.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/alloc-neg.log"
+          python3 - "$RUNNER_TEMP/sep-full/alloc-neg.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
           # Block extents: what a cell no longer pins (size, ending the block) and the extent updates.
           lake env lean tests/roadmap/sep-full/BlockExtentsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/block-extents.log"
           python3 - "$RUNNER_TEMP/sep-full/block-extents.log" <<'EOF'
@@ -1143,18 +1152,31 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/loop-tactics"
-          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
+          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
+
+      # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
+      # every Mem.FSeq memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
+      - name: Migrated full-state proofs and their strength logs
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/strength-log"
+          # shellcheck disable=SC2046
+          lake build $(sed -n 's/^import \([A-Z][^ ]*\)$/\1/p' tests/roadmap/strength-log/*.lean | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
+          for f in tests/roadmap/strength-log/*.lean; do
+            lake env lean "$f" 2>&1 | tee "$RUNNER_TEMP/strength-log/strength-$(basename "$f" .lean).log"
+          done
 
       - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
-          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Total ZigLean.Sep.Block ZigLean.Sep.Full.Triple Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Full.Init ZigLean.Sep.Full.Disjoint Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done
@@ -1679,7 +1701,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake build ZigLean ZigLean.Sep.Full.Malloc ZigLean.Conc.OsRules
           lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
@@ -2241,8 +2263,8 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
-      - name: Dispatch-loop template regressions
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"
