@@ -1701,7 +1701,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake build ZigLean ZigLean.Sep.Full.Malloc ZigLean.Conc.OsRules
           lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
