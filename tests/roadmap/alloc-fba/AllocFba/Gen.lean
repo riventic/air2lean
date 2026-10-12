@@ -1010,7 +1010,7 @@ inductive mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit where
   | br40
   | br61 (v : Option (Zig.Ptr))
   | br59 (v : Zig.Ptr)
-  | br87
+  | br86
   | br96
   | br108
   | br117
@@ -1113,18 +1113,18 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : 
               let i79 ← Zig.sub false i78 (0 : BitVec 64)
               let i80 ← pure (⟨i77, i79⟩ : Zig.Slice)
               let i81 ← pure i31.ptr
-              let i82 ← pure i81
-              let i83 ← pure (i76)
-              let i84 ← Zig.sub false i83 (0 : BitVec 64)
-              let i85 ← pure i31.len
-              let i86 ← pure (Zig.le false i83 i85)
+              let i82 ← pure (i76)
+              let i83 ← Zig.sub false i82 (0 : BitVec 64)
+              let i84 ← pure i31.len
+              let i85 ← pure (Zig.le false i82 i84)
               match ← ((do
-                if i86 then (do
-                  pure .br87)
+                if i85 then (do
+                  pure .br86)
                 else (do
                   throw .outOfBounds)) : Zig.MM mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
-              | .br87 => (do
-                let i92 ← Zig.callM (Zig.checkSliceEnd i31.len (0 : BitVec 64) i84 0 >>= fun _ => pure (⟨i82, i84⟩ : Zig.Slice))
+              | .br86 => (do
+                let i91 ← pure i81
+                let i92 ← Zig.callM (Zig.checkSliceEnd i31.len (0 : BitVec 64) i83 0 >>= fun _ => pure (⟨i91, i83⟩ : Zig.Slice))
                 let i93 ← pure i80.len
                 let i94 ← pure i92.len
                 let i95 ← pure (i93 == i94)
@@ -1631,7 +1631,7 @@ inductive mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Exit where
   | ret (v : Except Zig.ErrName (Zig.Slice))
   | br4 (v : Except Zig.ErrName (Zig.Slice))
   | br21
-  | br34
+  | br33
   | br42
 
 def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
@@ -1668,19 +1668,19 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator
           let i26 ← Zig.callM (Zig.checkIndex v15.len p1) >>= fun _ => Zig.callM (Zig.ptrProject v15.ptr (·.elem 1 p1))
           Zig.store (α := BitVec 8) 1 i26 (7 : BitVec 8)
           let i28 ← pure v15.ptr
-          let i29 ← pure i28
-          let i30 ← Zig.sub false p1 (0 : BitVec 64)
-          let i31 ← pure v15.len
-          let i32 ← Zig.add false p1 (1 : BitVec 64)
-          let i33 ← pure (Zig.le false i32 i31)
+          let i29 ← Zig.sub false p1 (0 : BitVec 64)
+          let i30 ← pure v15.len
+          let i31 ← Zig.add false p1 (1 : BitVec 64)
+          let i32 ← pure (Zig.le false i31 i30)
           match ← ((do
-            if i33 then (do
-              pure .br34)
+            if i32 then (do
+              pure .br33)
             else (do
               throw .outOfBounds)) : Zig.MM mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Locals mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Exit) with
-          | .br34 => (do
-            let i39 ← Zig.callM (Zig.checkSliceEnd v15.len (0 : BitVec 64) i30 1 >>= fun _ => pure (⟨i29, i30⟩ : Zig.Slice))
-            let i40 ← Zig.callM (Zig.checkSentinelIndex i39.len i30 >>= fun _ => Zig.load (BitVec 8) 1 (i39.ptr.elem 1 i30))
+          | .br33 => (do
+            let i38 ← pure i28
+            let i39 ← Zig.callM (Zig.checkSliceEnd v15.len (0 : BitVec 64) i29 1 >>= fun _ => pure (⟨i38, i29⟩ : Zig.Slice))
+            let i40 ← Zig.callM (Zig.checkSentinelIndex i39.len i29 >>= fun _ => Zig.load (BitVec 8) 1 (i39.ptr.elem 1 i29))
             let i41 ← pure ((7 : BitVec 8) == i40)
             match ← ((do
               if i41 then (do

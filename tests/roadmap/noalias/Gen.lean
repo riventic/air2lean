@@ -248,32 +248,32 @@ structure shiftCopyLocals where
 
 inductive shiftCopyExit where
   | ret (v : BitVec 8)
-  | br7
-  | br14
+  | br5
+  | br12
 
 def shiftCopy (p0 : BitVec 64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s2 ← Zig.allocStack 16 1
   let e ← ((do
     let i2 ← pure (← get).buf
     Zig.store (α := Vector (BitVec 8) 16) 1 i2 (#v[(1 : BitVec 8), (2 : BitVec 8), (3 : BitVec 8), (4 : BitVec 8), (5 : BitVec 8), (6 : BitVec 8), (7 : BitVec 8), (8 : BitVec 8), (9 : BitVec 8), (10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8), (14 : BitVec 8), (15 : BitVec 8), (16 : BitVec 8)] : Vector (BitVec 8) 16)
-    let i4 ← pure (i2)
-    let i5 ← Zig.callM (Zig.ptrProject i4 (·.elem 1 p0))
-    let i6 ← pure (Zig.le false p0 (16 : BitVec 64))
+    let i4 ← pure (Zig.le false p0 (16 : BitVec 64))
     match ← ((do
-      if i6 then (do
-        pure .br7)
+      if i4 then (do
+        pure .br5)
       else (do
         throw .outOfBounds)) : Zig.MM shiftCopyLocals shiftCopyExit) with
-    | .br7 => (do
-      let i12 ← Zig.sub false (16 : BitVec 64) p0
-      let i13 ← pure (Zig.le false (16 : BitVec 64) (16 : BitVec 64))
+    | .br5 => (do
+      let i10 ← Zig.sub false (16 : BitVec 64) p0
+      let i11 ← pure (Zig.le false (16 : BitVec 64) (16 : BitVec 64))
       match ← ((do
-        if i13 then (do
-          pure .br14)
+        if i11 then (do
+          pure .br12)
         else (do
           throw .outOfBounds)) : Zig.MM shiftCopyLocals shiftCopyExit) with
-      | .br14 => (do
-        let i19 ← Zig.callM (Zig.checkSliceEnd (16 : BitVec 64) p0 i12 0 >>= fun _ => pure (⟨i5, i12⟩ : Zig.Slice))
+      | .br12 => (do
+        let i17 ← pure (i2)
+        let i18 ← Zig.callM (Zig.ptrProject i17 (·.elem 1 p0))
+        let i19 ← Zig.callM (Zig.checkSliceEnd (16 : BitVec 64) p0 i10 0 >>= fun _ => pure (⟨i18, i10⟩ : Zig.Slice))
         modify (fun s => { s with local20 := i19 })
         let i24 ← pure (((← get).local20).ptr)
         let i25 ← pure (i2)

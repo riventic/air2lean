@@ -365,9 +365,9 @@ inductive heap_PageAllocator_mapExit where
   | br33
   | br44 (v : Zig.Slice)
   | br60
-  | br82
+  | br81
   | br72
-  | br100
+  | br99
   | br114
   | br93
   | br123
@@ -454,17 +454,17 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                 if i74 then (do
                   let i76 ← pure ((← get).local53)
                   let i77 ← pure i76.ptr
-                  let i78 ← pure i77
-                  let i79 ← Zig.sub false i71 (0 : BitVec 64)
-                  let i80 ← pure i76.len
-                  let i81 ← pure (Zig.le false i71 i80)
+                  let i78 ← Zig.sub false i71 (0 : BitVec 64)
+                  let i79 ← pure i76.len
+                  let i80 ← pure (Zig.le false i71 i79)
                   match ← ((do
-                    if i81 then (do
-                      pure .br82)
+                    if i80 then (do
+                      pure .br81)
                     else (do
                       throw .outOfBounds)) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
-                  | .br82 => (do
-                    let i87 ← Zig.callMC (Zig.checkSliceEnd i76.len (0 : BitVec 64) i79 0 >>= fun _ => pure (⟨i78, i79⟩ : Zig.Slice))
+                  | .br81 => (do
+                    let i86 ← pure i77
+                    let i87 ← Zig.callMC (Zig.checkSliceEnd i76.len (0 : BitVec 64) i78 0 >>= fun _ => pure (⟨i86, i78⟩ : Zig.Slice))
                     let i88 ← pure (i87)
                     let _i89 ← Zig.callMC (Zig.Os.munmap Zig.Os.Target.macos i88)
                     pure .br72)
@@ -478,16 +478,16 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                   let i95 ← pure (i11)
                   let i96 ← pure (Zig.gt false i94 i95)
                   if i96 then (do
-                    let i98 ← Zig.callMC (Zig.ptrProject i65 (·.elem 1 i11))
-                    let i99 ← pure (Zig.le false i11 i92)
+                    let i98 ← pure (Zig.le false i11 i92)
                     match ← ((do
-                      if i99 then (do
-                        pure .br100)
+                      if i98 then (do
+                        pure .br99)
                       else (do
                         throw .outOfBounds)) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
-                    | .br100 => (do
-                      let i105 ← Zig.sub false i92 i11
-                      let i106 ← pure (⟨i98, i105⟩ : Zig.Slice)
+                    | .br99 => (do
+                      let i104 ← Zig.sub false i92 i11
+                      let i105 ← Zig.callMC (Zig.ptrProject i65 (·.elem 1 i11))
+                      let i106 ← pure (⟨i105, i104⟩ : Zig.Slice)
                       let i107 ← pure i106.ptr
                       let i108 ← pure i106.len
                       let i109 ← pure (i108 == (0 : BitVec 64))

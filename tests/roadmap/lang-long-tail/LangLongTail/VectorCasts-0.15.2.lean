@@ -27,8 +27,8 @@ inductive mem_eqlBytesExit where
   | br78
   | br88
   | br30
-  | br130
-  | br143
+  | br128
+  | br141
   | br118
   | br115
   | br25
@@ -37,14 +37,14 @@ inductive mem_eqlBytesExit where
   | br166
   | br168
   | br170
-  | br193
-  | br207
+  | br191
+  | br205
   | br215 (v : Bool)
   | br214
   | br181
   | br178
-  | br235
-  | br250
+  | br233
+  | br248
   | br257 (v : Bool)
   | rep116
   | rep179
@@ -66,33 +66,33 @@ def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : 
     if i184 then (do
       let i186 ← Zig.mul false i180 (16 : BitVec 64)
       let i187 ← pure p0.ptr
-      let i188 ← Zig.callM (Zig.ptrProject i187 (·.elem 1 i186))
-      let i189 ← Zig.add false i186 (16 : BitVec 64)
-      let i190 ← pure (i188)
-      let i191 ← pure p0.len
-      let i192 ← pure (Zig.le false i189 i191)
+      let i188 ← Zig.add false i186 (16 : BitVec 64)
+      let i189 ← pure p0.len
+      let i190 ← pure (Zig.le false i188 i189)
       match ← ((do
-        if i192 then (do
-          pure .br193)
+        if i190 then (do
+          pure .br191)
         else (do
           throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-      | .br193 => (do
-        let i198 ← Zig.load (Vector (BitVec 8) 16) 1 i190
+      | .br191 => (do
+        let i196 ← Zig.callM (Zig.ptrProject i187 (·.elem 1 i186))
+        let i197 ← pure (i196)
+        let i198 ← Zig.load (Vector (BitVec 8) 16) 1 i197
         let i199 ← pure (⟨i198⟩ : Zig.Vec (BitVec 8) 16)
         let i200 ← Zig.mul false i180 (16 : BitVec 64)
         let i201 ← pure p1.ptr
-        let i202 ← Zig.callM (Zig.ptrProject i201 (·.elem 1 i200))
-        let i203 ← Zig.add false i200 (16 : BitVec 64)
-        let i204 ← pure (i202)
-        let i205 ← pure p1.len
-        let i206 ← pure (Zig.le false i203 i205)
+        let i202 ← Zig.add false i200 (16 : BitVec 64)
+        let i203 ← pure p1.len
+        let i204 ← pure (Zig.le false i202 i203)
         match ← ((do
-          if i206 then (do
-            pure .br207)
+          if i204 then (do
+            pure .br205)
           else (do
             throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-        | .br207 => (do
-          let i212 ← Zig.load (Vector (BitVec 8) 16) 1 i204
+        | .br205 => (do
+          let i210 ← Zig.callM (Zig.ptrProject i201 (·.elem 1 i200))
+          let i211 ← pure (i210)
+          let i212 ← Zig.load (Vector (BitVec 8) 16) 1 i211
           let i213 ← pure (⟨i212⟩ : Zig.Vec (BitVec 8) 16)
           match ← ((do
             match ← ((do
@@ -127,32 +127,32 @@ def mem_eqlBytes.loop116 (p0 : Zig.Slice) (p1 : Zig.Slice) (i114 : Vector (BitVe
       let i122 ← Zig.callR (Zig.vindex i114 i117)
       let i123 ← pure ((← get).x)
       let i124 ← pure p0.ptr
-      let i125 ← Zig.callM (Zig.ptrProject i124 (·.elem 1 i122))
-      let i126 ← Zig.add false i122 (4 : BitVec 64)
-      let i127 ← pure (i125)
-      let i128 ← pure p0.len
-      let i129 ← pure (Zig.le false i126 i128)
+      let i125 ← Zig.add false i122 (4 : BitVec 64)
+      let i126 ← pure p0.len
+      let i127 ← pure (Zig.le false i125 i126)
       match ← ((do
-        if i129 then (do
-          pure .br130)
+        if i127 then (do
+          pure .br128)
         else (do
           throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-      | .br130 => (do
-        let i135 ← Zig.load (Vector (BitVec 8) 4) 1 i127
+      | .br128 => (do
+        let i133 ← Zig.callM (Zig.ptrProject i124 (·.elem 1 i122))
+        let i134 ← pure (i133)
+        let i135 ← Zig.load (Vector (BitVec 8) 4) 1 i134
         let i136 ← Zig.reprCast (BitVec 32) (i135 : Vector (BitVec 8) 4)
         let i137 ← pure p1.ptr
-        let i138 ← Zig.callM (Zig.ptrProject i137 (·.elem 1 i122))
-        let i139 ← Zig.add false i122 (4 : BitVec 64)
-        let i140 ← pure (i138)
-        let i141 ← pure p1.len
-        let i142 ← pure (Zig.le false i139 i141)
+        let i138 ← Zig.add false i122 (4 : BitVec 64)
+        let i139 ← pure p1.len
+        let i140 ← pure (Zig.le false i138 i139)
         match ← ((do
-          if i142 then (do
-            pure .br143)
+          if i140 then (do
+            pure .br141)
           else (do
             throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-        | .br143 => (do
-          let i148 ← Zig.load (Vector (BitVec 8) 4) 1 i140
+        | .br141 => (do
+          let i146 ← Zig.callM (Zig.ptrProject i137 (·.elem 1 i122))
+          let i147 ← pure (i146)
+          let i148 ← Zig.load (Vector (BitVec 8) 4) 1 i147
           let i149 ← Zig.reprCast (BitVec 32) (i148 : Vector (BitVec 8) 4)
           let i150 ← pure (i136 ^^^ i149)
           let i151 ← pure (i123 ||| i150)
@@ -339,34 +339,34 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                       let i227 ← pure p0.len
                       let i228 ← Zig.sub false i227 (16 : BitVec 64)
                       let i229 ← pure p0.ptr
-                      let i230 ← Zig.callM (Zig.ptrProject i229 (·.elem 1 i228))
-                      let i231 ← Zig.add false i228 (16 : BitVec 64)
-                      let i232 ← pure (i230)
-                      let i233 ← pure p0.len
-                      let i234 ← pure (Zig.le false i231 i233)
+                      let i230 ← Zig.add false i228 (16 : BitVec 64)
+                      let i231 ← pure p0.len
+                      let i232 ← pure (Zig.le false i230 i231)
                       match ← ((do
-                        if i234 then (do
-                          pure .br235)
+                        if i232 then (do
+                          pure .br233)
                         else (do
                           throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-                      | .br235 => (do
-                        let i240 ← Zig.load (Vector (BitVec 8) 16) 1 i232
+                      | .br233 => (do
+                        let i238 ← Zig.callM (Zig.ptrProject i229 (·.elem 1 i228))
+                        let i239 ← pure (i238)
+                        let i240 ← Zig.load (Vector (BitVec 8) 16) 1 i239
                         let i241 ← pure (⟨i240⟩ : Zig.Vec (BitVec 8) 16)
                         let i242 ← pure p0.len
                         let i243 ← Zig.sub false i242 (16 : BitVec 64)
                         let i244 ← pure p1.ptr
-                        let i245 ← Zig.callM (Zig.ptrProject i244 (·.elem 1 i243))
-                        let i246 ← Zig.add false i243 (16 : BitVec 64)
-                        let i247 ← pure (i245)
-                        let i248 ← pure p1.len
-                        let i249 ← pure (Zig.le false i246 i248)
+                        let i245 ← Zig.add false i243 (16 : BitVec 64)
+                        let i246 ← pure p1.len
+                        let i247 ← pure (Zig.le false i245 i246)
                         match ← ((do
-                          if i249 then (do
-                            pure .br250)
+                          if i247 then (do
+                            pure .br248)
                           else (do
                             throw .outOfBounds)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
-                        | .br250 => (do
-                          let i255 ← Zig.load (Vector (BitVec 8) 16) 1 i247
+                        | .br248 => (do
+                          let i253 ← Zig.callM (Zig.ptrProject i244 (·.elem 1 i243))
+                          let i254 ← pure (i253)
+                          let i255 ← Zig.load (Vector (BitVec 8) 16) 1 i254
                           let i256 ← pure (⟨i255⟩ : Zig.Vec (BitVec 8) 16)
                           match ← ((do
                             let i258 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 != x1)) i241 i256
