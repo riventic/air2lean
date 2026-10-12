@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
+import ZigLean.Range
 
 /-!
 # The rule library of the full-state symbolic executor (`fsym`, `docs/proof-automation.md`)
@@ -50,11 +51,6 @@ theorem stepAll {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : FT
     (k : ∀ v, L.T (Q₀ v) (f v) Q) : L.T P (c >>= f) Q :=
   L.bind (L.ofTotal r) k
 
-/-- A command proved by a rule of the logic itself (a partial rule in the partial logic). -/
-theorem stepL {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : L.T P₀ c Q₀)
-    (k : ∀ v, L.T (Q₀ v ⋆ R) (f v) Q) : L.T (P₀ ⋆ R) (c >>= f) Q :=
-  L.bind (L.frame r) k
-
 /-- **A return**, after a frame-preserving update into the postcondition. -/
 theorem ret {v : β} (h : EUpd P (Q v)) : L.T P (pure v) Q :=
   L.ofTotal (FTotalTriple.eupd h (FTotalTriple.ret v))
@@ -77,10 +73,6 @@ variable {b : BlockId} {A k : Nat} {P X R : FAssn}
 theorem AddrOf.of_atom (h : AddrOf b A X) (e : P = (X ⋆ R)) : AddrOf b A P := e ▸ h.sepL
 
 theorem Reaches.of_atom (h : Reaches b k X) (e : P = (X ⋆ R)) : Reaches b k P := e ▸ h.sepL
-
-/-- The cells of a legacy assertion are the resource's. -/
-theorem up_cell {Y : Assn} {r : Res} (hr : up Y r) {l : Loc} {c : Cell} (hc : r.heap.erase l = some c) :
-    ∃ fc, r.heap l = some fc ∧ fc.cell = c := erase_cell hc
 
 /-- A nonempty owned byte range at `p` (in block `b`): the block's address. -/
 theorem AddrOf.bytes {Y : Assn} {p : Ptr} (hpb : p.block = some b)
@@ -209,9 +201,6 @@ attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
 section Arith
 
 variable {w : Nat} {P : FAssn}
-
-theorem read_pure {α : Type} {v : α} : FTotalTriple P (pure v : MemM α) (fun r => ⟪r = v⟫ ⋆ P) :=
-  (FTotalTriple.ret (Q := fun r => ⟪r = v⟫ ⋆ P) v).pre fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
 /-- A word result with its value: the step rules below leave `r` opaque with the fact
 `r.toNat = …` (a symbolic execution in SSA form), so later terms mention `r` and not the
@@ -404,14 +393,9 @@ theorem maxAtom_left {a b : Nat} (h : b ≤ a) : maxAtom a b = a := by unfold ma
 theorem maxAtom_right {a b : Nat} (h : a ≤ b) : maxAtom a b = b := by unfold maxAtom; omega
 
 /-! **No wrap-around**: the value of a word operation whose result fits (conditional rewrites of
-the arithmetic solver, side conditions by `omega`). -/
+the arithmetic solver, side conditions by `omega`; `+ - *` are `Zig.toNat_add_of_lt`,
+`Zig.toNat_sub_of_le`, `BitVec.toNat_mul_of_lt`). -/
 
-theorem toNat_add_nowrap {x y : BitVec w} (h : x.toNat + y.toNat < 2 ^ w) : (x + y).toNat = x.toNat + y.toNat :=
-  BitVec.toNat_add_of_lt h
-theorem toNat_sub_nowrap {x y : BitVec w} (h : y.toNat ≤ x.toNat) : (x - y).toNat = x.toNat - y.toNat :=
-  BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)
-theorem toNat_mul_nowrap {x y : BitVec w} (h : x.toNat * y.toNat < 2 ^ w) : (x * y).toNat = x.toNat * y.toNat := by
-  rw [BitVec.toNat_mul, Nat.mod_eq_of_lt h]
 theorem toNat_ofNat_nowrap {n : Nat} (h : n < 2 ^ w) : (BitVec.ofNat w n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
 theorem toNat_ofInt_nowrap {i : Int} (h0 : 0 ≤ i) (h : i < 2 ^ w) : (BitVec.ofInt w i).toNat = i.toNat := by
@@ -466,8 +450,6 @@ theorem imp_junk_junk (h : ∀ r, X r → Junk r) : ∀ r, (Junk ⋆ X) r → Ju
   obtain ⟨j2, h2⟩ := h _ h2
   exact junk_absorb ⟨r₁, r₂, hd, rfl, h1, ⟨j2, h2⟩⟩
 
-theorem eupd_of_imp (h : ∀ r, P r → X r) : EUpd P X := EUpd.of_imp h
-
 /-- A local update, reordered: the planner's step. -/
 theorem eupd_frame_ac {R P' : FAssn} (h : EUpd X Y) (e1 : P = (X ⋆ R)) (e2 : (Y ⋆ R) = P') :
     EUpd P P' := e1 ▸ e2 ▸ h.frame
@@ -518,6 +500,59 @@ theorem share_raise {q₂ : Frac} {k₂ : Nat} :
   obtain ⟨r₁, r₂, -, -, h1, h2⟩ := id hp
   obtain ⟨r', hh', hp'⟩ := EUpd.join m r rF hh hp hs
   exact ⟨r', hh', (bshare_split h1.1 h2.1).mp hp'⟩
+
+/-! The authority over a block's extent (`bauth`; `bext` is the fraction `Frac.one`): untagged
+shares go back into it (`EUpd.unlend`) and come out of it (`EUpd.lend`); a share's bound rises up
+to the block's size. -/
+
+theorem auth_unlend {S : Nat} {K : BlockKind} {q₁ q₂ : Frac} :
+    EUpd (bauth b S K q₁ ⋆ bshare b q₂ k) (bauth b S K (q₁.add q₂)) := EUpd.unlend
+
+theorem auth_lend {S : Nat} {K : BlockKind} {q₁ q₂ : Frac} (hk : k ≤ S) (hq : 0 < q₂.val) :
+    EUpd (bauth b S K (q₁.add q₂)) (bauth b S K q₁ ⋆ bshare b q₂ k) := EUpd.lend hk hq
+
+/-- **Raise a share's bound** with the authority of its block: up to the block's size. -/
+theorem auth_raise {S : Nat} {K : BlockKind} {q₁ q₂ : Frac} (hk : k' ≤ S) :
+    EUpd (bauth b S K q₁ ⋆ bshare b q₂ k) (bauth b S K q₁ ⋆ bshare b q₂ k') := fun m r rF hh hp hs => by
+  have hq : 0 < q₂.val := by obtain ⟨_, _, _, _, _, h2⟩ := hp; exact h2.1
+  exact (EUpd.unlend.trans (EUpd.lend hk hq)) m r rF hh hp hs
+
+/-- An authority whose fraction is known otherwise. -/
+theorem auth_eq {S : Nat} {K : BlockKind} {q₁ q₂ : Frac} (h : q₁ = q₂) :
+    bauth b S K q₁ = bauth b S K q₂ := h ▸ rfl
+
+theorem one_half_pos : 0 < Frac.one.half.val := Frac.half_pos (by decide)
+
+theorem frac_pos_of_eq {a c : Frac} (h : a = c) (ha : 0 < a.val) : 0 < c.val := h ▸ ha
+
+/-- **Knowledge from ownership**, as an update: a nonempty region of block `b` whose cells have
+the address `A` gives `known b A`. -/
+theorem known_of_region {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
+    (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a bs) ⋆ known b A) := by
+  intro m r rF hh hp _
+  obtain ⟨hr, hk, hg⟩ := id hp
+  obtain ⟨-, -, b', hb', -, hl⟩ := id hr
+  rw [hpb] at hb'; cases hb'
+  have e := hl (b, p.off.toNat)
+  rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at e
+  simp only [FHeap.erase, Option.map_eq_some_iff] at e
+  obtain ⟨fc, hfc, hfe⟩ := e
+  have hkn : m.kn b A := by
+    obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hfc
+    exact ⟨blk, hblk, by rw [← ha, hfe]⟩
+  exact ⟨⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩,
+    ⟨hh.disj, hh.heap, hh.know.union fun b' A' h => by obtain ⟨rfl, rfl⟩ := h; exact hkn,
+      hh.knowF, hh.ghost⟩,
+    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A, Ghost.unit⟩, FHeap.disjoint_empty _,
+      by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩⟩
+
+/-- Knowledge can be forgotten. -/
+theorem known_drop {A : Nat} {R : FAssn} : EUpd (known b A ⋆ R) R := by
+  rintro m _ rF hh ⟨r₁, r₂, -, rfl, ⟨e1, -, e3⟩, hp⟩ -
+  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
+  simp only [e1, e3, FHeap.empty_union, Ghost.unit_add] at hd hm hg
+  exact ⟨r₂, ⟨hd, hm, Know.Sub.right hkn, hkF, hg⟩, hp⟩
 
 theorem ite_pos_eq {c : Prop} [Decidable c] (h : c) (X Y : FAssn) : (if c then X else Y) = X := if_pos h
 theorem ite_neg_eq {c : Prop} [Decidable c] (h : ¬c) (X Y : FAssn) : (if c then X else Y) = Y := if_neg h
@@ -572,12 +607,16 @@ theorem result_throw_bind {α β : Type} (e : Error) (f : α → Result β) : (t
 attribute [fsym_norm] run_ite' run_throw' result_throw_bind lift_bind lift_ite lift_optPayload_some Option.elim_none Option.elim_some
   Zig.call StateT.run_monadLift StateT.run_lift liftM monadLift MonadLift.monadLift
 
+/-- The payload and the error of an error union whose tag is known. -/
+theorem unwrapPayload_ok {α : Type} (v : α) : Zig.unwrapPayload (.ok v : Except ErrName α) = pure v := rfl
+theorem unwrapErr_error {α : Type} (e : ErrName) : Zig.unwrapErr (.error e : Except ErrName α) = pure e := rfl
+
 attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_callM Norm.run_callR
   Norm.run_liftM Norm.run_liftR Norm.run_ite Norm.ite_bind Norm.run_throw Norm.throw_bind
   Norm.lift_pure Norm.lift_throw Norm.sub_zero Norm.elem_zero Norm.run_get Norm.run_modify
   Norm.add_zero_ptr bind_assoc pure_bind map_pure bind_map_left map_bind Norm.beq_true_iff
   bind_pure_unit Zig.isNonErr Zig.isErr Bool.not_false Bool.not_true Bool.false_eq_true
-  Norm.isSome_ite Norm.elim_bind
+  Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
 /-- `Zig` comparisons of unsigned words, as comparisons of their values. -/
 @[fsym_arith] theorem lt_false {n : Nat} (a b : BitVec n) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
@@ -598,6 +637,7 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
 attribute [fsym_arith] BitVec.toNat_ofNat BitVec.toNat_ofInt BitVec.toNat_add BitVec.toNat_eq
   BitVec.lt_def BitVec.le_def decide_eq_true_eq decide_eq_false_iff_not Bool.not_eq_true
   Bool.not_eq_true' beq_iff_eq bne_iff_ne Int.natCast_add Int.natCast_mul Int.toNat_natCast
+  Bool.or_eq_true Bool.and_eq_true Nat.not_lt Nat.not_le BlockKind.mapped.injEq
 
 open Lean Meta Simp in
 /-- `x &&& m` for a literal mask `m = 2 ^ k - 1`: `x % 2 ^ k` (for `omega`). -/
@@ -617,6 +657,43 @@ attribute [fsym_arith] addWithOverflow_fst subWithOverflow_fst mulWithOverflow_f
   subWithOverflow_snd mulWithOverflow_snd shl_eq BitVec.toNat_umod BitVec.toNat_udiv BitVec.toNat_not
 attribute [fsym_arith high] addWithOverflow_snd_eq subWithOverflow_snd_eq mulWithOverflow_snd_eq
 attribute [fsym_arith high] and_lowMask and_lowMask' and_not_lowMask and_not_lowMask'
+
+theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
+    Zig.add false a b = pure (a + b) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp at h ⊢; omega)]
+theorem sub_lit {n : Nat} {a b : BitVec n} (h : decide (b.toNat ≤ a.toNat) = true) :
+    Zig.sub false a b = pure (a - b) := by
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp at h ⊢; omega)]
+theorem mul_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
+    Zig.mul false a b = pure (a * b) := by
+  simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp at h ⊢; omega)]
+
+open Lean Meta Simp in
+/-- Unsigned `+ - *` of two word literals that does not overflow: its value (`pure (a - b)`,
+then evaluated by Lean's `BitVec` simprocs). Generated code computes constants such as
+`alignment - 1` at run time. The side condition is decided on the literals. -/
+def reduceLitArithCore (op lem : Name) : Simproc := fun e => do
+  unless e.isAppOfArity op 4 do return .continue
+  let args := e.getAppArgs
+  unless args[1]!.isConstOf ``Bool.false do return .continue
+  let some ⟨w, a⟩ ← getBitVecValue? args[2]! | return .continue
+  let some ⟨_, b⟩ ← getBitVecValue? args[3]! | return .continue
+  let ok := if op == ``Zig.add then a.toNat + b.toNat < 2 ^ w
+    else if op == ``Zig.sub then b.toNat ≤ a.toNat
+    else a.toNat * b.toNat < 2 ^ w
+  unless ok do return .continue
+  let f ← mkAppOptM lem #[none, args[2]!, args[3]!]
+  let hTy := (← whnfR (← inferType f)).bindingDomain!
+  let pf := mkApp f (← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) hTy)
+  let rhs := (← inferType pf).appArg!
+  return .visit { expr := rhs, proof? := some pf }
+
+simproc [fsym_norm] reduceLitAdd (Zig.add false _ _) := reduceLitArithCore ``Zig.add ``add_lit
+simproc [fsym_norm] reduceLitSub (Zig.sub false _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
+simproc [fsym_norm] reduceLitMul (Zig.mul false _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
 
 open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`
@@ -698,13 +775,55 @@ theorem kp_extract_append (bs t : Array Byte) (n : Nat) : keepsPrefix bs ((bs ++
     simp only [Array.getElem_extract, Nat.zero_add]
     rw [Array.getElem_append_left (by omega)]
 
+theorem kp_extract_append_append (bs t u : Array Byte) (n : Nat) :
+    keepsPrefix bs ((bs ++ t ++ u).extract 0 n) := by
+  rw [Array.append_assoc]; exact kp_extract_append bs (t ++ u) n
+
+/-- A prefix of a prefix of `bs ++ t` keeps `bs`'s prefix. -/
+theorem kp_extract_extract_append (bs t : Array Byte) (m n : Nat) :
+    keepsPrefix bs (((bs ++ t).extract 0 m).extract 0 n) := by
+  rw [Array.extract_extract]; simp only [Nat.zero_add]
+  exact kp_extract_append bs t (Nat.min n m)
+
+/-- A power of two divides a literal power of two exactly when its exponent is at most the
+literal's. -/
+theorem two_pow_dvd_iff {k j L : Nat} (h : L = 2 ^ j) : 2 ^ k ∣ L ↔ k ≤ j := by
+  subst h; exact Nat.pow_dvd_pow_iff_le_right (by decide)
+
+/-- An exponent bounded by a power of two's literal bound. -/
+theorem le_of_two_pow_le {x c j : Nat} (h : 2 ^ x ≤ c) (hc : c < 2 ^ (j + 1)) : x ≤ j := by
+  rcases Nat.lt_or_ge j x with hx | hx
+  · have : 2 ^ (j + 1) ≤ 2 ^ x := Nat.pow_le_pow_right (by decide) (by omega)
+    omega
+  · exact hx
+
+open Lean Meta Simp in
+/-- `2 ^ k ∣ L` for a literal power of two `L = 2 ^ j`: `k ≤ j` (for `omega`). -/
+simproc [fsym_arith] reduceTwoPowDvd ((2 : Nat) ^ _ ∣ _) := fun e => do
+  let_expr Dvd.dvd _ _ p L := e | return .continue
+  let some l := L.nat? | return .continue
+  unless l > 0 && l &&& (l - 1) == 0 do return .continue
+  let_expr HPow.hPow _ _ _ _ two k := p | return .continue
+  unless two.nat? == some 2 do return .continue
+  let j := l.log2
+  let h ← mkDecideProof (← mkEq L (← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit j]))
+  let pf ← mkAppOptM ``two_pow_dvd_iff #[k, mkNatLit j, L, h]
+  let rhs ← mkAppM ``LE.le #[k, mkNatLit j]
+  return .done { expr := rhs, proof? := some (← mkPropExt pf) }
+
 end Zig.Full.Auto
 
 /-- Library facts that are not arithmetic; extend with `macro_rules`. -/
 syntax "fsym_fact" : tactic
 macro_rules
   | `(tactic| fsym_fact) => `(tactic| first
-      | exact Zig.Full.Auto.kp_refl _
-      | exact Zig.Full.Auto.kp_extract _ _
-      | exact Zig.Full.Auto.kp_append _ _
-      | exact Zig.Full.Auto.kp_extract_append _ _ _)
+      | with_reducible exact Zig.Full.Auto.kp_refl _
+      | with_reducible exact Zig.Full.Auto.kp_extract _ _
+      | with_reducible exact Zig.Full.Auto.kp_append _ _
+      | with_reducible exact Zig.Full.Auto.kp_extract_append _ _ _
+      | with_reducible exact Zig.Full.Auto.kp_extract_extract_append _ _ _ _
+      | with_reducible exact Zig.Full.Auto.kp_extract_append_append _ _ _ _
+      | with_reducible exact Zig.Full.Frac.half_add_half _
+      | with_reducible exact Zig.Full.Auto.one_half_pos
+      | with_reducible assumption
+      | (apply Eq.symm; with_reducible assumption))
