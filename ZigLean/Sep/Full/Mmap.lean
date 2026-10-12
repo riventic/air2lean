@@ -49,8 +49,8 @@ theorem Ghost.ok_exts_change {E E' : BlockId → Option (Nat × BlockKind)} {gF 
       ECell.TagOk.of_le (ls' := ((Ghost.exts E).add gF).ls)
         (fun _ _ _ h => by rw [hep]; exact h) hok.1.uniq hle hv.2⟩
     rw [ECell.add_comm]; exact hv.1
-  refine ⟨⟨fun γ => ?_, fun b => ?_, hok.1.2.2.congr (by rw [Ghost.exts_add_cl, Ghost.exts_add_cl])
-    (by rw [Ghost.ls_exts_add, Ghost.ls_exts_add])⟩, ?_⟩
+  refine ⟨⟨fun γ => ?_, fun b => ?_, hok.1.2.2.1.congr (by rw [Ghost.exts_add_cl, Ghost.exts_add_cl])
+    (by rw [Ghost.ls_exts_add, Ghost.ls_exts_add]), by simpa using hok.1.2.2.2⟩, ?_⟩
   · have := hok.1.1 γ; simpa [Ghost.add, Ghost.exts] using this
   · rw [Ghost.ls_exts_add]
     by_cases hb : (E' b).isSome
@@ -303,7 +303,8 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
   obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
   refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hc hbs), ?_⟩
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
-  refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.congr (by funext x y; simp) (by rw [els, els])⟩, ?_⟩,
+  refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.1.congr (by funext x y; simp) (by rw [els, els]),
+      by simpa using hok.1.2.2.2⟩, ?_⟩,
     fun x => ?_, (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by rw [hrg]; funext x y; simp)⟩
   · have := hok.1.1 γ; simpa [Ghost.add, Ghost.atExt] using this
   · show ((((Ghost.atExt b _).add rF.gh).extent x).Valid ∧ _)
@@ -351,6 +352,7 @@ theorem exts_extOne (b : BlockId) (S : Nat) (K : BlockKind) :
   · funext γ; simp [Ghost.atExt, Ghost.exts]
   · funext x; simp only [Ghost.atExt, Ghost.exts, extOne]; split <;> simp_all
   · funext x y; simp [Ghost.atExt, Ghost.exts]
+  · simp
 
 /-- After a step that makes no byte of `b` live, `reblockRes` is `nb`'s full extent. -/
 theorem reblockRes_bext {m m' : Mem} {b : BlockId} {nb : Block}
