@@ -642,5 +642,33 @@ theorem CVTable.dispatch_closure_env {t : AllocTables Tgt} {fns : VTableFns} {im
 /-- The four entries of a `std.mem.Allocator.VTable` in field order, for `vtR`/`vtOwn`. -/
 def _root_.Zig.VTableFns.toList (fns : VTableFns) : List Ptr := [fns.alloc, fns.resize, fns.remap, fns.free]
 
+/-! ## `std.Random`
+
+The second instance of the mechanism: `std.Random` is a context pointer and `fillFn :
+*const fn (*anyopaque, []u8) void`. Its calls go through a `Table` of the program's fill
+functions with the environment `EnvFn Tgt (Ptr × Slice) Unit` (the generated `Ext.call<i>` of the
+`fillFn` type); a client assumes `RandomSpec` of the function that the call runs
+(`Table.contract_of_sel` for a generator of the program, `Table.contract_of_fresh` for the
+environment's, premise EXT-05). -/
+
+/-- **`std.Random`'s contract** for the fill function `fill` at the context `ctx`: it keeps the
+generator's own resources `R` (its state) and fills the slice it is given with integer bytes,
+touching nothing else. Any bytes of any block but a constant global's (which no fill can write). -/
+def RandomSpec (fill : Ptr × Slice → ConcM Tgt Unit) (ctx : Ptr) (R : FAssn) : Prop :=
+  ∀ (s : Slice) (A S : Nat) (K : BlockKind) (bs : Array Byte), K ≠ .constGlobal →
+    bs.size = s.len.toNat →
+    CTriple (R ⋆ up (bytesAt s.ptr A S K bs)) (fill (ctx, s))
+      (fun _ => R ⋆ FAssn.ex fun vs : Array (BitVec 8) =>
+        ⟪vs.size = s.len.toNat⟫ ⋆ up (bytesAt s.ptr A S K (vs.map Byte.int)))
+
+/-- The fill step of `RandomSpec` (an `fsym` rule: `fsym [h.fill]`). -/
+theorem RandomSpec.fill {fill : Ptr × Slice → ConcM Tgt Unit} {ctx : Ptr} {R : FAssn}
+    (h : RandomSpec fill ctx R) (s : Slice) (A S : Nat) (K : BlockKind) (bs : Array Byte)
+    (hK : K ≠ .constGlobal) (hn : bs.size = s.len.toNat) :
+    CTriple (R ⋆ up (bytesAt s.ptr A S K bs)) (fill (ctx, s))
+      (fun _ => R ⋆ FAssn.ex fun vs : Array (BitVec 8) =>
+        ⟪vs.size = s.len.toNat⟫ ⋆ up (bytesAt s.ptr A S K (vs.map Byte.int))) :=
+  h s A S K bs hK hn
+
 end Full
 end Zig

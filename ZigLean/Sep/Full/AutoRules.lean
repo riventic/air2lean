@@ -703,6 +703,12 @@ theorem result_throw_bind {α β : Type} (e : Error) (f : α → Result β) : (t
 attribute [fsym_norm] run_ite' run_throw' result_throw_bind lift_bind lift_ite lift_optPayload_some Option.elim_none Option.elim_some
   Zig.call StateT.run_monadLift StateT.run_lift liftM monadLift MonadLift.monadLift StateT.run_get StateT.run_modify
 
+/-- A store of `undefined` is the store of its undefined bytes (the byte rules execute it). -/
+theorem storeUndef_eq {α : Type} [Enc α] (a : Nat) (p : Ptr) :
+    Zig.storeUndef α a p = Zig.storeBytes p a (Array.replicate (Enc.size α) .undef) := rfl
+
+attribute [fsym_norm] storeUndef_eq
+
 /-- The payload and the error of an error union whose tag is known. -/
 theorem unwrapPayload_ok {α : Type} (v : α) : Zig.unwrapPayload (.ok v : Except ErrName α) = pure v := rfl
 theorem unwrapErr_error {α : Type} (e : ErrName) : Zig.unwrapErr (.error e : Except ErrName α) = pure e := rfl

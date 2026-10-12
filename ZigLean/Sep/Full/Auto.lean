@@ -122,7 +122,8 @@ def reduceProjs (e : Expr) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
-/-- `List.map f` over a list literal expanded to the literal of the images, beta-reduced (a
+/-- `List.map f` over a list literal (or a definition of one) expanded to the literal of the
+images, beta-reduced (a
 table's arms at a call's arguments, `Table.callOr`). Then `reduceProjs` turns an argument of the
 call (`(c, ?n, …).2.1`) into the metavariable itself, which unification assigns the program's
 literal as written; left as a projection, unification unfolds the literal (`4#64` to its
@@ -131,9 +132,10 @@ def expandMapLits (e : Expr) : MetaM Expr :=
   Meta.transform e (post := fun x => do
     if x.isHeadBetaTarget then return .visit x.headBeta
     unless x.isAppOfArity ``List.map 4 do return .continue
-    let l := x.appArg!
+    -- the list itself may be a definition of the proof (a table `targets := [(c₁, g₁), …]`)
+    let l ← whnfD x.appArg!
     unless l.isAppOfArity ``List.cons 3 || l.isAppOfArity ``List.nil 1 do return .continue
-    return .visit (← whnfD x))
+    return .visit (← whnfD (mkApp x.appFn! l)))
 
 /-- Raw natural-number literals as numerals (`OfNat.ofNat n`): unification can assign a rule's
 argument a raw literal (`BitVec.ofNat 6 ?k =?= 3`, an interface's alignment), which the
@@ -2686,6 +2688,8 @@ def memCmd? (x : Expr) : Option Expr :=
 /-- Unfold the command `cmd` of a `CTriple` rule until its head is that of the program's command
 `x` (a table call `t.call f a` or `(CVTable.dispatch t fns).alloc …` is an indirect call). -/
 partial def unfoldToHead (cmd x : Expr) (fuel : Nat := 6) : MetaM Expr := do
+  -- a contract about a function `fun a => extCall …` applied to the call's arguments
+  let cmd := cmd.headBeta
   if fuel == 0 || headKey cmd == headKey x then return cmd
   match ← unfold1 cmd with
   | some c' => unfoldToHead c' x (fuel - 1)

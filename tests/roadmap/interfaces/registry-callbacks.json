@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "models": [],
+  "interfaces": [
+    {
+      "interface": "Visitor",
+      "function": "fn (*u32, u32) callconv(.c) bool",
+      "contract": "Interfaces.CallbacksSpec.VisitSpec",
+      "premise": "EXT-05"
+    }
+  ]
+}

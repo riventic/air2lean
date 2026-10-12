@@ -149,20 +149,30 @@ theorem bytesAt_cell_of (hpb : p.block = some b) (hpos : 0 < bs.size) {h : Heap}
   refine ⟨p.off.toNat, ⟨bs[0]!, A, S, K⟩, ?_, rfl, rfl⟩
   rw [hh]; simp [hpos]
 
-/-- **A store at the start of a block's bytes** held with the block's extent (an escaping local,
-`allocStack`): the bytes become the value's, followed by the rest. -/
+/-- **A store of raw bytes at the start of a block's bytes** held with the block's extent (an
+escaping local, `allocStack`; `storeUndef` of a local): the bytes become `bs'`, followed by the
+rest. -/
+@[fsym] theorem FTotalTriple.storeBytesBlock {bs' : Array Byte} (hpb : p.block = some b)
+    (hn : 0 < bs'.size) (hk : bs'.size ≤ bs.size) (ha : (A + p.off.toNat) % al = 0)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.storeBytes p al bs')
+      (fun _ => up (bytesAt p A S K (writeBytes bs 0 bs')) ⋆ bext b S K) := by
+  refine FTotalTriple.pinned (fun m hP hF hd hm hp hst => ?_) (Tame.storeBytes p al bs' .write)
+    (bytesAt_cells hpb) fun _ _ h => bytesAt_cell_of hpb
+      (by rw [writeBytes_size _ _ _ (by omega)]; omega) h
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
+    bytesAt_store (q := p) (k := 0) (a := al) (bs' := bs') hp hm hd
+      (by cases p; simp [Ptr.add]) hn (by omega) (by simpa using ha) hst hK
+  exact ⟨(), m', h', hrun, hd', hm', hb', hst'⟩
+
+/-- **A store at the start of a block's bytes** held with the block's extent: the bytes become
+the value's, followed by the rest. -/
 @[fsym] theorem FTotalTriple.storeBlock (w : T) (hpb : p.block = some b)
     (hn : 0 < (Enc.encode w).size) (hk : (Enc.encode w).size ≤ bs.size)
     (ha : (A + p.off.toNat) % al = 0) (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store al p w)
-      (fun _ => up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) := by
-  refine FTotalTriple.pinned (fun m hP hF hd hm hp hst => ?_) (Tame.store al p w)
-    (bytesAt_cells hpb) fun _ _ h => bytesAt_cell_of hpb
-      (by rw [writeBytes_size _ _ _ (by omega)]; omega) h
-  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
-    bytesAt_store (q := p) (k := 0) (a := al) (bs' := Enc.encode w) hp hm hd
-      (by cases p; simp [Ptr.add]) hn (by omega) (by simpa using ha) hst hK
-  exact ⟨(), m', h', hrun, hd', hm', hb', hst'⟩
+      (fun _ => up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) :=
+  FTotalTriple.storeBytesBlock hpb hn hk ha hK
 
 /-- **A load at the start of a block's bytes** held with the block's extent, whose first bytes
 decode to `v`. -/
@@ -196,6 +206,33 @@ decode to `v`. -/
   have e := extract_writeBytes bs 0 (Enc.encode w) (by omega)
   rw [hs, Nat.zero_add] at e
   rw [e]; exact LawfulEnc.decode_encode w
+
+/-- The first byte of a buffer of `u8`s is the encoding of its first item. -/
+theorem u8s_extract {vs : Array (BitVec 8)} (hn : 0 < vs.size) :
+    (vs.map Byte.int).extract 0 (Enc.size (BitVec 8)) = Enc.encode vs[0]! := by
+  have he : Enc.encode vs[0]! = #[Byte.int vs[0]!] := by
+    have hr : Array.range 1 = #[0] := by decide
+    simp [Enc.encode, padTo, intBytes, intSize, intAlign, alignUp, hr]
+    apply BitVec.eq_of_toNat_eq
+    have := vs[0]!.isLt
+    simp only [BitVec.toNat_ofNat]
+    omega
+  rw [show Enc.size (BitVec 8) = 1 from rfl, he]
+  apply Array.ext
+  · simp; omega
+  · intro i _ h2
+    simp at h2
+    subst h2
+    simp [hn]
+
+/-- **A load of the first `u8` of a buffer of `u8`s** (bytes that a `std.Random` fill or any
+integer writes left) at the start of a block's bytes. -/
+@[fsym] theorem FTotalTriple.loadBlock_u8 {vs : Array (BitVec 8)} (hpb : p.block = some b)
+    (hn : 0 < vs.size) (ha : (A + p.off.toNat) % al = 0) :
+    FTotalTriple (up (bytesAt p A S K (vs.map Byte.int)) ⋆ bext b S K) (Zig.load (BitVec 8) al p)
+      (fun x => ⟪x = vs[0]!⟫ ⋆ (up (bytesAt p A S K (vs.map Byte.int)) ⋆ bext b S K)) :=
+  FTotalTriple.loadBlock hpb (by decide) (by simp [show Enc.size (BitVec 8) = 1 from rfl]; omega)
+    (by rw [u8s_extract hn]; exact LawfulEnc.decode_encode _) ha
 
 end Block
 

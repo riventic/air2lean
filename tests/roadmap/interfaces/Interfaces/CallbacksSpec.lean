@@ -1,0 +1,78 @@
+import Interfaces.Callbacks
+import ZigLean.Sep.Full.Wrappers
+import ZigLean.Sep.Full.Dispatch
+import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Block
+import ZigLean.Sep.Full.AutoPrim
+import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.Try
+import ZigLean.Sep.Full.Region
+
+/-!
+# E02's callbacks on the interface seam (`docs/interfaces.md`)
+
+`tests/roadmap/callbacks/callbacks.zig` with its callback type `Visitor` open
+(`registry-callbacks.json`): a call through a `Visitor` runs the foreign `ext_visit`'s model or
+`sumVisit` for their addresses, and the environment (`Ext.call0`, premise EXT-05) for any other
+pointer. `evaluate` is proved once, for every callback, from the contract `VisitSpec` of the
+function the call runs (`Table.callOr`); `sumVisit` meets the contract by its translated code,
+and the dispatch at its address does so whatever the environment (`Table.contract_of_sel`).
+-/
+
+namespace Interfaces.CallbacksSpec
+
+open Zig Zig.Full Zig.Full.FAssn Interfaces.Callbacks
+
+/-- The callback contract of `Visitor` (`fn (*u32, u32) callconv(.c) bool`) for the function
+`g`: it returns `true` and changes only the `u32` its context points at. -/
+def VisitSpec {Tgt : Type} (g : Ptr × BitVec 32 → ConcM Tgt Bool) : Prop :=
+  ∀ (ctx : Ptr) (x v : BitVec 32), CTriple (up (pts ctx 4 v)) (g (ctx, x))
+    (fun r => ⟪r = true⟫ ⋆ FAssn.ex fun v' : BitVec 32 => up (pts ctx 4 v'))
+
+theorem VisitSpec.call {Tgt : Type} {g : Ptr × BitVec 32 → ConcM Tgt Bool} (h : VisitSpec g)
+    (ctx : Ptr) (x v : BitVec 32) :
+    CTriple (up (pts ctx 4 v)) (g (ctx, x))
+      (fun r => ⟪r = true⟫ ⋆ FAssn.ex fun v' : BitVec 32 => up (pts ctx 4 v')) :=
+  h ctx x v
+
+variable [Ext]
+
+/-- The program's functions of the `Visitor` type (`ext_visit`'s model and `sumVisit`, at their
+addresses in `mem0`). -/
+def targets : Table Tgt (Ptr × BitVec 32) Bool :=
+  [(⟨some 1, 0⟩, fun a => ConcM.liftMem (air2lean_model_0 a.1 a.2)),
+   (⟨some 3, 0⟩, fun a => ConcM.liftMem (sumVisit a.1 a.2))]
+
+/-- The environment's `Visitor` functions: `Ext.call0`. -/
+def env : EnvFn Tgt (Ptr × BitVec 32) Bool := fun f a => Ext.call0 f a.1 a.2
+
+set_option maxHeartbeats 2000000 in
+/-- **The evaluator for every callback**: the function that `cb` reaches (the foreign model,
+`sumVisit` or the environment's) meets `VisitSpec`. -/
+theorem evaluate_spec (cb ctx : Ptr) (x v : BitVec 32) (h : VisitSpec (Table.callOr targets env cb)) :
+    CTriple (up (pts ctx 4 v)) (evaluate cb ctx x)
+      (fun r => ⟪r = true⟫ ⋆ FAssn.ex fun v' : BitVec 32 => up (pts ctx 4 v')) := by
+  fsym [h.call]
+
+omit [Ext] in
+set_option maxHeartbeats 2000000 in
+/-- `sumVisit` (translated) adds `x` to the context. -/
+theorem sumVisit_spec (ctx : Ptr) (x v : BitVec 32) :
+    FTotalTriple (up (pts ctx 4 v)) (sumVisit ctx x)
+      (fun r => ⟪r = true⟫ ⋆ up (pts ctx 4 (addWrap v x))) := by
+  fsym
+
+omit [Ext] in
+/-- `sumVisit` meets the callback contract. -/
+theorem sumVisit_visit : VisitSpec (Tgt := Tgt) fun a => ConcM.liftMem (sumVisit a.1 a.2) :=
+  fun ctx x v => CTriple.liftMem ((sumVisit_spec ctx x v).1.post fun _ _ h => by
+    obtain ⟨r₁, r₂, hd, e, h₁, h₂⟩ := h
+    exact ⟨r₁, r₂, hd, e, h₁, _, h₂⟩)
+
+/-- **`runLocal`'s callback through `sum_ops`**: the dispatch at `sumVisit`'s address meets the
+contract by the translated code, whatever the environment (`Table.contract_of_sel`). -/
+theorem sum_dispatch (e : EnvFn Tgt (Ptr × BitVec 32) Bool) :
+    VisitSpec (Table.callOr targets e ⟨some 3, 0⟩) :=
+  Table.contract_of_sel (C := VisitSpec) (by rfl) e sumVisit_visit
+
+end Interfaces.CallbacksSpec

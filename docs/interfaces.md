@@ -90,10 +90,14 @@ lane `codex/alloc-param`).
   through an open pointer); a fixed `.illegal` there would make the assumption unsatisfiable,
   and the theorem vacuous. `tests/roadmap/interfaces/Interfaces/{Lists,Mix}Spec.lean`.
 * Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own contract:
-  `std.Random`'s `fillFn` (a `CTriple` contract: it writes the slice and nothing else) is the
-  second instance in `tests/roadmap/interfaces`. E02's call sites take the same translator path
+  `std.Random`'s `fillFn` is the second instance: the library's `RandomSpec fill ctx R` (a
+  `CTriple` contract: with the generator's state `R`, it fills the slice with integer bytes and
+  touches nothing else), and `tests/roadmap/interfaces/Interfaces/RndSpec.lean` proves a die
+  roll in 1..6 for every generator from it. E02's call sites take the same translator path
   (a `"function"` entry); its MemM `Contract.Holds.dispatch` is the closed reading
-  (`dispatch []` is `.illegal`).
+  (`dispatch []` is `.illegal`), and `Interfaces/CallbacksSpec.lean` is E02's `callbacks.zig`
+  with its callback type opened: `evaluate` for every callback from a `CTriple` contract of the
+  function the call runs.
 
 ## Premise
 
