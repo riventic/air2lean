@@ -2,8 +2,9 @@
 # The general symbolic executor `fsym` (ZigLean/Sep/Full/Auto.lean, docs/proof-automation.md) on
 # small library-only examples: the arithmetic solver, walks/returns, the concurrent backend,
 # variable pointers (Facts), a large generated body (Large), and the scenarios of the retired
-# step/frame tactics and total-correctness checks (Steps, Frame, Total), range laws (Plan) and
-# the region library (Region). Its large user is the FixedBufferAllocator
+# step/frame tactics and total-correctness checks (Steps, Frame, Total), range laws (Plan), the
+# region library (Region) and providers over the whole precondition (Providers: tagged shares,
+# pointer `==` across live blocks, `Within`). Its large user is the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Needs `lake build ZigLean.Sep.Full.Auto
 # ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region`;
 # runs no compiler.
@@ -15,7 +16,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region; do
+for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }
