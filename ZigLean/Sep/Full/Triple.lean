@@ -34,7 +34,7 @@ open FAssn Conc
 
 /-- The memory invariant of `FTriple`: one thread (`Mem.Seq`), a well-formed atomic layout, and
 live blocks at disjoint addresses (`Mem.LiveDisjoint`, stage 3 of `docs/sep-full-state.md`). -/
-def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveDisjoint
+def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveLayout
 
 /-- `m` holds the resource `r` and the frame `rF`: their disjoint union matches `m` (its live
 bytes, each byte's tag constraint: `FMatch`), their knowledge is true in `m`, and their ghost
@@ -471,9 +471,11 @@ theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Tame (Zig.store a
 
 theorem alloc (kind : BlockKind) (size align : Nat) : Tame (Zig.alloc kind size align) :=
   of_eq fun m v m' h => by
-    rw [alloc_run_eq] at h
+    cases hroom : m.roomFor size align
+    · rw [alloc_run_noRoom m hroom] at h; cases h
+    rw [alloc_run_eq m hroom] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
-    exact ⟨rfl, KMono.push rfl, LDMono.push (fun _ => by simpa using m.newAddr_addrFree size align) rfl⟩
+    exact ⟨rfl, KMono.push rfl, LDMono.alloc hroom rfl (by simp) rfl⟩
 
 theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
   unfold Zig.free at h
@@ -580,7 +582,9 @@ theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Keeps D (Zig.stor
 
 theorem alloc (kind : BlockKind) (size align : Nat) : Keeps D (Zig.alloc kind size align) :=
   of_keepsExt fun m v m' h => by
-    rw [alloc_run_eq] at h
+    cases hroom : m.roomFor size align
+    · rw [alloc_run_noRoom m hroom] at h; cases h
+    rw [alloc_run_eq m hroom] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
     exact KeepsExt.push rfl
 
@@ -1101,7 +1105,7 @@ theorem Holds.apart {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
     fc.cell.addr + x < fc'.cell.addr ∨ fc'.cell.addr + x' < fc.cell.addr := by
   obtain ⟨blk, hb, hl, hx, -, ha, -⟩ := hh.block h1
   obtain ⟨blk', hb', hl', hx', -, ha', -⟩ := hh.block h2
-  have := clearOf_iff.mp (hs.2.2 b b' blk blk' hbb hb hb' hl')
+  have := clearOf_iff.mp (hs.2.2.1 b b' blk blk' hbb hb hb' hl')
   rw [ha, ha']
   rcases this with h | h | h | h | h
   · simp_all

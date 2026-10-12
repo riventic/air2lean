@@ -448,6 +448,10 @@ theorem create_ok {m m' : Mem} {r : Except ErrName Ptr}
   · obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
     exact .inl ⟨_, rfl, rfl⟩
+  split at h₃
+  · obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
+    exact .inl ⟨_, rfl, rfl⟩
   · obtain ⟨q, ha, rfl⟩ := MemM.map_ok h₃
     obtain ⟨rfl, rfl⟩ := alloc_ok ha
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
@@ -465,6 +469,8 @@ theorem create_noErr (m : Mem) (e : Error) :
     obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
     rcases MemM.bind_err h₂ with h | ⟨_, m₃, hs, h₃⟩
     · exact MemM.set_err h
+    split at h₃
+    · exact MemM.pure_err h₃
     split at h₃
     · exact MemM.pure_err h₃
     split at h₃

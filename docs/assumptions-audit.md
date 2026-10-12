@@ -197,7 +197,7 @@ retain ordinary hypotheses about assembly, allocations, scheduling, and other se
 premises. This gate inventories constants and axioms, not a semantic interpretation or
 human-readable enumeration of all local hypotheses. The semantic premises (profile,
 allocator, scheduler, ordering, timer, float, assembly and trust) have stable IDs in
-[premises.md](premises.md). [premise-index.md](premise-index.md) maps each theorem to
+[premises.md](premises.md). [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) maps each theorem to
 those IDs. `scripts/premises.py compiled --assurance <this report> --strict` derives the
 same mapping from this report's dependency graph and fails if the committed index misses a
 premise of any audited theorem; CI runs it after the audit.

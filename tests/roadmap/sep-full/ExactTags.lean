@@ -77,10 +77,13 @@ theorem holds0 : HoldsExact m0 r rF := by
     · simp [Mem.fheap, m0_heap, h1]
 
 theorem seq0 : m0.FSeq := by
-  refine ⟨⟨⟨by decide, by simp [m0]⟩⟩, ⟨by simp [shapes, m0, loc0, ALoc.shape], by simp [shapes, m0, loc0, ALoc.shape]⟩, ?_⟩
-  intro b b' blk blk' hne hb hb' _
-  simp only [m0] at hb hb'
-  rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  refine ⟨⟨⟨by decide, by simp [m0]⟩⟩, ⟨by simp [shapes, m0, loc0, ALoc.shape], by simp [shapes, m0, loc0, ALoc.shape]⟩, ?_, fun b blk hb _ => ?_⟩
+  · intro b b' blk blk' hne hb hb' _
+    simp only [m0] at hb hb'
+    rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  · simp only [m0] at hb
+    rcases b with _ | b <;> simp at hb
+    subst hb; simp [blk0]
 
 theorem pre0 : up (bytesAt p8 16 16 .heap z8) r := by
   refine ⟨⟨0, rfl, by decide, fun l => ?_⟩, rfl, rfl⟩

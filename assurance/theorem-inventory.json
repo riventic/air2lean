@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "4d6a2e13640db954df9250d549fbde931be09b05",
+        "head": "f4486f5cb602dd84c0a204068aedaca76b4c61a2",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T21:10:00.569525+00:00",
-      "elapsed_seconds": 0.44,
+      "started_utc": "2026-10-12T01:20:39.220530+00:00",
+      "elapsed_seconds": 0.443,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "caa4fab452e7fc2c9c55f3c2ca7c8e437ba801424f61f7adc29b8c8d8fa38924",
+      "log_sha256": "b4e0476c928fc142fd8adb909d9714c2fd62b6a4363ca74c3bbb005b5601c072",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Effects",
@@ -931,7 +931,7 @@
         "Proofs.Asm.Proofs": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
         "Proofs.Atomics.MessagePassing": "30251ef1dfd8433540754cb5b8e7022457f8e7abf7a4c191898c89902c149f70",
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
-        "Proofs.Atomics.PtrPublish": "0640772fc71407344c14bd19ac308bf325aa968daef202542d02cebd8371a2e0",
+        "Proofs.Atomics.PtrPublish": "d4126e30c091c1cbac0ae45c09022fdbc962b45eda0bd3ec0fe59e58075c6418",
         "Proofs.Atomics.Relaxed": "e64157665ab937b900a04ca442495df2d5f2c7d9123850512cb12faef6624b9c",
         "Proofs.Atomics.Stack": "ca664072461dc40e4ce5bf92d67f7dcb84b8fa3e4207611cd49eb814671afac7",
         "Proofs.Basic.AirCert": "b501397682846e80d2ee29841cc46f108859bee9081d67ee3ba2540586d460f5",

@@ -95,6 +95,7 @@ macro "tame_prim" : tactic => `(tactic| first
   | exact Wrap.tame_alignCast _ _
   | exact Wrap.tame_copyChecked _ _ _ _ _ _ _
   | exact Full.Tame.checkSliceEnd _ _ _ _
+  | exact Full.Tame.checkIndex _ _
   | exact Full.Tame.checkSentinelIndex _ _
   | exact Full.Tame.ptrProject _ _)
 

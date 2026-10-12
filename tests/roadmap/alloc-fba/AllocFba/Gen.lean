@@ -1,4 +1,4 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
+-- air2lean-profile: {"allocator_model":"translated","correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -70,8 +70,8 @@ instance : Zig.Enc heap_FixedBufferAllocator where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.end_index), (8, Zig.Enc.encode v.buffer)]
   decode bs := do pure { end_index := ← Zig.Enc.decodeAt bs 0, buffer := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
-def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. The words of `@returnAddress()` and of `undefined` pointers are `arbitrary` (`Mem.arbitrary`). -/
+def mem0 (σ : Zig.Placement) (arbitrary : Array (BitVec 64) := #[]) : Zig.Mem := { Zig.Mem.ofGlobals σ [
   -- 0: client.buffer
   (Array.replicate (Zig.Enc.size (Vector (BitVec 8) 16)) .undef, 1, .global),
   -- 1: heap.FixedBufferAllocator.alloc
@@ -83,7 +83,7 @@ def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 4: heap.FixedBufferAllocator.free
   (#[.undef], 1, .constGlobal),
   -- 5: a constant
-  (Zig.Enc.encode (({ alloc := (⟨some 1, 0⟩ : Zig.Ptr), resize := (⟨some 2, 0⟩ : Zig.Ptr), remap := (⟨some 3, 0⟩ : Zig.Ptr), free := (⟨some 4, 0⟩ : Zig.Ptr) } : mem_Allocator_VTable) : mem_Allocator_VTable), 8, .constGlobal)]
+  (Zig.Enc.encode (({ alloc := (⟨some 1, 0⟩ : Zig.Ptr), resize := (⟨some 2, 0⟩ : Zig.Ptr), remap := (⟨some 3, 0⟩ : Zig.Ptr), free := (⟨some 4, 0⟩ : Zig.Ptr) } : mem_Allocator_VTable) : mem_Allocator_VTable), 8, .constGlobal)] with arbitrary }
 
 structure heap_FixedBufferAllocator_initLocals where
   local1 : heap_FixedBufferAllocator

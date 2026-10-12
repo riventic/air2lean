@@ -286,7 +286,8 @@ theorem store_end (e' : Nat) : TotalTriple (state ctx B e ∗ R)
       (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice) ∗ R) (ptsM_store (by decide) _))
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
-/-- The `@alignCast` of the context pointer (`*FixedBufferAllocator`, alignment 8) passes. -/
+/-- Sema's `@alignCast` check of the context pointer (`*FixedBufferAllocator`, alignment 8): the
+address is a multiple of 8 (the model's own check is `checkAlign_ctx`). -/
 theorem ptrAddr_ctx : TotalTriple (state ctx B e ∗ R) (ptrAddr ctx)
     (fun r => ⌜(BitVec.ofInt 64 r &&& 7) = 0⌝ ∗ (state ctx B e ∗ R)) := by
   intro m hP hF hd hm hp hst

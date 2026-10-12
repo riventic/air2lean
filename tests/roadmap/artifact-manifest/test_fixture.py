@@ -40,7 +40,17 @@ def setUpModule():
     global TEMPORARY, TEMPLATE
     TEMPORARY = tempfile.TemporaryDirectory()
     TEMPLATE = Path(TEMPORARY.name).resolve() / 'template'
-    for name in tracked(*TREES, *FILES, *POLICY):
+    # The fixtures' manifest, pins and receipt are whole-tree generated files (assurance/generated.json,
+    # docs/ci.md): not tracked, materialized in the checkout (CI's `provenance` job, or
+    # scripts/generated.py). The template commits them, as the fixture copies these tests edit.
+    spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
+    registry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(registry)
+    generated = registry.all_paths(registry.load(ROOT), ['provenance', 'provenance-gap'])
+    missing = [p for p in generated if not (ROOT / p).is_file()]
+    if missing:
+        raise unittest.SkipTest('provenance fixtures not materialized (scripts/generated.py): %s' % missing[0])
+    for name in tracked(*TREES, *FILES, *POLICY) + generated:
         target = TEMPLATE / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target, follow_symlinks=False)

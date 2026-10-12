@@ -151,6 +151,34 @@ done): size-free cells and extent resources, and a stronger `FAllocSpec` whose g
 share of their block's extent ([sep-full-state.md](sep-full-state.md) §Block extents, with
 phases). The patched `alloc` proof waits for the remaining phases.
 
+**O-H: the address space ended at `2^64` in the model (found in step 7; fixed in the model).**
+`alloc`'s fast path computes `alignedIndex(buf.ptr, end_index, alignment)`: `addr +% end_index`
+(wrapping), then `Alignment.forward`, whose `x + (alignment - 1)` is overflow-checked
+(`Zig.add false`: `.overflow`, a panic). The old memory model let a block end exactly at `2^64`
+(`Mem.placeOk`: `A + size ≤ 2^64`; the fallback `alignUp m.top align` was not bounded at all), and
+nothing in `Mem.FSeq` or the arena's invariant bounded a node's address. Scenario: a
+`FixedBufferAllocator` child whose buffer global is placed so that a node's buffer ends at `2^64`
+(placement `σ` of `mem0 σ`); allocations of alignment `1` leave `end_index = buf.len - 3`; then
+`alloc(1, alignment 8)` passes the patched reservation check (`1 + 7 ≤ buf.len`) and
+`alignedIndex` adds `7` to `2^64 - 3`: overflow, a panic. So `FAllocSpec.alloc` failed for every
+arena invariant in such memories, stock or patched. Natively the state does not exist (user
+addresses end below `2^47`/`2^48`).
+
+Fix (coordinator decision 2026-10-12: in the model, one mechanism for every block kind, not an
+`FAllocSpec` premise): the placement carries the end of the user address space,
+`Placement.addrLimit` (at most `2^63` for every placement, `2^47` by default; SEM-07). `Mem.placeOk`
+takes a proposal only if the block ends at or below it, and `Mem.roomFor` checks the fallback
+after `Mem.top` against it. An allocation without room fails as for an exhausted address space:
+`rawAlloc` returns null, `mmap`/`mremap` fail with `ENOMEM` (OSM-01, `Os.Target.addrLimit`), and
+`alloc` has no outcome (`Zig.noRoom`). Every primitive keeps the live blocks below `2^63`
+(`Mem.LiveBounded`, proved per primitive with `Mem.LiveDisjoint` in `LDMono`, part of `Tame`), so
+the full-state invariant `Mem.FSeq` (its third part is now `Mem.LiveLayout`, both properties)
+gives every node `addr + end_index + 2^k - 1 < 2^64` for `k < 64`. It is a consequence of the
+model, not a premise of a triple. Kernel-checked regression (`ArenaObstruction.lean`):
+`aligned_index_overflows` (the old state panics), `memTop_unbounded` (that state is outside
+`Mem.FSeq`), `node_buf_low` and `aligned_index_ok` (a placement proposing `2^64 - 64` for
+`node_buf` no longer gets it, and `alignedIndex` on the memory it does get succeeds).
+
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
 multi-threaded specification of the lock-free code (the `resizing` bit as a lock, the stolen
@@ -205,6 +233,21 @@ free list) is not attempted.
     `EUpd.lendT`, `EUpd.rjoin`; `grow_ghost`). The arena needs no `q' = q` for a shrink (it never
     shrinks a block itself). `remap` is the whole-region `resize` (`resize_granted_ct`,
     `FAllocInv.resize_granted_of`) and returns `memory.ptr`.
+  * **Fraction accounting per block** (for `reset`, which must give each node's whole share
+    `qn` back to the child): the arena's variables name the grant map's bound `mN` and the pool's
+    pieces (`Pool t pn pf`), and `OV.Facts` keeps, for every block `b`, `ndLent b nodes =
+    poolOn b + grantsOn b` (the used nodes' lent parts `Σ (qn - qh)` are the pool's and the
+    grants' fractions on `b`; several nodes may share a block, e.g. a `FixedBufferAllocator`'s
+    buffer), `qh ≤ qn` per used node, and `qh = qn` on the free list. `free` moves the grant's
+    fraction to the pool (`acct_free`), `resize` keeps the sums (`acct_repoint`; a growth
+    restores `qh`).
+  * **The ends of `alloc`** (resource updates, not yet used by a proof of the code):
+    `alloc_carve_upd` (a grant from the first node's tail: padding to junk, half the node's kept
+    share lent at the grant's end, `Upd.issue` at `mN`, accounting), `push_node_upd` (a node from
+    the child or the free list becomes the first node; the old one joins the used nodes, its tail
+    leaks), `grow_node_upd` (O-G: the child grew the first node in place through the refined
+    `resize` from the token and the kept part `qh`, no bytes; the new bytes join the tail, the
+    node's regions take the new labels).
   * Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit of the stock arena**: the invariant keeps `end_index` within the first
   node's buffer (`OV.Facts`: `24 + ei ≤ sz`), which a failed `alloc` breaks; the stock arena has no

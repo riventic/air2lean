@@ -47,6 +47,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -215,6 +216,12 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -225,6 +232,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -400,6 +409,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -543,6 +553,12 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -553,6 +569,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -666,6 +684,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -812,6 +831,12 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -822,6 +847,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -942,6 +969,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -1096,6 +1124,12 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -1106,6 +1140,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -1338,9 +1374,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1431,9 +1465,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1498,9 +1530,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1663,9 +1693,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1730,9 +1758,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1894,9 +1920,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -1961,9 +1985,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2477,9 +2499,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2596,9 +2616,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2668,9 +2686,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2778,9 +2794,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2846,9 +2860,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -2923,9 +2935,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -3178,9 +3188,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -3246,9 +3254,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -3915,9 +3921,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -3983,9 +3987,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -4317,9 +4319,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   },
   {
@@ -4367,6 +4367,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -4498,6 +4499,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsPolicy.mk",
     "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
@@ -4656,6 +4658,12 @@
         "closed": "OfNat.ofNat"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "Zig.OsState.mk"
        }
       ],
@@ -4666,6 +4674,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -4812,9 +4822,7 @@
      }
     }
    },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "allowed": true
   }
  ],

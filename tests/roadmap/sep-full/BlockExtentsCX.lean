@@ -41,10 +41,13 @@ theorem m1_heap (l : Loc) :
   · simp
 
 theorem seq1 : m1.FSeq := by
-  refine ⟨⟨⟨by decide, by simp [m1]⟩⟩, ⟨by simp [shapes, m1], by simp [shapes, m1]⟩, ?_⟩
-  intro b b' blk blk' hne hb hb' _
-  simp only [m1] at hb hb'
-  rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  refine ⟨⟨⟨by decide, by simp [m1]⟩⟩, ⟨by simp [shapes, m1], by simp [shapes, m1]⟩, ?_, fun b blk hb _ => ?_⟩
+  · intro b b' blk blk' hne hb hb' _
+    simp only [m1] at hb hb'
+    rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  · simp only [m1] at hb
+    rcases b with _ | b <;> simp at hb
+    subst hb; simp [blk1]
 
 /-- A resource owning byte `(0, 0)` with the cell `c`. -/
 def own1 (c : Cell) : FHeap := fun l => if l = (0, 0) then some ⟨c, none⟩ else none

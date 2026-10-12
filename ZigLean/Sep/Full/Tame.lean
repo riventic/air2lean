@@ -75,6 +75,9 @@ theorem checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) :
     Tame (Zig.checkSliceEnd srcLen start len extra) := by
   unfold Zig.checkSliceEnd; exact ite (pure' _) (throw _)
 
+theorem checkIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkIndex len i) := by
+  unfold Zig.checkIndex; exact ite (pure' _) (throw _)
+
 theorem checkSentinelIndex {n : Nat} (len i : BitVec n) : Tame (Zig.checkSentinelIndex len i) := by
   unfold Zig.checkSentinelIndex; exact ite (pure' _) (throw _)
 
@@ -191,8 +194,8 @@ theorem _root_.Zig.Mem.addrFree_set_dead {m : Mem} {b : BlockId} {blk : Block} {
   · exact h i hi
 
 /-- `Mem.mappingRoom` as a statement about the other blocks. -/
-theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {b : BlockId} {blk : Block} {lo len : Nat}
-    (h : m.mappingRoom b blk lo len = true) (j : BlockId) (o : Block) (hj : j ≠ b)
+theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {L : Nat} {b : BlockId} {blk : Block} {lo len : Nat}
+    (h : m.mappingRoom L b blk lo len = true) (j : BlockId) (o : Block) (hj : j ≠ b)
     (ho : m.blocks[j]? = some o) : o.clearOf (blk.addr + lo) len = true := by
   unfold Mem.mappingRoom at h
   simp only [Bool.and_eq_true, Array.all_eq_true] at h
@@ -204,12 +207,12 @@ theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {b : BlockId} {blk : Block} {
 /-- Ending block `b` and pushing a block clear of the live ones (`mremap` moving a mapping). -/
 theorem _root_.Zig.Full.LDMono.set_dead_push {m m' : Mem} {b : BlockId} {blk x : Block}
     {M : Mem} (hb : m.blocks[b]? = some blk) (hM : M.blocks = m.blocks)
-    (hf : M.addrFree x.addr x.bytes.size = true)
+    (hf : M.addrFree x.addr x.bytes.size = true) (hbnd : x.addr + x.bytes.size ≤ 2 ^ 63)
     (h : m'.blocks = (m.blocks.set! b { blk with live := false }).push x) : LDMono m m' := by
   have hf' : m.addrFree x.addr x.bytes.size = true := by unfold Mem.addrFree at hf ⊢; rwa [← hM]
   exact LDMono.trans (m₂ := { m with blocks := m.blocks.set! b { blk with live := false } })
     (LDMono.set (nb := { blk with live := false }) hb (by simp) rfl (Nat.le_refl _) rfl)
-    (LDMono.push (fun _ => Mem.addrFree_set_dead hf') h)
+    (LDMono.push (fun _ => Mem.addrFree_set_dead hf') (fun _ => hbnd) h)
 
 theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo : Nat}
     {newLen : BitVec 64} {flags : BitVec 32} {m m' : Mem} {v : Except ErrName Slice}
@@ -241,7 +244,12 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
     · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
       exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
     split at h6
-    · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
+    · split at h6
+      · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+        exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+      rename_i hfit
+      have hfit := Os.Target.fits_le (by simpa using hfit)
+      obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
       obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h7
       obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
       obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h9
@@ -251,11 +259,13 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
       subst e
       refine ⟨rfl, KMono.set_push hb (nb := { blk with live := false }) rfl rfl,
         LDMono.set_dead_push hb (by rfl) (Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _) (Nat.le_refl _) ?_)
-          rfl⟩
-      simp only [Array.size_append, Array.size_extract, mremapFill, Array.size_map,
-        Array.size_range, Nat.min_self, Mem.mapAddr]
-      have := le_alignUp (newLen.toNat) os.pageSize
-      omega
+          ?_ rfl⟩
+      all_goals
+        simp only [Array.size_append, Array.size_extract, mremapFill, Array.size_map,
+          Array.size_range, Nat.min_self, Mem.mapAddr, Mem.newAddr_allocs, Mem.newAddr_recordAt]
+          at hfit ⊢
+        have := le_alignUp (newLen.toNat) os.pageSize
+        omega
     split at h6
     · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
       exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
@@ -266,7 +276,7 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
       refine ⟨rfl, hset rfl rfl, LDMono.grow (lo := lo) (len := alignUp newLen.toNat os.pageSize)
         (nb := { blk with bytes := blk.bytes ++ mremapFill os.pageSize (blk.bytes.size - lo) newLen.toNat })
         hb hl rfl hlo ?_ (fun j o hj ho => Mem.mappingRoom_clear (by simpa using ‹¬_ = false›) j o hj ho)
-        rfl⟩
+        (Nat.le_trans (Mem.mappingRoom_le (by simpa using ‹¬_ = false›)) os.addrLimit_le) rfl⟩
       simp only [Array.size_append, mremapFill, Array.size_map, Array.size_range]
       have := le_alignUp (newLen.toNat) os.pageSize
       omega
@@ -318,16 +328,20 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
   split at h6
   · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
     exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
-  · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
+  · rename_i hfit
+    have hfit := Os.Target.fits_le (by simp only [Bool.or_eq_true, not_or] at hfit; simpa using hfit.2)
+    obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
     obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h7
     obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h10
     have e := Proto.MemM.set_ok h9
     subst e
     refine ⟨rfl, KMono.push rfl, LDMono.push (fun _ => Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _)
-      (Nat.le_refl _) ?_) rfl⟩
-    simp only [Array.size_replicate]
-    exact Nat.add_le_add_left (le_alignUp _ _) _
+      (Nat.le_refl _) ?_) (fun _ => ?_) rfl⟩
+    all_goals
+      simp only [Array.size_replicate, Mem.mapAddr, Mem.newAddr_allocs] at hfit ⊢
+      have := le_alignUp len.toNat os.pageSize
+      omega
 end Tame
 
 /-- `Tame` goals of normalized generated code. Callees are taken from the hypotheses
@@ -353,6 +367,7 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.ptrEqAddr _ _
   | with_reducible exact Tame.checkAlign _ _
   | with_reducible exact Tame.checkSliceEnd _ _ _ _
+  | with_reducible exact Tame.checkIndex _ _
   | with_reducible exact Tame.checkSentinelIndex _ _
   | with_reducible exact Tame.memcpy _ _ _ _ _ _ _
   | with_reducible exact Tame.ptrProject _ _

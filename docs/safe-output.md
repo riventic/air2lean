@@ -50,7 +50,10 @@ The per-stage timeout is `--timeout SECONDS` or `AIR2LEAN_STAGE_TIMEOUT`. The de
 is 3600, and 0 disables the limit. `translate.sh` bounds the Lean build, the AIR export,
 translation and the Lean check. `check.sh` bounds the AIR dump, translation, final
 `lake build` and differential tests (`scripts/diff.sh`) in the same way, each with its own
-limit and the same TERM/KILL cancellation. A timeout or interrupt there leaves the
+limit and the same TERM/KILL cancellation. Its examples run as parallel jobs
+(`workflow_run_jobs`: [scripts/par.py](build-budgets.md#parallel-jobs) as one stage without a
+timeout of its own and a 15 s grace period); an interrupt reaches every running example, which
+stops its own stage and removes its staging directories before the jobs are killed. A timeout or interrupt there leaves the
 already-published `Proofs/<Ex>/Gen.lean` and check reports complete; `check.sh` exits 124
 (timeout) or 129/130/143 (signal). An outer `scripts/build-guard.py`
 ([build-budgets.md](build-budgets.md)) and the CI job timeout remain additional bounds.

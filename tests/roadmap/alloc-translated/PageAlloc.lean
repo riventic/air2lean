@@ -297,13 +297,13 @@ theorem final_upd {p : Ptr} {b : BlockId} {A L k : Nat} {all : Array Byte}
 
 /-- A new mapping, with its full extent from its cells (`upPost_bext`: it is a new block). -/
 theorem mmap_bext {H : FAssn} {s : Slice} {len : BitVec 64} :
-    EUpd (H ⋆ upPost (mmapPost P len (.ok s)) (fun _ => False) (fun _ => none))
+    EUpd (H ⋆ upPost (mmapPost P Os.Target.linux.addrLimit len (.ok s)) (fun _ => False) (fun _ => none))
       (FAssn.ex fun A : Nat => FAssn.ex fun b => ⟪s.ptr.off = 0 ∧ s.ptr.block = some b⟫ ⋆
         (H ⋆ (up (mapping P s.ptr A 0 (Array.replicate len.toNat (Byte.int 0))) ⋆
           bext b (0 + (Array.replicate len.toNat (Byte.int 0)).size) (.mapped 0)))) := by
   intro m r rF hh hr hs
   obtain ⟨r₁, r₂, hd, rfl, h1, hp⟩ := hr
-  obtain ⟨-, ho, A, hm⟩ : mmapPost P len (.ok s) r₂.heap.erase := by
+  obtain ⟨-, ho, A, -, hm⟩ : mmapPost P Os.Target.linux.addrLimit len (.ok s) r₂.heap.erase := by
     obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
   obtain ⟨b, hb, -⟩ := PageSpec.mapping_block hm
   obtain ⟨x, cl, hcl, hS, hK⟩ := mapping_cell hb hm
@@ -436,7 +436,7 @@ theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
     (remap_spec (own := own) c s k n ra bs hk hn hfit.1 hs hpos).toPartial
   free s k ra bs _ hs hpos := (free_spec (own := own) c s k ra bs hs hpos).toPartial
 
-/-! ## O5: alignments above a page -/
+/-! ## O5 regression: alignments above a page -/
 
 /-- `mem0` with one more (dead, empty) block that ends just below the last page under `2 ^ 64`:
 the fallback address of the next mapping (`Mem.top`, the placement proposes nothing) is that
@@ -446,11 +446,35 @@ def high : Mem :=
     blocks := (mem0 .fresh).blocks.push
       { bytes := #[], align := 1, kind := .heap, live := false, addr := 2 ^ 64 - 4097 } }
 
-/-- **O5.** `alloc(1, align 8192)` from `high` maps two pages at `2 ^ 64 - 4096`; the alignment
-`@intFromPtr(p) + 8191` of `std.mem.alignPointer` overflows, `alignPointer` returns `null`, and
-`PageAllocator.map` panics. So no invariant that `high` satisfies admits `k = 13`. -/
+/-- **O5, fixed.** Before the OS model bounded the address space, `alloc(1, align 8192)` from
+`high` mapped two pages at `2 ^ 64 - 4096`, the alignment `@intFromPtr(p) + 8191` of
+`std.mem.alignPointer` overflowed and `PageAllocator.map` panicked. Now that `mmap` fails with
+`ENOMEM` above `Os.Target.addrLimit` (OSM-01), `alloc` returns `null`, as natively. -/
 theorem alloc_high : (((vt.alloc ⟨none, 0⟩ 1 13 0).run high).run.map fun r =>
-    match r with | .error e => decide (e = .panic) | _ => false) = some true := by
+    match r with | .ok (v, _) => decide (v = none) | _ => false) = some true := by
+  decide +kernel
+
+/-- `mem0` under a placement that proposes the address `A` for the first mapping (block 6,
+after the six globals). -/
+def placedAt (A : Nat) : Mem := mem0 { propose := fun b => if b == 6 then some A else none }
+
+/-- Near the end of the address space, `alloc(1, align 8192)` maps two pages at
+`2 ^ 47 - 12288`, unmaps the first one (`TotalTriple.munmapPrefix`) and returns the second. -/
+theorem alloc_top : (((vt.alloc ⟨none, 0⟩ 1 13 0).run (placedAt (2 ^ 47 - 12288))).run.map
+    fun r =>
+    match r with | .ok (some p, _) => decide (p.off = 4096) | _ => false) = some true := by
+  decide +kernel
+
+/-- At the end of the address space, `alloc(1, align 8192)` maps two pages ending exactly at
+`addrLimit = 2 ^ 47`; the address is already aligned, so it unmaps the second page
+(`TotalTriple.munmapTail`; a wrong range would be `.illegal`) and returns the first. -/
+theorem alloc_edge : (((vt.alloc ⟨none, 0⟩ 1 13 0).run (placedAt (2 ^ 47 - 8192))).run.map
+    fun r =>
+    match r with
+    | .ok (some p, m) => match m.blocks[6]? with
+      | some blk => decide (p.off = 0 ∧ blk.addr = 2 ^ 47 - 8192 ∧ blk.live)
+      | none => false
+    | _ => false) = some true := by
   decide +kernel
 
 /-! ## The scheduler's reading -/

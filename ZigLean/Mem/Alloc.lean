@@ -59,12 +59,15 @@ def Mem.oracleDenies (m : Mem) (n : Nat) : Bool :=
     | none => false
     | some b => decide (b < m.liveHeapBytes + n)
 
-/-- `rawAlloc` of `n > 0` bytes: allocation number `Mem.allocs`. `none`: the allocation fails. -/
+/-- `rawAlloc` of `n > 0` bytes: allocation number `Mem.allocs`. `none`: the allocation fails,
+by the failure policy or because the address space has no room for it (`Mem.roomFor`). -/
 def rawAlloc (n align : Nat) : MemM (Option Ptr) := do
   let m ← get
   set { m with allocs := m.allocs + 1 }
   if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none
   if m.oracleDenies n then return none
+  -- No room in the address space (O-H): out of memory.
+  if m.roomFor n align = false then return none
   some <$> alloc .heap n align
 
 /-- The pointer of an allocation of 0 bytes: no block, and the highest address with the
@@ -177,6 +180,8 @@ def remapByteBuffer (s : Slice) (n : Nat) : MemM (Option Slice) := do
     set (current.afterByteRemap b blk n)
     return some ⟨s.ptr, BitVec.ofNat 64 n⟩
   | .move =>
+    -- No room in the address space (O-H): the remap fails as out of memory.
+    if m.roomFor n 1 = false then return none
     recordAccess b 0 (Nat.min blk.bytes.size n) .read
     let p ← alloc .heap n 1
     storeBytes p 1 (remapBytes blk.bytes n)
@@ -275,7 +280,8 @@ def vtableRemap (_ : Allocator) (s : Slice) (align : Nat) (n : BitVec 64) : MemM
   if rawAlignOk align = false ∨ n.toNat = 0 then throw .illegal
   let (b, blk) ← rawBlock s align
   let m ← get
-  if m.allocPolicy.byteRemap = .move ∧ n.toNat ≤ m.allocPolicy.maxBytes then
+  if m.allocPolicy.byteRemap = .move ∧ n.toNat ≤ m.allocPolicy.maxBytes ∧
+      m.roomFor n.toNat align = true then
     recordAccess b 0 (Nat.min blk.bytes.size n.toNat) .read
     let p ← alloc .heap n.toNat align
     storeBytes p 1 (remapBytes blk.bytes n.toNat)

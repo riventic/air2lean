@@ -68,7 +68,7 @@ liveness_witness Triple.store :=
 
 /-! ## Blocks and allocators -/
 
-nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, trivial⟩
+nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, by decide, trivial⟩
 
 nonvacuity_witness Triple.alloc := ⟨.heap, 1, 1, by decide, rfl, Admit.emp⟩
 liveness_witness Triple.alloc :=

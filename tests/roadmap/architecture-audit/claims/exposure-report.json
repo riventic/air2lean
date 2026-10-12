@@ -1137,8 +1137,7 @@
    "name": "AuditClaims.root_in_post",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext",
-    "Quot.sound"
+    "propext"
    ],
    "conclusion": {
     "head": "Zig.TotalTriple"
@@ -1193,9 +1192,7 @@
     "Zig.Assn.emp",
     "Zig.Assn.lift"
    ],
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1207,16 +1204,10 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
-    "ByteArray.size",
-    "Char.ofNatAux",
     "Int.add",
-    "Int.decEq",
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
-    "Int.ediv",
-    "Int.emod",
-    "Int.mul",
     "Int.natAbs",
     "Int.neg",
     "Int.negSucc",
@@ -1229,8 +1220,6 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
-    "Nat.gcd",
-    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1239,24 +1228,15 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
-    "String.Internal.append",
     "String.ofByteArray",
-    "String.ofList",
-    "String.toByteArray",
-    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat",
-    "panicCore"
+    "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM",
-    "Lean.Name.anonymous",
-    "Lean.Name.num",
-    "Lean.Name.str",
-    "Nat.repr"
+    "Array.anyM"
    ],
    "violations": [],
    "allowed": true,
@@ -1348,8 +1328,7 @@
    "name": "AuditClaims.spin_partial",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext",
-    "Quot.sound"
+    "propext"
    ],
    "conclusion": {
     "head": "Zig.Triple"
@@ -1370,9 +1349,7 @@
     "Zig.Triple",
     "Zig.Assn.emp"
    ],
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1384,21 +1361,8 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
-    "ByteArray.size",
-    "Char.ofNatAux",
-    "Int.add",
-    "Int.decEq",
-    "Int.decLe",
-    "Int.decLt",
-    "Int.decNonneg",
-    "Int.ediv",
-    "Int.emod",
-    "Int.mul",
-    "Int.natAbs",
-    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
-    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1406,8 +1370,6 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
-    "Nat.gcd",
-    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1416,24 +1378,15 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
-    "String.Internal.append",
     "String.ofByteArray",
-    "String.ofList",
-    "String.toByteArray",
-    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat",
-    "panicCore"
+    "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM",
-    "Lean.Name.anonymous",
-    "Lean.Name.num",
-    "Lean.Name.str",
-    "Nat.repr"
+    "Array.anyM"
    ],
    "violations": [],
    "allowed": true,
@@ -1539,9 +1492,7 @@
     "Zig.Mem.Seq",
     "Zig.Mem.heap"
    ],
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1554,20 +1505,8 @@
     "ByteArray.mk",
     "ByteArray.push",
     "ByteArray.size",
-    "Char.ofNatAux",
-    "Int.add",
-    "Int.decEq",
-    "Int.decLe",
-    "Int.decLt",
-    "Int.decNonneg",
-    "Int.ediv",
-    "Int.emod",
-    "Int.mul",
-    "Int.natAbs",
-    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
-    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1575,8 +1514,6 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
-    "Nat.gcd",
-    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1585,24 +1522,20 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
-    "String.Internal.append",
     "String.ofByteArray",
-    "String.ofList",
     "String.toByteArray",
     "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat",
-    "panicCore"
+    "UInt8.ofNat"
    ],
    "compiler_redirections": [
     "Array.anyM",
     "Lean.Name.anonymous",
     "Lean.Name.num",
-    "Lean.Name.str",
-    "Nat.repr"
+    "Lean.Name.str"
    ],
    "violations": [],
    "allowed": true,
@@ -1654,8 +1587,7 @@
    "name": "AuditClaims.total_false_pre",
    "module": "AuditClaims.Vacuous",
    "axioms": [
-    "propext",
-    "Quot.sound"
+    "propext"
    ],
    "conclusion": {
     "head": "Zig.TotalTriple"
@@ -1675,9 +1607,7 @@
     "Zig.Heap",
     "Zig.TotalTriple"
    ],
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
+   "opaque_dependencies": [],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
     "Array.get!Internal",
@@ -1689,21 +1619,8 @@
     "ByteArray.emptyWithCapacity",
     "ByteArray.mk",
     "ByteArray.push",
-    "ByteArray.size",
-    "Char.ofNatAux",
-    "Int.add",
-    "Int.decEq",
-    "Int.decLe",
-    "Int.decLt",
-    "Int.decNonneg",
-    "Int.ediv",
-    "Int.emod",
-    "Int.mul",
-    "Int.natAbs",
-    "Int.neg",
     "Int.negSucc",
     "Int.ofNat",
-    "Int.sub",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1711,8 +1628,6 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
-    "Nat.gcd",
-    "Nat.gcd._unary",
     "Nat.land",
     "Nat.mod",
     "Nat.modCore",
@@ -1721,24 +1636,15 @@
     "Nat.pred",
     "Nat.shiftRight",
     "Nat.sub",
-    "String.Internal.append",
     "String.ofByteArray",
-    "String.ofList",
-    "String.toByteArray",
-    "String.utf8ByteSize",
     "UInt32.ofBitVec",
     "UInt32.toBitVec",
     "UInt32.toNat",
     "UInt8.ofBitVec",
-    "UInt8.ofNat",
-    "panicCore"
+    "UInt8.ofNat"
    ],
    "compiler_redirections": [
-    "Array.anyM",
-    "Lean.Name.anonymous",
-    "Lean.Name.num",
-    "Lean.Name.str",
-    "Nat.repr"
+    "Array.anyM"
    ],
    "violations": [],
    "allowed": true,

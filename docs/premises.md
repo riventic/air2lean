@@ -2,10 +2,10 @@
 
 This is the single indexed reference for the premises behind every shipped theorem in
 `Proofs/` and every theorem-bearing roadmap, tutorial and case-study client. Each premise
-has a stable ID. [premise-index.md](premise-index.md) lists, per theorem, the IDs it
+has a stable ID. [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) lists, per theorem, the IDs it
 uses. `scripts/premises.py` derives that index mechanically and checks it.
 
-To read a proof: find the theorem in [premise-index.md](premise-index.md), then read each
+To read a proof: find the theorem in [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md), then read each
 listed premise below. The theorem holds in the model under those premises and its own
 stated hypotheses. Nothing else in the runtime is assumed. A premise ID marked
 *environment* is a model choice that the theorem quantifies over or fixes. A premise marked
@@ -14,7 +14,8 @@ proof makes (for example partial correctness).
 
 ```sh
 python3 scripts/premises.py check            # fails on a stale index, undefined/orphan ID or unmapped module
-python3 scripts/premises.py write            # regenerate docs/premise-index.md
+python3 scripts/premises.py write            # regenerate docs/premise-index.md (not committed: a whole-tree
+                                             # generated file, docs/ci.md; CI publishes it on the `generated` branch)
 python3 scripts/premises.py explain parallelCounter_spec   # which tokens/modules caused each premise
 python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.json --output premises.json --strict
 ```
@@ -791,9 +792,18 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The address of every block (global, stack, heap, allocator) is chosen by the
   placement oracle `Mem.place`, an arbitrary function of the block id. The model takes a
   proposal only if it satisfies what Zig guarantees (`Mem.placeOk`): nonzero, a multiple of the
-  block's declared alignment, ending at or below 2^64, and disjoint from every live block of
-  nonzero size; adjacency, any order and reuse of a dead block's address are allowed. Otherwise
-  the block goes after every block (`Mem.top`). A generated program-start memory is `mem0 σ`
+  block's declared alignment, ending inside the user address space (`Placement.addrLimit`), and
+  disjoint from every live block of nonzero size; adjacency, any order and reuse of a dead
+  block's address are allowed. Otherwise the block goes after every block (`Mem.top`). The
+  address space ends at `Placement.addrLimit`, at most `2^63` for every placement (every modelled
+  64-bit target has its user space in the lower half; `2^47` by default): no block of any kind
+  is placed above it (O-H). An allocation that has no room below it fails as for an exhausted
+  address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
+  (OSM-01), and `alloc` (a stack, global-like or heap block) has no outcome (`Zig.noRoom`, outside
+  every partial-correctness statement; a total-correctness statement shows room,
+  `Mem.roomFor`). The full-state invariant `Mem.FSeq` holds only memories whose live blocks end
+  below `2^63` (`Mem.LiveBounded`). Globals are placed at program start with the same fallback;
+  a statement that needs `Mem.LiveBounded` of `mem0 σ` shows that the globals fit. A generated program-start memory is `mem0 σ`
   and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
   programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
   the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
@@ -877,16 +887,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `MAP.PRIVATE|ANONYMOUS`, `fd = -1`, offset 0 and `length > 0` either returns
   `error.OutOfMemory` (the failure decision is the allocator's `Mem.allocDenied`, one attempt
   index for every request) with no other change, or a new block of kind `.mapped 0` of
-  exactly `length` zero bytes at the placement's page-aligned address for its pages (SEM-07). The
+  exactly `length` zero bytes at the placement's page-aligned address for its pages (SEM-07). A
+  mapping that would end above the target's user address space (`Os.Target.addrLimit`: `2^47`
+  on x86_64-linux, at least `TASK_SIZE_MAX`; `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on
+  aarch64-macos) fails with `error.OutOfMemory`, as the kernel's does; assumed: no call passes a
+  hint above `TASK_SIZE_MAX = 2^47 - 4096` (5-level-paging Linux maps above `2^47` for one,
+  a hint of `2^47` included). The
   kernel fails such a mapping only with `ENOMEM` (no other `MMapError` member). Other argument
   combinations are outside the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of
   the whole live range of one mapping ends it, of a page-aligned prefix moves its first live
   offset, of a page tail shrinks it; any other range (middle, past the mapping, not a live
   mapping: a double `munmap`) is `.illegal`, stricter than the kernel. `mremap` (Linux only)
   of a whole live mapping with flags 0 or `MAYMOVE`, no new address and `new_len > 0` shrinks
-  in place, or grows (an allocation attempt) in place when the grown pages are below 2^64 and
-  clear of every other live block, by a move to a new mapping at the placement's address
-  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with `error.OutOfMemory`;
+  in place, or grows (an allocation attempt) in place when the grown pages end at or below
+  `addrLimit` and are clear of every other live block, by a move to a new mapping at the placement's address
+  under `MAYMOVE` (oracle `mremapMoves`, or no room) whose pages end at or below `addrLimit`,
+  or fails with `error.OutOfMemory`;
   grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).

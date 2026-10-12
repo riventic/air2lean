@@ -160,11 +160,8 @@ def provenance_root(work, attempt, translator):
     check((goal['binding'], goal['audited_theorem'], goal['derived_strength']) == ('direct', 'double_eq', 'total_correctness'),
           f'double_eq binds directly to Provenance.double at derived total correctness: {goal["binding"]} {goal["reason"]}')
     check(root['level'] == 'functionally_verified_total', f'the fixture root is fully functionally verified: {root["blockers"]}')
-    # The committed fixture manifest chains the same source, AIR and profile as the covered root.
-    committed = json.loads((ROOT / 'assurance/provenance/manifest.json').read_text())['links']
-    fresh = json.loads(manifest.read_text())['links']
-    check(all(committed[name]['sha256'] == fresh[name]['sha256'] for name in ('source', 'air', 'profile')),
-          'the committed I07 fixture manifest chains the same source, AIR and profile as the covered root')
+    # The fixture's own manifest (a whole-tree generated file, docs/ci.md) is regenerated and
+    # strictly checked against these source, AIR and profile files by the CI `provenance` job.
     # A real audited reflexive theorem names the root, derives no strength and is not a direct goal.
     reflexive = [{'theorem': 'double_refl', 'strength': 'total_correctness', 'domain': 'all pairs of unsigned 32-bit inputs'}]
     row = coverage(reflexive, **evidence)
