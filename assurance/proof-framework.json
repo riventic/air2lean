@@ -457,9 +457,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Atomics/PtrPublish.lean"
-    },
-    {
       "path": "Proofs/Iogroup/Counter.lean"
     },
     {
