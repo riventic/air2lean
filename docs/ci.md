@@ -484,10 +484,11 @@ and the native wide bit-operation differential. What changes:
   `native`, `receipt` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.0, and the
   macOS rows. They were commit-bound (their gates read `HEAD`) or `"reuse": false` (`audit`:
   under the former tracer it exceeded the job limit); in the restricted checkout `HEAD` is a
-  function of the key. The proof receipt of `receipt` fingerprints every tracked file: a
-  withheld one is bound by its index blob instead of being read, and the receipt records how
-  many (`tree.withheld`); a release refuses such a receipt (`proof-receipt.py verify --release`),
-  release receipts come from the unrestricted `provenance` job.
+  function of the key. The proof receipt of `receipt` fingerprints every tracked file except
+  the withheld ones, which it records as withheld without reading them (`tree.withheld`: the
+  receipt does not pin their content); `proof-receipt.py verify --release` and
+  `artifact-manifest.py` refuse such a receipt, so release receipts come from the unrestricted
+  `provenance` job.
 - The whole tree: `test/0.16.0/docs`, the gates that read the prose documentation (support
   matrix, theorem inventory, mutation map, build-mode records, host accounting: `README.md`,
   `PLAN.md`, `ROADMAP.md` and every `docs/*.md`), split out of `inputs` so that a documentation

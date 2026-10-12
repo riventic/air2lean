@@ -116,7 +116,7 @@
         "docs/**",
         "*.md"
       ],
-      "note": "every tracked file except the prose documentation; the proof receipt binds withheld files by their index blob (scripts/proof-receipt.py) and is then no release receipt"
+      "note": "every tracked file except the prose documentation; the proof receipt records withheld files as withheld without reading or fingerprinting them (scripts/proof-receipt.py), and such a receipt is no release receipt"
     },
     "test/0.16.0/Debug": {
       "inputs": [

@@ -148,6 +148,12 @@ class ReceiptTests(unittest.TestCase):
             return ('\0'.join(self.names) + '\0').encode()
         if args == ('ls-files', '--others', '--exclude-standard', '-z'):
             return b''
+        if args == ('rev-parse', '--absolute-git-dir'):
+            (self.base / 'gitdir').mkdir(exist_ok=True)
+            if self.withheld:
+                (self.base / 'gitdir/air2lean-restricted.json').write_text(json.dumps(
+                    {'commit': '0123456789abcdef0123456789abcdef01234567', 'withheld': sorted(self.withheld)}))
+            return (str(self.base / 'gitdir') + '\n').encode()
         if args == ('ls-files', '-t', '-s', '-z'):
             return ''.join('%s 100644 %s 0\t%s\0' % ('S' if n in self.withheld else 'H', '1' * 40, n)
                            for n in self.names).encode()
@@ -385,7 +391,7 @@ class ReceiptTests(unittest.TestCase):
         receipt = r.load(self.attempt / 'receipt.json')
         self.assertEqual(receipt['kernel_replay']['status'], 'pass')
         self.assertEqual(receipt['tree'], {'head': self.plan['revision']['head'], 'tracked_dirty': False,
-                                           'dirty_allowed': False, 'withheld': 0})
+                                           'dirty_allowed': False})
         self.assertEqual(r.verify(self.attempt, release=True)['tree'], 'clean')
         (self.attempt / 'receipt.json').write_text(json.dumps({k: v for k, v in receipt.items() if k != 'kernel_replay'}))
         with self.assertRaisesRegex(ValueError, 'invalid receipt'):
