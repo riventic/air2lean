@@ -831,18 +831,9 @@ theorem ECell.ftot_rcpt_tg (γ e : Nat) (q : Frac) (k : Nat) (w : STag) (n : Nat
 theorem ECell.ftot_shareT_rc (u : STag) (q : Frac) (k γ e n : Nat) :
     ftot ((ECell.shareT u q k).rc γ e) n = 0 := ftot_zero (fun _ => by simp) n
 
-/-- **Lend a tagged share** off a share tagged with the ledger's parent `p`: the holder gets a
-share tagged `(γ, e)` (at a bound up to the old one), the lender a receipt for it, which lies in
-`p`'s world. Needs ledger `γ` at epoch `e`. With `p = none` it lends off an untagged share. -/
-theorem EUpd.lendT (hk : k' ≤ k) :
-    EUpd (gauthP γ e M p ⋆ bshare b q k p)
-      (gauthP γ e M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e)) := by
-  refine EUpd.ext1L (L := Ghost.at γ (GCell.auth1 e M p)) (Ghost.at_extent _ _) (b := b)
-    (c := ECell.shareT p q k) (c' := (ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) fun r h => ?_
-  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, h2⟩ := h; exact h2.1
-  refine ⟨gauth_ext_eq (fun _ h => bshareT_eq h) h,
-    gauth_ext_intro (ext_sep_intro ⟨hq, rfl, rfl, rfl⟩ ⟨hq, rfl, rfl, rfl⟩), fun ls hL hu => ?_⟩
-  have hls : ls γ e p := hL _ _ _ Ghost.at_auth1_ls
+/-- The cell step of `EUpd.lendT` (and of `EUpd.lendC` on each claimed byte). -/
+theorem ECell.stepE_lendT {ls : LStat} (hk : k' ≤ k) (hq : 0 < q.val) (hls : ls γ e p) (hu : ls.Uniq) :
+    ECell.StepE ls (ECell.shareT p q k) ((ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) := by
   have hlive : ∀ w, (∃ e', e ≤ e' ∧ ls γ e' w) → w = p := fun w ⟨e', _, h⟩ => (hu _ _ _ _ _ h hls).2
   have hrc0 : ∀ γ' e' j, (γ', e') ≠ (γ, e) →
       (((ECell.tshare γ e q k').add (ECell.rcpt γ e q k)).rc γ' e' j).val = ((ECell.shareT p q k).rc γ' e' j).val :=
@@ -904,17 +895,22 @@ theorem EUpd.lendT (hk : k' ≤ k) :
   · have : γ₁ ≠ γ := fun x => hn e p (x ▸ hls)
     simp [ECell.add, ECell.tshare, ECell.rcpt_rc_val, this]
 
-/-- **Give a tagged share back** during its epoch: it cancels its receipt, and the receipt's
-holder gets the share tagged with the ledger's parent `p` back, at the receipt's bound. -/
-theorem EUpd.returnT (hk : k' ≤ k) :
-    EUpd (gauthP γ e M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e))
-      (gauthP γ e M p ⋆ bshare b q k p) := by
+/-- **Lend a tagged share** off a share tagged with the ledger's parent `p`: the holder gets a
+share tagged `(γ, e)` (at a bound up to the old one), the lender a receipt for it, which lies in
+`p`'s world. Needs ledger `γ` at epoch `e`. With `p = none` it lends off an untagged share. -/
+theorem EUpd.lendT (hk : k' ≤ k) :
+    EUpd (gauthP γ e M p ⋆ bshare b q k p)
+      (gauthP γ e M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e)) := by
   refine EUpd.ext1L (L := Ghost.at γ (GCell.auth1 e M p)) (Ghost.at_extent _ _) (b := b)
-    (c := (ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) (c' := ECell.shareT p q k) fun r h => ?_
-  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, _, _, _, _, h2, _⟩ := h; exact h2.1
-  refine ⟨gauth_ext_eq (fun _ h => ext_sep_eq (fun _ h => bshareT_eq h) (fun _ h => brcpt_eq h) h) h,
-    gauth_ext_intro ⟨hq, rfl, rfl, rfl⟩, fun ls hL hu => ?_⟩
-  have hls : ls γ e p := hL _ _ _ Ghost.at_auth1_ls
+    (c := ECell.shareT p q k) (c' := (ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) fun r h => ?_
+  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, h2⟩ := h; exact h2.1
+  refine ⟨gauth_ext_eq (fun _ h => bshareT_eq h) h,
+    gauth_ext_intro (ext_sep_intro ⟨hq, rfl, rfl, rfl⟩ ⟨hq, rfl, rfl, rfl⟩),
+    fun ls hL hu => ECell.stepE_lendT hk hq (hL _ _ _ Ghost.at_auth1_ls) hu⟩
+
+/-- The cell step of `EUpd.returnT` (and of `EUpd.returnC` on each claimed byte). -/
+theorem ECell.stepE_returnT {ls : LStat} (hk : k' ≤ k) (hq : 0 < q.val) (hls : ls γ e p) (hu : ls.Uniq) :
+    ECell.StepE ls ((ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) (ECell.shareT p q k) := by
   have hlive : ∀ w, (∃ e', e ≤ e' ∧ ls γ e' w) → w = p := fun w ⟨e', _, h⟩ => (hu _ _ _ _ _ h hls).2
   refine ⟨by funext x; simp [ECell.add], fun d n N E => ⟨Max.max n (k + 1), Max.max N (γ + 1),
     Max.max E (e + 1), fun ⟨β, hb⟩ => ⟨_, (ECell.BalAt.change (γ := γ) (e := e) (n := Max.max n (k + 1)) (N := Max.max N (γ + 1))
@@ -960,17 +956,21 @@ theorem EUpd.returnT (hk : k' ≤ k) :
     · have : γ₁ ≠ γp := fun x => hnp γ e ep (x ▸ hls)
       simp [ECell.shareT, ECell.tshare, this]
 
-/-- **Revoke a past epoch's share**: once ledger `γ` is past epoch `e`, a receipt of epoch `e`
-turns back into a share tagged with the ledger's parent `p`, whatever the holder of the tagged
-share kept (it is dormant, and so is every share lent further from it). -/
-theorem EUpd.revoke {e' : Nat} (he : e < e') :
-    EUpd (gauthP γ e' M p ⋆ brcpt b q k γ e) (gauthP γ e' M p ⋆ bshare b q k p) := by
-  refine EUpd.ext1L (L := Ghost.at γ (GCell.auth1 e' M p)) (Ghost.at_extent _ _) (b := b)
-    (c := ECell.rcpt γ e q k) (c' := ECell.shareT p q k) fun r h => ?_
-  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, h2⟩ := h; exact h2.1
-  refine ⟨gauth_ext_eq (fun _ h => brcpt_eq h) h, gauth_ext_intro ⟨hq, rfl, rfl, rfl⟩,
-    fun ls hL hu => ?_⟩
-  have hls : ls γ e' p := hL _ _ _ Ghost.at_auth1_ls
+/-- **Give a tagged share back** during its epoch: it cancels its receipt, and the receipt's
+holder gets the share tagged with the ledger's parent `p` back, at the receipt's bound. -/
+theorem EUpd.returnT (hk : k' ≤ k) :
+    EUpd (gauthP γ e M p ⋆ (bshare b q k' (some (γ, e)) ⋆ brcpt b q k γ e))
+      (gauthP γ e M p ⋆ bshare b q k p) := by
+  refine EUpd.ext1L (L := Ghost.at γ (GCell.auth1 e M p)) (Ghost.at_extent _ _) (b := b)
+    (c := (ECell.tshare γ e q k').add (ECell.rcpt γ e q k)) (c' := ECell.shareT p q k) fun r h => ?_
+  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, _, _, _, _, h2, _⟩ := h; exact h2.1
+  refine ⟨gauth_ext_eq (fun _ h => ext_sep_eq (fun _ h => bshareT_eq h) (fun _ h => brcpt_eq h) h) h,
+    gauth_ext_intro ⟨hq, rfl, rfl, rfl⟩,
+    fun ls hL hu => ECell.stepE_returnT hk hq (hL _ _ _ Ghost.at_auth1_ls) hu⟩
+
+/-- The cell step of `EUpd.revoke` (and of `EUpd.revokeC` on each claimed byte). -/
+theorem ECell.stepE_revoke {ls : LStat} {e' : Nat} (he : e < e') (hq : 0 < q.val) (hls : ls γ e' p)
+    (hu : ls.Uniq) : ECell.StepE ls (ECell.rcpt γ e q k) (ECell.shareT p q k) := by
   have hlive : ∀ w, (∃ x, e ≤ x ∧ ls γ x w) → w = p := fun w ⟨x, _, h⟩ => (hu _ _ _ _ _ h hls).2
   have hnot : ¬ Act ls (some (γ, e)) := fun ha => by
     obtain ⟨p', h1, -⟩ := ha.inv; have := (hu _ _ _ _ _ h1 hls).1; omega
@@ -1016,6 +1016,17 @@ theorem EUpd.revoke {e' : Nat} (he : e < e') :
     · simp [ECell.shareT, ECell.share]
     · have : γ₁ ≠ γp := fun x => hnp γ e' ep (x ▸ hls)
       simp [ECell.shareT, ECell.tshare, this]
+
+/-- **Revoke a past epoch's share**: once ledger `γ` is past epoch `e`, a receipt of epoch `e`
+turns back into a share tagged with the ledger's parent `p`, whatever the holder of the tagged
+share kept (it is dormant, and so is every share lent further from it). -/
+theorem EUpd.revoke {e' : Nat} (he : e < e') :
+    EUpd (gauthP γ e' M p ⋆ brcpt b q k γ e) (gauthP γ e' M p ⋆ bshare b q k p) := by
+  refine EUpd.ext1L (L := Ghost.at γ (GCell.auth1 e' M p)) (Ghost.at_extent _ _) (b := b)
+    (c := ECell.rcpt γ e q k) (c' := ECell.shareT p q k) fun r h => ?_
+  have hq : 0 < q.val := by obtain ⟨_, _, _, _, _, h2⟩ := h; exact h2.1
+  refine ⟨gauth_ext_eq (fun _ h => brcpt_eq h) h, gauth_ext_intro ⟨hq, rfl, rfl, rfl⟩,
+    fun ls hL hu => ECell.stepE_revoke he hq (hL _ _ _ Ghost.at_auth1_ls) hu⟩
 
 open Classical in
 /-- A child's weight grows with its receipts' fraction. -/

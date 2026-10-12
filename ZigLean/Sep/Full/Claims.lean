@@ -185,6 +185,192 @@ theorem bcrcpt_split {b : BlockId} {lo m hi γ e : Nat} (h1 : lo ≤ m) (h2 : m 
     rw [res_eta r, h0, k0, g0, ← e]
     exact ghostOnly_sep_intro
 
+/-! ## Lending, returning and revoking claims -/
+
+namespace ECell
+
+theorem onRange_add (lo hi : Nat) (c c' : ECell) (x : Nat) :
+    (onRange lo hi c x).add (onRange lo hi c' x) = onRange lo hi (c.add c') x := by
+  simp only [onRange]; split <;> simp
+
+/-- A cell step on every byte of a range. -/
+theorem StepE.onRange {ls : LStat} {c c' : ECell} (h : StepE ls c c') (lo hi x : Nat) :
+    StepE ls (onRange lo hi c x) (onRange lo hi c' x) := by
+  simp only [ECell.onRange]; split
+  · exact h
+  · exact StepE.refl ls _
+
+/-- An empty range stays empty: if `c` is not the unit, `onRange lo hi c` is all unit only for
+`hi ≤ lo`. -/
+theorem onRange_unit {c c' : ECell} (hc : c ≠ unit) {lo hi : Nat} (h : ∀ x, onRange lo hi c x = unit) :
+    ∀ x, onRange lo hi c' x = unit := fun x => by
+  by_cases hx : lo ≤ x ∧ x < hi
+  · have := h x; simp only [onRange, if_pos hx] at this; exact absurd this hc
+  · simp only [onRange, if_neg hx]
+
+theorem shareT_ne_unit (t : STag) {q : Frac} (hq : 0 < q.val) (k : Nat) : shareT t q k ≠ unit := fun h => by
+  have h1 := tg_shareT t q k t k
+  rw [h] at h1
+  rcases t with _ | ⟨γ, e⟩ <;> simp [unit, tg, Frac.zero] at h1 <;> grind
+
+theorem rcpt_ne_unit (γ e : Nat) {q : Frac} (hq : 0 < q.val) (k : Nat) (d : ECell) :
+    d.add (rcpt γ e q k) ≠ unit := fun h => by
+  have h1 := congrArg (fun c : ECell => (c.rc γ e k).val) h
+  simp only [rc_add_val, rcpt_rc_val, and_self, if_true] at h1
+  have := (d.rc γ e k).nonneg
+  simp [unit, Frac.zero] at h1; grind
+
+end ECell
+
+theorem Ghost.atCl_ls (b : BlockId) (C : Nat → ECell) (g : Ghost) : (g.add (Ghost.atCl b C)).ls = g.ls := by
+  funext γ e p; simp [Ghost.ls, Ghost.add, Ghost.atCl]
+
+/-- Replacing the claim cells `C` of one block by `C'`, next to a ledger part `L` without claims,
+keeps a composition when every byte's change is a cell step (`ECell.StepE`) under every ledger
+status that contains `L`'s, and a block without claims stays without claims. -/
+theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b : BlockId}
+    {C C' : Nat → ECell} {gF : Ghost} (hok : GOk m (L.add (Ghost.atCl b C)) gF)
+    (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ∀ x, ECell.StepE ls (C x) (C' x))
+    (hz : (∀ x, C x = ECell.unit) → ∀ x, C' x = ECell.unit) :
+    GOk m (L.add (Ghost.atCl b C')) gF := by
+  obtain ⟨⟨⟨hv, hx, hcv, NC, hNC⟩, N, hN⟩, ht, hcf⟩ := hok
+  have hV : Ghost.Valid ((L.add (Ghost.atCl b C)).add gF) := ⟨hv, hx, hcv, NC, hNC⟩
+  have eled : ((L.add (Ghost.atCl b C')).add gF).led = ((L.add (Ghost.atCl b C)).add gF).led := rfl
+  have ex : ((L.add (Ghost.atCl b C')).add gF).extent = ((L.add (Ghost.atCl b C)).add gF).extent := rfl
+  have els : ((L.add (Ghost.atCl b C')).add gF).ls = ((L.add (Ghost.atCl b C)).add gF).ls := rfl
+  have ecl : ∀ D x y, ((L.add (Ghost.atCl b D)).add gF).cl x y =
+      if x = b then (D y).add (gF.cl b y) else gF.cl x y := fun D x y => by
+    by_cases hb : x = b
+    · subst hb; simp [Ghost.atCl, hL]
+    · simp [Ghost.atCl, hL, hb]
+  have hst := h ((L.add (Ghost.atCl b C)).add gF).ls
+    (fun γ e p h => Ghost.ls_add _ _ _ _ _ (Ghost.ls_add _ _ _ _ _ h)) hV.uniq
+  refine ⟨⟨⟨hv, by rw [ex, els]; exact hx, fun x y => ?_, Max.max NC N, fun γ hγ x y e k => ?_⟩,
+    N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+  · rw [ecl, els]
+    have h0 := hcv x y
+    rw [ecl] at h0
+    split
+    · rename_i hb; subst hb; rw [if_pos rfl] at h0; exact (hst y).okV h0.1 h0.2
+    · rename_i hb; rw [if_neg hb] at h0; exact h0
+  · have h0 := hNC γ (by omega) x y
+    rw [ecl] at h0 ⊢
+    split
+    · rename_i hb; subst hb; rw [if_pos rfl] at h0
+      have hz' := fun e k => ECell.add_tags_zero (a := C y) (b := gF.cl x y)
+        (by have := hNC γ (by omega) x y e k; rw [ecl, if_pos rfl] at this; exact this)
+      have hnep : ∀ e p, ¬ ((L.add (Ghost.atCl x C)).add gF).ls γ e p := fun e p ⟨M, hM⟩ => by
+        rw [(hN γ (by omega)).1] at hM; simp [GCell.unit] at hM
+      have hnpar : ∀ γ' e' e, ¬ ((L.add (Ghost.atCl x C)).add gF).ls γ' e' (some (γ, e)) :=
+        fun γ' e' e ⟨M, hM⟩ => by have := (hN γ (by omega)).2.2 γ' e' M e; omega
+      have := (hst y).2.2.2.2 γ hnep hnpar (fun e k => ⟨(hz' e k).1, (hz' e k).2.1⟩) e k
+      simp only [ECell.add, Frac.add_val, this.1, this.2, (hz' e k).2.2.1, (hz' e k).2.2.2]; grind
+    · rename_i hb; rw [if_neg hb] at h0; exact h0 e k
+  · have h0 := hcf x hx
+    rw [ecl]; split
+    · rename_i hb; subst hb
+      have hC : ∀ y, C y = ECell.unit := fun y => by
+        have := h0 y; rw [ecl, if_pos rfl] at this; exact ECell.eq_unit_of_add this
+      have hF : gF.cl x y = ECell.unit := by
+        have := h0 y; rw [ecl, if_pos rfl, ECell.add_comm] at this; exact ECell.eq_unit_of_add this
+      rw [hz hC y, hF, ECell.add_unit]
+    · rename_i hb; have := h0 y; rw [ecl, if_neg hb] at this; exact this
+
+namespace EUpd
+
+variable {P P' : FAssn}
+
+/-- **A local update of one block's claim cells** next to a ledger part `L` (`GOk.cl1`). -/
+theorem cl1L {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b : BlockId} {C C' : Nat → ECell}
+    (hp : ∀ r, P r → r = ⟨FHeap.empty, Know.none, L.add (Ghost.atCl b C)⟩ ∧
+      P' ⟨FHeap.empty, Know.none, L.add (Ghost.atCl b C')⟩ ∧
+      (∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ∀ x, ECell.StepE ls (C x) (C' x)) ∧
+      ((∀ x, C x = ECell.unit) → ∀ x, C' x = ECell.unit)) : EUpd P P' := by
+  intro m r rF hh hr _
+  obtain ⟨e, hp', hst, hz⟩ := hp r hr
+  subst e
+  exact ⟨⟨FHeap.empty, Know.none, L.add (Ghost.atCl b C')⟩,
+    ⟨hh.disj, hh.heap, hh.know, hh.knowF, GOk.cl1 hL hh.ghost hst hz⟩, hp'⟩
+
+end EUpd
+
+section ClaimRules
+
+variable {b : BlockId} {lo hi γ e : Nat} {M : GMap} {p : STag}
+
+theorem bclaim_eq {t : STag} {r : Res} (h : bclaim b lo hi t r) :
+    r = ⟨FHeap.empty, Know.none, Ghost.atCl b (ECell.onRange lo hi (ECell.shareT t Frac.one 0))⟩ := by
+  obtain ⟨h1, h2, h3⟩ := h; rw [res_eta r, h1, h2, h3]
+
+theorem bcrcpt_eq {r : Res} (h : bcrcpt b lo hi γ e r) :
+    r = ⟨FHeap.empty, Know.none, Ghost.atCl b (ECell.onRange lo hi (ECell.rcpt γ e Frac.one 0))⟩ := by
+  obtain ⟨h1, h2, h3⟩ := h; rw [res_eta r, h1, h2, h3]
+
+/-- A tagged claim next to its receipt, as one claim cell per byte. -/
+theorem bclaim_bcrcpt_eq {r : Res} (h : (bclaim b lo hi (some (γ, e)) ⋆ bcrcpt b lo hi γ e) r) :
+    r = ⟨FHeap.empty, Know.none, Ghost.atCl b (ECell.onRange lo hi
+      ((ECell.tshare γ e Frac.one 0).add (ECell.rcpt γ e Frac.one 0)))⟩ := by
+  obtain ⟨h1, h2, h3⟩ := ghostOnly_sep h
+  rw [res_eta r, h1, h2, h3]
+  congr 2; funext x; exact ECell.onRange_add lo hi _ _ x
+
+theorem bclaim_bcrcpt_intro :
+    (bclaim b lo hi (some (γ, e)) ⋆ bcrcpt b lo hi γ e) ⟨FHeap.empty, Know.none, Ghost.atCl b
+      (ECell.onRange lo hi ((ECell.tshare γ e Frac.one 0).add (ECell.rcpt γ e Frac.one 0)))⟩ := by
+  have := ghostOnly_sep_intro (b := b) (C := ECell.onRange lo hi (ECell.shareT (some (γ, e)) Frac.one 0))
+    (C' := ECell.onRange lo hi (ECell.rcpt γ e Frac.one 0))
+  have e : (fun x => (ECell.onRange lo hi (ECell.shareT (some (γ, e)) Frac.one 0) x).add
+      (ECell.onRange lo hi (ECell.rcpt γ e Frac.one 0) x)) =
+      ECell.onRange lo hi ((ECell.tshare γ e Frac.one 0).add (ECell.rcpt γ e Frac.one 0)) :=
+    funext (ECell.onRange_add lo hi _ _)
+  rw [e] at this; exact this
+
+/-- `gauthP γ e M p ⋆ P`, where `P` holds the claim cells `C` of block `b` only, as one resource. -/
+theorem gauth_cl_eq {P : FAssn} {C : Nat → ECell}
+    (hp : ∀ r, P r → r = ⟨FHeap.empty, Know.none, Ghost.atCl b C⟩) {r : Res} (h : (gauthP γ e M p ⋆ P) r) :
+    r = ⟨FHeap.empty, Know.none, (Ghost.at γ (GCell.auth1 e M p)).add (Ghost.atCl b C)⟩ := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, h2⟩ := h
+  rw [hp _ h2, h1, k1, g1]; simp [FHeap.union_empty, Know.union_none]
+
+theorem gauth_cl_intro {P : FAssn} {C : Nat → ECell} (hp : P ⟨FHeap.empty, Know.none, Ghost.atCl b C⟩) :
+    (gauthP γ e M p ⋆ P) ⟨FHeap.empty, Know.none, (Ghost.at γ (GCell.auth1 e M p)).add (Ghost.atCl b C)⟩ :=
+  ⟨⟨FHeap.empty, Know.none, Ghost.at γ (GCell.auth1 e M p)⟩, ⟨FHeap.empty, Know.none, Ghost.atCl b C⟩,
+    FHeap.disjoint_empty _, by simp [FHeap.union_empty, Know.union_none], ⟨rfl, rfl, rfl⟩, hp⟩
+
+theorem frac_one_pos : 0 < Frac.one.val := by decide
+
+/-- **Lend a claim** of the world `p` as a claim tagged `(γ, e)` (ledger `γ` at epoch `e` with
+parent `p`): the lender keeps a receipt (`EUpd.lendT` on each byte). -/
+theorem EUpd.lendC :
+    EUpd (gauthP γ e M p ⋆ bclaim b lo hi p)
+      (gauthP γ e M p ⋆ (bclaim b lo hi (some (γ, e)) ⋆ bcrcpt b lo hi γ e)) :=
+  EUpd.cl1L (L := Ghost.at γ (GCell.auth1 e M p)) (fun _ _ => rfl) fun r h =>
+    ⟨gauth_cl_eq (fun _ h => bclaim_eq h) h, gauth_cl_intro bclaim_bcrcpt_intro,
+      fun ls hL hu x => (ECell.stepE_lendT (Nat.le_refl 0) frac_one_pos (hL _ _ _ Ghost.at_auth1_ls) hu).onRange lo hi x,
+      ECell.onRange_unit (ECell.shareT_ne_unit p frac_one_pos 0)⟩
+
+/-- **Give a tagged claim back** during its epoch: it cancels its receipt, and the world `p`
+gets the claim back (`EUpd.returnT` on each byte). -/
+theorem EUpd.returnC :
+    EUpd (gauthP γ e M p ⋆ (bclaim b lo hi (some (γ, e)) ⋆ bcrcpt b lo hi γ e))
+      (gauthP γ e M p ⋆ bclaim b lo hi p) :=
+  EUpd.cl1L (L := Ghost.at γ (GCell.auth1 e M p)) (fun _ _ => rfl) fun r h =>
+    ⟨gauth_cl_eq (fun _ h => bclaim_bcrcpt_eq h) h, gauth_cl_intro ⟨rfl, rfl, rfl⟩,
+      fun ls hL hu x => (ECell.stepE_returnT (Nat.le_refl 0) frac_one_pos (hL _ _ _ Ghost.at_auth1_ls) hu).onRange lo hi x,
+      ECell.onRange_unit (ECell.rcpt_ne_unit γ e frac_one_pos 0 _)⟩
+
+/-- **Revoke a past epoch's claim**: once ledger `γ` is past epoch `e`, a claim receipt turns back
+into the claim of the world `p`, whatever the tagged claim's holder kept (`EUpd.revoke` on each
+byte). -/
+theorem EUpd.revokeC {e' : Nat} (he : e < e') :
+    EUpd (gauthP γ e' M p ⋆ bcrcpt b lo hi γ e) (gauthP γ e' M p ⋆ bclaim b lo hi p) :=
+  EUpd.cl1L (L := Ghost.at γ (GCell.auth1 e' M p)) (fun _ _ => rfl) fun r h =>
+    ⟨gauth_cl_eq (fun _ h => bcrcpt_eq h) h, gauth_cl_intro ⟨rfl, rfl, rfl⟩,
+      fun ls hL hu x => (ECell.stepE_revoke he frac_one_pos (hL _ _ _ Ghost.at_auth1_ls) hu).onRange lo hi x,
+      ECell.onRange_unit (by simpa using ECell.rcpt_ne_unit γ e frac_one_pos 0 ECell.unit)⟩
+
+end ClaimRules
+
 /-! ## Exclusivity -/
 
 /-- **Two claims of one active world are disjoint**: a byte claimed twice would hold twice the
