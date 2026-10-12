@@ -420,8 +420,8 @@ theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.
     · obtain ⟨fc, hfc, -⟩ := up_bytesAt_cell hp hpb' (j := k + i) (by omega)
       rw [← Nat.add_assoc] at hfc; rw [hfc]; simp
     · exact ⟨⟨singleThread_write (singleThread_recordAt hs.1.single _ _ _ _) _ _ _ _⟩, hs.2.1,
-        LDMono.set (nb := { blk with bytes := writeBytes blk.bytes (q.off.toNat + k) bs' }) hb id
-          rfl (by simp only; rw [writeBytes_size _ _ _ hfit']; exact Nat.le_refl _) rfl hs.2.2⟩
+        (LDMono.set (nb := { blk with bytes := writeBytes blk.bytes (q.off.toNat + k) bs' }) hb id
+          rfl (by simp only; rw [writeBytes_size _ _ _ hfit']; exact Nat.le_refl _) rfl) hs.2.2⟩
 
 /-- **Store of a `T`** at byte `k` of owned bytes, not of a `const` global. -/
 theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)

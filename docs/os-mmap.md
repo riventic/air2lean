@@ -60,11 +60,12 @@ when it is page-aligned, nonzero, its pages end at or below 2^64 and are clear o
 block, so a later mapping may reuse an unmapped range, as the kernel does. Otherwise the mapping
 goes after every block (`Mem.top`). Either way, a mapping whose pages would end above
 `addrLimit` fails with `error.OutOfMemory` (one attempt, no block): the kernel never maps there.
-The live range of a block for that check is its whole byte range, also below a mapping's first
-live offset: the model never places a block into the unmapped prefix of a mapping that is still
-partly live, which the kernel may do (open: the `map` path for alignments above a page, proved
-in `PageAlloc.lean`, unmaps such a prefix, and a later mapping the kernel puts there is outside
-the model).
+The live range of a block for that check is its live bytes, from its first live offset on
+(`Block.clearOf`, `BlockKind.mappedLo`): the unmapped prefix of a mapping that is still partly
+live is free address space again, and a later block may be placed there, as the kernel may do
+(the `map` path for alignments above a page, proved in `PageAlloc.lean`, unmaps such a prefix).
+A thread's stack cut off its mapping by `clone` is such a prefix while the thread runs
+(MM-19, [os-threads.md](os-threads.md)); the stack reserves keep every other placement out of it.
 
 ## munmap
 
@@ -75,7 +76,8 @@ the mapping's end counts as `lo + alignUp (hi - lo) page`. Then:
 
 - the whole mapping: the block ends (every later access is `.illegal`);
 - a prefix (`off = lo`, ending before the mapping's end): `lo` moves to the range's end; an
-  access below it is `.illegal` (`Mem.access` checks `BlockKind.mappedLo`);
+  access below it is `.illegal` (`Mem.access` checks `BlockKind.mappedLo`), and the released
+  range is free address space (`Os.unmapCase_prefix_ge`);
 - a tail (from `off > lo` to the mapping's end): the bytes end at `off`.
 
 Anything else is `.illegal`: a range in the middle (Zig's `munmap` rejects it too), a range

@@ -202,15 +202,17 @@ authority is a part of `P` under an active parent. A share tagged `t` gives its 
 is active (`Holds.bshare`). -/
 def _root_.Zig.Full.Active (t : STag) (P : FAssn) : Prop := ∀ r, P r → Act r.gh.ls t
 
-/-- Every memory that holds `P` has block `b` live with at least `k` bytes: an owned byte below
-`k`, or a share at bound `k` whose tag is active. Two live blocks lie apart (pointer `==` across
-blocks, `ptrEqAddr_live`). -/
-def _root_.Zig.Full.Live (b : BlockId) (k : Nat) (P : FAssn) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size
+/-- Every memory that holds `P` has block `b` live with at least `k` bytes, live from offset `l`
+on (at or above its first live offset, `BlockKind.mappedLo`): owned bytes from `l` to below `k`.
+Two live blocks share no live byte (pointer `==` across blocks, `ptrEqAddr_live`); a share gives
+no such bound (the bytes below an OS mapping's first live offset may be a thread's stack, MM-19). -/
+def _root_.Zig.Full.Live (b : BlockId) (l k : Nat) (P : FAssn) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+    blk.kind.mappedLo ≤ l ∧ k ≤ blk.bytes.size
 
 section Whole
 
-variable {b : BlockId} {A k : Nat} {t : STag} {P X : FAssn}
+variable {b : BlockId} {A l k : Nat} {t : STag} {P X : FAssn}
 
 theorem _root_.Zig.Full.AddrOf.of_within (h : AddrOf b A X) (hw : Within X P) : AddrOf b A P :=
   fun m r rF hh hp => by obtain ⟨_, h'⟩ := hw r hp; exact h.sepL m r rF hh h'
@@ -223,7 +225,7 @@ theorem _root_.Zig.Full.Active.of_within (h : Active t X) (hw : Within X P) : Ac
     obtain ⟨_, r₁, r₂, -, rfl, h1, -⟩ := hw r hp
     exact (h r₁ h1).mono (Ghost.ls_add _ _)
 
-theorem _root_.Zig.Full.Live.of_within (h : Live b k X) (hw : Within X P) : Live b k P :=
+theorem _root_.Zig.Full.Live.of_within (h : Live b l k X) (hw : Within X P) : Live b l k P :=
   fun m r rF hh hp => by
     obtain ⟨_, r₁, r₂, hd, rfl, h1, -⟩ := hw r hp
     exact h m r₁ _ (Holds.split hd hh) h1
@@ -239,45 +241,60 @@ theorem _root_.Zig.Full.Active.gauthP {γ e : Nat} {M : GMap} {p : STag}
     (hw : Within (gauthP γ e M p) P) (hp : Active p P) : Active (some (γ, e)) P :=
   fun r hr => act_gauthP hw hr (hp r hr)
 
-/-- A share whose tag is active: its block is live and reaches the share's bound. -/
-theorem _root_.Zig.Full.Live.share {q : Frac} (hw : Within (bshare b q k t) P) (ha : Active t P) :
-    Live b k P := fun m r rF hh hp => by
-  obtain ⟨blk, hb, hl, hk, -⟩ := hh.bshareW hw hp (ha r hp)
-  exact ⟨blk, hb, hl, hk⟩
+/-- A share whose tag is active: its block reaches the share's bound. -/
+theorem _root_.Zig.Full.Reaches.shareW {q : Frac} (hw : Within (bshare b q k t) P) (ha : Active t P) :
+    Reaches b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, -, hk, -⟩ := hh.bshareW hw hp (ha r hp)
+  exact ⟨blk, hb, hk⟩
 
-/-- A nonempty owned byte range at `p` (in block `b`): the block is live and reaches its end. -/
+/-- Owned byte `i` of a `bytesAt`. -/
+theorem _root_.Zig.Full.bytesAt_ownsAt_at {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {h : Heap} (hb : bytesAt p A S K bs h) {i : Nat} (hi : i < bs.size) :
+    ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ ∃ c, h (b, p.off.toNat + i) = some c := by
+  obtain ⟨b, hpb, h0, hl⟩ := hb
+  refine ⟨b, hpb, h0, ⟨bs[i]!, A, S, K⟩, ?_⟩
+  rw [hl]; simp only [true_and]; rw [if_pos ⟨by omega, by omega⟩]; congr 3; omega
+
+/-- A nonempty owned byte range at `p` (in block `b`): the block is live from `p` on and reaches
+the range's end. -/
 theorem _root_.Zig.Full.Live.bytes {Y : Assn} {p : Ptr} {n : Nat} (hpb : p.block = some b)
     (hy : ∀ h, Y h → ∃ A S K bs, 0 < bs.size ∧ n ≤ bs.size ∧ bytesAt p A S K bs h) :
-    Live b (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
+    Live b p.off.toNat (p.off.toNat + n) (up Y) := fun m r rF hh hr => by
   obtain ⟨A, S, K, bs, hpos, hn, hb⟩ := hy _ hr.1
-  obtain ⟨b', hb', h0, c, hc⟩ := bytesAt_ownsAt hb hpos
-  rw [hpb] at hb'; cases hb'
-  obtain ⟨fc, hfc, -⟩ := erase_cell hc
-  obtain ⟨blk, hblk, hl, hj, -⟩ := hh.block hfc
-  exact ⟨blk, hblk, hl, by omega⟩
+  have cell : ∀ i, i < bs.size → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      p.off.toNat + i < blk.bytes.size ∧ blk.kind.mappedLo ≤ p.off.toNat + i := fun i hi => by
+    obtain ⟨b', hb', -, c, hc⟩ := bytesAt_ownsAt_at hb hi
+    rw [hpb] at hb'; cases hb'
+    obtain ⟨fc, hfc, -⟩ := erase_cell hc
+    obtain ⟨blk, hblk, hl, hj, hlo, -⟩ := hh.block hfc
+    exact ⟨blk, hblk, hl, hj, hlo⟩
+  obtain ⟨blk, hblk, hl, hj, -⟩ := cell (bs.size - 1) (by omega)
+  obtain ⟨blk', hblk', -, -, hlo⟩ := cell 0 hpos
+  rw [hblk] at hblk'; cases hblk'
+  exact ⟨blk, hblk, hl, by omega, by omega⟩
 
-/-- A nonempty region: its block is live and reaches its end. -/
+/-- A nonempty region: its block is live from the region on and reaches its end. -/
 theorem _root_.Zig.Full.Live.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
     (hpb : p.block = some b) (hpos : 0 < bs.size) :
-    Live b (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
+    Live b p.off.toNat (p.off.toNat + bs.size) (up (regionIn p A S K a bs)) :=
   Live.bytes hpb fun _ hr => ⟨A, S, K, bs, hpos, Nat.le_refl _, hr.2.2⟩
 
-/-- A typed value at `p`: its block is live and reaches one past it. -/
+/-- A typed value at `p`: its block is live from `p` on and reaches one past it. -/
 theorem _root_.Zig.Full.Live.pts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hpb : p.block = some b)
-    (hn : 0 < Enc.size T) : Live b (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
+    (hn : 0 < Enc.size T) : Live b p.off.toNat (p.off.toNat + Enc.size T) (up (Zig.pts p a v)) :=
   Live.bytes hpb fun _ hp => by
     obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
     exact ⟨A, S, K, bs, by omega, by omega, hb⟩
 
-/-- A live block reaches its bound (owned bytes, `Live.region`/`Live.pts`; shares, `Live.share`). -/
-theorem _root_.Zig.Full.Reaches.of_live (h : Live b k P) : Reaches b k P := fun m r rF hh hp => by
-  obtain ⟨blk, hb, -, hk⟩ := h m r rF hh hp
+/-- A live block reaches its bound (owned bytes, `Live.region`/`Live.pts`). -/
+theorem _root_.Zig.Full.Reaches.of_live (h : Live b l k P) : Reaches b k P := fun m r rF hh hp => by
+  obtain ⟨blk, hb, -, -, hk⟩ := h m r rF hh hp
   exact ⟨blk, hb, hk⟩
 
 end Whole
 
-attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts Live.share
-  Reaches.of_live
+attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts
+  Reaches.shareW Reaches.of_live
 
 /-- `ptrEqAddr p q` of pointers into blocks `b` and `b'` at the blocks' addresses. -/
 theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : Block}
@@ -291,29 +308,35 @@ theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : 
   simp only [StateT.run_bind, ptrAddr_run hb, pure_bind, ptrAddr_run hb', StateT.run_pure]
 
 /-- **Pointer `==` of pointers into two live blocks** (possibly the same one): equal when the
-blocks and the offsets are. Both pointers are in bounds, or both are past the start (up to one
-past the end): two live blocks share no address (`Mem.LiveDisjoint.addr_ne`), but one block's end
-may be the next one's start. -/
-@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {k k' : Nat} {P : FAssn}
-    (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b k P) (hq : Live b' k' P)
-    (hk : (0 ≤ p.off ∧ p.off < k ∧ 0 ≤ q.off ∧ q.off < k') ∨
-      (0 < p.off ∧ p.off ≤ k ∧ 0 < q.off ∧ q.off ≤ k')) :
+blocks and the offsets are. Both pointers are at live bytes (from `l`, `l'` on, `Live`) in bounds,
+or both are past a live byte (up to one past the end): two live blocks share no live byte
+(`Mem.LiveDisjoint.addr_ne`), but one block's end may be the next one's start, and a byte below an
+OS mapping's first live offset may be another block's (MM-19). -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k k' : Nat}
+    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k P)
+    (hq : Live b' l' k' P)
+    (hk : ((l : Int) ≤ p.off ∧ p.off < k ∧ (l' : Int) ≤ q.off ∧ q.off < k') ∨
+      ((l : Int) < p.off ∧ p.off ≤ k ∧ (l' : Int) < q.off ∧ q.off ≤ k')) :
     FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
   FTotalTriple.of_read fun m r rF hh hr hs => by
-    obtain ⟨blk, hb, hl, hsz⟩ := hp m r rF hh hr
-    obtain ⟨blk', hb', hl', hsz'⟩ := hq m r rF hh hr
+    obtain ⟨blk, hb, hl, hlo, hsz⟩ := hp m r rF hh hr
+    obtain ⟨blk', hb', hl', hlo', hsz'⟩ := hq m r rF hh hr
     rw [ptrEqAddr_blocks_run hpb hb hqb hb']
     congr 2
     by_cases hbb : b = b'
     · subst hbb
       rw [hb] at hb'; cases hb'
       exact decide_eq_decide.mpr ⟨fun h => ⟨rfl, by omega⟩, fun h => by omega⟩
-    · have hne : ∀ x x', x < blk.bytes.size → x' < blk'.bytes.size → blk.addr + x ≠ blk'.addr + x' :=
-        fun x x' hx hx' => hs.2.2.1.addr_ne hbb hb hb' hl hl' hx hx'
+    · have hne : ∀ x x', l ≤ x → x < blk.bytes.size → l' ≤ x' → x' < blk'.bytes.size →
+          blk.addr + x ≠ blk'.addr + x' :=
+        fun x x' h0 hx h0' hx' => hs.2.2.1.addr_ne hbb hb hb' hl hl' hx hx' (by omega) (by omega)
       refine decide_eq_decide.mpr ⟨fun h => ?_, fun h => absurd h.1 hbb⟩
       rcases hk with ⟨h0, h1, h2, h3⟩ | ⟨h0, h1, h2, h3⟩
-      · exact absurd h (by have := hne p.off.toNat q.off.toNat (by omega) (by omega); omega)
-      · exact absurd h (by have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega); omega)
+      · exact absurd h (by
+          have := hne p.off.toNat q.off.toNat (by omega) (by omega) (by omega) (by omega); omega)
+      · exact absurd h (by
+          have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega) (by omega) (by omega)
+          omega)
 
 /-! ## The fields of a stored slice -/
 

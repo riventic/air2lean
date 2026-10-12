@@ -697,15 +697,28 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Hold
       (v.bp ≠ v.bN → ∀ x x', v.N.off.toNat + 16 ≤ x → x < blkN.bytes.size → s.ptr.off.toNat - 8 ≤ x' →
         x' < blkP.bytes.size → blkN.addr + x ≠ blkP.addr + x') ∧
       (v.bp = v.bN → blkP = blkN) := by
-  obtain ⟨-, -, hbc, hbN, hbp, -, hpos, -, -, -⟩ := hv
+  obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, hbc, hbN, hbp, -, hpos, -, -, hMi⟩ := hv
   have hbN' : (v.N.add 16).block = some v.bN := by simpa [Ptr.add] using hbN
   have hoC : Owns v.bc (ctx.off.toNat + 15) v.w.Ac v.w.Kc (v.L CI γ e ctx s G) :=
     Owns.within (X := v.cR CI ctx) (Owns.region (a := 8) hbc (i := 15) (by simp)) (by within)
   have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K (v.L CI γ e ctx s G) :=
     Owns.within (X := v.nR) (Owns.region (a := 8) (bs := Enc.encode v.w.nxt) hbN' (i := 0)
       (by rw [encode_nxt_size]; omega)) (by within)
-  obtain ⟨blkC, e1, -, x1, a1, -⟩ := hoC.block hh hp
-  obtain ⟨blkN, e2, l2, -, a2, -⟩ := hoN.block hh hp
+  obtain ⟨blkC, e1, -, x1, -, a1, -⟩ := hoC.block hh hp
+  obtain ⟨blkN, e2, l2, -, lo2, a2, -⟩ := hoN.block hh hp
+  -- the slice's block is live from the `next` word of the node that the grant lies past
+  -- (`GrantOk`) on, when it is not the first node's block
+  have hloP : v.bp ≠ v.bN → ∃ blkP', m.blocks[v.bp]? = some blkP' ∧
+      blkP'.kind.mappedLo ≤ s.ptr.off.toNat - 8 := by
+    intro hne
+    obtain ⟨-, nd, hnd, hblk, -, -, hoff⟩ := hgr _ _ hMi
+    simp only [OV.nodes, hfirst] at hnd
+    rcases List.mem_cons.mp hnd with rfl | hm
+    · exact absurd (Option.some.inj (hbp.symm.trans (hblk.trans hbN))) hne
+    · have hoR : Owns v.bp ((nd.N.add 16).off.toNat + 0) nd.A nd.K (v.L CI γ e ctx s G) :=
+        Owns.within (X := UsedRest CI v.w.rest v.w.nxt) (chain_owns (hblk.symm.trans hbp) hm) (by within)
+      obtain ⟨b, eb, -, -, lob, -⟩ := hoR.block hh hp
+      exact ⟨b, eb, by simp only [Ptr.add] at lob; omega⟩
   have hact : Act r.gh.ls (some (γ, e)) :=
     act_gauthP (M := v.w.M) (p := CI.tag) (show Within (v.gA CI γ e) (v.L CI γ e ctx s G) by within) hp
       (CI.act_within (by within) hp)
@@ -714,7 +727,11 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Hold
     (CI.act_within (by within) hp)
   rw [e2] at e2'; cases e2'
   refine ⟨blkC, blkN, blkP, e1, a1, by omega, e2, a2, s2, e3, l3, s3,
-    fun hne x x' _ hx _ hx' => hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx', fun heq => ?_⟩
+    fun hne x x' hxN hx hxP hx' => ?_, fun heq => ?_⟩
+  · obtain ⟨b, eb, lob⟩ := hloP hne
+    rw [e3] at eb; cases eb
+    exact hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx' (by simp only [Ptr.add] at lo2; omega)
+      (by omega)
   rw [heq, e2] at e3; cases e3; rfl
 
 /-- **O-F**: the comparison of the first node's `buf + end_index` with the slice's end by address
@@ -752,8 +769,8 @@ theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {
         (by simpa [Ptr.add] using hbN) (by rw [encode_nxt_size]; omega)) (by within)
     have hoR : Owns v.bN ((nd.N.add 16).off.toNat + 0) nd.A nd.K (v.L CI γ e ctx s G) :=
       Owns.within (X := UsedRest CI v.w.rest v.w.nxt) (chain_owns hb' hm) (by within)
-    obtain ⟨b1, e1, -, -, a1, k1⟩ := hoN.block hh hp
-    obtain ⟨b2, e2, -, -, a2, k2⟩ := hoR.block hh hp
+    obtain ⟨b1, e1, -, -, -, a1, k1⟩ := hoN.block hh hp
+    obtain ⟨b2, e2, -, -, -, a2, k2⟩ := hoR.block hh hp
     rw [e1] at e2; cases e2
     exact ⟨by rw [hA, ← a2, a1], by rw [hK, ← k2, k1]⟩
 
