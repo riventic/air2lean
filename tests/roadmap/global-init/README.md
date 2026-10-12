@@ -35,11 +35,15 @@ export fn setScratch(v: u32) u32 { scratch = v; return scratch; }
 `ext`: the block layout and order of `mem0 ext`, that program start owns `counter` with value
 `ext.counter`, that `bump` from program start returns `ext.counter + 1` under the explicit
 hypothesis `ext.counter.toNat + 1 < 2 ^ 32`, that `readLimit` returns `ext.limit`, and that
-`readScratch` from program start throws `.unspecified`. `test_cli.py` checks the retained
-translation byte for byte and the rejections above through the CLI and `--diagnostics-json`.
+`readScratch` from program start throws `.unspecified`. `bump` is a total full-state triple
+(`FTotalTriple`, proved by `fsym`) about the counter alone; the run from program start is that
+triple framed by the other globals (`ZigLean/Sep/Full/Init.lean`: `globals_pts`,
+`FTotalTriple.run_init`). `test_cli.py` checks the retained translation byte for byte and the
+rejections above through the CLI and `--diagnostics-json`. `check.sh` also compiles the strength
+log `tests/roadmap/strength-log/GlobalInit.lean`.
 
 ```sh
-lake build air2lean ZigLean.Sep
+lake build air2lean ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Init ZigLean.Sep.Full.Strength
 bash tests/roadmap/global-init/check.sh
 ```
 
