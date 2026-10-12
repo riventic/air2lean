@@ -719,9 +719,6 @@
       "path": "ZigLean/Witnesses/Sep.lean"
     },
     {
-      "path": "tests/roadmap/address-reuse/Kernel.lean"
-    },
-    {
       "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },

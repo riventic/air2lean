@@ -52,8 +52,9 @@ example (R : FAssn) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : R r) (hs : 
     match (reuseCycle.run (m.withPlacement σ pm)).run with
     | none => True
     | some (.error e) => e = .stackOverflow
-    | some (.ok (_, m')) => ∃ r', Holds m' r' rF ∧ R r' ∧ m'.FSeq :=
-  (reuseCycle_spec R).withPlacement hh hp hs σ pm
+    | some (.ok (_, m')) => ∃ r', Holds m' r' rF ∧ R r' ∧ m'.FSeq := by
+  have h := (reuseCycle_spec R).withPlacement hh hp hs σ pm
+  split at h <;> simp_all
 
 -- (d) A new block's address range is clear of every live block under every placement (and
 -- nothing about order or gaps).
