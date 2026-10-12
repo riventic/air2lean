@@ -21,8 +21,8 @@ import json
 from pathlib import Path
 import sys
 
-FORMAT = "air2lean-module-split-v2"
-KEYS = "air2lean-module-keys-v2"
+FORMAT = "air2lean-module-split-v3"
+KEYS = "air2lean-module-keys-v3"
 COMPARISON = "air2lean-module-comparison-v1"
 KINDS = {"types", "group", "dispatch", "umbrella"}
 MODULE_FIELDS = {"module", "file", "kind", "functions", "definitions", "imports"}
@@ -38,11 +38,13 @@ def load_manifest(path):
     path = Path(path)
     doc = fp.parse_json(path.read_text(encoding="utf-8"))
     if (not isinstance(doc, dict) or doc.get("format") != FORMAT or
-            set(doc) != {"format", "namespace", "root", "metadata", "translator", "modules"} or
+            set(doc) != {"format", "namespace", "root", "metadata", "translator", "runtime", "modules"} or
             not isinstance(doc["modules"], list)):
         raise ValueError(f"{path}: not an {FORMAT} manifest")
     if not fp.valid_translator(doc["translator"]):
         raise ValueError(f"{path}: malformed or inconsistent translator revision")
+    if not fp.valid_translator(doc["runtime"]):
+        raise ValueError(f"{path}: malformed or inconsistent runtime revision")
     names = set()
     for m in doc["modules"]:
         if (not isinstance(m, dict) or set(m) != MODULE_FIELDS or m["kind"] not in KINDS or
@@ -67,7 +69,8 @@ def keys(manifest, source_map=None):
     if source_map is not None:
         if (source_map["namespace"] != manifest["namespace"] or
                 source_map["metadata"] != manifest["metadata"] or
-                source_map["translator"]["revision"] != manifest["translator"]["revision"]):
+                source_map["translator"]["revision"] != manifest["translator"]["revision"] or
+                source_map["runtime"]["revision"] != manifest["runtime"]["revision"]):
             raise ValueError("source map and module manifest describe different translations")
         prints = fp.fingerprints(source_map)
         listed = [s for m in modules.values() for s in m["functions"]]
@@ -86,6 +89,7 @@ def keys(manifest, source_map=None):
         key = fp.digest(dict(
             format=KEYS, module=name, kind=m["kind"], text=m["text_sha256"],
             metadata=manifest["metadata"], translator=manifest["translator"]["revision"],
+            runtime=manifest["runtime"]["revision"],
             functions=[[s, prints[s]["fingerprint"] if prints else None] for s in m["functions"]],
             imports=[[i, result[i]["key"] if i in result else None] for i in sorted(m["imports"])]))
         result[name] = dict(module=name, kind=m["kind"], file=m["file"], functions=m["functions"],

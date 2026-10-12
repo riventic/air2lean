@@ -681,16 +681,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "fce66096483a486eab5759b3cb293a0d165afdb2",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:18:09.643592+00:00",
-      "elapsed_seconds": 47.364,
+      "started_utc": "2026-10-12T16:05:27.205574+00:00",
+      "elapsed_seconds": 31.219,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "59606de20d305b78f5eb752c9f39c64899b60ee57c0021abdbfe5376cbd43685",
+      "log_sha256": "e55f42aebec588551050371028c4f53ccf156f2ffe3c2214b9474402c2b414c3",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -710,7 +710,7 @@
         "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
         "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
         "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "ca9156644041837bf7b4df4d0140371af5a144af9cb1dc7c01373f2e333bb197"
+        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b"
       }
     },
     "0.14.1-linux-floatops": {
@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "192a354e490bbc5f689029c2bc492db3beaf6f6f",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:21:52.467273+00:00",
-      "elapsed_seconds": 0.488,
+      "started_utc": "2026-10-12T16:24:08.164015+00:00",
+      "elapsed_seconds": 235.898,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3a501b0adbce33ea6311ed6aaee81db81e70e39d22506bbac1d7f2dec1d27d0c",
+      "log_sha256": "5c083c4c756eed7b3d2140f55d85e39585e8e3aff0fb56d6451f5aa2ebaa8501",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -886,7 +886,7 @@
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
-          "sha256": "46d180ad4a7d7281eb86ca251ce5e408639179a0a3752bd5b436eab1b74da351"
+          "sha256": "b6fee7fc3d83a5456c4787eea9326b0d7e9fba10aedad90175c10072e1f99dd4"
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",
@@ -939,7 +939,7 @@
       },
       "sources": {
         "Proofs.Asm.AirCert": "6fb8ff76034d212095328ccbc03a742ccf4c7d621130e3f4c8660ea17c29c26d",
-        "Proofs.Asm.Effects": "c50095fddefdc30a34747bb04c6ffc7cc5dffc3996f53dfe2211cb3811c74ef8",
+        "Proofs.Asm.Effects": "10002dca60c49e3b827cb411263b6653fb58524ce29120dfdba288caebe338d9",
         "Proofs.Asm.Proofs": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
         "Proofs.Atomics.AirCert": "9c6d2311a512906599e828ea3deab7a8f26a3b119811ce49fce615a1ee968b3d",
         "Proofs.Atomics.MessagePassing": "30251ef1dfd8433540754cb5b8e7022457f8e7abf7a4c191898c89902c149f70",
@@ -1007,7 +1007,7 @@
         "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
         "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
         "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "ca9156644041837bf7b4df4d0140371af5a144af9cb1dc7c01373f2e333bb197",
+        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b",
         "Proofs.Variants.AirCert": "f0d0cc9e0a5212d7990086aaebcf9d057a5d09b49984bfc18fc191f1419e113c",
         "Proofs.Variants.Proofs": "d28d84359f4f156c48a6fc24eef89177e34d52065f56954b2b0df975d074d6fb",
         "Proofs.Vectors.AirCert": "3f0926a38f08ca9674f03d2717b6e8b9c15c37e26fa2625d0ad1623ecb8c70c5",
@@ -1376,16 +1376,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "fce66096483a486eab5759b3cb293a0d165afdb2",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:18:57.262554+00:00",
-      "elapsed_seconds": 43.199,
+      "started_utc": "2026-10-12T16:05:58.876022+00:00",
+      "elapsed_seconds": 37.521,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "69985cbf6bd580585cfe3a81652884e06994f6bfc4b932d61fd7ba6c6823cdf6",
+      "log_sha256": "5250bb0b59c6affface1d3986d6a358094cdefee482fb154dcdd07de67f5fb09",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -1405,7 +1405,7 @@
         "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
         "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
         "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "ca9156644041837bf7b4df4d0140371af5a144af9cb1dc7c01373f2e333bb197"
+        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b"
       }
     },
     "0.15.2-linux-aarch64-floatops": {
@@ -1519,6 +1519,45 @@
         "floatops": {
           "path": "tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean",
           "sha256": "50c0386c9a290e3f43a02e9aaece57ae5f49b4fd67ee90de9565ca896c4b46b9"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+      }
+    },
+    "0.17.0-linux-aarch64-floatops": {
+      "zig": "0.17.0",
+      "target": "linux-aarch64",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "2cea5bdd7f86d0a68f40b9ed85496a7a656becbc",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-12T11:30:01.598957+00:00",
+      "elapsed_seconds": 10.152,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "ca00b2217b23200c84fbe8628afeeecbe041be6bec66468f5f3c787e2c4b8f8b",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean",
+          "sha256": "4e1b7886a20aca6d4379492d1174c4216bbcf3513e1cbf95dd06d0e0d7c54727"
         }
       },
       "sources": {

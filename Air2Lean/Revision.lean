@@ -11,7 +11,9 @@ changing any input, so the fingerprints must also cover the translator that prod
 reads the source of every imported `Air2Lean` module and of the using file itself, and returns
 SHA-256 digests of each and of their ordered list together with the Lean version. Lake
 rebuilds the using module whenever an imported module changes, so the embedded revision
-always describes the translator that was built. Comments and documentation count: the key is
+always describes the translator that was built. `runtime_revision%` does the same for the
+`ZigLean` modules in the import closure of `import ZigLean` (the runtime every generated module
+imports), so the sidecar also binds the runtime semantics the definitions are about. Comments and documentation count: the key is
 conservative, never a semantic-equivalence claim.
 -/
 
@@ -80,20 +82,35 @@ def Translator.of (lean : String) (sources : Array (String × ByteArray)) : Tran
   { lean, modules, revision := sha256 listing.toUTF8 }
 
 open Lean Elab Term in
-/-- The `Translator` record of the imported `Air2Lean` modules and the current file. -/
-elab "translator_revision%" : term => do
+/-- The sources of the imported modules whose root is `rootName`, as `Translator.of`'s input.
+`withMain`: also the using file itself. -/
+private def importedSources (rootName : Name) (withMain : Bool) : TermElabM (Array (String × ByteArray)) := do
   let file ← IO.FS.realPath (System.FilePath.mk (← getFileName))
   let mainModule := (← getEnv).mainModule
   -- `<root>/Air2Lean/Main.lean` for module `Air2Lean.Main`: walk up one directory per component.
   let root := (List.range mainModule.components.length).foldl
     (fun (p : System.FilePath) _ => p.parent.getD p) file
-  let imported := (← getEnv).allImportedModuleNames.filter fun m =>
-    m.getRoot == `Air2Lean
-  let mut sources : Array (String × ByteArray) := #[(mainModule.toString, ← IO.FS.readBinFile file)]
+  let imported := (← getEnv).allImportedModuleNames.filter fun m => m.getRoot == rootName
+  let mut sources : Array (String × ByteArray) := #[]
+  if withMain then sources := sources.push (mainModule.toString, ← IO.FS.readBinFile file)
   for m in imported do
     let path := (m.components.foldl (fun (p : System.FilePath) c => p / c.toString) root).withExtension "lean"
     sources := sources.push (m.toString, ← IO.FS.readBinFile path)
-  let t := Translator.of Lean.versionString sources
+  return sources
+
+open Lean Elab Term in
+/-- The `Translator` record of the imported `Air2Lean` modules and the current file. -/
+elab "translator_revision%" : term => do
+  let t := Translator.of Lean.versionString (← importedSources `Air2Lean true)
+  elabTerm (← `(Translator.mk $(quote t.lean) $(quote t.modules) $(quote t.revision)))
+    (some (mkConst ``Translator))
+
+open Lean Elab Term in
+/-- The `Translator`-shaped record of the runtime: every imported `ZigLean` module, that is the
+import closure of `import ZigLean`, which each generated module imports. Lake rebuilds the using
+module whenever one of them changes. -/
+elab "runtime_revision%" : term => do
+  let t := Translator.of Lean.versionString (← importedSources `ZigLean false)
   elabTerm (← `(Translator.mk $(quote t.lean) $(quote t.modules) $(quote t.revision)))
     (some (mkConst ``Translator))
 

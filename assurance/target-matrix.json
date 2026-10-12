@@ -67,6 +67,15 @@
     }
 ,
     {
+      "zig": "0.17.0", "host": "aarch64-linux", "target": "aarch64-linux", "profile": "abi64-le-v1",
+      "job": "aarch64-linux",
+      "evidence": {
+        "native_execution": ["aarch64-linux golden AIR, translate, differential test (0.17.0)"],
+        "target_probe": ["aarch64-linux ABI qualification (T04, 0.17.0)"],
+        "proof_check": ["aarch64-linux proofs (0.17.0)"]
+      }
+    },
+    {
       "zig": "0.16.0", "host": "aarch64-linux", "target": "aarch64-linux", "profile": "abi64-le-v1",
       "job": "aarch64-linux",
       "evidence": {

@@ -426,7 +426,7 @@
    "ty": 1,
    "callee": {
     "ty": 13,
-    "func": "mem.absorbSentinel__anon_20557",
+    "func": "mem.absorbSentinel__anon_20414",
     "module": "std",
     "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
     "noreturn": false
@@ -642,8 +642,7 @@
   {
    "id": 61,
    "tag": "ret_addr",
-   "ty": 2,
-   "unsupported": true
+   "ty": 2
   },
   {
    "id": 62,

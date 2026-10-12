@@ -63,7 +63,7 @@ inductive Byte where
   /-- The bits set in `d` are defined, with the values of `b`; the others are undefined (`b`'s
   bits there are 0). Only for a mask that is not all, none or the low bits (`.int`, `.undef`,
   `.part`): a bit-pointer store of a field or of `undefined` next to undefined bits
-  (`Byte.ofDefBits`, `ZigLean/Packed.lean`). A read that needs a bit outside `d` throws
+  (`Byte.ofDefBits`, `ZigLean/Mem/Enc.lean`). A read that needs a bit outside `d` throws
   `.unspecified` (`intOfBytes`). -/
   | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
@@ -985,6 +985,19 @@ def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) (kind : BlockKind
 initial bytes, alignment and kind, at the address that `σ` gives it. -/
 def Mem.ofGlobals (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) : Mem :=
   gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) { place := σ }
+
+/-- A block of external storage (L12, `docs/generated-code.md` §Globals): static storage that
+another object defines, which the initial value of a pointer-bearing `extern` global can point
+into. A generated `mem0` adds these blocks after the program's globals, in order, so block
+`gs.length + i` is `ext.storage[i]`. It is never freed; a `const` one is read-only. -/
+structure ExternBlock where
+  bytes : Array Byte
+  align : Nat
+  writable : Bool
+
+/-- The global block of `b`. -/
+def ExternBlock.global (b : ExternBlock) : Array Byte × Nat × BlockKind :=
+  (b.bytes, b.align, if b.writable then .global else .constGlobal)
 
 /-! ## Calls -/
 

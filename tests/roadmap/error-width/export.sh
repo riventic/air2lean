@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# L10: export error_width.zig with the patched compilers (0.16.0, 0.15.2, 0.14.1) at several
+# L10: export error_width.zig with the patched compilers (0.17.0, 0.16.0, 0.15.2, 0.14.1) at several
 # `--error-limit` values into air-fresh/<version>/bits<N>, or with --check compare a fresh
 # export byte for byte with the committed one.
 #
@@ -31,7 +31,7 @@ limit_for() {
     *) echo "bad width $1" >&2; exit 1 ;;
   esac
 }
-for version in 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   if [ "$mode" = --check ]; then
     recorded=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["patched_compiler_sha256"][sys.argv[2]])' \
       "$here/provenance.json" "$version")

@@ -226,7 +226,7 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
       found := true
       log := log.add { context with
         message
-        category := if (runtimeTagReason? raw.tag).isSome then .unsupportedSemantics else .validationFailure
+        category := if (stateTagReason? raw.tag).isSome then .unsupportedSemantics else .validationFailure
         anchor := { idSpace := .canonical, instruction := some raw.id }
         firstErrorInUnit := true }
   -- Defensive: never let an unexplained composed failure pass silently.
@@ -237,7 +237,7 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
 malformed input (JSON syntax, undecodable AIR, a structurally unusable profile, invalid
 references) stops the unit; within each phase, independent findings are all reported. -/
 def inspect (file contents : String) (initial : Log) (device : Option DeviceContract := none)
-    (mode : AllocatorModel := .std) :
+    (mode : AllocatorModel := .std) (errorTable : Option Raw.ErrorTableFile := none) :
     FileResult × Log := Id.run do
   let mut log := initial
   let empty : FileResult := { file }
@@ -284,7 +284,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
   for i in Raw.flatten raw.body do
     if marked i then
       hasMarkers := true
-      let message := match runtimeTagReason? i.tag with
+      let message := match stateTagReason? i.tag with
         | some reason => s!"{raw.name}: inst {i.id}: tag '{i.tag}': {reason}"
         | none => s!"instruction tag '{i.tag}' is explicitly unsupported{markedTagGuidance i.tag}"
       log := log.add { (boundary file name
@@ -307,7 +307,8 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
     | log := log.record { boundary file name .canonicalFailure .canonicalize .validationFailure with fatal := true } rewritten
       return (unit, log.add (skipped file name .check "canonicalized_AIR"))
   log := register log file { (log.spans.getD file {}) with canonical := (spanMap src canonical.body none {}).2 }
-  let normalized := normalizeCanonical canonical
+  -- With the compilation's error numbering, as the translator applies it (`withErrorTable`).
+  let normalized := normalizeCanonical canonical >>= (withErrorTable · errorTable)
   let .ok f := normalized
     | let (blockedCalls, collected) := collectNormalization file canonical hasMarkers normalized log
       return ({ unit with blockedCalls }, collected.add (skipped file name .check "fully_normalized_function"))
@@ -558,9 +559,10 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
       files := files.push path.toString
       texts := texts.push contents
   let renamed := Anon.renumberAll texts
+  let errorTable ← readErrorTable a.directory
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
-    let result := inspect file contents log device a.allocatorModel
+    let result := inspect file contents log device a.allocatorModel errorTable
     log := result.2
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile

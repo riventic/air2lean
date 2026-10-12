@@ -95,6 +95,11 @@ structure RawInst where
   asm : Option RawAsm
   /-- `runtime_nav_ptr`: the global's entry in the `globals` table. -/
   global : Option Nat := none
+  /-- A call: the type `?*StackTrace` of the error return trace the callee also receives
+  (`err_trace`), or `some none` when the exporter could not resolve it (`err_trace_unresolved`).
+  `save_err_return_trace_index`: `ptrTy` is its field pointer type (§Error return trace). -/
+  errTrace : Option (Option TyId) := none
+  ptrTy : Option TyId := none
   unsupported : Bool
 
 /-- One case of a `switch_br`/`loop_switch_br`, before tag interpretation. -/
@@ -125,6 +130,9 @@ structure RawFunc where
   identities : Array Identity.Record := #[]
   externs : Array ExternDecl := #[]
   exportDecl : Option ExportDecl := none
+  /-- The hidden error-return-trace parameter (`err_trace`, §Error return trace): its type
+  `?*StackTrace`, or `some none` for `err_trace_unresolved`. `Canon.errTraces` resolves it. -/
+  errTrace : Option (Option TyId) := none
   /-- The indices of the `noalias` parameters (`noalias`, schema 12; legacy schemas have none). -/
   noalias : Array Nat := #[]
   /-- `unchecked_ib`: the illegal behaviours that the patched compiler's Sema lowers to `unreach`
@@ -369,14 +377,16 @@ private inductive PackedVisit where
   | unseen | active | done (width : Nat)
   deriving Inhabited
 
-/-- The bit width of an integer, bool, enum tag, or packed struct (the `packedBits` model
-in `Memory.lean`, which this file cannot import). Memoized explicit DFS completes shared
+/-- The bit width of an integer, bool, float, enum tag, packed struct (sum), packed union
+(widest field) or vector (`len` lanes) (the `packedBits` model in `Memory.lean`, which this file
+cannot import). Memoized explicit DFS completes shared
 field types once; cycles/unknown widths return `none` even for direct API calls that did not run `validateTypeGraph`. -/
 def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
   match types[id]? with
-  | some (.int _ bits) => return some bits
+  | some (.int _ bits) | some (.float bits) => return some bits
   | some .bool => return some 1
-  | some (.enum ..) | some (.struct _ "packed" _) => pure ()
+  | some (.enum ..) | some (.struct _ "packed" _) | some (.union _ "packed" none _)
+  | some (.vector ..) => pure ()
   | _ => return none
   let mut states : Array PackedVisit := Array.replicate types.size .unseen
   let mut tasks : List (TyId × Bool) := [(id, false)]
@@ -386,13 +396,18 @@ def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
     let some t := types[current]? | return none
     if finish then
       let children : Array TyId := match t with
-        | .enum _ tag _ _ => #[tag]
-        | .struct _ "packed" fs => fs.map (fun (field : String × TyId) => field.2)
+        | .enum _ tag _ _ | .vector _ tag => #[tag]
+        | .struct _ "packed" fs | .union _ "packed" none fs =>
+          fs.map (fun (field : String × TyId) => field.2)
         | _ => #[]
       let mut width : Nat := 0
       for child in children do
         let some (PackedVisit.done w) := states[child]? | return none
-        width := width + w
+        -- A packed union is its widest field; a vector `len` lanes.
+        width := match t with
+          | .union .. => Nat.max width w
+          | .vector len _ => len * w
+          | _ => width + w
       states := states.set! current (.done width)
     else
       match states[current]? with
@@ -400,11 +415,15 @@ def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
       | some .active | none => return none
       | some .unseen =>
         match t with
-        | .int _ bits => states := states.set! current (.done bits)
+        | .int _ bits | .float bits => states := states.set! current (.done bits)
         | .bool => states := states.set! current (.done 1)
-        | .enum _ tag _ _ =>
+        | .enum _ tag _ _ | .vector _ tag =>
           states := states.set! current .active
           tasks := (tag, false) :: (current, true) :: tasks
+        | .union _ "packed" none fs =>
+          if fs.isEmpty then return none
+          states := states.set! current .active
+          tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
         | .struct _ "packed" fs =>
           states := states.set! current .active
           tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
@@ -534,8 +553,18 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
         -- tag enum lists its names in the same order (`docs/air-json.md`). An `extern` or
         -- `packed` union constant has a `utag` too, unless the compiler made it from bytes.
         let some tagJ := optField j "utag"
-          | throw s!"{fnName}: union constant without 'utag' (an `extern` or `packed` union \
-              constant without an active field is outside the subset)"
+          | match ty with
+            | .union _ "packed" none _ =>
+              -- A `packed` union constant made from bits (`@bitCast`): its backing integer,
+              -- `uval` of the integer type (`Emit.lean` writes `Zig.Packed.ofBits`).
+              let n ← parseIntLit fnName (← (← uvalJ.getObjVal? "val").getStr?)
+              let some w := packedWidth types tyId
+                | throw s!"{fnName}: packed union constant of type {tyId} has no bit width"
+              unless integerFits false w n do
+                throw s!"{fnName}: packed union constant does not fit type {tyId}"
+              return .int tyId n
+            | _ => throw s!"{fnName}: union constant without 'utag' (an `extern` union \
+                constant without an active field is outside the subset)"
         let .enumTag tagTy v ← parseVal fnName types tagJ
           | throw s!"{fnName}: union constant: 'utag' is not an enum constant"
         let some (.enum _ _ _ tagFields) := types[tagTy]?
@@ -663,6 +692,13 @@ def parseSrc? (j : Json) : Option RawSrc := do
   guard (declLine ≥ 1 && !file.isEmpty && file.length ≤ 4096 && !module.isEmpty && module.length ≤ 1024)
   pure { file, module, declLine }
 
+/-- `err_trace` (a type id) or `err_trace_unresolved` of a function or call (§Error return
+trace). -/
+def errTraceField (j : Json) : Except String (Option (Option TyId)) := do
+  if let some t := optField j "err_trace" then return some (some (← t.getNat?))
+  if (← trueMarker j "err_trace_unresolved") then return some none
+  return none
+
 mutual
 
 partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except String RawInst := do
@@ -735,10 +771,14 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
     | some gj => some <$> gj.getNat?
     | none => pure none
   let unsupported ← boolField j "unsupported"
+  let errTrace ← errTraceField j
+  let ptrTy ← match optField j "ptr_ty" with
+    | some pj => some <$> pj.getNat?
+    | none => pure none
   let column := (optField j "column").bind (·.getNat?.toOption) |>.filter (· ≥ 1)
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
            line, column, src := parseSrc? j, order, rmwOp, successOrder, failureOrder, op, mask,
-           asm, global, unsupported }
+           asm, global, errTrace, ptrTy, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?
@@ -859,6 +899,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) (allocatorModel : Allocato
     src := parseSrc? j
     externs
     exportDecl
+    errTrace := ← errTraceField j
     noalias
     uncheckedIb
     allocatorModel
@@ -884,5 +925,27 @@ def parseIdentifiedFunc (j : Json) (allocatorModel : AllocatorModel := .std) :
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
   parseIdentifiedFunc (← StrictJson.parse contents) allocatorModel
+
+/-- The file of the compilation's error numbering beside the AIR files (`docs/air-json.md`
+§Error table, L10). -/
+def errorTableFileName : String := "error-table.air2lean"
+
+/-- The compilation's error numbering: code `i + 1` is `names[i]`. -/
+structure ErrorTableFile where
+  zigVersion : String
+  errorSetBits : Nat
+  names : Array String
+
+/-- Parse `error-table.air2lean`: schema 12, the Zig version, the error width and the names in
+code order, each once. -/
+def parseErrorTable (contents : String) : Except String ErrorTableFile := do
+  let j ← StrictJson.parse contents
+  let schema ← j.getObjValAs? Nat "schema"
+  unless schema == 12 do throw s!"error table: schema {schema}, expected 12"
+  let names ← j.getObjValAs? (Array String) "names"
+  let unique := names.foldl (fun (seen : Std.HashSet String) n => seen.insert n) {}
+  unless unique.size == names.size do throw "error table: an error name occurs twice"
+  return { zigVersion := ← j.getObjValAs? String "zig_version",
+           errorSetBits := ← j.getObjValAs? Nat "error_set_bits", names }
 
 end Air2Lean.Raw

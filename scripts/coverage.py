@@ -236,6 +236,76 @@ def table_reasons(table, field):
     return {tag: row[field] for tag, row in table['tags'].items() if row[field]}
 
 
+def canon_resolved(text):
+    """Canon.lean's `errTraceTags`: tags resolved before normalizeOp, with their canonical tags."""
+    rows = re.findall(r'\("([^"]+)", \[([^\]]*)\]\)', lean_section(text, 'errTraceTags'))
+    if not rows:
+        raise ValueError('Canon.lean: errTraceTags not found')
+    return {tag: re.findall(r'"([^"]+)"', targets) for tag, targets in rows}
+
+
+# L14: the exporter hook runs right after a function body is analysed (zig-patch/<version>/
+# hook.patch), before any legalization, so the source files that build AIR before the hook are the
+# only producers of exported AIR. A tag whose name never occurs as an enum literal (`.name`,
+# `Tag.name`, `.@"name"`) in them, nor in an Air.zig helper that returns a `Tag`, has no producer.
+# Every other non-backend file that builds AIR must be a reviewed post-hook stage, else the scan
+# does not decide; so does a tag computed from a name or an integer.
+# The instruction list, or an `add*(` call on a Sema block (`block.addBinOp`, `child_block.addTyOp`,
+# `addInstAsIndex`, ...): over-inclusion only adds producers, which is the safe direction.
+AIR_BUILDERS = re.compile(r'air_instructions|[A-Za-z_]*block\.add[A-Z][A-Za-z]*\(|\.addInst\(|addInstAsIndex')
+BACKEND_DIRS = ('src/codegen/', 'src/arch/', 'src/link/')
+# Legalization and liveness run in the backends, after the hook; they rewrite or read AIR.
+POST_HOOK_BUILDERS = ('src/Air/Legalize.zig', 'src/Air/Liveness.zig', 'src/Liveness.zig')
+COMPUTED_TAG = re.compile(r'@field\(\s*(?:Air\.Inst\.|Air\.)?Tag\b|stringToEnum\(\s*(?:Air\.Inst\.|Air\.)?Tag\b|'
+                          r'Tag\s*=\s*@enumFromInt|@as\(\s*(?:Air\.Inst\.)?Tag\s*,\s*@enumFromInt')
+
+
+def enum_literals(ts):
+    """The enum literals (`.name`, `Tag.name`, `.@"name"`) of a token list."""
+    return {identifier(ts[i+1]) for i in range(len(ts)-1)
+            if ts[i] == '.' and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*|@".*"', ts[i+1])}
+
+
+def tag_helper_bodies(ts):
+    """The bodies of the functions that return an AIR `Tag` (`fn fromCmpOp(...) Tag {`)."""
+    for i in range(len(ts)-2):
+        if ts[i] == 'fn' and ts[i+2] == '(':
+            k = balanced(ts, i+2) + 1
+            while k < len(ts) and ts[k] not in ('{', ';'):
+                k += 1
+            if k < len(ts) and ts[k] == '{' and ts[k-1] == 'Tag':
+                yield ts[k+1:balanced(ts, k)]
+
+
+def producer_literals(source, cache):
+    """Every enum literal of the files that build AIR before the export hook, or None when the
+    scan cannot decide."""
+    if not exact_file(source / 'src/Air.zig') or not (source / 'src').is_dir():
+        return None
+    producers = []
+    for p in sorted((source / 'src').rglob('*.zig')):
+        relative = str(p.relative_to(source))
+        if relative.startswith(BACKEND_DIRS) or relative in POST_HOOK_BUILDERS or relative == 'src/Air.zig':
+            continue
+        # All of Sema is a producer, whatever builder spelling it uses.
+        if relative == 'src/Sema.zig' or relative.startswith('src/Sema/') or AIR_BUILDERS.search(cache.text(p)):
+            producers.append(relative)
+    if 'src/Sema.zig' not in producers:
+        return None
+    literals = set()
+    for relative in producers:
+        if COMPUTED_TAG.search(cache.text(source / relative)):
+            return None
+        literals |= enum_literals(cache.tokens(source / relative))
+    # A helper that returns a tag (`Air.Inst.Tag.fromCmpOp`) produces what its body names, wherever
+    # it is defined (backends excluded: they run after the hook).
+    for p in sorted((source / 'src').rglob('*.zig')):
+        if not str(p.relative_to(source)).startswith(BACKEND_DIRS):
+            for body in tag_helper_bodies(cache.tokens(p)):
+                literals |= enum_literals(body)
+    return literals
+
+
 def canon_aliases(text):
     """Canon.lean's `tagAliases017`: Zig 0.17.0 tags read in their 0.16.0 spelling."""
     section = text.split('def tagAliases017', 1)[1].split('\n\n', 1)[0]
@@ -286,6 +356,11 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
+    'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
+    'tests/roadmap/const-bases/air-llvm/{version}': 'tests/roadmap/const-bases/provenance.json',
+    'tests/roadmap/error-tracing/air/{version}': 'tests/roadmap/error-tracing/provenance.json',
+    'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
+    'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
@@ -298,11 +373,33 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/s390x-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    # T03: concurrency.zig at both byte orders (concurrency.sh --export).
+    'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
+    # L07/L08: one directory per source and version (check.sh --export).
+    'tests/roadmap/packed-casts/air/{version}/packed_casts': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/logical017': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/vector_fields': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/auto_items': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
+    # nan_bits.zig (nan-bits/check.sh --export; docs/architecture-audit/nan-bits.md).
+    'tests/roadmap/nan-bits/air/{version}/nan_bits': 'tests/roadmap/nan-bits/README.md',
+    # L04: try_lifetimes.zig (lifetimes/check.sh --export).
+    'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
+    # T06: self-hosted (stage2_x86_64) exports of the backend-divergence reproducers.
+    'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
+    'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
+    # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
+    'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
+    'tests/roadmap/asm-effects/air-env/{version}': 'tests/roadmap/asm-effects/provenance-env.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
     'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
@@ -321,6 +418,12 @@ COMPILER_FIXTURE_ROOTS = {
     # L-series long tail: one directory per fixture source (export.sh, provenance.json).
     'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/tls_pointers/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/extern_storage/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/error_ints/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/error_ints_w8/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/runtime_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/float_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
@@ -344,6 +447,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
+    'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
@@ -458,8 +562,9 @@ DISPOSITIONS = {
         'rejected-fast-math': 'normalizeOp rejects the fast-math suffix with optimizedFloatGuidance before decoding.',
         'rejected-compiler-state-or-effect': 'runtimeTagReason? rejects the tag with a specific diagnostic.',
         'rejected-exporter-unsupported': 'The exporter writes "unsupported": true for this version; normalizeOp rejects the marker with the exporterTagReason? reason and guidance.',
+        'resolved-in-canon': 'Exported, and Canon.lean resolves it before normalizeOp into the canonical tags of Canon.errTraceTags (or operands), which pass the other stages; a selected compiler-generated fixture contains it. No semantics, proof or contract qualification.',
         'rejected-unknown-tag': 'Exported, but normalizeOp has no branch; its fallback rejects the unknown AIR tag with a diagnostic.',
-        'unreachable-at-export': 'Reviewed override: the compiler cannot place this tag in exported analyzed AIR.',
+        'unreachable-at-export': 'Producer scan or reviewed override: the compiler cannot place this tag in exported analyzed AIR.',
         FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
     },
     'types': {
@@ -487,15 +592,7 @@ DISPOSITIONS = {
 # with the command in docs/coverage.md §L14, or None with the reason no candidate exists.
 # Unexported and unverified; an emitted tag without a fixture and without a row here is forbidden.
 FIXTURE_SOURCE = 'tests/roadmap/runtime-tags/runtime_tags.zig'
-NO_SEMA_PRODUCER = ('no Sema producer found in the 0.14.1/0.15.2/0.16.0 sources (only legalization/backend '
-                    'switches name it); needs an unreachable-at-export review or a compiler-generated counterexample')
-NO_ERROR_TRACE_PRODUCER = ('0.15.2 and 0.14.1 call analyzePtrIsNonErr only from zirRetLoad under error return tracing '
-                           '(the -fno-error-tracing export profile never reaches it; a ReleaseSafe probe of a large '
-                           'error-union return emitted no ret_load); 0.16.0 emits it for a by-reference error-union '
-                           'capture with an error switch (switchErrRef, exported)')
-# Versions for which a tag has no candidate although FIXTURE_REQUESTS names one for others.
-VERSION_NO_PRODUCER = {('is_non_err_ptr', v): NO_ERROR_TRACE_PRODUCER for v in ('0.15.2', '0.14.1')}
-# Rows are kept while any inventory (0.17.0 has no runtime_tags export yet) still needs a request.
+# Rows are kept while any inventory still needs a request.
 FIXTURE_REQUESTS = {
     'add_with_overflow': 'addOverflow', 'sub_with_overflow': 'subOverflow',
     'mul_with_overflow': 'mulOverflow', 'shl_with_overflow': 'shlOverflow',
@@ -508,7 +605,6 @@ FIXTURE_REQUESTS = {
     'call_always_tail': 'alwaysTail', 'call_never_tail': 'neverTail', 'call_never_inline': 'neverInline',
     'try_cold': 'coldTry', 'try_ptr': 'tryPtr', 'try_ptr_cold': 'tryPtrCold', 'is_null': 'isNull',
     'is_non_err_ptr': 'switchErrRef', 'errunion_payload_ptr_set': 'setPayload', 'error_name': 'errorName',
-    'is_null_ptr': None, 'is_err': None, 'is_err_ptr': None,
     'bool_and': 'threeWay', 'bool_or': 'alignSlice',
     'fptrunc': 'narrow', 'fpext': 'widen', 'int_from_float': 'truncUnsafe', 'float_from_int': 'toFloat',
     'struct_field_ptr': 'fieldPtr', 'slice': 'subSlice', 'ptr_slice_len_ptr': 'setLen',
@@ -521,15 +617,11 @@ FIXTURE_REQUESTS = {
 }
 
 
-def fixture_request(tag, source_text, version=None):
+def fixture_request(tag, source_text):
     """The reviewed fixture request for an unfixtured tag, or None when absent or dangling."""
     if tag not in FIXTURE_REQUESTS:
         return None
     function = FIXTURE_REQUESTS[tag]
-    if (tag, version) in VERSION_NO_PRODUCER:
-        return {'source': None, 'function': None, 'reason': VERSION_NO_PRODUCER[(tag, version)]}
-    if function is None:
-        return {'source': None, 'function': None, 'reason': NO_SEMA_PRODUCER}
     if not re.search(r'^(?:export|pub) fn ' + re.escape(function) + r'\(', source_text, re.M):
         return None
     return {'source': FIXTURE_SOURCE, 'function': function,
@@ -702,7 +794,7 @@ def l14_problems(inventory):
         tag, disposition = row['tag'], row['disposition']
         label = f'{inventory.get("zig_version")}: {tag}'
         paths = row.get('tests', {}).get('paths', [])
-        if disposition == 'emitted-unqualified':
+        if disposition in ('emitted-unqualified', 'resolved-in-canon'):
             witnesses = []
             for relative in paths:
                 path = ROOT/relative
@@ -712,9 +804,9 @@ def l14_problems(inventory):
                     if tag in tags_cache[relative]:
                         witnesses.append(relative)
             if not witnesses:
-                problems.append(f'{label}: emitted-unqualified without a committed compiler-generated fixture containing it')
+                problems.append(f'{label}: {disposition} without a committed compiler-generated fixture containing it')
         elif disposition == 'emitted-unfixtured':
-            request = fixture_request(tag, fixture_text, inventory.get('zig_version'))
+            request = fixture_request(tag, fixture_text)
             if paths:
                 problems.append(f'{label}: emitted-unfixtured but fixture paths are recorded')
             if request is None or row.get('fixture_request') != request:
@@ -782,6 +874,8 @@ def generate(version, source, os_name='linux'):
     for alias, canonical in canon_aliases(cache.text(ROOT/'Air2Lean/Air/Canon.lean')).items():
         if canonical in norms:
             norms.setdefault(alias, norms[canonical])
+    resolved = canon_resolved(cache.text(ROOT/'Air2Lean/Air/Canon.lean'))
+    produced = producer_literals(source, cache)
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
     semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
@@ -825,6 +919,8 @@ def generate(version, source, os_name='linux'):
             disposition = 'rejected-exporter-unsupported' if tag in exporter_reasons else FORBIDDEN
         elif export_status not in ('explicit-arm', 'fallback-named-decoder'):
             disposition = FORBIDDEN
+        elif tag in resolved and tag not in norms:
+            disposition = 'resolved-in-canon' if test_tags.get(tag) else FORBIDDEN
         elif tag not in norms:
             disposition = 'rejected-unknown-tag'
         elif not ops or unemitted:
@@ -833,11 +929,16 @@ def generate(version, source, os_name='linux'):
             disposition = 'erased-at-emission'
         elif test_tags.get(tag):
             disposition = 'emitted-unqualified'
+        elif produced is not None and tag not in produced:
+            # L14: no producer at the export stage (producer scan), so no fixture can exist.
+            disposition = 'unreachable-at-export'
         else:
             # L14: no compiler-generated fixture; honest only with a reviewed fixture request.
-            request = fixture_request(tag, fixture_text, version)
+            request = fixture_request(tag, fixture_text)
             disposition = 'emitted-unfixtured' if request else FORBIDDEN
-        reached = disposition in ('emitted-unqualified', 'emitted-unfixtured', 'erased-at-emission')
+        if disposition == 'resolved-in-canon':
+            ops = [op for canonical in resolved[tag] for op in norms.get(canonical, [])]
+        reached = disposition in ('emitted-unqualified', 'emitted-unfixtured', 'erased-at-emission', 'resolved-in-canon')
         reason = (fast_guidance if disposition == 'rejected-fast-math' else rejection_reason
                   if disposition == 'rejected-compiler-state-or-effect' else exporter_reasons.get(tag)
                   if disposition == 'rejected-exporter-unsupported' else None)
@@ -845,7 +946,7 @@ def generate(version, source, os_name='linux'):
             'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
                      'exporter': {'status': export_status, 'reason': export_reasons[export_status]},
-                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'unknown-tag-rejection', 'constructors': ops},
+                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'canon-resolved' if disposition == 'resolved-in-canon' else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},

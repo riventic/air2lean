@@ -105,13 +105,15 @@ def main():
     for _, edit, marker in extern_cases:
         checks += reject(binary, mutate(bump, edit), marker)
 
-    # Storage that can hold a pointer or error identity is outside explicit external state.
-    def pointer(g, d):
-        d["types"].append(dict(k="ptr", size="one", const=False, child=0, ptr_align=4,
+    # A data pointer is explicit external state (L12, with the external blocks `ExternInit.storage`,
+    # tests/roadmap/lang-long-tail); a function pointer or error identity is not.
+    def fn_pointer(g, d):
+        d["types"].append(dict(k="other", name="fn () callconv(.c) void"))
+        d["types"].append(dict(k="ptr", size="one", const=True, child=len(d["types"]) - 1, ptr_align=1,
                                volatile=False, allowzero=False, sentinel=False, host_size=0,
                                abi_size=8, abi_align=8))
         g["ty"] = len(d["types"]) - 1
-    checks += reject(binary, mutate(bump, pointer), "its type can hold a pointer")
+    checks += reject(binary, mutate(bump, fn_pointer), "its type can hold a function pointer")
 
     def error_union(g, d):
         d["types"] += [dict(k="error_set", abi_size=2, abi_align=2, errors=["Bad"]),

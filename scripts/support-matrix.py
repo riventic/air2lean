@@ -28,7 +28,6 @@ SOURCES = [
     '.github/workflows/ci.yml',
 ]
 SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions', 'assurance/register/*.md']
-DEFAULT_SCRIPTS = ['scripts/check.sh', 'scripts/mutate.sh', 'scripts/translate.sh']
 # scripts/doctor.sh delegates to scripts/doctor.py, whose default is the release metadata's.
 DEFAULT_METADATA = 'compatibility.json'
 STATUSES = ['complete', 'partial', 'open', 'research']
@@ -84,18 +83,19 @@ def pinned_versions(root):
 
 
 def default_version(root):
-    found = {}
-    for rel in DEFAULT_SCRIPTS:
-        m = re.search(r'^zig_version=\$\{AIR2LEAN_ZIG_VERSION:-([^}]+)\}', read(root, rel), re.M)
-        if not m: raise Stale(f'{rel}: default AIR2LEAN_ZIG_VERSION not found')
-        found[rel] = m.group(1)
+    """zig.default of compatibility.json (the one source; the scripts read it through
+    scripts/compat.py), which the translator's `ZigVersion.defaultVersion` must repeat."""
     try:
-        found[DEFAULT_METADATA] = json.loads(read(root, DEFAULT_METADATA))['zig']['default']
+        default = json.loads(read(root, DEFAULT_METADATA))['zig']['default']
     except (ValueError, KeyError, TypeError):
         raise Stale(f'{DEFAULT_METADATA}: zig.default not found')
-    if len(set(found.values())) != 1:
-        raise Stale(f'default Zig versions disagree: {found}')
-    return next(iter(found.values()))
+    text = read(root, 'Air2Lean/Air/Dialect.lean')
+    m = re.search(r'def defaultVersion : ZigVersion := \.(v\d+_\d+_\d+)', text)
+    spelled = dict(re.findall(r'\|\s*(v\d+_\d+_\d+)\s*=>\s*"([^"]+)"', text))
+    found = spelled.get(m.group(1)) if m else None
+    if found != default:
+        raise Stale(f'default Zig versions disagree: {DEFAULT_METADATA} {default}, Dialect.defaultVersion {found}')
+    return default
 
 
 def version_status(root):
@@ -342,6 +342,10 @@ def consistency(root):
                             f'selection {selected}')
     # CLI: help names every supported version, the default and the matrix; usage flags agree.
     help_text = lean_string(root, 'Air2Lean/Main.lean', 'help')
+    if 'ZigVersion.helpList' in read(root, 'Air2Lean/Main.lean'):
+        # The help lists the versions through the dialect registry (`ZigVersion.helpList`: every
+        # version in registry order, the default marked), so the list is rendered here.
+        help_text += ' ' + ', '.join(v + (' (default)' if v == default else '') for v in versions)
     usage_text = lean_string(root, 'Air2Lean/Main.lean', 'usage')
     for v in versions:
         if v not in help_text:

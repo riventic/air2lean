@@ -264,6 +264,21 @@ def atomicRmwAt {n : Nat} (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOr
   rmwWrite li pos ord rd (op.apply signed old v)
   pure old
 
+/-- `atomicRmwAt` with any update `f` of the old value (`atomicRmwAt_eq_fn`): a big-endian RMW is
+the op under a byte swap (`ZigLean/Conc/Endian.lean`). -/
+def atomicRmwFnAt {n : Nat} (c : Nat) (f : BitVec n → BitVec n) (ord : AtomicOrder) (align : Nat)
+    (p : Ptr) : MemM (BitVec n) := do
+  let (li, opts) ← loadPrep n ord align p true
+  let some pos := opts[c]? | throw .illegal
+  let rd := (← get).atomics[li]!.msgs[pos]!
+  let old ← intOfBytes n rd.bytes
+  rmwWrite li pos ord rd (f old)
+  pure old
+
+theorem atomicRmwAt_eq_fn {n : Nat} (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder)
+    (align : Nat) (p : Ptr) (v : BitVec n) :
+    atomicRmwAt c op signed ord align p v = atomicRmwFnAt c (op.apply signed · v) ord align p := rfl
+
 /-- Shared CAS preparation: writable access, exactly one atomic-read footprint, the location,
 and its complete readable positions. Strong and weak operations filter this same array. -/
 def casReadPrep (n align : Nat) (p : Ptr) : MemM (Nat × Array Nat) := do

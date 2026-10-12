@@ -55,6 +55,30 @@ theorem nullablePtrEnc_decode_encode (p : Ptr) :
 theorem nullablePtrEnc_lawful : @LawfulEnc Ptr nullablePtrEnc :=
   @LawfulEnc.mk Ptr nullablePtrEnc nullablePtrEnc_size_encode nullablePtrEnc_decode_encode
 
+/-- The nullable-slice storage dictionary (`[]allowzero T`) reads back every slice it writes,
+including one at address zero. -/
+theorem nullableSliceEnc_lawful : @LawfulEnc Slice nullableSliceEnc := by
+  refine @LawfulEnc.mk Slice nullableSliceEnc (fun s => ?_) (fun s => ?_)
+  · change (nullablePtrEnc.encode s.ptr ++ Enc.encode s.len).size = 16
+    rw [Array.size_append, nullablePtrEnc_size_encode, LawfulEnc.size_encode]; rfl
+  · change (do pure ⟨← nullablePtrEnc.decode ((nullablePtrEnc.encode s.ptr ++ Enc.encode s.len).extract 0 8),
+        ← Enc.decode ((nullablePtrEnc.encode s.ptr ++ Enc.encode s.len).extract 8 16)⟩ : Result Slice) = pure s
+    have hp : (nullablePtrEnc.encode s.ptr).size = 8 := nullablePtrEnc_size_encode s.ptr
+    have hl : (Enc.encode s.len).size = 8 := LawfulEnc.size_encode s.len
+    have h0 : (nullablePtrEnc.encode s.ptr ++ Enc.encode s.len).extract 0 8 = nullablePtrEnc.encode s.ptr := by
+      rw [Array.extract_append, hp]; simp [hp]
+    have h1 : (nullablePtrEnc.encode s.ptr ++ Enc.encode s.len).extract 8 16 = Enc.encode s.len := by
+      rw [Array.extract_append, hp]
+      have e : (Enc.encode s.len).extract 0 8 = Enc.encode s.len := by
+        rw [← hl]; exact Array.extract_size
+      simp [e, hp]
+    rw [h0, h1, nullablePtrEnc_decode_encode, LawfulEnc.decode_encode]
+    rfl
+
+/-- A null slice of any length is stored as eight zero bytes and its length. -/
+theorem nullableSliceEnc_encode_null (len : BitVec 64) :
+    nullableSliceEnc.encode ⟨Ptr.null, len⟩ = Array.replicate 8 (.int 0) ++ Enc.encode len := rfl
+
 /-- Stored C pointers and ordinary optional pointers share one byte representation:
 `Ptr.null` is `none`'s eight zero bytes; every other pointer is `some`'s fragments. -/
 theorem nullablePtrEnc_encode_eq_optional (p : Ptr) :

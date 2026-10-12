@@ -19,7 +19,7 @@
 # Usage: check.sh
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
-#                         Default: 0.16.0
+#                         Default: zig.default of compatibility.json
 #   AIR2LEAN_ZIG_AIR      Patched zig (zig-patch/build.sh output). Default: zig-air-$AIR2LEAN_ZIG_VERSION/bin/zig
 #   AIR2LEAN_CI           If 1: fail when the committed translation differs from the new translator
 #                         output: tests/golden/<version>/<ex>/Gen.lean if it exists, else
@@ -71,7 +71,7 @@ trap 'workflow_interrupt 129' HUP
 trap 'workflow_interrupt 130' INT
 trap 'workflow_interrupt 143' TERM
 
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
+zig_version=${AIR2LEAN_ZIG_VERSION:-$(air2lean_default_zig_version "$repo_root")}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 [ -x "$zig_air" ] || {
   echo "error: patched zig not found/executable at $zig_air" >&2

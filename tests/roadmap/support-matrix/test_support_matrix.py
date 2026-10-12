@@ -133,10 +133,13 @@ class Stale(Scratch):
 class Agreement(Scratch):
     def test_cli_help_must_name_each_version_and_default(self):
         path = self.root/'Air2Lean/Main.lean'
-        path.write_text(path.read_text(encoding='utf-8').replace('0.14.1', '0.14.x'), encoding='utf-8')
+        text = path.read_text(encoding='utf-8')
+        path.write_text(text.replace('"Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\\n" ++',
+                                     '"Supported AIR: Zig 0.17.0 (default), 0.16.0 and 0.15.2, a checked subset only;\\n" ++'),
+                        encoding='utf-8')
         self.assertProblem('help does not name Zig 0.14.1')
-        self.edit('Air2Lean/Main.lean', '0.16.0 (default)', '0.16.0')
-        self.assertProblem('help does not mark 0.16.0 as the default')
+        self.edit('Air2Lean/Main.lean', '0.17.0 (default)', '0.17.0')
+        self.assertProblem('help does not mark 0.17.0 as the default')
 
     def test_cli_help_must_describe_usage_flags(self):
         self.edit('Air2Lean/Main.lean', '  --model-registry-template    Write',
@@ -163,7 +166,7 @@ class Agreement(Scratch):
         self.assertIn('coverage inventories', output)
         self.assertIn('CI matrix versions', output)
         self.assertIn('compatibility.json lists', output)
-        self.assertIn('help does not name Zig 0.99.0', output)
+        # The help lists the registry (`ZigVersion.helpList`), so a new version is named by construction.
 
     def test_in_qualification_version_is_labelled(self):
         rows = MATRIX['version_rows'](ROOT)[2]
@@ -176,12 +179,13 @@ class Agreement(Scratch):
         self.assertEqual(MATRIX['version_label']('0.16.0', '0.16.0', {'0.16.0': 'qualified'}),
                          '0.16.0 (default)')
 
-    def test_default_scripts_must_agree(self):
-        self.edit('scripts/mutate.sh', 'AIR2LEAN_ZIG_VERSION:-0.16.0', 'AIR2LEAN_ZIG_VERSION:-0.15.2')
+    def test_dialect_default_must_agree(self):
+        self.edit('Air2Lean/Air/Dialect.lean', 'defaultVersion : ZigVersion := .v0_17_0',
+                  'defaultVersion : ZigVersion := .v0_15_2')
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_release_metadata_default_must_agree(self):
-        self.edit('compatibility.json', '"default": "0.16.0"', '"default": "0.15.2"')
+        self.edit('compatibility.json', '"default": "0.17.0"', '"default": "0.15.2"')
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_ci_example_list_must_match_selection(self):

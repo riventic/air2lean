@@ -217,6 +217,29 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('opaque_dependencies', goal['reason'])
 
+    def test_concurrency_claim_lists_memory_model_premise(self):
+        """C12: a claim whose closure reaches the scheduler or the atomics model lists the
+        memory-model adequacy premise (ORD-06); a report without `runtime_modules`, or with an
+        unmapped runtime module, is rejected."""
+        theorems = classified(copy.deepcopy(FIXTURE))
+        self.assertEqual(theorems['ClaimFixture.countdown_total']['premises'], ['ORD-06'])
+        self.assertEqual(theorems['ClaimFixture.stuck_not_total']['premises'], ['ORD-06'])
+        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], [])
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] == 'ClaimFixture.ret_total':
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
+                                  'domain': 'all'}, theorems_of(report), definition='ClaimFixture.ret')
+        self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ORD-06']))
+        for change in ({'runtime_modules': None}, {'runtime_modules': ['ZigLean.Unmapped']}):
+            audited = theorems_of(copy.deepcopy(FIXTURE))
+            audited['ClaimFixture.ret_total'].update(change)
+            goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'safety', 'domain': 'all'},
+                                     audited, definition='ClaimFixture.ret')
+            self.assertEqual(goal['status'], 'rejected')
+            self.assertIn('runtime_modules', goal['reason'])
+
     def test_old_or_failed_reports_are_rejected(self):
         for field in ('conclusion', 'statement'):
             old = copy.deepcopy(FIXTURE)

@@ -5,13 +5,13 @@
   "exporter": {
     "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99",
     "zig_patch_json_zig": "zig-patch/air-json/json.zig of the soundness-wave-3 tree (rebuilt after merging main)",
-    "json_zig_sha256": "eb698912de78be2afd6412fbb0e5d5c58a95987f6d31a295bc148f7f0129d4e4",
+    "json_zig_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
     "install": "built by zig-patch/build.sh from that tree"
   },
   "commands": {
     "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",
     "x86_64": "ZIG_AIR_JSON_FILTER=packed_fields.hostAbi zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline packed_fields.zig",
-    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host)"
+    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host); compiler.sh --native-linux (stock 0.14.1-0.17.0, x86_64-linux-musl LLVM ReleaseSafe/Debug and the self-hosted backend, Docker linux/amd64)"
   },
   "functions": {
     "llvm": [
@@ -58,12 +58,12 @@
     "air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "1e5d0c51fe31871749c28b9d58fdb32415df8a25b7b7d4c25abb1a253117dc46",
     "air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "78cf9bc567e00a040611c7ecde8c02b083dda9a772de85edd81c4c26f703b4eb",
     "air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "de31d052c7dbc9ab9f27ee66c84245edee90a6cdc7f17be97cdb707f464a9b00",
-    "PackedFieldsFresh/Gen.lean": "5a0e25079e765fcab84127c02b950d84ee439159f7e3d1091a55bb571abd0320",
+    "PackedFieldsFresh/Gen.lean": "1d7b00c6225a86e76fbbd57d5c5a7754ebe0d44f26c31718eeba92336be32f80",
     "PackedFieldsX86/Gen.lean": "2c0abcc29d920ac5c6217d3171047985af944f1c4c1da92c4095f01524ee568c"
   },
   "qualification": {
     "compiler_export": "passed",
-    "native": "passed (aarch64-macos host; not executed on x86_64-linux)",
+    "native": "passed (aarch64-macos host, ReleaseSafe and Debug; x86_64-linux-musl with 0.14.1-0.17.0, compiler.sh --native-linux)",
     "lean": "passed"
   }
 }

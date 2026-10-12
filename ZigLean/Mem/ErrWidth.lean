@@ -241,6 +241,37 @@ def errorFromIntW (bits : Nat) (t : ErrorTable) (c : BitVec bits) : Result ErrNa
     pure t.names[c.toNat - 1]
   else throw .panic
 
+/-! ### The translated casts (L10)
+
+A translation reads the compilation's numbering from the exporter (`error-table.air2lean`,
+`docs/air-json.md` §Error table) as the plain array `errorTable`; the translator has checked
+that it names each error once and fits the width. `intFromErrorIn`/`errorFromIntIn` are the
+casts on it; on an `ErrorTable` they are `intFromErrorW`/`errorFromIntW` up to the invalid-code
+outcome (`intFromErrorIn_table`, `errorFromIntIn_table`). -/
+
+/-- `@intFromError` on the numbering `names`: the code of `e`. Every error of a compilation is
+in its numbering; a name outside it has no code. -/
+def intFromErrorIn (bits : Nat) (names : Array ErrName) (e : ErrName) : Result (BitVec bits) :=
+  match errIndex e names.toList with
+  | some i => if i + 1 ≤ errCapacity bits then pure (BitVec.ofNat bits (i + 1)) else throw .unspecified
+  | none => throw .unspecified
+
+/-- `error_from_int` on the numbering `names`: the unchecked conversion. A safe build checks the
+code first (`cmp_lte_errors_len` and `!= 0`, a separate AIR instruction, then the panic
+`invalid error code`); without that check an invalid code is illegal behaviour. -/
+def errorFromIntIn {bits : Nat} (names : Array ErrName) (c : BitVec bits) : Result ErrName :=
+  if h : 0 < c.toNat ∧ c.toNat ≤ names.size then pure names[c.toNat - 1] else throw .illegal
+
+theorem intFromErrorIn_table (bits : Nat) (t : ErrorTable) (e : ErrName) :
+    intFromErrorIn bits t.names e = intFromErrorW bits t e := rfl
+
+/-- On a valid code the unchecked cast is `errorFromIntW`; an invalid code, which the safety
+check turns into a panic before the cast, is illegal behaviour here. -/
+theorem errorFromIntIn_table {bits : Nat} (t : ErrorTable) (c : BitVec bits)
+    (h : 0 < c.toNat ∧ c.toNat ≤ t.names.size) :
+    errorFromIntIn t.names c = errorFromIntW bits t c := by
+  simp [errorFromIntIn, errorFromIntW, h]
+
 /-- An integer converted to the error integer (`@intCast` to `u<bits>`): a value that does
 not fit the narrower width is the safety panic `integer overflow`, not a truncated code. -/
 def errorCodeOfNat (bits x : Nat) : Result (BitVec bits) :=

@@ -415,11 +415,13 @@ class Translate(Stubbed):
         super().setUp()
         self.repo = self.base / 'repo'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('translate.sh', 'workflow-common.sh', 'safe-output.py'):
+        for name in ('translate.sh', 'workflow-common.sh', 'zig-default.sh', 'compat.py', 'safe-output.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
+        shutil.copy2(ROOT / 'compatibility.json', self.repo / 'compatibility.json')
         shutil.copy2(ROOT / 'lean-toolchain', self.repo / 'lean-toolchain')
         self.stub(self.bin / 'elan')
         self.stub(self.repo / 'zig-air-0.16.0/bin/zig')
+        self.env['AIR2LEAN_ZIG_VERSION'] = '0.16.0'  # zig-pin: the stub zig reports 0.16.0
         self.env['MOCK_REPO'] = str(self.repo)
         self.caller = self.base / 'caller'
         self.caller.mkdir()
@@ -499,8 +501,9 @@ class Check(Stubbed):
         super().setUp()
         self.repo = self.base / 'repo'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('check.sh', 'workflow-common.sh', 'safe-output.py', 'par.py'):
+        for name in ('check.sh', 'workflow-common.sh', 'zig-default.sh', 'compat.py', 'safe-output.py', 'par.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
+        shutil.copy2(ROOT / 'compatibility.json', self.repo / 'compatibility.json')
         (self.repo / 'examples/demo').mkdir(parents=True)
         (self.repo / 'examples/demo/demo.zig').write_text('export fn foo() u32 { return 1; }\n')
         self.gen = self.repo / 'Proofs/Demo/Gen.lean'

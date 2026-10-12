@@ -22,9 +22,9 @@ import re
 from pathlib import Path
 import sys
 
-SIDECAR = "air2lean-source-map-v2"
-INDEX = "air2lean-semantic-fingerprint-v2"
-COMPARISON = "air2lean-proof-interface-comparison-v2"
+SIDECAR = "air2lean-source-map-v3"
+INDEX = "air2lean-semantic-fingerprint-v3"
+COMPARISON = "air2lean-proof-interface-comparison-v3"
 FIELDS = {"source", "air_name", "air_file", "definition", "proof_api", "callees", "canonical", "lines"}
 
 sys.dont_write_bytecode = True  # importing the sibling script must not leave __pycache__
@@ -61,11 +61,13 @@ def valid_translator(translator):
 def load_sidecar(path, generated=None):
     doc = parse_json(Path(path).read_text(encoding="utf-8"))
     if (not isinstance(doc, dict) or doc.get("format") != SIDECAR or
-            set(doc) != {"format", "namespace", "metadata", "options", "translator", "functions"} or
+            set(doc) != {"format", "namespace", "metadata", "options", "translator", "runtime", "functions"} or
             not isinstance(doc["functions"], list)):
         raise ValueError(f"{path}: not an {SIDECAR} sidecar")
     if not valid_translator(doc["translator"]):
         raise ValueError(f"{path}: malformed or inconsistent translator revision")
+    if not valid_translator(doc["runtime"]):
+        raise ValueError(f"{path}: malformed or inconsistent runtime revision")
     seen = set()
     for record in doc["functions"]:
         if (not isinstance(record, dict) or set(record) != FIELDS or
@@ -123,7 +125,8 @@ def components(nodes, edges):
 def fingerprints(doc):
     """`source -> entry` with local, component and call-graph fingerprints."""
     context = digest(dict(format=INDEX, metadata=doc["metadata"], options=doc["options"],
-                          translator=doc["translator"]["revision"]))
+                          translator=doc["translator"]["revision"],
+                          runtime=doc["runtime"]["revision"]))
     records = {r["source"]: r for r in doc["functions"]}
     local = {s: digest(dict(context=context, canonical=r["canonical"])) for s, r in records.items()}
     edges = {s: sorted(set(c for c in r["callees"] if c in records)) for s, r in records.items()}
@@ -153,13 +156,14 @@ def interface(doc, entry):
 def index(doc):
     entries = fingerprints(doc)
     return dict(format=INDEX, namespace=doc["namespace"], translator=doc["translator"]["revision"],
-                functions=[entries[s] for s in sorted(entries)])
+                runtime=doc["runtime"]["revision"], functions=[entries[s] for s in sorted(entries)])
 
 
 def compare(old, new):
     before, after = fingerprints(old), fingerprints(new)
     report = dict(format=COMPARISON, unaffected=[], invalidated=[], renamed=[], added=[], removed=[],
-                  translator_changed=old["translator"]["revision"] != new["translator"]["revision"])
+                  translator_changed=old["translator"]["revision"] != new["translator"]["revision"],
+                  runtime_changed=old["runtime"]["revision"] != new["runtime"]["revision"])
     for source in sorted(set(before) | set(after)):
         if source not in after:
             report["removed"].append(source)

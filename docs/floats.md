@@ -75,6 +75,26 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 - `@bitCast` of a NaN to an integer throws `.unspecified`.
 - The diff test prints every NaN as `"nan"`.
 
+### NaN in memory
+
+A NaN's bits are never observable in the model, through any path (`docs/architecture-audit/nan-bits.md`). One mechanism serves them all: `Float.detMask` (`ZigLean/Mem/Enc.lean`) gives a float's determined bits, all of them or none for a NaN, and the encodings write only those bits (`maskedBytes`, the defined-bit masks of `Byte`):
+
+| Path | A NaN's bits |
+|---|---|
+| a store, then a load as an integer (`*u32` of an `f32`), an `extern union`, `@memcpy` of the bytes, a byte local | undefined bytes (`Enc (Float fmt)`, both byte orders: `floatEncOf`): the integer load is `.unspecified` |
+| `@bitCast` up to 0.16 of an array, `extern struct` or vector with a float (`Zig.reprCast`) | the same bytes: `.unspecified` |
+| a vector in memory (`@Vector(n, fW)`) | the NaN lane's bits are undefined (`Vec` float encoding, `Vec.floatEncOf`) |
+| a packed struct or union field, a bit-pointer store, a 0.17 logical `@bitCast` | `Zig.Packed.mask` (`= Float.detMask`): undefined bits, `.unspecified` |
+| a scalar `@bitCast` | `Float.toBits?`: `.unspecified` |
+
+`ZigLean/EndianLemmas.lean` states it in general: `floatEncOf_nan_int` (every integer read of a stored NaN's bytes is `.unspecified`, at both orders) and `floatEncOf_decode_encode_nan`; a float that is not a NaN still reads back exactly (`floatEncOf_decode_encode`, `Vec.float_decode_encode`).
+
+A stored NaN read back *as a float* is `.unspecified` too. Native code reads a NaN there, so this is an over-approximation: the bytes do not say which NaN they hold, and undefined bytes may as well be an infinity. A proof about a program that stores a NaN and reads it back fails closed.
+
+Bits that are determined stay exact. A NaN **constant** (`std.math.nan(f32)`, `@bitCast(@as(u32, 0x7fa00001))`) has the bits that the compiler stores: a store of a constant (to memory or a byte local), a `@memset` of a scalar NaN constant, and a global initializer write its exact bytes (`Air2Lean/Memory.lean`'s `nanConstParts`, `Emit.lean`'s `FCtx.nanConstBytes?`), as the value itself or at its offset in an array, a non-`packed` struct or a tuple. Elsewhere (in an optional, union, vector or packed struct, in an aggregate `@memset` item, or once the constant is a runtime value that is stored again) its bits are undefined: never a wrong value. Bytes copied as bytes (`@memcpy`, a byte local, a struct copy of raw bytes) keep whatever they hold. Target-exact NaN payloads of operations are follow-up F04.
+
+`tests/roadmap/nan-bits/` checks every path on Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.0 against x86_64-linux and aarch64-linux natively.
+
 ### Allowed results
 
 `ZigLean/Float/Allowed.lean` states which results the target may give in place of the model's, so a proof can cover all of them instead of the model's one choice:

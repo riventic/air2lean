@@ -80,7 +80,8 @@ class CommittedMatrix(Scratch):
             '0.14.1/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1',
             '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1',
-            '0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1',
+            '0.17.0/aarch64-linux/aarch64-linux/abi64-le-v1',
+        '0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1',
             '0.15.2/aarch64-linux/aarch64-linux/abi64-le-v1',
             '0.14.1/aarch64-linux/aarch64-linux/abi64-le-v1'})
         self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['job'], 'macos')
@@ -248,7 +249,7 @@ class Evidence(Scratch):
         def change(data):
             self.entry(data, '0.16.0', 'x86_64-linux')['matrix'] = {'zig': '0.16.0'}
         self.edit_json(TM['MAP'], change)
-        self.check_fails('matches 14 rows')
+        self.check_fails('matches 15 rows')
 
 
 class Gaps(Scratch):

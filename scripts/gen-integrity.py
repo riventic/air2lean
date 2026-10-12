@@ -108,6 +108,8 @@ FIXTURES = [
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
      ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
+    ("tests/roadmap/union-bases/UnionBases/Gen.lean", "tests/roadmap/union-bases/air/0.16.0",
+     ["--namespace", "UnionBases", "--prefix", "union_bases.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
      ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
     ("tests/roadmap/noalias/Gen.lean", "tests/roadmap/noalias/air",
@@ -122,6 +124,15 @@ FIXTURES = [
     ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
      ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
       "tests/roadmap/extern-calls/registry.json"], "exact"),
+    # E02 callback contracts and A01 environment/region asm: fresh 0.17.0 translations.
+    ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.0",
+     ["--namespace", "Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/callbacks/registry-0.17.0.json"], "exact"),
+    ("tests/roadmap/callbacks/Callbacks/Async.lean", "tests/roadmap/callbacks/air-async/0.17.0",
+     ["--namespace", "Callbacks.Async", "--prefix", "async_cb.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/callbacks/registry-async-0.17.0.json"], "exact"),
+    ("tests/roadmap/asm-effects/AsmEnv/Gen.lean", "tests/roadmap/asm-effects/air-env/0.17.0",
+     ["--namespace", "AsmEnv", "--prefix", "asm_env.", "--profile", "abi64-le-v1"], "exact"),
     ("tests/roadmap/futures/Futures/Gen.lean", "tests/roadmap/futures/air/0.16.0",
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
     ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
@@ -149,7 +160,33 @@ FIXTURES = [
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
-    for ns, target in (("S390x", "s390x-linux"), ("X64", "x86_64-linux"))
+    for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
+] + [
+    # T03 concurrency.sh: concurrency.zig per Zig version and target.
+    (f"tests/roadmap/big-endian/conc-gen/{v}-{target}.lean",
+     f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
+     ["--namespace", "Conc", "--prefix", "concurrency."], "exact")
+    for v in ("0.15.2", "0.17.0") for target in ("s390x-linux", "mips64-linux", "x86_64-linux")
+] + [
+    # L07/L08 packed-casts/check.sh: one translation per source and version.
+    (f"tests/roadmap/packed-casts/gen/{v}/{ns}.lean", f"tests/roadmap/packed-casts/air/{v}/{src}",
+     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    for src, ns, versions in (
+        ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.0")),
+        ("logical017", "Logical017", ("0.17.0",)),
+        ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
+        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
+    for v in versions
+] + [
+    # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
+    (f"tests/roadmap/nan-bits/gen/{v}/NanBits.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
+     ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+] + [
+    # L04 try-pointers/lifetimes/check.sh.
+    (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
+     ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
@@ -165,11 +202,21 @@ FIXTURES = [
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
     for bits in (8, 10, 16, 17)
 ] + [
-    # tests/roadmap/lang-long-tail/check.sh: a version's own translation where it differs.
-    (f"tests/roadmap/lang-long-tail/LangLongTail/{ns}{'' if v == '0.16.0' else '-' + v}.lean",
-     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", f"{stem}."], "exact")
-    for stem, ns, versions in (("error_params", "ErrorParams", ("0.16.0",)),
-                               ("vector_casts", "VectorCasts", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")))
+    # tests/roadmap/lang-long-tail/check.sh: the base translation (LangLongTail/<Key>.lean: 0.16.0,
+    # or the newest version that compiles the source) and a version's own where it differs.
+    (f"tests/roadmap/lang-long-tail/LangLongTail/{key}{'' if v == base else '-' + v}.lean",
+     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", prefix], "exact")
+    for stem, ns, key, prefix, base, versions in (
+        ("error_params", "ErrorParams", "ErrorParams", "error_params.", "0.16.0", ("0.16.0",)),
+        ("vector_casts", "VectorCasts", "VectorCasts", "vector_casts.", "0.16.0",
+         ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
+        ("tls_pointers", "TlsPointers", "TlsPointers", "tls_pointers.", "0.16.0", ("0.16.0", "0.15.2")),
+        ("extern_storage", "ExternStorage", "ExternStorage", "extern_storage.", "0.16.0",
+         ("0.16.0", "0.15.2", "0.14.1")),
+        ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
+        ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2")),
+        ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
+        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
     for v in versions
 ]
 
@@ -360,7 +407,9 @@ class Translator:
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
-                for src in (sorted(source.glob("*.json")) if source.is_dir() else [source]):
+                # With the compilation's error numbering (`error-table.air2lean`, L10).
+                for src in (sorted([*source.glob("*.json"), *source.glob("error-table.air2lean")])
+                            if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
             # Schema-11 (legacy) AIR translates only with the explicit legacy profile opt-in
