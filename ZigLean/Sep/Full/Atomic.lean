@@ -549,7 +549,7 @@ theorem singleThread_insertM {m : Mem} (h : m.SingleThread) (li p : Nat) (msg : 
 theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hb : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size)
     (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
-    (hd : m.LiveDisjoint) : m'.LiveDisjoint :=
+    (hd : m.LiveLayout) : m'.LiveLayout :=
   LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb id rfl
     (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _) h hd
 

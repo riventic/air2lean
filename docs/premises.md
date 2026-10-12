@@ -791,9 +791,18 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The address of every block (global, stack, heap, allocator) is chosen by the
   placement oracle `Mem.place`, an arbitrary function of the block id. The model takes a
   proposal only if it satisfies what Zig guarantees (`Mem.placeOk`): nonzero, a multiple of the
-  block's declared alignment, ending at or below 2^64, and disjoint from every live block of
-  nonzero size; adjacency, any order and reuse of a dead block's address are allowed. Otherwise
-  the block goes after every block (`Mem.top`). A generated program-start memory is `mem0 σ`
+  block's declared alignment, ending inside the user address space (`Placement.addrLimit`), and
+  disjoint from every live block of nonzero size; adjacency, any order and reuse of a dead
+  block's address are allowed. Otherwise the block goes after every block (`Mem.top`). The
+  address space ends at `Placement.addrLimit`, at most `2^63` for every placement (every modelled
+  64-bit target has its user space in the lower half; `2^47` by default): no block of any kind
+  is placed above it (O-H). An allocation that has no room below it fails as for an exhausted
+  address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
+  (OSM-01), and `alloc` (a stack, global-like or heap block) has no outcome (`Zig.noRoom`, outside
+  every partial-correctness statement; a total-correctness statement shows room,
+  `Mem.roomFor`). The full-state invariant `Mem.FSeq` holds only memories whose live blocks end
+  below `2^63` (`Mem.LiveBounded`). Globals are placed at program start with the same fallback;
+  a statement that needs `Mem.LiveBounded` of `mem0 σ` shows that the globals fit. A generated program-start memory is `mem0 σ`
   and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
   programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
   the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment

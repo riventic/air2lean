@@ -15,11 +15,16 @@ guarantees for an object (`Mem.placeOk`):
 
 * not 0;
 * a multiple of the block's declared alignment;
-* the block ends at or below 2^64;
+* the block ends at or below the end of the user address space, `Placement.addrLimit` (at most
+  2^63 for every placement, 2^47 by default; O-H);
 * disjoint from every live block (`Mem.addrFree`). Blocks may be adjacent, in any order, and
   may reuse a dead block's address. A zero-size block constrains nothing.
 
-Otherwise the block goes to `alignUp Mem.top align`, past every block with a 1-byte gap. The
+Otherwise the block goes to `alignUp Mem.top align`, past every block with a 1-byte gap, if it
+ends inside the address space there (`Mem.roomFor`). An allocation without room fails as for an
+exhausted address space: `rawAlloc` returns null, `mmap`/`mremap` fail with `ENOMEM`, and
+`alloc` has no outcome (`Zig.noRoom`). So no block of any kind ends above `addrLimit`, and the
+full-state invariant `Mem.FSeq` keeps every live block below 2^63 (`Mem.LiveBounded`). The
 placement that proposes nothing, `Placement.fresh`, gives the old fixed layout (first block at
 4096): it is what the differential harness, `#eval` and runtime fixtures run with.
 
@@ -71,8 +76,10 @@ liveness and provenance: an access, `free` and `@ptrFromInt`'s provenance recove
 
 * Out-of-allocation pointer arithmetic (MM-3) is still accepted; LLVM treats it as poison.
 * The stack is unbounded (MM-5).
-* The fallback address (`alignUp Mem.top align`) is not bounded by 2^64, unlike a placed one; it
-  only matters for programs that allocate close to 2^64 bytes.
+* The fallback address (`alignUp Mem.top align`) does not reuse addresses: a program whose
+  allocations add up to the address space finds no room even if most blocks are dead (a placement
+  that reuses addresses has room). Globals take the same fallback at program start without the
+  room check; a statement that needs `Mem.LiveBounded` of `mem0 σ` shows that they fit.
 * `Mem.top` scans every block, so allocation under `Placement.fresh` is linear in the number of
   blocks so far (runtime cost only).
 * VC extraction (`vc_gen`) has a pointer `==` contract only for provenance-free pointers

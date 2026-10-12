@@ -15,7 +15,9 @@ Each block gets an address when it is made: a global at program start, a stack b
 function entry, a heap or allocator block at `alloc`. The address is chosen by the environment,
 the placement oracle `Mem.place` (`docs/address-placement.md`, MM-1): a proposal is taken if it
 satisfies what Zig guarantees and nothing more (`Mem.placeOk`: not 0, a multiple of the block's
-alignment, below 2^64, disjoint from every live block; no gap and no order). A generated
+alignment, inside the address space (`Placement.addrLimit`), disjoint from every live block; no
+gap and no order). A block that the placement cannot fit inside the address space is never made
+(`Mem.roomFor`, `alloc`). A generated
 program-start memory takes the placement as a parameter (`mem0 σ`), so a theorem about it holds
 for every placement. Block ids stay unique, and every lifetime check uses the block id, not the
 address (`docs/address-reuse.md`).
@@ -366,14 +368,22 @@ address of each block, of every kind (global, stack, heap, allocator). `propose 
 of block `b`; the model takes it if it is valid (`Mem.placeOk`), else the block gets the next
 free address after every block (`Mem.top`). The oracle is an arbitrary function of the block id,
 and a run is deterministic given it, so quantifying over it covers every address assignment
-that keeps live blocks apart: every native layout, with or without address reuse. -/
+that keeps live blocks apart: every native layout, with or without address reuse.
+
+`addrLimit` is the end of the user address space (O-H, premise SEM-07): no block ends above it,
+of any kind. A theorem for every placement holds for every limit up to `2 ^ 63`, which covers
+every modelled 64-bit target (user space in the lower half). The default is `2 ^ 47`, the smaller
+of the two OS targets' limits (`Os.Target.addrLimit`). -/
 structure Placement where
   propose : BlockId → Option Nat
+  /-- The end of the user address space (module doc). -/
+  addrLimit : Nat := 2 ^ 47
+  addrLimit_le : addrLimit ≤ 2 ^ 63 := by decide
 
 /-- The placement that proposes nothing: every block at the next free address after every other
 block, from 4096, with a 1-byte gap. Only for running a program (`#eval`, the differential
 harness); a theorem about a generated program holds for every placement. -/
-def Placement.fresh : Placement := ⟨fun _ => none⟩
+def Placement.fresh : Placement := { propose := fun _ => none }
 
 instance : Inhabited Placement := ⟨.fresh⟩
 
@@ -586,10 +596,12 @@ def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
 
 /-- `A` is a valid address for a new block of `size` bytes with alignment `align`: exactly what
 Zig guarantees about the address of an object. Not 0, a multiple of the alignment, the block
-below 2^64, and disjoint from every live block (`Mem.addrFree`). It may be the address of a dead
-block (reuse) and it may be adjacent to a live one. -/
+inside the address space (`Placement.addrLimit`), and disjoint from every live block
+(`Mem.addrFree`). It may be the address of a dead block (reuse) and it may be adjacent to a live
+one. -/
 def Mem.placeOk (m : Mem) (A size align : Nat) : Bool :=
-  decide (0 < A) && decide (A % align = 0) && decide (A + size ≤ 2 ^ 64) && m.addrFree A size
+  decide (0 < A) && decide (A % align = 0) && decide (A + size ≤ m.place.addrLimit) &&
+    m.addrFree A size
 
 /-- The placement's address for the next block, if it is valid (`Mem.placeOk`). -/
 def Mem.placed? (m : Mem) (size align : Nat) : Option Nat :=
@@ -609,6 +621,11 @@ def Mem.newAddr (m : Mem) (size align : Nat) : Nat :=
   | some A => A
   | none => alignUp m.top align
 
+/-- The new block fits inside the address space (`Placement.addrLimit`): always for a placed
+address (`Mem.placeOk`), and for the fallback after `Mem.top` while that ends inside it. -/
+def Mem.roomFor (m : Mem) (size align : Nat) : Bool :=
+  decide (m.newAddr size align + size ≤ m.place.addrLimit)
+
 /-- The memory after `alloc`: one more block, `m.blocks.size`, of `size` undefined bytes, at
 `Mem.newAddr`. -/
 def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
@@ -617,12 +634,21 @@ def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
       { bytes := Array.replicate size .undef, align, kind, live := true,
         addr := m.newAddr size align } }
 
+/-- A run with no outcome: the address space has no room for a block (`alloc`). Like a run that
+does not terminate, it is outside every partial-correctness statement; a total-correctness
+statement shows room (`Mem.roomFor`, premise SEM-07). -/
+def noRoom {α : Type} : MemM α := StateT.lift (ExceptT.mk none)
+
 /-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`); its address is the
-placement's (`Mem.newAddr`). -/
+placement's (`Mem.newAddr`). If the block does not fit inside the address space
+(`Mem.roomFor`), the allocation fails as for an exhausted address space: the run has no outcome
+(`noRoom`). The block is never placed above `Placement.addrLimit` (O-H). -/
 def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   let m ← get
-  set (m.afterAlloc kind size align)
-  pure ⟨some m.blocks.size, 0⟩
+  if m.roomFor size align then
+    set (m.afterAlloc kind size align)
+    pure ⟨some m.blocks.size, 0⟩
+  else noRoom
 
 /-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
 `e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of

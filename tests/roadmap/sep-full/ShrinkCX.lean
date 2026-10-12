@@ -49,10 +49,13 @@ theorem m2_heap (l : Loc) : m2.heap l = if l.1 = 0 ∧ l.2 < 8192 then some c0 e
   · simp [Mem.heap, m2]
 
 theorem seq2 : m2.FSeq := by
-  refine ⟨⟨⟨by decide, by simp [m2]⟩⟩, ⟨by simp [shapes, m2], by simp [shapes, m2]⟩, ?_⟩
-  intro b b' blk blk' hne hb hb' _
-  simp only [m2] at hb hb'
-  rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  refine ⟨⟨⟨by decide, by simp [m2]⟩⟩, ⟨by simp [shapes, m2], by simp [shapes, m2]⟩, ?_, fun b blk hb _ => ?_⟩
+  · intro b b' blk blk' hne hb hb' _
+    simp only [m2] at hb hb'
+    rcases b with _ | b <;> rcases b' with _ | b' <;> simp at hb hb' hne
+  · simp only [m2] at hb
+    rcases b with _ | b <;> simp at hb
+    subst hb; simp [blk2, bs2_size]
 
 /-! ## The resources -/
 

@@ -980,7 +980,7 @@ program start (`Mem.ofGlobals σ gs`) holds global `k` as block `k`, with its by
 kind, at an aligned address, and nothing else (`Mem.ofGlobals_block`, `Mem.ofGlobals_eq`). -/
 
 theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
-    0 < A ∧ A % align = 0 ∧ A + size ≤ 2 ^ 64 ∧ m.addrFree A size = true := by
+    0 < A ∧ A % align = 0 ∧ A + size ≤ m.place.addrLimit ∧ m.addrFree A size = true := by
   unfold Mem.placed? at h
   split at h
   · split at h
@@ -1008,6 +1008,29 @@ theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = som
   rw [← Array.foldl_toList]
   exact (foldl_top m.blocks.toList 4096).2 blk
     (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+/-- A placed address always fits (`Mem.placeOk`), so `Mem.roomFor` only rejects a fallback. -/
+theorem Mem.roomFor_iff {m : Mem} {size align : Nat} :
+    m.roomFor size align = true ↔ m.newAddr size align + size ≤ m.place.addrLimit := by
+  simp [Mem.roomFor]
+
+/-- A block that `alloc` makes ends inside the address space, so below `2 ^ 63` (O-H). -/
+theorem Mem.roomFor_le {m : Mem} {size align : Nat} (h : m.roomFor size align = true) :
+    m.newAddr size align + size ≤ 2 ^ 63 :=
+  Nat.le_trans (Mem.roomFor_iff.mp h) m.place.addrLimit_le
+
+/-- The address of a new block depends only on the blocks and the placement. -/
+@[simp] theorem Mem.newAddr_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).newAddr = m.newAddr := rfl
+
+@[simp] theorem Mem.newAddr_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).newAddr = m.newAddr := rfl
+
+@[simp] theorem Mem.roomFor_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).roomFor = m.roomFor := rfl
+
+@[simp] theorem Mem.roomFor_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).roomFor = m.roomFor := rfl
 
 theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
     m.newAddr size align % align = 0 := by

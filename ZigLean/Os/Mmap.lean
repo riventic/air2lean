@@ -109,6 +109,16 @@ def Target.addrLimit : Target → Nat
 def Target.fits (os : Target) (a n : Nat) : Bool :=
   decide (a + alignUp n os.pageSize ≤ os.addrLimit)
 
+/-- Every modelled target's address space ends below `2 ^ 63` (so does every placement's,
+`Placement.addrLimit`). -/
+theorem Target.addrLimit_le (os : Target) : os.addrLimit ≤ 2 ^ 63 := by
+  cases os <;> decide
+
+/-- A mapping that fits ends below `2 ^ 63`. -/
+theorem Target.fits_le {os : Target} {a n : Nat} (h : os.fits a n = true) :
+    a + alignUp n os.pageSize ≤ 2 ^ 63 :=
+  Nat.le_trans (by simpa [Target.fits] using h) os.addrLimit_le
+
 /-- `posix.MREMAP != void`. -/
 def Target.hasMremap : Target → Bool
   | .linux => true
@@ -151,6 +161,13 @@ def mremapFill (P cur n : Nat) : Array Byte :=
 def Mem.mappingRoom (m : Mem) (L : Nat) (b : BlockId) (blk : Block) (lo len : Nat) : Bool :=
   decide (blk.addr + lo + len ≤ L) &&
     m.blocks.zipIdx.all fun (o, j) => j == b || o.clearOf (blk.addr + lo) len
+
+/-- A growth with room ends inside the address space `L`. -/
+theorem Mem.mappingRoom_le {m : Mem} {L : Nat} {b : BlockId} {blk : Block} {lo len : Nat}
+    (h : m.mappingRoom L b blk lo len = true) : blk.addr + lo + len ≤ L := by
+  unfold Mem.mappingRoom at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1
 
 namespace Os
 

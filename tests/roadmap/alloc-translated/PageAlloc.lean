@@ -456,7 +456,7 @@ theorem alloc_high : (((vt.alloc ⟨none, 0⟩ 1 13 0).run high).run.map fun r =
 
 /-- `mem0` under a placement that proposes the address `A` for the first mapping (block 6,
 after the six globals). -/
-def placedAt (A : Nat) : Mem := mem0 ⟨fun b => if b == 6 then some A else none⟩
+def placedAt (A : Nat) : Mem := mem0 { propose := fun b => if b == 6 then some A else none }
 
 /-- Near the end of the address space, `alloc(1, align 8192)` maps two pages at
 `2 ^ 47 - 12288`, unmaps the first one (`TotalTriple.munmapPrefix`) and returns the second. -/

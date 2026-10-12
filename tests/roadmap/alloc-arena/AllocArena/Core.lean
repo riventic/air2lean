@@ -565,7 +565,7 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Hold
     (CI.act_within (by within) hp)
   rw [e2] at e2'; cases e2'
   refine ⟨blkC, blkN, blkP, e1, a1, by omega, e2, a2, s2, e3, l3, s3,
-    fun hne x x' hx hx' => hs.2.2.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx', fun heq => ?_⟩
+    fun hne x x' hx hx' => hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx', fun heq => ?_⟩
   rw [heq, e2] at e3; cases e3; rfl
 
 /-- **O-F**: the comparison of the first node's `buf + end_index` with the slice's end by address

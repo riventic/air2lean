@@ -25,15 +25,29 @@ def Mem.LiveDisjoint (m : Mem) : Prop :=
 
 namespace Full
 
-/-- The step from `m` to `m'` keeps `Mem.LiveDisjoint`. -/
-def LDMono (m m' : Mem) : Prop := m.LiveDisjoint → m'.LiveDisjoint
+/-- Every live block ends inside the address space, below `2 ^ 63` (O-H: every placement's
+`Placement.addrLimit` is at most `2 ^ 63`, and `alloc`, `mmap` and `mremap` never place a block
+above it). -/
+def _root_.Zig.Mem.LiveBounded (m : Mem) : Prop :=
+  ∀ (b : BlockId) (blk : Block), m.blocks[b]? = some blk → blk.live = true →
+    blk.addr + blk.bytes.size ≤ 2 ^ 63
 
-theorem LDMono.refl (m : Mem) : LDMono m m := id
+/-- The address layout of the live blocks: apart (`Mem.LiveDisjoint`) and inside the address
+space (`Mem.LiveBounded`). The third part of `Mem.FSeq`. -/
+def _root_.Zig.Mem.LiveLayout (m : Mem) : Prop := m.LiveDisjoint ∧ m.LiveBounded
 
-theorem LDMono.trans {m₁ m₂ m₃ : Mem} (h₁ : LDMono m₁ m₂) (h₂ : LDMono m₂ m₃) : LDMono m₁ m₃ :=
+/-- The step from `m` to `m'` keeps `Mem.LiveDisjoint` (the pairwise part of `LDMono`). -/
+def PDMono (m m' : Mem) : Prop := m.LiveDisjoint → m'.LiveDisjoint
+
+/-- The step from `m` to `m'` keeps the live layout (`Mem.LiveLayout`). -/
+def LDMono (m m' : Mem) : Prop := m.LiveLayout → m'.LiveLayout
+
+theorem PDMono.refl (m : Mem) : PDMono m m := id
+
+theorem PDMono.trans {m₁ m₂ m₃ : Mem} (h₁ : PDMono m₁ m₂) (h₂ : PDMono m₂ m₃) : PDMono m₁ m₃ :=
   fun h => h₂ (h₁ h)
 
-theorem LDMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : LDMono m m' := by
+theorem PDMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : PDMono m m' := by
   intro hd b b' blk blk' hbb h1 h2 hl
   rw [h] at h1 h2; exact hd b b' blk blk' hbb h1 h2 hl
 
@@ -83,10 +97,10 @@ theorem clearOf_symm {blk blk' : Block} (hl : blk.live = true) (hl' : blk'.live 
 
 /-- Each block of `m'` is the block of `m` with the same id, at the same address, no larger, and
 not newly live. -/
-theorem LDMono.shrink {m m' : Mem}
+theorem PDMono.shrink {m m' : Mem}
     (h : ∀ (b : BlockId) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk : Block, m.blocks[b]? = some blk ∧
       (blk'.live = true → blk.live = true) ∧ blk'.addr = blk.addr ∧
-      blk'.bytes.size ≤ blk.bytes.size) : LDMono m m' := by
+      blk'.bytes.size ≤ blk.bytes.size) : PDMono m m' := by
   intro hd b b' blk₁' blk₂' hbb h1 h2 hl
   obtain ⟨blk₁, e1, l1, a1, s1⟩ := h b blk₁' h1
   obtain ⟨blk₂, e2, l2, a2, s2⟩ := h b' blk₂' h2
@@ -94,11 +108,11 @@ theorem LDMono.shrink {m m' : Mem}
   exact clearOf_shrink this l1 a1 s1 (by omega) (by omega)
 
 /-- Replacing block `b` by one at the same address, no larger and not newly live. -/
-theorem LDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+theorem PDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (hl : nb.live = true → blk.live = true) (ha : nb.addr = blk.addr)
     (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb) :
-    LDMono m m' := by
-  refine LDMono.shrink fun b' blk' h' => ?_
+    PDMono m m' := by
+  refine PDMono.shrink fun b' blk' h' => ?_
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h'
   by_cases e : b = b'
   · subst e
@@ -111,12 +125,12 @@ theorem LDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]
 
 /-- Growing the live block `b` in place to at most `lo + len` bytes, where the added range
 `[addr + lo, addr + lo + len)` is clear of every other block (`Mem.mappingRoom`). -/
-theorem LDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
+theorem PDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
     (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (ha : nb.addr = blk.addr)
     (hlo : lo ≤ blk.bytes.size) (hsz : nb.bytes.size ≤ lo + len)
     (hroom : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
       o.clearOf (blk.addr + lo) len = true)
-    (h : m'.blocks = m.blocks.set! b nb) : LDMono m m' := by
+    (h : m'.blocks = m.blocks.set! b nb) : PDMono m m' := by
   intro hd
   -- every other block is clear of the grown range
   have hclear : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
@@ -155,9 +169,9 @@ theorem LDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
     exact hd x y bx by' hxy h1 h2 hly
 
 /-- Pushing a block that is dead or clear of every live block (`Mem.addrFree`). -/
-theorem LDMono.push {m m' : Mem} {nb : Block}
+theorem PDMono.push {m m' : Mem} {nb : Block}
     (hf : nb.live = true → m.addrFree nb.addr nb.bytes.size = true)
-    (h : m'.blocks = m.blocks.push nb) : LDMono m m' := by
+    (h : m'.blocks = m.blocks.push nb) : PDMono m m' := by
   intro hd b b' blk blk' hbb h1 h2 hl
   rw [h, Array.getElem?_push] at h1 h2
   have hall : ∀ (j : Nat) (x : Block), m.blocks[j]? = some x → nb.live = true →
@@ -195,9 +209,9 @@ theorem _root_.Zig.Mem.newAddr_addrFree (m : Mem) (size align : Nat) :
     rw [clearOf_iff]; right; right; right; right; omega
 
 /-- A global's block is placed like any new block. -/
-theorem LDMono.addGlobal (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
-    LDMono m (m.addGlobal bs a k) :=
-  LDMono.push (fun _ => m.newAddr_addrFree _ _) rfl
+theorem PDMono.addGlobal (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
+    PDMono m (m.addGlobal bs a k) :=
+  PDMono.push (fun _ => m.newAddr_addrFree _ _) rfl
 
 /-- The memory at program start keeps live blocks apart, so `Mem.FSeq`'s `LiveDisjoint` holds of
 every memory reachable from it. -/
@@ -212,7 +226,7 @@ theorem _root_.Zig.Mem.ofGlobals_liveDisjoint (σ : Placement)
   | nil => exact fun _ h => h
   | cons g gs ih =>
     obtain ⟨bs, a, k⟩ := g
-    exact fun m h => ih _ (LDMono.addGlobal m bs a k h)
+    exact fun m h => ih _ (PDMono.addGlobal m bs a k h)
 
 /-- A range inside a clear one is clear. -/
 theorem _root_.Zig.Mem.addrFree_mono {m : Mem} {A n A' n' : Nat} (h : m.addrFree A n = true)
@@ -220,6 +234,79 @@ theorem _root_.Zig.Mem.addrFree_mono {m : Mem} {A n A' n' : Nat} (h : m.addrFree
   unfold Mem.addrFree at h ⊢
   rw [Array.all_eq_true] at h ⊢
   exact fun i hi => clearOf_shrink (h i hi) id rfl (Nat.le_refl _) hA hn
+
+
+/-! ### The live layout: the pairwise part and the bound together -/
+
+theorem LDMono.refl (m : Mem) : LDMono m m := id
+
+theorem LDMono.trans {m₁ m₂ m₃ : Mem} (h₁ : LDMono m₁ m₂) (h₂ : LDMono m₂ m₃) : LDMono m₁ m₃ :=
+  fun h => h₂ (h₁ h)
+
+theorem LDMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : LDMono m m' :=
+  fun hd => ⟨PDMono.of_blocks h hd.1, fun b blk hb hl => hd.2 b blk (by rw [← h]; exact hb) hl⟩
+
+theorem LDMono.shrink {m m' : Mem}
+    (h : ∀ (b : BlockId) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk : Block, m.blocks[b]? = some blk ∧
+      (blk'.live = true → blk.live = true) ∧ blk'.addr = blk.addr ∧
+      blk'.bytes.size ≤ blk.bytes.size) : LDMono m m' := fun hd => by
+  refine ⟨PDMono.shrink h hd.1, fun b blk' hb hl => ?_⟩
+  obtain ⟨blk, e, l, a, sz⟩ := h b blk' hb
+  have := hd.2 b blk e (l hl)
+  omega
+
+theorem LDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+    (hl : nb.live = true → blk.live = true) (ha : nb.addr = blk.addr)
+    (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb) :
+    LDMono m m' := by
+  refine LDMono.shrink fun b' blk' h' => ?_
+  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h'
+  by_cases e : b = b'
+  · subst e
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    simp only [hlt, if_true, Option.some.injEq] at h'
+    subst h'
+    exact ⟨blk, hb, hl, ha, hs⟩
+  · simp only [e, if_false] at h'
+    exact ⟨blk', h', id, rfl, Nat.le_refl _⟩
+
+/-- Growing the live block `b` in place, inside the address space (`hbnd`). -/
+theorem LDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
+    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (ha : nb.addr = blk.addr)
+    (hlo : lo ≤ blk.bytes.size) (hsz : nb.bytes.size ≤ lo + len)
+    (hroom : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
+      o.clearOf (blk.addr + lo) len = true)
+    (hbnd : blk.addr + lo + len ≤ 2 ^ 63)
+    (h : m'.blocks = m.blocks.set! b nb) : LDMono m m' := fun hd => by
+  refine ⟨PDMono.grow hb hl ha hlo hsz hroom h hd.1, fun j o hj hlj => ?_⟩
+  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at hj
+  by_cases e : b = j
+  · subst e
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    simp only [hlt, if_true, Option.some.injEq] at hj
+    subst hj; omega
+  · simp only [e, if_false] at hj
+    exact hd.2 j o hj hlj
+
+/-- Pushing a block that is dead, or clear of every live block (`Mem.addrFree`) and inside the
+address space. -/
+theorem LDMono.push {m m' : Mem} {nb : Block}
+    (hf : nb.live = true → m.addrFree nb.addr nb.bytes.size = true)
+    (hbnd : nb.live = true → nb.addr + nb.bytes.size ≤ 2 ^ 63)
+    (h : m'.blocks = m.blocks.push nb) : LDMono m m' := fun hd => by
+  refine ⟨PDMono.push hf h hd.1, fun j o hj hlj => ?_⟩
+  rw [h, Array.getElem?_push] at hj
+  split at hj
+  · cases hj; exact hbnd hlj
+  · exact hd.2 j o hj hlj
+
+/-- A block that `alloc` makes with room (`Mem.roomFor`) keeps the live layout. -/
+theorem LDMono.alloc {m m' : Mem} {size align : Nat} {nb : Block}
+    (hroom : m.roomFor size align = true) (ha : nb.addr = m.newAddr size align)
+    (hs : nb.bytes.size = size) (h : m'.blocks = m.blocks.push nb) : LDMono m m' :=
+  LDMono.push (fun _ => by rw [ha, hs]; exact m.newAddr_addrFree _ _)
+    (fun _ => by rw [ha, hs]; exact Mem.roomFor_le hroom) h
+
 
 end Full
 end Zig

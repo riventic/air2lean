@@ -122,8 +122,14 @@ theorem remapByteBuffer_owned {m : Mem} {s : Slice} {h hF : Heap} {A : Nat} {bs 
     rw [hptr]
     simpa [hK, hbytes] using hp'
   | move =>
+    cases hroom : m.roomFor n 1
+    · apply none_of
+      have hc' : ¬ (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) := by
+        simp [halign, hn0, Nat.not_lt.mpr hcap]
+      simp [remapByteBuffer, hmode, hacc, hwhole, hc', hroom, zig_unfold]
     obtain ⟨p, m', h', A', hr, hd', hm', hst', hp0, hb'⟩ :=
       remapByteBuffer_move_owned (hbytes ▸ hb) hm hd hst h0 hold hmode hacc hK hsz halign hn hcap
+        hroom
     exact ⟨some ⟨p, BitVec.ofNat 64 n⟩, m', hr, hst', rfl, hp0, h', A', hd', hm',
       by simpa [hbytes] using hb'⟩
 

@@ -630,7 +630,8 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
   refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩, ⟨⟨hs.1.single⟩,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
       (by rw [hnbs]; have := le_alignUp n os.pageSize; omega)
-      (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho) rfl hs₁.2.2⟩⟩
+      (fun j o hj ho => Mem.mappingRoom_clear hroom j o hj ho)
+      (Nat.le_trans (Mem.mappingRoom_le hroom) os.addrLimit_le) rfl hs₁.2.2⟩⟩
   have hup := growRes_up (m := m₁) (m' := m₂) (b := b) (nb := nb) (q := q)
     (P := bytesAt ⟨some b, (blk.bytes.size : Int)⟩ blk.addr (lo + n) (.mapped lo) fill) ?_
   · rw [hnbs, show nb.kind = .mapped lo from hK] at hup; exact hup

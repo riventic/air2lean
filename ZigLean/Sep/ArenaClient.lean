@@ -187,7 +187,7 @@ theorem dupeBytes_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
     have hst₁ : m₁.Seq := ⟨hst.single⟩
     have hg₁ : Grows a m m₁ := Grows.of_blocks rfl rfl
     by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < bs.size ∨
-        m.allocs ∈ m.allocPolicy.failures
+        m.allocs ∈ m.allocPolicy.failures ∨ m.roomFor bs.size 1 = false
     · simp only [hc, ↓reduceIte] at hA
       refine ⟨.error "OutOfMemory", m₁, ?_, hg₁, hst₁, rfl⟩
       simp only [StateT.run] at hA

@@ -151,29 +151,33 @@ done): size-free cells and extent resources, and a stronger `FAllocSpec` whose g
 share of their block's extent ([sep-full-state.md](sep-full-state.md) §Block extents, with
 phases). The patched `alloc` proof waits for the remaining phases.
 
-**O-H: the address space ends at `2^64` in the model (open, found in step 7; needs a decision).**
+**O-H: the address space ended at `2^64` in the model (found in step 7; fixed in the model).**
 `alloc`'s fast path computes `alignedIndex(buf.ptr, end_index, alignment)`: `addr +% end_index`
 (wrapping), then `Alignment.forward`, whose `x + (alignment - 1)` is overflow-checked
-(`Zig.add false`: `.overflow`, a panic). The memory model lets a block end exactly at `2^64`
-(`Mem.placeOk`: `A + size ≤ 2^64`; the fallback `alignUp m.top align` is not bounded at all), and
-nothing in `Mem.FSeq` or the arena's invariant bounds a node's address. Scenario: a
+(`Zig.add false`: `.overflow`, a panic). The old memory model let a block end exactly at `2^64`
+(`Mem.placeOk`: `A + size ≤ 2^64`; the fallback `alignUp m.top align` was not bounded at all), and
+nothing in `Mem.FSeq` or the arena's invariant bounded a node's address. Scenario: a
 `FixedBufferAllocator` child whose buffer global is placed so that a node's buffer ends at `2^64`
 (placement `σ` of `mem0 σ`); allocations of alignment `1` leave `end_index = buf.len - 3`; then
 `alloc(1, alignment 8)` passes the patched reservation check (`1 + 7 ≤ buf.len`) and
-`alignedIndex` adds `7` to `2^64 - 3`: overflow, a panic. So `FAllocSpec.alloc` fails for every
+`alignedIndex` adds `7` to `2^64 - 3`: overflow, a panic. So `FAllocSpec.alloc` failed for every
 arena invariant in such memories, stock or patched. Natively the state does not exist (user
-addresses end below `2^47`/`2^48` on x86_64-linux and aarch64-macos). The resolution belongs in
-the model or the premises (an address-space bound for every live block, e.g. a placement and
-`Mem.newAddr` that keep blocks below an architecture bound, as an OS/architecture premise), not in
-`FAllocSpec` (no per-triple premise). Kernel-checked at the step that panics
-(`ArenaObstruction.aligned_index_overflows`: `alignedIndex` on a memory whose last block ends at
-`2^64`, `end_index = 5`, alignment 8: `.overflow`). **Decision (coordinator, 2026-10-12):** fix
-it in the model, one mechanism for every block kind (the O5 follow-up "`Mem.top`/`placeOk` bound
-for all block kinds"): placement keeps every live block below the target's `addrLimit`
-(`Mem.placeOk` and the fallback `Mem.top`; an allocation that does not fit fails as for OOM, it
-is never placed above), with an OSM-01-family premise "user-space addresses lie below
-`addrLimit`" per target. Not an `FSeq` invariant and not an `FAllocSpec` premise. The regression
-then shows the state unreachable (or the call succeeding). Not done yet.
+addresses end below `2^47`/`2^48`).
+
+Fix (coordinator decision 2026-10-12: in the model, one mechanism for every block kind, not an
+`FAllocSpec` premise): the placement carries the end of the user address space,
+`Placement.addrLimit` (at most `2^63` for every placement, `2^47` by default; SEM-07). `Mem.placeOk`
+takes a proposal only if the block ends at or below it, and `Mem.roomFor` checks the fallback
+after `Mem.top` against it. An allocation without room fails as for an exhausted address space:
+`rawAlloc` returns null, `mmap`/`mremap` fail with `ENOMEM` (OSM-01, `Os.Target.addrLimit`), and
+`alloc` has no outcome (`Zig.noRoom`). Every primitive keeps the live blocks below `2^63`
+(`Mem.LiveBounded`, proved per primitive with `Mem.LiveDisjoint` in `LDMono`, part of `Tame`), so
+the full-state invariant `Mem.FSeq` (its third part is now `Mem.LiveLayout`, both properties)
+gives every node `addr + end_index + 2^k - 1 < 2^64` for `k < 64`. It is a consequence of the
+model, not a premise of a triple. Kernel-checked regression (`ArenaObstruction.lean`):
+`aligned_index_overflows` (the old state panics), `memTop_unbounded` (that state is outside
+`Mem.FSeq`), `node_buf_low` and `aligned_index_ok` (a placement proposing `2^64 - 64` for
+`node_buf` no longer gets it, and `alignedIndex` on the memory it does get succeeds).
 
 **O-D: one thread.** The atomic rules (`ZigLean/Sep/Full/Atomic.lean`, `AtomicPtr.lean`,
 `AtomicRules.lean`) read an atomic op with the oracle's choice `0`, as one thread does. A
