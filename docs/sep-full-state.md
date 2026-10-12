@@ -775,8 +775,9 @@ start memory, not a judgment parameter and not a new judgment. The room cell wil
 Total `allocStack`/`enterFrame` rules need a resource that guarantees the next stack block. The
 model side (per-thread stack regions with a LIFO budget and a reserve) is
 `docs/architecture-audit/memory-model.md` §MM-16; this section is the resource on top of it and
-replaces the "room" half of §Credits and room above. Status: the model is MM-16 step 1; the
-resource below is step 2.
+replaces the "room" half of §Credits and room above. Status: the model is implemented (MM-16
+step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`); the resource below
+is step 3, as an instance of the same authoritative-counter pattern as the credits.
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only

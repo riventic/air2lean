@@ -58,7 +58,7 @@ build for each fixed finding below.
 | MM-2 | fixed | alignment checks follow the placement; a placement without the extra alignment panics as natively |
 | MM-3 | fixed | checked pointer formation `Zig.ptrProject` (`getelementptr inbounds`): a derived pointer outside `[0, size]` of its block is `.illegal` |
 | MM-4 | fixed | pointer `==` compares addresses for every pointer kind (`Zig.ptrEqAddr`, `Zig.optPtrEqAddr`) |
-| MM-5 | fixed | stack budget `Mem.stackLimit`/`Zig.enterFrame`, `Zig.Error.stackOverflow`; premise STK-01 without a budget |
+| MM-5 | fixed | per-thread stack budget (`Mem.withStack`, MM-16), `Zig.enterFrame`, `Zig.Error.stackOverflow`; premise STK-01 without a budget |
 | MM-6 | fixed | emitter arms write an unbound `placeholder`; output with one is rejected (`EMITTER_PLACEHOLDER`), every formerly reachable arm is a checker rule |
 | MM-7 | qualified | `docs/build-modes.md` lists the remaining exceptions of the ReleaseFast premise |
 | MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
@@ -67,8 +67,8 @@ build for each fixed finding below.
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
-| MM-16 | design (stack-region lane) | per-thread stack regions with a LIFO budget and a reserve (§MM-16) |
-| MM-17 | open | `clone` hands the child the stack part of the mapping (§MM-16, step 4) |
+| MM-16 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-16, `tests/roadmap/stack-region`) |
+| MM-17 | open | `clone` hands the child the stack part of the mapping (§MM-16, step 2) |
 
 ## Measurements
 
@@ -368,10 +368,11 @@ AIR carries Sema's alias check, and the model panics like native (`memcpyOverlap
 model is right only because export is pinned to ReleaseSafe (`docs/build-modes.md`). If any
 other export mode is ever admitted, `@memcpy` needs its own overlap → `.illegal` rule.
 
-### MM-16. Stack room and per-thread stack regions (design, `codex/stack-region`)
+### MM-16. Stack room and per-thread stack regions (`codex/stack-region`)
 
-**Status: design, awaiting the coordinator's approval (decision A, 2026-10-12).** Nothing below
-is implemented yet. The logic side is in `docs/sep-full-state.md` §Stack depth.
+**Status: design approved (decision A, 2026-10-12); step 1 (model, emitters, regressions)
+implemented, see §Implementation (step 1).** The logic side is in `docs/sep-full-state.md`
+§Stack depth.
 
 #### The finding
 
@@ -399,13 +400,15 @@ Fixture: a ReleaseSafe program that records the addresses of escaping locals in 
 an inlinable callee, in a `noinline` caller/callee pair, in two sibling calls and in a spawned
 thread, and prints the mapping that holds them (`/proc/self/maps`) and the stack rlimit.
 Ran on x86_64-linux (Docker `--platform linux/amd64`, Rosetta) with 0.14.1, 0.15.2, 0.16.0 and
-0.17.0, on aarch64-linux (native arm64 container) with 0.14.1 and 0.17.0, and on aarch64-macos
-with 0.16.0 and 0.17.0 (0.14.1 and 0.15.2 do not link against the current macOS SDK). The
-results are the same on every row:
+0.17.0, on aarch64-linux (native arm64 container) with 0.14.1, 0.15.2, 0.16.0 and 0.17.0, and
+on aarch64-macos with 0.16.0 and 0.17.0 (0.14.1 and 0.15.2 do not link against the current macOS
+SDK). The fixture is `tests/roadmap/stack-region/evidence.zig` (`check.sh --docker-linux`). The
+results are the same on every row except E1 on aarch64-linux 0.14.1/0.15.2, where the inlined
+callee's local lies below the caller's:
 
 | | observation | consequence for the model |
 |---|---|---|
-| E1 | an inlined callee's local lies **above** the caller's earlier local; a `noinline` callee's lies below | the address order of locals across model frames is not fixed |
+| E1 | an inlined callee's local lies **above** the caller's earlier local (below on aarch64-linux 0.14.1/0.15.2); a `noinline` callee's lies below | the address order of locals across model frames is not fixed |
 | E1' | the inlined callee's local and a later local of the caller **share one address** (LLVM stack colouring) | a dead stack block's address is reused inside one native frame |
 | E2 | two sibling calls put their locals at the same address | reuse across frames |
 | E3 | a spawned thread's locals lie inside the anonymous mapping that `std.Thread.spawn` `mmap`s (Linux: guard, stack, TLS, `Instance`; 16 MiB stack by default in all four versions) | MM-17 |
@@ -459,7 +462,7 @@ Mem.stacks : Array StackState    -- indexed by ThreadId, like Mem.clocks
   clear of live blocks and reserves), else by the first fit. The main thread's budget is set on
   the start memory (`Mem.withStack S`, after the globals: `Mem.firstFit` succeeds under
   `Mem.GlobalsFit` and `S ≤ 2^40`). A child's budget is set at `fork` (environment parameter
-  first, `SpawnConfig.stack_size` later, step 4); without a fit the spawn fails as
+  first, `SpawnConfig.stack_size` later, step 5); without a fit the spawn fails as
   `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`. A reserve
   stays reserved until its thread has ended and its cells are dead.
 * **Everything else avoids the reserves:** `Mem.addrFree` (so `placeOk`), `Mem.growFree`,
@@ -530,7 +533,7 @@ form): the native stack of `t` holds every call chain whose model charge stays w
 4. Heap-kind runtime cells without an out-of-memory path (`Future.slotAlloc`: `alloc .heap`)
    keep today's `.stackOverflow` without address room: partial only, listed as follow-up (not a
    stack object; native `Io` implementations have their own fallback).
-5. MM-17 below stays open until step 4.
+5. MM-17 below stays open until step 2.
 
 #### MM-17. A child's locals cannot lie in its thread mapping
 
@@ -541,11 +544,13 @@ The translated `LinuxThreadImpl.spawn` (all four versions) `mmap`s one mapping (
 model the mapping is a live `.mapped` block, so `Mem.placeOk` rejects every address inside it for
 the child's stack blocks: `@intFromPtr(&local)` inside `thread.impl.thread.mapped` is provably
 false in the model and true natively. Not caused by the stack region; the region makes the fix
-natural (step 4): `clone` makes `[stack - S_c, stack)` of the mapping the child's reserve and
+natural (step 2): `clone` makes `[stack - S_c, stack)` of the mapping the child's reserve and
 lets proposals for the child's stack blocks fall inside it; the parent's accesses to those bytes
 are `.illegal` while the child runs (a conservative over-approximation); `munmap` after the join
-releases it. Needs the coordinator's decision because it changes `Os.clone` and
-`Mem.LiveDisjoint` (a stack block nested in a live mapping).
+releases it. Approved (coordinator, 2026-10-12): a soundness bug, fixed as step 2, with the
+minimal general `Mem.LiveDisjoint` exception for a reserve nested in its mapping and the
+`@intFromPtr` counterexample as a regression; Linux and macOS thread stacks are instances of one
+per-thread reserve contract.
 
 #### Impact
 
@@ -567,17 +572,49 @@ releases it. Needs the coordinator's decision because it changes `Os.clone` and
 * About 15 library files and 10 test files; the generated programs change only in the order of
   their `free`s and the `enterFrame` argument.
 
+#### Implementation (step 1)
+
+* **The region is the `.stack` kind of `alloc`.** `allocStack` stays `alloc .stack`, so every
+  `.stack` block (generated locals and the hand-written runtime clients' `alloc .stack`) is
+  accounted, and the existing rules about `alloc` cover it: they were re-proved, not duplicated.
+  `alloc` checks `Mem.allocOk kind` and places at `Mem.allocAddr kind`; for every kind but a
+  `.stack` block of a thread with a budget these are `Mem.roomFor` and `Mem.newAddr` (by `rfl`).
+  The lemmas that named `roomFor`/`newAddr` for any kind now name `allocOk`/`allocAddr`
+  (`alloc_run_eq`, `alloc_run_noRoom`, `alloc_run_core`, `alloc_run`, `alloc_noErr`,
+  `alloc_new_id`, `LDMono.alloc`); `Mem.allocOk_fit`, `Mem.allocOk_le`, `Mem.allocAddr_mod` and
+  `Mem.allocAddr_clear` give what the partial rules export (aligned, clear of every live block,
+  inside the address space), so no rule statement changed.
+* **State.** `Mem.stacks : Array StackState` (budget, reserve base, entries); an entry records
+  its block (or a frame), the depth at its push and its charge, so the depth is O(1) (the top
+  held entry's end). `StackState.held` pops dead entries lazily (`Array.popWhile`); a push stores
+  the popped array. `leaveFrame` closes the topmost open frame entry.
+* **The fallback is checked at run time** (`Mem.fitOk`): a fallback that met a live block or left
+  the address space would throw `.stackOverflow`. In every memory that a run reaches it never
+  does (the reserve holds only the thread's own fallback blocks, below the held entries); step 3
+  proves that from the `sp` invariant. The check keeps the partial rules free of any new
+  invariant.
+* **Reserves.** `Mem.withStack S` gives the main thread its budget: the placement's
+  `Placement.reserve 0` if valid (`Mem.placeOk`, 16-aligned), else the first fit, else no budget
+  (fail closed). `Mem.placeOk` is `Mem.fitOk` plus `Mem.reservesFree`; `Mem.top` is past every
+  reserve; `Mem.growFree` and `Mem.mappingRoom` avoid reserves.
+* **Cells are deferred to step 5.** The TLS instances of spawned threads and the macOS `errno`
+  cell are still made by `alloc .global` outside every reserve. That is sound (they consume no
+  slack); what is missing is only a total `__error` under an exhausted address space (fail-closed
+  point 4). `used = depth` until the threads step adds the cells' reservation.
+* **Regressions** (`tests/roadmap/stack-region/Regressions.lean`, kernel): the three scenarios
+  in their fixed form and their old behaviour without a budget, overflow exactly at the budget
+  (blocks and frames), the splittable-room counterexample (`splitRoom_cx`) and its LIFO control,
+  and E1/E1' as one placement under a budget (`e1_native_layout`).
+
 #### Steps (phase 2, one small PR each, on `codex/stack-region`)
 
-1. Model + emitters + lemmas + regressions: the three MM-16 scenarios as kernel theorems on the
-   old model are replaced by their fixed forms (a free returns the slack; heap traffic and a
-   placement at `addrLimit` leave it); `.stackOverflow` exactly at the budget; E1/E1' as
-   "some placement puts the callee's block above the caller's / on a dead block's address";
-   the native fixture in `tests/roadmap/stack-region/` (x86_64-linux in Docker, aarch64-macos).
-2. Logic: the `sp` resource, Holds conjunct, total rules (`docs/sep-full-state.md`).
-3. Full/Init gives the main thread `sp 0 S k₀` under `Mem.withStack S`; replaces interim (C) and
+1. Model + emitters + lemmas + regressions (done, above).
+2. MM-17: `Os.clone` hands the child the stack part of its mapping (below).
+3. Logic: the `sp` resource, Holds conjunct, total rules (`docs/sep-full-state.md`), as one
+   instance of the generic authoritative-counter pattern shared with the credits.
+4. Full/Init gives the main thread `sp 0 S k₀` under `Mem.withStack S`; replaces interim (C) and
    `TotalTripleIn` (Full/Strength, memory-hardening/NoRoom, one-logic/Strength).
-4. Threads: child budgets from the spawn, reserve release at thread end, thread rules, MM-17.
+5. Threads: child budgets from the spawn, reserve release at thread end, the cells, thread rules.
 
 ---
 

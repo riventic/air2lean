@@ -803,7 +803,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
   (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
   `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
-  total-correctness statement shows room, `Mem.roomFor`, e.g. with `TotalTripleIn`). The
+  total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
+  inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-16,
+  STK-02). The
   full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
   (`Mem.LiveBounded`). A global at program start that the placement does not place and that has
   no room after `Mem.top` goes to the first fit (`Mem.globalPlace`, `Mem.firstFit`), so the

@@ -17,7 +17,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `unspecified_timer` | model `unspecified_timer`: `Zig.Error.unsupportedTimer`, a clock or timed wait the model has no semantics for ([TMR-01](premises.md#tmr-01)) | both |
 | `deadlock` | model `deadlock` | both |
 | `hardware_trap` | model `trap` (an allowlisted inline-asm fault: `Zig.asmTrap`, [ASM-04](premises.md#asm-04)); `trap_match` against a native `SIGFPE` | both |
-| `stack_overflow` | model `stack_overflow` (`Zig.Error.stackOverflow`): a frame did not fit in the selected stack budget (`Mem.stackLimit`, [STK-01](premises.md#stk-01)). The differential runner reports it as `stack_overflow_exclusion`, pinned like `unspecified` | both |
+| `stack_overflow` | model `stack_overflow` (`Zig.Error.stackOverflow`): a frame or a stack block did not fit in the thread's selected stack budget (`Mem.withStack`, [STK-01](premises.md#stk-01)), or a block without an allocator found no room in the address space. The differential runner reports it as `stack_overflow_exclusion`, pinned like `unspecified` | both |
 | `divergence` | `bounded_no_result` or a search with a no-result branch: scheduler fuel ran out; divergence is not established | both |
 | `search_cap` | a `capped` schedule search | both |
 | `unsupported_semantics` | exporter-marked unsupported AIR (coverage), or an unknown model kind | both |

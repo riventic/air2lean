@@ -81,7 +81,8 @@ The premise holds only for programs that do not. The item is lifted when its rec
 placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a
 no-throw proof covers the native layout, including the address-dependent safety checks
 (`@alignCast`, the alignment check of `@ptrFromInt`). Stack overflow (MM-5): a recursive function
-that uses memory charges its frame to the stack budget `Mem.stackLimit` and throws
+that uses memory charges its frame, and every stack block its size, to the thread's stack
+budget (`Mem.withStack`, MM-16) and throws
 `.stackOverflow` when it does not fit; a statement without a budget assumes that the native stack
 holds every call chain (premise STK-01), which the claim tooling lists for such a goal.
 

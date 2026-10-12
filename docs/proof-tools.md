@@ -299,8 +299,8 @@ measure. Each recursive call site discharges the decrease when it applies `ih`.
 (self-recursive, the second argument decreases by `a % b < b`), the mutual `isEven`/`isOdd`
 group and `fact` (a range premise carried through `ih`). The memory-backed `Pointers.addDown`
 is not covered: it charges its frame to the stack budget (MM-5, `Zig.enterFrame`), and a
-`TotalTriple` over every memory does not hold under a small `Mem.stackLimit` until the
-separation layer carries the stack premise (STK-01).
+`TotalTriple` over every memory does not hold under a small stack budget (`Mem.withStack`) until
+the full-state logic carries the stack-depth resource (`docs/sep-full-state.md` §Stack depth).
 
 Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range
 Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean`, then run
