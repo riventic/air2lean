@@ -143,14 +143,49 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
   end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
   as it is has its thread rule directly (`FTTotalTriple.of_read`). Each primitive then has one
-  statement, its thread rule (`FTTotalTriple.ofSeq` of the sequential proof and its locality),
-  and the `@[fsym]` sequential rule is `.toFTotalTriple` of it.
+  proof: its thread rule is `FTTotalTriple.ofSeq` of the sequential rule and its locality (or
+  the sequential rule is `.toFTotalTriple` of a thread rule proved directly).
+
+  Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
+  `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
+  `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
+  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `region_add`,
+  `regionIn_add`, `regionIn_start`.
 
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. Next: `Arr`, `Typed`,
-  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`; their locality must show
-  `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
+  `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
+  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
+  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
+  `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
+  `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
+  `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
+  its locality, statements unchanged; the pointer order and bounds checks read no byte, so their
+  thread rules are the proofs and the sequential rules are read from them. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
+  `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
+  an old block alive).
+
+  **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
+  check passes only if no recorded write to the global is concurrent with the reader. Every
+  write that is recorded went through `Mem.accessW` (or a mapping's kind check), which rejects a
+  `const` global, so no reachable memory has one; but `Mem.FConc` does not say so, and a thread
+  rule must hold in every `FConc` memory. Counterexample to `FTTotalTriple.cload` as stated: a
+  memory whose footprint has a write by thread 1 to a live `const` block, concurrent with thread
+  0, where thread 0 holds `cpts` of it (knowledge only: `Mem.kn` reads the blocks); the load
+  throws `.illegal`. A thread rule needs a memory invariant "no recorded write to a `const`
+  block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts.
+  Decided (coordinator): the invariant goes into `FConc`, proved preserved by every step.
+
+  **Open: `mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
+  `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a
+  recorded access, so the thread owns them only if every recorded access to those offsets
+  happened before its clock. The precondition holds the extent (`bext`) and at most the old
+  bytes; the extent is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
+  `S` (its `munmap` of the old tail, concurrent with thread 0) makes the post's ownership false.
+  A thread rule needs ownership of a whole extent (or of the mapping's claim, `Full/Claims`) to
+  cover every recorded access to the block's offsets past its end. Decided (coordinator): a
+  model fix, not a logic patch: bytes that a growth (or any revival) brings to life start with
+  no access history, as the bytes of a new block do (natively `mremap` maps new pages).
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
@@ -209,8 +244,11 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
   (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
 * **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
-  `join_regain` are `FOwned.fork`/`join`.
+  `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
+  `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
 * **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
+  Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
+  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/ThreadBridge.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
 * **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
@@ -309,7 +347,7 @@ theorems (`## Strength` at the end of the file).
 | T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
-| T4 | `Transfer`, `SpawnLemmas`, `Detach`, `TlsLemmas` restated; `spawn-failure`, `thread-locals`, `thread-tuples`, `detached-threads` | next |
+| T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`); clients next |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |

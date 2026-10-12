@@ -1082,7 +1082,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Full.AutoAll ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Explicit array framing regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1096,14 +1096,6 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
-
-      # Legacy step tactics on the generated array clients, until the library has array rules
-      # (Full/Arr); the other step, frame and total scenarios are fsym regressions in sep-auto.
-      - name: Symbolic-execution step regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/StepClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/StepClients.log"
 
       - name: Concrete runs of programs with loops (unroll_sched)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1124,7 +1116,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1335,6 +1327,17 @@ jobs:
           set -euo pipefail
           lake build ZigLean ZigLean.External.Callback ZigLean.Sep.Loop Proofs.Asm.Effects
           bash tests/roadmap/callbacks/check.sh
+
+      # Open interfaces (docs/interfaces.md): a std.mem.Allocator or std.Random parameter's calls
+      # go to the environment's implementation (Ext, premise EXT-05), on every Zig version.
+      - name: Open interfaces
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto \
+            ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim ZigLean.Sep.Full.Typed \
+            ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
+          bash tests/roadmap/interfaces/check.sh
 
       - name: Validate check-only diagnostic collection
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
