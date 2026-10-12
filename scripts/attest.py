@@ -167,15 +167,15 @@ def verify(path, allowed_signers, manifests=(), receipts=(), files=(), principal
     fingerprint = verify_signature(statement, signature, allowed_signers, named, verify_time)
     demand(pin is None or fingerprint == pin, 'signing key %s is not the pinned key %s' % (fingerprint, pin))
     supplied = collect(manifests, receipts, files)
-    matched = set()
+    free = list(range(len(supplied)))
     for subject in statement['subjects']:
-        hits = [i for i, s in enumerate(supplied)
-                if s['kind'] == subject['kind'] and s['files'] == subject['files']
-                and s.get('manifest_sha256') == subject.get('manifest_sha256')]
-        demand(hits, 'attested %s %r matches no supplied artifact (edited, replaced or missing)'
+        hit = next((i for i in free if supplied[i]['kind'] == subject['kind'] and supplied[i]['name'] == subject['name']
+                    and supplied[i]['files'] == subject['files']
+                    and supplied[i].get('manifest_sha256') == subject.get('manifest_sha256')), None)
+        demand(hit is not None, 'attested %s %r matches no supplied artifact (edited, replaced or missing)'
                % (subject['kind'], subject['name']))
-        matched.update(hits)
-    demand(len(matched) == len(supplied), 'a supplied artifact is not covered by the attestation')
+        free.remove(hit)  # one artifact covers one subject
+    demand(not free, 'a supplied artifact is not covered by the attestation')
     return {'status': 'attested', 'principal': named, 'key_fingerprint': fingerprint,
             'subjects': [{'kind': s['kind'], 'name': s['name']} for s in statement['subjects']]}
 

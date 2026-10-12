@@ -562,6 +562,11 @@ def run_row(root, request, zig, difftest, timeout):
 def diff_row_confirm(root, replay, zig, difftest, timeout):
     """Replay the recorded row; `verified` only when both fresh lines equal the recorded ones."""
     request = replay['request']
+    # A bundle is untrusted input: names must be identifiers and the row must be the hashed one.
+    if not (isinstance(request, dict) and all(isinstance(request.get(k), str) for k in ('example', 'function', 'row', 'row_sha256'))
+            and REPORT.IDENT.fullmatch(request['example']) and REPORT.IDENT.fullmatch(request['function'])
+            and hashlib.sha256((request['row'] + '\n').encode()).hexdigest() == request['row_sha256']):
+        return dict(status='error', detail='malformed row-replay request')
     if diff_row_sources(root, request['example']) != request['sources_sha256']:
         return dict(status='error', detail='harness, example or runner sources changed since the bundle was written')
     try: current = CLI.row(root/'tests/diff'/request['example']/'inputs'/f"{request['function']}.jsonl", request['input_index'])

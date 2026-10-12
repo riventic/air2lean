@@ -304,8 +304,8 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             for module, limits in sorted((budget.get("modules") or {}).items()):
                 got = (result.get("modules") or {}).get(module)
                 if got is None:
-                    if result.get("modules") is not None:
-                        add("missing-phase", ident, f"hotspot module {module} is absent from the per-module timings")
+                    add("missing-phase", ident, f"hotspot module {module} has no timing "
+                        "(record with --per-module)")
                     continue
                 seconds = got.get("seconds")
                 if not isinstance(seconds, (int, float)):
@@ -365,8 +365,10 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
                 or calibration.get("sha256") != digest(ROOT / CALIBRATION):
             raise ValueError("the measurement's calibration is invalid or ran another calibration file")
         unit = calibration["seconds"]
-        updated["calibration"] = {"file": CALIBRATION, "sha256": calibration["sha256"],
-                                  "baseline_seconds": unit, "runs": calibration.get("runs")}
+        # A partial rebaseline keeps the recorded unit of the other workloads (same reference platform).
+        kept = updated.get("calibration") if only else None
+        updated["calibration"] = kept or {"file": CALIBRATION, "sha256": calibration["sha256"],
+                                          "baseline_seconds": unit, "runs": calibration.get("runs")}
         updated.setdefault("normalized_tolerance", {"lean": {"time_ratio": 2.0, "time_slack_units": 2.0,
                                                              "module_slack_units": 1.0}})
     elif updated.get("calibration") and only:

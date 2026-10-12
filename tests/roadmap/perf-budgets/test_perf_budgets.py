@@ -297,7 +297,7 @@ class NormalizedGate(unittest.TestCase):
         slow = calibrated_measurement(scale=4.0, modules={"Proofs.Basic.Proofs": 30.0})
         self.assertEqual(perf.gate(budgets, slow, normalized=True), (0, []))
         self.assertEqual(perf.gate(budgets, slow)[0], 1)                         # the reference limits are for the reference machine
-        code, findings = perf.gate(budgets, calibrated_measurement(scale=4.0, proof_scale=3.5), normalized=True)
+        code, findings = perf.gate(budgets, calibrated_measurement(scale=4.0, proof_scale=3.5, modules={"Proofs.Basic.Proofs": 30.0}), normalized=True)
         self.assertEqual((code, kinds(findings)), (1, ["time-regression"]))
         self.assertEqual({item["phase"] for item in findings}, {"proof.cold"})
         self.assertIn("calibration units", findings[0]["message"])
@@ -310,7 +310,7 @@ class NormalizedGate(unittest.TestCase):
         self.assertTrue(all("Proofs.Basic.Proofs" in item["message"] for item in findings))
         absent = calibrated_measurement(modules={"Proofs.Basic.Gen": 1.0})
         self.assertEqual(perf.gate(budgets, absent, normalized=True)[0], 1)    # a budgeted hotspot is not silently dropped
-        self.assertEqual(perf.gate(budgets, calibrated_measurement(), normalized=True), (0, []))  # no per-module run: nothing to compare
+        self.assertEqual(perf.gate(budgets, calibrated_measurement(), normalized=True)[0], 1)  # no per-module run: fail closed
 
     def test_a_partial_measurement_gates_only_its_workloads(self):
         budgets = calibrated_budgets({"Proofs.Basic.Proofs": 30.0})
