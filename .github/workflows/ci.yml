@@ -44,6 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job generated --row "$AIR2LEAN_ROW"
 
@@ -99,6 +100,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job provenance --row "$AIR2LEAN_ROW"
 
@@ -500,6 +502,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job test --row "$AIR2LEAN_ROW"
 
@@ -2381,6 +2384,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job macos --row "$AIR2LEAN_ROW"
 
@@ -2669,6 +2673,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job aarch64-linux --row "$AIR2LEAN_ROW"
 
@@ -2784,6 +2789,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job build-modes-aarch64-linux --row "$AIR2LEAN_ROW"
 
@@ -2920,6 +2926,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_QUEUE_REUSE: ${{ vars.AIR2LEAN_QUEUE_REUSE }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job bitops-native-arm --row "$AIR2LEAN_ROW"
 

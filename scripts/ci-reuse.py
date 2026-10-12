@@ -48,6 +48,9 @@ GUARD = '!env.AIR2LEAN_REUSED'
 RUN_SPECIFIC = re.compile(r'\$\{\{[^}]*\bgithub\.(?!workspace\b)')
 # Producer events whose records a pull_request run may reuse (never a fork: see lookup()).
 RECORD_EVENTS = ('pull_request', 'merge_group', 'workflow_dispatch')
+# A merge_group run reuses only when the repository variable AIR2LEAN_QUEUE_REUSE is '1' (a
+# maintainer decision, docs/ci.md#reuse-in-the-merge-queue), and only records of full runs.
+QUEUE_RECORD_EVENTS = ('merge_group', 'workflow_dispatch')
 DECLARATION_KEYS = {'reuse', 'inputs', 'listings', 'tree_names', 'commit_bound', 'note'}
 
 _spec = importlib.util.spec_from_file_location('air2lean_release_record', ROOT / 'scripts/release-record.py')
@@ -763,7 +766,7 @@ def api(path, token, base=None):
         return json.loads(response.read())
 
 
-def lookup(key, job_name, repository, token, fetch=api):
+def lookup(key, job_name, repository, token, fetch=api, events=RECORD_EVENTS):
     """The newest acceptable record of `key`: (run id, run URL, job id) or None.
 
     Accepted only from this repository's CI workflow (never a fork's head repository), from a
@@ -777,7 +780,7 @@ def lookup(key, job_name, repository, token, fetch=api):
         if source.get('head_repository_id') != source.get('repository_id') or not source.get('id'):
             continue
         run = fetch('/repos/%s/actions/runs/%d' % (repository, source['id']), token)
-        if (run.get('path') != WORKFLOW or run.get('name') != WORKFLOW_NAME or run.get('event') not in RECORD_EVENTS
+        if (run.get('path') != WORKFLOW or run.get('name') != WORKFLOW_NAME or run.get('event') not in events
                 or (run.get('head_repository') or {}).get('full_name') != repository):
             continue
         page = 1
@@ -826,10 +829,12 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     (out / 'manifest.json').write_text(canonical(preimage))
     lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key]
     message = '**%s** input key `%s`' % (part, key)
-    if event == 'pull_request':
+    queue_reuse = event == 'merge_group' and environ.get('AIR2LEAN_QUEUE_REUSE') == '1'
+    if event == 'pull_request' or queue_reuse:
         found = None
         try:
-            found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch)
+            found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
+                           QUEUE_RECORD_EVENTS if queue_reuse else RECORD_EVENTS)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             print('record lookup failed (%s): the part runs' % error)
         chosen = self_check_part(environ, [p for p in parts(load_workflow(root))

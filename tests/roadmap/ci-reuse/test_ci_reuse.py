@@ -370,6 +370,12 @@ class Lookup(unittest.TestCase):
         for artifacts, run, jobs in cases:
             self.assertIsNone(cr.lookup('k', 'test (x)', self.REPO, 't', self.fetch_for(artifacts, run, jobs)))
 
+    def test_queue_reuses_only_records_of_full_runs(self):
+        for event, accepted in (('merge_group', True), ('workflow_dispatch', True), ('pull_request', False)):
+            found = cr.lookup('k', 'test (x)', self.REPO, 't', self.fetch_for([self.artifact()], self.run_data(event=event),
+                                                                            self.JOBS), events=cr.QUEUE_RECORD_EVENTS)
+            self.assertEqual(found is not None, accepted, event)
+
     def test_self_check_choice_is_one_part_per_run(self):
         parts = ['a', 'b', 'c', 'd']
         chosen = {cr.self_check_part({'GITHUB_RUN_ID': str(i), 'GITHUB_RUN_ATTEMPT': '1'}, parts) for i in range(40)}

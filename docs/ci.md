@@ -204,7 +204,8 @@ that the queue then rejects; it can never merge an unchecked change.
   commit that reached `main` outside the queue). No `push` trigger: the queue already tested the
   exact commit that `main` advances to.
 - `pull_request` runs: reuse on, the PR's merge with `main` checked out. `merge_group` and `workflow_dispatch`
-  runs: reuse off, every part executes and is traced, and records are written.
+  runs: reuse off (unless the maintainer turns on [reuse in the merge
+  queue](#reuse-in-the-merge-queue)), every part executes and is traced, and records are written.
 - `all-checks` aggregates every job; it is the one required status.
 - Repository ruleset `main-protection` on `main` (applied with `gh api`, 2026-10-12):
   required status check `all-checks` (integration: GitHub Actions), merge queue with merge method
@@ -219,13 +220,51 @@ that the queue then rejects; it can never merge an unchecked change.
 ### Coordinator merge flow
 
 1. The PR is green (`all-checks`) on its head, after `/review` and `/simple`.
-2. `gh pr merge <N> --merge --auto` (or "Merge when ready" in the UI) adds it to the queue;
-   with no further checks pending it enters the queue at once.
+2. Enqueue it. While the repository setting "Allow auto-merge" is off, `gh pr merge <N> --merge
+   --auto` fails; enqueue the verified head directly (fails if the head moved):
+
+   ```
+   gh api graphql -f id="$(gh pr view <N> --json id -q .id)" -f head=<verified head sha> -f query='
+     mutation($id: ID!, $head: GitObjectID!) {
+       enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) {
+         mergeQueueEntry { position state } } }'
+   ```
+
+   With auto-merge on, `gh pr merge <N> --merge --auto` (or "Merge when ready") does the same
+   once the checks are green.
 3. The queue builds `main` + the PRs ahead of it + this PR as a `merge_group` commit and runs
    the full CI on it; on green it fast-forwards `main` to that commit, on red it removes the PR
    and comments. `gh pr merge <N> --disable-auto` leaves the queue.
 4. Integration failures appear only in the queue; merge `main` into a PR branch before
    queueing when `main` moved under it substantially.
+
+### Reuse in the merge queue
+
+Docs-only PR #149 took 29.5 min in the queue (`merge_group` run 38220406483, 07:54-08:24Z
+2026-10-12): every one of its 35 jobs executed, because a `merge_group` run never reuses
+(item 1: reuse affects only PR feedback; the queue run is each `main` commit's full evidence).
+286 runner-minutes, longest jobs `mutation/3` 18.1, macOS 0.15.2 20.2, `audit` 17.0,
+`receipt` 16.4 min.
+
+`AIR2LEAN_QUEUE_REUSE` (repository variable, default unset) lets a `merge_group` run reuse a
+part whose key matches a record of an earlier `merge_group` or `workflow_dispatch` run (never a
+PR run's record): `gh variable set AIR2LEAN_QUEUE_REUSE --body 1`. The key argument is the same
+as for PRs, and the self-check still re-executes one part per run. Consequences, which make it a
+maintainer decision:
+
+- A `main` commit's queue run no longer executes every gate: `scripts/release-record.py` lists
+  a reused gate as missing, so a release needs a `workflow_dispatch` run on its commit.
+- What it saves for a docs-only change, from run 38220406483: the eight narrowed Linux rows
+  (five mutation shards, three build modes), `test/0.14.1/lean` and the three aarch64-linux jobs,
+  about 105 of 286 runner-minutes. The wall time stays about 17-20 min: the rows that are
+  `commit_bound` (0.16.0 `golden`, `lean`, `inputs`, `native`, `receipt`; the golden rows of the
+  other versions; the macOS rows), the rows that read `docs/` (lean 0.15.2 and 0.17.0) and the
+  `"reuse": false` jobs (`audit`, `generated`, `provenance`) always run.
+- A docs-only queue run of a few minutes needs the commit-bound rows to become content-keyed.
+  Their gates read `HEAD`: build-guard, perf-budget and assumption reports record it, the
+  receipt and the generated-branch regressions bind it. Recording the tree instead where only
+  in-run consistency is checked (a tree-bound key) is the next step; macOS rows cannot be traced
+  (no strace) and stay commit-bound.
 
 ### Whole-tree generated files
 
@@ -420,8 +459,9 @@ arm64 16-17 min instead of 8.4, golden 0.17.0 19 instead of 11, mutation shards 
 5. Reuse: tracer, checker, declarations derived from traces of this PR's own CI runs, records,
    lookup, self-check, release-record handling of reused gates.
 6. After merge: ruleset with `all-checks` and the merge queue (`gh api`), verified with a test PR.
-7. Later, maintainer decision after a clean self-check record: reuse in `merge_group` runs for
-   parts whose key matches a record from a `merge_group` run.
+7. Maintainer decision after a clean self-check record: set `AIR2LEAN_QUEUE_REUSE=1` (reuse in
+   `merge_group` runs for parts whose key matches a record from a `merge_group` or
+   `workflow_dispatch` run; implemented, off by default).
 
 ## Expected savings
 
