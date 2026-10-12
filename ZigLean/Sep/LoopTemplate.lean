@@ -160,18 +160,37 @@ def reportPremises (goals : List MVarId) : TacticM Unit := do
 `loop_template?` without an invariant reads the loop body (one definition unfolding, no
 evaluation) and prints suggestions; it proves nothing and leaves the goal unchanged. It follows
 only the generated shapes: locals read by `(← get).f`, writes by `modify (fun s => { s with … })`,
-checked `Zig.add`/`Zig.sub` steps of a local by a literal, and unsigned `Zig.lt`/`le`/`gt`/`ge`
-guards. From a counter that steps towards a bound it suggests a measure and a bound invariant;
-given a postcondition (`loop_template? _ post`) it also suggests the postcondition with that
-bound replaced by the counter. A nested loop's body, calls, memory and any other shape are not
-followed and are reported as such. -/
+checked `Zig.add`/`Zig.sub` steps of a local by a positive literal `k`, loads, and
+`Zig.lt`/`le`/`gt`/`ge` guards.
+
+* A counter that steps towards a fixed bound (every write is a step the same way): a measure and
+  a bound invariant, in `Nat` for an unsigned guard and in `Int` for a signed one. The slack is
+  `k - 1` for a strict guard and `k` otherwise, so the invariant survives the last step.
+* The side premise of the step: the checked add or sub must not overflow on a repeat. It is
+  reported as discharged by the guard (`k = 1` under a strict guard) or as a premise to supply
+  (`bound + k - 1 < 2^w`, `k ≤ bound + 1`, and their signed forms).
+* A counter that is also reset to a value from outside the loop (a reset counter): its own
+  measure can grow, so it gets none. With another counter that has a measure `μ`, the
+  lexicographic candidate `μ s * (R + 1) + μ' s` is suggested, where `μ'` is the reset counter's
+  measure and `R` its largest value; it is valid when every path that resets the counter steps
+  the other one.
+* A local written only from a load (a pointer that follows a link: a list walk): a ghost measure
+  is suggested, the number of nodes from that local in the invariant's representation predicate.
+* Given a postcondition (`loop_template? _ post`), the postcondition with the bound replaced by
+  the counter.
+
+A nested loop's body, calls, other memory shapes and other side premises are not followed and
+are reported as such. -/
 
 /-- What inference knows about a value of the loop body. -/
 inductive Src where
   | state
   | field (f : Name)
-  | step (f : Name) (up : Bool)
+  /-- `f + k` (`up`) or `f - k` by a checked `Zig.add`/`Zig.sub` of the literal `k > 0`. -/
+  | step (f : Name) (up : Bool) (k : Nat)
   | outer (e : Expr)
+  /-- A value read from memory. -/
+  | loaded
   | other
   deriving Inhabited
 
@@ -191,6 +210,15 @@ def bindLocal (n : Name) (ty : Expr) (src : Src) (k : Expr → InferM Unit) : In
                                vals := st.vals.insert x.fvarId! src }
     k x
 
+/-- A natural-number literal. -/
+def litNat? (e : Expr) : Option Nat :=
+  let e := e.consumeMData
+  if e.isAppOfArity ``OfNat.ofNat 3 then
+    match e.getArg! 1 |>.consumeMData with
+    | .lit (.natVal k) => some k
+    | _ => none
+  else none
+
 /-- Classify a value of the body. -/
 partial def classify (structName : Name) (e : Expr) : InferM Src := do
   let e := e.consumeMData.headBeta
@@ -204,8 +232,11 @@ partial def classify (structName : Name) (e : Expr) : InferM Src := do
     if c == ``Pure.pure && args.size == 4 then return ← classify structName args[3]!
     if c == ``MonadState.get || c == ``MonadStateOf.get || c == ``StateT.get || c == ``getThe then
       return .state
-    if (c == ``Zig.add || c == ``Zig.sub) && args.size == 4 && args[3]!.isAppOf ``OfNat.ofNat then
-      if let .field f ← classify structName args[2]! then return .step f (c == ``Zig.add)
+    if (c == ``Zig.add || c == ``Zig.sub) && args.size == 4 then
+      if let some k := litNat? args[3]! then
+        if k > 0 then
+          if let .field f ← classify structName args[2]! then return .step f (c == ``Zig.add) k
+    if c == ``Zig.load && args.size == 4 then return .loaded
     if let some info ← getProjectionFnInfo? c then
       if c.getPrefix == structName && args.size == info.numParams + 1 then
         if let .state ← classify structName args[info.numParams]! then return .field (.mkSimple c.getString!)
@@ -265,6 +296,19 @@ partial def walk (structName ctor : Name) (e : Expr) : InferM Unit := do
   | .proj _ _ x => walk structName ctor x
   | _ => pure ()
 
+/-- A counter candidate of a guard: the local, its direction, its largest step, the bound,
+whether the guard is signed and strict, and whether the local is also reset. -/
+structure Counter where
+  f : Name
+  up : Bool
+  k : Nat
+  bound : Expr → MetaM Expr
+  boundShown : MessageData
+  signed : Bool
+  strict : Bool
+  reset : Bool
+  op : Name
+
 /-- Suggestions for the loop in the goal; `post?` is the user's postcondition, if any. -/
 def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.withContext do
   let some loop := (← instantiateMVars (← g.getType)).find? (·.isAppOfArity ``Zig.loop 7)
@@ -281,51 +325,94 @@ def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.with
   let ((), facts) ← (walk structName ctorVal.name unfolded).run {}
   let written := fields.filter fun f => facts.writes.any (·.1 == f)
   let unchanged := fields.filter (!written.contains ·)
-  -- The direction of `f`, if every write of `f` steps it the same way by a literal.
-  let direction (f : Name) : Option Bool :=
-    let ws := facts.writes.filterMap fun (w : Name × Src) => if w.1 == f then some w.2 else none
-    let dirs := ws.filterMap fun
-      | .step f' up => if f' == f then some up else none
-      | _ => none
-    if dirs.size == ws.size then dirs[0]?.filter fun up => dirs.all (· == up) else none
+  let writesOf (f : Name) : Array Src :=
+    facts.writes.filterMap fun (w : Name × Src) => if w.1 == f then some w.2 else none
+  let stepsOf (f : Name) : Array (Bool × Nat) := (writesOf f).filterMap fun
+    | .step f' up k => if f' == f then some (up, k) else none
+    | _ => none
+  -- The direction and the largest step of `f`, if every step goes the same way; `reset`: the
+  -- other writes set it to a value from outside the loop.
+  let counter (f : Name) : Option (Bool × Nat × Bool) :=
+    let ws := writesOf f
+    let ss := stepsOf f
+    let resets := ws.filter fun | .outer _ => true | _ => false
+    match ss[0]? with
+    | some (up, _) =>
+      if ss.all (·.1 == up) && ss.size + resets.size == ws.size then
+        some (up, ss.foldl (fun (k : Nat) (st : Bool × Nat) => Nat.max k st.2) 0, !resets.isEmpty)
+      else none
+    | none => none
+  let width (f : Name) : MetaM (Option Nat) := withLocalDeclD `s σ fun s => do
+    let t ← whnf (← inferType (← mkProjection s f))
+    if t.isAppOfArity ``BitVec 1 then evalNat t.appArg! else pure none
   let names (xs : Array Name) := if xs.isEmpty then m!"(none)" else
     MessageData.joinSep (xs.toList.map (m!"{·}")) m!", "
   let mut lines : Array MessageData := #[
     m!"loop-carried locals (written by the body): {names written}",
     m!"unchanged locals: {names unchanged}"]
   let mut found := false
+  let mut plain : Array (Counter × Expr) := #[]
+  let mut resets : Array Counter := #[]
   for (op, signed, a, b) in facts.guards do
     -- Normalize to `lo < hi` / `lo ≤ hi`.
     let (lo, hi, strict) := if op == ``Zig.lt || op == ``Zig.le then (a, b, op == ``Zig.lt)
       else (b, a, op == ``Zig.gt)
-    if signed then
-      lines := lines.push m!"guard {op}: signed comparison, no measure inferred"
-      continue
-    -- The counter moves towards the bound by a checked step; the bound does not change.
-    let pick : Option (Name × Bool × Src) := match lo, hi with
-      | .field f, b => if direction f == some true then some (f, true, b) else none
-      | b, .field f => if direction f == some false then some (f, false, b) else none
-      | _, _ => none
-    let some (f, up, bnd) := pick
+    -- The counter moves towards the bound by a checked step.
+    let pick : Option (Name × Bool × Nat × Bool × Src) :=
+      (match lo with
+        | .field f => (counter f).bind fun (up, k, r) => if up then some (f, up, k, r, hi) else none
+        | _ => none) <|>
+      (match hi with
+        | .field f => (counter f).bind fun (up, k, r) => if up then none else some (f, up, k, r, lo)
+        | _ => none)
+    let some (f, up, k, reset, bnd) := pick
       | lines := lines.push m!"guard {op}: no local steps towards a fixed bound, no measure inferred"
         continue
-    let bound? : Option (Expr → MetaM Expr) := match bnd with
-      | .outer e => some fun _ => pure e
-      | .field f' => if unchanged.contains f' then some (mkProjection · f') else none
+    let bound? : Option ((Expr → MetaM Expr) × MessageData) := match bnd with
+      | .outer e => some (fun _ => pure e, m!"{e}")
+      | .field f' => if unchanged.contains f' then some ((mkProjection · f'), m!"s.{f'}") else none
       | _ => none
-    let some bound := bound?
+    let some (bound, shown) := bound?
       | lines := lines.push m!"guard {op}: the bound of {f} changes in the loop, no measure inferred"
         continue
-    found := true
-    let slack := if strict then 0 else 1
+    let c : Counter := { f, up, k, bound, boundShown := shown, signed, strict, reset, op }
+    if reset then
+      resets := resets.push c
+      continue
+    -- The slack keeps the invariant after the last step: `k - 1` (strict) or `k`.
+    let slack := if strict then k - 1 else k
     let (measure, inv) ← withLocalDeclD `s σ fun s => do
-      let c ← mkAppM ``BitVec.toNat #[← mkProjection s f]
-      let b ← mkAppM ``BitVec.toNat #[← bound s]
-      let b := if slack == 0 then b else mkNatAdd b (mkNatLit slack)
-      let (lo, hi) := if up then (c, b) else (b, c)
-      pure (← mkLambdaFVars #[s] (mkNatSub hi lo), ← mkLambdaFVars #[s] (← mkAppM ``LE.le #[lo, hi]))
+      let conv := if signed then ``BitVec.toInt else ``BitVec.toNat
+      let cv ← mkAppM conv #[← mkProjection s f]
+      let bv ← mkAppM conv #[← bound s]
+      let addSlack (x : Expr) : MetaM Expr :=
+        if slack == 0 then pure x
+        else if signed then mkAppM ``HAdd.hAdd #[x, toExpr (slack : Int)]
+        else pure (mkNatAdd x (mkNatLit slack))
+      let (lo, hi) ← if up then pure (cv, ← addSlack bv) else pure (bv, ← addSlack cv)
+      let m ← if signed then mkAppM ``Int.toNat #[← mkAppM ``HSub.hSub #[hi, lo]]
+        else pure (mkNatSub hi lo)
+      pure (← mkLambdaFVars #[s] m, ← mkLambdaFVars #[s] (← mkAppM ``LE.le #[lo, hi]))
+    found := true
+    plain := plain.push (c, measure)
     lines := lines.push m!"measure candidate: {measure}"
     lines := lines.push m!"bound invariant candidate: {inv}"
+    -- The side premise of the step on a repeat.
+    let w? ← width f
+    let stepShown := m!"{f} {if up then "+" else "-"} {k}"
+    let side : Option MessageData := match w?, signed, up, strict with
+      | _, _, _, true => if k == 1 then none else match signed, up with
+        | false, true => some m!"{shown}.toNat + {k - 1} < 2^{w?.getD 0}"
+        | false, false => some m!"{k} ≤ {shown}.toNat + 1"
+        | true, true => some m!"{shown}.toInt + {k - 1} < 2^{w?.getD 1 - 1}"
+        | true, false => some m!"-2^{w?.getD 1 - 1} ≤ {shown}.toInt + 1 - {k}"
+      | _, false, true, false => some m!"{shown}.toNat + {k} < 2^{w?.getD 0}"
+      | _, false, false, false => some m!"{k} ≤ {shown}.toNat"
+      | _, true, true, false => some m!"{shown}.toInt + {k} < 2^{w?.getD 1 - 1}"
+      | _, true, false, false => some m!"-2^{w?.getD 1 - 1} ≤ {shown}.toInt - {k}"
+    lines := lines.push <| match side with
+      | none => m!"side premise of the step {stepShown}: discharged by the guard (no overflow)"
+      | some p => m!"side premise of the step {stepShown} (no overflow on a repeat): {p}"
     -- With a postcondition: replace a bound from outside the loop by the counter.
     if let (some post, .outer be) := (post?, bnd) then
       let postT ← inferType post
@@ -341,13 +428,46 @@ def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.with
         some <$> mkLambdaFVars xs replaced
       if let some cand := cand then
         lines := lines.push m!"postcondition with {be} replaced by {f}: {cand}"
+  -- Reset counters: lexicographic with a counter that has a measure.
+  for c in resets do
+    let outer := plain.find? fun (p, _) => p.f != c.f
+    match outer, c.signed with
+    | some (p, μ), false =>
+      let slack := if c.strict then c.k - 1 else c.k
+      let lex ← withLocalDeclD `s σ fun s => do
+        let plus (x : Expr) := if slack == 0 then x else mkNatAdd x (mkNatLit slack)
+        let cv ← mkAppM ``BitVec.toNat #[← mkProjection s c.f]
+        let b0 ← mkAppM ``BitVec.toNat #[← c.bound s]
+        let bv := plus b0
+        let inner := if c.up then mkNatSub bv cv else mkNatSub (plus cv) b0
+        -- The reset counter's measure is at most `R` (its unsigned bound plus the slack, or
+        -- the width's range when it counts down).
+        let range ← if c.up then pure bv else do
+          let some w ← width c.f | pure (mkNatLit 0)
+          pure (mkNatLit (2 ^ w))
+        mkLambdaFVars #[s] (mkNatAdd (mkNatMul (μ.beta #[s]) (mkNatAdd range (mkNatLit 1))) inner)
+      found := true
+      lines := lines.push m!"{c.f} steps towards its bound but is also reset; valid if every path \
+        that resets {c.f} steps {p.f}:"
+      lines := lines.push m!"lexicographic measure candidate: {lex}"
+    | _, _ =>
+      lines := lines.push m!"guard {c.op}: {c.f} steps towards its bound but is also reset, and no \
+        other counter has a measure: no measure inferred"
+  -- Pointer-chasing locals: a ghost measure.
+  let chasing := written.filter fun f =>
+    let ws := writesOf f
+    !ws.isEmpty && ws.all fun | .loaded => true | _ => false
+  for f in chasing do
+    lines := lines.push m!"{f} is written from a load (a list walk): ghost measure candidate: the \
+      number of nodes from s.{f} in the invariant's representation predicate, \
+      e.g. inv s n := ∃ zs, ⌜zs.length = n⌝ ∗ list s.{f} zs"
   unless found do
-    lines := lines.push m!"measure: not inferred (no unsigned counter steps towards a fixed bound); \
-      supply a ghost measure, e.g. the number of remaining items"
+    lines := lines.push m!"measure: no counter measure inferred; supply a ghost measure, e.g. the \
+      number of remaining items"
   for n in facts.nested do
     lines := lines.push m!"nested loop {n}: not followed; give it its own template (LoopTemplate.run)"
-  lines := lines.push m!"not inferred: side premises (overflow and range bounds), the values of the \
-    other carried locals, memory shapes"
+  lines := lines.push m!"not inferred: side premises of other operations (overflow and range \
+    bounds), the values of the other carried locals, memory shapes"
   return m!"loop_template? suggestions (unchecked, nothing is proved):" ++
     MessageData.joinSep (lines.toList.map (m!"\n  " ++ ·)) m!""
 

@@ -13,7 +13,8 @@ on entry and releases it on return (MM-5). Under a stack budget a deep enough ca
 `.stackOverflow`; so no `TotalTriple` of it holds (`addDown_not_total`), and its total
 correctness is a `TotalTripleStk` with the room it needs: `n + 1` frames (`addDown_total`).
 
-The proof is the general machinery only: `rec_template` supplies the induction on `n.toNat`,
+The proof is the general machinery only: `rec_template` infers the measure `n.toNat` from the
+recursive call and supplies the induction,
 `sep_unfold`/`sep_step`/`sep_steps` walk the generated body (the frame bracket, the load, the
 checked add, the store, the checked sub and the recursive call through `ih`), and the module
 supplies the specification, the measure and the arithmetic facts of its checked operations.
@@ -37,8 +38,9 @@ theorem addDown_total (acc : Ptr) : ∀ (n : BitVec 32) (v : BitVec 64),
     v.toNat + tri n.toNat < 2 ^ 64 →
     TotalTripleStk (pts acc 8 v) (Pointers.addDown acc n)
       (fun _ => pts acc 8 (BitVec.ofNat 64 (v.toNat + tri n.toNat))) ((n.toNat + 1) * frameBase) 0 := by
-  rec_template (fun (n : BitVec 32) (_ : BitVec 64) => n.toNat) unfolding Pointers.addDown
-  intro hfit
+  -- The measure `n.toNat` is inferred from the recursive call `addDown acc (n - 1)`.
+  rec_template _ unfolding Pointers.addDown
+  intro v hfit
   sep_unfold
   sep_step
   by_cases hn0 : n = (0 : BitVec 32)
@@ -63,7 +65,7 @@ theorem addDown_total (acc : Ptr) : ∀ (n : BitVec 32) (v : BitVec 64),
       rw [Zig.toNat_add_of_lt (by omega), hw]
     sep_steps [Zig.intCast_unsigned_widen n 64 (by decide), hadd, hsub]
     -- The recursive call: a smaller measure, and its `n` frames fit in the room that is left.
-    sep_step using ih (n - 1) (v + n.setWidth 64) (by omega) (by rw [hv, hn]; omega)
+    sep_step using ih (n - 1) (by omega) (v + n.setWidth 64) (by rw [hv, hn]; omega)
     sep_step
     sep_ret
     intro h hp

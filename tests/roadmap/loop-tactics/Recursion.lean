@@ -120,7 +120,76 @@ theorem fact_spec : ∀ n : BitVec 32, n.toNat ≤ 12 →
       rw [BitVec.toNat_mul, BitVec.toNat_ofNat, hmod, BitVec.toNat_ofNat, hn]; rfl
     simp [zig_unfold, hn0, hres, hn, hnomul, hmuleq]
 
+/-! ## Inferred measures
+
+`rec_template? _ unfolding …` reads the group's recursive calls and infers the measure: `gcd`'s
+second argument becomes `a % b` (below `b` when `b ≠ 0`), `isEven`/`isOdd` call each other at
+`n - 1`. The decrease is still discharged where `ih` is applied. -/
+
+/-- info: rec_template? measure inference (unchecked until `ih` is applied):
+  call Recursion.gcd → Recursion.gcd:
+    argument 1: no decrease recognized
+    argument 2: x % p: smaller than p1; side premise: p1 ≠ 0
+  measure candidate (argument 2): fun a b => b.toNat
+---
+info: rec_template remaining premise (1):
+  step : ∀ (a b : BitVec 32),
+  (∀ (a b_1 : BitVec 32), b_1.toNat < b.toNat → Recursion.gcd a b_1 = pure (BitVec.ofNat 32 (a.toNat.gcd b_1.toNat))) →
+    Recursion.gcd a b = pure (BitVec.ofNat 32 (a.toNat.gcd b.toNat))
+  unfolded: Recursion.gcd -/
+#guard_msgs in
+theorem gcd_spec' : ∀ a b : BitVec 32,
+    Recursion.gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) := by
+  rec_template? _ unfolding Recursion.gcd
+  by_cases hb0 : b = 0#32
+  · subst hb0
+    simp [zig_unfold, BitVec.ofNat_toNat]
+  · have hbne : b.toNat ≠ 0 := fun h0 => hb0 (BitVec.eq_of_toNat_eq (by simpa using h0))
+    have hres := ih b (a % b) (by rw [BitVec.toNat_umod]; exact Nat.mod_lt _ (by omega))
+    rw [BitVec.toNat_umod, Nat.gcd_comm b.toNat, ← Nat.gcd_rec, Nat.gcd_comm] at hres
+    simp [zig_unfold, hb0, rem_unsigned, hres]
+
+/-- info: rec_template? measure inference (unchecked until `ih` is applied):
+  call Recursion.isEven → Recursion.isOdd:
+    argument 1: p0 - k (checked sub): smaller; side premise: p0 ≥ k (else the sub overflows)
+  call Recursion.isOdd → Recursion.isEven:
+    argument 1: p0 - k (checked sub): smaller; side premise: p0 ≥ k (else the sub overflows)
+  measure candidate (argument 1): fun n => n.toNat
+---
+info: rec_template remaining premise (1):
+  step : ∀ (n : BitVec 32),
+  (∀ (n_1 : BitVec 32),
+      n_1.toNat < n.toNat →
+        Recursion.isEven n_1 = pure (n_1.toNat % 2 == 0) ∧ Recursion.isOdd n_1 = pure (n_1.toNat % 2 == 1)) →
+    Recursion.isEven n = pure (n.toNat % 2 == 0) ∧ Recursion.isOdd n = pure (n.toNat % 2 == 1)
+  unfolded: Recursion.isEven, Recursion.isOdd -/
+#guard_msgs in
+theorem isEven_isOdd_spec' : ∀ n : BitVec 32,
+    Recursion.isEven n = pure (n.toNat % 2 == 0) ∧ Recursion.isOdd n = pure (n.toNat % 2 == 1) := by
+  rec_template? _ unfolding Recursion.isEven, Recursion.isOdd
+  by_cases hn0 : n = 0#32
+  · subst hn0; simp [zig_unfold]
+  · have hn := toNat_pred n hn0
+    obtain ⟨he, ho⟩ := ih (n - 1#32) (by omega)
+    generalize (n - 1#32).toNat = k at he ho hn
+    simp [zig_unfold, hn0, he, ho, hn, succ_parity0, succ_parity1]
+
 /-! ## Rejections -/
+
+/-- A recursion that does not shrink its argument: no measure is inferred. -/
+def spin (n : BitVec 32) : Zig.Result Unit := do
+  let _ ← spin n
+  pure ()
+partial_fixpoint
+
+/-- error: rec_template? measure inference (unchecked until `ih` is applied):
+  call RecTemplateTest.spin → RecTemplateTest.spin:
+    argument 1: n unchanged
+  measure: not inferred (no argument decreases at every call); supply one, or a ghost measure for a structure read from memory -/
+#guard_msgs in
+example : ∀ n : BitVec 32, spin n = pure () := by
+  rec_template _ unfolding spin
+
 
 /-- error: rec_template: the goal has fewer than 2 leading binders: ∀ (n : BitVec 32), Recursion.fact n = Recursion.fact n -/
 #guard_msgs in

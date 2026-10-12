@@ -7,10 +7,12 @@ import ZigLean.Sep.LoopTemplate
 
 `loop_template?` without an invariant prints suggestions read from one unfolding of the loop
 body; it proves nothing and leaves the goal unchanged. These regressions pin its output on two
-generated loops (`Pointers.sumTo`, a counter loop with a call; `Lists.sum`, a linked-list walk)
-and on hand-written bodies in the generated shapes for the cases it refuses: a signed guard, a
-counter that steps away from its bound, a counter that is also reset, and a bound that the loop
-changes.
+generated loops (`Pointers.sumTo`, a counter loop with a call; `Lists.sum`, a linked-list walk,
+for which it suggests a ghost measure) and on hand-written bodies in the generated shapes: a
+signed counter, a counter that steps by 2 under a non-strict guard (a side premise to supply), a
+signed counter that counts down, a reset counter with an outer counter (a lexicographic
+measure), and the refused shapes: a counter that steps away from its bound, a counter that is
+reset with no other progress, and a bound that the loop changes.
 `tests/roadmap/loop-tactics/nested/Proof.lean` covers a translated nested loop.
 -/
 
@@ -28,7 +30,8 @@ theorem vacuous {α : Type} {c : MemM α} {Q : α → Assn} : TotalTriple (fun _
   unchanged locals: acc
   measure candidate: fun s => n.toNat - s.i.toNat
   bound invariant candidate: fun s => s.i.toNat ≤ n.toNat
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  side premise of the step i + 1: discharged by the guard (no overflow)
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 -- `while (i < n) : (i += 1) addTo(&acc, i)`: the counter, its bound and the untouched pointer.
 example (p : Ptr) (n : BitVec 32) (s : Pointers.sumToLocals) (Q : Pointers.sumToExit × Pointers.sumToLocals → Assn) :
@@ -39,8 +42,9 @@ example (p : Ptr) (n : BitVec 32) (s : Pointers.sumToLocals) (Q : Pointers.sumTo
 /-- info: loop_template? suggestions (unchecked, nothing is proved):
   loop-carried locals (written by the body): s, p
   unchanged locals: (none)
-  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  p is written from a load (a list walk): ghost measure candidate: the number of nodes from s.p in the invariant's representation predicate, e.g. inv s n := ∃ zs, ⌜zs.length = n⌝ ∗ list s.p zs
+  measure: no counter measure inferred; supply a ghost measure, e.g. the number of remaining items
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 -- `while (p) |n| : (p = n.next) s += n.val`: no counter; the queue proof
 -- (`Queue.lean`) supplies the number of remaining nodes as a ghost measure.
@@ -87,9 +91,10 @@ def movingBound : MM L Bool := do
 /-- info: loop_template? suggestions (unchecked, nothing is proved):
   loop-carried locals (written by the body): i
   unchanged locals: n
-  guard Zig.lt: signed comparison, no measure inferred
-  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  measure candidate: fun s => (s.n.toInt - s.i.toInt).toNat
+  bound invariant candidate: fun s => s.i.toInt ≤ s.n.toInt
+  side premise of the step i + 1: discharged by the guard (no overflow)
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 example (s : L) (Q : Bool × L → Assn) :
     TotalTriple (fun _ => False) ((Zig.loop signedLoop id).run s) Q := by
@@ -100,8 +105,8 @@ example (s : L) (Q : Bool × L → Assn) :
   loop-carried locals (written by the body): i
   unchanged locals: n
   guard Zig.lt: no local steps towards a fixed bound, no measure inferred
-  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  measure: no counter measure inferred; supply a ghost measure, e.g. the number of remaining items
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 -- `i` decreases while the guard is `i < n`: no suggestion (this loop runs until `i` underflows).
 example (s : L) (Q : Bool × L → Assn) :
@@ -113,8 +118,8 @@ example (s : L) (Q : Bool × L → Assn) :
   loop-carried locals (written by the body): i, n
   unchanged locals: (none)
   guard Zig.lt: the bound of i changes in the loop, no measure inferred
-  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  measure: no counter measure inferred; supply a ghost measure, e.g. the number of remaining items
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 example (s : L) (Q : Bool × L → Assn) :
     TotalTriple (fun _ => False) ((Zig.loop movingBound id).run s) Q := by
@@ -136,12 +141,96 @@ def resetLoop : MM L Bool := do
 /-- info: loop_template? suggestions (unchecked, nothing is proved):
   loop-carried locals (written by the body): i
   unchanged locals: n
-  guard Zig.lt: no local steps towards a fixed bound, no measure inferred
-  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
-  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+  guard Zig.lt: i steps towards its bound but is also reset, and no other counter has a measure: no measure inferred
+  measure: no counter measure inferred; supply a ghost measure, e.g. the number of remaining items
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
 #guard_msgs in
 example (s : L) (Q : Bool × L → Assn) :
     TotalTriple (fun _ => False) ((Zig.loop resetLoop id).run s) Q := by
+  loop_template?
+  exact vacuous
+
+/-- `while (i <= n) : (i += 2)`: the guard does not keep `i + 2` in range. -/
+def byTwo : MM L Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.le false i n then do
+    let i' ← Zig.add false i (2 : BitVec 32)
+    modify (fun s => { s with i := i' })
+    pure true
+  else pure false
+
+/-- info: loop_template? suggestions (unchecked, nothing is proved):
+  loop-carried locals (written by the body): i
+  unchanged locals: n
+  measure candidate: fun s => s.n.toNat + 2 - s.i.toNat
+  bound invariant candidate: fun s => s.i.toNat ≤ s.n.toNat + 2
+  side premise of the step i + 2 (no overflow on a repeat): s.n.toNat + 2 < 2^32
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
+#guard_msgs in
+example (s : L) (Q : Bool × L → Assn) :
+    TotalTriple (fun _ => False) ((Zig.loop byTwo id).run s) Q := by
+  loop_template?
+  exact vacuous
+
+/-- `while (i > n) : (i -= 1)`, signed. -/
+def signedDown : MM L Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.gt true i n then do
+    let i' ← Zig.sub true i (1 : BitVec 32)
+    modify (fun s => { s with i := i' })
+    pure true
+  else pure false
+
+/-- info: loop_template? suggestions (unchecked, nothing is proved):
+  loop-carried locals (written by the body): i
+  unchanged locals: n
+  measure candidate: fun s => (s.i.toInt - s.n.toInt).toNat
+  bound invariant candidate: fun s => s.n.toInt ≤ s.i.toInt
+  side premise of the step i - 1: discharged by the guard (no overflow)
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
+#guard_msgs in
+example (s : L) (Q : Bool × L → Assn) :
+    TotalTriple (fun _ => False) ((Zig.loop signedDown id).run s) Q := by
+  loop_template?
+  exact vacuous
+
+structure L2 where
+  i : BitVec 32
+  j : BitVec 32
+  n : BitVec 32
+  m : BitVec 32
+  deriving Inhabited
+
+/-- A flattened two-dimensional walk: `j` counts to `m`, then resets while `i` steps. -/
+def grid : MM L2 Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.lt false i n then do
+    let j ← pure ((← get).j)
+    let m ← pure ((← get).m)
+    if Zig.lt false j m then do
+      let j' ← Zig.add false j (1 : BitVec 32)
+      modify (fun s => { s with j := j' })
+    else do
+      let i' ← Zig.add false i (1 : BitVec 32)
+      modify (fun s => { s with j := 0, i := i' })
+    pure true
+  else pure false
+
+/-- info: loop_template? suggestions (unchecked, nothing is proved):
+  loop-carried locals (written by the body): i, j
+  unchanged locals: n, m
+  measure candidate: fun s => s.n.toNat - s.i.toNat
+  bound invariant candidate: fun s => s.i.toNat ≤ s.n.toNat
+  side premise of the step i + 1: discharged by the guard (no overflow)
+  j steps towards its bound but is also reset; valid if every path that resets j steps i:
+  lexicographic measure candidate: fun s => (s.n.toNat - s.i.toNat) * (s.m.toNat + 1) + (s.m.toNat - s.j.toNat)
+  not inferred: side premises of other operations (overflow and range bounds), the values of the other carried locals, memory shapes -/
+#guard_msgs in
+example (s : L2) (Q : Bool × L2 → Assn) :
+    TotalTriple (fun _ => False) ((Zig.loop grid id).run s) Q := by
   loop_template?
   exact vacuous
 
