@@ -643,7 +643,8 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Region.lean"
+      "path": "ZigLean/Sep/Full/Region.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"
@@ -662,10 +663,12 @@
       "path": "ZigLean/Sep/Full/Triple.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Try.lean"
+      "path": "ZigLean/Sep/Full/Try.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Typed.lean"
+      "path": "ZigLean/Sep/Full/Typed.lean",
+      "approved": "maintainer 2026-10-12 (transitional bridge lifting until native rules, Plan A6; framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
@@ -804,13 +807,16 @@
       "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
     },
     {
-      "path": "tests/roadmap/strength-log/ProofsLayout.lean"
+      "path": "tests/roadmap/strength-log/ProofsLayout.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/ProofsLists.lean"
+      "path": "tests/roadmap/strength-log/ProofsLists.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/ProofsPointers.lean"
+      "path": "tests/roadmap/strength-log/ProofsPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Counters.lean"
