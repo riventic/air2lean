@@ -239,6 +239,27 @@ theorem EUpd.regroup {t : STag} : ∀ (dst src : List Piece), (∀ d ∈ dst, 0 
         · rw [maxOn_cons_ne hdb, maxOn_filter b src d.1 hdb]; exact hkd d hd
 termination_by dst => dst.length
 
+theorem sharesL_append {t : STag} (l₁ l₂ : List Piece) :
+    sharesL t (l₁ ++ l₂) = (sharesL t l₁ ⋆ sharesL t l₂) := by
+  induction l₁ with
+  | nil => simp only [List.nil_append, sharesL]; exact (emp_sep_eq _).symm
+  | cons x l ih =>
+    obtain ⟨b, q, k⟩ := x
+    simp only [List.cons_append, sharesL, ih]; exact (sep_assoc_eq _ _ _).symm
+
+theorem sumOn_append (b : BlockId) (l₁ l₂ : List Piece) :
+    sumOn b (l₁ ++ l₂) = sumOn b l₁ + sumOn b l₂ := by
+  induction l₁ with
+  | nil => simp [sumOn, Rat.zero_add]
+  | cons x l ih => simp only [List.cons_append, sumOn, ih]; grind
+
+/-- A piece's bound is at most the highest bound on its block. -/
+theorem le_maxOn {b : BlockId} {q : Frac} {k : Nat} : ∀ {l : List Piece}, (b, q, k) ∈ l → k ≤ maxOn b l
+  | x :: l, h => by
+    rcases List.mem_cons.mp h with rfl | h
+    · simp only [maxOn, if_pos rfl]; exact Nat.le_max_left _ _
+    · have := le_maxOn h; simp only [maxOn]; split <;> omega
+
 /-- **Revoke a list of receipts** of a past epoch (`EUpd.revoke`, one at a time). -/
 theorem EUpd.revokeL {γ e e' : Nat} {M : GMap} {p : STag} (he : e < e') :
     ∀ l : List Piece, EUpd (gauthP γ e' M p ⋆ rcptsL γ e l) (gauthP γ e' M p ⋆ sharesL p l)
