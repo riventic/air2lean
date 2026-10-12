@@ -1539,8 +1539,8 @@ def fba_dupe (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
         pure (.ret i27))
       | e => pure e)
     | e => pure e) : Zig.MM fba_dupeLocals fba_dupeExit).run' { (default : fba_dupeLocals) with fba := s1, local8 := s8 }
-  Zig.free s1
   Zig.free s8
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic

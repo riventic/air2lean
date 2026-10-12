@@ -76,16 +76,20 @@ theorem dupe_spec (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array 
         (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) := by
   fsym [hA, mulWithOverflow_one]
 
-/-! `realloc` (`reallocAdvanced__anon_0df1`, `realloc__anon_af0c`) and `allocSentinel`
-(`__anon_79cb`) wait on two `fsym` engine features (planning order, atoms equal up to arithmetic):
-the walk of both reaches the returns, and what is left is the return entailment of a grant whose
-bytes changed after the allocation (the `@memset(_, undefined)` of the fresh bytes, the
-`@memcpy` of the moved prefix, the stored sentinel). Its token `I.tok p bs.size …` still names
-the size of the allocation's existential `bs`, so the postcondition's grant `I.granted p k ?bs'`
-gets `?bs' := bs` from the token before the region is planned, and the region's `n + 1` bytes
-match the postcondition's only up to arithmetic. -/
+/-- **`a.allocSentinel(u8, n, 7)`**: `n` undefined bytes and the sentinel `7` after them, granted
+as `n + 1` bytes, or `error.OutOfMemory` and nothing. -/
+theorem allocSentinel_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
+    (hfit : I.fits (n.toNat + 1) 0)
+    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
+      FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
+        (I.allocPost len.toNat 0)) :
+    FTotalTriple (I.own ⋆ vtR vtp fns.toList)
+      (mem_Allocator_allocSentinel__anon_79cb42d26607 ⟨ctx, vtp⟩ n)
+      (fun r => I.own ⋆ (I.bytesResult 0 n (writeBytes (Array.replicate (n.toNat + 1) .undef) n.toNat
+        (Enc.encode (7 : BitVec 8))) r ⋆ vtR vtp fns.toList)) := by
+  fsym [hA, mulWithOverflow_one]
 
-/-! ## Release -/
+/-! ## Release and reallocation -/
 
 /-- **`a.free(s)`** of a `[]u8`: the grant (nothing for an empty slice) goes back. -/
 theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
@@ -96,6 +100,57 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
       (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s) (fun _ => I.own ⋆ vtR vtp fns.toList) := by
   fsym [fun (s : Slice) ra (h : 0 < s.len.toNat) =>
     hF s ra (Array.replicate s.len.toNat .undef) (by simp) (by simpa using h)]
+
+/-- **`a.reallocAdvanced(s, n, ra)`** of a `[]u8` holding `bs`: in place (`remap`), or a fresh
+grant with the common prefix copied and the old grant freed; `n = 0` frees the old grant and
+returns an empty slice; on `error.OutOfMemory` the old grant stays. -/
+theorem reallocAdvanced_spec (s : Slice) (n ra : BitVec 64) (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hfit : I.fits n.toNat 0)
+    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
+      FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
+        (I.allocPost len.toNat 0))
+    (hM : ∀ (s : Slice) (n ra : BitVec 64) (bs : Array Byte), 0 < n.toNat → I.fits n.toNat 0 →
+      s.len.toNat = bs.size → 0 < bs.size →
+      FTotalTriple (I.own ⋆ I.granted s.ptr 0 bs) (heap_FixedBufferAllocator_remap ctx s ⟨0#6⟩ n ra)
+        (I.remapPost s.ptr 0 bs n.toNat))
+    (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
+      FTotalTriple (I.own ⋆ I.granted s.ptr 0 bs) (heap_FixedBufferAllocator_free ctx s ⟨0#6⟩ ra)
+        (fun _ => I.own)) :
+    FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_reallocAdvanced__anon_0df1ef68623e ⟨ctx, vtp⟩ s n ra)
+      (fun r => I.own ⋆ (I.reallocResult 0 s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) := by
+  -- The wrapper names alignment 1 both as the enum literal and as its log2 `⟨0#6⟩`.
+  fsym [hA, fun len ra (h1 : 0 < len.toNat) (h2 : I.fits len.toNat 0) =>
+      show FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len ⟨0#6⟩ ra)
+        (I.allocPost len.toNat 0) from hA len ra h1 h2,
+    hM, mulWithOverflow_one, free_spec ctx vtp I _ _ _ hF,
+    fun (s : Slice) ra (h : 0 < s.len.toNat) =>
+      hF s ra (Array.replicate s.len.toNat .undef) (by simp) (by simpa using h)]
+
+/-- **`a.realloc(s, n)`**: `reallocAdvanced` with the caller's return address. The walk goes
+through `reallocAdvanced`'s code with the same rules: `fsym` does not yet plan
+`reallocAdvanced_spec`'s `if`-guarded grant against the opened state (engine ledger #27). -/
+theorem realloc_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hfit : I.fits n.toNat 0)
+    (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
+      FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
+        (I.allocPost len.toNat 0))
+    (hM : ∀ (s : Slice) (n ra : BitVec 64) (bs : Array Byte), 0 < n.toNat → I.fits n.toNat 0 →
+      s.len.toNat = bs.size → 0 < bs.size →
+      FTotalTriple (I.own ⋆ I.granted s.ptr 0 bs) (heap_FixedBufferAllocator_remap ctx s ⟨0#6⟩ n ra)
+        (I.remapPost s.ptr 0 bs n.toNat))
+    (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
+      FTotalTriple (I.own ⋆ I.granted s.ptr 0 bs) (heap_FixedBufferAllocator_free ctx s ⟨0#6⟩ ra)
+        (fun _ => I.own)) :
+    FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
+      (fun r => I.own ⋆ (I.reallocResult 0 s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) := by
+  fsym [hA, fun len ra (h1 : 0 < len.toNat) (h2 : I.fits len.toNat 0) =>
+      show FTotalTriple I.own (heap_FixedBufferAllocator_alloc ctx len ⟨0#6⟩ ra)
+        (I.allocPost len.toNat 0) from hA len ra h1 h2,
+    hM, mulWithOverflow_one, free_spec ctx vtp I _ _ _ hF,
+    fun (s : Slice) ra (h : 0 < s.len.toNat) =>
+      hF s ra (Array.replicate s.len.toNat .undef) (by simp) (by simpa using h)]
 
 /-- **`a.free(s)`** of a `[:7]u8` (from `allocSentinel`): the grant of `s.len + 1` bytes, the
 sentinel included, goes back. -/
@@ -148,6 +203,23 @@ theorem dupe_of (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array By
       (fun r => I.own ⋆ (I.bytesResult 0 s.len bs r ⋆
         (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) :=
   dupe_spec ctx vtp I s bs hlen hpos hfit fun len ra h1 h2 => h.alloc len 0 ra h1 (by decide) h2
+
+theorem allocSentinel_of (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
+    (hfit : I.fits (n.toNat + 1) 0) :
+    FTotalTriple (I.own ⋆ vtR vtp fns.toList)
+      (mem_Allocator_allocSentinel__anon_79cb42d26607 ⟨ctx, vtp⟩ n)
+      (fun r => I.own ⋆ (I.bytesResult 0 n (writeBytes (Array.replicate (n.toNat + 1) .undef) n.toNat
+        (Enc.encode (7 : BitVec 8))) r ⋆ vtR vtp fns.toList)) :=
+  allocSentinel_spec ctx vtp I n hn hfit fun len ra h1 h2 => h.alloc len 0 ra h1 (by decide) h2
+
+theorem realloc_of (s : Slice) (n : BitVec 64) (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hfit : I.fits n.toNat 0) :
+    FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))
+      (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
+      (fun r => I.own ⋆ (I.reallocResult 0 s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) :=
+  realloc_spec ctx vtp I s n bs hlen hfit (fun len ra h1 h2 => h.alloc len 0 ra h1 (by decide) h2)
+    (fun s n ra bs h1 h2 h3 h4 => h.remap s 0 n ra bs (by decide) h1 h2 h3 h4)
+    (fun s ra bs h1 h2 => h.free s 0 ra bs (by decide) h1 h2)
 
 theorem free_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) :
     FTotalTriple (I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR vtp fns.toList))

@@ -132,9 +132,9 @@ def concurrentReads (p0 : BitVec 8) (p1 : Bool) : Zig.ConcM Tgt (Except Zig.ErrN
           let i34 ← pure ((.ok i33) : Except Zig.ErrName (BitVec 16))
           pure (.ret i34))))
     | e => pure e) : Zig.CM Tgt concurrentReadsLocals concurrentReadsExit).run' { (default : concurrentReadsLocals) with cell := s2, x := s9, y := s11 }
-  Zig.free s2
-  Zig.free s9
   Zig.free s11
+  Zig.free s9
+  Zig.free s2
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -241,8 +241,8 @@ def concurrentWrites (p0 : BitVec 8) (p1 : BitVec 8) : Zig.ConcM Tgt (Except Zig
             let i37 ← Zig.add false i29 i36
             let i38 ← pure ((.ok i37) : Except Zig.ErrName (BitVec 16))
             pure (.ret i38)))))) : Zig.CM Tgt concurrentWritesLocals concurrentWritesExit).run' { (default : concurrentWritesLocals) with c1 := s2, c2 := s4 }
-  Zig.free s2
   Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -363,8 +363,8 @@ def racingAliases (p0 : BitVec 8) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 8)
         let i21 ← Zig.load (BitVec 8) 1 i3
         let i22 ← pure ((.ok i21) : Except Zig.ErrName (BitVec 8))
         pure (.ret i22)))) : Zig.CM Tgt racingAliasesLocals racingAliasesExit).run' { (default : racingAliasesLocals) with cell := s1, out := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
 
