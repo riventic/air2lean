@@ -1575,7 +1575,7 @@
         },
         {
           "path": "tests/roadmap/sep-auto/Steps.lean",
-          "anchor": "/-- A rule about another command is not used. -/"
+          "anchor": "/-- A rule about another command is not used: the goal holds only if the (unsound) rule about a"
         }
       ],
       "mutants": [
@@ -1595,7 +1595,7 @@
           "name": "frame-atom-dropped",
           "path": "tests/roadmap/sep-auto/Steps.lean",
           "category": "other",
-          "anchor": "(fun r => \u27ear = x\u27eb \u22c6 up (pts p 4 x))"
+          "anchor": "FTotalTriple (up (pts p 4 x) \u22c6 R) (Zig.load (BitVec 32) 4 p)"
         }
       ],
       "note": "Mutated specifications of fsym walks (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (tests/roadmap/sep-auto/Steps.lean, CI step Full-state separation logic)."

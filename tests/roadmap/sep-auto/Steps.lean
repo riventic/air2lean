@@ -145,11 +145,12 @@ example (p : Ptr) (x w : BitVec 32) (hne : x ≠ w) : True := by
       fsym
   trivial
 
-/-- A rule about another command is not used. -/
-example (p q : Ptr) (x : BitVec 32) (c : MemM Unit) (rule : FTotalTriple (up (pts q 4 x)) c (fun _ => emp)) :
-    True := by
+/-- A rule about another command is not used: the goal holds only if the (unsound) rule about a
+load at `q` were applied to the load at `p`. -/
+example (p q : Ptr) (x : BitVec 32)
+    (rule : FTotalTriple emp (Zig.load (BitVec 32) 4 q) (fun r => ⟪r = x⟫)) : True := by
   fail_if_success
-    have : FTotalTriple (up (pts q 4 x)) (Zig.store 4 q x) (fun _ => emp) := by
+    have : FTotalTriple emp (Zig.load (BitVec 32) 4 p) (fun r => ⟪r = x⟫) := by
       fsym [rule]
   trivial
 
