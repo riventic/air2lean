@@ -494,7 +494,8 @@ theorem read_race {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hc : m.current
     rcases hi.thr with ⟨-, -, ⟨h1, -⟩ | ⟨-, ⟨r, hr, -, hj⟩, -⟩⟩
     · omega
     · exact solo_false_of hr hj.1
-  refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) ?_ (err := .illegal)
+  refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) (by decide) (by rw [hl]; decide)
+    ?_ (err := .illegal)
     (by rw [hk]; rfl) hsolo
   rw [hc]
   simp only [VClock.concurrent, Bool.and_eq_true, Bool.not_eq_true']

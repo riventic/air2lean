@@ -1276,11 +1276,12 @@ theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]
     exact Bool.false_ne_true this
   simp [this]
 
-/-- An entry of block `b` that overlaps an access, whose clock is concurrent with the thread's
-bumped clock, and that races with it by its kind: the access races (unless `m.solo` skips the
-check, which no reachable memory with a concurrent entry does). -/
+/-- An entry of block `b` that overlaps an access (both of positive length), whose clock is
+concurrent with the thread's bumped clock, and that races with it by its kind: the access races
+(unless `m.solo` skips the check, which no reachable memory with a concurrent entry does). -/
 theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
     (he : e ∈ m.footprint) (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
+    (hlen : 0 < len) (hel : 0 < e.len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
     {err : Error} (hr : racePair e.kind k = some err) (hs : m.solo = false) :
     ¬ NoRace m b o len k := by
@@ -1288,7 +1289,7 @@ theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
   rw [hs, if_neg (by decide), Array.findSome?_eq_none_iff]
   intro h
   have := h e he
-  simp [hb, h1, h2, hc, hr] at this
+  simp [hb, h1, h2, hlen, hel, hc, hr] at this
 
 /-- `Thread.join` of a thread that the current thread spawned and did not join yet. -/
 theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)

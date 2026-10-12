@@ -330,6 +330,15 @@ theorem noRace_of_raceAt {m : Mem} {block : BlockId} {off len : Nat} {kind : Acc
     NoRace m block off len kind := by
   unfold NoRace raceCheck; split <;> simp_all
 
+/-- **A zero-length access races with nothing**: it touches no byte. -/
+theorem noRace_zero (m : Mem) (block : BlockId) (off : Nat) (kind : AccessKind) :
+    NoRace m block off 0 kind := by
+  apply noRace_of_raceAt
+  unfold raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro e _
+  simp
+
 theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
     (hnr : NoRace m block off len kind) :
     (recordAccess block off len kind).run m = pure ((), { m with

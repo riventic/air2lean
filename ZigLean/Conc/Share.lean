@@ -176,9 +176,10 @@ theorem raceCheck_illegal {m : Mem} {c : VClock} {b o len : Nat} {k : AccessKind
 current thread. A write over it races. -/
 theorem outstanding_races {e : FootprintEntry} (he : e ∈ m.footprint) (hk : e.kind = .read)
     {b o len : Nat} (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
+    (hlen : 0 < len) (hel : 0 < e.len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
     (hs : m.solo = false) : ¬ NoRace m b o len .write :=
-  race_of (err := .illegal) he hb h1 h2 hc (by rw [hk]; rfl) hs
+  race_of (err := .illegal) he hb h1 h2 hlen hel hc (by rw [hk]; rfl) hs
 
 /-- `std`'s `free` of a heap region (poison write, then `rawFree`) with a racing access, such as
 an outstanding read share (`outstanding_races`), throws `.illegal`. -/

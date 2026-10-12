@@ -590,11 +590,12 @@ def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
 entry races. `Array.findSome?` searches in order, so this matches recording the accesses one at a
-time and stopping at the first conflict. -/
+time and stopping at the first conflict. A zero-length access (or entry) touches no byte, so it
+races with nothing. -/
 def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off len : Nat)
     (kind : AccessKind) : Option Error :=
   fp.findSome? fun e =>
-    if e.block == block && off < e.off + e.len && e.off < off + len &&
+    if e.block == block && 0 < len && 0 < e.len && off < e.off + e.len && e.off < off + len &&
         VClock.concurrent e.clock clock then racePair e.kind kind
     else none
 
@@ -892,10 +893,11 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
 `e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
 of the current thread that it joined (the join is after each access of the child; a detached or
 exited child, `ThreadRec.released`, gives no such edge). The end of a
-block is a write of all its bytes for the race check (C11: the bytes are reused). -/
+block is a write of all its bytes for the race check (C11: the bytes are reused). A zero-length
+access touches no byte, so it races with no end. -/
 def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
   let c := VClock.bump (m.clocks[m.current]!) m.current
-  m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
+  m.footprint.any fun e => e.block == b && 0 < e.len && e.off < n && e.tid != m.current &&
     !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
     !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
 

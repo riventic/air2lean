@@ -131,7 +131,7 @@ theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : 
   split
   · rename_i hc
     simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
-    obtain ⟨⟨⟨hb, h1⟩, h2⟩, hcon⟩ := hc
+    obtain ⟨⟨⟨⟨⟨hb, -⟩, -⟩, h1⟩, h2⟩, hcon⟩ := hc
     subst hb
     have ht : e.Touches h := by
       by_cases ho' : e.off ≤ off
@@ -204,9 +204,9 @@ theorem recordAt_clock (hc : m.current < m.clocks.size) :
     (m.recordAt b off len kind).clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current :=
   Array.getElem!_set!_self m.clocks m.current _ hc
 
-/-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`). -/
-theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
-    (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
+/-- A recorded access by the current thread that touches no byte of `hF`. -/
+theorem StepIn.recordAt_of (hc : m.current < m.clocks.size)
+    (hnt : ∀ x, off ≤ x → (x < off + len ∨ x = off) → hF (b, x) = none)
     (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) := by
   refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp [Mem.recordAt], fun u hu => ?_, ?_,
     Nat.le_refl _, fun e he => ?_, fun e he => ?_⟩
@@ -216,17 +216,18 @@ theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h h
   · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl he
-    · refine .inr ⟨rfl, fun ⟨x, h1, h2, h3⟩ => ?_, hb⟩
-      simp only at h1 h2 h3
-      have := hin x h1 (by omega)
-      rcases hd (b, x) with e | e
-      · exact this e
-      · exact h3 e
+    · exact .inr ⟨rfl, fun ⟨x, h1, h2, h3⟩ => h3 (hnt x h1 h2), hb⟩
   · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl he
     · right; show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
       rw [Array.getElem!_set!_self _ _ _ hc]; exact VClock.le_refl _
+
+/-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`). -/
+theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
+    (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
+    (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) :=
+  StepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 (by omega))) hb
 
 /-- The current thread keeps what it owns over one of its recorded accesses. -/
 theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :

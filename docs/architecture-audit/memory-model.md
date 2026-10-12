@@ -338,7 +338,9 @@ projections from address zero were `.illegal` even for offset 0 (`ROADMAP.md` L0
 `codex/roadmap-null-projection`). Both are conservative. MM-3's `ptrOffset` rule (offset 0 always
 allowed) gives the consistent answer: with MM-3 fixed (`Zig.ptrProject`), an offset-0 projection
 from address zero is defined, except into a nonnullable result type (`ptrProjectNonnull`); the
-zero-length access rule is unchanged.
+zero-length access rule is unchanged. The race check, unlike the access check, treats a
+zero-length access as touching no byte: it races with nothing (`raceAt`, `Mem.freeRaces`;
+regression `tests/roadmap/sep-full/ZeroLenCX.lean`).
 
 ### MM-13. Value-level union retagging
 

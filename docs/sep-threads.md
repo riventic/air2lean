@@ -166,11 +166,12 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `mremapShrink'`, `mremapShrinkR`): `ThreadLocal.mmap` (every precondition: no record read, a
   new block), `ThreadLocal.munmap` and `ThreadLocal.mremapShrink` (the removed bytes are the
   precondition's; `Mem.NoRevive.setBlock`: a block keeps or loses live bytes, never gains one).
-  The shrink's thread rules ask for a nonempty cut (`lo + n < S`, the sequential rule allows
-  `≤`): an empty cut records a zero-length write at the mapping's end, and the race check counts
-  a zero-length access at an offset strictly inside an entry (`raceAt`), so a stale entry of a
-  concurrent thread across the end (from before an earlier shrink) makes it `.illegal`; the
-  extent alone does not order that entry.
+  An empty cut records a zero-length write at the mapping's end. A zero-length access touches no
+  byte and races with nothing (`raceAt`, `Mem.freeRaces`; model fix, coordinator ruling;
+  `noRace_zero`, regression `tests/roadmap/sep-full/ZeroLenCX.lean`). Before the fix it raced
+  with a stale entry of a concurrent thread across the end, which the extent alone does not
+  order, so the shrink's thread rules needed a nonempty cut; now their statements equal the
+  sequential ones.
 
   **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
   check passes only if no recorded write to the global is concurrent with the reader. Every
