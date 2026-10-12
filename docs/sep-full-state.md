@@ -770,6 +770,76 @@ memory-model lane). Until (A) lands: (C), a premise of the adequacy theorem (`Fu
 start memory, not a judgment parameter and not a new judgment. The room cell will then be a second
 `CCell`-like component of `Ghost` whose authority is tied to the memory in `GOk`.
 
+## Stack depth (stack-region lane; design approved 2026-10-12)
+
+Total `allocStack`/`enterFrame` rules need a resource that guarantees the next stack block. The
+model side (per-thread stack regions with a LIFO budget and a reserve) is
+`docs/architecture-audit/memory-model.md` §MM-16; this section is the resource on top of it and
+replaces the "room" half of §Credits and room above. Status: the model is MM-16 step 1; the
+resource below is step 2.
+
+**Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
+sound only if the freed block is the top of its thread's stack: a stack slot is free again only
+when everything above it is gone. With splittable credits the logic cannot know that.
+Counterexample (budget `c + c'`): `alloc b` (pay `c`), `alloc b'` (pay `c'`), `free b` (get `c`
+back, but `b'` still lies above `b`, so the slack is still 0), then `alloc b''` with the credit
+overflows. So the resource is the thread's depth itself, held exclusively, as a stack pointer
+is in separation logic for assembly.
+
+**Resources** (a new `Ghost` component, next to `cl` and the credits `cr`):
+
+* `sp t S D`: thread `t` has the budget `S`, and its LIFO depth plus its cells is at most `D`
+  (`Mem.used t ≤ D`). Exclusive: one fragment per thread with a budget. The cells (TLS
+  instances, `errno`) are reserved when the budget is set, so the first fragment is
+  `sp t S cells` and no later cell creation needs it.
+* `ent t ℓ c o`: a live stack entry of `t`, pushed at logical depth `ℓ` with charge `c`; `o` is
+  its block (`some b`) or a frame charge (`none`). Exclusive.
+* `room t n := ∃ D S, sp t S D ⋆ ⌜D + n ≤ S⌝` is notation, not a resource: it does not split.
+  A function that needs `k` bytes of stack is specified for every depth:
+  `∀ D, D + k ≤ S → FTotalTriple (sp t S D ⋆ P) f (fun v => sp t S D ⋆ Q v)`.
+
+**Holds** (a conjunct of `GOk`, the arena lane's `Res`/`Ghost`):
+
+* every thread `t` with a budget has exactly one `sp t S D` in `r ⊔ rF`, with `S = S_t` and
+  `Mem.used t ≤ D`;
+* the `ent` fragments of `t` are exactly its live entries; in push order their logical intervals
+  `[ℓ, ℓ + c)` follow each other, the last ends at or below `D`, and each entry's real end
+  (`Mem.used` at its push plus `c`) is at or below its logical end `ℓ + c`.
+
+**Rules** (`@[fsym]`, `Full/Block`, with the current thread `t`, below):
+
+* `allocStack size align`, `c = size + align`:
+  `sp t S D ⋆ ⌜D + c ≤ S⌝ ⊢ ⟨p⟩ sp t S (D + c) ⋆ ent t D c (some b) ⋆ up (bytesAt p A size …) ⋆ bext b …`
+  (total: the model's check `used + c ≤ S` follows from `used ≤ D`).
+* `free p` of that block: `sp t S (ℓ + c) ⋆ ent t ℓ c (some b) ⋆ bytes ⋆ bext ⊢ sp t S ℓ`. The
+  fragment `sp t S (ℓ + c)` makes `b` the top: an entry pushed after `b` would have a logical
+  interval above `ℓ + c` with positive charge, ending above `D = ℓ + c`. So the free pops `b`,
+  and the depth drops to at most `ℓ`.
+* `enterFrame`/`leaveFrame`: the same with `o = none` and `c = frameBase`.
+* Every other primitive keeps `Mem.used` of every thread (the frame of the conjunct): a new
+  `Tame` field, proved once per primitive.
+
+**Not mintable without touching the judgments.** `GOk` requires exactly one `sp` per budgeted
+thread somewhere in `r ⊔ rF`, so `EUpd emp (sp t S D)` fails in every memory (a second fragment
+is invalid), and no judgment can produce an `sp` from nothing. Unlike the credits, this needs
+no new conjunct in `EUpd`/`FTriple`/`FTotalTriple`/`CTriple`/`Upd`. The only introductions are
+the start memory (`Full/Init`: `sp 0 S k₀` under `Mem.withStack S`, `k₀` the main thread's
+cells) and the spawn rule (the child's `sp c S_c k_c`). Regressions: `¬ EUpd emp (sp 0 S 0)`,
+`¬ (sp t S D ⋆ sp t S D')`, and a total `allocStack` from `sp t S D` with `D + c > S` is
+unprovable (a memory with `used = D` throws `.stackOverflow`).
+
+**The current thread.** The rules apply only when `t` runs. A sequential triple quantifies over
+memories with any `m.current`, so the rule needs it from the precondition: knowledge `cur t`
+(`m.current = t`), kept by every `MemM` primitive (none switches threads), given by `Full/Init`
+(`cur 0`) and by the thread rules to each thread's own resources. Knowledge of another thread's
+`cur` in an invariant is useless, not unsound (`Holds` fails while that thread does not run).
+Open point for the CSL lane (step 5).
+
+**Interim (C).** Until this lands, a total statement that allocates on the stack takes room as
+a premise of the adequacy theorem. That premise must be about the run ("this run throws no
+`.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
+resource is unsound (`memory-model.md` §MM-16, scenario 1).
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem
