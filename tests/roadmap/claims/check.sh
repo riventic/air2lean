@@ -91,3 +91,19 @@ for theorem, namespace, function in (('ClaimFixture.countdown_under', 'Zig.Conc.
     assert (goal['status'], goal['derived_strength']) == ('rejected', None), goal
 print('claim-strength regressions passed')
 PY
+# The library lemmas' companions live in ZigLean/Witnesses/*.lean, which no module imports
+# (generated code must not import the witness commands, docs/claim-strength.md): the shipped-scope
+# audit imports them because scripts/assumptions.py selects every ZigLean/**.lean module. Build
+# them all here, and check that the extractor verifies a library lemma's companion from them.
+# shellcheck disable=SC2046
+lake build $(find ZigLean/Witnesses -name '*.lean' | sort | sed 's|/|.|g; s|\.lean$||')
+scripts/assumptions.sh --no-build --module ZigLean.Bit --module ZigLean.Witnesses.Mem \
+  --output "$out/library.json"
+python3 - "$out/library.json" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[1]))
+found = {t['name']: t['statement']['witnesses'] for t in report['theorems']}
+w = found['Zig.shlExact_of_noOverflow']['nonvacuity']
+assert w == {'status': 'verified', 'theorem': 'Zig.shlExact_of_noOverflow.nonvacuous'}, w
+print('library witness companions verified')
+PY
