@@ -2501,8 +2501,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .wrapOptional a => let (env, l) := bindLet fc env inst.id s!"pure (some {rv a})"; (env, some l)
   | .isNullPtr isNull p =>
-    -- `?*T`: the payload is the flag (null = address 0). `?T`: a flag byte after the payload.
-    -- The flag byte after the payload: every `?T` but an ordinary optional pointer and an error set.
+    -- `?*T`: the payload is the flag (null = address 0). Every other `?T` (also `?*allowzero T`)
+    -- but an error set: a flag byte after the payload.
     let flagged (c : TyId) := fc.storageExpr c
       s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)}) {rv p}"
     let some' := match fc.pointeeOf p with

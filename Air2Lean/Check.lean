@@ -1266,9 +1266,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.0
       -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
       -- so no cast to, from or between such optionals is translated.
-      let optNullable (t : TyId) : Bool := match cx.types[t]? with
-        | some (.optional c) => nullable c
-        | _ => false
+      let optNullable := optNullablePtrTy cx.types cx.layouts
       if (optNullable aty || optNullable ty) && aty != ty then
         cx.fail line "a cast to or from an optional C/allowzero pointer (`?*allowzero T`, \
           `?[*c]T`) is outside the subset: Zig miscompiles it; unwrap and cast the payload"
@@ -1442,9 +1440,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `?*allowzero T` of a `*allowzero T` is `some p`, also at address zero; an ordinary `?*T`
     -- of a nullable pointer is a `bitcast` that maps zero to `none` (`Zig.ptrToOptional`).
     if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) &&
-        !(match cx.types[ty]? with
-          | some (.optional c) => nullablePtrTy cx.types cx.layouts c
-          | _ => false) then
+        !optNullablePtrTy cx.types cx.layouts ty then
       cx.fail line "wrapping a C/allowzero pointer as an ordinary optional pointer needs explicit null mapping"
     pure line
   | .slice .. => pure line

@@ -254,6 +254,13 @@ def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool
   | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
   | _ => false
 
+/-- An optional of a C/allowzero pointer (`?*allowzero T`, `?[*c]T`): a flag after the payload,
+since the payload's address zero is a value. -/
+def optNullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.optional c) => nullablePtrTy types layouts c
+  | _ => false
+
 /-- An ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr` in the model:
 the type a C/allowzero pointer converts to and from with explicit null mapping. -/
 def optScalarPtr (types : Array Ty) : Ty → Bool
