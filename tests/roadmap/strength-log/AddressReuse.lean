@@ -6,8 +6,8 @@ Strength log of `tests/roadmap/address-reuse/Kernel.lean` (`ZigLean/Sep/Full/Str
 deleted with the legacy logic). Kernel (c) now states the placement independence of the
 full-state triples (`FTotalTriple.withPlacement`, `FTriple.withPlacement`). The legacy statement
 (c) (`TotalTriple.withPlacement`, `ZigLean/Sep/AddrReuse.lean`) follows from it on every
-`Mem.FSeq` memory: a total full-state triple over legacy assertions gives the legacy conclusion
-from a memory with any placement and provenance mode, word for word.
+`Mem.FSeq` memory: a total full-state triple over legacy assertions (size-free postcondition)
+gives the legacy conclusion, word for word, from a memory with any placement and provenance mode.
 -/
 
 open Zig Zig.Full Zig.Full.FAssn
