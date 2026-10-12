@@ -164,6 +164,12 @@ theorem weaken (hs : StepIn hF m m') (hsub : ∀ l, hF' l ≠ none → hF l ≠ 
     fp := fun e he => (hs.fp e he).imp id fun ⟨ht, hnt, hb⟩ =>
       ⟨ht, fun ⟨x, h1, h2, h3⟩ => hnt ⟨x, h1, h2, hsub _ h3⟩, hb⟩ }
 
+/-- A change of one block (bytes, kind, liveness) records no access. -/
+theorem setBlock (m : Mem) (hF : Heap) (b : BlockId) (nb : Block) :
+    StepIn hF m { m with blocks := m.blocks.set! b nb } :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+    by simp, fun _ he => .inl he, fun _ he => .inl he⟩
+
 /-- `Mem.write` changes only the bytes of a block. -/
 theorem write (m : Mem) (hF : Heap) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) :
     StepIn hF m (m.write b blk o bs) :=

@@ -337,6 +337,24 @@ theorem free {b : BlockId} (hpb : p.block = some b)
       · rfl
     · rfl
 
+theorem throw (e : Error) : RunFp F m₀ (MonadExcept.throw e : MemM α) := rfl
+
+/-- `modify` by a change that keeps the record in front. -/
+theorem modify' {g : Mem → Mem} (hg : g (m₀.withFp F) = (g m₀).withFp F) :
+    RunFp F m₀ (_root_.modify g : MemM PUnit) := by
+  show some (.ok ((), g (m₀.withFp F))) = some (.ok ((), (g m₀).withFp F))
+  rw [hg]
+
+/-- A read of the memory, a change of it that keeps the record in front, then a step that reads
+the old memory only where the record does not matter. -/
+theorem get_set_bind {g : Mem → Mem} {k : Mem → MemM α}
+    (hg : g (m₀.withFp F) = (g m₀).withFp F) (hk : k (m₀.withFp F) = k m₀)
+    (hr : RunFp F (g m₀) (k m₀)) :
+    RunFp F m₀ (get >>= fun m => set (g m) >>= fun _ => k m) := by
+  unfold RunFp at *
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_set, hg, hk]
+  exact hr
+
 /-- The run part of `ThreadLocal`: the run from `m` is the run from `m.noFp` with `m`'s record in
 front. -/
 theorem noFp {m : Mem} {c : MemM α} (h : RunFp m.footprint m.noFp c) :
@@ -383,6 +401,37 @@ theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
         simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
         simp [Ne.symm hb]
       rwa [e] at h
+
+/-- Block `b` becomes `nb`, live at no offset where it was not (no more liveness, no more bytes,
+a live start no lower). -/
+theorem _root_.Zig.Mem.NoRevive.setBlock {m m' : Mem} {b : BlockId} {blk nb : Block}
+    (hb : m.blocks[b]? = some blk) (hbs : m'.blocks = m.blocks.set! b nb)
+    (hlive : nb.live = true → blk.live = true) (hsz : nb.bytes.size ≤ blk.bytes.size)
+    (hlo : blk.kind.mappedLo ≤ nb.kind.mappedLo) : m.NoRevive m' := fun b' x hb' h => by
+  have hget : ∀ j, m'.blocks[j]? = if j = b then some nb else m.blocks[j]? := fun j => by
+    rw [hbs, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    by_cases e : b = j
+    · subst e; simp [Array.getElem?_eq_some_iff.mp hb |>.1]
+    · simp [e, Ne.symm e]
+  by_cases e : b' = b
+  · subst e
+    have e0 : m'.blocks[b']? = some nb := by rw [hget]; simp
+    rw [Mem.heap_of e0] at h
+    rw [Mem.heap_of hb]
+    split at h
+    · rename_i hc
+      rw [dif_pos ⟨hlive hc.1, by omega, by omega⟩]; simp
+    · exact absurd rfl h
+  · have e1 : m'.heap (b', x) = m.heap (b', x) := by
+      unfold Mem.heap; rw [hget, if_neg e]
+    rwa [e1] at h
+
+/-- A new block at the end. -/
+theorem _root_.Zig.Mem.NoRevive.push {m m' : Mem} {x : Block} (hbs : m'.blocks = m.blocks.push x) :
+    m.NoRevive m' := fun b o hb h => by
+  have e : m'.heap (b, o) = m.heap (b, o) := by
+    unfold Mem.heap; rw [hbs, Array.getElem?_push_lt hb]
+  rwa [e] at h
 
 namespace ThreadLocal
 
