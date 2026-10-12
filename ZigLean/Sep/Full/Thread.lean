@@ -247,16 +247,13 @@ theorem know_intro {b : BlockId} {A : Nat}
     (ht : FTTriple (P ⋆ known b A) c Q) : FTTriple P c Q := by
   intro m r rF hh hp hcm ho
   obtain ⟨x, fc, hx, hA⟩ := hc r hp
-  have hkn : m.kn b A := by
+  have hkn : m.kn (.addr b A) := by
     obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hx
     exact ⟨blk, hblk, by rw [← hA, ha]⟩
-  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ :=
-    ⟨r, ⟨FHeap.empty, fun b' A' => b' = b ∧ A' = A, Ghost.unit⟩, FHeap.disjoint_empty _,
+  have hres : (P ⋆ known b A) ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ :=
+    ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
-  have hk : Know.Sub (r.know.union fun b' A' => b' = b ∧ A' = A) m.kn :=
-    hh.know.union fun b' A' h => by obtain ⟨rfl, rfl⟩ := h; exact hkn
-  exact ht m ⟨r.heap, r.know.union fun b' A' => b' = b ∧ A' = A, r.gh⟩ rF
-    ⟨hh.disj, hh.heap, hk, hh.knowF, hh.ghost⟩ hres hcm ho
+  exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
 end FTTriple
 
