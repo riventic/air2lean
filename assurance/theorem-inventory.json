@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "7c0adfb8535c4cb6cc00f649827e6e89068d67a0",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:21:52.467273+00:00",
-      "elapsed_seconds": 0.488,
+      "started_utc": "2026-10-12T12:06:29.104789+00:00",
+      "elapsed_seconds": 233.488,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3a501b0adbce33ea6311ed6aaee81db81e70e39d22506bbac1d7f2dec1d27d0c",
+      "log_sha256": "0a6d2262c71826c2d73825f3a7ae9b00ed06fd9d38d2bb3ebf825f6077e5e9d3",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -886,7 +886,7 @@
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
-          "sha256": "46d180ad4a7d7281eb86ca251ce5e408639179a0a3752bd5b436eab1b74da351"
+          "sha256": "b6fee7fc3d83a5456c4787eea9326b0d7e9fba10aedad90175c10072e1f99dd4"
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",

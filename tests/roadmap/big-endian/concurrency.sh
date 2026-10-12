@@ -13,7 +13,8 @@
 #                                     linux/s390x, mips64 and x86_64 in Docker linux/amd64 (mips64
 #                                     through the Docker VM's qemu-mips64 binfmt handler, which
 #                                     matches ELF ABI version 0: the copy that runs has
-#                                     EI_ABIVERSION cleared, the code is unchanged)
+#                                     EI_ABIVERSION cleared, the code is unchanged);
+#                                     AIR2LEAN_<ARCH>_RUN names a direct runner (empty: the host)
 #   concurrency.sh --export VERSION DIR   fresh AIR (AIR2LEAN_ZIG_AIR)
 # Run in the serialized build queue.
 set -euo pipefail
@@ -51,8 +52,14 @@ case "${1:---check}" in
       platform=linux/amd64
       [ "$arch" = s390x ] && platform=linux/s390x
       [ "$arch" = mips64 ] && python3 "$dir/elf-abiversion.py" "$work/$arch"
-      docker run --rm --platform "$platform" -v "$work:/w:ro" alpine:3 sh -c "/w/$arch 2>&1" \
-        > "$work/$arch.txt"
+      var=AIR2LEAN_$(tr a-z A-Z <<<"$arch")_RUN
+      if [ -n "${!var+set}" ]; then
+        # shellcheck disable=SC2086
+        ${!var} "$work/$arch" 2> "$work/$arch.txt"
+      else
+        docker run --rm --platform "$platform" -v "$work:/w:ro" alpine:3 "/w/$arch" \
+          > "$work/$arch.txt" 2>&1
+      fi
       diff -u "$dir/observed/concurrency-$2-$t.txt" "$work/$arch.txt"
       echo "native $t ($2) matches the retained observation"
     done
