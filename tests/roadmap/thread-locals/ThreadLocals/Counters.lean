@@ -433,7 +433,8 @@ theorem cnt_hcnt : cnt 7 hcnt := by
   simp only [hcnt, enc_u32, Int.toNat_zero, Nat.zero_le, true_and, Nat.zero_add, Nat.sub_zero]
 
 theorem mem0_blocks :
-    (mem0 .fresh).blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := rfl
+    (mem0 .fresh).blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := by
+  with_unfolding_all exact rfl
 
 theorem hcnt_sub : hcnt.Sub (mem0 .fresh).heap := by
   rintro ⟨b, x⟩ c h
