@@ -9,7 +9,7 @@
 #                Proofs.Basic.Proofs, check tutorials/first-proof (docs/getting-started.md,
 #                first half), then every tutorial with its exercise and negative control
 #                (scripts/tutorials.py check)
-#   --translate  additionally bootstrap the pinned Zig 0.16.0, build the AIR-only patched
+#   --translate  additionally bootstrap the pinned default Zig (compatibility.json), build the AIR-only patched
 #                compiler (no LLVM), verify the lock refuses native output, translate the
 #                getting-started demo and check its separate proof (needs ~12 GiB disk, 8 GiB RAM)
 # Env: AIR2LEAN_CLEAN_RESULTS (default .lake/clean-env-results), AIR2LEAN_CLEAN_TIMEOUT (default 3h).
@@ -46,26 +46,28 @@ if [ "${1:-}" = --inside ]; then
   python3 scripts/tutorials.py check --results "$out/tutorials"
   echo 'OK: every tutorial, exercise and negative control' | tee "$out/proofs.ok"
   if [ "$translate" = 1 ]; then
-    # 5. Stock host Zig 0.16.0 from its pin, then the default (no-LLVM, AIR-only locked) build.
-    url=$(zig-patch/toml-get.sh '[ci.host-zig."0.16.0"]' url)
-    sha=$(zig-patch/toml-get.sh '[ci.host-zig."0.16.0"]' sha256)
+    # 5. Stock host Zig of the default version from its pin, then the default (no-LLVM, AIR-only
+    # locked) build.
+    zig_version=$(python3 scripts/compat.py default)
+    url=$(zig-patch/toml-get.sh "[ci.host-zig.\"$zig_version\"]" url)
+    sha=$(zig-patch/toml-get.sh "[ci.host-zig.\"$zig_version\"]" sha256)
     curl -fsSL --output /tmp/zig.tar.xz "$url"
     echo "$sha  /tmp/zig.tar.xz" | sha256sum -c -
     mkdir -p "$HOME/host-zig"
     tar -xJf /tmp/zig.tar.xz -C "$HOME/host-zig" --strip-components=1
     export PATH="$HOME/host-zig:$PATH"
-    zig-patch/build.sh 0.16.0
+    zig-patch/build.sh "$zig_version"
     scripts/doctor.sh --no-docker --json >"$out/doctor-translate.json"
     scripts/doctor.sh --no-docker
-    python3 - "$out/doctor-translate.json" <<'PY'
+    python3 - "$out/doctor-translate.json" "$zig_version" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))
-lock = [c for c in report['checks'] if c['id'] == 'patched-zig-0.16.0'][0]
+lock = [c for c in report['checks'] if c['id'] == 'patched-zig-' + sys.argv[2]][0]
 assert report['ready']['translate'] and lock['details']['lock'] == 'locked', lock
 PY
     # 6. The AIR-only lock must refuse native output when LLVM is absent.
     printf 'pub fn main() void {}\n' >/tmp/lock-probe.zig
-    if zig-air-0.16.0/bin/zig build-exe /tmp/lock-probe.zig >"$out/lock-probe.log" 2>&1; then
+    if "zig-air-$zig_version/bin/zig" build-exe /tmp/lock-probe.zig >"$out/lock-probe.log" 2>&1; then
       echo 'error: the AIR-only compiler accepted build-exe' >&2
       exit 1
     fi

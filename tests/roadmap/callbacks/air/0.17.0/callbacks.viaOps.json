@@ -1,0 +1,327 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "callbacks.viaOps",
+ "module": "root",
+ "src": {
+  "file": "callbacks.zig",
+  "module": "callbacks",
+  "decl_line": 28
+ },
+ "params": [
+  0,
+  1,
+  2
+ ],
+ "noalias": [],
+ "ret": 3,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 2,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "ptr_cast",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 2,
+   "column": 32
+  },
+  {
+   "id": 7,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "load",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 2,
+   "column": 19
+  },
+  {
+   "id": 11,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 9,
+    "func": "callbacks.forEach",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 2
+    },
+    {
+     "inst": 9
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 13,
+   "tag": "ret_safe",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 11
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 11,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 12,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 13,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn ([]const u32, *u32, *const fn (*u32, u32) callconv(.c) bool) bool"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "callbacks.Ops",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "visit",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (*u32, u32) callconv(.c) bool"
+  }
+ ]
+}

@@ -124,6 +124,19 @@ class ExportTest(unittest.TestCase):
         self.assertEqual([r['function'] for r in report['unexported_roots']], ['proj.root'])
         self.assertFalse(out.exists())
 
+    def test_profile_error_widths(self):
+        """L10: a project may use any `--error-limit` width the translator models (1-32 bits)."""
+        base = {'name': 'abi64-le-v1', 'target_triple': 'x86_64-linux.5.10...6.16-musl', 'pointer_bits': 64,
+                'endian': 'little', 'abi': 'musl', 'zig_version': '0.16.0', 'backend': 'stage2_llvm',
+                'cpu': 'x86_64', 'features': [], 'build_mode': 'ReleaseSafe',
+                'float_mode': 'per-instruction', 'error_set_bits': 16, 'error_layout': 'type-table',
+                'export_stage': 'analyzed-air', 'error_tracing': False}
+        for bits in (1, 8, 16, 17, 32):
+            project.validate_profile(dict(base, error_set_bits=bits))
+        for bits in (0, 33, True, '16'):
+            with self.subTest(bits=bits), self.assertRaises(project.Invalid):
+                project.validate_profile(dict(base, error_set_bits=bits))
+
     def test_flags_modules_options_and_references_are_preserved(self):
         path = self.manifest(['proj.root'], references=['proj.root'],
                              options={'module': 'build_options',

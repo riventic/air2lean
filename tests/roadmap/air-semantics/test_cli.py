@@ -1,16 +1,19 @@
 """AIR semantics certificates (V01 slice): translator-side checks, no Lean or Zig.
 
-Runs the built translator on committed golden AIR and checks that
+Runs the built translator on the committed golden AIR of every example whose Proofs/<Ex>/Gen.lean
+is that AIR's translation, and checks that
 (a) `--air-certificate` leaves the generated Lean byte-identical (and equal to the committed
     Proofs/<Ex>/Gen.lean body);
 (b) the certificate equals the committed Proofs/<Ex>/AirCert.lean;
-(c) the certified set and the listed exclusions are the expected ones (fail closed);
+(c) the certified set is the expected one, and every other function of the example is listed
+    with a reason (fail closed);
 (d) the flag's argument checks reject incomplete or clashing outputs;
 (e) the semantics, the generator and the certificates contain no sorry/admit/native_decide.
 `lake build Proofs` kernel-checks the committed certificates; test_lean.py runs the round
 trip and mutation checks.
 """
 import argparse
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -18,10 +21,22 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 
-EXPECTED = {
-    'basic': (['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
-              ['basic.sum', 'basic.totalWeightedTardiness', 'basic.weightedTardiness']),
-    'recursion': (['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'], []),
+# The examples with a committed certificate: those whose committed Gen.lean is the translation of
+# tests/golden/<ex>/air (not layout, threadsync, floatops).
+EXAMPLES = ['asm', 'atomics', 'basic', 'errors', 'floatconv', 'floats', 'iogroup', 'options', 'pointers',
+            'recursion', 'threads', 'variants', 'vectors']
+# The certified functions (none for an example not listed); every other function must be listed
+# as excluded.
+CERTIFIED = {
+    'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.sum', 'basic.tardiness'],
+    'errors': ['errors.digitOrZero', 'errors.parseDigit'],
+    'iogroup': ['debug.assert'],
+    'options': ['options.find'],
+    'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.sumTo',
+                 'pointers.swap'],
+    'recursion': ['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'],
+    'threads': ['threads.writeFlag'],
+    'vectors': ['vectors.sMod', 'vectors.sRem'],
 }
 
 
@@ -56,12 +71,24 @@ def check_example(binary, ex, work):
         f'{ex}: stale {committed.relative_to(ROOT)}; regenerate with --air-certificate'
     text = cert.read_text()
     certified, excluded = certificate_sets(text)
-    assert (certified, excluded) == EXPECTED[ex], (ex, certified, excluded)
+    assert certified == CERTIFIED.get(ex, []), (ex, certified)
+    golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
+    names = sorted(json.loads(path.read_text())['name'] for path in golden)
+    assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
     for name in certified:
-        decl = name.split('.', 1)[1]
+        # The certificate's stem: the generated name (prefix stripped), other characters as `_`.
+        decl = re.sub(r'\W', '_', name.removeprefix(ex + '.'))
         assert re.search(rf'^theorem {decl}_step ', text, re.M), (ex, name)
-        assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M), (ex, name)
-    assert re.search(r'^theorem run_le_gen ', text, re.M)
+        # Equality with `run`; a function in `Zig.MemM` that calls gets soundness only
+        # (completeness for memory callers is future work, docs/air-semantics.md); a function
+        # without memory with a slice parameter is certified at the call boundary through its
+        # view (`_view`, and `_step` up to read entries).
+        assert re.search(rf'^theorem {decl}_(run|eq|view) ', text, re.M) or \
+            (re.search(rf'^theorem {decl}_sound ', text, re.M) and
+             f'-- `{name}`: no completeness theorem' in text), (ex, name)
+    if any(not re.search(rf'^theorem {re.sub(r"\W", "_", n.removeprefix(ex + "."))}_view ', text, re.M)
+           for n in certified):
+        assert re.search(r'^theorem run_le_gen ', text, re.M)
 
 
 def check_flags(binary, work):
@@ -78,12 +105,30 @@ def check_flags(binary, work):
 
 
 def check_no_escape_hatches():
-    paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemAttr.lean', ROOT / 'Air2Lean/Certificate.lean',
-             *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXPECTED)]
+    paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemView.lean', ROOT / 'Air2Lean/SemAttr.lean',
+             ROOT / 'Air2Lean/Certificate.lean',
+             *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)
         for word in ('sorry', 'admit', 'native_decide'):
             assert not re.search(rf'\b{word}\b', code), (path, word)
+
+
+def check_coverage():
+    """Every example with a committed certificate is checked here, and every certificate that
+    certifies a function is in the round trip (RoundTrip.lean)."""
+    committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
+    assert committed == EXAMPLES, (committed, EXAMPLES)
+    round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
+    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views)$', round_trip, re.M)
+    assert sorted({ex for ex, _ in listed}) == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
+    # Both tables of a certificate (`table`: the fixpoint program, `views`: functions with a viewed
+    # slice parameter) are checked.
+    for ex in CERTIFIED:
+        text = (ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean').read_text()
+        for table in ('table', 'views'):
+            assert (re.search(rf'^def {table} : Table', text, re.M) is not None) == ((ex, table) in listed), \
+                (ex, table, 'RoundTrip.lean')
 
 
 def main():
@@ -91,9 +136,10 @@ def main():
     parser.add_argument('binary', type=Path)
     args = parser.parse_args()
     check_no_escape_hatches()
+    check_coverage()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        for ex in EXPECTED:
+        for ex in EXAMPLES:
             check_example(args.binary, ex, work)
         check_flags(args.binary, work)
     print('AIR semantics certificate checks passed')

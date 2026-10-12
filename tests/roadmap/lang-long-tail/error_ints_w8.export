@@ -1,0 +1,3 @@
+root_src=probe_error_ints.zig
+module=error_ints.
+args="--error-limit 255"

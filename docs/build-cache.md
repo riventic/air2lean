@@ -23,6 +23,7 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_CAS_MAX_GIB` | size cap for `cas.py gc` (default 60) |
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
 | `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lane and lock wait (seconds) of the heavy steps |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 24576) |
 
 ## What is cached, and why a hit is always right
 
@@ -48,6 +49,22 @@ receipt never runs with the cache variables; `scripts/regen.sh` removes them for
 step. The hard-linked outputs it finds in `.lake/build` are ordinary up-to-date Lake outputs.
 
 ## Use
+
+A new worktree starts with one command:
+
+    scripts/worktree-init.sh [--zig 0.16.0 ...] [--no-lean] [--no-generated]
+
+It builds what CI's `lake` job builds (ZigLean, Air2Lean, air2lean, Proofs, AssuranceTools, every
+tracked ZigLean module) and the `tests/diff` package through `cas.py run` under build-guard,
+then the requested patched compilers and the whole-tree generated files. With the cache on, a
+module is compiled only if no worktree has built it with the same inputs; the rest are restored
+as hard links. Measured on the dev Mac (2026-10-12, main 9ea4c9b6, fresh `git worktree add`):
+
+| start | root package | whole init |
+| --- | --- | --- |
+| `AIR2LEAN_CAS_DIR` unset (plain Lake build) | 399 s | 435 s |
+| cache from an older `main` (some modules changed since) | 48 s | 66 s |
+| cache already holding this tree's modules | 1 s | 15 s |
 
     AIR2LEAN_ZIG_AIR=$(scripts/zig-air.sh 0.16.0)         # patched compiler for this checkout
     python3 scripts/build-guard.py ... -- python3 -B scripts/cas.py run -- lake build Proofs

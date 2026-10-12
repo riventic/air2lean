@@ -56,9 +56,8 @@ cd "$repo"
 if [ -z "$examples" ]; then
   source scripts/example-selection.sh
   examples=$(air2lean_default_examples "$repo" "$version" x86_64)
-  # The self-hosted backend cannot encode examples/asm's lzcnt/popcnt at -mcpu=baseline.
-  if [ "$backend" = stage2_x86_64 ]; then examples=$(printf '%s\n' $examples | grep -vx asm | tr '\n' ' '); fi
 fi
+[ -n "${examples// /}" ] || { echo "error: no examples selected" >&2; exit 1; }
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-mode.XXXXXX")
 container=
 cleanup() {
@@ -67,6 +66,7 @@ cleanup() {
   if [ -n "$container" ]; then
     mkdir -p "$out"
     docker cp "$container:/artifacts/." "$out" || status=1
+    if [ -f "$snapshot/stage2/excluded-examples.json" ]; then cp "$snapshot/stage2/excluded-examples.json" "$out/"; fi
     # The container always exits 0 so its artifacts are kept; the diff status is the result.
     if [ "$status" -eq 0 ] && [ -f "$out/exit-status" ]; then status=$(cat "$out/exit-status"); fi
     docker rm -f "$container" >/dev/null 2>&1 || true
@@ -75,6 +75,16 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+if [ "$backend" = stage2_x86_64 ]; then
+  # The self-hosted backend's own translations (scripts/stage2-translations.py): its AIR export
+  # under the stage2_x86_64 profile, translated, must be the translation the run's Lean side
+  # builds; an example the stage2_x86_64 rules reject, or that the backend cannot compile
+  # (examples/asm), is left out and listed in <output-dir>/excluded-examples.json.
+  python3 -B scripts/stage2-translations.py --version "$version" --examples "$examples" --out "$snapshot/stage2"
+  examples=$(cat "$snapshot/stage2/examples")
+  # An empty AIR2LEAN_EXAMPLES means every example to scripts/diff.sh, the excluded ones too.
+  [ -n "${examples//[[:space:]]/}" ] || { echo "error: every selected example is excluded on stage2_x86_64" >&2; exit 1; }
+fi
 git ls-files -z | while IFS= read -r -d '' path; do
   case "$path" in
     .git|.git/*|.lake|.lake/*|*/.lake|*/.lake/*|zig-air-*/*|host-zig/*) continue ;;

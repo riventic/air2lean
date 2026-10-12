@@ -16,7 +16,7 @@
   "export_revision": "9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee",
   "export_command": "ZIG_AIR_JSON_DIR=air ZIG_AIR_JSON_FILTER=nested. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline nested.zig",
   "artifacts": {
-    "air/nested.pairs.json": "2fd430d2270a536f4e4ef8d1868e78162f5f7e880f5ae03059419d3e9f828880"
+    "air/nested.pairs.json": "d72a27edfe36e9aefc899508439836a37c9c2cfb4b55e0d32fd7e98f308746b3"
   },
   "translation": {
     "command": "air2lean tests/roadmap/loop-tactics/nested/air -o Nested/Gen.lean --namespace Nested --prefix nested.",

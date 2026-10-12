@@ -205,7 +205,7 @@ def registry_client(nested=False):
             inst(2, "ret", 1, [ref(1)])]
     del body[0]["args"]  # schema 12: an `arg` has no operands
     return {**{k: base[k] for k in ("schema", "zig_version", "target_endian", "profile")},
-            "name": "client", "module": "root", "params": [param], "ret": 3, "types": types, "body": body,
+            "name": "client", "module": "root", "params": [param], "noalias": [], "ret": 3, "types": types, "body": body,
             "globals": []}
 
 
@@ -357,12 +357,14 @@ def asm_fixtures(version="0.16.0"):
     void = dict(ty=1, val="{}")
     tsc = lambda i, volatile=True: asm(i, 8, TSC, volatile=volatile, clobbers=("cc", "rdx"), outputs=("={rax}",))
     return {
-        # Two reads of the time-stamp counter: as opaques they would be one repeatable value.
+        # Two reads of the time-stamp counter: as opaques they would be one repeatable value. A01
+        # allowlists them as environment reads (`Zig.Asm.envWord`, ASM-05); a device contract
+        # that declares the template keeps them device events, which must be `volatile`.
         "rdtsc_twice": (f("rdtsc_twice", 8, [tsc(0), tsc(1), inst(2, "sub_wrap", 8, [ref(1), ref(0)]),
-                                            returning(3, ref(2))]), 2, 0),
-        "rdtsc_plain": (f("rdtsc_plain", 8, [tsc(0, volatile=False), returning(1, ref(0))]), 1, 1),
+                                            returning(3, ref(2))]), 0, 0),
+        "rdtsc_plain": (f("rdtsc_plain", 8, [tsc(0, volatile=False), returning(1, ref(0))]), 0, 1),
         "rdrand": (f("rdrand", 8, [asm(0, 8, "rdrand %[ret]", clobbers=("cc",), outputs=("=r",)),
-                                   returning(1, ref(0))]), 1, 1),
+                                   returning(1, ref(0))]), 0, 0),
         "outputless": (f("outputless", 1, [asm(0, 1, "mfence"), returning(1, void)]), 1, 1),
         # A `memory` clobber off A01's registry (whose only entry is the empty barrier).
         "memory_clobber": (f("memory_clobber", 1, [asm(0, 1, "mfence", clobbers=("memory",)), returning(1, void)]), 1, 1),
@@ -406,6 +408,8 @@ def check_asm(binary, tmp, air):
                     assert result.returncode == 0, (name, result.stderr)
                     text = out.read_text()
                     assert ("Zig.vasm air2lean_device" in text) == (name == "rdtsc_twice" and bool(flags)), text
+                    env = name in ("rdtsc_plain", "rdrand") or (name == "rdtsc_twice" and not flags)
+                    assert ("Zig.Asm.envWord" in text) == env, text
                 checks += 1
     # A spin hint off its target's list is not a declarable device event (the emitter makes it a
     # hint): `isb` is allowlisted for aarch64 only, and these fixtures are the x86_64 reference.

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -44,6 +47,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "fba_dupe",
@@ -330,7 +334,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.dupe__anon_8814",
+      "func": "mem.Allocator.dupe__anon_8639",
       "module": "std",
       "instance_key": "63991a21d32c0135418c73f2e98cc49731746f9da7ff31bd72c70fbd5af218bc",
       "noreturn": false

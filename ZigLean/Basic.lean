@@ -156,11 +156,23 @@ allowed (Sema checks only `b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverf
 @[inline] def subWrap (a b : BitVec n) : BitVec n := a - b
 @[inline] def mulWrap (a b : BitVec n) : BitVec n := a * b
 
+/-- Smallest value of the `n`-bit integer type (signed if `s`). The `0 < n` guard matters: `i0` has
+the single value 0, and Nat subtraction would make `n - 1 = 0` give `-1` (`docs/architecture-audit/zero-width-ints.md`). -/
+def intLo (s : Bool) (n : Nat) : Int := if s ∧ 0 < n then -(2 ^ (n - 1)) else 0
+
+/-- Largest value of the `n`-bit integer type (signed if `s`); `0` for `i0` and `u0`. -/
+def intHi (s : Bool) (n : Nat) : Int := if s then 2 ^ (n - 1) - 1 else 2 ^ n - 1
+
+@[simp] theorem intLo_unsigned (n : Nat) : intLo false n = 0 := by simp [intLo]
+@[simp] theorem intHi_unsigned (n : Nat) : intHi false n = 2 ^ n - 1 := rfl
+@[simp] theorem intLo_signed_succ (k : Nat) : intLo true (k + 1) = -(2 ^ k) := by simp [intLo]
+@[simp] theorem intHi_signed_succ (k : Nat) : intHi true (k + 1) = 2 ^ k - 1 := by simp [intHi]
+@[simp] theorem intLo_zero (s : Bool) : intLo s 0 = 0 := by simp [intLo]
+@[simp] theorem intHi_zero (s : Bool) : intHi s 0 = 0 := by cases s <;> simp [intHi]
+
 /-- Clamp a mathematical integer into the range of an `n`-bit type. -/
 def clamp (s : Bool) (n : Nat) (v : Int) : BitVec n :=
-  let lo : Int := if s then -(2 ^ (n - 1)) else 0
-  let hi : Int := if s then 2 ^ (n - 1) - 1 else 2 ^ n - 1
-  .ofInt n (max lo (min hi v))
+  .ofInt n (max (intLo s n) (min (intHi s n) v))
 
 @[inline] def val (s : Bool) (a : BitVec n) : Int := if s then a.toInt else a.toNat
 
@@ -238,15 +250,7 @@ after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shi
 /-- `@intCast`: the value must fit in the target type. -/
 @[inline] def intCast (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) : Result (BitVec m) :=
   let v := val s₁ a
-  let lo : Int := if s₂ then -(2 ^ (m - 1)) else 0
-  let hi : Int := if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1
-  if lo ≤ v ∧ v ≤ hi then pure (.ofInt m v) else throw .overflow
-
-/-- The length of an operand of a multi-operand `for` loop under `@setRuntimeSafety(false)` (a
-`slice_len` the loop does not read otherwise): it must equal the loop's length `bound`. Unequal
-lengths are illegal behaviour that only Sema's check (`forLenMismatch`) catches: `.illegal`. -/
-@[inline] def forLen (len bound : usize) : Result usize :=
-  if len = bound then pure len else throw .illegal
+  if intLo s₂ m ≤ v ∧ v ≤ intHi s₂ m then pure (.ofInt m v) else throw .overflow
 
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m
@@ -255,25 +259,28 @@ end Arith
 
 /-! ## Slices -/
 
-/-- Read-only slice element. Out of range ⇒ `outOfBounds`. -/
+/-- Read-only slice element (`slice_elem_val` of a pure function's `[]const T`). An index at or
+past the length is illegal behaviour that only Sema's bounds check (`outOfBounds`) catches, so
+the model checks it itself: `.illegal`, as `Zig.checkIndex` in memory (`docs/illegal-behavior.md`
+row 2). -/
 @[inline] def index {α : Type} (a : Array α) (i : usize) : Result α :=
-  if h : i.toNat < a.size then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < a.size then pure a[i.toNat] else throw .illegal
 
 @[inline] def len {α : Type} (a : Array α) : usize := BitVec.ofNat 64 a.size
 
-/-- Array element (`array_elem_val`). Out of range ⇒ `outOfBounds`. -/
+/-- Array element (`array_elem_val`). Out of range: illegal behaviour, `.illegal` (as `index`). -/
 @[inline] def vindex {α : Type} {n : Nat} (a : Vector α n) (i : usize) : Result α :=
-  if h : i.toNat < n then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < n then pure a[i.toNat] else throw .illegal
 
 /-! ## Optionals -/
 
-/-- Unwrap an optional's payload (`optional_payload`). Sema emits this only after an
-`is_non_null` check, so the `none` case is statically unreachable; still total, so it panics
-instead of diverging. -/
+/-- Unwrap an optional's payload (`optional_payload`). Unwrapping null is illegal behaviour
+(docs/illegal-behavior.md row 15): Sema's `is_non_null` check before it is ordinary AIR that
+panics first; without it (`@setRuntimeSafety(false)`) the op's own check gives `.illegal`. -/
 @[inline] def optPayload {α : Type} (a : Option α) : Result α :=
   match a with
   | some v => pure v
-  | none => throw .panic
+  | none => throw .illegal
 
 /-! ## Error unions -/
 
@@ -285,12 +292,13 @@ instead of diverging. -/
 /-- `is_non_err`. -/
 @[inline] def isNonErr {α : Type} (e : Except ErrName α) : Bool := !isErr e
 
-/-- `unwrap_errunion_payload`: Sema always checks the union first (`is_err`/`is_non_err` or a
-`try`), so the `.error` case here is statically impossible. -/
+/-- `unwrap_errunion_payload`. Unwrapping an error is illegal behaviour (row 16): Sema's check
+(`is_err`/`is_non_err` or a `try`) is ordinary AIR before it; the op's own check gives
+`.illegal`. -/
 @[inline] def unwrapPayload {α : Type} (e : Except ErrName α) : Result α :=
   match e with
   | .ok v => pure v
-  | .error _ => throw .panic
+  | .error _ => throw .illegal
 
 /-- `@errorCast` to the error set `names` (a `bitcast` between error sets): an error outside it
 is illegal behaviour that only Sema's check (`error_set_has_value`, which the exporter does not
@@ -298,12 +306,12 @@ support) catches, so the model checks it itself: `.illegal`. -/
 @[inline] def errorIn (names : List ErrName) (e : ErrName) : Result ErrName :=
   if names.contains e then pure e else throw .illegal
 
-/-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
-statically impossible. -/
+/-- `unwrap_errunion_err`: the error of a union that holds one; of a payload, illegal behaviour
+that the op checks itself (`.illegal`), as `unwrapPayload`. -/
 @[inline] def unwrapErr {α : Type} (e : Except ErrName α) : Result ErrName :=
   match e with
   | .error name => pure name
-  | .ok _ => throw .panic
+  | .ok _ => throw .illegal
 
 /-! ## Enums -/
 

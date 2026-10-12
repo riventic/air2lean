@@ -25,7 +25,10 @@ fixed layout, for running programs.
 
 ## What does not depend on fresh addresses
 
-`ZigLean/Sep/AddrReuse.lean` states the lifetime rules for every reuse policy:
+`ZigLean/Mem/Reuse.lean` states the lifetime rules for every reuse policy (the triples: the
+full-state `FTriple.withPlacement`, `FTotalTriple.withPlacement` in `ZigLean/Sep/Full/Ops.lean`; the
+legacy `Triple.withPlacement`, `TotalTriple.withPlacement` and `rawFree_stale` in
+`ZigLean/Sep/AddrReuse.lean`, retired with the legacy logic):
 
 | Theorem | Statement |
 | --- | --- |
@@ -33,7 +36,7 @@ fixed layout, for running programs.
 | `alloc_new_id` | The new block's id differs from every existing id. |
 | `access_stale` | Use after free: after a free and any sequence of allocations at any addresses, an access through the stale pointer throws `.illegal`. |
 | `free_stale`, `rawFree_stale` | Double free: a free of a dead block throws `.illegal`, also when a live block now has its address. |
-| `Triple.withPlacement`, `TotalTriple.withPlacement` | Every separation-logic triple holds from a memory with any placement and provenance mode. |
+| `FTriple.withPlacement`, `FTotalTriple.withPlacement` (legacy: `Triple.withPlacement`, `TotalTriple.withPlacement`) | Every separation-logic triple holds from a memory with any placement and provenance mode. |
 | `reuse_witness`, `reuse_stale_load` | Reuse does happen: block 1 gets block 0's address, and a load through block 0's pointer still throws `.illegal`. |
 
 `Triple`, `TotalTriple`, `alloc_run`, `rawAlloc_run` and the other rules of `ZigLean/Sep/`
@@ -88,7 +91,7 @@ start), `AllocPolicy.provenance` decides:
   it converts belongs to that block, also a stale one. This is the PNVI-style choice of C. If
   none of the covering blocks is live, the pointer has no provenance, as under `.strict`.
 
-Kernel checks (`ZigLean/Sep/AddrReuse.lean`) run the program "allocate `p`, keep `n = @intFromPtr(p)`,
+Kernel checks (`ZigLean/Mem/Reuse.lean`) run the program "allocate `p`, keep `n = @intFromPtr(p)`,
 free `p`, allocate `q` (reusing the address), store 7 in `q`, load through `@ptrFromInt(n)`":
 
 | Memory | Result | Theorem |

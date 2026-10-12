@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.13.0...15.6-none",
@@ -90,9 +93,10 @@
  "src": {
   "file": "arena.zig",
   "module": "arena",
-  "decl_line": 128
+  "decl_line": 129
  },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "arena_mixed",

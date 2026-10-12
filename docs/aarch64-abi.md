@@ -2,7 +2,7 @@
 
 Two aarch64 profiles are qualified separately: **aarch64-linux-gnu** (`-mcpu=baseline` =
 `generic`) and **aarch64-macos-none** (`-mcpu=baseline` = `apple_m1`). Both use stock Zig
-(0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
+(0.17.0, 0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
 ReleaseSafe. Each profile has three pieces of evidence:
 
 1. A native probe run. `scripts/aarch64-abi.py` runs only on the profile's own host. It does
@@ -11,13 +11,15 @@ ReleaseSafe. Each profile has three pieces of evidence:
 3. A Lean check tied to that file. Kernel-checked layout tables are compared with the file, and
    the recorded results are compared with the model.
 
-This is ABI qualification only. aarch64-linux AIR stays outside the translator's accepted
-profiles (`Air2Lean/Air/Profile.lean`). No native differential test or proof build runs on
-that host. See [target-matrix.md](target-matrix.md).
+The translator accepts both profiles (`Target.qualified` in `Air2Lean/Air/Dialect.lean`;
+[profiles.md](profiles.md#aarch64-abi-profiles-t04)). aarch64-linux only for the Zig versions
+with an expected file (`Target.aarch64Probed`: 0.17.0, 0.16.0, 0.15.2 and 0.14.1, on both
+profiles) and, on aarch64-linux, the `gnu` ABI: any other is a profile error.
+See [target-matrix.md](target-matrix.md) and §Translation below.
 
 ```sh
 # On the profile's host (aarch64 Linux or Apple silicon macOS), with a stock Zig whose version
-# has an expected file (0.16.0, 0.15.2, 0.14.1):
+# has an expected file (0.17.0, 0.16.0, 0.15.2, 0.14.1):
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-gnu
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
@@ -108,9 +110,6 @@ starts to match (the list is stale) or if an unlisted case diverges.
 | --- | --- | --- |
 | `isnan(f80 unnormal)` | `false`: compiler_rt soft f80 treats it as a number | `true` (x87 and `Float.classify`) |
 | `f80 pseudo-denormal + 0` | encoding kept (`0000_8000…`) | normalized (`0001_8000…`) |
-| `u24` cmpxchg, padding byte `ff` | **fails**, although the 24-bit values are equal | succeeds |
-| `u40` cmpxchg, padding bytes `ff` | **fails**, although the 40-bit values are equal | succeeds |
-| `i24` and `i40` `@atomicRmw` `Max`, negative cell and positive operand | **keeps the negative cell**: not the signed maximum | the signed maximum |
 
 The model allows `unnormal + 0` itself, because it classifies the returned unnormal as a NaN.
 The divergence shows up in `isnan`.
@@ -121,21 +120,53 @@ of `f80` and `f128` is correct to `f64` precision only (`sqrt(2)` = `3fff b504f3
 lists them for those versions only; otherwise the 0.15.2 and 0.14.1 files equal the 0.16.0
 files line for line (apart from `meta zig`).
 
-The signed `Max` row is an unsound corner of the model: the model's `RmwOp.apply` is the
-signed maximum, and the native result of a padded signed width (`i24`, `i40`) is not. `Min` and
-the unpadded widths (`i8`, `i64`, `i128`) agree. The translator's atomic checker does not
-reject padded widths yet.
+### Padded-width atomics: rejected, not declared
 
-The cmpxchg rows are a synchronization boundary. Zig widens a `u24`/`u40` atomic to its
-4-/8-byte ABI cell and compares the whole cell, padding included. A plain store writes only
-the value bytes. The model leaves padding undefined and compares only the value bits. So
-the model's strong cmpxchg claim is not valid for widths with whole padding bytes (`u24`,
-`u40`, `u48`, `u56`, `u65`…`u120`). The translator's atomic checker (`atomicIntChild`)
-does not reject them yet (see the risks in the T04 handoff). The LLVM IR that Zig 0.16.0
-emits shows the mechanism: `store i40` for the plain store, and `cmpxchg ptr, i64, i64` for
-the atomic. The widening comes from Zig's frontend lowering, so other targets probably behave
-the same way. This has been observed only on aarch64. Widths without padding (`u8`,
-`u16`, `u32`, `u64`, `u128`) match on both profiles, with either padding.
+A `cmpxchg` or an `@atomicRmw` `.Max`/`.Min` on an integer representation with padding bits
+(bit width other than `8 * @sizeOf`: `u7`, `i12`, `u24`, `i40`, an `enum(u24)`, a packed struct
+backed by `u40`) is outside the subset on every target and version: the translator rejects it
+(`CheckCtx.checkPaddedAtomic`, diagnostic `PADDED_ATOMIC`,
+[upstream draft](upstream/padded-rmw-minmax.md)). Zig lowers these to an LLVM atomic on the whole
+ABI cell, so the padding bits take part: a `cmpxchg` fails on equal values when the padding is
+not what the compiler expects, and a signed `.Max`/`.Min` orders a negative cell as a large
+unsigned value. Loads, stores, `.Xchg` and the arithmetic and bitwise RMWs stay in the subset:
+their results are masked, and they only write the padding, which the model leaves undefined.
+
+`Model.lean` therefore does not declare these rows. A diverging result line is accepted, and
+printed as `rejected by the translator (PADDED_ATOMIC, not a match)`, only when it is a
+`cmpxchg` or `.Max`/`.Min` of a padded type (`rejectedByTranslator`); for an `atomic` row, only
+its `cmpxchg` may differ, and every later result must follow from the cell the failed
+`cmpxchg` left (`paddedAtomicCase`). Any other divergence of an atomic row fails the check. Up to
+0.16.0 the `atomic u24`/`u40` `padff` rows (cmpxchg with padding byte `ff`) and the
+`rmw i24`/`i40` `Max` rows (negative cell, positive operand) diverge on both profiles, and are
+classified this way.
+
+A wider native probe (Zig 0.14.1 to 0.17.0 on aarch64-macos) shows that the rule must cover every
+padded width, not only whole padding bytes: on 0.14.1 to 0.16.0 a signed `.Max` diverges for
+`i7`, `i12`, `i40`, `i48` and `i56` as well, an unsigned `.Min` for `u24`, `u48` and `u56`, a
+`cmpxchg` with `ff` padding for `u24` to `u56`, and on every version including 0.17.0 a
+`cmpxchg` after an `.Add` that carried into the padding fails for `u7`, `u12`, `u24`, `u40`,
+`u48` and `u56`. All of these are padded `cmpxchg`/`.Max`/`.Min` operations, which the translator
+rejects; widths without padding (`u8` to `u64`, `i8` to `i64`) agree with the model everywhere.
+
+### Zig 0.17.0
+
+The 0.17.0 files (recorded with the stock 0.17.0: natively on Apple silicon, and in a
+`linux/arm64` container) differ from 0.16.0's in four ways, on both profiles unless noted:
+
+| Row | 0.17.0 | Model |
+| --- | --- | --- |
+| `float f80` (and `float f128` on aarch64-macos-none, where it is not `c_longdouble`) | alignment 8 | 16 |
+| `vector f80x2` | alignment 8; the second lane's image is not `Vec.packedEnc`'s | 32, bit-packed |
+| `atomic u24`/`u40` `padff` | cmpxchg succeeds | succeeds (no padded-width row diverges) |
+| `rmw i24`/`i40` `Max` | the signed maximum | the signed maximum |
+
+`Model.lean` declares the layout rows as 0.17.0 divergences (`layoutDivergences017`): the file
+must record alignment 8 there and the model's table elsewhere, and the CI step compares the
+vector images without `f80x2` (`vector-layouts/Model.lean --skip f80x2`). The translator rejects
+these types in memory on 0.17.0: `checkMemTy` compares the exporter's alignment with the model's.
+The padded `cmpxchg` and `.Max`/`.Min` stay rejected on every version. Only the two soft-float
+`f80` rows remain result divergences in 0.17.0.
 
 ## Per-profile observations (every recorded Zig version, ReleaseSafe)
 
@@ -158,6 +189,22 @@ Both profiles share the rest:
 - Subnormal rounding and conversions are as the model predicts.
 - Atomics are accepted up to 128 bits and the cache line is 128 bytes.
 
+## Translation
+
+Each profile's facts are a row of `Target.qualified`: 64-bit little-endian pointers, the
+integer and float layouts of `Zig.intSize`/`Zig.intAlign` (the layout tables above),
+`c_longdouble` (`f128` on aarch64-linux-gnu, `f64` on aarch64-macos-none), the float rules
+(`FloatRules.aarch64`, premise MTH-04, [floats.md](floats.md#targets)) and 128-bit atomics. The
+two rows differ in `c_longdouble` and in `f16` `@mulAdd`: `apple_m1` has `fullfp16` and fuses it,
+the aarch64-linux `generic` CPU rounds it through `f32`. Both differ from x86_64 in `f80` (soft
+float) and in `f32`/`f64` `@mulAdd` (fused). The declared divergences above stay outside every
+translation: a noncanonical `f80` operand is `.unspecified`, the pre-0.16.0 `@sqrt` is the
+`f64`-precision helper, and a padded `cmpxchg` or `.Max`/`.Min` is rejected.
+
+The examples are translated, built and differentially tested natively on both hosts
+(`scripts/check.sh`); aarch64-linux AIR differs from the x86_64-linux goldens only where
+`tests/golden/<version>/<ex>/air-linux-aarch64/` and `Gen-linux-aarch64.lean` say so.
+
 ## Scope
 
 Not covered:
@@ -170,5 +217,8 @@ Not covered:
   semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
 - instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
 - atomics on `f80`, and the `-mcpu` features other than `baseline`;
-- other Zig versions (0.17.0 included). A new version needs its own `expected/<version>/`
-  files; without them `compare` reports `excluded`.
+- other Zig versions. A new version needs its own `expected/<version>/` files; without them
+  `compare` reports `excluded`, and the translator rejects its aarch64 AIR;
+- programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to
+  glibc, not compiler_rt. The translator rejects those `f128` ops unless `--assume-no-libc`
+  ([floats.md](floats.md#targets)); a `link_libc` profile fact is a follow-up.

@@ -155,7 +155,7 @@ end FTTriple
 
 /-! ## Primitive rules of a thread
 
-The rules of `FTriple.alloc'` and `FTriple.free'` (`Full/Toy.lean`) for a thread, lifted from the
+The rules of `FTriple.alloc'` and `FTriple.free'` (`Full/Block.lean`) for a thread, lifted from the
 legacy thread triples (`TTriple.alloc`, `TTriple.free`, `TTriple.storeAt`, `TTriple.loadAt`,
 `TTriple.ptrProjectAt`) by the bridge; a block's bytes come with its full extent (`bext`), which
 pins its size and kind. -/

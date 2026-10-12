@@ -83,9 +83,9 @@ pointer casts) keeps the existing rules, which agree with 0.17 for those types.
 | `[n]bool` / `@Vector(n, bool)` ↔ int | **model**: `ofBools` / `toBools` |
 | lane aggregate ↔ lane aggregate of other shape, packed struct, float, bool, enum | **model**: compose through `BitVec (bits)` |
 | int ↔ enum (any tag signedness), enum ↔ enum/packed/float | **model**: tag bits. An exhaustive destination becomes `Zig.enumOf (E.ofInt? …)`: an unnamed tag throws `.panic` (`invalidEnumValue`). The same model covers `bit_cast` in unsafe builds, where that case is illegal behaviour (`ZigLean/Basic.lean`: "never throws" covers both). An enum ↔ exactly its tag type keeps the ≤0.16 text |
-| nested arrays, arrays/vectors of floats, enums or packed structs | **reject**: `a Zig 0.17 `@bitCast` of an array or vector whose element is not an integer or `bool` …` |
-| sentinel-terminated arrays | **reject**: `… of a sentinel-terminated array …` |
-| packed union ↔ aggregate/enum, `void`, any other type | **reject**: `… to or from a type other than …` |
+| nested arrays, arrays/vectors of floats, enums, packed structs or packed unions, a packed union | **model**: the type's `Zig.Packed` instance (`ZigLean/PackedRepr.lean`): `Zig.Packed.toBits?` then `Zig.Packed.ofBits?`. An element is its own logical bits, element 0 lowest, at any depth; a NaN has no determined bits (`.unspecified`); an enum item without a name is `.illegal` (0.17 checks only a scalar enum result) |
+| sentinel-terminated arrays (also as elements) | **reject**: `… of a sentinel-terminated array …` / `… whose element has no logical bit representation …` |
+| `void`, an `auto`/`extern` struct, tuple, tagged/`extern` union, pointer, optional, error type | **reject**: `… to or from a type other than …` (Sema rejects every one of these but `void`) |
 | total bit sizes differ (cannot come from Sema) | **reject**: `… between types of A and B logical bits …` |
 
 Every rejection message starts with "a Zig 0.17 `@bitCast`" and ends with "(logical bit order,
@@ -103,6 +103,10 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
   the array have identical encodings. So a ≤0.16 fact stated through memory carries over to the
   0.17 translation in this case. `tests/roadmap/bitcast-017/BitCastReal/Runtime.lean` applies
   it to translated real 0.17 AIR.
+- `Zig.Packed.bitCast_roundtrip` (`ZigLean/PackedRepr.lean`): a logical cast and its inverse
+  give the source back when its bits are all determined and give it back, and every bit pattern
+  is a destination value that gives the same bits (integers, packed structs of integers, arrays
+  of these; not enums or floats).
 - `decode_boolVec`, `decode_boolVec_bits`: the model's `@Vector(n, bool)` memory decoder
   (`Vec.packedEnc` with 1-bit lanes) gives lane `i` bit `i` of the packed integer, as `toBools`
   does, so the bool-vector layout already follows the logical order.
@@ -135,3 +139,6 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
   - It runs that translation against the values `zig test` checks natively.
   - It runs the synthetic accept/reject, ≤0.16-unchanged and emitted-runtime regressions
     (`Pipeline.lean`).
+- `tests/roadmap/packed-casts`: real 0.17.0 AIR of `logical017.zig` (nested arrays, arrays and
+  vectors of floats, enums, packed structs and packed unions, packed union ↔ `[4]u4`) with
+  kernel-checked results equal to the native x86_64-linux output.

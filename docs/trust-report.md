@@ -24,7 +24,7 @@ premise, checker or test, or a check whose test CI does not run.
 | Per-version tag normalization | `unverified-assumption` | TRU-02 | — |
 | Whole-program checker | `unverified-assumption` | TRU-02, PRF-01, PRF-02 | — |
 | Lean emitter (Gen.lean) | `unverified-assumption` | TRU-02 | — |
-| Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain) | `independently-checked-metadata` | TRU-02 | `scripts/artifact-manifest.py` / `tests/roadmap/artifact-manifest/test_manifest.py` |
+| Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain) | `independently-checked-metadata` | TRU-02, TRU-05 | `scripts/artifact-manifest.py` / `tests/roadmap/artifact-manifest/test_manifest.py`<br>`scripts/attest.py` / `tests/roadmap/attestation/test_attestation.py` |
 | ZigLean runtime semantics (model fidelity) | `unverified-assumption` | SEM-01, SEM-02, SEM-03, TRU-04 | — |
 | Theorems over generated modules and the ZigLean library | `kernel-checked` | TRU-01, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/assurance/test_policy.py`<br>`scripts/theorem_universe.py` / `tests/roadmap/theorem-universe/test_universe.py`<br>`scripts/premises.py` / `tests/roadmap/premises/test_premises.py` |
 | Lean kernel and toolchain | `unverified-assumption` | TRU-01 | — |
@@ -57,11 +57,12 @@ The exported structure is re-checked outside the Lean decoder: instruction ids, 
 
 ### Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain)
 
-Hash links between the artifacts of one run are recomputed and staleness is named per link. Identity is checked; correspondence between the linked artifacts is not.
+Hash links between the artifacts of one run are recomputed and staleness is named per link. Identity is checked; correspondence between the linked artifacts is not. A manifest or receipt is authenticated only by an attestation (an SSH signature) checked against the verifier's own allowed signers; without one it is unauthenticated.
 
-- Components: `scripts/artifact-manifest.py`
-- Premises: [TRU-02](premises.md#tru-02)
+- Components: `scripts/artifact-manifest.py`, `scripts/attest.py`
+- Premises: [TRU-02](premises.md#tru-02), [TRU-05](premises.md#tru-05)
 - Check: chained manifest hashes and per-link staleness: `scripts/artifact-manifest.py`, tested by `tests/roadmap/artifact-manifest/test_manifest.py` (CI: `tests/roadmap/artifact-manifest/test_manifest.py`)
+- Check: signed manifests and receipts: signature, trust anchor, subject digests and tamper rejection: `scripts/attest.py`, tested by `tests/roadmap/attestation/test_attestation.py` (CI: `tests/roadmap/attestation/test_attestation.py`)
 
 ## unverified-assumption
 

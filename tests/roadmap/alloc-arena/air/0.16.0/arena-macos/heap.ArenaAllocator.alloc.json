@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.13.0...15.6-none",
@@ -98,6 +101,7 @@
   2,
   1
  ],
+ "noalias": [],
  "ret": 3,
  "body": [
   {
@@ -3034,8 +3038,7 @@
           {
            "id": 296,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 297,
@@ -7002,8 +7005,7 @@
               {
                "id": 692,
                "tag": "ret_addr",
-               "ty": 1,
-               "unsupported": true
+               "ty": 1
               },
               {
                "id": 693,
@@ -9916,8 +9918,7 @@
           {
            "id": 979,
            "tag": "ret_addr",
-           "ty": 1,
-           "unsupported": true
+           "ty": 1
           },
           {
            "id": 980,

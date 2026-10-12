@@ -178,17 +178,13 @@ class ProvenanceTests(unittest.TestCase):
         origin = self.case/'origin/TryPointers/Gen.lean'
         origin.parent.mkdir(parents=True)
         origin.write_bytes((self.case/'TryPointers/Gen.lean').read_bytes())
-        emitter = self.repo/'Air2Lean/Emit.lean'
-        emitter.parent.mkdir()
-        emitter.write_text('finite emitter fixture')
         (self.case/'TryPointers/Gen.lean').write_text('current finite generated output')
         variant = {
-            'format': 'l04-emitter-integration-inputs-v1',
+            'format': 'l04-emitter-integration-inputs-v2',
             'status': 'inputs-only-not-compilation-attestation',
             'origin_provenance_sha256': guard.digest(self.case/'provenance.json'),
             'origin_generated_sha256': self.manifest['artifacts']['TryPointers/Gen.lean'],
-            'current_generated_sha256': guard.digest(self.case/'TryPointers/Gen.lean'),
-            'current_emitter_sha256': guard.digest(emitter)}
+            'current_generated_sha256': guard.digest(self.case/'TryPointers/Gen.lean')}
         path = self.case/'emitter-integration.json'
         path.write_text(json.dumps(variant))
         return before, path, variant
@@ -207,7 +203,6 @@ class ProvenanceTests(unittest.TestCase):
     def test_emitter_variant_rejects_each_drift_and_invalid_shape(self):
         before, path, variant = self.emitter_integration()
         for relative, diagnostic in [
-                ('Air2Lean/Emit.lean', 'stale current emitter'),
                 ('case/TryPointers/Gen.lean', 'stale current generated'),
                 ('case/origin/TryPointers/Gen.lean', 'stale historical generated')]:
             item = self.repo/relative
@@ -219,13 +214,14 @@ class ProvenanceTests(unittest.TestCase):
         for field, diagnostic in [
                 ('origin_provenance_sha256', 'historical provenance'),
                 ('origin_generated_sha256', 'origin generated'),
-                ('current_generated_sha256', 'stale current generated'),
-                ('current_emitter_sha256', 'stale current emitter')]:
+                ('current_generated_sha256', 'stale current generated')]:
             path.write_text(json.dumps(dict(variant, **{field: '0'*64})))
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, diagnostic):
                 guard.inspect(self.repo, self.case)
         for changed in [dict(variant, extra=True), dict(variant, status='qualified'),
-                        dict(variant, current_generated_sha256='not-sha256')]:
+                        dict(variant, current_generated_sha256='not-sha256'),
+                        dict(variant, format='l04-emitter-integration-inputs-v1'),
+                        dict(variant, current_emitter_sha256='0'*64)]:
             path.write_text(json.dumps(changed))
             with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'invalid emitter'):
                 guard.inspect(self.repo, self.case)

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -44,6 +47,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "fba_create",
@@ -230,7 +234,7 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.create__anon_28007",
+      "func": "mem.Allocator.create__anon_27651",
       "module": "std",
       "instance_key": "8f6a81b88324595b9175c2eda47a7af7a96c10036863e6040c862f2bf0e33e87",
       "noreturn": false
@@ -405,7 +409,7 @@
    "ty": 1,
    "callee": {
     "ty": 18,
-    "func": "mem.Allocator.destroy__anon_28011",
+    "func": "mem.Allocator.destroy__anon_27655",
     "module": "std",
     "instance_key": "7fa4accb9a56b0e9fb9823debdb50906f7a9f0d675ce8ebd949fec04febce1df",
     "noreturn": false

@@ -8,11 +8,13 @@ import ZigLean.Sep.Full.Try
 import ZigLean.Sep.Full.Region
 import ZigLean.Sep.Full.Wrappers
 import ZigLean.Sep.Full.Block
+import ZigLean.Sep.Full.Malloc
 import ZigLean.Sep.Full.Mmap
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 import ZigLean.VC.Rules
+import ZigLean.VecMem
 
 /-!
 # The proof framework in one import (`docs/proof-framework.md`)

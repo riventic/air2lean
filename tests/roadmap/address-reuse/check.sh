@@ -3,11 +3,13 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
-lake build ZigLean.Sep.AddrReuse
+lake build ZigLean.Mem.Reuse ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Strength
 kernel=$(lake env lean tests/roadmap/address-reuse/Kernel.lean)
 printf '%s\n' "$kernel"
 if grep -q sorryAx <<<"$kernel"; then
   echo "address reuse: a theorem depends on sorryAx" >&2
   exit 1
 fi
+# The strength log of the migrated statement (tests/roadmap/strength-log).
+lake env lean tests/roadmap/strength-log/AddressReuse.lean
 lake env lean --run tests/roadmap/address-reuse/Check.lean
