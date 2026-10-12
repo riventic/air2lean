@@ -18,6 +18,38 @@ CI confirms"); CI is the final, independent check.
 
 Every PR push ran the full CI, and every merge to `main` ran it again on the merge commit.
 
+### Measured after the merge queue (2026-10-12, before PR "CI speed")
+
+Five full runs of the reuse/queue workflow (`gh api .../actions/runs/<id>/jobs`). *Wall*: run
+start to last job end. *Queue*: job created to job started. *Setup*: checkout, installs,
+downloads, unpacks, cache restores, patched-compiler and translator builds; *test*: every
+other step.
+
+| run | event | wall | runner min (macOS) | queue max / sum | setup / test min | longest test row | longest macOS row |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 38182713444 | workflow_dispatch | 30.8 | 332 (66) | 11.9 / 51 | 38 / 292 | 18.0 (golden 0.15.2) | 24.0 |
+| 38182983305 | pull_request (docs only) | 35.7 | 275 (43) | 16.0 / 197 | 25 / 249 | 16.1 | 16.2 |
+| 38180914212 | pull_request | 26.6 | 343 (60) | 6.0 / 36 | 39 / 302 | 20.6 (golden 0.17.0) | 24.2 |
+| 38178362017 | pull_request | 37.5 | 349 (72) | 11.7 / 81 | 39 / 308 | 19.4 | 25.6 |
+| 38179421984 | push (old workflow) | 32.2 | 265 (58) | 12.6 / 156 | 13 / 250 | 17.4 | 23.4 |
+
+- 35 jobs per run (22 test rows, 3 macOS, 3 aarch64-linux, 4 `zig-air`, `lake`, `generated`,
+  `preflight`, `provenance`, `all-checks`). The Free plan runs 20 jobs at a time, 5 of them
+  macOS, across all workflows: from 23:06 to 23:33 on 2026-10-11 every one of the 20 slots was
+  busy (one dispatched run, one PR run, `ci-cache.yml`), so a run's wall time is mostly the
+  runner-minutes of everything in flight divided by 20. One run alone needs at least
+  332 / 20 = 17 min.
+- Setup is about 12 % of runner time; the build-ahead jobs finish 1.4-2.7 min into an
+  uncontended run. The rest is test steps and queueing.
+- Sinks: (1) the macOS rows rebuilt all of `Proofs` (13.7 min of the 24-min 0.16.0 row): the
+  `main` cache entry had been saved by the old workflow without `Proofs` under the same key, so
+  `ci-cache.yml` saw a hit and never rebuilt it; (2) tracing cost 1.3-1.9x on the rows that
+  declare the whole tree (golden 0.17.0 17-19 min instead of 10-14) although such a row can only
+  be reused on an identical tree; (3) the docs-only PR #149 reused 3 of 35 jobs: every traced
+  row observed every tracked file, because `git status` in the final "Checkout unchanged" step
+  stats them from threads that the reducer did not attribute to git; and any edit of a `test`
+  step changed every test row's key.
+
 ## Design overview
 
 1. **Merge queue gates every merge with the full CI.** `main` requires the single status
@@ -56,9 +88,15 @@ The **key** of a part is SHA-256 over:
 
 - the schema of `scripts/ci-reuse.py` and the content of the reuse machinery itself
   (`scripts/ci-reuse.py`, `scripts/ci-trace.sh`, `.github/ci-inputs.json`);
-- the part's job definition (the parsed job with every step, its `env`, `runs-on`, `needs`, and
-  its own matrix row in place of the matrix), the workflow-level keys other than `jobs`, and the
-  definitions of the jobs it `needs` (they produce the artifacts it consumes);
+- the part's job definition (the parsed job with its `env`, `runs-on`, `needs`, its own matrix
+  row in place of the matrix, and every step that may run for that row), the workflow-level keys
+  other than `jobs`, and the definitions of the jobs it `needs` (they produce the artifacts it
+  consumes). A step is left out only when its `if` is false for the row in every executing run:
+  the condition reads nothing but `matrix.*`, `runner.os` (from `runs-on`) and
+  `env.AIR2LEAN_REUSED` (empty in an executing run) and evaluates to false
+  (`scripts/target-matrix.py`'s evaluator). A step that never runs cannot affect the verdict;
+  a condition with a status function, another step's output or any other context keeps the step.
+  So adding a step for the `lean` rows does not change a mutation shard's key;
 - every `hashFiles(...)` pattern of those jobs, added to the content inputs (a restored cache is
   derived from exactly those files);
 - the runner: `ImageOS`, `ImageVersion`, `RUNNER_OS`, `RUNNER_ARCH`;
@@ -94,7 +132,10 @@ nondeterminism that a re-run of P on T1 already has (timing, scheduling, cache w
   same result on T1 and T2, the next call is the same; a covered observation returns the same
   result. So P on T2 makes the same calls, observes the same data and reaches the same verdict.
 - Git is modelled by command, not by its reads of `.git/`: the tracer attributes every access by
-  a `git` process to the command line. `git ls-files` (names) needs all tracked names (the key
+  a `git` process to the command line. A process or thread runs its parent's image until its own
+  `execve` (`git status` stats the tracked files from index-preload threads), so the reducer
+  attributes a clone's observations to the parent's command, also when strace prints the child
+  before the parent's `clone` returns. `git ls-files` (names) needs all tracked names (the key
   then includes the full name list); `git status --porcelain` in the final "Checkout unchanged"
   step needs nothing beyond the step's own traced writes; `fetch`, `show`, `cat-file` and
   `rev-parse` naming only full object ids read content-addressed objects (the ids come from
@@ -310,6 +351,11 @@ and the native wide bit-operation differential. What changes:
   row's proof build only rebuilds the modules that the PR or a Darwin translation changes. Before,
   the macOS cache held only `lake build` defaults and every row rebuilt all of `Proofs` in its
   check tree (5-10 min).
+- Every Lake cache key contains `hashFiles('.github/workflows/ci-cache.yml')` after the
+  toolchain hash: the recipe that built the entry (which targets, which packages) is part of the
+  key, so an entry saved by an older recipe is never a hit for a newer one. Before, the macOS
+  entry built by the old workflow without `Proofs` kept its key, `ci-cache.yml` skipped the
+  build, and every macOS row rebuilt `Proofs`.
 - Patched compilers are cached under a key over exactly the inputs of `zig-patch/build.sh` for
   that version: `air-json/*.zig`, `<version>/hook.patch`, `build.sh`, `lock.sh`, `toml-get.sh`,
   the version's own `versions.toml` table and the host-Zig pin (`scripts/ci-cache-key.py`). A pin
@@ -335,9 +381,12 @@ and the native wide bit-operation differential. What changes:
 ### Current declarations
 
 - Traced and reusable by content, declared `"inputs": ["**"], "tree_names": true` (the whole
-  tree): golden and lean rows of 0.14.1, 0.15.2 and 0.17.0, the three build-mode rows and the five
-  mutation shards. Most of them build the Lake package or a check tree, which read nearly every
-  file, so narrowing gains little there.
+  tree): lean rows of 0.14.1, 0.15.2 and 0.17.0, the three build-mode rows and the five
+  mutation shards. They read about a third of the tree once `git status` is modelled (see
+  above): to be narrowed from their traces.
+- `commit_bound` because they read the whole tree: the golden rows of 0.14.1, 0.15.2 and 0.17.0.
+  `scripts/check.sh` copies every tracked file into its check tree, so their content key is the
+  whole tree and could only match an identical tree; tracing made them 1.4-1.9x slower.
 - Narrowed from their traces (`scripts/ci-reuse.py suggest` over the uploaded `ci-trace-<key>`
   artifacts, verified by the next execution's coverage check): `aarch64-linux`,
   `bitops-native-arm`, `build-modes-aarch64-linux`.
