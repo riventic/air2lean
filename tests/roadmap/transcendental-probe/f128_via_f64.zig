@@ -1,3 +1,5 @@
+//! F02 probe (docs/research/F02.md): f128 transcendentals are computed through f64 on Zig 0.15.2.
+//! Recorded on aarch64-macos: @exp(f128 1000) = inf; @log(1+2^-60)-2^-60 = -8.67e-19 (exact -2^-121).
 const std = @import("std");
 pub fn main() void {
     var v: f128 = 1000.0;
