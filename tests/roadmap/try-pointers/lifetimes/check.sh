@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # L04 pointer-try lifetimes and native runs (README.md). Run in the serialized build queue.
 #   check.sh [--check]          translate air/<version>/ (0.14.1, 0.15.2, 0.16.0, 0.17.0), compare
-#                               with gen/<version>.lean, build it and run TryLifetimes/Runtime.lean
+#                               with gen/<version>.lean, build it and run Lifetimes.lean
 #                               (kernel-checked sequential theorems, 32 scheduler oracles)
 #   check.sh --native VERSION   with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE): the tests of
 #                               try_pointers.zig, try_aliases.zig and try_lifetimes.zig for
@@ -59,9 +59,12 @@ for v in "${versions[@]}"; do
   "$translator" "$dir/air/$v" -o "$w/TryLifetimes/Gen.lean" --namespace TryLifetimes \
     --prefix try_lifetimes.
   cmp "$w/TryLifetimes/Gen.lean" "$dir/gen/$v.lean"
-  cp "$dir/TryLifetimes/Runtime.lean" "$w/TryLifetimes/"
+  cp "$dir/Lifetimes.lean" "$w/"
   LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
     "${lean_cmd[@]}" -R "$w" -o "$w/TryLifetimes/Gen.olean" "$w/TryLifetimes/Gen.lean"
   echo "$v: $(LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
-    "${lean_cmd[@]}" -R "$w" --run "$w/TryLifetimes/Runtime.lean")"
+    "${lean_cmd[@]}" -R "$w" --run "$w/Lifetimes.lean")"
+  # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
+  python3 -B scripts/theorem_universe.py gate "$w/Lifetimes.lean" --root "$w" \
+    --lean-path "$w" --output-dir "$w/universe" > /dev/null
 done

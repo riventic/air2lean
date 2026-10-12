@@ -8,6 +8,8 @@ open Zig Logical017 PackedCastsShow
 
 def f16 (b : Nat) : Zig.F16 := Zig.Float.ofBits (BitVec.ofNat 16 b)
 
+namespace Logical017Model
+
 theorem nestedToInt_ok : (nestedToInt #v[#v[1, 2, 3], #v[4, 5, 6]]).run = some (.ok 0x654321#24) := by
   decide +kernel
 theorem nested_roundtrip : (intToNested 0xFEDCBA#24 >>= nestedToInt).run = some (.ok 0xFEDCBA#24) := by
@@ -29,6 +31,10 @@ theorem halvesToVec_ok : ((halvesToVec #v[f16 0x3c00, f16 0xc000]).map (·.lanes
 /-- A NaN lane has no determined bits. -/
 theorem vecToHalves_nan : (vecToHalves ⟨#v[f16 0x7e00, f16 0x4000]⟩).run = some (.error .unspecified) := by
   decide +kernel
+
+end Logical017Model
+
+open Logical017Model
 
 def main : IO Unit := do
   line "nestedToInt" (nestedToInt #v[#v[1, 2, 3], #v[4, 5, 6]])

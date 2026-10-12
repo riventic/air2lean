@@ -126,6 +126,9 @@ for v in "${versions[@]}"; do
       "${lean_cmd[@]}" -R "$w" --run "$w/$model.lean" > "$w/$model.txt" \
       || { cat "$w/$model.txt" >&2; exit 1; }
     cat "$w/$model.txt" >> "$w/lines.txt"
+    # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
+    python3 -B scripts/theorem_universe.py gate "$w/$model.lean" --root "$w" --lean-path "$w" \
+      --output-dir "$w/universe-$model" > /dev/null
   done
   # The model's lines are the retained native observations of this version.
   compare "$w/lines.txt" "$dir/expected/$v.txt"

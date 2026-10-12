@@ -6,6 +6,8 @@ import Show
 
 open Zig AutoItems PackedCastsShow
 
+namespace AutoItemsModel
+
 theorem structsToInt_ok : (structsToInt #v[{ a := 1, b := 2 }, { a := 3, b := 4 }]).run =
     some (.ok 0x0004000300020001#64) := by decide +kernel
 theorem structB1_ok : (structB1 0x0004000300020001#64).run = some (.ok 4) := by decide +kernel
@@ -18,6 +20,10 @@ theorem unionPayload1_badTag : (unionPayload1 0x0005BEEF00011234#64).run =
 /-- The tagged unions' padding bytes are undefined: their integer is `.unspecified`. -/
 theorem unionsToInt_padding : (unionsToInt #v[.a 0x1234, .b 0x56]).run = some (.error .unspecified) := by
   decide +kernel
+
+end AutoItemsModel
+
+open AutoItemsModel
 
 def main : IO Unit := do
   line "structsToInt" (structsToInt #v[{ a := 1, b := 2 }, { a := 3, b := 4 }])

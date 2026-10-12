@@ -6,12 +6,18 @@ of `native.zig`'s cases. -/
 
 open Zig VectorFields PackedCastsShow
 
+namespace VectorFieldsModel
+
 def result {α : Type} (f : MemM α) : Option (Except Error α) :=
   ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
 
 theorem setVector_ok : result (setVector 1 2 3) = some (.ok 0x321a) := by decide +kernel
 theorem lane1_ok : (lane1 0x321A#16).run = some (.ok 2) := by decide +kernel
 theorem laneSum_ok : result (laneSum 0x321A#16) = some (.ok 6) := by decide +kernel
+
+end VectorFieldsModel
+
+open VectorFieldsModel
 
 def main : IO Unit := do
   let m := mem0 .fresh

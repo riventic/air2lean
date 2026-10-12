@@ -10,6 +10,8 @@ open Zig PackedCasts PackedCastsShow
 def f16 (b : Nat) : Zig.F16 := Zig.Float.ofBits (BitVec.ofNat 16 b)
 def f32 (b : Nat) : Zig.F32 := Zig.Float.ofBits (BitVec.ofNat 32 b)
 
+namespace PackedCastsModel
+
 /-- The result of running `f` from the translation's initial memory. -/
 def result {α : Type} (f : MemM α) : Option (Except Error α) :=
   ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
@@ -47,6 +49,10 @@ theorem intToFloats_ok : ((intToFloats 0x40400000BF800000#64).map (·.toList)).r
     some (.ok [f32 0xbf800000, f32 0x40400000]) := by decide +kernel
 theorem vecToInt_ok : (vecToInt ⟨#v[f32 0x3f000000, f32 0x40800000]⟩).run =
     some (.ok 0x408000003f000000#64) := by decide +kernel
+
+end PackedCastsModel
+
+open PackedCastsModel
 
 def main : IO Unit := do
   let m := mem0 .fresh

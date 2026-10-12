@@ -10,6 +10,141 @@
       ],
       "correspondence": "model"
     },
+    "Model::PackedCastsModel.floatField_nan": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.floatInPlace_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.floatKeepsNeighbours_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.floatsToInt_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.halfToF16_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.intToFloats_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.makeR_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.rToInt_intToR": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.setFloat_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.setUnion_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.unionFloatView_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.unionHalfHi_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.unionKeepsA_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.vecToInt_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Model::PackedCastsModel.wideFloat_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::T04.linuxGnu_layouts": {
       "semantics": "ieee",
       "targets": [
@@ -20,6 +155,24 @@
       "correspondence": "model"
     },
     "Model::T04.macosNone_layouts": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ModelLogical::Logical017Model.halvesToVec_ok": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ModelLogical::Logical017Model.vecToHalves_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
