@@ -626,6 +626,23 @@ def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Un
       clocks := m.clocks.set! t clock,
       footprint := m.footprint.push { tid := t, clock, block, off, len, kind } }
 
+/-- `e` without its accesses to offsets `≥ S` of block `b`: an entry that starts there gets the
+empty clock (it happened before every access, so it races with none and every clock covers it;
+its place in the record stays, so `NaScope.seen` keeps pointing at the same entries), and one that
+crosses `S` ends there. -/
+def FootprintEntry.forgetFrom (b : BlockId) (S : Nat) (e : FootprintEntry) : FootprintEntry :=
+  if e.block = b ∧ S ≤ e.off then { e with clock := #[] }
+  else if e.block = b ∧ S < e.off + e.len then { e with len := S - e.off }
+  else e
+
+/-- **Revived bytes have no access history.** The offsets `≥ S` of block `b` are dead (past its
+end); a step that brings them to life (an in-place growth: `Os.mremap`, `remapByteBuffer`) first
+forgets every recorded access to them, so they start as the bytes of a new block do (natively the
+growth maps new pages or hands out memory the allocator owned). The accesses to offsets `< S` and
+to every other block stay. -/
+def Mem.forgetFrom (m : Mem) (b : BlockId) (S : Nat) : Mem :=
+  { m with footprint := m.footprint.map (FootprintEntry.forgetFrom b S) }
+
 def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Array Byte) := do
   let (b, blk, o) ← (← get).access p n align
   recordAccess b o n kind

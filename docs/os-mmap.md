@@ -105,7 +105,10 @@ are `.unspecified`, as is any call on macOS.
   in place if there is room, else returns `error.OutOfMemory` (`ENOMEM`). A move whose pages
   would end above `addrLimit` returns `error.OutOfMemory` too.
   The grown bytes up to the old length's page end are undefined (the kernel keeps the stale
-  tail of the last page), the rest are zero (`mremapFill`).
+  tail of the last page), the rest are zero (`mremapFill`). A growth in place forgets the
+  recorded accesses to the grown offsets (`Mem.forgetFrom`): the grown bytes start with no access
+  history, as a new mapping's do, so an access from before an earlier unmap of those pages (by
+  any thread) races with no access to the new ones.
 
 ## Rules (`ZigLean/Sep/Mmap.lean`, proof-only)
 
