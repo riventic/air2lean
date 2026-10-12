@@ -223,10 +223,12 @@ class HostRules(unittest.TestCase):
         self.mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.mod)
 
-    def selection(self, host, version):
+    def selection(self, host, version, status=None):
         args = self.mod.parse(['--zig-version', version], {})
         doctor = self.mod.Doctor(ROOT, ROOT, args, {})
         self.assertTrue(doctor.metadata())
+        if status:
+            doctor.versions[version]['status'] = status
         doctor.host_id = host
         return doctor.zig_selection(), doctor.checks[-1]
 
@@ -239,10 +241,13 @@ class HostRules(unittest.TestCase):
         self.assertTrue(self.selection('aarch64-macos', '0.15.2')[0])
 
     def test_in_qualification_version_is_noted(self):
-        ok, check = self.selection('x86_64-linux', '0.17.0')
+        ok, check = self.selection('x86_64-linux', '0.17.0', status='in-qualification')
         self.assertTrue(ok)
         self.assertEqual((check['id'], check['status']), ('zig-version-status', 'note'))
         self.assertIn('0.16.0', check['hint'])
+        # No pinned version is in qualification now: 0.17.0 (qualified) gets no note.
+        ok, check = self.selection('x86_64-linux', '0.17.0')
+        self.assertEqual((check['id'], check['status']), ('zig-version', 'ok'))
         ok, check = self.selection('x86_64-linux', '0.16.0')
         self.assertEqual(check['id'], 'zig-version')
 

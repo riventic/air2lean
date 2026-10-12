@@ -19,7 +19,7 @@
     "versions": [
       {
         "version": "0.17.0",
-        "status": "in-qualification",
+        "status": "qualified",
         "hosts": ["x86_64-linux", "aarch64-macos"],
         "source": {
           "url": "https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz",
