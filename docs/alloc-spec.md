@@ -238,16 +238,29 @@ Every claim it makes is either **replaced** by a statement over translated alloc
 about the hand-written model itself. The executable checks of the `std` allocator model
 (`tests/roadmap/{allocation-policy, allocator-identity, byte-sentinel, sentinel-realloc,
 resize-remap}`: kernel runs of `Zig.Allocator` and `ZigLean/Mem/Owned.lean`) test the semantics
-that `--allocator-model std` still emits. They stay, importing `ZigLean/Mem/*` only, until that
-mode's allocator rows are deleted ([allocator-model.md](allocator-model.md), steps 4 and 5).
+that `--allocator-model std` still emits. They are **legacy std allocator model checks**: they
+stay, importing `ZigLean/Mem/*` only, and retire with `--allocator-model std`
+([allocator-model.md](allocator-model.md), step 3 onwards). No new evidence is built on them.
+
+**The wrapper contracts are stated on the generated wrapper code** (decision of the D2 lane). The
+translated `std.mem.Allocator` wrappers dispatch through the vtable, so a contract on the
+generated function is generic in the allocator: it holds for every invariant `I` whose vtable
+entries satisfy their `FAllocSpec` triples (the entries are the rules of the vtable calls that
+`fsym` walks to). `Wrap.*`, the hand-written step semantics of the wrappers, is not used: it is a
+hand-written model of a std module (CLAUDE.md, "Trusted base"), and its bridge to the generated
+code was a manual equality per program. A program-independent normal form would only be added
+with an automatic bridge (one rule set per Zig version, applied by `fsym`); none is needed. Below,
+`Full/Wrappers` is the library part (postconditions over `FAllocInv`, step rules for
+`@returnAddress`, `@memset(_, undefined)` and the constants of the wrappers) and the contracts
+themselves are proved over the generated wrappers of `tests/roadmap/alloc-fba`.
 
 | Legacy claim | Where | Status | Replacement or reason |
 | --- | --- | --- | --- |
-| `allocBytes_spec`, `allocItems_spec`, `allocAdvanced_spec`, `allocSlice_spec` (`alloc`, `alignedAlloc`) | `AllocSpec/Wrappers` | replaced | `Full/Wrappers`: the same contracts for every allocator with `FAllocSpec L vt ctx I` (partial, total or concurrent) |
-| `create_spec`, `destroy_spec`, `freeBytes_spec`, `free_spec`, `freeSentinel_spec` | `AllocSpec/Wrappers` | replaced | `Full/Wrappers` over `FAllocSpec` |
-| `copyChecked_spec`, `dupe_spec` (`GrantSep`, `SrcSep`) | `AllocSpec/Wrappers` | replaced | `Full/Wrappers` over `FAllocSpec`; the address disjointness of two grants follows from their extent shares and claims instead of the premise `GrantSep` where the allocator's token pins the block |
-| `reallocAdvanced_spec`, `realloc_spec` | `AllocSpec/Wrappers` | replaced | `Full/Wrappers` over `FAllocSpec` (remap in place or moved, else alloc, copy, free) |
-| `allocSentinel_spec` | `AllocSpec/Wrappers` | replaced | `Full/Wrappers` over `FAllocSpec` |
+| `allocBytes_spec`, `allocItems_spec`, `allocAdvanced_spec`, `allocSlice_spec` (`alloc`, `alignedAlloc`) | `AllocSpec/Wrappers` | replaced | contracts of the generated `alloc`/`alignedAlloc` wrappers for every allocator invariant with the `FAllocSpec` entry triples (`Full/Wrappers`, `tests/roadmap/alloc-fba`) |
+| `create_spec`, `destroy_spec`, `freeBytes_spec`, `free_spec`, `freeSentinel_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` |
+| `copyChecked_spec`, `dupe_spec` (`GrantSep`, `SrcSep`) | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec`; the address disjointness of two grants follows from their extent shares and claims instead of the premise `GrantSep` where the allocator's token pins the block |
+| `reallocAdvanced_spec`, `realloc_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` (remap in place or moved, else alloc, copy, free) |
+| `allocSentinel_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` |
 | `sep_from`, `tame_prim` (tactics), `sep_ex_right`, `sep_lift_right`, `Logic.of_pure`, `granted_ex*`, `ret_eq`, `sep_part` | `AllocSpec/Wrappers` | retired | proof glue of the legacy logic; `fsym` walks the wrappers |
 | `AllocSpec`, `AllocInv`, `granted`, `Logic` (`partial`, `total`, `Sound`), `AllocSpec.toPartial`, `AllocSpec.congr` | `AllocSpec` | replaced | `FAllocSpec`, `FAllocInv`, `FAllocInv.granted`, `FLogic`, `FAllocSpec.toPartial`, `FAllocSpec.congr` (`Full/AllocSpec`, `Full/Logic`); `RawVTable`, `keepsPrefix` move to `Full/AllocSpec` |
 | `dispatch_allocSpec`, `vtR`, `AllocInv.withVTable`, `load_dispatch*` | `AllocSpec/Dispatch` | replaced | `CAllocSpec.dispatch` and the persistent vtable knowledge `vtR` (`Full/Dispatch`, `Full/Const`); `VTableFns`, `dispatch` move to `Full/Dispatch` |
