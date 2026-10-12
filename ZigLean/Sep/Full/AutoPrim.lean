@@ -42,10 +42,9 @@ variable {P : FAssn}
     FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) :=
   FTotalTriple.of_read fun _ _ _ _ _ _ => by simp [ptrEqAddr, ptrAddr, hp, hq, zig_unfold]
 
--- The value of a widened or truncated word, the size of a literal byte array (a
--- `Zig.storeBytes` of constant bytes) and of a value's bytes, for the arithmetic solver.
-attribute [fsym_arith] BitVec.toNat_setWidth List.size_toArray List.length_cons List.length_nil
-  LawfulEnc.size_encode
+-- The size of a literal byte array (a `Zig.storeBytes` of constant bytes), for the arithmetic
+-- solver (widened and truncated words, sizes of values' bytes: `AutoArith.lean`).
+attribute [fsym_arith] List.size_toArray List.length_cons List.length_nil
 
 end Values
 
