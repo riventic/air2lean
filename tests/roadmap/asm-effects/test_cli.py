@@ -99,7 +99,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-effects-") as d:
         out = Path(d) / "Gen.lean"
         result = subprocess.run([str(binary), str(ROOT / "tests/golden/asm/air"), "-o", str(out),
-                                 "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le"], text=True,
+                                 "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le",
+                                 "--assume-asm-cpu-features"], text=True,
                                 capture_output=True, check=False, timeout=60)
         assert result.returncode == 0, result.stderr
         # check.sh may have rewritten Proofs/Asm/Gen.lean with this host's profile header first

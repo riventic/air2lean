@@ -10,6 +10,15 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - **Full language support, not snippets.** Implement general support for a Zig feature, type, std
   module or target. Do not prove one code snippet in a way that breaks when the code changes. A
   proof should follow from general semantics and reusable rules.
+- **Build generic, prove individual items against it.** Every proof splits into a generic part
+  stated once for all instances (a contract, an interface, a library rule, a model of a whole
+  family) and per-item obligations that each concrete instance discharges. A client relies only on
+  the contract, never on which instance it gets: code that calls through a vtable, callback,
+  allocator, `Io`, generic type parameter or OS primitive is proved for *every* implementation; each
+  implementation in the program proves the contract; an implementation from outside enters only
+  as an explicit premise; no contract means fail closed. The same holds for features: model the
+  whole family (all widths, all value kinds, all versions, all targets) and let examples be
+  instances, never one-off proofs. See `docs/interfaces.md`.
 - **General tactics over module-specific ones.** A proof about a module supplies its invariant and
   little else; the generated code is walked by general tactics and rules in the libraries
   (`ZigLean`). When a module-specific tactic seems necessary, generalize it into the library
