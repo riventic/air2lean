@@ -91,9 +91,9 @@ hand-written fixtures:
 * Every fresh program is rejected on `stage2_llvm` at offset 24, like the hand-written one,
   and also when downgraded to schema 11 (below).
 
-This is export and translation evidence only. The native offsets are checked with a stock
-0.16.0 compiler (`check.sh --native`); `zig test const_bases.zig -fno-llvm` was not run with
-0.15.2 or 0.14.1 here.
+This is export and translation evidence. The native offsets are checked by `check.sh
+--native`, which passed with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux-musl
+(linux/amd64 container).
 
 ## The LLVM constant `eu_payload` offset
 
