@@ -1,6 +1,6 @@
 # Roadmap handoff
 
-This handoff finishes the existing eight-closeout batch and preserves the broader roadmap. All eight closeouts are merged at feature integration head `5f7f547ed885d56624c9536c90e2b0d60e901568`. The register has **89 requirements: 40 complete, 39 partial, 1 open and 9 research**. The other 50 requirements remain incomplete even where a useful bounded feature has shipped.
+This handoff finishes the existing eight-closeout batch and preserves the broader roadmap. All eight closeouts are merged at feature integration head `5f7f547ed885d56624c9536c90e2b0d60e901568`. The register has **89 requirements: 40 complete, 39 partial, 1 open and 9 research**. The other 49 requirements remain incomplete even where a useful bounded feature has shipped.
 
 The repository translates a supported subset of Zig into Lean, supplies executable memory/concurrency models and kernel-checked proofs, and compares selected generated computations with compiled Zig. This batch improves error/outcome reporting, ABI/storage behavior, deadlines, sentinel allocation, byte permutations and a bounded RwLock snapshot client. Use the [README](https://github.com/riventic/air2lean/blob/main/README.md) to start, [PLAN](https://github.com/riventic/air2lean/blob/main/PLAN.md) for implemented milestones and [coverage](https://github.com/riventic/air2lean/blob/main/docs/coverage.md) for supported domains.
 

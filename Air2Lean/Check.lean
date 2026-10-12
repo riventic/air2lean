@@ -1264,11 +1264,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       let memCast := cx.bitCast == some .memory
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
       -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.0
-      -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`).
+      -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
+      -- so no cast to, from or between such optionals is translated.
       let optNullable (t : TyId) : Bool := match cx.types[t]? with
         | some (.optional c) => nullable c
         | _ => false
-      if optNullable aty != optNullable ty then
+      if (optNullable aty || optNullable ty) && aty != ty then
         cx.fail line "a cast to or from an optional C/allowzero pointer (`?*allowzero T`, \
           `?[*c]T`) is outside the subset: Zig miscompiles it; unwrap and cast the payload"
       -- A nullable slice (`[]allowzero T`) keeps its nullability: no cast to or from another
@@ -1279,7 +1280,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if (nullableSlice aty || nullableSlice ty) && !(nullableSlice aty && nullableSlice ty) then
         cx.fail line "a cast between a nullable slice (`[]allowzero T`) and another type is \
           outside the subset"
-      -- A nullable pointer is never optional, so at most one side is the optional pointer.
+      -- A nullable pointer is never optional, so at most one side is the optional pointer (an
+      -- optional of a nullable pointer was rejected above).
       if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then
         unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
           cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"

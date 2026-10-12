@@ -22,7 +22,10 @@ case "${1:-}" in
     [ -f "$here/expected/$version.txt" ] || { echo "no expected/$version.txt: a release Zig of a supported version is required" >&2; exit 1; }
     # `main`, then one variant per `case` (each ends the process with a panic or a fault).
     runs=()
-    for name in main sliceCNull memsetCNull optUnwrapNull memsetAzNull; do
+    # The cases are `runCase`'s `comptime eql(u8, case, "<name>")` lines, in order.
+    cases=$(grep -o 'comptime eql(u8, case, "[A-Za-z]*")' "$here/nullpointers.zig" | sed 's/.*"\(.*\)")/\1/')
+    [ -n "$cases" ] || { echo 'no native cases in nullpointers.zig' >&2; exit 1; }
+    for name in main $cases; do
       mkdir -p "$work/$name"
       sed "s/^const case = \"main\";\$/const case = \"$name\";/" "$here/nullpointers.zig" > "$work/$name/nullpointers.zig"
       grep -q "^const case = \"$name\";\$" "$work/$name/nullpointers.zig" || { echo "no case line for $name" >&2; exit 1; }
