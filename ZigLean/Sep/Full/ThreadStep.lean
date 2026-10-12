@@ -312,7 +312,7 @@ theorem load {T : Type} [Enc T]
 /-- `alloc` reads no record. -/
 theorem alloc (kind : BlockKind) (size align : Nat) : RunFp F m₀ (Zig.alloc kind size align) := by
   unfold RunFp
-  cases hroom : m₀.roomFor size align
+  cases hroom : m₀.allocOk kind size align
   · rw [alloc_run_noRoom _ (by exact hroom), alloc_run_noRoom _ hroom]; rfl
   · rw [alloc_run_eq _ (by exact hroom), alloc_run_eq _ hroom]; rfl
 
