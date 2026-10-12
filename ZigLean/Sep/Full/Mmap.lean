@@ -701,10 +701,11 @@ mapping's full extent is read back from its cells (`upPost_bext`), and a whole m
 by its full extent (`up_sep_bext`). Clients see only full-state assertions. -/
 
 /-- What `mmap` returns over full-state resources: a fresh mapping of `len` zero bytes, live
-from offset 0 at a page-aligned address, with its full extent; or `error.OutOfMemory`. -/
-def fmmapPost (P : Nat) (len : BitVec 64) : Except ErrName Slice → FAssn
+from offset 0 at a page-aligned address whose pages end at or below the address limit `L`, with
+its full extent; or `error.OutOfMemory`. -/
+def fmmapPost (P L : Nat) (len : BitVec 64) : Except ErrName Slice → FAssn
   | .ok s => ⟪s.len = len ∧ s.ptr.off = 0⟫ ⋆ FAssn.ex fun b => FAssn.ex fun A : Nat =>
-      ⟪s.ptr.block = some b ∧ A % P = 0⟫ ⋆
+      ⟪s.ptr.block = some b ∧ A % P = 0 ∧ A + alignUp len.toNat P ≤ L⟫ ⋆
         (up (regionIn s.ptr A len.toNat (.mapped 0) P (Array.replicate len.toNat (.int 0))) ⋆
           bext b len.toNat (.mapped 0))
   | .error e => ⟪e = "OutOfMemory"⟫
@@ -714,7 +715,7 @@ def fmmapPost (P : Nat) (len : BitVec 64) : Except ErrName Slice → FAssn
 theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
     (hlen : 0 < len.toNat) :
     FTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
-      (fmmapPost os.pageSize len) := by
+      (fmmapPost os.pageSize os.addrLimit len) := by
   refine ((FTotalTriple.ofTotal (E := fun _ => none) (B := fun _ => False)
     (TotalTriple.mmap os hint len hlen) (Tame.mmap _ _ _ _ _ _ _)
     (fun _ he _ _ hl => by rw [he] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
@@ -724,7 +725,7 @@ theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64
   · refine EUpd.upPost_up.trans (EUpd.of_imp fun r h => ?_)
     exact ⟨h.1.1, up_emp.mp ⟨h.1.2, h.2⟩⟩
   · intro m r rF hh hp hs
-    obtain ⟨hsl, ho, A, hm⟩ : mmapPost os.pageSize len (.ok s) r.heap.erase := by
+    obtain ⟨hsl, ho, A, hAL, hm⟩ : mmapPost os.pageSize os.addrLimit len (.ok s) r.heap.erase := by
       obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
     obtain ⟨-, hpos, hA, -, hb⟩ := hm
     obtain ⟨b, hpb, h0, hl⟩ := hb
@@ -737,8 +738,8 @@ theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64
       (upPost_bext (b := b) (S := len.toNat) (K := .mapped 0) hp
         ⟨_, fc, hfc, by rw [hfe]; simp, by rw [hfe], fun h => h.elim⟩) hs
     obtain ⟨r₁, r₂, hd, he, ⟨hq, hk, hg⟩, h2⟩ := hr'
-    obtain ⟨-, -, A', -, -, hA', -, hb'⟩ := hq
-    refine ⟨r', hh', sep_lift.mpr ⟨⟨hsl, ho⟩, b, A', sep_lift.mpr ⟨⟨hpb, hA'⟩,
+    obtain ⟨-, -, A', hAL', -, -, hA', -, hb'⟩ := hq
+    refine ⟨r', hh', sep_lift.mpr ⟨⟨hsl, ho⟩, b, A', sep_lift.mpr ⟨⟨hpb, hA', hAL'⟩,
       r₁, r₂, hd, he, ⟨⟨?_, by simp, ?_⟩, hk, hg⟩, h2⟩⟩⟩
     · rw [ho]; simpa using hA'
     · simpa using hb'
