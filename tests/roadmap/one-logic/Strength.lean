@@ -14,16 +14,20 @@ namespace OneLogic.Strength
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn
 
-/-- The library's typed load. -/
+/-- The library's typed load: the legacy total triple's statement on every `Mem.FSeq` memory. -/
 theorem load {T : Type} [Enc T] {a : Nat} {q : Ptr} {v : T} (hn : 0 < Enc.size T) :
-    TotalTripleIn Mem.FSeq (pts q a v) (Zig.load T a q) (fun x => ⌜x = v⌝ ∗ pts q a v) :=
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → pts q a v hP → m.Seq → m.FSeq →
+      ∃ x m' hQ, (Zig.load T a q).run m = pure (x, m') ∧ Heap.Disjoint hQ hF ∧
+        m'.heap = hQ ∪ hF ∧ (⌜x = v⌝ ∗ pts q a v) hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on ((FTotalTriple.load hn).post fun _ _ h => up_lift.mpr (sep_lift.mp h))
     fun _ => SizeFree.sep SizeFree.lift (SizeFree.pts q a v)
 
-/-- The library's typed store. -/
+/-- The library's typed store: the legacy total triple's statement on every `Mem.FSeq` memory. -/
 theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {q : Ptr} {v : T} (hn : 0 < Enc.size T)
     (w : T) :
-    TotalTripleIn Mem.FSeq (pts q a v) (Zig.store a q w) (fun _ => pts q a w) :=
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → pts q a v hP → m.Seq → m.FSeq →
+      ∃ x m' hQ, (Zig.store a q w).run m = pure (x, m') ∧ Heap.Disjoint hQ hF ∧
+        m'.heap = hQ ∪ hF ∧ pts q a w hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on (FTotalTriple.store hn w) fun _ => SizeFree.pts q a w
 
 end OneLogic.Strength

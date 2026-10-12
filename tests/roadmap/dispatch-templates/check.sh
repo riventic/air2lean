@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Dispatch-loop template: tactic regressions, and the proof about a fresh compiler-exported
-# tokenizer state machine. Run only under the root's serialized compiler guard.
-#   --template-only  tactic regressions only (no Zig)
+# Dispatch loops in the full-state logic: regressions on small machines, and the proof about a
+# fresh compiler-exported tokenizer state machine. Run only under the root's serialized compiler
+# guard.
+#   --template-only  small-machine regressions only (no Zig)
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -15,9 +16,9 @@ case "$#" in
   *) echo 'too many arguments' >&2; exit 2 ;;
 esac
 here=tests/roadmap/dispatch-templates
-lake build ZigLean.Sep.DispatchTemplate ZigLean.Range air2lean
+lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigLean.Sep.Full.Strength air2lean
 lake env lean "$here/Template.lean"
-if [ "$native" = 0 ]; then echo 'dispatch template regressions passed'; exit 0; fi
+if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi
 
 version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_DISPATCH_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
@@ -58,4 +59,4 @@ lake env lean -R "$work/gen" -o "$work/gen/DispatchTokenizer.olean" "$work/gen/D
 # Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
 python3 -B scripts/theorem_universe.py gate "$here/TokenizerProof.lean" \
   --root "$here" --lean-path "$work/gen" --output-dir "$work/universe"
-echo "dispatch template regressions and generated tokenizer proof passed: Zig $version"
+echo "dispatch loop regressions and generated tokenizer proof passed: Zig $version"
