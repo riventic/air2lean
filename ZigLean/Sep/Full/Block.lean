@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoAttr
+import ZigLean.Sep.Full.ThreadStep
 import ZigLean.Mem.AllocLemmas
 
 /-!
@@ -19,7 +20,9 @@ Step rules for `fsym` about making and ending blocks:
 
 The rules are proved on `Holds` directly (no legacy lifting): `Holds.alloc` (the memory after a
 new block holds its bytes and full extent, `newBlockRes`, with the same frame) and `Holds.free`
-(the memory with a block ended holds nothing more, from its bytes and full extent).
+(the memory with a block ended holds nothing more, from its bytes and full extent). Each rule
+is also a thread rule (`FTTriple.alloc`, `FTTriple.allocZero`, `FTTotalTriple.free`): the
+sequential triple and the step's locality (`ZigLean/Sep/Full/ThreadStep.lean`).
 -/
 
 namespace Zig
@@ -332,6 +335,33 @@ theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
     (hK : K ≠ .constGlobal) :
     FReturns (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) :=
   (FTotalTriple.free hpb hS h0 hpos hK).2
+
+/-! ## Thread rules -/
+
+/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent. -/
+theorem FTTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    FTTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
+  FTTriple.ofSeq (FTriple.alloc' kind size align ha hpos hk) (ThreadLocal.alloc kind size align)
+
+/-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block. -/
+theorem FTTriple.allocZero (kind : BlockKind) (align : Nat) :
+    FTTriple emp (Zig.alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) :=
+  FTTriple.ofSeq (FTriple.allocZero kind align) (ThreadLocal.alloc kind 0 align)
+
+/-- **`free` of a whole block in a thread** (total): its bytes and its full extent go. The thread
+owns every byte of the block, so no access to it races with its end. -/
+theorem FTTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
+  FTTotalTriple.ofSeq (FTotalTriple.free hpb hS h0 hpos hK)
+    (ThreadLocal.free hpb fun m r _ hh hp blk hb x hx => by
+      obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth (sep_comm hp)
+      rw [hb] at hb'; cases hb'
+      exact (OwnsAt.bytesAt hpb).sepL r hp x (by simp [h0]) (by simp [h0]; omega))
 
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/

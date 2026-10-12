@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Extent
 import ZigLean.Sep.Full.Tame
+import ZigLean.Sep.Full.ThreadStep
 import ZigLean.Mem.Reuse
 
 /-!
@@ -351,54 +352,7 @@ theorem of_cases
     obtain ⟨v, m', r', hr, hh', h', hs'⟩ := ht.runs hh hi hs
     exact ⟨v, m', r', hr, hh', hq v r' h', hs'⟩
 
-variable {q p : Ptr} {b : BlockId} {A K : Nat}
-
-/-- **`@intFromPtr`** of a pointer into block `b` at address `A`. -/
-theorem ptrAddr_of (hqb : q.block = some b) (h : AddrOf b A P) :
-    FTotalTriple P (Zig.ptrAddr q) (fun x => ⟪x = (A : Int) + q.off⟫ ⋆ P) := by
-  obtain ⟨qb, qo⟩ := q
-  simp only at hqb; subst hqb
-  refine of_read fun m r rF hh hp _ => ?_
-  obtain ⟨blk, hb, rfl⟩ := h m r rF hh hp
-  exact ptrAddr_run hb qo
-
-/-- **The model's `@alignCast` check** of a pointer at an address that `al` divides. -/
-theorem checkAlign_of {al : Nat} (hqb : q.block = some b) (h : AddrOf b A P)
-    (hal : ((A : Int) + q.off) % al = 0) : FTotalTriple P (checkAlign al q) (fun _ => P) := by
-  unfold checkAlign
-  refine bind (ptrAddr_of hqb h) fun x => lift fun hx => ?_
-  subst hx
-  rw [if_neg (by simp [hal])]
-  exact ret (Q := fun _ => P) ()
-
-/-- **Pointer `==`** of two pointers into one block: their offsets are equal (MM-4). -/
-theorem ptrEqAddr_of (hpb : p.block = some b) (hqb : q.block = some b) (h : AddrOf b A P) :
-    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) := by
-  unfold ptrEqAddr
-  refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
-  refine bind (ptrAddr_of hqb h) fun y => lift fun hy => ?_
-  subst hx hy
-  exact conseq (ret (Q := fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) _)
-    (fun _ hh => sep_lift.mpr ⟨by simp, hh⟩) (fun _ _ h => h)
-
-/-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of `q` that stays within the
-first `K` bytes of a block that reaches `K`. -/
-theorem ptrProject_of {k : Int} (hqb : q.block = some b) (h : Reaches b K P) (h0 : 0 ≤ q.off)
-    (hq : q.off ≤ K) (hk0 : 0 ≤ q.off + k) (hk : q.off + k ≤ K) :
-    FTotalTriple P (ptrProject q (·.add k)) (fun r => ⟪r = q.add k⟫ ⋆ P) :=
-  of_read fun m r rF hh hp _ => by
-    obtain ⟨blk, hb, hK⟩ := h m r rF hh hp
-    exact ptrProject_add_run (inBounds_of hqb hb h0 (by omega))
-      (inBounds_of (p := q.add k) hqb hb (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
-
-/-- `ptrProject_of` for an item pointer `q.elem size i`. -/
-theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
-    (h : Reaches b K P) (h0 : 0 ≤ q.off) (hk : q.off + ((size * i.toNat : Nat) : Int) ≤ K) :
-    FTotalTriple P (ptrProject q (·.elem size i)) (fun r => ⟪r = q.elem size i⟫ ⋆ P) := by
-  have e : (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) := by
-    funext x; exact Ptr.elem_eq x size i
-  rw [e, Ptr.elem_eq]
-  exact ptrProject_of hqb h h0 (by omega) (by omega) hk
+variable {q : Ptr}
 
 /-! ### Loads and stores of owned bytes (native) -/
 
@@ -572,6 +526,120 @@ theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.s
   simp only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hw.trans hsz.symm)] at t
   exact ⟨_, _, t, hb, fun _ _ h => up_pts_iff_bytesAt.mpr
     ⟨A, S, K, _, ⟨ha, hw, LawfulEnc.decode_encode w, hK⟩, h⟩⟩
+
+end FTotalTriple
+
+/-! ## Thread rules
+
+Each rule below holds in a thread (`FTTotalTriple`, `ZigLean/Sep/Full/ThreadStep.lean`): a read
+that leaves the memory as it is (`FTTotalTriple.of_read`), or a sequential triple of an owned
+access (`FTTotalTriple.ofSeq`, `ThreadLocal.load`/`store`). The sequential pointer rules (next
+section) are these rules read sequentially (`FTTotalTriple.toFTotalTriple`). -/
+
+/-- The bytes of `pts` at `q`. -/
+theorem OwnsPtr.pts {T : Type} [Enc T] {q : Ptr} {a : Nat} {v : T} :
+    OwnsPtr (up (Zig.pts q a v)) q (Enc.size T) := by
+  rintro b hqb r ⟨⟨A, S, K, bs, -, hs, -, hb, -⟩, -, -⟩
+  rw [← hs]; exact bytesAt_has hb hqb
+
+namespace FTTotalTriple
+
+variable {α : Type} {P : FAssn} {q p : Ptr} {b : BlockId} {A K : Nat}
+
+/-- **`@intFromPtr`** of a pointer into block `b` at address `A`. -/
+theorem ptrAddr_of (hqb : q.block = some b) (h : AddrOf b A P) :
+    FTTotalTriple P (Zig.ptrAddr q) (fun x => ⟪x = (A : Int) + q.off⟫ ⋆ P) := by
+  obtain ⟨qb, qo⟩ := q
+  simp only at hqb; subst hqb
+  refine of_read fun m r rF hh hp _ => ?_
+  obtain ⟨blk, hb, rfl⟩ := h m r rF hh hp
+  exact ptrAddr_run hb qo
+
+/-- **The model's `@alignCast` check** of a pointer at an address that `al` divides. -/
+theorem checkAlign_of {al : Nat} (hqb : q.block = some b) (h : AddrOf b A P)
+    (hal : ((A : Int) + q.off) % al = 0) : FTTotalTriple P (checkAlign al q) (fun _ => P) := by
+  unfold checkAlign
+  refine bind (ptrAddr_of hqb h) fun x => lift fun hx => ?_
+  subst hx
+  rw [if_neg (by simp [hal])]
+  exact ret (Q := fun _ => P) ()
+
+/-- **Pointer `==`** of two pointers into one block: their offsets are equal (MM-4). -/
+theorem ptrEqAddr_of (hpb : p.block = some b) (hqb : q.block = some b) (h : AddrOf b A P) :
+    FTTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) := by
+  unfold ptrEqAddr
+  refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
+  refine bind (ptrAddr_of hqb h) fun y => lift fun hy => ?_
+  subst hx hy
+  exact conseq (ret (Q := fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) _)
+    (fun _ hh => sep_lift.mpr ⟨by simp, hh⟩) (fun _ _ h => h)
+
+/-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of `q` that stays within the
+first `K` bytes of a block that reaches `K`. -/
+theorem ptrProject_of {k : Int} (hqb : q.block = some b) (h : Reaches b K P) (h0 : 0 ≤ q.off)
+    (hq : q.off ≤ K) (hk0 : 0 ≤ q.off + k) (hk : q.off + k ≤ K) :
+    FTTotalTriple P (ptrProject q (·.add k)) (fun r => ⟪r = q.add k⟫ ⋆ P) :=
+  of_read fun m r rF hh hp _ => by
+    obtain ⟨blk, hb, hK⟩ := h m r rF hh hp
+    exact ptrProject_add_run (inBounds_of hqb hb h0 (by omega))
+      (inBounds_of (p := q.add k) hqb hb (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
+/-- `ptrProject_of` for an item pointer `q.elem size i`. -/
+theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
+    (h : Reaches b K P) (h0 : 0 ≤ q.off) (hk : q.off + ((size * i.toNat : Nat) : Int) ≤ K) :
+    FTTotalTriple P (ptrProject q (·.elem size i)) (fun r => ⟪r = q.elem size i⟫ ⋆ P) := by
+  have e : (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) := by
+    funext x; exact Ptr.elem_eq x size i
+  rw [e, Ptr.elem_eq]
+  exact ptrProject_of hqb h h0 (by omega) (by omega) hk
+
+/-- **Load** of a typed value (`pts`) in a thread. -/
+theorem load {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
+    FTTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
+  ofSeq (FTotalTriple.load hn) (ThreadLocal.load hn OwnsPtr.pts)
+
+/-- **Store** of a typed value (`pts`) in a thread. -/
+theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
+    FTTotalTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
+  ofSeq (FTotalTriple.store hn w)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
+      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))
+
+end FTTotalTriple
+
+/-! ## Sequential pointer rules -/
+
+namespace FTotalTriple
+
+variable {P : FAssn} {q p : Ptr} {b : BlockId} {A K : Nat}
+
+/-- **`@intFromPtr`** of a pointer into block `b` at address `A`. -/
+theorem ptrAddr_of (hqb : q.block = some b) (h : AddrOf b A P) :
+    FTotalTriple P (Zig.ptrAddr q) (fun x => ⟪x = (A : Int) + q.off⟫ ⋆ P) :=
+  (FTTotalTriple.ptrAddr_of hqb h).toFTotalTriple
+
+/-- **The model's `@alignCast` check** of a pointer at an address that `al` divides. -/
+theorem checkAlign_of {al : Nat} (hqb : q.block = some b) (h : AddrOf b A P)
+    (hal : ((A : Int) + q.off) % al = 0) : FTotalTriple P (checkAlign al q) (fun _ => P) :=
+  (FTTotalTriple.checkAlign_of hqb h hal).toFTotalTriple
+
+/-- **Pointer `==`** of two pointers into one block: their offsets are equal (MM-4). -/
+theorem ptrEqAddr_of (hpb : p.block = some b) (hqb : q.block = some b) (h : AddrOf b A P) :
+    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrEqAddr_of hpb hqb h).toFTotalTriple
+
+/-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of `q` that stays within the
+first `K` bytes of a block that reaches `K`. -/
+theorem ptrProject_of {k : Int} (hqb : q.block = some b) (h : Reaches b K P) (h0 : 0 ≤ q.off)
+    (hq : q.off ≤ K) (hk0 : 0 ≤ q.off + k) (hk : q.off + k ≤ K) :
+    FTotalTriple P (ptrProject q (·.add k)) (fun r => ⟪r = q.add k⟫ ⋆ P) :=
+  (FTTotalTriple.ptrProject_of hqb h h0 hq hk0 hk).toFTotalTriple
+
+/-- `ptrProject_of` for an item pointer `q.elem size i`. -/
+theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
+    (h : Reaches b K P) (h0 : 0 ≤ q.off) (hk : q.off + ((size * i.toNat : Nat) : Int) ≤ K) :
+    FTotalTriple P (ptrProject q (·.elem size i)) (fun r => ⟪r = q.elem size i⟫ ⋆ P) :=
+  (FTTotalTriple.ptrProject_elem_of hqb h h0 hk).toFTotalTriple
 
 end FTotalTriple
 
