@@ -17,7 +17,8 @@ premises, as on Linux and macOS ([CLAUDE.md](../CLAUDE.md) §Trusted base).
 | --- | --- |
 | `Target.qualified` row `x86_64`/`windows`, ABI `gnu`, Zig 0.17.0/0.16.0/0.15.2/0.14.1 | done |
 | Fail closed: OS-backed std models, `threadlocal`, Windows OS calls, `f80` x87 precision | done |
-| `--assume-x87-extended` admission (header `x87-extended`) | done; its premise awaits approval (§Premises) |
+| `--assume-x87-extended` admission (header `x87-extended`; rejected on 0.14.1) | done; its premise awaits approval (§Premises) |
+| Wine differential of the nine pure examples, four versions | done (local evidence; §Native evidence) |
 | `scripts/check.sh` cross-target mode (`AIR2LEAN_TARGET`), `air-windows/` overlays, `Gen-windows.lean` | done: §Goldens |
 | Diff harness on Windows (case child with restart, `tests/diff/common.zig`) | done |
 | T04 probe for `x86_64-windows-gnu`, expected files for four versions, `Model.lean` table | done (recorded under Wine) |
@@ -90,6 +91,11 @@ code runs with extended precision. The admission is recorded in the generated he
 bit casts and conversions between float types are admitted: they do not use the precision
 control. The `floatops` example's Windows translation passes the admission
 (`examples/floatops/translate-windows.args`).
+
+On Zig 0.14.1 the admission holds on no thread: `WinStartup` leaves the main thread at 53 bits, and
+the AIR records no MinGW CRT linkage that would reset it (`ZigVersion.winStartupX87Extended`). The
+checker therefore rejects those `f80` ops there also with `--assume-x87-extended`, and `floatops`
+has no 0.14.1 Windows translation.
 
 The long-term fix is in the OS layer: when Windows threads are translated (Phase 3), the model
 gets the per-thread precision control as thread state, set by the startup code and by
@@ -181,8 +187,21 @@ x86_64-windows-gnu` and `scripts/check.sh` with the Windows harness need no Wine
 the first item of Phase 2.
 
 What Wine showed, all to be confirmed natively: the four probe records (§x87 precision control;
-`tests/roadmap/aarch64-abi/expected/<version>/x86_64-windows-gnu-ReleaseSafe.txt`), and the
-`basic` harness output identical to the native aarch64-macos run of the same harness.
+`tests/roadmap/aarch64-abi/expected/<version>/x86_64-windows-gnu-ReleaseSafe.txt`), the `basic`
+harness output identical to the native aarch64-macos run of the same harness, and the
+differential test of the nine pure examples (`scripts/check.sh` above; 0.14.1 without
+`floatops`, §x87 precision control).
+
+Two limits of a cross run, where the Lean side runs on the aarch64 Mac and the harness under Wine:
+
+- `tests/diff/Diff.lean` renders a NaN as the harness's `v != v` sees it on the harness's
+  architecture (`AIR2LEAN_TARGET`), not the Lean host's: x87 reads every invalid `f80` encoding
+  as a NaN, aarch64's `__nexf2` does not.
+- The libm archive that the Lean side links is built for the Lean host. Its `f80` `@sin`/`@cos`/
+  `@tan` on an invalid encoding (an unnormal, a pseudo-infinity or pseudo-NaN) give other results
+  in soft float (aarch64) than on the x87 in Zig 0.16.0 and 0.17.0, so their runs show 93
+  `floatops.op80` mismatches on such inputs, and none elsewhere (0.15.2 and 0.14.1: none). They are no model difference: on x86_64 (the
+  reference host, and a native Windows row) the archive is the target's own.
 
 ### Running it
 
