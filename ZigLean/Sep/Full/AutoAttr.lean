@@ -12,8 +12,9 @@ import Lean
   (library atoms such as `Junk`; a user may mark an opaque representation predicate).
 * `@[fsym_provider]` marks a **provider lemma** `AddrOf b A X`/`Reaches b k X` of an atom `X`
   (the address or the extent of the block of memory that `X` owns): side goals of rules.
-* `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ`: the pure facts `φ` that an assertion
-  `X` implies (the block, offset and alignment of an owned pointer). `fsym` adds the facts of the
+* `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ` or `MemFacts X φ`: the pure facts `φ`
+  that an assertion `X` implies (the block, offset and alignment of an owned pointer), or that
+  it implies in a memory that holds it (`X` an atom or a pair `X₁ ⋆ X₂`). `fsym` adds the facts of the
   precondition's atoms when it needs more facts (a rule's side goal, an `if`, a panic).
 * `@[fsym_plan]` marks a **planner extension** (a constant of type `Zig.Full.Auto.Planner`): when
   `fsym` closes an update `EUpd P Q`, after regions and shares, it rearranges the state's atoms of

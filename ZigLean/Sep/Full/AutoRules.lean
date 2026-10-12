@@ -77,6 +77,34 @@ theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : Me
     (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
   L.pre (L.lift t) fun _ h => sep_lift.mpr ⟨hX.sepL h, h⟩
 
+/-- The assertion `X`, held in a memory, implies the fact `φ` (a facts lemma, `@[fsym_facts]`):
+facts that need the memory or the whole ghost state, such as a token's grant in its authority's
+map (`gauthP γ e M t ⋆ gfrag γ e i g`, `gfrag_mem`) or two owned regions apart. `X` is one atom
+or a pair `X₁ ⋆ X₂` of atoms. -/
+def MemFacts (X : FAssn) (φ : Prop) : Prop := ∀ m r rF, Holds m r rF → X r → m.FSeq → φ
+
+theorem AtomFacts.mem {X : FAssn} {φ : Prop} (h : AtomFacts X φ) : MemFacts X φ :=
+  fun _ r _ _ hx _ => h r hx
+
+theorem MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X φ) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hr : (X ⋆ R) r) (hs : m.FSeq) : φ := by
+  obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hr
+  exact h m r₁ _ (Holds.split hd hh) h1 hs
+
+/-- The facts of a part `X` of the precondition, as an update that keeps it. -/
+theorem MemFacts.eupd {X R : FAssn} {φ : Prop} (h : MemFacts X φ) : EUpd (X ⋆ R) (⟪φ⟫ ⋆ (X ⋆ R)) :=
+  fun _ r _ hh hp hs => ⟨r, hh, sep_lift.mpr ⟨h.sepL hh hp hs, hp⟩⟩
+
+/-- An update of the precondition, in any logic (a return of `()` bound to the program). -/
+theorem pre_eupd (L : FLogic) {β : Type} {P P' : FAssn} {Q : β → FAssn} {c : MemM β}
+    (h : EUpd P P') (t : L.T P' c Q) : L.T P c Q :=
+  L.congr (fun _ _ => rfl) (L.bind (ret L (Q := fun _ => P') (v := ()) h) fun _ => t)
+
+/-- A fact of a part `X` of the precondition that needs the memory, in the context. -/
+theorem pre_mfact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
+    (hX : MemFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
+  pre_eupd L hX.eupd (L.lift t)
+
 section Facts
 
 variable {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
@@ -279,6 +307,27 @@ subtraction, which `omega` would case-split on). -/
     FTotalTriple P (StateT.lift (optPayload o) : MemM α) (fun v => ⟪o = some v⟫ ⋆ P) := by
   obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
   exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
+/-! Tests of an optional as constructor equations (facts of `if o != null`, `orelse`), so a
+`match o` of the precondition reduces (`destruct`, `substCtor`). -/
+
+theorem opt_isSome_true {α : Type _} {o : Option α} (h : o.isSome = true) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp h
+
+theorem opt_not_isSome {α : Type _} {o : Option α} (h : ¬o.isSome = true) : o = none :=
+  Option.not_isSome_iff_eq_none.mp h
+
+theorem opt_isSome_false {α : Type _} {o : Option α} (h : o.isSome = false) : o = none :=
+  Option.not_isSome_iff_eq_none.mp (by simp [h])
+
+theorem opt_isNone_true {α : Type _} {o : Option α} (h : o.isNone = true) : o = none :=
+  Option.isNone_iff_eq_none.mp h
+
+theorem opt_not_isNone {α : Type _} {o : Option α} (h : ¬o.isNone = true) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp (by cases o <;> simp_all)
+
+theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : ∃ a, o = some a :=
+  Option.isSome_iff_exists.mp (by cases o <;> simp_all)
 
 /-- A slice's end check (`s[start..][0..len]`) within the source's length. -/
 @[fsym] theorem checkSliceEnd_of {srcLen start len : BitVec 64} {extra : Nat}

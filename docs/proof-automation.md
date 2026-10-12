@@ -74,8 +74,10 @@ many successful calls with 20 to 30 facts.
   and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are unfolded;
   existentials and facts move into the context (conjunctions split, equations of a variable
   substituted, user definitions of facts unfolded; a term `t` that is not a variable, such as a
-  field of the locals, equated to a constructor application `C …` is replaced by it in the goal
-  and the facts, so a `match` on `t` reduces: `substCtor`). An assertion-level `if c then X else Y`
+  field of the locals, equated to a constructor application `C …` or to a closed value of a type
+  that is not arithmetic (`w.M = GMap.empty`) is replaced by it in the goal and the facts, so a
+  `match` on `t` reduces: `substCtor`; a test `o.isSome`/`o.isNone` of an optional adds its
+  constructor equation, `o = none` or `o = some a`: `opt_*`). An assertion-level `if c then X else Y`
   (`relBytes`, `newBytes`) takes the branch the facts decide; an undecided one stays an atom and
   is split at the next return.
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code,
@@ -92,7 +94,10 @@ many successful calls with 20 to 30 facts.
   more facts (a rule whose side goals fail, an undecided `if`, a reachable panic, a return the
   planner cannot close), the facts of the precondition's atoms that the context lacks are added
   (`pre_fact`) and the step is retried; so a pointer whose block the context does not know
-  (a field of a node, an argument) gets one from what the precondition owns at it. Block
+  (a field of a node, an argument) gets one from what the precondition owns at it. A facts
+  lemma may need the memory, or be about an ordered pair of atoms (`MemFacts X φ` with `X` an atom
+  or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
+  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart. Block
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`).
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. Commands of one head are unified argument by argument: a
@@ -194,7 +199,8 @@ parallel; a run is identified by the option `fsym.run`).
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
-  pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`.
+  pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
+  facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
 * A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
 * A new kind of ghost resource to plan (split, join, lend): a `Planner` value tagged
   `@[fsym_plan]` in a module that imports `Auto` (its `run` rearranges the state's atoms by
