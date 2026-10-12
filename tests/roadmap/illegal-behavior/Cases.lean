@@ -131,14 +131,31 @@ def cases : IO Unit := do
     (memErr (do let a ← slicePtr 2; let b ← slicePtr 3; forLenMem a b)) (some .illegal)
   check "forLenMem 3/3"
     (memErr (do let a ← slicePtr 3; let b ← slicePtr 3; forLenMem a b)) none
-  -- Residual gap: the range's end never reaches the AIR (docs/illegal-behavior.md row 27).
-  check "forRange 3/5 (gap: returns a value)" (errOf (forRange (arr 3) 5)) none
+  -- A range or array operand's length reaches the AIR only through the patched Sema's
+  -- `unreach` check (docs/illegal-behavior.md row 27).
+  check "forRange 3/5" (errOf (forRange (arr 3) 5)) (some .illegal)
+  check "forRange 3/3" (errOf (forRange (arr 3) 3)) none
+  check "forRangeFrom 3/1..6" (errOf (forRangeFrom (arr 3) 1 6)) (some .illegal)
+  check "forRangeFrom 3/2..5" (errOf (forRangeFrom (arr 3) 2 5)) none
+  let slice (n : Nat) : MemM Slice := do pure ⟨← words n, BitVec.ofNat 64 n⟩
+  check "forArray 4/3" (memErr (do let a ← slice 4; let b ← words 3; forArray a b)) (some .illegal)
+  check "forArray 3/3" (memErr (do let a ← slice 3; let b ← words 3; forArray a b)) none
   check "parentOf lone u32" (memErr (do let x ← alloc .heap 4 4; parentOf x)) (some .illegal)
   -- The parent pointer is in bounds (pointer formation, MM-3, passes), but no 8-byte `S` fits.
   check "parentOf u32 at offset 4 of 6 bytes"
     (memErr (do let x ← alloc .heap 6 4; parentOf (x.add 4))) (some .illegal)
   check "parentOf field b of an S"
     (memErr (do let p ← alloc .heap 8 4; parentOf (p.add 4))) none
+  -- The model's primitives check their own illegal behaviour (rows 2, 15, 16): out-of-range
+  -- index, unwrap of null or of an error (without the Sema check before them).
+  check "Zig.index #[1] 1" (errOf (Zig.index #[(1 : Nat)] (1 : BitVec 64))) (some .illegal)
+  check "Zig.index #[1] 0" (errOf (Zig.index #[(1 : Nat)] (0 : BitVec 64))) none
+  check "Zig.optPayload none" (errOf (Zig.optPayload (none : Option Nat))) (some .illegal)
+  check "Zig.optPtrUnwrap none" (errOf (Zig.optPtrUnwrap none)) (some .illegal)
+  check "Zig.ptrRequireNonNull null" (memErr (Zig.ptrRequireNonNull Ptr.null)) (some .illegal)
+  check "Zig.unwrapPayload error"
+    (errOf (Zig.unwrapPayload (.error "E" : Except ErrName Nat))) (some .illegal)
+  check "Zig.unwrapErr ok" (errOf (Zig.unwrapErr (.ok 1 : Except ErrName Nat))) (some .illegal)
 
 end IllegalCases
 

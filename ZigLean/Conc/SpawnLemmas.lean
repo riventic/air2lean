@@ -66,18 +66,23 @@ theorem WP.spawnFallibleC {target : Tgt} {s : σ}
   unfold spawnWithPolicyC
   exact WP.assignmentChoiceC (by decide) h
 
-theorem WP.groupAsyncFallibleC {group : Ptr} {io : Io} {target : Tgt}
+/-- `Io.Group.async` under either policy: the environment picks the execution
+(`SyncOp.asyncChoice`), so every execution must keep the protocol. -/
+theorem WP.groupAsyncWithPolicyC {policy : SpawnPolicy} {group : Ptr} {io : Io} {target : Tgt}
     {fallback : ConcM Tgt Unit} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ c, c < 2 → (c = 0 → ({ m₁ with current := t } : Mem).spawnAdmits = true) →
+      ∀ c, c < groupAsyncOutcomes →
         P.WP t ((groupAsyncOutcomeC c group io target fallback : CM Tgt σ _).run s)
           Q G₁ { m₁ with current := t } k) :
-    P.WP t ((groupAsyncWithPolicyC .fallible group io target fallback : CM Tgt σ _).run s)
+    P.WP t ((Zig.groupAsyncWithPolicyC policy group io target fallback : CM Tgt σ _).run s)
       Q G m n := by
-  unfold groupAsyncWithPolicyC
-  exact WP.assignmentChoiceC (by decide) h
+  unfold Zig.groupAsyncWithPolicyC
+  simp only [StateT.run_bind, StateT.run_lift]
+  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  obtain ⟨g, hi, hb⟩ := h k hk
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 theorem WP.groupConcurrentFallibleC {group : Ptr} {io : Io} {target : Tgt} {s : σ}
     {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}

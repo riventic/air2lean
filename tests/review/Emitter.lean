@@ -33,6 +33,7 @@ private def enumTy (name : String) (tag : Nat) (fields : Array String) : Json :=
 private def file (name : String) (types : Array Json) (params : Array Nat) (ret : Nat)
     (body : Array Json) : Json :=
   obj [("schema", num 11), ("zig_version", .str "0.16.0"), ("target_endian", .str "little"),
+    ("unchecked_ib", .arr #[.str "for_len"]),
     ("name", .str name), ("types", .arr types), ("params", toJson params), ("ret", num ret),
     ("body", .arr body)]
 private def accept (j : Json) : IO Func := do
@@ -340,7 +341,7 @@ def main (args : List String) : IO Unit := do
   writeCase directory "unionTagCapture" #[tagLoop]
     "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .b n => n.toNat | _ => 0) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
-    "example : successful ((Zig.Sched.run Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
+    "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
   for (mode, name) in #[(FloatSemantics.ieee, "floatIeee"), (.compilerRt, "floatCompilerRt")] do
     let expected : Nat := match mode with | .ieee => 512 | .compilerRt => 0
     writeCase directory name #[floatConversion]

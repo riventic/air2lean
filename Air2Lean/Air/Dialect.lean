@@ -110,6 +110,13 @@ def lanePtrEvidence : ZigVersion → Bool
 /-- The versions with `lanePtrEvidence`, newest first. -/
 def lanePtrVersions : List ZigVersion := all.filter (·.lanePtrEvidence)
 
+/-- `@errorName` indexes the name table with the sign-extended error code, so a code with the
+error integer's top bit set reads out of bounds (`tests/roadmap/error-width`,
+`docs/upstream/zig-0.14.1-error-name-sign-extension.md`); fixed from 0.15.2. -/
+def errorNameSignExtends : ZigVersion → Bool
+  | v0_14_1 => true
+  | v0_15_2 | v0_16_0 | v0_17_0 => false
+
 /-- `Thread.spawn`'s `SpawnConfig` layout was audited for the fallible spawn policy
 (`docs/spawn-failure.md`). -/
 def spawnConfigAudited : ZigVersion → Bool

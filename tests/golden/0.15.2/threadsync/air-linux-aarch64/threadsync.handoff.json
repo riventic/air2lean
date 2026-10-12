@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
@@ -36,6 +39,7 @@
   "decl_line": 53
  },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

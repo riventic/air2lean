@@ -222,8 +222,8 @@ MUTANTS = {
         PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
-        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",
-        "    if data['event'] not in ('push', 'workflow_dispatch', 'pull_request'):\n", RELEASE, 'rr',
+        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group'):\n",
+        "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'pull_request'):\n", RELEASE, 'rr',
         ('RecordTests.test_evidence_for_another_revision_is_refused',)),
     # Q08: a failed step must never be published as passed when other evidence passes.
     'release-record-failure-masked': (

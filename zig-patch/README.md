@@ -8,8 +8,13 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   function. One source for every supported version: its `Compat` section holds
   the version differences (comptime branches on `builtin.zig_version`).
 - `<version>/hook.patch`: the one-line call in `src/Zcu/PerThread.zig`, after the
-  function body is analysed. The only per-version file of the exporter. For 0.15.2 and 0.14.1
-  it also makes `Compilation.addLinkLib` return when there is no binary (`-fno-emit-bin`):
+  function body is analysed, and one `src/Sema.zig` change: with runtime safety off, `zirForLen`
+  still compares the `for` operand lengths and lowers a mismatch to `if (!ok) unreachable`
+  (`air2leanUncheckedIb`), since that illegal behaviour otherwise leaves no trace in the AIR. The
+  exporter then writes `"unchecked_ib": ["for_len"]` (`docs/air-json.md`). This is the only
+  change to what the compiler analyses: a backend may take the `unreachable` as an assumption,
+  which the illegal behaviour already permits. The only per-version file of the exporter.
+  For 0.15.2 and 0.14.1 it also makes `Compilation.addLinkLib` return when there is no binary (`-fno-emit-bin`):
   those versions queue a DLL import library for every `extern "kernel32"`/`"ntdll"` function of a
   Windows target, which an AIR-only compiler (no LLVM) cannot build, so their Windows exports
   failed (docs/windows-target.md). 0.16.0 and 0.17.0 build import libraries without LLVM.

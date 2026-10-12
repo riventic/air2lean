@@ -92,15 +92,32 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · rename_i hc
         simp [pure, ExceptT.pure, ExceptT.mk] at h
         obtain ⟨rfl, rfl, rfl⟩ := h
-        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2, rfl⟩
+        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2.1, rfl⟩
+      · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
+        cases h
+
+/-- A successful access starts at or above its block's first live offset. -/
+theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
+  unfold Mem.access at h
+  split at h
+  · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+  · split at h
+    · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+    · split at h
+      · rename_i hc
+        simp [pure, ExceptT.pure, ExceptT.mk] at h
+        obtain ⟨rfl, rfl, rfl⟩ := h
+        exact hc.2.2.2.2
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
 theorem access_of {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
     (hb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live) (h0 : 0 ≤ p.off)
-    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0) :
+    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat := by first | simp_all [BlockKind.mappedLo] | omega) :
     m.access p n a = pure (b, blk, p.off.toNat) := by
-  simp [Mem.access, hb, hblk, hl, h0, hn, ha]
+  simp [Mem.access, hb, hblk, hl, h0, hn, ha, hlo]
 
 /-! ### Pointer formation (`ptrProject`, MM-3) -/
 
@@ -178,6 +195,13 @@ theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : proj
   simp only [ptrProject, StateT.run]
   rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
 
+/-- A pointer without a block (an `@ptrFromInt` address, the provenance-free result of an
+ambiguous `ptrFromAddr`, `Zig.undefPtr`) has no bounds: any nonzero offset from it is
+`.illegal` (MM-3), only the same pointer is formed. -/
+theorem ptrProject_blockless_add_illegal (m : Mem) (a : Int) {k : Int} (hk : k ≠ 0) :
+    (ptrProject ⟨none, a⟩ (·.add k)).run m = throw .illegal :=
+  ptrProject_illegal _ (by simp [Ptr.add]; omega) (by simp [Mem.inBounds])
+
 /-- Pointer formation never changes memory and keeps the base's block. -/
 theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
     (h : (ptrProject p project).run m = pure (q, m')) : q.block = p.block ∧ m' = m := by
@@ -206,6 +230,32 @@ theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
   split at h
   · cases h; exact ⟨rfl, rfl⟩
   · cases h
+
+/-- An error union's payload is first (offset 0) or follows the 2-byte error code at offset 0. -/
+theorem errUnionOffsets_payload (size align : Nat) :
+    (errUnionOffsets size align).2 = 0 ∨ errUnionOffsets size align = (0, 2) := by
+  unfold errUnionOffsets
+  split
+  · simp
+  · split
+    · simp
+    · have : align = 0 ∨ align = 1 := by omega
+      rcases this with h | h <;> simp [h, alignUp]
+
+/-- Once an access reached the error code of the error union at `p`, its payload pointer is
+formed (`tryPayloadPtr`, `errSetOk`): it is the base, or one past the 2-byte code at the base,
+so it lies in bounds of the code's block. -/
+theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
+    {r : BlockId × Block × Nat}
+    (h : m.access (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 a = pure r) :
+    (ptrProject p (errPayloadPtr α)).run m = pure (errPayloadPtr α p, m) := by
+  rcases errUnionOffsets_payload (Enc.size α) (Enc.align α) with h0 | he
+  · have hp : errPayloadPtr α p = p := by simp [errPayloadPtr, h0]
+    rw [hp]; exact ptrProject_same _ hp
+  · obtain ⟨b, blk, o⟩ := r
+    have h' : m.access p 2 a = pure (b, blk, o) := by simpa [he] using h
+    exact ptrProject_run _ rfl (by simpa using inBounds_of_access h' 0 (by omega))
+      (by simpa [errPayloadPtr, he] using inBounds_of_access h' 2 (by omega))
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
@@ -441,6 +491,65 @@ theorem raceCheck_eq_raceAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     simp [VClock.concurrent, hle']
   unfold raceCheck; split <;> simp [hr]
 
+/-- The end of a block does not race if every thread's clock is below the current thread's
+(each thread joined into it, or no other thread). -/
+theorem freeRaces_of_le {m : Mem} {b n : Nat}
+    (h : ∀ u < m.clocks.size, VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at he
+  have hle : VClock.le (m.clocks[m.footprint[i].tid]!)
+      (VClock.bump (m.clocks[m.current]!) m.current) = true := by
+    by_cases hu : m.footprint[i].tid < m.clocks.size
+    · exact VClock.le_trans (h _ hu) (VClock.le_bump _ _)
+    · rw [getElem!_neg m.clocks _ hu]; exact VClock.le_default _
+  rw [he.1.2] at hle; cases hle
+
+/-- The end of a block does not race if each access to its bytes happened before the current
+thread. -/
+theorem freeRaces_of_clock {m : Mem} {b n : Nat}
+    (h : ∀ e ∈ m.footprint, e.block = b → e.off < n →
+      VClock.le e.clock (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at he
+  obtain ⟨⟨⟨⟨⟨⟨hb, -⟩, ho⟩, -⟩, hcl⟩, -⟩, -⟩ := he
+  have hle := VClock.le_trans (h _ (Array.getElem_mem hi) hb ho)
+    (VClock.le_bump (m.clocks[m.current]!) m.current)
+  rw [hcl] at hle; cases hle
+
+/-- The end of a block does not race if each other thread is a child of the current thread that
+it joined (and there are as many clocks as threads). -/
+theorem freeRaces_of_joined {m : Mem} {b n : Nat} (hcs : m.clocks.size = m.threads.size)
+    (h : ∀ u < m.threads.size, u = m.current ∨
+      ∃ r, m.threads[u]? = some r ∧ r.spawner = m.current ∧ r.joined = true ∧ r.released = false) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, hcl⟩, hj⟩ := he
+  by_cases hu : m.footprint[i].tid < m.threads.size
+  · rcases h _ hu with h' | ⟨r, hr, hs, hjr, hrel⟩
+    · exact htc h'
+    · rw [hr] at hj; simp [hs, hjr, hrel] at hj
+  · rw [getElem!_neg m.clocks m.footprint[i].tid (by rw [hcs]; exact hu)] at hcl
+    rw [VClock.le_default] at hcl; cases hcl
+
+/-- In a single thread, the end of a block does not race. -/
+theorem freeRaces_of_singleThread {m : Mem} (h : m.SingleThread) (b n : Nat) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, -⟩, -⟩ := he
+  exact htc (h.2 _ (Array.getElem_mem hi)).1
+
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
   have hbump : (m.recordAt block off len kind).clocks[(m.recordAt block off len kind).current]! =
@@ -520,10 +629,11 @@ theorem access_write_same {m : Mem} {p q : Ptr} {a n' a' : Nat} {bs : Array Byte
     (m.write b blk o bs).access q n' a' =
       pure (b, { blk with bytes := writeBytes blk.bytes o bs }, o') := by
   obtain ⟨hpb, hblk, hl, h0, hn, _, rfl⟩ := access_eq hw
+  have hlo' := access_lo hq
   obtain ⟨hqb, -, -, h0', hn', ha', rfl⟩ := access_eq hq
   have hlt : b < m.blocks.size := by
     rcases Array.getElem?_eq_some_iff.mp hblk with ⟨h, _⟩; exact h
-  apply access_of hqb
+  refine access_of hqb ?_ ?_ ?_ ?_ ?_ hlo'
   · simp [Mem.write, hlt]
   · exact hl
   · exact h0'
@@ -535,8 +645,10 @@ theorem access_write_other {m : Mem} {q : Ptr} {n' a' : Nat} {bs : Array Byte}
     {b c : BlockId} {blk blk' : Block} {o o' : Nat}
     (hq : m.access q n' a' = pure (c, blk', o')) (hbc : b ≠ c) :
     (m.write b blk o bs).access q n' a' = pure (c, blk', o') := by
+  have hlo := access_lo hq
   obtain ⟨hqb, hblk', hl, h0, hn, ha, rfl⟩ := access_eq hq
   exact access_of hqb (by simp [Mem.write, Array.getElem?_setIfInBounds_ne hbc, hblk']) hl h0 hn ha
+    hlo
 
 /-! ## Typed access -/
 

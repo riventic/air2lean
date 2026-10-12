@@ -315,18 +315,20 @@ def errPayloadPtr (α : Type) [Enc α] (p : Ptr) : Ptr :=
   p.add (errUnionOffsets (Enc.size α) (Enc.align α)).2
 
 /-- Pointer-form `try`: read only the error code. Success returns the addressed payload
-in the same allocation. Payload bytes may be undefined until the caller writes them. -/
+in the same allocation, formed like every derived pointer (`ptrProject`, MM-3). Payload bytes
+may be undefined until the caller writes them. -/
 def tryPayloadPtr (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM (Except ErrName Ptr) := do
   let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
   match ← errOfBytes (← loadBytes (p.add eo) 2 (Nat.min align 2)) with
   | some e => pure (.error e)
-  | none => pure (.ok (errPayloadPtr α p))
+  | none => .ok <$> ptrProject p (errPayloadPtr α)
 
-/-- `errunion_payload_ptr_set`: set the error code to 0 (no error), then the payload pointer. -/
+/-- `errunion_payload_ptr_set`: set the error code to 0 (no error), then form the payload
+pointer (`ptrProject`, MM-3). -/
 def errSetOk (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
-  let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
+  let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
   storeBytes (p.add eo) (Nat.min align 2) (errBytes none)
-  pure (p.add po)
+  ptrProject p (errPayloadPtr α)
 
 def finiteErrIsErrAt (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Bool := do
   let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)

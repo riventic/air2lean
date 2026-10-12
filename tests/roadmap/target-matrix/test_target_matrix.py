@@ -23,6 +23,9 @@ def run(*args):
     return code, out.getvalue() + err.getvalue()
 
 
+# Every step after the reuse decision carries this guard (docs/ci.md, scripts/ci-reuse.py).
+GUARD = '        if: ${{ !env.AIR2LEAN_REUSED }}\n'
+
 class Scratch(unittest.TestCase):
     """Each test edits a private copy of exactly the committed inputs."""
 
@@ -201,9 +204,9 @@ class Evidence(Scratch):
         self.check_fails('bound to Zig 0.16.0, not 0.15.2')
 
     def test_step_bound_to_another_version_fails(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n        env:\n'
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}\n',
-                       '      - name: macOS proofs\n        env:\n'
+                       '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: "0.17.0"\n')
         self.check_fails('bound to Zig 0.17.0, not 0.16.0', 'bound to Zig 0.17.0, not 0.15.2')
 
@@ -215,8 +218,8 @@ class Evidence(Scratch):
         job = workflow[start:end]
         rows = job[job.index('    strategy:\n'):job.index('    steps:\n')]
         job = job.replace(rows, '').replace('${{ matrix.zig }}', '0.16.0').replace(
-            '      - name: macOS proofs\n        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
-            '      - name: macOS proofs\n        env:\n          OTHER: 0.16.0\n')
+            '      - name: macOS proofs\n' + GUARD + '        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
+            '      - name: macOS proofs\n' + GUARD + '        env:\n          OTHER: 0.16.0\n')
         (self.root/TM['WORKFLOW']).write_text(workflow[:start] + job + workflow[end:])
 
         def change(data):
@@ -237,8 +240,8 @@ class Evidence(Scratch):
         self.check_fails("'macOS ABI target probe (0.16.0)': not found in the job")
 
     def test_unknown_condition_context_fails_closed(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n',
-                       "      - name: macOS proofs\n        if: steps.x.outputs.y == 'true'\n")
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD,
+                       "      - name: macOS proofs\n        if: ${{ !env.AIR2LEAN_REUSED && steps.x.outputs.y == 'true' }}\n")
         self.check_fails("unsupported term 'steps.x.outputs.y'")
 
     def test_ambiguous_matrix_selector_fails(self):

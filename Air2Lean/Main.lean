@@ -45,8 +45,8 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-x87-extended] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-x87-extended] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--allocator-model std|translated]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table"
 
 def help : String :=
@@ -71,6 +71,8 @@ def help : String :=
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --device-contract <json>     Model volatile integer accesses as device events; see docs/volatile-effects.md.\n" ++
+  "  --allocator-model <mode>     std (default) or translated; see docs/allocator-model.md.\n" ++
+  "  --assume-no-lb               Accept relaxed load-then-store code (premise ORD-02); see docs/std-models.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --unit-diagnostic-limit <n>  Diagnostics to report per input file in that mode (1..4096).\n" ++
@@ -106,6 +108,8 @@ structure Args where
   /-- `--allow-unqualified-build-mode`: admit a profile outside `BuildProfile.qualifiedBuilds`
   (`docs/build-modes.md`); recorded in the generated header. -/
   allowUnqualified : Bool := false
+  /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
+  assumeNoLb : Bool := false
   /-- `--assume-no-libc` (`Dialect.noLibc`); recorded in the generated header. -/
   assumeNoLibc : Bool := false
   /-- `--assume-x87-extended` (`Dialect.x87Extended`); recorded in the generated header of a
@@ -123,6 +127,23 @@ structure Args where
   airCertificate : Option String := none
   /-- `--air-certificate-import`: the Lean module of the `-o` output, for the certificate. -/
   airCertificateImport : Option String := none
+  /-- `--allocator-model` (default `std`; `docs/allocator-model.md`). -/
+  allocatorModel : AllocatorModel := .std
+
+/-- Remove `--allocator-model V` (or `--allocator-model=V`) from `args`; at most once. -/
+private def takeAllocatorModel (args : List String) :
+    Except String (Option AllocatorModel × List String) := do
+  let rec go (args : List String) (seen : Option AllocatorModel) (acc : List String) :
+      Except String (Option AllocatorModel × List String) := do
+    match args with
+    | [] => pure (seen, acc.reverse)
+    | ["--allocator-model"] => throw s!"missing value for --allocator-model\n{usage}"
+    | "--allocator-model" :: v :: rest =>
+      if seen.isSome then throw s!"duplicate --allocator-model\n{usage}"
+      let mode ← (parseAllocatorModel v).mapError (fun message => s!"{message}\n{usage}")
+      go rest (some mode) acc
+    | a :: rest => go rest seen (a :: acc)
+  go (splitAllocatorModelFlag args) none []
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -156,6 +177,9 @@ private partial def parseArgsGo (args : List String)
   | "--allow-unqualified-build-mode" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with allowUnqualified := true })
+  | "--assume-no-lb" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLb := true })
   | "--assume-no-libc" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeNoLibc := true })
@@ -195,7 +219,9 @@ private partial def parseArgsGo (args : List String)
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
+  let (allocatorModel, args) ← takeAllocatorModel args
   let a ← parseArgsGo args none none none none none none none none false
+  let a := { a with allocatorModel := allocatorModel.getD .std }
   if a.registryTemplate && a.modelRegistry.isSome then
     throw "--model-registry-template cannot be combined with --model-registry"
   if a.registryTemplate && a.spawnSemantics == .fallible then
@@ -321,7 +347,7 @@ private def run (args : List String) : IO UInt32 := do
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           -- Same stage order as `processRaw` (preflight, normalize, check), timed separately.
-          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents
+          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents a.allocatorModel
           times := { times with parse := times.parse + parseNs }
           match parsed with
           | .error e => err := some s!"{path}: {e}"
@@ -351,6 +377,7 @@ private def run (args : List String) : IO UInt32 := do
         let resolved ← resolveExterns funcs models
         checkProgram resolved models profiles[0]?
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
+        unless a.assumeNoLb do checkLoadBuffering resolved
         return resolved
         : Except String (Array Func))
       times := { times with check := times.check + programNs }
@@ -386,6 +413,8 @@ private def run (args : List String) : IO UInt32 := do
               (if funcs.any (·.dialect.x87Extended) then ["x87-extended"] else [])
             let admission := if optIns.isEmpty then [] else
               [("admission", Lean.Json.str (",".intercalate optIns))]
+            let admission := admission ++ if a.allocatorModel == .translated then
+              [("allocator_model", Lean.Json.str "translated")] else []
             let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")] ++ admission)
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
@@ -431,7 +460,8 @@ private def run (args : List String) : IO UInt32 := do
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
             if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
-              let cert := Certificate.emit emissionFuncs a.ns declNames genModule
+              let cert := Certificate.emit emissionFuncs a.ns declNames genModule parts.memFuncs
+                parts.concFuncs parts.shapes
               try IO.FS.writeFile path cert catch e =>
                 throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then

@@ -42,19 +42,20 @@ tag, type tag, intern key or pointer base lacks a named disposition (see
 disappear through a normalizer filter. Renaming appears as removal plus addition;
 the tool does not infer equivalence. Exit 2 means invalid/inaccessible input,
 including a translator source whose diagnostic gates the derivation can no
-longer find. CI must provision the
-compiler source root and check committed evidence before overwriting generated
-proof modules.
+longer find.
 Regeneration records evidence; it does not itself qualify an upgrade.
 
-CI runs the offline regression suite in every matrix job. Each non-mutation job
-then downloads its version's source archive using the existing `versions.toml`
-URL and SHA-256 pins, verifies the archive, extracts a fresh temporary source root
-and checks the committed Linux inventory. It cleans up the source root on exit.
-This gate runs before compiler/proof pipelines overwrite generated proof modules,
-and independently of the patched compiler cache. A new/renamed tag, changed
-compiler fingerprint or stale project evidence fails the job. The source gate
-invokes neither Zig nor Lean; later pipeline steps supply execution/proof evidence.
+The inventories describe the whole tree (they hash the translator, goldens and project
+evidence), so they are whole-tree generated files ([ci.md](ci.md#whole-tree-generated-files)):
+not committed. Every CI run's `generated` job downloads each version's source archive with the
+`versions.toml` URL and SHA-256 pins, generates every inventory twice and requires identical
+bytes (`scripts/generated.py produce --group coverage`); a missing disposition fails it, as it
+fails `generate`. The rows install those files before their gates, and the `merge_group` run's
+files are published on the `generated` branch for that main commit. Locally,
+`scripts/generated.py materialize` (or `regen --group coverage`) writes them into the checkout;
+`scripts/coverage.py diff` against a published entry (`scripts/generated.py fetch --rev SHA`)
+shows what a change does to an inventory. The gate invokes neither Zig nor Lean; later pipeline
+steps supply execution/proof evidence.
 
 The snapshots are generated from the checksum-verified release source archives
 pinned in `zig-patch/versions.toml` (the same archives the CI gate checks):
@@ -234,7 +235,7 @@ appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
 | `inferred_alloc*`, `legalize_*`, `cmp_lt(e)_errors_len`, `error_set_has_value` | Not meaningful at the analyzed-AIR export stage (inference, legalization or finalized error universe) | Inspect the exporter/compiler stage; cast to a superset error set |
 | `*_optimized`, `int_from_float_optimized_safe` | Lower first: rebuild in strict float mode | Remove `@setFloatMode(.optimized)` |
 | `err_return_trace*`, `save_err_return_trace_index`, `runtime_nav_ptr`, `vector_store_elem` | Need new semantics (trace state, TLS/extern identity, vector-lane memory) | Keep out of translated functions until modelled |
-| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state | Remove, pass explicit values, or export fixed-arity functions |
+| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state (`ret_addr` is an explicit oracle under `--allocator-model translated`, [allocator-model.md](allocator-model.md)) | Remove, pass explicit values, or export fixed-arity functions |
 | `wasm_memory_*`, `work_*` | Outside qualified targets | Keep out of translated functions |
 | `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
 

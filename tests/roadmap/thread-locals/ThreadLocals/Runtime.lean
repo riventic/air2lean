@@ -37,14 +37,14 @@ private def immortalDispatch : Tgt → ConcM Tgt Unit
 def main : IO Unit := do
   for seed in List.range 16 do
     let oracle := fun turn => seed + turn * 7
-    require (okValue (Sched.run dispatch 200 oracle twoCounters (mem0 .fresh)).run == some 90908)
+    require (okValue (Sched.run ⟨.any, .available⟩ dispatch 200 oracle twoCounters (mem0 .fresh)).run == some 90908)
       s!"twoCounters failed at schedule {seed}"
-    require (illegal (Sched.run dispatch 200 oracle leaked (mem0 .fresh)).run)
+    require (illegal (Sched.run ⟨.any, .available⟩ dispatch 200 oracle leaked (mem0 .fresh)).run)
       s!"leaked pointer read did not throw .illegal at schedule {seed}"
     -- Shared instances: the workers' increments race with each other or with main.
-    require (okValue (Sched.run sharedDispatch 200 oracle twoCounters (mem0 .fresh)).run != some 90908)
+    require (okValue (Sched.run ⟨.any, .available⟩ sharedDispatch 200 oracle twoCounters (mem0 .fresh)).run != some 90908)
       s!"shared-instance mutant still returned 90908 at schedule {seed}"
     -- Immortal instances: the leaked read succeeds and reads the worker's 7.
-    require (okValue (Sched.run immortalDispatch 200 oracle leaked (mem0 .fresh)).run == some 7)
+    require (okValue (Sched.run ⟨.any, .available⟩ immortalDispatch 200 oracle leaked (mem0 .fresh)).run == some 7)
       s!"immortal-instance mutant did not read the worker's instance at schedule {seed}"
   IO.println "thread-local runtime schedules and mutants passed"

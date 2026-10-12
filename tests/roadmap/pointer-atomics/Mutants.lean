@@ -63,7 +63,7 @@ def oracles : List (Nat → Nat) :=
 
 def outcomes (d : Tgt → Zig.ConcM Tgt Unit) (m : Zig.ConcM Tgt (BitVec 32)) :
     List (Option (Except Error (BitVec 32))) :=
-  oracles.map fun o => ((Sched.run d 200 o m mem0).run).map (·.map (·.1))
+  oracles.map fun o => ((Sched.run ⟨.any, .available⟩ d 200 o m mem0).run).map (·.map (·.1))
 
 def isError : Option (Except Error (BitVec 32)) → Bool
   | some (.error _) => true

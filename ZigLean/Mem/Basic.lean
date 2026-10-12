@@ -83,7 +83,24 @@ inductive BlockKind where
   `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
   free through one allocator of a block that another one made throws `.illegal`. -/
   | owned (a : AllocId)
+  /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
+  live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
+  up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
+  `lo` throws `.illegal` (`Mem.access`), as one past the size does. -/
+  | mapped (lo : Nat)
   deriving DecidableEq, Repr
+
+/-- The first live offset of a block: `lo` for an OS mapping (`.mapped lo`), 0 otherwise. -/
+def BlockKind.mappedLo : BlockKind → Nat
+  | .mapped lo => lo
+  | _ => 0
+
+@[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
+@[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_global : BlockKind.global.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_constGlobal : BlockKind.constGlobal.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_owned (a : AllocId) : (BlockKind.owned a).mappedLo = 0 := rfl
 
 structure Block where
   bytes : Array Byte
@@ -157,11 +174,18 @@ def racePair (a b : AccessKind) : Option Error :=
 by `Thread.detach` (a detached thread may still run). Index 0 (main) is unused: nothing ever
 joins it. `tls`: the thread's own instance of each `threadlocal` global, as
 `(key, instance block)` (`ZigLean/Mem/Tls.lean`); empty for a program without `threadlocal`
-globals and for a thread that has not started. -/
+globals and for a thread that has not started. `gated`: a deferred `Io.Group` task
+(`Thread.forkGated`); it does not start while its group still records it (`Mem.isGated`,
+`ZigLean/Conc/Sched.lean`). -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool
   tls : Array (BlockId × BlockId) := #[]
+  gated : Bool := false
+  /-- The join obligation ended without a happens-before edge to the owner: `pthread_detach`, or
+  a Linux `clone` thread's exit (`Os.markExited`). `Mem.freeRaces` then does not exempt the
+  thread's accesses. -/
+  released : Bool := false
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/
@@ -200,6 +224,9 @@ structure Msg where
   relClock : VClock
   /-- For an RMW: the id of the message it read. It stays right after that message. -/
   rmwOf : Option Nat := none
+  /-- The thread of an atomic store or RMW (`none` for a plain write). Ghost: it only decides
+  the owner check of a mutex unlock (`Thread.mutexOwnerCheck`, `ALoc.holder`). -/
+  writer : Option ThreadId := none
   deriving Repr, Inhabited
 
 /-- An atomic location: its writes in modification order. -/
@@ -228,15 +255,24 @@ the address (`ptrFromAddr`): a freed block and a later block at its address (add
 `docs/address-reuse.md`), or one block's one-past-the-end address that starts the next block (two
 blocks may be adjacent, `docs/address-placement.md`). -/
 inductive ProvenanceMode where
-  /-- The default: the integer does not say which block it came from, so the recovery throws
-  `.unspecified`. A stale integer never gains the provenance of the block that reuses its
-  address. -/
+  /-- The default: the integer does not say which block it came from, so the recovery gives no
+  provenance (`⟨none, n⟩`: the address only, every access `.illegal`). A stale integer never
+  gains the provenance of the block that reuses its address. -/
   | strict
   /-- The address-sensitive contract: the address recovers the provenance of the live block that
   covers it (live blocks never share an address). A program that declares it asserts that each
   integer it converts belongs to that block, also a stale one. -/
   | liveBlock
   deriving DecidableEq, Repr, Inhabited
+
+/-- The OS page-mapping oracle (premise OSM-01, `ZigLean/Os/Mmap.lean`). Whether an `mmap` or a
+growing `mremap` fails is the allocator failure decision (`Mem.allocDenied`, one attempt index
+for every request); this picks only whether a growth that may move does move, from the attempt
+index and the requested length in bytes. -/
+structure OsPolicy where
+  /-- A growth with `MREMAP.MAYMOVE` moves the mapping to a fresh address. -/
+  mremapMoves : Nat → Nat → Bool := fun _ _ => false
+  deriving Inhabited
 
 /-- Selected allocator environment: a per-request cap, finite failure indices, an arbitrary
 failure oracle over (attempt index, request bytes) and an optional live-heap budget.
@@ -254,13 +290,15 @@ structure AllocPolicy where
   budget : Option Nat := none
   /-- `@ptrFromInt` of an address that more than one block covers. -/
   provenance : ProvenanceMode := .strict
+  /-- The move choice of the OS page-mapping model (`ZigLean/Os/Mmap.lean`). -/
+  os : OsPolicy := {}
   deriving Inhabited
 
 /-- The oracles are functions, so they are shown opaquely. -/
 instance : Repr AllocPolicy where
   reprPrec p _ := f!"\{ maxBytes := {repr p.maxBytes}, failures := {repr p.failures}, " ++
     f!"byteRemap := {repr p.byteRemap}, fails := <oracle>, budget := {repr p.budget}, " ++
-    f!"provenance := {repr p.provenance} }"
+    f!"provenance := {repr p.provenance}, os := <oracle> }"
 
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
@@ -323,6 +361,27 @@ structure DevState where
 instance : Repr DevState where
   reprPrec d _ := f!"\{ oracle := <oracle>, asmOracle := <oracle>, trace := {repr d.trace} }"
 
+/-! ## `noalias` scopes (`ZigLean/Mem/Noalias.lean`, `docs/illegal-behavior.md`) -/
+
+/-- One access in the log of a `noalias` scope: its bytes, whether it writes, and its root, the
+`noalias` parameter that the pointer of the access is based on (`none`: none of them). -/
+structure NaEntry where
+  block : BlockId
+  off : Nat
+  len : Nat
+  write : Bool
+  root : Option Nat
+  deriving Repr, Inhabited
+
+/-- One running call of a function with `noalias` parameters, on thread `tid`. `seen`: the
+footprint entries before it are in `log` (or before the call); the ones after it are the
+accesses of the instruction that the next `Zig.naMark` follows. -/
+structure NaScope where
+  tid : ThreadId
+  seen : Nat
+  log : Array NaEntry := #[]
+  deriving Repr, Inhabited
+
 /-- Address placement (MM-1, `docs/address-placement.md`): the environment's choice of the
 address of each block, of every kind (global, stack, heap, allocator). `propose b` is the address
 of block `b`; the model takes it if it is valid (`Mem.placeOk`), else the block gets the next
@@ -341,6 +400,20 @@ instance : Inhabited Placement := ⟨.fresh⟩
 
 /-- The oracle is a function, so it is shown opaquely. -/
 instance : Repr Placement := ⟨fun _ _ => "<placement>"⟩
+
+/-- The kernel's and libc's per-process state that the trusted OS thread primitives keep
+(`ZigLean/Os/`, `docs/os-threads.md`). Only those models read or write it. -/
+structure OsState where
+  /-- The threads with a pending interrupt (`tgkill`/`pthread_kill` of `SIG.IO`, premise OSG-01). -/
+  interrupts : Array ThreadId := #[]
+  /-- The number of clock reads so far: the index of the next one into the clock oracle
+  (premise OSK-01). -/
+  clockReads : Nat := 0
+  /-- Each thread's libc `errno` cell (macOS `__error()`), made at its first use. -/
+  errno : Array (ThreadId × BlockId) := #[]
+  /-- The threads that `pthread_detach` released: they stay signalable while they run. -/
+  detached : Array ThreadId := #[]
+  deriving Repr, Inhabited
 
 structure Mem where
   blocks : Array Block := #[]
@@ -367,7 +440,8 @@ structure Mem where
   /-- The id of the next message. -/
   nextMsg : Nat := 0
   /-- The futex queue (the kernel's state, `ZigLean/Mem/Thread.lean`): the threads that wait at
-  a futex, and the address, in the order they began to wait. -/
+  a futex, and the address. A wake picks among them (`Thread.wakeSet`): the order is not a
+  wake order. -/
   waiters : Array (ThreadId × Ptr) := #[]
   /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
   woken : Array ThreadId := #[]
@@ -396,7 +470,25 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The running calls of functions with `noalias` parameters, innermost last
+  (`ZigLean/Mem/Noalias.lean`). Empty in every program without one. -/
+  noalias : Array NaScope := #[]
+  /-- The explicit oracle of arbitrary words (`arbitraryWord`, `--allocator-model translated`,
+  `docs/allocator-model.md`): query `k` (from 0, in execution order) returns `arbitrary[k]`,
+  `0` past the end. `@returnAddress()` and an `undefined` pointer operand read it. Every finite
+  run makes finitely many queries, so a theorem about every initial `Mem` holds for every
+  sequence of values; nothing ties a value to a real code address. -/
+  arbitrary : Array (BitVec 64) := #[]
+  /-- The number of `arbitraryWord` queries so far. -/
+  arbitraryNext : Nat := 0
+  /-- The state of the trusted OS thread primitives (`ZigLean/Os/`). -/
+  os : OsState := {}
   deriving Repr, Inhabited
+
+/-- Thread `t` is a deferred task (`ThreadRec.gated`) that its group still records: no `await` or
+`cancel` of the group has taken it (`Thread.groupTake`), so it has not started. -/
+def Mem.isGated (m : Mem) (t : ThreadId) : Bool :=
+  (m.threads[t]?.map (·.gated)).getD false && m.groups.any (·.2 == t)
 
 /-- The state of a function that uses memory. -/
 abbrev MemM (α : Type) := StateT Mem Result α
@@ -404,12 +496,29 @@ abbrev MemM (α : Type) := StateT Mem Result α
 /-- The body monad of a function that uses memory: its locals over `MemM`. -/
 abbrev MM (σ α : Type) := StateT σ MemM α
 
+/-- The next value of the explicit oracle `Mem.arbitrary`. No memory access. -/
+def arbitraryWord : MemM (BitVec 64) := do
+  let m ← get
+  set { m with arbitraryNext := m.arbitraryNext + 1 }
+  pure (m.arbitrary.getD m.arbitraryNext 0)
+
+/-- `@returnAddress()`: an arbitrary `usize` (`arbitraryWord`). Allocators only pass it along
+as `ret_addr`. -/
+def returnAddress : MemM (BitVec 64) := arbitraryWord
+
+/-- An `undefined` pointer operand (`--allocator-model translated`, e.g. the `ptr` of
+`std.heap.page_allocator`): a pointer without a block at an arbitrary address
+(`arbitraryWord`), so every access through it throws `.illegal`. -/
+def undefPtr : MemM Ptr := do
+  pure ⟨none, (← arbitraryWord).toNat⟩
+
 /-- `n` rounded up to a multiple of `a` (`a = 0`: `n`). -/
 def alignUp (n a : Nat) : Nat := if a = 0 then n else (n + a - 1) / a * a
 
 /-- The block and the offset of an access of `n` bytes at `p` that needs alignment `align`.
-Throws `.illegal` if the block is dead, the bytes are not all in the block, or the address is
-not a multiple of `align`. -/
+Throws `.illegal` if the block is dead, the bytes are not all in the block (for an OS mapping:
+not all at or above its first live offset, `BlockKind.mappedLo`), or the address is not a
+multiple of `align`. -/
 def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) :=
   match p.block with
   | none => throw .illegal
@@ -417,7 +526,8 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
     match m.blocks[b]? with
     | none => throw .illegal
     | some blk =>
-      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0
+      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0 ∧
+          blk.kind.mappedLo ≤ p.off.toNat
       then pure (b, blk, p.off.toNat) else throw .illegal
 
 /-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/
@@ -538,8 +648,21 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   set (m.afterAlloc kind size align)
   pure ⟨some m.blocks.size, 0⟩
 
+/-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
+`e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
+`e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
+of the current thread that it joined (the join is after each access of the child; a detached or
+exited child, `ThreadRec.released`, gives no such edge). The end of a
+block is a write of all its bytes for the race check (C11: the bytes are reused). -/
+def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
+  let c := VClock.bump (m.clocks[m.current]!) m.current
+  m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
+    !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
+    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
+
 /-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
-`.illegal`. -/
+`.illegal`; so does an end of the block that races with an access by another thread
+(`Mem.freeRaces`). It records nothing: a later access to the dead block is `.illegal`. -/
 def free (p : Ptr) : MemM Unit := do
   let m ← get
   match p.block with
@@ -547,7 +670,9 @@ def free (p : Ptr) : MemM Unit := do
   | some b =>
     match m.blocks[b]? with
     | some blk =>
-      if blk.live ∧ p.off = 0 then set { m with blocks := m.blocks.set! b { blk with live := false } }
+      if blk.live ∧ p.off = 0 then
+        if m.freeRaces b blk.bytes.size then throw .illegal
+        else set { m with blocks := m.blocks.set! b { blk with live := false } }
       else throw .illegal
     | none => throw .illegal
 
@@ -776,8 +901,16 @@ block's bytes, if no other block covers the address.
 More than one block covers `n` when a freed block and a later block share addresses (reuse), or
 when `n` is one past the end of a block and the start of an adjacent one: the integer does not
 say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
-throws `.unspecified`; the address-sensitive contract `.liveBlock` takes the live block that
-contains `n`, else a live block that ends at `n` (`docs/address-reuse.md`). -/
+gives no provenance; the address-sensitive contract `.liveBlock` takes the live block that
+contains `n`, else a live block that ends at `n`, and gives no provenance if none of the
+covering blocks is live (`docs/address-reuse.md`).
+
+**No provenance** is `⟨none, n⟩`, as when no block covers `n`: its address is `n` (`ptrAddr`, so
+`@intFromPtr` round-trips and `==` compares addresses), and every load, store, atomic op, `free`
+or `munmap` through it is `.illegal` (`Mem.access` needs a block). This is a conservative
+over-approximation: native code may dereference the address; the model claims nothing about such
+an access. A program that only passes the address on (`std.heap.PageAllocator`'s `mmap` hint) is
+unaffected. -/
 def ptrFromAddr (n : Nat) : MemM Ptr := do
   let m ← get
   let hits := m.blocks.zipIdx.filterMap fun (blk, b) =>
@@ -787,12 +920,12 @@ def ptrFromAddr (n : Nat) : MemM Ptr := do
   | [(b, blk)] => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
   | _ =>
     match m.allocPolicy.provenance with
-    | .strict => throw .unspecified
+    | .strict => pure ⟨none, n⟩
     | .liveBlock =>
       match (hits.find? fun (_, blk) => blk.live ∧ n < blk.addr + blk.bytes.size) <|>
           hits.find? (·.2.live) with
       | some (b, blk) => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
-      | none => throw .unspecified
+      | none => pure ⟨none, n⟩
 
 /-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. The order of two blocks is the
 placement's (`Mem.place`): nothing fixes it. -/

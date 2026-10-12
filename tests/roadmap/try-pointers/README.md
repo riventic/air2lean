@@ -127,10 +127,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/try-poin
 
 Current finite-error storage integration keeps every retained AIR file and
 `provenance.json` unchanged. The historical generated file is retained at
-`origin/TryPointers/Gen.lean`; `emitter-integration.json` binds that identity, the
-current emitter, and the exact current generated file as inputs only. The gate
-cannot rewrite the historical receipt in this mode. Both retained and fresh output
-comparisons still compare the full body with current `TryPointers/Gen.lean`.
+`origin/TryPointers/Gen.lean`; `emitter-integration.json` binds that identity and the
+exact current generated file as inputs only. It pins the output, not the translator source
+(no `Air2Lean/Emit.lean` hash): `check.sh` re-translates the retained AIR with the current
+translator and compares the full body with current `TryPointers/Gen.lean`, and
+`scripts/gen-integrity.py` regenerates it, so any emitter change that alters the output fails
+there. The gate cannot rewrite the historical receipt in this mode. Both retained and fresh
+output comparisons compare the full body with current `TryPointers/Gen.lean`.
 Current generated pointer operations enforce the AIR domain `Bad`/`Other`.
 The generated-program ownership contracts therefore require any present error to
 belong to that domain; payload addresses, full-object/tag reads, frame ownership,

@@ -63,7 +63,8 @@ workflow_patched_zig() {
 workflow_stage_pid=''
 workflow_run_stage() {
   # Run in the background and wait, so a trapped signal interrupts the wait at once.
-  python3 "$repo_root/scripts/safe-output.py" run --timeout "${workflow_stage_timeout:-0}" -- "$@" &
+  python3 "$repo_root/scripts/safe-output.py" run --timeout "${workflow_stage_timeout:-0}" \
+    --grace "${workflow_stage_grace:-2}" -- "$@" &
   workflow_stage_pid=$!
   local status=0
   wait "$workflow_stage_pid" || status=$?
@@ -81,4 +82,11 @@ workflow_interrupt() {
 workflow_publish() {
   # workflow_publish --overwrite|--no-clobber STAGED DESTINATION: fsync, then atomic rename/link.
   python3 "$repo_root/scripts/safe-output.py" publish "$@"
+}
+# Independent jobs (scripts/par.py and its arguments) as one stage without a timeout of its
+# own: each job bounds its own stages. An interrupt stops every job; the grace period lets each
+# job stop its own stage (2 s grace) and clean up first.
+workflow_run_jobs() {
+  local workflow_stage_timeout=0 workflow_stage_grace=15
+  workflow_run_stage python3 "$repo_root/scripts/par.py" "$@"
 }

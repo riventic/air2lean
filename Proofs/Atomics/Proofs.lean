@@ -29,34 +29,34 @@ def sched (cs : List Nat) : Nat → Nat := fun i => cs.getD i 0
 /-- Store buffering: the sequentially consistent schedule gives `2` (the second thread reads
 the first thread's write). -/
 theorem sb_sc :
-    ∃ σ, okVal (Sched.run dispatch 100 (sched []) sbRelaxed (mem0 σ)) = some 2 :=
+    ∃ σ, okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched []) sbRelaxed (mem0 σ)) = some 2 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- Store buffering: both threads read the old value, a result of a weak memory model. -/
 theorem sb_weak :
-    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed (mem0 σ)) = some 0 :=
+    ∃ σ, okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed (mem0 σ)) = some 0 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- 2+2W: both first writes are last in the modification order, a result of a weak memory
 model (`x = 1`, `y = 1`). -/
 theorem twoPlusTwoW_weak :
-    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW (mem0 σ)) = some 11 :=
+    ∃ σ, okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW (mem0 σ)) = some 11 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- Relaxed message passing completes under the sequentially consistent schedule, with 0. -/
 theorem mpRelaxed_completes :
-    ∃ σ, okVal (Sched.run dispatch 100 (sched []) mpRelaxed (mem0 σ)) = some 0 :=
+    ∃ σ, okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched []) mpRelaxed (mem0 σ)) = some 0 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- Message passing: the reader sees the flag and then the data. -/
 theorem mp_sees_data :
-    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelAcq (mem0 σ)) = some 42 :=
+    ∃ σ, okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 1, 1]) mpRelAcq (mem0 σ)) = some 42 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- The same schedule with relaxed atomics: the read of the data after the flag is a data race
 (`.illegal`), since the relaxed load gives no happens-before edge. -/
 theorem mpRelaxed_race :
-    ∃ σ, (match (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelaxed (mem0 σ)).run with
+    ∃ σ, (match (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 1, 1]) mpRelaxed (mem0 σ)).run with
       | some (.error .illegal) => true
       | _ => false) = true :=
   ⟨.fresh, by decide +kernel⟩

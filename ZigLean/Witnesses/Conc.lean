@@ -81,9 +81,9 @@ liveness_witness TTriple.storeBytesAt :=
     by decide +kernel, by decide +kernel, by decide, by decide,
     TLive.mem1 tbytes32 (ok_of_okb (by decide +kernel))⟩
 
-nonvacuity_witness TTriple.alloc := ⟨.stack, 1, 1, by decide, TAdmit.of_empty rfl⟩
+nonvacuity_witness TTriple.alloc := ⟨.stack, 1, 1, by decide, rfl, TAdmit.of_empty rfl⟩
 liveness_witness TTriple.alloc :=
-  ⟨.stack, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
+  ⟨.stack, 1, 1, by decide, rfl, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness alloc_next := ⟨emp, 1, 1, by decide, TAdmit.of_empty rfl⟩
 liveness_witness alloc_next := ⟨emp, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
@@ -105,7 +105,7 @@ nonvacuity_witness Proto.casMarkWrite_run :=
 
 nonvacuity_witness Proto.futexWait_run_go :=
   ⟨p0, 0, mem1 (Enc.encode (0 : BitVec 32)), 0, blk (Enc.encode (0 : BitVec 32)), 0, 0, by decide +kernel,
-    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+    by with_unfolding_all rfl, mem1_noRace _ _ _ _ _ _, by with_unfolding_all rfl, trivial⟩
 
 nonvacuity_witness Proto.futexWait_run_woken := ⟨p0, 0, { woken := #[0] }, by decide +kernel, trivial⟩
 
@@ -119,9 +119,9 @@ nonvacuity_witness Proto.weakCasPrep_of :=
 nonvacuity_witness TimedBody.selectedMessage_currentValue :=
   ⟨Enc.encode (0 : BitVec 32), Enc.encode (0 : BitVec 32), 0, rfl, by with_unfolding_all rfl, trivial⟩
 
-nonvacuity_witness Total.countdown_run := ⟨0, 0, fun _ => 0, Nat.le_refl 0, trivial⟩
+nonvacuity_witness Total.countdown_run := ⟨⟨.any, .available⟩, 0, 0, fun _ => 0, Nat.le_refl 0, trivial⟩
 nonvacuity_witness Total.go_countdown :=
-  ⟨0, 0, 1, 0, #[], fun _ => 0, Nat.le_refl 0, Nat.le_refl 1, trivial⟩
+  ⟨⟨.any, .available⟩, 0, 0, 1, 0, #[], fun _ => 0, Nat.le_refl 0, Nat.le_refl 1, trivial⟩
 
 /-! ## Lock states and words (`ZigLean/Conc/LockRules.lean`, `ZigLean/Conc/Word.lean`) -/
 
