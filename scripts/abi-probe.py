@@ -24,6 +24,25 @@ VALUES = {'vector_u9_image': 268173823, 'vector_u9_lane_write': 178782719,
           'vector_u24_image': 20016001699311,
           'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
 OFFSETS = {'record_count': 4, 'record_pointer': 8}
+
+
+def error_layouts(bits):
+    """L10: `anyerror` is `u<bits>` (1, 2 or 4 bytes for 1-8, 9-16, 17-32 bits); `anyerror!u8`
+    puts the code first, then the payload byte, padded to the code's alignment
+    (`ZigLean/Mem/ErrWidth.lean`, `tests/roadmap/error-width`)."""
+    size = 1 if bits <= 8 else 2 if bits <= 16 else 4
+    return {'anyerror': [size, size], 'error_union_u8': [2 * size, size]}
+
+
+def layouts(bits):
+    """The expected layouts of a profile with `bits`-bit errors."""
+    return {**LAYOUTS, **error_layouts(bits)}
+
+
+def error_limit(bits):
+    """The `--error-limit` of a `bits`-bit error integer: the default (no flag) for 16 bits,
+    else the largest limit of that width (Zig's width is `bit_length(limit)`)."""
+    return None if bits == 16 else 2 ** bits - 1
 # Zig versions with committed probe contracts: 0.16.0's profiles are
 # tests/roadmap/abi-probes/<triple>-<mode>.json, every other version's are under <version>/
 # (`observe` selects it from the stock compiler's `zig version`).
@@ -47,7 +66,7 @@ def profile_check(profile):
             or profile['build_mode'] not in ('ReleaseSafe', 'ReleaseFast')
             or profile['export_stage'] != 'analyzed-air'
             or profile['float_mode'] != 'per-instruction' or profile['error_layout'] != 'type-table'
-            or type(profile['error_set_bits']) is not int or profile['error_set_bits'] != 16
+            or type(profile['error_set_bits']) is not int or not 0 < profile['error_set_bits'] <= 32
             or type(profile['error_tracing']) is not bool):
         raise ValueError('unsupported source profile, backend, mode, endian or width')
     if (profile['cpu'] != NATIVE[profile['target_triple']][3] or not isinstance(profile['features'], list)
@@ -76,9 +95,10 @@ def observations(text, profile):
     _, os_tag, abi_tag, _ = NATIVE[profile['target_triple']]
     expected_meta = {'arch': arch, 'os': os_tag, 'abi': abi_tag, 'endian': 'little',
                      'backend': profile['backend'], 'mode': profile['build_mode'],
-                     'cpu': profile['cpu'], 'zig': profile['zig_version'], 'pointer_bits': '64', 'error_set_bits': '16',
+                     'cpu': profile['cpu'], 'zig': profile['zig_version'], 'pointer_bits': '64',
+                     'error_set_bits': str(profile['error_set_bits']),
                      'error_tracing': str(profile['error_tracing']).lower()}
-    if data != {'meta': expected_meta, 'layout': LAYOUTS, 'offset': OFFSETS, 'value': VALUES,
+    if data != {'meta': expected_meta, 'layout': layouts(profile['error_set_bits']), 'offset': OFFSETS, 'value': VALUES,
                 'feature': {name: 1 for name in profile['features']}}:
         raise ValueError('native observations differ from the bounded ABI contract: ' + json.dumps(data, sort_keys=True))
     return data
@@ -99,6 +119,8 @@ def run(zig, profile):
         command = [str(compiler), 'build-exe', '-fllvm', '-O' + profile['build_mode'],
                    '-ferror-tracing' if profile['error_tracing'] else '-fno-error-tracing',
                    '-target', profile['target_triple'], '-mcpu=baseline', '-femit-bin=' + str(binary),
+                   *([] if error_limit(profile['error_set_bits']) is None
+                     else ['--error-limit', str(error_limit(profile['error_set_bits']))]),
                    '--dep', 'compat', '-Mroot=' + str(ROOT / SOURCES[0]),
                    '-Mcompat=' + str(ROOT / SOURCES[1])]
         compiler_hash = hashlib.sha256(compiler.read_bytes()).hexdigest()

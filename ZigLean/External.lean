@@ -117,4 +117,56 @@ theorem Contract.accesses_within {Args Result : Type} (c : Contract Args Result)
   obtain ⟨delta, hlog, hcov⟩ := h.2.2.1
   exact ⟨delta, hlog, fun entry mem => respects.1 args before entry (hcov entry mem)⟩
 
+/-! ## Calls from concurrent programs (E02, premise EXT-04)
+
+A registry model runs as one step of the scheduler: its accesses are not interleaved with other
+threads'. That matches a native run only when no other thread accesses the model's memory
+without synchronization, which is a race and so `.illegal` in the model. A model need not record
+its own accesses, so in a concurrent program the generated call first claims the whole block of
+each declared footprint parameter (`claim`): one recorded access of the block, read or write,
+checked against every concurrent access (`recordAccess`). A conflicting unsynchronized access by
+another thread then throws `.illegal`, before or after the call. -/
+
+/-- Record one access to the whole block of `r` (none for a pointer without a block: the
+model's own access then throws, as the contract allows). -/
+def claim {α : Type} [Region α] (r : α) (kind : AccessKind) : MemM Unit := fun m =>
+  match Region.block r with
+  | none => pure ((), m)
+  | some b => match m.blocks[b]? with
+    | some blk => (recordAccess b 0 blk.bytes.size kind).run m
+    | none => pure ((), m)
+
+/-- A recorded access changes no block. -/
+theorem recordAccess_blocks {b o n : Nat} {kind : AccessKind} {m m' : Mem}
+    (h : (recordAccess b o n kind).run m = pure ((), m')) : m'.blocks = m.blocks := by
+  simp only [recordAccess, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont,
+    set, StateT.set, MonadStateOf.set, throw, throwThe, MonadExceptOf.throw] at h
+  generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
+  match r, hr, h with
+  | some _, _, h => cases h
+  | none, _, h =>
+    simp only [ExceptT.bindCont, Option.bind_some] at h
+    obtain ⟨-, rfl⟩ := h
+    rfl
+
+/-- A claim changes no block: only the access log and the clocks. -/
+theorem claim_blocks {α : Type} [Region α] {r : α} {kind : AccessKind} {m m' : Mem}
+    (h : (claim r kind).run m = pure ((), m')) : m'.blocks = m.blocks := by
+  have pure_eq : ∀ {m₁ : Mem}, (pure ((), m₁) : Result (Unit × Mem)) = pure ((), m') → m' = m₁ :=
+    fun h => by
+      have h : some (Except.ok ((), _)) = some (Except.ok ((), m')) := h
+      simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+      exact h.2.symm
+  change (match Region.block r with
+    | none => pure ((), m)
+    | some b => match m.blocks[b]? with
+      | some blk => (recordAccess b 0 blk.bytes.size kind).run m
+      | none => pure ((), m)) = _ at h
+  split at h
+  · rw [pure_eq h]
+  · split at h
+    · exact recordAccess_blocks h
+    · rw [pure_eq h]
+
 end Zig.External

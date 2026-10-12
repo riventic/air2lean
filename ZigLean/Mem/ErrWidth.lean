@@ -47,21 +47,32 @@ def errCapacity (bits : Nat) : Nat := 2 ^ bits - 1
 
 /-! ## Code bytes -/
 
-/-- The `errCodeSize bits` bytes of an error code: zeros for no error, else the name's
+/-- Bytes that hold the error integer's bits, `ceil(bits / 8)`: what a store of `u<bits>`
+writes (LLVM's store size of `iN`). Below `errCodeSize bits` only at 17 to 24 bits, where the
+fourth byte of the 4-byte code is padding (native evidence: `tests/roadmap/error-width`). -/
+def errValueSize (bits : Nat) : Nat := (bits + 7) / 8
+
+/-- The `errValueSize bits` value bytes of an error code: zeros for no error, else the name's
 fragments. -/
-def errBytesW (bits : Nat) : Option ErrName → Array Byte
-  | none => Array.replicate (errCodeSize bits) (.int 0)
-  | some e => Array.ofFn (n := errCodeSize bits) fun i =>
+def errValueW (bits : Nat) : Option ErrName → Array Byte
+  | none => Array.replicate (errValueSize bits) (.int 0)
+  | some e => Array.ofFn (n := errValueSize bits) fun i =>
       if h : i.val < 4 then .errFrag e ⟨i.val, h⟩ else .undef
 
-/-- The error of the first `errCodeSize bits` bytes: `none` for the zero code. Any other
-content (mixed, partial, swapped or foreign fragments, integer bytes) throws `.unspecified`. -/
+/-- The `errCodeSize bits` bytes of a stored error code: the value bytes, then padding
+(undefined), as for an integer (`padTo`). -/
+def errBytesW (bits : Nat) (e : Option ErrName) : Array Byte :=
+  padTo (errCodeSize bits) (errValueW bits e)
+
+/-- The error of the first `errValueSize bits` bytes (a padding byte after them is not read):
+`none` for the zero code. Any other content (mixed, partial, swapped or foreign fragments,
+integer bytes) throws `.unspecified`. -/
 def errOfBytesW (bits : Nat) (bs : Array Byte) : Result (Option ErrName) :=
-  let code := bs.extract 0 (errCodeSize bits)
+  let code := bs.extract 0 (errValueSize bits)
   if 4 < errCodeSize bits then throw .unspecified
-  else if code = errBytesW bits none then pure none
+  else if code = errValueW bits none then pure none
   else match (code[0]? : Option Byte) with
-    | some (.errFrag e _) => if code = errBytesW bits (some e) then pure (some e) else throw .unspecified
+    | some (.errFrag e _) => if code = errValueW bits (some e) then pure (some e) else throw .unspecified
     | _ => throw .unspecified
 
 /-! ## Declared finite domains -/
@@ -172,12 +183,12 @@ def tryPayloadPtrW (bits : Nat) (α : Type) [Enc α] (align : Nat) (p : Ptr) :
     MemM (Except ErrName Ptr) := do
   match ← errCodeBytesAt bits α align p with
   | some e => pure (.error e)
-  | none => pure (.ok (errPayloadPtrW bits α p))
+  | none => .ok <$> ptrProject p (errPayloadPtrW bits α)
 
 def errSetOkW (bits : Nat) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
-  let (eo, po) := errUnionOffsetsW bits (Enc.size α) (Enc.align α)
+  let (eo, _) := errUnionOffsetsW bits (Enc.size α) (Enc.align α)
   storeBytes (p.add eo) (Nat.min align (errCodeAlign bits)) (errBytesW bits none)
-  pure (p.add po)
+  ptrProject p (errPayloadPtrW bits α)
 
 def finiteErrIsErrAtW (bits : Nat) (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) :
     MemM Bool := do
@@ -229,6 +240,37 @@ def errorFromIntW (bits : Nat) (t : ErrorTable) (c : BitVec bits) : Result ErrNa
   if h : 0 < c.toNat ∧ c.toNat ≤ t.names.size then
     pure t.names[c.toNat - 1]
   else throw .panic
+
+/-! ### The translated casts (L10)
+
+A translation reads the compilation's numbering from the exporter (`error-table.air2lean`,
+`docs/air-json.md` §Error table) as the plain array `errorTable`; the translator has checked
+that it names each error once and fits the width. `intFromErrorIn`/`errorFromIntIn` are the
+casts on it; on an `ErrorTable` they are `intFromErrorW`/`errorFromIntW` up to the invalid-code
+outcome (`intFromErrorIn_table`, `errorFromIntIn_table`). -/
+
+/-- `@intFromError` on the numbering `names`: the code of `e`. Every error of a compilation is
+in its numbering; a name outside it has no code. -/
+def intFromErrorIn (bits : Nat) (names : Array ErrName) (e : ErrName) : Result (BitVec bits) :=
+  match errIndex e names.toList with
+  | some i => if i + 1 ≤ errCapacity bits then pure (BitVec.ofNat bits (i + 1)) else throw .unspecified
+  | none => throw .unspecified
+
+/-- `error_from_int` on the numbering `names`: the unchecked conversion. A safe build checks the
+code first (`cmp_lte_errors_len` and `!= 0`, a separate AIR instruction, then the panic
+`invalid error code`); without that check an invalid code is illegal behaviour. -/
+def errorFromIntIn {bits : Nat} (names : Array ErrName) (c : BitVec bits) : Result ErrName :=
+  if h : 0 < c.toNat ∧ c.toNat ≤ names.size then pure names[c.toNat - 1] else throw .illegal
+
+theorem intFromErrorIn_table (bits : Nat) (t : ErrorTable) (e : ErrName) :
+    intFromErrorIn bits t.names e = intFromErrorW bits t e := rfl
+
+/-- On a valid code the unchecked cast is `errorFromIntW`; an invalid code, which the safety
+check turns into a panic before the cast, is illegal behaviour here. -/
+theorem errorFromIntIn_table {bits : Nat} (t : ErrorTable) (c : BitVec bits)
+    (h : 0 < c.toNat ∧ c.toNat ≤ t.names.size) :
+    errorFromIntIn t.names c = errorFromIntW bits t c := by
+  simp [errorFromIntIn, errorFromIntW, h]
 
 /-- An integer converted to the error integer (`@intCast` to `u<bits>`): a value that does
 not fit the narrower width is the safety panic `integer overflow`, not a truncated code. -/

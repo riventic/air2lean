@@ -88,11 +88,18 @@ What the real compiler does differently from the hand-written AIR (the model is 
 * `hostAbi` on the LLVM backend has host size 3 (the ABI host size 4 appears only in the
   `-fno-llvm` export).
 
-`packed_fields.zig` has native tests for every defined-behaviour function (stock 0.16.0 on an
-aarch64-macos host, ReleaseSafe and Debug: all pass). Not run natively: `innerPartial` and
-`undefField` (they read bits that are still undefined) and `unionBadMode` (an enum tag without a
-name is a safety panic). Native execution on x86_64 Linux is not done.
+`packed_fields.zig` has native tests for every defined-behaviour function: stock 0.16.0 on an
+aarch64-macos host, ReleaseSafe and Debug; and `compiler.sh --native-linux` on x86_64-linux-musl
+(Docker `linux/amd64`) with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0, LLVM ReleaseSafe and Debug
+and the self-hosted x86_64 backend: all pass. These native results are the values that
+`PackedFields/Proofs.lean` proves for the hand-written AIR, including the byte-pointer form
+(`innerC` = `0xAB`, `innerCKeepsA` = 1) and the nested-base fix. Not run natively: `innerPartial`
+and `undefField` (they read bits that are still undefined) and `unionBadMode` (an enum tag
+without a name is a safety panic).
 
-Scope: the hand-written AIR remains the only input for the byte-pointer form and the
-`struct_field_ptr` forms above. Packed unions as fields of packed structs, float and pointer
-fields, partly `undefined` packed constants and big-endian targets remain outside the subset.
+Scope: the hand-written AIR remains the only translated input for the byte-pointer form
+through a nested bit-pointer (no Zig version exports it: `&reg.inner.c` is a bit-pointer). Packed
+unions and floats as packed-struct fields, vector fields (0.14.1, 0.15.2) and packed-union casts
+are in `tests/roadmap/packed-casts`; pointer fields (0.14.1, 0.15.2) and partly `undefined` packed
+constants remain outside the subset, and big-endian packed structs are in
+`tests/roadmap/big-endian`.

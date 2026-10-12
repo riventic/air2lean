@@ -42,6 +42,7 @@ def _load(name, path):
 
 
 closure = _load('dependency_closure', Path(__file__).resolve().with_name('dependency-closure.py'))
+compat = _load('compat', Path(__file__).resolve().with_name('compat.py'))
 
 
 class Invalid(ValueError):
@@ -468,7 +469,7 @@ def main(project, argv=None):
     zig = args.zig_air or os.environ.get('AIR2LEAN_ZIG_AIR')
     if zig is None:
         spec = project.load_manifest(manifest_path)[0].get('export') or {}
-        zig = ROOT / f'zig-air-{spec.get("zig_version", "0.16.0")}' / 'bin' / 'zig'
+        zig = ROOT / f'zig-air-{spec.get("zig_version") or compat.default_version(ROOT)}' / 'bin' / 'zig'
     report, encoded = run_export(project, manifest_path, zig, args.translator, args.out, args.module, args.defines,
                                  replace=args.replace)
     if args.report:

@@ -62,9 +62,10 @@ def profile_for_air(doc):
     string_fields = RAW_FIELDS - {"pointer_bits", "error_set_bits", "error_tracing", "features"}
     if any(not isinstance(p[k], str) or not p[k] for k in string_fields):
         raise ValueError("profile string fields must not be empty or malformed")
-    # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos,
-    # 32-bit wasm32-freestanding/wasm32-wasi pointers or the 64-bit big-endian s390x-linux model
-    # (named `abi64-be-v1` by the exporter), and a 1..32-bit error integer.
+    # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos/
+    # aarch64-linux (gnu, Zig 0.14.1-0.16.0: `Target.qualified`), 32-bit wasm32-freestanding/
+    # wasm32-wasi pointers or the 64-bit big-endian s390x-linux and mips64-linux models (named
+    # `abi64-be-v1` by the exporter), and a 1..32-bit error integer.
     big = p["endian"] == "big"
     if (p["name"] != ("abi64-be-v1" if big else "abi64-le-v1") or p["zig_version"] != version or
             type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
@@ -76,17 +77,25 @@ def profile_for_air(doc):
     triple = p["target_triple"].split("-")
     target = (triple[0], triple[1].split(".")[0]) if len(triple) == 3 else None
     if (len(triple) != 3 or triple[2].split(".")[0] != p["abi"] or
-            target not in {("x86_64", "linux"), ("aarch64", "macos"), ("s390x", "linux"),
-                           ("wasm32", "freestanding"), ("wasm32", "wasi")}):
+            target not in {("x86_64", "linux"), ("aarch64", "macos"), ("aarch64", "linux"),
+                           ("s390x", "linux"), ("mips64", "linux"), ("wasm32", "freestanding"),
+                           ("wasm32", "wasi")}):
+        raise ValueError("target triple is outside the supported model ABI scope")
+    if target == ("aarch64", "linux") and (p["abi"] != "gnu" or
+                                           version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
         raise ValueError("incompatible target profile")
-    if big != (target == ("s390x", "linux")) or (big and p["backend"] != "stage2_llvm"):
+    if big != (target in {("s390x", "linux"), ("mips64", "linux")}) or (
+            big and p["backend"] != "stage2_llvm"):
         raise ValueError("incompatible target profile")
     fs = p["features"]
     if (not isinstance(fs, list) or any(not isinstance(f, str) or not f for f in fs) or
             len(fs) != len(set(fs)) or type(p["error_tracing"]) is not bool):
         raise ValueError("invalid profile features or error_tracing")
+    # aarch64-linux's float rules are the `generic` CPU's: `fullfp16` would fuse an f16 @mulAdd.
+    if target == ("aarch64", "linux") and "fullfp16" in fs:
+        raise ValueError("incompatible target profile: fullfp16 is outside the aarch64-linux float rules")
     if (p["build_mode"] not in {"Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"} or
             p["float_mode"] != "per-instruction" or p["error_layout"] != "type-table" or
             p["export_stage"] != "analyzed-air"):
@@ -115,6 +124,9 @@ def fresh_linux_profile(doc, expected_version):
     return profile
 
 
+ADMISSIONS = {"unqualified-build-mode", "no-libc", "unqualified-build-mode,no-libc"}
+
+
 def split_generated(data, required=False):
     first, newline, body = data.partition(b"\n")
     if not first.startswith(PREFIX):
@@ -124,11 +136,15 @@ def split_generated(data, required=False):
     if not newline:
         raise ValueError("profile record must end with a newline")
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
-    # `admission` is present only when the translator was given an admission opt-in
-    # (`--allow-unqualified-build-mode`, docs/build-modes.md).
+    # `admission` is present only when the translator was given an admission opt-in, in this
+    # order: `--allow-unqualified-build-mode` (docs/build-modes.md), `--assume-no-libc`
+    # (docs/floats.md §Targets).
+    # `allocator_model` is present only under `--allocator-model translated`
+    # (docs/allocator-model.md): its trust base is the OS boundary (OSM-01).
     if (not isinstance(metadata, dict) or
-            set(metadata) - {"admission"} != {"profile", "float_semantics", "correspondence"} or
-            metadata.get("admission", "unqualified-build-mode") != "unqualified-build-mode" or
+            set(metadata) - {"admission", "allocator_model"} != {"profile", "float_semantics", "correspondence"} or
+            metadata.get("admission", "no-libc") not in ADMISSIONS or
+            metadata.get("allocator_model", "translated") != "translated" or
             not isinstance(metadata["float_semantics"], str) or
             metadata["float_semantics"] not in {"ieee", "compiler-rt"} or metadata["correspondence"] != "model"):
         raise ValueError("unsupported generated profile record")
@@ -224,7 +240,8 @@ def proof_lemma_records(body, sources):
         base = proof_api_base(source)
         loops = record.get("loops", [])
         expected_loops = [dict(body=f"{base}_loop{k}_body", again=f"{base}_loop{k}_again",
-                               body_unfold=f"{base}_loop{k}_body_unfold", step=f"{base}_loop{k}_step")
+                               body_unfold=f"{base}_loop{k}_body_unfold", step=f"{base}_loop{k}_step",
+                               spec=f"{base}_loop{k}_spec")
                           for k in range(len(loops))] if isinstance(loops, list) else None
         if (record["model"] != base + "_model" or record["unfold"] != base + "_unfold" or
                 not isinstance(loops, list) or loops != expected_loops or

@@ -191,6 +191,11 @@ def Reg.get_flags (u : Reg) : Zig.Result (Flags) := Zig.PackedU.get (Flags) u.by
 def Reg.modify_flags (g : Flags → Flags) (u : Reg) : Reg :=
   ⟨Zig.PackedU.set u.bytes (g (Zig.Raw.getD (Zig.PackedU.get (Flags) u.bytes)))⟩
 
+instance : Zig.Packed Reg 8 where
+  toBits u := Zig.PackedU.bitsOf 8 u.bytes.toArray
+  ofBits b := ⟨Zig.Raw.ofArray 1 (Zig.intBytes b)⟩
+  mask u := Zig.PackedU.maskOf 8 u.bytes.toArray
+
 instance : Zig.Enc Reg where
   size := 1
   align := 1
@@ -328,6 +333,11 @@ def Nib.get_signed (u : Nib) : Zig.Result (BitVec 4) := Zig.PackedU.get (BitVec 
 
 def Nib.modify_signed (g : BitVec 4 → BitVec 4) (u : Nib) : Nib :=
   ⟨Zig.PackedU.set u.bytes (g (Zig.Raw.getD (Zig.PackedU.get (BitVec 4) u.bytes)))⟩
+
+instance : Zig.Packed Nib 4 where
+  toBits u := Zig.PackedU.bitsOf 4 u.bytes.toArray
+  ofBits b := ⟨Zig.Raw.ofArray 1 (Zig.intBytes b)⟩
+  mask u := Zig.PackedU.maskOf 4 u.bytes.toArray
 
 instance : Zig.Enc Nib where
   size := 1

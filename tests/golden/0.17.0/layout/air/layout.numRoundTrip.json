@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,10 +118,16 @@
  },
  "name": "layout.numRoundTrip",
  "module": "root",
+ "src": {
+  "file": "layout.zig",
+  "module": "layout",
+  "decl_line": 298
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -137,7 +146,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -173,7 +183,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 11
   },
   {
    "id": 7,
@@ -201,7 +212,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 18
   },
   {
    "id": 9,
@@ -217,7 +229,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 18
   },
   {
    "id": 11,
@@ -239,7 +252,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 13,

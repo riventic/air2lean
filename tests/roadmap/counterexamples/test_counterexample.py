@@ -301,6 +301,31 @@ class SourceSpans(unittest.TestCase):
         self.assertEqual(spans[12], (dict(file='helper.zig', module='root', line=8, column=4), 'statement'))
         self.assertEqual(spans[15], (None, 'unavailable_in_AIR'))     # inlined body without its callee's src
 
+    def test_inlined_sites_keep_exact_callee_lines_and_the_call_site_chain(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); air = root/'air'; air.mkdir()
+            nested = [dict(id=0, tag='dbg_stmt', line=4, column=3),
+                      dict(id=1, tag='dbg_inline_block', src=INLINE_SRC, body=[
+                          dict(id=2, tag='dbg_stmt', line=2, column=4),
+                          dict(id=3, tag='dbg_inline_block', body=[dict(id=4, tag='dbg_stmt', line=9, column=1), dict(id=5, tag='load')]),
+                          dict(id=6, tag='load')]),
+                      dict(id=7, tag='load')]
+            (air/'demo.f.json').write_text(json.dumps(dict(schema=11, name='demo.f', src=SRC, body=nested)))
+            sites = {s['air_id']: s for s in CX.localize(root, 'demo', 'f', 'illegal', None, air_dir=air)['candidate_sites']}
+            outer, deep, plain = sites[6], sites[5], sites[7]
+            # An inlined body whose callee exports `src` has the callee's own exact line, in the callee's file.
+            self.assertEqual((outer['source_span_status'], outer['zig_file'], outer['zig_line']), ('statement', 'helper.zig', 8))
+            self.assertEqual([c['call_site']['line'] for c in outer['inline_chain']], [33])
+            self.assertEqual(outer['call_site_span']['line'], 33)
+            # Nested inlining without its own `src`: no exact line, but the full chain of call sites.
+            self.assertEqual(deep['source_span_status'], 'unavailable_in_AIR')
+            self.assertEqual([c['call_site']['line'] for c in deep['inline_chain']], [33, 8])
+            self.assertEqual(deep['call_site_span']['line'], 8)
+            self.assertEqual(deep['inline_chain'][0]['callee_span']['file'], 'helper.zig')
+            # Code outside every inline block has no chain.
+            self.assertNotIn('inline_chain', plain)
+            self.assertEqual((plain['source_span_status'], plain['zig_line']), ('statement', 33))
+
     def test_old_air_without_src_is_unavailable(self):
         spans = self.spans(None)  # only the inlined callee that exports its own src keeps a span
         self.assertTrue(all(span == (None, 'unavailable_in_AIR') for i, span in spans.items() if i not in (10, 12)))

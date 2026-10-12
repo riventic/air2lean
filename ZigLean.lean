@@ -13,9 +13,11 @@ import ZigLean.Endian
 import ZigLean.PackedLemmas
 import ZigLean.Simp
 import ZigLean.Union
+import ZigLean.PackedRepr
 import ZigLean.Vec
 import ZigLean.External
 import ZigLean.VersionGate
 import ZigLean.External.Callback
 import ZigLean.Asm
+import ZigLean.Os.Mmap
 import ZigLean.Os

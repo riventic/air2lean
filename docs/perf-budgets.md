@@ -1,8 +1,8 @@
 # Translation and proof performance budgets
 
-Status: **recorded** (Darwin arm64 reference platform, 18 workloads). The gate has two
-modes: the strict reference-platform limits and a portable mode with generous limits that
-CI runs on any runner (see Gate).
+Status: **recorded** (Darwin arm64 reference platform, 18 workloads). The gate has three
+modes: the strict reference-platform limits, a portable mode with generous limits that CI runs
+on any runner, and a normalized mode that also gates proof time on any machine (see Gate).
 
 ## Workloads
 
@@ -150,6 +150,34 @@ masks a failure). Findings:
 | `unserialized-measurement` | not recorded with `LEAN_NUM_THREADS=1` |
 | `pending` | no baseline for the workload |
 
+## Proof time on any machine
+
+Wall time of a proof build differs between machines by far more than a fixed slack can absorb,
+so the reference limits apply to the reference platform only. `record` therefore also times a
+fixed pure-Lean workload, `tests/roadmap/perf-budgets/Calibration.lean` (no imports; `omega`,
+`simp`, `decide` and `decide +kernel` goals; median of 3 `lake env lean` runs, about 5.8 s on the
+reference machine), once per measurement (skipped by `--skip-proof` and `--skip-calibration`).
+`baseline` stores each Lean phase (`elaborate`, `proof.cold`, `proof.warm`) as `baseline_ratio`
+and `max_ratio`, its time divided by the calibration time of the same run (limit
+`max(ratio x 2, ratio + 2)` units), and, for workloads recorded with `--per-module`, one limit per
+proof module that takes at least 2 s (`budget.modules`: module-local cold build, `max(ratio x 2,
+ratio + 1)`). The budgets file records the calibration file's SHA-256: editing the file fails
+`validate` until a rebaseline.
+
+```sh
+python3 scripts/perf-budgets.py gate --normalized --measurement M.json [--workload ID] [--phase proof.cold]
+```
+
+`--normalized` is `--portable` plus those Lean phases and modules, compared as multiples of the
+measurement's own calibration, so a slower or faster machine cancels. It fails closed: a missing,
+zero or foreign calibration (`missing-calibration`), a phase without a calibrated budget, a
+budgeted hotspot module without a timing (record with `--per-module`), or any change of emitted
+Lean. Memory uses the portable limits. `--workload` gates a partial `record --workload`
+measurement. CI runs it for the `threadsync` workload (the Handoff and WaitGroup hotspots) on
+0.16.0. Limits: the ratio assumes the machine scales CPU-bound Lean work uniformly (it does not
+model memory-bound or I/O effects), and cold builds of a runner with a warm Lake cache of
+dependencies are not comparable with a cold dependency build.
+
 ## Optimizations and preservation
 
 A performance change must keep every workload's emitted Lean byte-identical (the
@@ -179,23 +207,30 @@ with other jobs, so differences below about 20% are noise):
 - **Lean elaboration of generated modules** takes 0.3-2.3 s and 550-650 MiB, mostly
   import cost; it scales weakly with output size.
 - **Proofs** dominate: 64 `Proofs.*` modules cost 116 s module-local cold. Slowest:
-  `Sync.RwLock` 11 s, `Threadsync.Handoff` 10-11 s (2.1 GB, `decide +kernel` and kernel
-  type checking), `Threadsync.WaitGroup` 9-10 s, `Sync.Handoff` 6.6 s. Warm rebuilds
-  (trace check only) take 0.15-0.18 s per workload.
+  `Sync.RwLock` 11 s, `Threadsync.Handoff` 17 s module-local (2.9 GB), `Threadsync.WaitGroup`
+  9 s, `Sync.Handoff` 6.6 s. Warm rebuilds (trace check only) take 0.15-0.18 s per workload.
   `Sync.RwLock.live_all` proved two facts about `Ph` with `simp_all` inside a context
   holding the whole protocol invariant (2.1 s by the profiler). They are now standalone
   `Ph` lemmas; the module's standalone elaboration went from 11.3 s to 9.4 s. No theorem
-  statement changed; the dependents build and `scripts/no-sorry.sh` passes. The
-  module-local cold build in the two full recordings (11.5 s, 11.1 s) does not separate
-  this gain from host noise; the budget is not tightened on it.
-  Profile with `lake env lean -Dtrace.profiler=true -Dtrace.profiler.threshold=800
-  Proofs/X/Y.lean`. `Threadsync.WaitGroup` hits the 200000-heartbeat limit near line 3127
-  when profiler tracing is on, so it has little heartbeat headroom.
+  statement changed.
+  **Profile serially.** Lean elaborates theorems as async tasks, and the wall time of a task
+  includes the time other tasks run on the same thread: `Threadsync.Handoff.enc_box`
+  (`decide +kernel` of seven array equalities) showed 8.4 s with the default settings but
+  0.4 s on its own, and each conjunct 0.1-0.25 s. It was never a hotspot. Use
+  `lake env lean -DElab.async=false -Dtrace.profiler=true -Dtrace.profiler.threshold=400
+  Proofs/X/Y.lean`.
+  The serial profile of `Threadsync.WaitGroup` put `tally_decode` first (6 s): four
+  `have h' : intOfBytes ... = pure a := h` steps, each a 0.7-2 s unification that unfolds
+  `ExceptT.run` over the whole term. The general lemma `Zig.Result.eq_pure_of_run`
+  (`ZigLean/ResultRun.lean`) states the step once at a variable; no statement changed, and the
+  module's elaboration went from 19-22 s to 15-17 s (three runs each, `-DElab.async=false`).
+  Remaining in `Threadsync.Handoff` and `WaitGroup`: kernel type checking of the large
+  `refine` chains (`sig_body` 4.5 s, `handoff_completes` 3.4 s, `fwait_spec`, `wus_spec`
+  2.7 s each, `inv_finish` 3.5 s). Other `have _ : x = pure a := h` steps exist in
+  `Proofs/Lists` and `ZigLean/Sep`; they are not hotspots.
 
 No lookup-structure change in the translator is claimed: no translator phase other than
-`renumber` exceeds 16 ms. Remaining proof candidates are `Threadsync.Handoff.enc_box`
-(`decide +kernel` of seven byte-array equalities) and the `WaitGroup`/`Handoff`
-`refine` chains.
+`renumber` exceeds 16 ms. The remaining proof candidates are the `WaitGroup`/`Handoff` `refine` chains above.
 
 `python3 tests/roadmap/perf-budgets/test_perf_budgets.py` tests the gate,
 baseline derivation, AIR overlay, module-local cold cleanup, `wait4` measurement

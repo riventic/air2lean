@@ -5,7 +5,8 @@
 committed index is stale, a premise ID is undefined or unused, a runtime module or import
 has no premise mapping, or the catalogue is malformed. `write` regenerates the index.
 `explain` prints the derivation of one theorem. `compiled` applies the same tables to the
-kernel dependency graph written by scripts/assumptions.py. See docs/premises.md.
+kernel dependency graph written by scripts/assumptions.py. Both fail when a concurrency theorem
+or report omits the memory-model adequacy premise (`memory_model`, C12). See docs/premises.md.
 """
 from __future__ import annotations
 
@@ -45,8 +46,13 @@ IDENT = r"[A-Za-z_À-ɏͰ-Ͽἀ-῿][A-Za-z_0-9'!?À-ɏͰ-Ͽἀ-῿₀-ₜ]*"
 TOKEN_RE = re.compile(IDENT + r"(?:\." + IDENT + r")*")
 NAME_RE = re.compile(r"\s*(" + IDENT + r"(?:\." + IDENT + r")*)")
 CTOR_RE = re.compile(r"\|\s*(" + IDENT + r")")
-# `.ctor` with an expected type (`throw .unspecified`), not a field access on a term.
-DOT_CTOR_RE = re.compile(r"(?<![\w.'!?)\]}⟩])\.(" + IDENT + r")")
+# `.ctor` with an expected type (`throw .unspecified`), not a field access on a term (nor on
+# the anonymous-function argument `·`).
+DOT_CTOR_RE = re.compile(r"(?<![\w.'!?)\]}⟩·])\.(" + IDENT + r")")
+# `(·.f …)`: field notation on the argument of an anonymous function. In this repository it is
+# the projection argument `Ptr → Ptr` of pointer formation (`ptrProject p (·.add 8)`,
+# `ptrProjectDevice`, `BlkAt.proj (f := ·.elem …)`), so `f` elaborates to `Zig.Ptr.f`.
+DOT_FIELD_RE = re.compile(r"·\.(" + IDENT + r")")
 # `(a b : T ...)`, `{a : T}`, `[a : T]`, `⦃a : T⦄`: bound names and the head token of their type.
 BINDER_RE = re.compile(r"[(\[{⦃]\s*((?:" + IDENT + r"\s+)*" + IDENT + r")\s*:(?!=)\s*@?("
                        + IDENT + r"(?:\." + IDENT + r")*)")
@@ -117,9 +123,14 @@ def load_config(path: Path) -> dict:
         raise ValueError("unsupported premise configuration schema")
     for key in ("catalog", "index", "universal", "theorem_roots", "import_roots", "excluded", "generated_imports",
                 "generated_premises", "generated_markers", "profiles", "float_semantics", "source_axiom",
-                "runtime_modules", "rules", "implies"):
+                "runtime_modules", "rules", "implies", "memory_model"):
         if key not in config:
             raise ValueError(f"premise configuration lacks {key}")
+    model = config["memory_model"]
+    if (not isinstance(model, dict) or not isinstance(model.get("premise"), str)
+            or not isinstance(model.get("concurrency"), list) or not model["concurrency"]
+            or not isinstance(model.get("targets"), dict) or not isinstance(model.get("unqualified"), dict)):
+        raise ValueError("memory_model needs a premise, concurrency premises, targets and unqualified targets")
     for rule in config["rules"]:
         if set(rule) != {"premise", "scope", "pattern"} or rule["scope"] not in {"closure", "statement"}:
             raise ValueError(f"invalid premise rule: {rule}")
@@ -134,11 +145,43 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     found += [("generated_markers", p) for p in config["generated_markers"]]
     found += [(f"profiles.{k}", p) for k, p in config["profiles"].items()]
     found += [(f"float_semantics.{k}", p) for k, ps in config["float_semantics"].items() for p in ps]
+    found += [(f"admissions.{k}", p) for k, ps in config.get("admissions", {}).items() for p in ps]
     found += [("source_axiom", p) for p in config["source_axiom"]]
     found += [(f"runtime_modules.{m}", p) for m, ps in config["runtime_modules"].items() for p in ps]
     found += [(f"rules[{i}]", r["premise"]) for i, r in enumerate(config["rules"])]
     found += [(f"implies.{k}", p) for k, ps in config["implies"].items() for p in [k, *ps]]
+    model = config["memory_model"]
+    found += [("memory_model.premise", model["premise"])]
+    found += [("memory_model.concurrency", p) for p in model["concurrency"]]
     return found
+
+
+def memory_model_errors(config: dict, entries, where) -> list[str]:
+    """C12: every entry whose premises contain a concurrency premise lists the memory-model
+    adequacy premise. `where(entry)` names the entry in the message."""
+    model = config["memory_model"]
+    return [f"{where(e)} makes a concurrency claim without the memory-model adequacy premise "
+            f"{model['premise']}" for e in entries
+            if set(model["concurrency"]) & set(e["premises"]) and model["premise"] not in e["premises"]]
+
+
+def memory_model_record_errors(config: dict, reports: dict, root: Path) -> list[str]:
+    """The adequacy qualification record names its evidence, and every concurrency report of
+    docs/premises.md lists the premise itself (not only through `implies`)."""
+    model, errors = config["memory_model"], []
+    for target, entry in sorted(model["targets"].items()):
+        if not entry.get("hardware") or not entry.get("argument") or not entry.get("evidence"):
+            errors.append(f"memory_model.targets.{target} needs hardware, argument and evidence")
+        for path in entry.get("evidence", ()):
+            if not (root / path).exists():
+                errors.append(f"memory_model.targets.{target}: evidence {path} does not exist")
+    for target in sorted(set(model["targets"]) & set(model["unqualified"])):
+        errors.append(f"memory_model: {target} is both qualified and unqualified")
+    for name, ids in sorted(reports.items()):
+        reached = close(config, {p: [] for p in ids})
+        if set(model["concurrency"]) & set(reached) and model["premise"] not in ids:
+            errors.append(f"report {name!r} rests on a concurrency premise but does not list {model['premise']}")
+    return errors
 
 
 # ----------------------------------------------------------------------------- Lean source
@@ -231,6 +274,7 @@ class Decl:
     tokens: set = field(default_factory=set)
     binders: dict = field(default_factory=dict)
     dot_ctors: set = field(default_factory=set)
+    dot_fields: set = field(default_factory=set)
     targets: list | None = None
     markers: dict = field(default_factory=dict)  # premise ID -> parameter indices
 
@@ -358,6 +402,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
+            decl.dot_fields = set(DOT_FIELD_RE.findall(body))
             for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
                 decl.binders.setdefault(name, set()).add(head)
             if keyword in {"theorem", "lemma", "example"}:
@@ -529,6 +574,11 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
         owners = {id(t): t for t in repo.ctors.get(name, ()) if t.file.rel in visible}
         if len(owners) == 1 and decl not in owners.values():
             found.update(owners)
+    for name in decl.dot_fields:
+        # The elaborated constant of `·.f`: the `Ptr` operation `f`; nothing if there is none
+        # (the receiver type is unknown in source; `compiled` sees the elaborated constant).
+        found.update((id(t), t) for t in repo.table.get(f"Zig.Ptr.{name}", ())
+                     if t.file.rel in visible and t is not decl)
     for token in decl.tokens:
         found.update((id(t), t) for t in typed(token) if t is not decl)
         # An unresolved dotted name may be a field or projection: retry its owner.
@@ -552,9 +602,35 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
     return decl.targets
 
 
+# Translator flags that are admission opt-ins, by the name the header records (`admission`).
+ADMISSION_FLAGS = {"--allow-unqualified-build-mode": "unqualified-build-mode", "--assume-no-libc": "no-libc"}
+
+
+def example_admissions(lean: LeanFile) -> list[str]:
+    """A committed example translation (`Proofs/<Ex>/Gen.lean`) is a canonical body without a
+    header; its admission opt-ins are those of `examples/<ex>/translate.args`, which every
+    translation of the example uses (scripts/check.sh)."""
+    parts = lean.rel.split("/")
+    if len(parts) != 3 or parts[0] != "Proofs" or parts[2] != "Gen.lean":
+        return []
+    args = lean.path.parents[2] / "examples" / parts[1].lower() / "translate.args"
+    tokens = args.read_text().split() if args.is_file() else []
+    return [ADMISSION_FLAGS[t] for t in tokens if t in ADMISSION_FLAGS]
+
+
+def admission_premises(config: dict, lean: LeanFile, admissions: list[str]) -> list[str]:
+    mapped = config.get("admissions", {})
+    for admission in admissions:
+        if admission not in mapped:
+            raise ValueError(f"{lean.rel}: admission {admission!r} has no premise mapping")
+    return [p for a in admissions for p in mapped[a]]
+
+
 def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     if not lean.header:
-        return [config["profiles"]["absent"]], "no profile header"
+        admissions = example_admissions(lean)
+        why = "no profile header" + (f", translate.args admission {','.join(admissions)}" if admissions else "")
+        return [config["profiles"]["absent"], *admission_premises(config, lean, admissions)], why
     record = json.loads(lean.header[len(PROFILE_MARKER):])
     name = record.get("profile", {}).get("name")
     if name not in config["profiles"]:
@@ -562,7 +638,13 @@ def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     semantics = record.get("float_semantics", "ieee")
     if semantics not in config["float_semantics"]:
         raise ValueError(f"{lean.rel}: float semantics {semantics!r} has no premise mapping")
-    return [config["profiles"][name], *config["float_semantics"][semantics]], f"profile {name}, float {semantics}"
+    # An admission opt-in (`"admission": "unqualified-build-mode,no-libc"`) widens the claim scope:
+    # each one maps to its premises (`admissions`), and an unmapped one fails closed.
+    admissions = [a for a in record.get("admission", "").split(",") if a]
+    premises = [config["profiles"][name], *config["float_semantics"][semantics],
+                *admission_premises(config, lean, admissions)]
+    why = f"profile {name}, float {semantics}" + (f", admission {','.join(admissions)}" if admissions else "")
+    return premises, why
 
 
 def close(config: dict, via: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -752,6 +834,8 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)
     errors += index_errors
+    errors += memory_model_errors(config, entries, lambda e: f"{e['file']}: {e['theorem']}")
+    errors += memory_model_record_errors(config, reports, root)
     for entry in entries:
         for pid in entry["premises"]:
             if pid not in premises:
@@ -858,6 +942,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                     entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
     errors += markers.errors
+    errors += memory_model_errors(config, theorems, lambda t: t["name"])
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,

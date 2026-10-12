@@ -10,8 +10,10 @@ Round trips and lane-write frames for the bit-packed vector encoding (`Vec.packe
 * `intOfBytes_intBytes`: the bytes of an integer of any width `m` read back as it
   (the `n * w`-bit integer that holds a vector's lanes is one);
 * `laneOf_packLanes`: lane `i` of the packed integer is the `i`-th lane;
-* `Vec.packedEnc_lawful`, and the `LawfulEnc` instances for `Vec (BitVec w) n` and
-  `Vec (Float fmt) n`: a vector stored and loaded back is the same vector;
+* `Vec.packedEnc_lawful`, and the `LawfulEnc` instance for `Vec (BitVec w) n`: a vector stored
+  and loaded back is the same vector; `Vec.float_decode_encode`: so is a float vector without a
+  NaN lane (a NaN lane's bits are undefined, `Float.detMask`);
+* `maskedBytes_allOnes`, `maskedBytes_zero`: the bytes of a value with all or no bits determined;
 * `packLanes_set_mod`/`packLanes_set_shiftRight`: a lane write leaves every bit below and above
   the written lane's bits of the memory image unchanged; `Vec.set_lane_ne` and
   `Vec.storeLane_run`/`Vec.load_storeLane` state that frame on lanes and through memory;
@@ -95,6 +97,67 @@ theorem intOfBytes_of_extract {m : Nat} (v : BitVec m) {bs : Array Byte}
 theorem intOfBytes_intBytes {m : Nat} (v : BitVec m) : intOfBytes m (intBytes v) = pure v :=
   intOfBytes_of_extract v (by simp [intBytes])
 
+/-! ## Bytes with defined-bit masks (`maskedBytes`)
+
+A value whose bits are all determined has its integer bytes; a value with none has undefined
+bytes. Every float format is a whole number of bytes (`FloatFmt.width_mod_eight`), which is all
+the float encodings (`Float.detMask`) need. -/
+
+theorem FloatFmt.width_mod_eight (fmt : FloatFmt) : fmt.width % 8 = 0 := by cases fmt <;> rfl
+
+private theorem ones_shiftRight_mod (n k : Nat) (h : k + 8 ≤ n) :
+    ((2 ^ n - 1) >>> k) % 256 = 255 := by
+  apply Nat.eq_of_testBit_eq
+  intro j
+  rw [show (256 : Nat) = 2 ^ 8 from rfl, show (255 : Nat) = 2 ^ 8 - 1 from rfl,
+    Nat.testBit_mod_two_pow, Nat.testBit_shiftRight, Nat.testBit_two_pow_sub_one,
+    Nat.testBit_two_pow_sub_one]
+  by_cases hj : j < 8
+  · have : k + j < n := by omega
+    simp [hj, this]
+  · simp [hj]
+
+/-- Every bit determined: the integer's bytes (`intBytes`), for a whole number of bytes. -/
+theorem maskedBytes_allOnes {n : Nat} (v : BitVec n) (h : n % 8 = 0) :
+    maskedBytes v (BitVec.allOnes n) = intBytes v := by
+  apply Array.ext
+  · simp [maskedBytes, intBytes]
+  · intro i h1 _
+    have hi : i < (n + 7) / 8 := by simpa [maskedBytes] using h1
+    have h8 : 8 * i + 8 ≤ n := by omega
+    have hm : BitVec.ofNat 8 ((BitVec.allOnes n).toNat >>> (8 * i)) = BitVec.allOnes 8 := by
+      apply BitVec.eq_of_toNat_eq
+      simp only [BitVec.toNat_ofNat, BitVec.toNat_allOnes]
+      exact ones_shiftRight_mod n (8 * i) h8
+    simp only [maskedBytes, intBytes, Array.getElem_map, Array.getElem_range, hm, Byte.ofDefBits,
+      ite_true, show ¬ n - 8 * i < 8 by omega, ite_false]
+    congr 1
+    apply BitVec.eq_of_toNat_eq
+    simp
+
+/-- No bit determined: every value byte is undefined. -/
+theorem maskedBytes_zero {n : Nat} (v : BitVec n) :
+    maskedBytes v 0 = Array.replicate ((n + 7) / 8) .undef := by
+  apply Array.ext
+  · simp [maskedBytes]
+  · intro i h1 _
+    have h0 : BitVec.ofNat 8 ((0 : BitVec n).toNat >>> (8 * i)) = 0 := by simp
+    simp only [maskedBytes, Array.getElem_map, Array.getElem_range, h0, Byte.ofDefBits,
+      Array.getElem_replicate]
+    rfl
+
+/-- A float's bytes are its integer bytes unless it is a NaN. -/
+theorem Float.maskedBytes_of_not_isNaN {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = false) :
+    maskedBytes x.bits x.detMask = intBytes x.bits := by
+  simp only [Float.detMask, h, Bool.false_eq_true, ite_false]
+  exact maskedBytes_allOnes _ fmt.width_mod_eight
+
+/-- A NaN's value bytes are undefined. -/
+theorem Float.maskedBytes_of_isNaN {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) :
+    maskedBytes x.bits x.detMask = Array.replicate ((fmt.width + 7) / 8) .undef := by
+  simp only [Float.detMask, h, ite_true]
+  exact maskedBytes_zero _
+
 /-! ## Packed lanes -/
 
 theorem packLanes_lt {w : Nat} (l : List (BitVec w)) : packLanes l < 2 ^ (w * l.length) := by
@@ -171,9 +234,50 @@ theorem Vec.packedEnc_lawful {α : Type} (n w : Nat) (toBits : α → BitVec w)
 instance {w n : Nat} : LawfulEnc (Vec (BitVec w) n) :=
   Vec.packedEnc_lawful n w id id fun _ => rfl
 
-/-- The packed encoding of a float vector round-trips its lanes' IEEE bit patterns. -/
-@[instance] theorem Vec.lawfulEnc_float {fmt : FloatFmt} {n : Nat} : LawfulEnc (Vec (Float fmt) n) :=
-  Vec.packedEnc_lawful n fmt.width Float.bits Float.mk fun _ => rfl
+/-- Lanes whose bits are all set pack to the all-ones integer. -/
+theorem packLanes_allOnes {w : Nat} :
+    ∀ l : List (BitVec w), (∀ x ∈ l, x = BitVec.allOnes w) → packLanes l = 2 ^ (w * l.length) - 1
+  | [], _ => by simp [packLanes]
+  | x :: xs, h => by
+    have ih := packLanes_allOnes xs fun y hy => h y (List.mem_cons_of_mem _ hy)
+    simp only [packLanes, h x List.mem_cons_self, ih, BitVec.toNat_allOnes, List.length_cons]
+    have ha := Nat.one_le_two_pow (n := w)
+    have hb := Nat.one_le_two_pow (n := w * xs.length)
+    rw [Nat.mul_succ, Nat.pow_add, Nat.mul_sub_one, Nat.mul_comm (2 ^ w)]
+    have : 2 ^ w ≤ 2 ^ (w * xs.length) * 2 ^ w := Nat.le_mul_of_pos_left _ (by omega)
+    omega
+
+/-- The packed bits of lanes that each map to all ones (`Float.detMask` of non-NaN lanes). -/
+theorem Vec.packBits_allOnes {α : Type} {n w : Nat} (f : α → BitVec w) (v : Vec α n)
+    (h : ∀ x ∈ v.lanes.toList, f x = BitVec.allOnes w) :
+    v.packBits w f = BitVec.allOnes (n * w) := by
+  apply BitVec.eq_of_toNat_eq
+  rw [Vec.packBits_toNat, packLanes_allOnes _ fun y hy => by
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.1 hy; exact h x hx]
+  simp [Nat.mul_comm]
+
+/-- A float vector's bytes: its packed lanes, a NaN lane's bits undefined; the size of the
+encoding either way. -/
+theorem Vec.float_size_encode {fmt : FloatFmt} {n : Nat} (v : Vec (Float fmt) n) :
+    (Enc.encode v).size = Enc.size (Vec (Float fmt) n) := by
+  have := le_ceilPow2 ((n * fmt.width + 7) / 8)
+  simp [Enc.encode, Enc.size, padTo, maskedBytes, packedVecLayout]
+  omega
+
+/-- Without a NaN lane, a float vector's bytes are those of its lanes' bits (`Vec.packedEnc`). -/
+theorem Vec.float_encode_of_not_isNaN {fmt : FloatFmt} {n : Nat} (v : Vec (Float fmt) n)
+    (h : ∀ x ∈ v.lanes.toList, x.isNaN = false) :
+    Enc.encode v = (Vec.packedEnc n fmt.width Float.bits Float.mk).encode v := by
+  show padTo _ (maskedBytes _ _) = padTo _ (intBytes _)
+  rw [Vec.packBits_allOnes Float.detMask v fun x hx => by simp [Float.detMask, h x hx],
+    maskedBytes_allOnes _ (by rw [Nat.mul_mod, fmt.width_mod_eight]; simp)]
+
+/-- A float vector without a NaN lane reads back as stored. A NaN lane has undefined bits
+(`Float.detMask`): the model does not know which NaN native code stored. -/
+theorem Vec.float_decode_encode {fmt : FloatFmt} {n : Nat} (v : Vec (Float fmt) n)
+    (h : ∀ x ∈ v.lanes.toList, x.isNaN = false) : Enc.decode (Enc.encode v) = pure v := by
+  rw [Vec.float_encode_of_not_isNaN v h]
+  exact (Vec.packedEnc_lawful n fmt.width Float.bits Float.mk fun _ => rfl).decode_encode v
 
 /-! ## Lane writes -/
 
@@ -638,5 +742,26 @@ theorem Vec.load_storeLane_vec {α : Type} {n w : Nat} [Packed α w]
       show Min.min (o + laneHost n w) (o + packedVecLayout n w) = o + laneHost n w by omega, hx]
   exact @load_run (Vec α n) (Vec.packedEnc n w Packed.toBits Packed.ofBits) _ _ _ _ _ _ _ ha
     (Vec.packedEnc_decode _ _ hround _ hpre) hr
+
+/-! ## Runtime-index lane stores and float lanes (L09) -/
+
+/-- A runtime-index lane store (`vector_store_elem`, Zig 0.14.1/0.15.2) inside the vector is the
+store through the comptime lane pointer of that lane: the theorems on `storeLane` above
+(`Vec.storeLane_vec`, `Vec.load_storeLane_vec`) apply to it. -/
+theorem storeLaneAt_lt {α : Type} {w : Nat} [Packed α w] {lanes hostSize align : Nat} {p : Ptr}
+    {i : BitVec 64} (v : α) (h : i.toNat < lanes) :
+    storeLaneAt lanes hostSize align p i v = storeLane hostSize align (i.toNat * w) p v := by
+  simp [storeLaneAt, h]
+
+/-- An index past the lanes is illegal behaviour (a safe build panics before the store). -/
+theorem storeLaneAt_ge {α : Type} {w : Nat} [Packed α w] {lanes hostSize align : Nat} {p : Ptr}
+    {i : BitVec 64} (v : α) (h : lanes ≤ i.toNat) :
+    storeLaneAt lanes hostSize align p i v = throw .illegal := by
+  simp [storeLaneAt, Nat.not_lt.mpr h]
+
+/-- A float lane is its bits: decoding the bits of a float gives it back, the round trip that
+the lane theorems above take (`hround`). -/
+theorem Packed.float_round {fmt : FloatFmt} (y : Float fmt) :
+    (Packed.ofBits (Packed.toBits y) : Float fmt) = y := rfl
 
 end Zig

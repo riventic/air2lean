@@ -20,6 +20,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const Sema = @import("../Sema.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 const Identity = @import("identity.zig");
@@ -92,6 +93,10 @@ const Compat = struct {
 
     fn truncateFile(pt: Zcu.PerThread, file: File) !void {
         if (v16) try file.setLength(pt.zcu.comp.io, 0) else try file.setEndPos(0);
+    }
+
+    fn deleteFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !void {
+        if (v16) try dir.deleteFile(pt.zcu.comp.io, name) else try dir.deleteFile(name);
     }
 
     fn closeFile(pt: Zcu.PerThread, file: File) void {
@@ -200,6 +205,35 @@ const Compat = struct {
     /// `struct_field_val`, renamed `agg_field_val` in 0.17.0 (`ty_pl`, payload `StructField`).
     fn isFieldVal(tag: Air.Inst.Tag) bool {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
+    }
+
+    /// The `@errorFromInt` bound check: `cmp_lt_errors_len`, renamed `cmp_lte_errors_len` in
+    /// 0.16.0 (both compare `<=` with the error count). A `un_op`.
+    fn isErrorsLen(tag: Air.Inst.Tag) bool {
+        return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
+    }
+
+    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.0's
+    /// `int_from_error`/`error_from_int`, the errors_len check, and 0.14.1's `error_name`, which
+    /// indexes the name table with the sign-extended code.
+    fn isErrorIntTag(tag: Air.Inst.Tag) bool {
+        return isErrorsLen(tag) or if (v17)
+            tag == .int_from_error or tag == .error_from_int
+        else if (v14)
+            tag == .error_name
+        else
+            false;
+    }
+
+    /// The `bitcast` that before 0.17.0 also lowers `@intFromError`/`@errorFromInt`.
+    fn isBitcast(tag: Air.Inst.Tag) bool {
+        return if (v17) false else tag == .bitcast;
+    }
+
+    /// `vector_store_elem` (0.14.1, 0.15.2; 0.16.0 rejects a runtime vector index in Sema): a
+    /// store of one lane at a runtime index, `v[i] = x` through a vector pointer.
+    fn isVectorStoreElem(tag: Air.Inst.Tag) bool {
+        return if (v16) false else tag == .vector_store_elem;
     }
 
     /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
@@ -370,6 +404,40 @@ const Compat = struct {
         };
     }
 
+    /// Resolve the value of a non-extern global that a pointer constant names, so that its
+    /// `globals` entry has an `init`. `-fno-emit-bin` never lowers the global, so without this a
+    /// `const` such as `heap.PageAllocator.vtable` can stay type-resolved only, and its function
+    /// pointers unknown. This is the analysis Sema itself runs for a global's value (it registers
+    /// any error); a global whose value is already under analysis is left as it is.
+    fn ensureNavVal(pt: Zcu.PerThread, nav_index: InternPool.Nav.Index) void {
+        const zcu = pt.zcu;
+        const unit: InternPool.AnalUnit = .wrap(.{ .nav_val = nav_index });
+        if (zcu.analysis_in_progress.contains(unit)) return;
+        if (v16) {
+            const reason: Zcu.DependencyReason = .{ .src = zcu.navSrcLoc(nav_index), .type_layout_reason = undefined };
+            pt.ensureNavValUpToDate(nav_index, &reason) catch {};
+        } else {
+            pt.ensureNavValUpToDate(nav_index) catch {};
+        }
+    }
+
+    /// 0.16.0: resolve the layout of a struct, union or enum type before it is written, as
+    /// Sema does for a type whose layout is wanted. Otherwise a container that this function
+    /// has only behind a pointer (`heap.ArenaAllocator.Node` in `ArenaAllocator.init`) is
+    /// written without fields, while another function's export of the same type has them.
+    /// Before 0.16.0 the fields are always known; the layout stays as Sema left it.
+    fn ensureLayout(pt: Zcu.PerThread, ty: Type) void {
+        if (!v16) return;
+        const zcu = pt.zcu;
+        switch (zcu.intern_pool.indexToKey(ty.toIntern())) {
+            .struct_type, .union_type, .enum_type => {},
+            else => return,
+        }
+        if (zcu.analysis_in_progress.contains(.wrap(.{ .type_layout = ty.toIntern() }))) return;
+        const reason: Zcu.DependencyReason = .{ .src = ty.srcLoc(zcu), .type_layout_reason = .field_queried };
+        pt.ensureTypeLayoutUpToDate(ty, &reason) catch {};
+    }
+
     /// The `assembly` AIR instruction, normalized. 0.16.0 has a convenience `Air.unwrapAsm`;
     /// 0.15.2 has no such helper, and its extra-data order differs (outputs, inputs, output
     /// constraint/name pairs, input constraint/name pairs, source — 0.16.0 instead puts the
@@ -511,6 +579,73 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
     const end = hashed_name_prefix.len + digest.len * 2;
     @memcpy(buffer[end .. end + 5], ".json");
     return buffer[0 .. end + 5];
+}
+
+/// Set once an exported function converts between errors and integers (`convertsErrorInt`):
+/// `@intFromError`, `@errorFromInt` and its `errors_len` check mean the compilation's error
+/// numbering, which is final only when analysis ends, so `dumpErrorTable` writes it then.
+var error_ints_used = std.atomic.Value(bool).init(false);
+
+/// The file of the error numbering (`docs/air-json.md` §Error table). Not a `.json` name: it
+/// describes no function.
+const error_table_name = "error-table.air2lean";
+
+/// After analysis (`<version>/hook.patch`, in `Compilation.update`): if an exported function
+/// converts between errors and integers, write the compilation's global error set in code
+/// order (code `i + 1` is `names[i]`) with the error integer's width, beside the function files.
+pub fn dumpErrorTable(pt: Zcu.PerThread) void {
+    const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
+    var dir = Compat.openDir(pt, dir_path) catch |err| {
+        std.log.warn("air2lean: cannot open {s}: {s}", .{ dir_path, @errorName(err) });
+        return;
+    };
+    defer Compat.closeDir(pt, &dir);
+    // Without a conversion, a table an earlier compilation left in the directory must not
+    // describe these files.
+    if (!error_ints_used.load(.monotonic)) {
+        Compat.deleteFile(pt, dir, error_table_name) catch |err| if (err != error.FileNotFound)
+            std.log.warn("air2lean: cannot remove a stale error table: {s}", .{@errorName(err)});
+        return;
+    }
+    const file = openErrorTable(pt, dir) catch |err| {
+        std.log.warn("air2lean: no error table: {s}", .{@errorName(err)});
+        return;
+    };
+    defer Compat.closeFile(pt, file);
+    var sink: Compat.Sink = undefined;
+    sink.init(pt, file);
+    writeErrorTable(&sink.j, pt.zcu) catch |err| {
+        std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+        return;
+    };
+    sink.flush() catch |err| std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+}
+
+/// The error table file, created or (a re-export into the same directory) truncated.
+fn openErrorTable(pt: Zcu.PerThread, dir: Compat.Dir) !Compat.File {
+    return Compat.createFile(pt, dir, error_table_name) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+        const file = try Compat.openExistingFile(pt, dir, error_table_name);
+        errdefer Compat.closeFile(pt, file);
+        try Compat.truncateFile(pt, file);
+        return file;
+    };
+}
+
+fn writeErrorTable(j: *Compat.Json, zcu: *Zcu) Error!void {
+    const ip = &zcu.intern_pool;
+    try j.beginObject();
+    try j.objectField("schema");
+    try j.write(12);
+    try j.objectField("zig_version");
+    try j.write(build_options.version);
+    try j.objectField("error_set_bits");
+    try j.write(zcu.errorSetBits());
+    try j.objectField("names");
+    try j.beginArray();
+    for (ip.global_error_set.getNamesFromMainThread()) |name| try j.write(name.toSlice(ip));
+    try j.endArray();
+    try j.endObject();
 }
 
 // Exclusive creation protects fresh files. Repeated analysis may export the same
@@ -703,6 +838,14 @@ const W = struct {
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        // The illegal behaviours that the patched Sema (`<version>/hook.patch`) lowers to `unreach`
+        // where it has no safety check; absent without that patch.
+        if (@hasDecl(Sema, "air_json_unchecked_ib")) {
+            try w.field("unchecked_ib");
+            try w.j.beginArray();
+            for (Sema.air_json_unchecked_ib) |name| try w.j.write(name);
+            try w.j.endArray();
+        }
         try w.field("profile");
         try w.writeProfile(owner_nav);
         try w.field("name");
@@ -714,9 +857,18 @@ const W = struct {
         try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
-        const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
+        const fn_info = ip.indexToKey(fn_ty.toIntern()).func_type;
+        const param_types = fn_info.param_types.get(ip);
         w.param_types = param_types;
         for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
+        try w.j.endArray();
+        // The `noalias` parameters, as indices into `params` (the LLVM backend's `noalias`
+        // argument attribute). Only the first 32 parameters can be `noalias`.
+        try w.field("noalias");
+        try w.j.beginArray();
+        for (0..@min(param_types.len, 32)) |i| {
+            if (@as(u1, @truncate(fn_info.noalias_bits >> @as(u5, @intCast(i)))) != 0) try w.j.write(i);
+        }
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
@@ -819,6 +971,22 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
+    /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
+    /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Also
+    /// 0.14.1's `error_name`, which indexes the name table with the sign-extended code: only the
+    /// error count bounds the codes it reads. Tags are compared by name: not every version has
+    /// each.
+    fn convertsErrorInt(w: *W, tag: Air.Inst.Tag, inst: Air.Inst.Index) bool {
+        if (Compat.isErrorIntTag(tag)) return true;
+        if (!Compat.isBitcast(tag)) return false;
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        const result = w.air.typeOfIndex(inst, ip).zigTypeTag(zcu) == .error_set;
+        const operand = w.air.typeOf(w.data(inst).ty_op.operand, ip).zigTypeTag(zcu) == .error_set;
+        return result != operand;
+    }
+
     fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
         return w.air.instructions.items(.data)[@intFromEnum(inst)];
     }
@@ -849,6 +1017,9 @@ const W = struct {
         try w.j.write(@intFromEnum(inst));
         try w.field("tag");
         try w.j.write(@tagName(tag));
+        // Once set, the flag stays: skip the type queries for the rest of the compilation.
+        if (!error_ints_used.load(.monotonic) and w.convertsErrorInt(tag, inst))
+            error_ints_used.store(true, .monotonic);
         switch (tag) {
             .inferred_alloc, .inferred_alloc_comptime => {},
             else => {
@@ -1191,6 +1362,14 @@ const W = struct {
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             } else if (Compat.isFieldVal(tag)) {
                 try w.writeStructField(inst);
+            } else if (Compat.isErrorsLen(tag)) {
+                try w.writeArgs(&.{w.data(inst).un_op});
+            } else if (!Compat.v16 and Compat.isVectorStoreElem(tag)) {
+                // (`!Compat.v16` is comptime: 0.16.0+ has no `vector_store_elem` data field.)
+                // The vector pointer, the lane index and the lane value.
+                const d = w.data(inst).vector_store_elem;
+                const b = w.air.extraData(Air.Bin, d.payload).data;
+                try w.writeArgs(&.{ d.vector_ptr, b.lhs, b.rhs });
             } else if (!Compat.v14) {
                 // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into
                 // `shuffle_one` (single source) and `shuffle_two` (two sources). The two forms
@@ -1757,6 +1936,8 @@ const W = struct {
         try w.j.beginObject();
         switch (g) {
             .nav => |nav| {
+                const seen = Compat.navInfo(zcu, nav);
+                if (seen.init == null and !seen.is_extern) Compat.ensureNavVal(w.pt, nav);
                 const info = Compat.navInfo(zcu, nav);
                 const name = ip.getNav(nav).fqn.toSlice(ip);
                 const module = Identity.navModule(zcu, nav);
@@ -1793,6 +1974,8 @@ const W = struct {
     fn typeId(w: *W, ty: Type) Error!u32 {
         const gop = try w.ids.getOrPut(w.gpa, ty.toIntern());
         if (!gop.found_existing) {
+            // Before the type's entry and any pointer to it (`ptr_align`) are written.
+            Compat.ensureLayout(w.pt, ty);
             gop.value_ptr.* = @intCast(w.queue.items.len);
             try w.queue.append(w.gpa, ty.toIntern());
         }
