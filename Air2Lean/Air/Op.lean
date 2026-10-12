@@ -97,6 +97,36 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- `ty` with every child type id replaced by `0`: what two types must share beyond their
+children to be the same type. -/
+def Ty.head : Ty → Ty
+  | .ptr s c _ => .ptr s c 0
+  | .array n _ s => .array n 0 s
+  | .vector n _ => .vector n 0
+  | .optional _ => .optional 0
+  | .future _ => .future 0
+  | .errorUnion _ _ => .errorUnion 0 0
+  | .struct n s fs => .struct n s (fs.map fun (n, _) => (n, 0))
+  | .enum n _ e fs => .enum n 0 e fs
+  | .union n s tag fs => .union n s (tag.map fun _ => 0) (fs.map fun (n, _) => (n, 0))
+  | .tuple fs => .tuple (fs.map fun _ => 0)
+  | t => t
+
+/-- `a` and `b` are the same type although the exporter gave it two ids (Zig 0.17.0 interns
+`*align(8) T` and `*T` apart even where the alignments agree): equal heads and layouts and,
+pairwise, the same children. A pair met again on the path is assumed equal (the two regular
+trees are bisimilar); unknown ids and exhausted fuel compare unequal. -/
+partial def sameTyUpToIds {L : Type} [BEq L] (types : Array Ty) (layouts : Array L) (a b : TyId)
+    (fuel : Nat := 256) (path : List (TyId × TyId) := []) : Bool :=
+  a == b || path.contains (a, b) || (fuel != 0 &&
+    match types[a]?, types[b]? with
+    | some ta, some tb =>
+      ta.head == tb.head && layouts[a]? == layouts[b]? &&
+        (childTys ta).size == (childTys tb).size &&
+        ((childTys ta).zip (childTys tb)).all fun (x, y) =>
+          sameTyUpToIds types layouts x y (fuel - 1) ((a, b) :: path)
+    | _, _ => false)
+
 /-- `id` holds a pointer, at any depth; unknown types and exhausted fuel count as pointers
 (fail closed). -/
 partial def tyHoldsPtr (types : Array Ty) (id : TyId) (fuel : Nat := 256) : Bool :=
@@ -394,7 +424,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
   | some "memcpyLenMismatch"
-  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
+  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment" | some "sliceCastLenRemainder"
   | some "unexpectedErrorCode" | some "loadUninstantiableType" | some "invalidErrorCode" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
@@ -766,6 +796,10 @@ structure Func where
   `error-table.air2lean` beside the AIR files (`docs/air-json.md` §Error table, L10); `none`
   without one. Integer/error casts translate only with it. -/
   errorTable : Option (Array String) := none
+  /-- The function types of the program's open interfaces, in the order of the generated
+  `Ext`'s fields (`docs/interfaces.md`, the model registry's `interfaces`): a call through a
+  pointer of one of them that no function of the program serves calls the environment. -/
+  openFnTys : Array String := #[]
 
 /-- A single or many pointer type through which an access is an ordinary memory access: not a
 slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and

@@ -147,7 +147,12 @@ def main : IO Unit := do
   let cyclePtr := cycleTy + 1
   let cycleTypes := types ++ #[.struct "CapabilityCycle" "auto" #[("next", cyclePtr)], .ptr "one" false cycleTy]
   let cycleLayouts := layouts ++ #[{size := some 8, align := some 8, offsets := #[0]}, pointer 8]
-  reject {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
+  -- A cycle adds no storage: an error-free recursive pointee (a list node) is error-free, one
+  -- that reaches error storage through the cycle is not.
+  accept {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
+  let errCycleTypes := types ++ #[.struct "ErrorCycle" "auto" #[("next", cyclePtr), ("code", 0)], .ptr "one" false cycleTy]
+  let errCycleLayouts := layouts ++ #[{size := some 16, align := some 8, offsets := #[0, 8]}, pointer 8]
+  reject {base "cyclicErrorCapabilityCast" constUnion with globals := #[], types := errCycleTypes, layouts := errCycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "a pointer cast exposing symbolic error storage"
   let capBudgetTypes := types ++ #[.struct "CapabilityBudget" "auto" ((Array.range 1024).map fun k => (s!"n{k}", 1)), .ptr "one" false cycleTy]
   let capBudgetLayouts := layouts ++ #[{size := some 2048, align := some 2, offsets := (Array.range 1024).map (· * 2)}, pointer 2]
   reject {base "exhaustedCapabilityCast" constUnion with globals := #[], types := capBudgetTypes, layouts := capBudgetLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"

@@ -508,7 +508,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
 | `outOfBounds`, `startGreaterThanEnd` | `.outOfBounds` |
-| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch` (0.14.1: `memcpyLenMismatch`), `memcpyAlias`, `call` (`@panic`) | `.panic` |
+| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch` (0.14.1: `memcpyLenMismatch`), `memcpyAlias`, `sliceCastLenRemainder` (a `@ptrCast` of a slice whose byte length the new item size does not divide), `call` (`@panic`) | `.panic` |
 
 `shiftRhsTooBig` is the shift-count check of `<<`, `>>`, `@shlExact` and `@shrExact` on an integer whose width is not a power of two (its count type can hold counts at or above the width; for a power-of-two width it cannot, and Sema emits no check). 0.14.1, 0.15.2 and 0.16.0 emit it in the same safety block as `shlOverflow`/`shrOverflow`, so it shares their constructor; `@shlWithOverflow` has no count check, and an oversized count there stays `.illegal` (`tests/roadmap/bitops-native`).
 

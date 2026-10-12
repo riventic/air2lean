@@ -45,6 +45,18 @@ structure ModelBinding where
   /-- `some`: `symbol` is an extern callee (`externCallee`), bound at its linker identity. -/
   externBinding : Option ExternBinding := none
 
+/-- An open interface (`docs/interfaces.md`): the function types whose calls through a pointer
+that no function of the program serves go to the environment, under `contract` (premise
+`premise`, EXT-05). `struct`: every function-pointer field of that struct type (a vtable, or an
+interface struct such as `Random`); `function`: one function type (a bare callback). -/
+structure InterfaceDecl where
+  interface : String
+  struct : Option String
+  function : Option String
+  contract : String
+  premise : String
+  deriving BEq, Repr, Inhabited
+
 instance : Inhabited ModelBinding := ⟨{
   symbol := "", profile := {name := "", schema := 0, zigVersion := ""},
   params := #[], ret := .null, importModule := "", implementation := "", contract := "",
@@ -289,7 +301,7 @@ def modelCallIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) :=
 select legacy metadata; there is no implicit default or wildcard. -/
 def parse (contents : String) : Except String (Array ModelBinding) := do
   let j ← StrictJson.parse contents maxJsonDepth
-  keys j ["schema", "models"]
+  keys j ["schema", "models", "interfaces"]
   unless (← (← field j "schema").getNat?) == 1 do throw "unsupported model registry schema"
   (← (← field j "models").getArr?).mapM fun m => do
     keys m ["symbol", "profile", "signature", "import", "implementation", "contract", "trust",
@@ -383,6 +395,62 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
       footprint := footprint
       externBinding := externBinding
     }
+
+/-- The registry's open interfaces (`docs/interfaces.md`); none without an `interfaces` array. -/
+def parseInterfaces (contents : String) : Except String (Array InterfaceDecl) := do
+  let j ← StrictJson.parse contents maxJsonDepth
+  let .ok entries := j.getObjVal? "interfaces" | return #[]
+  (← entries.getArr?).mapM fun e => do
+    keys e ["interface", "struct", "function", "contract", "premise"]
+    let interface ← str e "interface"
+    let struct := (str e "struct").toOption
+    let function := (str e "function").toOption
+    unless struct.isSome != function.isSome do
+      throw s!"model registry: interface '{interface}' needs exactly one of 'struct' and 'function'"
+    let contract ← str e "contract"
+    unless identifier contract do throw s!"model registry: invalid Lean identifier '{contract}'"
+    let premise ← str e "premise"
+    -- One premise states the environment's side of every interface (`docs/premises.md`).
+    unless premise == "EXT-05" do
+      throw s!"model registry: interface '{interface}': premise must be EXT-05 (docs/premises.md)"
+    pure { interface, struct, function, contract, premise }
+
+/-- The function types that `decls` open, in declaration order (the generated `Ext`'s field
+order), checked against the program: a struct must have function-pointer fields, every opened
+type must be called through a pointer somewhere, and no type is opened twice. -/
+def openFnTypes (decls : Array InterfaceDecl) (funcs : Array Func) : Except String (Array String) := do
+  let called : Std.HashSet String := funcs.foldl (init := {}) fun acc f =>
+    f.allInsts.foldl (init := acc) fun acc i => match i.op with
+      | .call v _ => match f.calleeValFnTy? v with | some tn => acc.insert tn | none => acc
+      | _ => acc
+  let mut out : Array String := #[]
+  for d in decls do
+    -- A struct: its function-pointer fields, in field order, as any function sees them.
+    let fieldsOf (s : String) (f : Func) : Option (Array String) := f.types.findSome? fun t =>
+      match t with
+      | .struct n _ fs => if n == s then some (fs.filterMap fun (_, c) => fnPtrTyName? f.types c) else none
+      | _ => none
+    let tys : Array String := match d.struct, d.function with
+      | some s, _ => (funcs.findSome? (fieldsOf s)).getD #[]
+      | none, some fn => #[fn]
+      | none, none => #[]
+    if tys.isEmpty then
+      throw s!"model registry: interface '{d.interface}' names no struct of the program with function-pointer fields"
+    let used := tys.filter called.contains
+    if used.isEmpty then
+      throw s!"model registry: interface '{d.interface}' opens no call through a pointer of the program"
+    for tn in used do
+      if out.contains tn then throw s!"model registry: function type '{tn}' is opened twice"
+      out := out.push tn
+  return out
+
+/-- The open interfaces and the function type of each generated `Ext.call<i>`, for the header
+of the generated module (`-- air2lean-interfaces:`). -/
+def interfaceReport (decls : Array InterfaceDecl) (openTys : Array String) : Json :=
+  Json.mkObj [("interfaces", .arr <| decls.map fun d => Json.mkObj ([("interface", .str d.interface)] ++
+      (d.struct.map ("struct", .str ·)).toList ++ (d.function.map ("function", .str ·)).toList ++
+      [("contract", .str d.contract), ("premise", .str d.premise)])),
+    ("ext", .arr <| openTys.mapIdx fun i tn => Json.mkObj [("field", .str s!"call{i}"), ("type", .str tn)])]
 
 /-- Each semantic dependency names another binding, a modelled built-in std model qualified
 for the binding's Zig version, or a project Lean declaration. Dependencies are unique, and

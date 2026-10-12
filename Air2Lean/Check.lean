@@ -74,10 +74,13 @@ partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId :=
     | none => false
 
 /-- Unlike byte-storage classification, capability classification follows pointer
-edges. Unknown, cyclic and exhausted type traversals cannot prove a safe view. -/
+edges. Unknown, exhausted and (unless `cycles`) cyclic type traversals cannot prove a safe view.
+With `cycles`, a type met again on the path (a list node's `?*Node`) adds nothing: whatever
+storage it reaches, its first visit counts. -/
 private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
-    (seen : Array TyId := #[]) : Option (Nat × Bool) := do
-  if fuel == 0 || seen.contains id then none
+    (seen : Array TyId := #[]) (cycles : Bool := false) : Option (Nat × Bool) := do
+  if fuel == 0 then none
+  if seen.contains id then if cycles then return (fuel, false) else none
   let ty ← types[id]?
   -- A function pointer stored as data is a code address: its pointee is no data storage
   -- (`Emit.lean`'s 1-byte function block, L11). A view of code itself stays unresolved.
@@ -97,17 +100,18 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   if count > remaining then none
   let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
   for child in if fnPointer then #[] else childTys ty do
-    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
+    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id) cycles
     remaining := next
     symbolic := symbolic || childCap
   return (remaining, symbolic)
 
-private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
-  (errorCapabilityScan types id 1024).map (·.2)
+private def hasErrorCapability (types : Array Ty) (id : TyId) (cycles : Bool := false) : Option Bool :=
+  (errorCapabilityScan types id 1024 (cycles := cycles)).map (·.2)
 
 /-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
 is used only for global aliases whose strict capability traversal could not finish;
-casts and parent recovery retain the strict cycle-rejecting traversal. -/
+parent recovery retains the strict cycle-rejecting traversal, and a pointer cast reads a cycle
+as adding nothing (`errorCapabilityScan`'s `cycles`). -/
 private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : Bool := Id.run do
   let mut pending : List TyId := [root, child]
   let mut visited : Std.HashSet TyId := {}
@@ -1390,8 +1394,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- A code address carries no data storage: a function pointer may be reinterpreted,
       -- and a call through it dispatches over the table of its type (`.illegal` for any
       -- other block, L11).
+      -- Capability is reachability of error storage, so a recursive pointee (a list node's
+      -- `?*Node`) has one: a cycle adds nothing.
       let castCapability (t : TyId) : Option Bool :=
-        if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
+        if (cx.types[t]?.map isFnTy).getD false then some false
+        else hasErrorCapability cx.types t (cycles := true)
       -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
@@ -1415,7 +1422,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           if sourceCap != targetCap ||
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
-              ((sourceCap || targetCap) && source != target) then
+              ((sourceCap || targetCap) && !sameTyUpToIds cx.types cx.layouts source target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
       | none, some target =>
         unless castCapability target == some false do

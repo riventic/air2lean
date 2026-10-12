@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "models": [],
+  "interfaces": [
+    {
+      "interface": "std.mem.Allocator",
+      "struct": "mem.Allocator.VTable",
+      "contract": "Zig.Full.CAllocSpec",
+      "premise": "EXT-05"
+    }
+  ]
+}
