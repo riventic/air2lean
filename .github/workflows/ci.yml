@@ -1209,7 +1209,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep
+          lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Start ZigLean.Sep.Full.Strength
           bash tests/roadmap/global-init/check.sh
 
       # Q01 fuzz seeds 18/19/39: comptime-resolved locals (dead address-0 placeholders dropped,
