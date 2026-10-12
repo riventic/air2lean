@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Air2Lean.Air.Effects
 import Air2Lean.AsmAllowlist
+import ZigLean.Float.Value
 
 /-!
 # Memory analysis
@@ -164,6 +165,51 @@ partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : T
     (elems.zip parts).foldlM (init := #[]) fun acc (e, t, o) =>
       (acc ++ ·) <$> undefByteRanges types layouts t e (base + o)
   | v => if v.hasNestedUndef then none else pure #[]
+
+/-- The float format of `float(w)`. -/
+def floatFmtOfWidth? : Nat → Option Zig.FloatFmt
+  | 16 => some .f16
+  | 32 => some .f32
+  | 64 => some .f64
+  | 80 => some .f80
+  | 128 => some .f128
+  | _ => none
+
+/-- The NaN float constants in the constant `v` of type `tid`: the byte offset (from `base`), bit
+width and bits of each. A float's memory encoding leaves a NaN's bits undefined
+(`Zig.Float.detMask`, `ZigLean/Mem/Enc.lean`), because the model's NaN results stand for every
+NaN. A NaN *constant* has determined bits, and the compiler stores exactly them, so a store or
+global initializer of `v` writes them over its encoding (`Emit.lean`'s `FCtx.withNaNConsts`).
+Found at any depth where the exporter gives the byte offset: the value itself, an item of an
+array, a field of a non-`packed` struct or tuple. A NaN constant elsewhere (in an optional,
+union, vector, packed struct) keeps undefined bits: never a wrong value. -/
+partial def nanConstParts (types : Array Ty) (layouts : Array Layout) (tid : TyId) (v : Val)
+    (base : Nat := 0) : Array (Nat × Nat × Nat) :=
+  match v with
+  | .float _ bits =>
+    match types[tid]? with
+    | some (.float w) =>
+      match floatFmtOfWidth? w with
+      | some fmt =>
+        if (Zig.Float.ofBits (BitVec.ofNat fmt.width bits) : Zig.Float fmt).isNaN then
+          #[(base, w, bits)] else #[]
+      | none => #[]
+    | _ => #[]
+  | .agg _ elems =>
+    let parts : Array (TyId × Nat) := match types[tid]? with
+      | some (.array _ child _) => match (layouts[child]?).bind (·.size) with
+        | some stride => elems.mapIdx fun k _ => (child, k * stride)
+        | none => #[]
+      | some (.struct _ layout fields) =>
+        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+        if layout == "packed" || offsets.size != fields.size then #[]
+        else (fields.zip offsets).map fun ((_, t), o) => (t, o)
+      | some (.tuple fields) =>
+        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+        if offsets.size != fields.size then #[] else fields.zip offsets
+      | _ => #[]
+    (elems.zip parts).flatMap fun (e, t, o) => nanConstParts types layouts t e (base + o)
+  | _ => #[]
 
 /-- The `alloc`s of `f` that escape by their uses. A store of a partly `undefined` constant to a
 place makes its `alloc` escape: memory holds the undefined parts as undefined bytes

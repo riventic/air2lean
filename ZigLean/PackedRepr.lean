@@ -33,7 +33,7 @@ namespace Zig
 instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
   toBits x := x.bits
   ofBits b := ⟨b⟩
-  mask x := if x.isNaN then 0 else BitVec.allOnes fmt.width
+  mask := Float.detMask
 
 /-! ## Arrays and vectors -/
 

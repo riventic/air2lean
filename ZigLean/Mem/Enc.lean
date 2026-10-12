@@ -60,6 +60,39 @@ def intOfBytes (n : Nat) (bs : Array Byte) (trunc : Bool := false) : Result (Bit
 def padTo (size : Nat) (bs : Array Byte) : Array Byte :=
   bs ++ Array.replicate (size - bs.size) .undef
 
+/-! ## Defined bits
+
+A byte is a defined-bit mask and a value (`Byte.defBits`). `maskedBytes` makes the bytes of a
+value with only some bits determined: a NaN's bits (`Float.detMask`), a packed struct or union
+with such a field (`Zig.Packed.mask`, `ZigLean/Packed.lean`). -/
+
+/-- The low `m` bits of a byte. -/
+def lowMask8 (m : Nat) : BitVec 8 := BitVec.ofNat 8 (2 ^ m - 1)
+
+/-- A byte as its defined-bit mask and its value (0 in undefined bits); `none` for a pointer
+or error byte, which has no integer bits. -/
+def Byte.defBits : Byte → Option (BitVec 8 × BitVec 8)
+  | .undef => some (0, 0)
+  | .int x => some (BitVec.allOnes 8, x)
+  | .part m x => some (lowMask8 m, x &&& lowMask8 m)
+  | .mask d x => some (d, x &&& d)
+  | _ => none
+
+/-- The byte with the defined bits `d` and the values `x` there, in its canonical form:
+`.int`, `.undef`, `.part m` for the low `m` bits, else `.mask`. -/
+def Byte.ofDefBits (d x : BitVec 8) : Byte :=
+  if d = BitVec.allOnes 8 then .int x
+  else if d = 0 then .undef
+  else match [1, 2, 3, 4, 5, 6, 7].find? (lowMask8 · = d) with
+    | some m => .part m (x &&& d)
+    | none => .mask d (x &&& d)
+
+/-- The `(n + 7) / 8` value bytes of the `n`-bit integer `v`, little-endian, with only the bits
+of `m` defined (`Byte.ofDefBits`). -/
+def maskedBytes {n : Nat} (v m : BitVec n) : Array Byte :=
+  (Array.range ((n + 7) / 8)).map fun i =>
+    Byte.ofDefBits (BitVec.ofNat 8 (m.toNat >>> (8 * i))) (BitVec.ofNat 8 (v.toNat >>> (8 * i)))
+
 instance {n : Nat} : Enc (BitVec n) where
   size := intSize n
   align := intAlign n
@@ -75,11 +108,21 @@ instance : Enc Bool where
     | some (.int x) => if x = 0 then pure false else if x = 1 then pure true else throw .illegal
     | _ => throw .unspecified
 
-/-- The float's bits as an integer of the same width: `f80` (10 bytes) has size 16. -/
+/-- The determined bits of a float: all of them, none for a NaN. A NaN that an operation makes
+has a target-specific sign and payload (`docs/floats.md` §NaN); the model's canonical NaN stands
+for every NaN, so its bits are not the native ones. -/
+def Float.detMask {fmt : FloatFmt} (x : Float fmt) : BitVec fmt.width :=
+  if x.isNaN then 0 else BitVec.allOnes fmt.width
+
+/-- The float's bits as an integer of the same width: `f80` (10 bytes) has size 16. A NaN's
+bits are undefined (`Float.detMask`): an integer load of them is `.unspecified`, never the
+model's canonical NaN, and so is a float load (the model cannot say which NaN it reads;
+`docs/floats.md` §NaN in memory). A NaN constant keeps its bits: the translator writes its exact
+bytes (`Air2Lean/Memory.lean`'s `nanConstBytes`). -/
 instance {fmt : FloatFmt} : Enc (Float fmt) where
   size := intSize fmt.width
   align := intAlign fmt.width
-  encode v := Enc.encode v.bits
+  encode v := padTo (intSize fmt.width) (maskedBytes v.bits v.detMask)
   decode bs := do pure ⟨← intOfBytes fmt.width bs⟩
 
 instance : Enc Unit where
