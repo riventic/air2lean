@@ -196,6 +196,7 @@ budget is premise [STK-01](premises.md#stk-01), read as non-termination.
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
 | `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
+| `Proofs/Lists/Linked.lean` | full-state logic, for every resource `X` a node keeps besides its fields: `reverse_total` (the list in the other order, it returns), `sum_total` (the sum of the items, if it fits in a `u64`; the list unchanged); loop bodies by `fsym` |
 | `Proofs/Lists/Append.lean` | `append_run` (`ArrayListUnmanaged(u32).append`: `xs ++ [v]`, or `error.OutOfMemory` and the same list; a new buffer when the old one is full) |
 | `Proofs/Lists/Container.lean` | `SeqImpl` (a sequence interface: `Rep h xs` and an `add` contract over the abstract sequence only), `linkedAdd_spec` (`push` as an add to a reversed linked list), `arrayAdd_spec` (`append` as the same add on `ArrayListUnmanaged(u32)`) |
 

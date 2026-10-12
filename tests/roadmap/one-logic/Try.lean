@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Try
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # Error unions and optionals through pointers (`ZigLean/Sep/Full/Try.lean`), library-only

@@ -9,6 +9,7 @@ A theorem migrated from the legacy logic (`Triple`, `TotalTriple`) to the full-s
 memory (`Mem.FSeq` holds of the start memory, `Mem.init_fseq`, and every rule keeps it):
 
     FTriple (up P) c (fun v => up (Q v))  ⟹  `Triple P c Q`'s statement on every FSeq memory
+    FTotalTriple (up P) c (fun v => up (Q v))  ⟹  `TotalTriple P c Q`'s statement on every FSeq memory
 
 when each `Q v` is size-free (`SizeFree`: it does not read the size labels of its cells, which a
 full-state postcondition cannot pin without the block's extent; `region`, `pts` and every
@@ -183,10 +184,12 @@ theorem FTriple.toTriple_on {c : MemM α} {P : Assn} {Q : α → Assn}
       · exact upE_fix (hQ v) (fun _ _ _ _ _ _ _ h => by cases h) hh' (upE_none.mpr hq)
 
 /-- **Strength (D1a), total form**: a total full-state triple over legacy assertions gives the
-legacy total triple on every `Mem.FSeq` memory, for a size-free postcondition. -/
+legacy total triple's statement on every `Mem.FSeq` memory, for a size-free postcondition. -/
 theorem FTotalTriple.toTotal_on {c : MemM α} {P : Assn} {Q : α → Assn}
     (ht : FTotalTriple (up P) c (fun v => up (Q v))) (hQ : ∀ v, SizeFree (fun _ => none) (Q v)) :
-    TotalTripleIn Mem.FSeq P c Q := by
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →
+      ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
+        m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq := by
   intro m hP hF hd hm hp hseq hs
   obtain ⟨v, m', hrun⟩ := ht.2 m _ _ (holds_ofHeap hd hm) ⟨by simpa using hp, rfl, rfl⟩ hs
   have := FTriple.toTriple_on ht.1 hQ m hP hF hd hm hp hseq hs
