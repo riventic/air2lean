@@ -96,14 +96,16 @@ def retry_while_busy(name, attempt, busy):
 
 
 def guarded(name, argv, env=None, timeout=18000):
-    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy.
+    """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 24576 MiB; lower it on a shared machine).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', '24576', '--log-bytes', 16 << 20, '--report', report, '--log', logfile, '--', *argv],
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '24576'), '--log-bytes', 16 << 20,
+         '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))
@@ -177,11 +179,11 @@ def step_coverage(check):
 
 
 def step_pins(check):
-    """Input pins of the L04 try-pointers integration (check-artifacts.py): the emitter, its
-    retained translation and the exporter they were taken with."""
+    """Input pins of the L04 try-pointers integration (check-artifacts.py): its retained
+    translation and the exporter it was taken with. Outputs are pinned, not translator sources:
+    check.sh and gen-integrity.py re-translate and compare the output itself."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
     pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
-                'current_emitter_sha256': digest('Air2Lean/Emit.lean'),
                 'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
             'tests/roadmap/try-pointers/integration-qualification.json': {
                 'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}

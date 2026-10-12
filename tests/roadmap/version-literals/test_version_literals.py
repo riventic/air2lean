@@ -76,6 +76,23 @@ class VersionLiterals(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('differs from compatibility.json', result.stderr)
 
+    def test_default_literal_in_script_fails_and_pin_passes(self):
+        (self.tmp / 'scripts').mkdir()
+        self.write('scripts/x.sh', 'v=${AIR2LEAN_ZIG_VERSION:-0.16.0}\n')
+        self.write('scripts/y.py', "v = os.environ.get('V', '0.15.2')  # zig-pin: double\n")
+        result = run(self.tmp)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('scripts/x.sh:1: version literal in a defaulting position', result.stderr)
+        self.assertNotIn('scripts/y.py', result.stderr)
+
+    def test_dialect_default_must_match_compatibility(self):
+        compat = json.loads((self.tmp / 'compatibility.json').read_text())
+        compat['zig']['default'] = '0.15.2'
+        self.write('compatibility.json', json.dumps(compat))
+        result = run(self.tmp)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('defaultVersion is', result.stderr)
+
     def test_missing_registry_fails(self):
         (self.tmp / 'Air2Lean/Air/Dialect.lean').unlink()
         result = run(self.tmp)

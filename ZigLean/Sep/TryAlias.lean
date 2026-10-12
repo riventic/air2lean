@@ -103,7 +103,9 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
     ∃ block tb, (loadBytes (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
         (Nat.min a 2)).run m = pure (tb, m.recordAt block
           (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read) ∧
-      errOfBytes tb = pure (errTagOf u) := by
+      errOfBytes tb = pure (errTagOf u) ∧
+      ∀ m' : Mem, m'.blocks = m.blocks →
+        (ptrProject p (errPayloadPtr α)).run m' = pure (errPayloadPtr α p, m') := by
   obtain ⟨A, S, K, bs, ha, hsz, hdec, hb, -⟩ := hp
   obtain ⟨h1, -, -⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
   obtain ⟨htag, -⟩ := errUnion_decode_eq hdec
@@ -114,7 +116,8 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
   have hl := loadBytes_run hacc (noRace_of_singleThread hs.single block
     (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read)
   rw [hx] at hl
-  exact ⟨block, _, hl, htag⟩
+  exact ⟨block, _, hl, htag, fun m' hb' =>
+    errPayloadPtr_formed (by unfold Mem.access; rw [hb']; exact hacc)⟩
 
 /-- Pointer-form try on a wholly owned union: the exact `tryView` result; heap unchanged. -/
 theorem pts_try_run {p : Ptr} {a : Nat} {u : Except ErrName α} {m : Mem} {h hF : Heap}
@@ -123,10 +126,12 @@ theorem pts_try_run {p : Ptr} {a : Nat} {u : Except ErrName α} {m : Mem} {h hF 
     (hm : m.heap = h ∪ hF) (hs : m.Seq) :
     ∃ m', (tryPayloadPtr α a p).run m = pure (tryView α p u, m') ∧
       m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨block, tb, hl, htag⟩ := pts_tag_access hp ht heo hm hs
+  obtain ⟨block, tb, hl, htag, hpp⟩ := pts_tag_access hp ht heo hm hs
+  have hpp := hpp (m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
+    .read) rfl
   refine ⟨m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read,
     ?_, ?_, hs.recordAt _ _ _ _⟩
-  · simp only [StateT.run] at hl
+  · simp only [StateT.run] at hl hpp
     cases u <;> simp_all [tryPayloadPtr, tryView, errTagOf, zig_unfold, StateT.run]
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
@@ -136,7 +141,7 @@ theorem pts_errCode_run {p : Ptr} {a : Nat} {e : ErrName} {m : Mem} {h hF : Heap
     (heo : Nat.min a 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (hm : m.heap = h ∪ hF) (hs : m.Seq) :
     ∃ m', (errCodeAt α a p).run m = pure (e, m') ∧ m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨block, tb, hl, htag⟩ := pts_tag_access hp ht heo hm hs
+  obtain ⟨block, tb, hl, htag, -⟩ := pts_tag_access hp ht heo hm hs
   refine ⟨m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read,
     ?_, ?_, hs.recordAt _ _ _ _⟩
   · simp only [StateT.run] at hl

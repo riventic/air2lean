@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Shared setup for doctor.sh, translate.sh and check.sh; source after computing repo_root.
 # The callers supply zig_version, zig_air and caller_dir.
+. "$repo_root/scripts/zig-default.sh"  # air2lean_default_zig_version: the default is in compatibility.json
 # shellcheck disable=SC2154
 workflow_error() { printf 'error: %s\n' "$*" >&2; }
 workflow_version() {
   case "$zig_version" in
     0.17.0 | 0.16.0 | 0.15.2 | 0.14.1) ;;
-    *) workflow_error "unsupported Zig version '$zig_version'; choose 0.16.0, 0.15.2, 0.14.1 or 0.17.0 (in qualification)"; return 1 ;;
+    *) workflow_error "unsupported Zig version '$zig_version'; choose 0.16.0, 0.15.2, 0.14.1 or 0.17.0"; return 1 ;;
   esac
   if [ "$zig_version" = 0.14.1 ] && [ "$(uname -s)" != Linux ]; then
     workflow_error 'Zig 0.14.1 is supported on Linux only; choose 0.16.0, 0.15.2 or 0.17.0 on this host'

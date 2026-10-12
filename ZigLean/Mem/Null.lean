@@ -36,10 +36,11 @@ def checkSentinelByte (p : Ptr) (len : BitVec 64) (s : BitVec 8) : MemM Unit := 
 def ptrIsNull (p : Ptr) : MemM Bool := do
   pure (decide ((← ptrAddr p) = 0))
 
-/-- A C-pointer unwrap or nullable-to-nonnullable cast in the ReleaseSafe fragment. A
-nonzero address preserves its pointer value; it does not establish dereference validity. -/
+/-- A C-pointer unwrap or nullable-to-nonnullable cast. A nonzero address preserves its pointer
+value; it does not establish dereference validity. Null is illegal behaviour that the op checks
+itself (`.illegal`, docs/illegal-behavior.md row 15); Sema's check before it is ordinary AIR. -/
 def ptrRequireNonNull (p : Ptr) : MemM Ptr := do
-  if ← ptrIsNull p then throw .panic else pure p
+  if ← ptrIsNull p then throw .illegal else pure p
 
 /-- The storage dictionary of a C/allowzero pointer value in memory (a `[*c]T` variable,
 struct field or array item). `Ptr.null` is eight zero integer bytes, the target's null
@@ -92,7 +93,7 @@ theorem null_is_null (m : Mem) :
 
 /-- A C unwrap or a nonnullable cast of null fails; it cannot turn zero into storage. -/
 theorem null_unwrap (m : Mem) :
-    (ptrRequireNonNull Ptr.null).run m = throw .panic := by rfl
+    (ptrRequireNonNull Ptr.null).run m = throw .illegal := by rfl
 
 /-- A nonzero integer address still cannot be dereferenced without block provenance. -/
 theorem raw_address_access (m : Mem) (off : Int) (n a : Nat) :

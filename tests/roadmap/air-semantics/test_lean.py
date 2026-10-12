@@ -1,15 +1,23 @@
 """AIR semantics certificates (V01 slice): Lean-side checks.
 
-Needs `lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main` first.
+Needs `lake build Proofs.<Ex>.AirCert Air2Lean.Main` (every committed certificate) first.
 (a) RoundTrip.lean: each certificate's embedded `Func` is the decoded golden AIR.
 (b) Mutations: a certificate whose embedded AIR differs from what the generated code does
     (one operator changed) no longer checks, at that function's theorem. The committed
     certificates are not vacuous.
 (c) fixtures/caller: a non-recursive caller of a certified function (a path the committed
     examples do not exercise) gets `_complete` and `_eq`, and its fresh certificate checks.
+(d) Slices and pointer arithmetic: the Zig 0.15.2 files of tests/golden/slices (the example has
+    no committed certificate: its golden mixes versions) certify the expected functions, and the
+    fresh certificate checks.
+(e) PlacementCounterexample.lean: an extra block changes a later allocation's address, so a
+    memory extension cannot relate a promoted local to a block.
 """
 import argparse
+import json
 import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -17,17 +25,65 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 
 MUTATIONS = [
-    ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step'),
-    ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step'),
-    ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step'),
-    ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step'),
-    ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step'),
+    ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step', 'def'),
+    ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step', 'def'),
+    ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step', 'def'),
+    ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step', 'def'),
+    ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step', 'def'),
+    # Memory: a field offset, a store's value, a pointer comparison, a load's address.
+    ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step', 'def'),
+    ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step', 'def'),
+    ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step', 'def'),
+    ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step', 'def'),
+    # A loop: the checked increment of the loop counter made wrapping. The loop's AIR also appears
+    # in its field and loop lemmas, so the mutation goes everywhere: the iteration lemma breaks.
+    ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
+     '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body', 'all'),
+    # A pure function with a slice parameter (a view): its loop's sum, and the view's wiring.
+    ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
+     'sum_loop7_body', 'all'),
+    ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body', 'once'),
+    # Error unions: the test, and the error a function returns.
+    ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step', 'def'),
+    ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step', 'def'),
 ]
 
 
 def lean(path):
     return subprocess.run(['lake', 'env', 'lean', str(path)], cwd=ROOT, capture_output=True,
                           text=True, timeout=1800)
+
+
+def check_module(gen, cert, tmp):
+    """Compile the generated module `gen` into `tmp`, then kernel-check the certificate `cert`."""
+    olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(gen.with_suffix('.olean')), str(gen)],
+                           cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert olean.returncode == 0, olean.stdout + olean.stderr
+    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
+                    'slices.sumZ']
+
+
+def check_slices(binary, tmp):
+    air = tmp / 'slices-0.15.2'
+    air.mkdir()
+    for path in sorted((ROOT / 'tests/golden/slices/air').glob('*.json')):
+        if json.loads(path.read_text())['zig_version'] == '0.15.2':
+            shutil.copy(path, air / path.name)
+    gen, cert = tmp / 'SlicesGen.lean', tmp / 'SlicesCert.lean'
+    result = subprocess.run([str(binary), str(air), '-o', str(gen), '--namespace', 'Slices', '--prefix', 'slices.',
+                             '--profile', 'legacy-abi64-le',
+                             '--air-certificate', str(cert), '--air-certificate-import', 'SlicesGen'],
+                            capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    certified = re.findall(r'`([^`]+)`', re.search(r'^/-! Certified: (.*)$', cert.read_text(), re.M).group(1))
+    assert certified == SLICES_CERTIFIED, certified
+    check_module(gen, cert, tmp)
+    print(f'slices: {len(certified)} certified functions check')
 
 
 def check_caller(binary, tmp):
@@ -42,12 +98,7 @@ def check_caller(binary, tmp):
     text = cert.read_text()
     for name in ('scale_run', 'scaleTwice_sound', 'scaleTwice_complete', 'scaleTwice_eq'):
         assert f'theorem {name} ' in text, name
-    olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(tmp / 'CallerGen.olean'), str(gen)],
-                           cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert olean.returncode == 0, olean.stdout + olean.stderr
-    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
-                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert check.returncode == 0, check.stdout + check.stderr
+    check_module(gen, cert, tmp)
     print('caller fixture: scaleTwice_eq checks')
 
 
@@ -55,20 +106,33 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
     args = parser.parse_args()
+    # The placement counterexample behind register locals (docs/air-semantics.md §Locals).
+    result = lean(ROOT / 'tests/roadmap/air-semantics/PlacementCounterexample.lean')
+    assert result.returncode == 0, result.stdout + result.stderr
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.count('certified AIR terms equal the decoded golden files') == 2, result.stdout
+    tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
+    assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
-        for index, (ex, old, new, theorem) in enumerate(MUTATIONS):
+        for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
-            # Mutate the theorem's own function: the AIR def it names.
-            fn = theorem.rsplit('_', 1)[0]
-            start_def = source.index(f'def air_{fn} : Func :=')
-            end_def = source.index('\n\n', start_def)
-            block = source[start_def:end_def]
-            assert block.count(old) == 1, (ex, fn, old)
-            mutated = source[:start_def] + block.replace(old, new) + source[end_def:]
+            if scope == 'once':
+                # A text that occurs once in the certificate (a view's key).
+                assert source.count(old) == 1, (ex, theorem, old)
+                mutated = source.replace(old, new)
+            elif scope == 'all':
+                # A function with loops restates its AIR in its loop lemmas: mutate every copy.
+                assert source.count(old) >= 2, (ex, theorem, old)
+                mutated = source.replace(old, new)
+            else:
+                # Mutate the theorem's own function: the AIR def it names.
+                fn = theorem.rsplit('_', 1)[0]
+                start_def = source.index(f'def air_{fn} : Func :=')
+                end_def = source.index('\n\n', start_def)
+                block = source[start_def:end_def]
+                assert block.count(old) == 1, (ex, fn, old)
+                mutated = source[:start_def] + block.replace(old, new) + source[end_def:]
             mutant = Path(tmp) / f'Mutant{index}.lean'
             mutant.write_text(mutated)
             result = lean(mutant)
@@ -82,6 +146,7 @@ def main():
             assert errors and all(start < n <= end + 1 for n in errors[:1]), (theorem, errors, output[:2000])
             print(f'mutant {index}: {theorem} rejected')
         check_caller(args.binary, Path(tmp))
+        check_slices(args.binary, Path(tmp))
     print('AIR semantics Lean checks passed')
 
 

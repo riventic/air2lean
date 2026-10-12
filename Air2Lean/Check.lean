@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.Noalias
 import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
@@ -202,7 +203,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
         profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
-        ({Target.llvmBackend}) on {" or ".intercalate Dialect.lanePtrArchs}"
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -214,7 +215,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
       let some bits := packedBits types child
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
-            `bool`, an enum or a packed struct is outside the subset"
+            `bool`, a float, an enum, a packed struct, a packed union or a vector of these is \
+            outside the subset"
       if l.bitOffset + bits > 8 * l.hostSize then
         throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
@@ -254,7 +256,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointers in packed aggregates are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
-        integer, a `bool`, an enum or a packed struct: outside the subset"
+        integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these \
+        (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
@@ -278,7 +281,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
           subset"
       if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
         throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
-          integer, a `bool`, an enum or a packed struct: outside the subset"
+          integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of \
+          these: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
@@ -386,7 +390,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     if layout == "packed" then
       -- Its backing integer (`Zig.Packed`).
       let some bits := packedBits types id | throw s!"packed struct '{name}' with a field other \
-        than an integer, a `bool` or a packed struct"
+        than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector \
+        of these"
       return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
       let _ ← modelLayout types layouts fty errBits
@@ -450,6 +455,19 @@ def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (field
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
+/-- A `@bitCast` between a packed struct or union and another packed struct or union, a float or a
+`bool` of the same bit size (every Zig version: both sides are their bits, `Zig.Packed`). An
+integer side keeps its own rules (`Zig.Packed.ofBits?`/`toBits`, `Zig.PackedU`). -/
+def packedScalarCast (types : Array Ty) (src dst : TyId) : Bool :=
+  let packedAgg (t : TyId) : Bool := match types[t]? with
+    | some (.struct _ "packed" _) | some (.union _ "packed" none _) => true
+    | _ => false
+  let scalar (t : TyId) : Bool := match types[t]? with
+    | some (.float _) | some .bool => true
+    | _ => packedAgg t
+  src != dst && (packedAgg src || packedAgg dst) && scalar src && scalar dst &&
+    (packedBits types src).isSome && packedBits types src == packedBits types dst
+
 /-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
 
 /-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
@@ -474,33 +492,70 @@ def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Boo
 an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
 @bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
 for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
-storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out, and
-for a pointer or optional pointer at any depth: the model's pointer bytes carry provenance and
-are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). -/
-partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
+storage, sentinel array), which `@bitCast` rejects or the model leaves out, and for a pointer or
+optional pointer at any depth: the model's pointer bytes carry provenance and are not integer
+bits, so a pointer-bearing representation cast is rejected (fail closed). A vector of integer,
+float or `bool` lanes has `len·@bitSizeOf(lane)` bits: the LLVM backend's memory image packs the
+lanes without padding (`Zig.Vec.packedEnc`, L09). A packed struct or union is its backing
+integer.
+
+`autoItems` (Zig 0.14.1 and 0.15.2, `ZigVersion.bitCastAutoItems`): Sema checks only the outer
+types, so an *array item* may be an `auto` struct or a tagged union; its bits are its ABI size
+(`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
+tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). A tuple item stays
+outside: the memory model has no tuple layout. -/
+partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
+    (autoItems : Bool := false) : Option Nat := do
   let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
+  let recur (t : TyId) := reprBitSize types layouts t autoItems
   match ← types[id]? with
   | .int _ bits | .float bits => pure bits
   | .bool => pure 1
-  | .enum _ tag _ _ => reprBitSize types layouts tag
-  | .struct _ "packed" _ => packedBits types id
+  | .enum _ tag _ _ => recur tag
+  | .struct _ "packed" _ | .union _ "packed" none _ => packedBits types id
   | .struct _ "extern" fields | .union _ "extern" none fields =>
-    for (_, t) in fields do let _ ← reprBitSize types layouts t
+    for (_, t) in fields do let _ ← recur t
     abiBits
   | .array len child false =>
-    let eb ← reprBitSize types layouts child
+    let eb ← match types[child]? with
+      | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
+        if !autoItems then none else do
+          for (_, t) in fields do let _ ← recur t
+          (layouts[child]?.bind (·.size)).map (8 * ·)
+      | _ => recur child
     let es ← layouts[child]?.bind (·.size)
     pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
+  | .vector len child =>
+    match ← types[child]? with
+    | .int _ bits | .float bits => pure (len * bits)
+    | .bool => pure len
+    | _ => none
   | _ => none
+
+def isVectorTy (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with | some (.vector ..) => true | _ => false
+
+/-- `[n]T` ↔ `@Vector(n, T)` (same item type, no sentinel): `some true` from the array,
+`some false` to it. Up to 0.16.0 this `@bitCast` is lane `i` = item `i` for every item type
+(Zig 0.16.0's LLVM `bitCast`: a vector store/load for whole-byte items, otherwise one
+`extractelement`/`insertelement` per item), so it is translated lane-wise, not through the
+memory images (an item `u24` has a padding byte in the array, none in the vector). -/
+def vectorLaneCast? (types : Array Ty) (src dst : TyId) : Option Bool :=
+  match types[src]?, types[dst]? with
+  | some (.array n a false), some (.vector m b) => if n == m && a == b then some true else none
+  | some (.vector m b), some (.array n a false) => if n == m && a == b then some false else none
+  | _, _ => none
 
 /-- A ≤0.16 `@bitCast` (`ZigVersion.BitCast.memory`: up to 0.16.0 `@bitCast` reinterprets the
 in-memory representation; 0.17.0 changed it to the logical bit order) from `src` to `dst` that the
 representation cast (`Zig.reprCast`) translates: different types, an array, `extern` struct or
-`extern` union on at least one side. The checker then requires both sides to have a
+`extern` union on at least one side, or a vector on at least one side except the lane-wise
+`[n]T` ↔ `@Vector(n, T)` (`vectorLaneCast?`). The checker then requires both sides to have a
 `reprBitSize` and equal ones. -/
 def reprCastApplies (bitCast : ZigVersion.BitCast) (types : Array Ty) (src dst : TyId) : Bool :=
   bitCast == .memory && src != dst &&
-    (reprAggregate types src || reprAggregate types dst)
+    (reprAggregate types src || reprAggregate types dst ||
+      ((isVectorTy types src || isVectorTy types dst) && (vectorLaneCast? types src dst).isNone))
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -699,8 +754,8 @@ def atomicPtrPointee (types : Array Ty) (layouts : Array Layout) (c : TyId) : Bo
     | _ => false
 
 /-- An atomic op's pointee must be an integer, an enum, a `bool`, a packed struct, or a pointer
-(`atomicPtrPointee`; `docs/std-models.md` §Thread model). An RMW on a pointer must be `.Xchg`.
-A float atomic is rejected with its own reason. -/
+(`atomicPtrPointee`; `docs/std-models.md` §Thread model), at most `Target.atomicBits` wide. An
+RMW on a pointer must be `.Xchg`. A float atomic is rejected with its own reason. -/
 def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option RmwOp := none) :
     Except String Unit := do
   let some pty := cx.valTy? ptr
@@ -715,6 +770,16 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
         cx.fail line "an atomic RMW on a pointer other than `.Xchg` is outside the subset"
     | none => pure ()
     return
+  -- Wider than the target's `max_atomic_bits` (`Target.atomicBits`): native code has no such op.
+  if let (some t, some bits) := (cx.dialect.bind (·.target?), packedBits cx.types c) then
+    if bits > t.atomicBits then
+      cx.fail line s!"an atomic op on a {bits}-bit integer representation is outside the \
+        {t.arch}-{t.os} model ({t.atomicBits}-bit atomics at the baseline CPU)"
+  -- A packed struct with a float or packed-union field can hold undetermined bits
+  -- (`Zig.Packed.mask`), which the atomic messages (integer bytes) cannot.
+  if packedHasMask cx.types c && !(cx.types[c]? matches some (.float _)) then
+    cx.fail line "an atomic op on a packed struct with a float or packed-union field is outside \
+      the subset: its NaN or undefined bits have no atomic message bytes"
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
@@ -748,10 +813,49 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
   if cx.types[c]? == some .bool then return
   let some bits := packedBits cx.types c | return
   if bits != 8 * Zig.intSize bits then
+    -- A signed `.Max`/`.Min` is wrong even with zero padding (natively on 0.14.1-0.17.0,
+    -- x86_64 and aarch64; `docs/upstream/padded-rmw-minmax.md`): LLVM gets the sign-extended
+    -- operand but the cell's raw bytes, so a negative cell orders as a large unsigned value.
+    let signedMinMax := match op, cx.types[c]? with
+      | .atomicRmw .max .., some (.int true _) | .atomicRmw .min .., some (.int true _) => true
+      | _, _ => false
+    let why := if signedMinMax then
+        "the native op orders a negative signed cell as a large unsigned value (its padding is not \
+        sign-extended), where the model compares the signed value bits"
+      else
+        "the native op compares the whole ABI cell, padding included, which the model leaves \
+        undefined"
     cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
-      (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
-      ABI cell, padding included, which the model leaves undefined; use an integer whose width \
-      is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+      (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
+      width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+
+/-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
+(`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
+`@floor`/`@ceil`/`@trunc`/`@round` (`floorl`, …), `@min`/`@max` (`fminl`/`fmaxl`) and the
+division family other than `/` (`truncl`, `floorl`, `fmodl`, …). Linked with libc, these are
+libc's routines, not the compiler_rt ones that the model ports (before 0.16.0 their `@sqrt`
+differs). The profile records no `link_libc` fact, so only `--assume-no-libc` admits them. The
+opaque transcendentals (`sinl`, …) state nothing about either routine and stay admitted. -/
+def CheckCtx.checkLongDoubleCall (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let some d := cx.dialect | return
+  let some t := d.target? | return
+  if t.longDoubleBits != 128 || d.noLibc then return
+  let (what, a) ← match op with
+    | .sqrt a => pure ("@sqrt", a)
+    | .mulAdd a _ _ => pure ("@mulAdd", a)
+    | .floatRound _ a => pure ("@floor/@ceil/@trunc/@round", a)
+    | .minMax _ a _ => pure ("@min/@max", a)
+    | .div _ a _ => pure ("@divTrunc/@divFloor/@divExact/@rem/@mod", a)
+    | _ => return
+  let some aty := cx.valTy? a | return
+  let elem := match cx.types[aty]? with
+    | some (.vector _ c) => cx.types[c]?
+    | other => other
+  if elem == some (.float 128) then
+    cx.fail line s!"{what} on f128 is outside the {t.arch}-{t.os} model: f128 is this target's \
+      c_longdouble, so the op calls a long double libm routine (sqrtl, fmal, floorl, …), which is \
+      compiler_rt's only in a program without libc, and the AIR profile records no link_libc \
+      fact; pass --assume-no-libc for a program linked without libc (docs/floats.md §Targets)"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -780,6 +884,11 @@ def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
   let pty ← cx.memPtrTy line ptr
   let some vec := ptrChild cx.types pty
     | cx.fail line "a lane pointer that does not point into a vector"
+  -- A bit-pointer to a vector is a vector field of a packed struct (Zig 0.14.1/0.15.2), whose
+  -- lane pointers those compilers miscompile (`docs/upstream/packed-vector-lane-ptr.md`).
+  if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+    cx.fail line "a vector lane pointer into a vector field of a packed struct is outside the \
+      subset (Zig 0.14.1/0.15.2 drop the field's bit offset, docs/upstream/packed-vector-lane-ptr.md)"
   let some (.vector n e) := cx.types[vec]?
     | cx.fail line "a lane pointer that does not point into a vector"
   let l := cx.layouts[ty]?.getD {}
@@ -1118,6 +1227,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>
@@ -1283,8 +1393,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | .error e => cx.fail line e
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
+    -- Up to 0.16.0 a vector `@bitCast` is the lane-wise `[n]T` ↔ `@Vector(n, T)`
+    -- (`vectorLaneCast?`) or a representation cast of the vector's memory image below (L09).
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
-      cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+      unless cx.bitCast == some .memory do
+        cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+      if let some aty := sourceTy then
+        if (vectorLaneCast? cx.types aty ty).isSome then return line
     -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
     -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
     -- its bytes as an array (`docs/illegal-behavior.md`).
@@ -1333,18 +1448,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- encode, then decode the other type from the same bytes, padding bytes undefined.
       if cx.bitCast.any (reprCastApplies · cx.types aty ty) then
         let side (t : TyId) : Bool := match cx.types[t]? with
-          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _) => true
+          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _)
+          | some (.union _ "packed" none _) | some (.vector ..) => true
           | _ => reprAggregate cx.types t
         unless side aty && side ty do
-          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct \
-            or `extern` union and a type other than an integer, float, `bool`, packed struct, \
-            array, `extern` struct or `extern` union is outside the subset"
-        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
-            reprBitSize cx.types cx.layouts ty)
+          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct, \
+            `extern` union or vector and a type other than an integer, float, `bool`, packed \
+            struct, packed union, array, `extern` struct, `extern` union or vector is outside \
+            the subset (an `auto` struct, tuple or tagged union has no guaranteed layout: Sema \
+            rejects its `@bitCast`)"
+        -- An array and a vector of other items: 0.16.0's LLVM `bitCast` reinterprets memory
+        -- only when the source's items fill whole bytes; otherwise it copies item by item into
+        -- lanes of another type, which is no representation cast.
+        let sourceItem : Option TyId := match cx.types[aty]?, cx.types[ty]? with
+          | some (.array _ c _), some (.vector ..) | some (.vector _ c), some (.array ..) => some c
+          | _, _ => none
+        if let some c := sourceItem then
+          unless byteStridedLane cx.types c do
+            cx.fail line "a Zig ≤0.16 `@bitCast` between an array and a vector of another item \
+              type whose source items do not fill whole bytes is outside the subset"
+        let autoItems := cx.dialect.any (·.version.bitCastAutoItems)
+        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty autoItems,
+            reprBitSize cx.types cx.layouts ty autoItems)
           | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
               pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
-              tagged union, packed union, slice, vector, sentinel array or error storage, at any \
-              depth) is outside the subset"
+              tagged union, slice, sentinel array or error storage, at any depth) is outside \
+              the subset"
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
             {bbits} bits (`@bitSizeOf`) is outside the subset"
@@ -1357,6 +1486,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | some (.int ..) => "int"
         | _ => "other"
       if aty == ty then return line
+      -- A packed struct or union and another packable scalar of the same bit size (a packed
+      -- struct or union, a float, `bool`): the bits, through `Zig.Packed` (`packedScalarCast`).
+      if packedScalarCast cx.types aty ty then return line
       match kind aty, kind ty with
       | "packed", "int" | "int", "packed" => pure line
       | "packed", _ | _, "packed" | "agg", _ | _, "agg" =>
@@ -2547,9 +2679,33 @@ private def checkBitPtrConstant (f : Func) (v : Val) : Except String Unit :=
     else pure ()
   | none => pure ()
 
+/-- A lane pointer constant (`&g.v[i]` folded to `{global, off}`) must point into a global vector:
+Zig 0.14.1/0.15.2 also fold `&s.v[i]` for a vector *field* `v` of a packed struct `s`, without the
+field's bit offset, and miscompile stores through it (`docs/upstream/packed-vector-lane-ptr.md`).
+`CheckCtx.lanePtr` rejects the instruction form. -/
+private def checkLaneConstant (f : Func) (v : Val) : Except String Unit :=
+  -- Only a program with a vector field in a packed struct can form such a pointer.
+  let vectorField := f.types.any fun t => match t with
+    | .struct _ "packed" fs => fs.any fun (_, c) => match f.types[c]? with
+      | some (.vector ..) => true
+      | _ => false
+    | _ => false
+  match v with
+  | .ptrConst pty g _ =>
+    if vectorField && laneBitPtrTy f.layouts pty then
+      match (f.globals[g]?).bind (f.types[·.ty]?) with
+      | some (.vector ..) => pure ()
+      | _ => throw s!"{f.name}: a vector lane pointer into a global that is not a vector (a \
+          vector field of a packed struct: Zig 0.14.1/0.15.2 drop the field's bit offset, \
+          docs/upstream/packed-vector-lane-ptr.md) is outside the subset"
+    else pure ()
+  | _ => pure ()
+
 /-- A big-endian profile (T03, `ZigLean/Endian.lean`) parameterizes the byte order of
 integers, floats, slices, enums, packed structs (their backing integer and bit-pointer hosts),
-whole-byte vector lanes and every aggregate built from them. The rest is unqualified on a
+whole-byte vector lanes, every aggregate built from them, atomic ops and futex words
+(`ZigLean/Conc/Endian.lean`). The std allocator, thread and OS models read no integer from
+memory except the futex word, so they are the same at both orders. The rest is unqualified on a
 big-endian target and fails closed (`docs/profiles.md` §Byte order). -/
 def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
   let fail {α : Type} (what : String) : Except String α :=
@@ -2559,6 +2715,9 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
     match t with
     | .float 80 => fail "`f80`"
     | .union _ "packed" none _ => fail "a `packed union`"
+    -- Its memory image with undetermined bits (`Zig.Packed.encodeOf`) is little endian only.
+    | .struct _ "packed" fs =>
+      if fs.any (packedHasMask f.types ·.2) then fail "a packed struct with a float field"
     | .vector _ c =>
       match f.types[c]? with
       | some (.int _ bits) => unless bits % 8 == 0 do fail "a vector of non-byte-multiple lanes"
@@ -2575,14 +2734,21 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
       | _ => false
     | _ => false
   let hostOf (t : TyId) : Nat := (f.layouts[t]?.map (·.hostSize)).getD 0
+  -- An atomic op is the little-endian op under a byte swap (`ZigLean/Conc/Endian.lean`): its
+  -- integer representation is at most one byte or a whole number of bytes. A pointer's bytes
+  -- are symbolic, the same at both orders.
+  let atomicPtr (v : Val) : Option TyId := (tyOf v).bind (ptrChild f.types)
+  let atomicWidth (v : Val) : Except String Unit := do
+    if let some bits := (atomicPtr v).bind (packedBits f.types) then
+      unless bits ≤ 8 || bits % 8 == 0 do
+        fail s!"an atomic op on a {bits}-bit integer representation (neither at most one byte nor a \
+          whole number of bytes)"
   for i in insts do
     match i.op with
-    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => fail "an atomic op"
+    | .atomicLoad p _ | .atomicStore p _ _ | .atomicRmw _ _ p _ | .cmpxchg _ p .. => atomicWidth p
     | .asm .. => fail "inline assembly"
     | .tagName _ => fail "`@tagName`"
     | .errorName _ => fail "`@errorName`"
-    | .call (.func callee ..) _ =>
-      if modelledStdFn callee f.allocatorModel then fail s!"the std model '{callee}'"
     -- The little-endian byte offset of a byte-aligned packed field (`FCtx.fieldOffsetIn`).
     | .fieldPtr b _ =>
       if (tyOf b).any packedPtr && hostOf i.ty == 0 then fail "a byte pointer to a packed struct field"
@@ -2617,6 +2783,24 @@ def checkBodiesEnd (f : Func) : Except String Unit := do
       throw s!"{f.name}: a body ends without a terminator (`br`, `ret`, `unreach`, a noreturn \
         call, …)"
 
+/-- With runtime safety off, Sema does not check that the operands of a multi-operand `for` have
+equal lengths, and the AIR need not hold any length but the loop's own bound (a range `0..n`
+operand has no instruction): the mismatch is unchecked illegal behaviour. The patched compiler
+lowers it to `if (!ok) unreachable` and lists `for_len` in `unchecked_ib`
+(`docs/illegal-behavior.md` row 27). An export without that fact may hide the mismatch in any
+loop, so a function with a loop is rejected. -/
+def checkForLenFact (f : Func) (insts : Array Inst) : Except String Unit := do
+  unless f.uncheckedIb.contains "for_len" do
+    if let some i := insts.find? (fun i => i.op matches .loop _) then
+      throw s!"{f.name}: inst {i.id}: a loop in an export without the `for` length fact \
+        (`unchecked_ib` lacks \"for_len\"): with runtime safety off it may hide an unequal \
+        `for` operand length; re-export with a compiler built from zig-patch"
+
+/-- `@errorName` (`error_name`). -/
+def Op.isErrorName : Op → Bool
+  | .errorName _ => true
+  | _ => false
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -2631,6 +2815,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
+  checkForLenFact f insts
   -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
   -- `usize` and allocation; the ops below remain 64-bit only.
   let ptrBytes := ptrBytesOf f.layouts
@@ -2644,6 +2829,14 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         | _ => none
       if let some what := what? then
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
+  -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
+  -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
+  -- does not export the compilation's error count, so no code is known to stay below that bit.
+  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) then
+    throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
+      error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
+      compilation's error codes; use Zig 0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2659,6 +2852,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   for g in f.globals do
     checkGlobal f g
     if let some init := g.init then checkNoThreadlocalConstant f init
+  -- `noalias` parameters: every access has one root, and no tainted value escapes.
+  unless f.noalias.isEmpty do discard <| Noalias.analyze f
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
@@ -2674,6 +2869,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
           checkTy f.name f.types f.layouts 0 vty
           checkedConstTypes := checkedConstTypes.insert vty
       checkBitPtrConstant f v
+      checkLaneConstant f v
       checkNullConstants f.name f.types f.layouts v
       checkNoThreadlocalConstant f v
       checkPointerConstant f v
@@ -2803,7 +2999,7 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
   | .undef _, _ => pure ()
   | .int _ n, .int signed bits =>
     unless integerFits signed bits n do throw s!"{f.name}: integer constant does not fit type {expected}"
-  | .int _ n, .struct _ "packed" _ =>
+  | .int _ n, .struct _ "packed" _ | .int _ n, .union _ "packed" none _ =>
     let some bits := packedBits f.types expected | fail
     if bits > 65535 then throw s!"{f.name}: packed integer width exceeds 65535 bits"
     unless integerFits false bits n do throw s!"{f.name}: packed integer constant does not fit type {expected}"
@@ -3905,6 +4101,13 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
+  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
+  if funcs.any (!·.noalias.isEmpty) then
+    let conc := concFunctions funcs
+    for f in funcs do
+      if !f.noalias.isEmpty && conc.contains f.name then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          (Noalias.concurrentMsg f.name) }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -4039,6 +4242,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id f.errorSetBits)
   let insts := index.insts
+  log := log.record { (checkDiagnostic file f .instructionFailure) with
+    category := .unsupportedSemantics } (checkForLenFact f insts)
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -4054,6 +4259,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
       (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
+  unless f.noalias.isEmpty do
+    log := log.record { (checkDiagnostic file f .memoryFailure { idSpace := .canonical }) with
+      category := .unsupportedSemantics } (discard <| Noalias.analyze f)
   for i in insts do
     if let .runtimeNavPtr g := i.op then
       log := log.record (checkDiagnostic file f .globalFailure
@@ -4071,6 +4279,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       let result := do
         checkNullConstants f.name f.types f.layouts v
         checkBitPtrConstant f v
+        checkLaneConstant f v
         checkNoThreadlocalConstant f v
         checkPointerConstant f v
           (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")

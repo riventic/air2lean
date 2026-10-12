@@ -198,9 +198,12 @@ class CasTests(unittest.TestCase):
         self.native(zig, self.tmp / 'n6')
         self.assertEqual(runs(), 5)
         (self.tmp / 'mod/embed.zig').unlink()
+        self.native(zig, self.tmp / 'n5b', '-femit-h=' + str(self.tmp / 'h.h'))   # an extra output: uncached
+        self.native(zig, self.tmp / 'n5c', '-femit-h=' + str(self.tmp / 'h.h'))
+        self.assertEqual(runs(), 7)
         self.native(zig, self.tmp / 'n7', store=False)                          # no cache directory: plain run
         self.native(zig, self.tmp / 'n8', store=False)
-        self.assertEqual(runs(), 7)
+        self.assertEqual(runs(), 9)
 
     def test_gc_evicts_least_recently_used_first(self):
         store = cas.Store(self.tmp / 'store')

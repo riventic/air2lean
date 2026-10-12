@@ -87,10 +87,11 @@ class CommittedRecord(unittest.TestCase):
                              ['aarch64-linux', 'aarch64-macos', 'x86_64-linux'])
             run = json.loads((ROOT / bm.RUN_DIR / f'0.16.0--aarch64-linux--{mode}--llvm.json').read_text())
             self.assertEqual((run['target'], run['emulated'], run['host']), ('aarch64-linux', False, 'Linux-aarch64'))
-            # No aarch64-linux float model: the run leaves floatops and floatconv out, so it
-            # shows none of the float @divExact mismatches the other two targets triage.
+            # The run tests this host's own float translations (Gen-linux-aarch64.lean): no example
+            # is left out and no mismatch is triaged.
             self.assertEqual(run['counts'].get('mismatch', 0), 0)
-            self.assertEqual(sorted(e['example'] for e in run['excluded_examples']), ['floatconv', 'floatops'])
+            self.assertEqual(run['excluded_examples'], [])
+            self.assertIn('floatops', run['examples'])
 
     def test_unqualified_backend_records_state_findings(self):
         for mode in ('Debug', 'ReleaseSafe', 'ReleaseFast'):
@@ -308,6 +309,16 @@ class RunControls(Fixture):
     def test_triage_needs_reproducer_and_stated_exception(self):
         (self.root / 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig').unlink()
         self.assertRejects('needs a note and an existing reproducer file')
+        # A mismatch triaged as unchecked illegal behaviour (the float @divExact class, now a
+        # model .illegal) needs the record to state that exception.
+        (self.root / 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig').write_text('//\n')
+        def triaged(run):
+            run['counts']['value_match'] -= 1
+            run['counts']['mismatch'] = run['counts'].get('mismatch', 0) + 1
+            run['triage'].append({'cases': 1, 'classification': 'illegal-behaviour-not-detected-by-releasesafe',
+                                  'example': 'floatops', 'function': 'divExact64', 'note': 'inexact quotient',
+                                  'reproducer': 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig'})
+        self.edit('ReleaseFast', 'llvm', triaged)
         record(self.data, 'ReleaseFast', 'llvm')['exceptions'] = []
         self.assertRejects('is not a stated exception of the record')
 

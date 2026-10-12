@@ -41,6 +41,10 @@ the tool:
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
    header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   Each admission opt-in that the header records maps to its premises (`admissions`:
+   `no-libc` selects MTH-05); an admission without a mapping fails the check. A committed
+   example translation (`Proofs/<Ex>/Gen.lean`, a canonical body without a header) takes the
+   opt-ins of `examples/<ex>/translate.args`, which every translation of the example uses.
    Adds the caller obligations of every generated definition reached: the translator writes
    `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
@@ -93,7 +97,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
-| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) |
+| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
@@ -648,13 +652,31 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### MTH-04 — aarch64 float lowering
 
 - Kind: environment.
-- Statement: The translation targets aarch64-macos, whose float lowering differs from
-  x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3` division;
-  before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f16`/`f32`/`f64` is a fused
-  instruction. The rules are read from the Zig 0.16.0 LLVM backend and compiler_rt sources and
-  checked by the macOS differential test; no other aarch64 target is qualified.
+- Statement: The translation targets aarch64-macos or aarch64-linux, whose float lowering
+  differs from x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3`
+  division; before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f32`/`f64` is a fused
+  instruction, on `f16` too where the baseline CPU has `fullfp16` (aarch64-macos `apple_m1`; not
+  aarch64-linux `generic`, which rounds through `f32` like x86_64). The rules are those of the
+  baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
+  compiler_rt sources and checked by each host's differential test. On aarch64-linux the
+  `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: the checker rejects the
+  `f128` ops that call them unless `--assume-no-libc` (recorded in the header, premise MTH-05)
+  states that the program links no libc.
 - Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
 - Sources: [floats.md](floats.md#targets).
+
+<a id="mth-05"></a>
+### MTH-05 — Program linked without libc
+
+- Kind: environment.
+- Statement: The program is linked without libc, so on a target whose `c_longdouble` is `f128`
+  (aarch64-linux, s390x, wasm32) the `long double` libm routines that `f128` `@sqrt`, `@mulAdd`,
+  `@floor`/`@ceil`/`@trunc`/`@round`, `@min`/`@max` and the division family other than `/` call
+  (`sqrtl`, `fmal`, `floorl`, …) are compiler_rt's, which the model ports. The AIR profile
+  records no `link_libc` fact; the user states this with `--assume-no-libc`.
+- Derived from: a reached generated module whose header records the admission `no-libc`
+  (`assurance/premises.json` `admissions`).
+- Sources: [floats.md](floats.md#targets), [air-json.md](air-json.md).
 
 ## Inline assembly
 
@@ -718,7 +740,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is a `Zig.Error` (`.illegal`, `.unspecified`, panics) rather than undefined behavior.
   Zig error unions are ordinary values. Integer, bit, vector, packed and union operations
   follow `ZigLean/Basic.lean` and its companions.
-- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
+- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.PackedRepr`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
 - Sources: [generated-code.md](generated-code.md), [docs/generated-code.md §Panics](generated-code.md#panics).
 
 <a id="sem-02"></a>
@@ -730,12 +752,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   profile. A `const` global is read-only static storage: a write to it (`Mem.accessW`) and a
   `free` of it (`Zig.free`) are `.illegal`, so its bytes never change while it is live.
   Out-of-bounds, misaligned or dead accesses are `.illegal`, and so is forming a derived pointer
-  outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`) or an access below
-  an OS mapping's first live offset (`BlockKind.mapped lo`). Undefined bytes are explicit.
-  `@returnAddress()` and an `undefined` pointer operand (`--allocator-model translated`) read
-  the explicit oracle `Mem.arbitrary`, so a theorem over every initial memory covers every
-  value sequence.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
+  outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`), an access below an
+  OS mapping's first live offset (`BlockKind.mapped lo`), and two overlapping accesses of one
+  call, one a write, through pointers with different `noalias` roots (`Zig.naMark`, LLVM's
+  `noalias`). Undefined bytes are explicit. `@returnAddress()` and an `undefined` pointer
+  operand (`--allocator-model translated`) read the explicit oracle `Mem.arbitrary`, so a
+  theorem over every initial memory covers every value sequence.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Mem.Noalias`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>
@@ -779,11 +802,24 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: meaning.
 - Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
-  its fragment: an interpreter over the decoded `Air2Lean.Func`, over ZigLean's primitive
-  operations and `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment
-  and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`) relates the
-  generated definition to this meaning; it does not relate the meaning to Zig, the exporter
-  or canonicalization (TRU-02).
+  its fragment (integer arithmetic and safety checks, blocks, branches, switches, loops, stack
+  locals, loads, stores, field pointers and comparisons through plain pointers, pointer
+  arithmetic, slices of a function that uses memory, optionals and error unions as values,
+  `try`, direct calls): an interpreter over the
+  decoded `Air2Lean.Func`, with a typed SSA environment, over ZigLean's primitive operations and
+  `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment and ill-typed
+  steps are `⊥`. An `alloc` whose address is never taken (every use is the pointer of a `load`
+  or `store`, or debug information; `Sem.regAlloc`, decided on the AIR alone) is a cell of the
+  frame, not a memory block (a register local, as Clight's temporaries). This is faithful
+  because such a local's address is unobservable, and theorems hold for every placement `σ`
+  (SEM-07): every native address assignment of the remaining blocks is the one of some `σ`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`)
+  relates the generated definition to this meaning, so `Check.lean` and `Emit.lean` are not
+  trusted for a certified function; it does not relate the meaning to Zig, the exporter or
+  canonicalization (TRU-02). The plan to shrink this premise (raw-AIR certificates, executable
+  conformance tests of `Sem`) is in air-semantics.md §How SEM-06 shrinks. `Sem.Ctx.view` is a
+  certificate device that `execFunc` leaves empty; the relation of a viewed run to `execFunc` is
+  proved (`SemView.execFunc_view`), under the theorem's hypothesis `Mem.ClockWf` on the start
+  memory.
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
 

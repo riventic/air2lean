@@ -1,0 +1,17 @@
+eqlChunk 0 true
+eqlChunk 1 false
+stdEql 0 true
+stdEql 1 false
+stdEql 2 false
+bytesToLanes 0 1,2,3,250
+lanesToBytes 0 9,8,7,255
+u24ItemToLane 0 11259375
+u24LaneToItem 0 1193046
+boolItemToLane 0 1
+boolLanesToByte 0 141
+lanesToWord 0 1144201745
+wordToLanes 0 239,190,173,222
+bytesToHalves 0 513,1027
+halvesToBytes 0 239,190,52,18
+packedLanesToInt 0 369
+intToPackedLanes 0 1,6,5

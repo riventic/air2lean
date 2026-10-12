@@ -298,12 +298,35 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/s390x-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    # T03: concurrency.zig at both byte orders (concurrency.sh --export).
+    'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
+    # L07/L08: one directory per source and version (check.sh --export).
+    'tests/roadmap/packed-casts/air/{version}/packed_casts': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/logical017': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/vector_fields': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/auto_items': 'tests/roadmap/packed-casts/README.md',
+    'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
+    # nan_bits.zig (nan-bits/check.sh --export; docs/architecture-audit/nan-bits.md).
+    'tests/roadmap/nan-bits/air/{version}/nan_bits': 'tests/roadmap/nan-bits/README.md',
+    # L04: try_lifetimes.zig (lifetimes/check.sh --export).
+    'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
+    'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
+    # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
+    'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits8': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits10': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits16': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits17': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits32': 'tests/roadmap/error-width/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
@@ -314,6 +337,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/alloc-arena/air/{version}/arena-fixed-linux': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
     'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
+    # L-series long tail: one directory per fixture source (export.sh, provenance.json).
+    'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
+    'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
@@ -343,6 +369,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
     'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
     'tests/roadmap/illegal-behavior': 'illegal-behaviour fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
+    'tests/roadmap/noalias': 'noalias fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
     'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
     'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
 }

@@ -34,6 +34,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -219,6 +220,9 @@
         "closed": "List.toArray"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
         "closed": "OfNat.ofNat"
        },
        {
@@ -232,6 +236,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -396,6 +401,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -556,6 +562,9 @@
         "closed": "List.toArray"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
         "closed": "OfNat.ofNat"
        },
        {
@@ -569,6 +578,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -671,6 +681,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -834,6 +845,9 @@
         "closed": "List.toArray"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
         "closed": "OfNat.ofNat"
        },
        {
@@ -847,6 +861,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -956,6 +971,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -1127,6 +1143,9 @@
         "closed": "List.toArray"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
         "closed": "OfNat.ofNat"
        },
        {
@@ -1140,6 +1159,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -1449,7 +1469,7 @@
      }
     ],
     "head": {
-     "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
+     "fingerprint": "c6c5472570166be24da2d010bd33478d",
      "kind": "definition",
      "module": "ZigLean.Sep.Triple",
      "name": "Zig.Triple"
@@ -2778,7 +2798,7 @@
      }
     ],
     "head": {
-     "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
+     "fingerprint": "c6c5472570166be24da2d010bd33478d",
      "kind": "definition",
      "module": "ZigLean.Sep.Triple",
      "name": "Zig.Triple"
@@ -3795,7 +3815,7 @@
      }
     ],
     "head": {
-     "fingerprint": "7f67aa56d2810a37df450da21e4613e6",
+     "fingerprint": "fcfff318dc4a6fbbf46ff2340f1532ed",
      "kind": "definition",
      "module": "ZigLean.Conc.Own",
      "name": "Zig.TTriple"
@@ -4354,6 +4374,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4486,6 +4507,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4661,6 +4683,9 @@
         "closed": "List.toArray"
        },
        {
+        "closed": "List.toArray"
+       },
+       {
         "closed": "OfNat.ofNat"
        },
        {
@@ -4674,6 +4699,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",

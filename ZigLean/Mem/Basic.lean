@@ -65,7 +65,7 @@ inductive Byte where
   /-- The bits set in `d` are defined, with the values of `b`; the others are undefined (`b`'s
   bits there are 0). Only for a mask that is not all, none or the low bits (`.int`, `.undef`,
   `.part`): a bit-pointer store of a field or of `undefined` next to undefined bits
-  (`Byte.ofDefBits`, `ZigLean/Packed.lean`). A read that needs a bit outside `d` throws
+  (`Byte.ofDefBits`, `ZigLean/Mem/Enc.lean`). A read that needs a bit outside `d` throws
   `.unspecified` (`intOfBytes`). -/
   | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
@@ -363,6 +363,27 @@ structure DevState where
 instance : Repr DevState where
   reprPrec d _ := f!"\{ oracle := <oracle>, asmOracle := <oracle>, trace := {repr d.trace} }"
 
+/-! ## `noalias` scopes (`ZigLean/Mem/Noalias.lean`, `docs/illegal-behavior.md`) -/
+
+/-- One access in the log of a `noalias` scope: its bytes, whether it writes, and its root, the
+`noalias` parameter that the pointer of the access is based on (`none`: none of them). -/
+structure NaEntry where
+  block : BlockId
+  off : Nat
+  len : Nat
+  write : Bool
+  root : Option Nat
+  deriving Repr, Inhabited
+
+/-- One running call of a function with `noalias` parameters, on thread `tid`. `seen`: the
+footprint entries before it are in `log` (or before the call); the ones after it are the
+accesses of the instruction that the next `Zig.naMark` follows. -/
+structure NaScope where
+  tid : ThreadId
+  seen : Nat
+  log : Array NaEntry := #[]
+  deriving Repr, Inhabited
+
 /-- Address placement (MM-1, `docs/address-placement.md`): the environment's choice of the
 address of each block, of every kind (global, stack, heap, allocator). `propose b` is the address
 of block `b`; the model takes it if it is valid (`Mem.placeOk`), else the block gets the next
@@ -459,6 +480,9 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The running calls of functions with `noalias` parameters, innermost last
+  (`ZigLean/Mem/Noalias.lean`). Empty in every program without one. -/
+  noalias : Array NaScope := #[]
   /-- The explicit oracle of arbitrary words (`arbitraryWord`, `--allocator-model translated`,
   `docs/allocator-model.md`): query `k` (from 0, in execution order) returns `arbitrary[k]`,
   `0` past the end. `@returnAddress()` and an `undefined` pointer operand read it. Every finite

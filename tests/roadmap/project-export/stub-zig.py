@@ -13,7 +13,7 @@ import sys
 
 args = sys.argv[1:]
 if args == ['version']:
-    print(os.environ.get('STUB_ZIG_VERSION', '0.16.0'))
+    print(os.environ.get('STUB_ZIG_VERSION', '0.16.0'))  # zig-pin: test double
     sys.exit(0)
 if not args or args[0] != 'build-obj':
     sys.exit(2)
@@ -37,10 +37,11 @@ for name, callees in program.items():
         continue
     body = [{'id': i, 'tag': 'call', 'ty': 1, 'callee': {'ty': 0, 'func': c, 'noreturn': False}, 'args': []}
             for i, c in enumerate(callees)]
-    air = {'schema': 11, 'zig_version': os.environ.get('STUB_AIR_VERSION', '0.16.0'), 'name': name,
+    air = {'schema': 11, 'zig_version': os.environ.get('STUB_AIR_VERSION', '0.16.0'), 'name': name,  # zig-pin: test double
            'params': [], 'ret': 1, 'body': body, 'types': types}
     if os.environ.get('STUB_PROFILE'):
         air['schema'] = 12
+        air['noalias'] = []
         air['profile'] = json.loads(os.environ['STUB_PROFILE'])
     (out / f'{name}.json').write_text(json.dumps(air))
 if os.environ.get('STUB_WARN'):

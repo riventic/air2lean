@@ -242,12 +242,6 @@ after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shi
   let hi : Int := if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1
   if lo ≤ v ∧ v ≤ hi then pure (.ofInt m v) else throw .overflow
 
-/-- The length of an operand of a multi-operand `for` loop under `@setRuntimeSafety(false)` (a
-`slice_len` the loop does not read otherwise): it must equal the loop's length `bound`. Unequal
-lengths are illegal behaviour that only Sema's check (`forLenMismatch`) catches: `.illegal`. -/
-@[inline] def forLen (len bound : usize) : Result usize :=
-  if len = bound then pure len else throw .illegal
-
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m
 
@@ -255,25 +249,28 @@ end Arith
 
 /-! ## Slices -/
 
-/-- Read-only slice element. Out of range ⇒ `outOfBounds`. -/
+/-- Read-only slice element (`slice_elem_val` of a pure function's `[]const T`). An index at or
+past the length is illegal behaviour that only Sema's bounds check (`outOfBounds`) catches, so
+the model checks it itself: `.illegal`, as `Zig.checkIndex` in memory (`docs/illegal-behavior.md`
+row 2). -/
 @[inline] def index {α : Type} (a : Array α) (i : usize) : Result α :=
-  if h : i.toNat < a.size then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < a.size then pure a[i.toNat] else throw .illegal
 
 @[inline] def len {α : Type} (a : Array α) : usize := BitVec.ofNat 64 a.size
 
-/-- Array element (`array_elem_val`). Out of range ⇒ `outOfBounds`. -/
+/-- Array element (`array_elem_val`). Out of range: illegal behaviour, `.illegal` (as `index`). -/
 @[inline] def vindex {α : Type} {n : Nat} (a : Vector α n) (i : usize) : Result α :=
-  if h : i.toNat < n then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < n then pure a[i.toNat] else throw .illegal
 
 /-! ## Optionals -/
 
-/-- Unwrap an optional's payload (`optional_payload`). Sema emits this only after an
-`is_non_null` check, so the `none` case is statically unreachable; still total, so it panics
-instead of diverging. -/
+/-- Unwrap an optional's payload (`optional_payload`). Unwrapping null is illegal behaviour
+(docs/illegal-behavior.md row 15): Sema's `is_non_null` check before it is ordinary AIR that
+panics first; without it (`@setRuntimeSafety(false)`) the op's own check gives `.illegal`. -/
 @[inline] def optPayload {α : Type} (a : Option α) : Result α :=
   match a with
   | some v => pure v
-  | none => throw .panic
+  | none => throw .illegal
 
 /-! ## Error unions -/
 
@@ -285,12 +282,13 @@ instead of diverging. -/
 /-- `is_non_err`. -/
 @[inline] def isNonErr {α : Type} (e : Except ErrName α) : Bool := !isErr e
 
-/-- `unwrap_errunion_payload`: Sema always checks the union first (`is_err`/`is_non_err` or a
-`try`), so the `.error` case here is statically impossible. -/
+/-- `unwrap_errunion_payload`. Unwrapping an error is illegal behaviour (row 16): Sema's check
+(`is_err`/`is_non_err` or a `try`) is ordinary AIR before it; the op's own check gives
+`.illegal`. -/
 @[inline] def unwrapPayload {α : Type} (e : Except ErrName α) : Result α :=
   match e with
   | .ok v => pure v
-  | .error _ => throw .panic
+  | .error _ => throw .illegal
 
 /-- `@errorCast` to the error set `names` (a `bitcast` between error sets): an error outside it
 is illegal behaviour that only Sema's check (`error_set_has_value`, which the exporter does not
@@ -298,12 +296,12 @@ support) catches, so the model checks it itself: `.illegal`. -/
 @[inline] def errorIn (names : List ErrName) (e : ErrName) : Result ErrName :=
   if names.contains e then pure e else throw .illegal
 
-/-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
-statically impossible. -/
+/-- `unwrap_errunion_err`: the error of a union that holds one; of a payload, illegal behaviour
+that the op checks itself (`.illegal`), as `unwrapPayload`. -/
 @[inline] def unwrapErr {α : Type} (e : Except ErrName α) : Result ErrName :=
   match e with
   | .error name => pure name
-  | .ok _ => throw .panic
+  | .ok _ => throw .illegal
 
 /-! ## Enums -/
 
