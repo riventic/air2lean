@@ -14,7 +14,8 @@ OUT = ROOT / '.lake/architecture-audit/claims'
 GENERATED = ('AuditClaims.root', 'AuditClaims.spin', 'Asm.divmod')
 SNAPSHOT = HERE / 'exposure-report.json'
 FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'conclusion_dependencies',
-          'opaque_dependencies', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed', 'statement')
+          'opaque_dependencies', 'runtime_modules', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed',
+          'statement')
 # The Shadow contracts redefine Zig.TotalTriple and Zig.TotalTripleWithin; the audit
 # environment imports the registered ones.
 CLASH = "environment already contains 'Zig.TotalTriple"

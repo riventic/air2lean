@@ -89,6 +89,23 @@ class Relation(unittest.TestCase):
         self.assertIsNone(wc.relate(f64, [], 0, 1 << 63, {}))  # +0 and -0 are one ulp apart
         self.assertIsNotNone(wc.relate({**f64, 'ulp': 0}, [], 0, 1 << 63, {}))
 
+    def test_f32_high_bits_are_observed(self):
+        f32 = {'class': 'tolerated', 'format': 'f32', 'ulp': 0}
+        self.assertIsNone(wc.relate(f32, [], 0x3F800000, 0x3F800000, {}))
+        self.assertIn('above bit 31', wc.relate(f32, [], 0x3F800000, 0xDEADBEEF3F800000, {}))
+
+    def test_expect_sees_the_record_version(self):
+        entry = {'class': 'target-specific', 'expect': 'TRAP if zig < 15 else a'}
+        bits = {'native': 64, 'wasm32': 32}
+        self.assertIsNone(wc.relate(entry, [5], 'trap', 'trap', bits, 14))
+        self.assertIsNotNone(wc.relate(entry, [5], 'trap', 'trap', bits, 17))
+
+    def test_mislabelled_record_is_not_compared(self):
+        self.edit('0.16.0', 'x86_64-linux', lambda d: d.__setitem__('zig_version', '0.17.0'))
+        errors, summary = wc.check(self.relation, ROOT, self.records)
+        self.assertTrue(any('records Zig 0.17.0' in e for e in errors))
+        self.assertNotIn('0.16.0 x86_64-linux/wasm32-freestanding', summary)
+
     def test_illegal_cases_are_not_compared(self):
         entry = self.relation['kernels']['f64_to_i64']
         self.assertTrue(wc.illegal(entry, [0x7FF8000000000000], 17))

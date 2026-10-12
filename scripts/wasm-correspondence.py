@@ -13,10 +13,10 @@ words to a `u64` word; an observation is that word or `trap` (a safety panic). T
                    equals `expect` evaluated with that target's `bits` (pointer width), the
                    per-profile model of the effect.
 
-`record` builds and runs one target and writes its observations, bound to the compiler, the
-source bytes and the generated cases. `check` fails closed: an export without a relation entry
-(or an entry without an export), a missing record of the declared matrix, a stale record, an
-unknown class, an unrelated pair, and a claim that cites a theorem about another target's
+`record` builds and runs one target and writes its observations, bound to the Zig version, the
+source bytes and the generated cases (the compiler hash is kept as provenance). `check` fails
+closed: an export without a relation entry (or an entry without an export), a missing,
+mislabelled or stale record, an unknown class, an unrelated pair, and a claim that cites a theorem about another target's
 generated module (a native theorem is never relabeled as a wasm32 theorem) all fail.
 
   scripts/wasm-correspondence.py record --zig ZIG --target native|wasm32   (writes records/)
@@ -149,8 +149,8 @@ def validate(relation: dict, root: Path = ROOT) -> list[str]:
         if WASM not in targets or not set(targets) <= set(relation['targets']):
             errors.append(f'matrix {version}: needs {WASM} and declared targets only')
     for target, facts in relation['targets'].items():
-        if facts.get('pointer_bits') not in (32, 64):
-            errors.append(f'target {target}: pointer_bits must be 32 or 64')
+        if facts.get('pointer_bits') not in (32, 64) or not isinstance(facts.get('model_target'), str):
+            errors.append(f'target {target}: needs pointer_bits 32 or 64 and a model_target')
     return errors
 
 
@@ -325,8 +325,8 @@ def illegal(entry: dict, args: list[int], zig: int) -> bool:
     return 'illegal' in entry and bool(evaluate(entry['illegal'], expect_env(args, 0, zig)))
 
 
-def relate(entry: dict, args: list[int], native, wasm, bits: dict) -> str | None:
-    """None if the pair is related, else the reason."""
+def relate(entry: dict, args: list[int], native, wasm, bits: dict, zig: int = 17) -> str | None:
+    """None if the pair is related, else the reason. `zig` is the records' minor version."""
     cls = entry['class']
     if cls == 'exact':
         return None if native == wasm else f'exact: native {native} != wasm32 {wasm}'
@@ -334,6 +334,9 @@ def relate(entry: dict, args: list[int], native, wasm, bits: dict) -> str | None
         if TRAP in (native, wasm):
             return None if native == wasm else f'tolerated: a trap pairs with {native if wasm == TRAP else wasm}'
         fmt = entry['format']
+        width = FORMATS[fmt][0]
+        if native >> width or wasm >> width:
+            return f'tolerated: a {fmt} result has bits above bit {width - 1} ({native:#x}, {wasm:#x})'
         if is_nan(native, fmt) and is_nan(wasm, fmt):
             return None
         if is_nan(native, fmt) or is_nan(wasm, fmt):
@@ -341,7 +344,7 @@ def relate(entry: dict, args: list[int], native, wasm, bits: dict) -> str | None
         distance = abs(ordered(native, fmt) - ordered(wasm, fmt))
         return None if distance <= entry['ulp'] else f'tolerated: {distance} ulp > {entry["ulp"]} ({native:#x}, {wasm:#x})'
     for side, value in (('native', native), ('wasm32', wasm)):
-        want = evaluate(entry['expect'], expect_env(args, bits[side]))
+        want = evaluate(entry['expect'], expect_env(args, bits[side], zig))
         want = want if want == TRAP else want & MASK64
         if value != want:
             return f'target-specific: {side} (bits {bits[side]}) observed {value}, the profile model gives {want}'
@@ -376,18 +379,21 @@ def theorem_text(text: str, name: str) -> str | None:
     return match.group(1) if match else None
 
 
-def generated_targets(proof: Path, root: Path) -> dict[str, str]:
-    """Namespace -> recorded `arch-os` of each generated module the proof file imports."""
+def generated_targets(proof: Path) -> dict[str, str]:
+    """Namespace -> recorded `arch-os` of each generated module the proof file imports. A module
+    resolves against each ancestor of the proof file (its Lean root, `lean -R`); one without a
+    recorded target triple names no target."""
     found = {}
     for module in re.findall(r'^import (\S+\.Gen)$', proof.read_text(), re.M):
-        path = proof.parent.parent / Path(*module.split('.')).with_suffix('.lean')
-        if not path.is_file():
+        rel = Path(*module.split('.')).with_suffix('.lean')
+        path = next((base / rel for base in proof.parents if (base / rel).is_file()), None)
+        if path is None:
             continue
         text = path.read_text()
         header = PROFILE_RE.search(text)
         namespace = re.search(r'^namespace (\S+)$', text, re.M)
-        if header and namespace:
-            triple = json.loads(header.group(1))['profile']['target_triple']
+        triple = json.loads(header.group(1)).get('profile', {}).get('target_triple') if header else None
+        if namespace and isinstance(triple, str) and triple.count('-') >= 1:
             arch, os_ = triple.split('-')[:2]
             found[namespace.group(1)] = f'{arch}-{os_.split(".")[0]}'
     return found
@@ -409,7 +415,7 @@ def check_claims(relation: dict, root: Path = ROOT) -> list[str]:
         if statement is None:
             errors.append(f'{where}: theorem {claim["theorem"]} not found in {claim["file"]}')
             continue
-        targets = generated_targets(proof, root)
+        targets = generated_targets(proof)
         enclosing = re.findall(r'^namespace (\S+)$', text, re.M)
         cited = set()
         for token in re.findall(r'[A-Za-z_][\w.]*', statement):
@@ -448,6 +454,7 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
                 continue
             if loaded[target]['zig_version'] != version or loaded[target]['target'] != target:
                 errors.append(f'{path}: records Zig {loaded[target]["zig_version"]} on {loaded[target]["target"]}')
+                del loaded[target]
         if WASM not in loaded:
             continue
         for target in sorted(set(loaded) - {WASM}):
@@ -461,7 +468,7 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
                         counts['illegal'] += 1
                         continue
                     reason = relate(entry, args, loaded[target]['results'][name][i],
-                                    loaded[WASM]['results'][name][i], bits)
+                                    loaded[WASM]['results'][name][i], bits, minor(version))
                     if reason:
                         errors.append(f'{version} {target}/{WASM} {name}{tuple(args)}: {reason}')
                     else:
@@ -488,6 +495,9 @@ def main(argv=None) -> int:
         path, data = record(args.zig, args.target, relation)
         if args.verify:
             committed = json.loads(path.read_text()) if path.is_file() else None
+            # The observations, sources and cases must match. The compiler hash is provenance only:
+            # a wasm32 record observed with the macOS and with the Linux build of one Zig release
+            # comes from different binaries.
             same = committed is not None and {k: v for k, v in committed.items() if k != 'compiler_sha256'} == \
                 {k: v for k, v in data.items() if k != 'compiler_sha256'}
             print(f'{path.relative_to(ROOT)}: {"matches" if same else "DIFFERS from"} the fresh observation')
