@@ -197,7 +197,7 @@ def may_run(step, context):
     condition = step.get('if', True)
     if isinstance(condition, bool):
         return condition
-    if re.search(r'\w\s*\(', condition):
+    if re.search(r'\w\s*\(', condition):  # the evaluator's status functions have fixed values
         return True
     try:
         return TM.condition(condition, context)
@@ -211,7 +211,7 @@ def job_definition(job, row):
     job = json.loads(canonical(job))
     if row is not None:
         job['strategy']['matrix']['include'] = [row]
-        context = {'matrix': row, 'runner.os': 'macOS' if str(job.get('runs-on', '')).startswith('macos') else 'Linux'}
+        context = {'matrix': row, 'runner.os': RR.runner_os(job)}
         job['steps'] = [step for step in job.get('steps') or [] if may_run(step, context)]
     return job
 
