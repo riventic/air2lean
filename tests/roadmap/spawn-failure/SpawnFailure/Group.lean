@@ -566,7 +566,8 @@ theorem liftMem_upd' {x : MemM α} {Pa : Assn} {Qa : α → Assn} {h : Heap}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa) (ho : Owned (upd own t h) m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
-      m'.threads = m.threads → m'.groups = m.groups → Q a G m' n) :
+      m'.threads = m.threads → m'.groups = m.groups → Q a G m' n)
+    (hpart : P.Partial := by first | exact .inl rfl | exact .inr rfl | assumption) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   WP.liftMem_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' _ ho' hq hs _ _ =>
     k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads hs.groups
@@ -575,7 +576,8 @@ theorem liftM_upd' {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn} {h : He
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa)
     (ho : Owned (upd own t h) m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
-      m'.threads = m.threads → m'.groups = m.groups → Q (a, s) G m' n) :
+      m'.threads = m.threads → m'.groups = m.groups → Q (a, s) G m' n)
+    (hpart : P.Partial := by first | exact .inl rfl | exact .inr rfl | assumption) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
   exact WP.bind (liftMem_upd' ht ho hc htl hp fun a m' h' ho' hq hc' ht' hg' =>
