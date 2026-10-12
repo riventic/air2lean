@@ -11,8 +11,8 @@ generated-style `MM` body with `get`/`modify`/`callM` and a branch decided by a 
 store through `p.elem` with the neighbours framed, and a side condition left to the caller. The
 rejected attempts show that a missing points-to, a dropped frame, a wrong value, a changed
 neighbour or a rule about another command is not accepted. The programs are written by hand in
-the shape the translator generates. (Whole-array ownership `arr p xs` with a symbolic index
-waits for the library's array rules, `Full/Arr`.)
+the shape the translator generates. (Whole-array ownership `arr p xs` with a symbolic index is
+in `tests/roadmap/proof-tools/`, on the library's array rules `Full/Arr`.)
 -/
 
 namespace SepAuto.Steps

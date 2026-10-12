@@ -404,9 +404,12 @@ theorem slice_field {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
 
 /-! ## Memory and pointer rules -/
 
+-- Rules registered later are tried first: `ptrProject_elem_of` before `ptrProject_of`, which
+-- also matches `(·.elem size i)` by unfolding and would leave the item pointer as `p.add k`
+-- (no longer the `p.elem size i` of the array rules, `Full/Arr`).
 attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
-  FTotalTriple.checkAlign_of FTotalTriple.ptrEqAddr_of FTotalTriple.ptrProject_elem_of
-  FTotalTriple.ptrProject_of
+  FTotalTriple.checkAlign_of FTotalTriple.ptrEqAddr_of FTotalTriple.ptrProject_of
+  FTotalTriple.ptrProject_elem_of
 
 /-- The size of written bytes, for the arithmetic solver (a region written after its
 allocation, or twice). -/
