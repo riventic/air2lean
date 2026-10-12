@@ -27,8 +27,9 @@ info: fsym: no rule for the command
 with the precondition
   emp
 ---
-error: vc_gen: no `@[fsym]` rule or `@[vc_contract]` theorem for the command
+error: vc_gen: the walk stopped at the command
   load (BitVec 32) 4 p
+(no `@[fsym]` rule or `@[vc_contract]` theorem executes it, or the step budget ran out)
 -/
 #guard_msgs in
 example (p : Ptr) : FTotalTriple emp (loadStore p) (fun _ => emp) := by

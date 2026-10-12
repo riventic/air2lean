@@ -667,17 +667,17 @@ def consumes (c : Name) : MetaM Bool := do
 /-- Classify the goals that the walk of `g₀` left. -/
 def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
     TacticM (Array Obligation) := do
-  let mut rules : NameSet := (Zig.Full.Auto.fsymRuleExt.getState (← getEnv)).foldl
-    (·.insert ·) {}
-  for thm in ← labelled `vc_contract do rules := rules.insert thm
+  let contracts : NameSet := (← labelled `vc_contract).foldl (·.insert ·) {}
+  let rules : NameSet := (Zig.Full.Auto.fsymRuleExt.getState (← getEnv)).foldl
+    (·.insert ·) contracts
   let resid := left.foldl (·.insert ·) ({} : Std.HashSet MVarId)
   let pf ← Core.betaReduce (← instantiateMVars (.mvar g₀))
   let ((), (own, _)) ← (owners resid rules pf {}).run ({}, {})
   let mut out := #[]
   for m₀ in left do
+    let o := own.getD m₀ {}
     let ty₀ ← m₀.withContext do Core.betaReduce (← instantiateMVars (← m₀.getType))
     let m ← m₀.replaceTargetDefEq ty₀
-    let own := if m == m₀ then own else own.insert m (own.getD m₀ {})
     -- a triple the walk stopped at: not through `whnfR`, which would unfold the projection `FLogic.T`
     let ty := ty₀.consumeMData
     if ty.isAppOfArity ``Zig.Full.FLogic.T 5 then
@@ -688,19 +688,21 @@ def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
         out := out.push { goal := h, kind := .safety, label := "panic/throw is unreachable" }
         continue
       let x := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
-      throwError "vc_gen: no `@[fsym]` rule or `@[vc_contract]` theorem for the command{indentExpr x}"
+      throwError "vc_gen: the walk stopped at the command{indentExpr x}\n(no `@[fsym]` rule or \
+        `@[vc_contract]` theorem executes it, or the step budget ran out)"
     if ty.isAppOfArity ``Zig.Full.EUpd 2 then
       out := out.push { goal := m, kind := .memory, label := "heap postcondition" }
       continue
-    let o := own.getD m {}
     -- the walk splits on a side condition `φ` it cannot decide and walks both cases; in the
     -- case `hc : ¬φ` the goal is `φ`, which is equivalent to `φ` without `hc` (`(¬φ → φ) ↔ φ`)
     let m ← m.withContext do
-      let some d := (← getLCtx).findDecl? fun d =>
-          if !d.isImplementationDetail && d.type.consumeMData.isAppOfArity ``Not 1 &&
-            d.type.consumeMData.appArg! == ty then some d else none
-        | pure m
-      try m.clear d.fvarId catch _ => pure m
+      let mut found := none
+      for d in ← getLCtx do
+        if d.isImplementationDetail then continue
+        let t := (← instantiateMVars d.type).consumeMData
+        if t.isAppOfArity ``Not 1 && t.appArg! == ty then found := some d.fvarId; break
+      let some d := found | pure m
+      try m.clear d catch _ => pure m
     if o.fact then
       let k ← match o.ret with | some v => valueKind v | none => pure .result
       let label := if k == .error then "error return" else "functional result"
@@ -708,7 +710,7 @@ def memObligations (g₀ : MVarId) (left : List MVarId) (mems : NameSet) :
     else if let some r := o.rule then
       let (kind, label) ←
         if r == ``result_step then pure (.safety, "precondition of a `Result` call")
-        else if (← labelled `vc_contract).contains r then
+        else if contracts.contains r then
           pure (if mems.contains r then .memory else .safety, s!"precondition of `{r}`")
         else pure (if ← consumes r then .memory else .safety, s!"side condition of `{r}`")
       out := out.push { goal := m, kind := kind, label := label }

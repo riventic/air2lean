@@ -33,8 +33,8 @@ current heap. So `vc_gen` on a full-state triple is a mode of `fsym`, not a para
    A side condition `φ` that the walk split on (`hc : ¬φ ⊢ φ`) is reported without `hc`, which
    is equivalent.
 
-A command that no rule executes is refused (`vc_gen: no @[fsym] rule or @[vc_contract] theorem
-for the command …`); nothing is assumed. Every closing step is a kernel-checked proof, so the
+A command that no rule executes (or a walk that runs out of its step budget) is refused
+(`vc_gen: the walk stopped at the command …`); nothing is assumed. Every closing step is a kernel-checked proof, so the
 goals left are the complete open obligations: closing them proves the contract. The walk
 discharges what its arithmetic and planner prove (overflow from a hypothesis, ownership, frames,
 the heap postcondition); a wrong contract leaves a goal that is false. Memory VCs are total with
