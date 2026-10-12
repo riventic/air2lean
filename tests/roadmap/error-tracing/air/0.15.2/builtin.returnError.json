@@ -1,0 +1,603 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": true,
+  "export_stage": "analyzed-air"
+ },
+ "name": "builtin.returnError",
+ "module": "std",
+ "src": {
+  "file": "builtin.zig",
+  "module": "std",
+  "decl_line": 1105
+ },
+ "params": [],
+ "ret": 0,
+ "err_trace": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "save_err_return_trace_index",
+   "ty": 2,
+   "index": 0,
+   "ptr_ty": 3
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 0,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "err_return_trace",
+   "ty": 1
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 0,
+   "line": 4,
+   "column": 35
+  },
+  {
+   "id": 4,
+   "tag": "optional_payload",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "alloc",
+   "ty": 5
+  },
+  {
+   "id": 6,
+   "tag": "store",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    },
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "bitcast",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_var_val",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    }
+   ],
+   "name": "st"
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 0,
+   "line": 5,
+   "column": 9
+  },
+  {
+   "id": 10,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 11,
+     "tag": "dbg_stmt",
+     "ty": 0,
+     "line": 5,
+     "column": 11
+    },
+    {
+     "id": 12,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 4
+      }
+     ]
+    },
+    {
+     "id": 13,
+     "tag": "load",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 12
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "tag": "dbg_stmt",
+     "ty": 0,
+     "line": 5,
+     "column": 22
+    },
+    {
+     "id": 15,
+     "tag": "struct_field_ptr_index_1",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 4
+      }
+     ]
+    },
+    {
+     "id": 16,
+     "tag": "load",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 15
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "tag": "dbg_stmt",
+     "ty": 0,
+     "line": 5,
+     "column": 44
+    },
+    {
+     "id": 18,
+     "tag": "slice_len",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 16
+      }
+     ]
+    },
+    {
+     "id": 19,
+     "tag": "bitcast",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 13
+      }
+     ]
+    },
+    {
+     "id": 20,
+     "tag": "bitcast",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 18
+      }
+     ]
+    },
+    {
+     "id": 21,
+     "tag": "cmp_lt",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 19
+      },
+      {
+       "inst": 20
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "tag": "cond_br",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 21
+      }
+     ],
+     "then": [
+      {
+       "id": 22,
+       "tag": "dbg_stmt",
+       "ty": 0,
+       "line": 6,
+       "column": 11
+      },
+      {
+       "id": 23,
+       "tag": "load",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 24,
+       "tag": "struct_field_ptr_index_1",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 23
+        }
+       ]
+      },
+      {
+       "id": 25,
+       "tag": "dbg_stmt",
+       "ty": 0,
+       "line": 6,
+       "column": 36
+      },
+      {
+       "id": 26,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 4
+        }
+       ]
+      },
+      {
+       "id": 27,
+       "tag": "load",
+       "ty": 2,
+       "args": [
+        {
+         "inst": 26
+        }
+       ]
+      },
+      {
+       "id": 28,
+       "tag": "dbg_stmt",
+       "ty": 0,
+       "line": 6,
+       "column": 33
+      },
+      {
+       "id": 29,
+       "tag": "load",
+       "ty": 8,
+       "args": [
+        {
+         "inst": 24
+        }
+       ]
+      },
+      {
+       "id": 30,
+       "tag": "slice_elem_ptr",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 29
+        },
+        {
+         "inst": 27
+        }
+       ]
+      },
+      {
+       "id": 31,
+       "tag": "ret_addr",
+       "ty": 2
+      },
+      {
+       "id": 32,
+       "tag": "store",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 30
+        },
+        {
+         "inst": 31
+        }
+       ]
+      },
+      {
+       "id": 33,
+       "tag": "br",
+       "ty": 11,
+       "target": 10,
+       "args": [
+        {
+         "ty": 0,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 34,
+       "tag": "br",
+       "ty": 11,
+       "target": 10,
+       "args": [
+        {
+         "ty": 0,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "tag": "dbg_stmt",
+   "ty": 0,
+   "line": 7,
+   "column": 7
+  },
+  {
+   "id": 37,
+   "tag": "load",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 37
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 38
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "dbg_stmt",
+   "ty": 0,
+   "line": 7,
+   "column": 14
+  },
+  {
+   "id": 41,
+   "tag": "add",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 39
+    },
+    {
+     "ty": 2,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "tag": "store",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 38
+    },
+    {
+     "inst": 41
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "tag": "ret",
+   "ty": 11,
+   "args": [
+    {
+     "ty": 0,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "optional",
+   "child": 4,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "builtin.StackTrace",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "index",
+     "ty": 2,
+     "offset": 0
+    },
+    {
+     "name": "instruction_addresses",
+     "ty": 8,
+     "offset": 8
+    }
+   ],
+   "abi_size": 24,
+   "abi_align": 8
+  }
+ ]
+}
