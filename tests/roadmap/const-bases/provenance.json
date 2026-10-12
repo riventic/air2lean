@@ -27,7 +27,7 @@
   },
   "command": "ZIG_AIR_JSON_DIR=air-fresh/<version> ZIG_AIR_JSON_FILTER=const_bases. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl -mcpu=baseline const_bases.zig",
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "eb698912de78be2afd6412fbb0e5d5c58a95987f6d31a295bc148f7f0129d4e4",
+  "exporter_sha256": "29d6b1d5a1c36d1ea2019dba9911122352d7e1947adf4824e1e8d0bad0ca8612",
   "note": "All three exports come from compilers built by zig-patch/build.sh from this tree's exporter. patched_compiler_sha256 hashes the compiler binary (bin/zig-unlocked behind the AIR-only lock wrapper, which is the same file for every version).",
   "patched_compiler_sha256": {
     "0.14.1": "60508a3d000934d3e2ca18730229fcae9052843d27d0dac234b0d803a808f9e6",

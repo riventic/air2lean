@@ -17,7 +17,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PROVENANCE = HERE / "provenance.json"
-VERSIONS = ("0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
 # Directory -> error_set_bits of the `--error-limit` it was exported with (export.sh).
 WIDTHS = {2: 2, 8: 8, 10: 10, 16: 16, 17: 17, 32: 32}
 LIMITS = {2: 3, 8: 255, 10: 1000, 16: None, 17: 100000, 32: 4294967295}
@@ -59,7 +59,7 @@ def tool_hashes():
     root = Path(os.environ.get("AIR2LEAN_ZIG_AIR", "/opt/dev/air2lean-build"))
     patched = {v: sha(root / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
     home = Path.home() / ".cache/air2lean"
-    default = {"0.16.0": home / "host-0.16.0/zig", "0.15.2": home / "host-0.15.2/zig",
+    default = {"0.17.0": home / "host-0.17.0/zig", "0.16.0": home / "host-0.16.0/zig", "0.15.2": home / "host-0.15.2/zig",
                "0.14.1": Path("/opt/dev/air2lean-build/0.14.1/zig-aarch64-macos-0.14.1/zig")}
     given = os.environ.get("AIR2LEAN_NATIVE_ZIG")
     paths = dict(item.split("=", 1) for item in given.split(",")) if given else default

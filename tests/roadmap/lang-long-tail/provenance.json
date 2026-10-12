@@ -1,6 +1,6 @@
 {
   "air": {
-    "command": "ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<stem>. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig (export.sh)",
+    "command": "ZIG_AIR_JSON_DIR=air/<stem>/<version> ZIG_AIR_JSON_FILTER=<module>. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <stem>.zig, or build-exe of <root_src> with <args> (<stem>.export) (export.sh)",
     "cpu": "baseline",
     "error_tracing": false,
     "optimization": "ReleaseSafe",
@@ -8,6 +8,46 @@
     "target": "x86_64-linux"
   },
   "air_sha256": {
+    "error_ints/0.14.1/error_ints.back.json": "ccc2f4d01edb6004f4c603f1a0c762b78b5c10a80c761849202c12cb71502cf4",
+    "error_ints/0.14.1/error_ints.code.json": "33050108209ce6ebaeffa19dd9ed39ada23a2e5c0031e15a9daa8ec84e1ed40f",
+    "error_ints/0.14.1/error_ints.nameOf.json": "6b4a9c788e942025af337d3a8c62bf940912a05c9f2e0e248e3cd8a56311b92c",
+    "error_ints/0.14.1/error_ints.roundTrip.json": "db77c2ab037405b4dce67a11bc53831c1bc3b0012f318d5496855a67b6fac942",
+    "error_ints/0.14.1/error_ints.viaMemory.json": "818cf3e3c5a5bb351a2a516b4ab09c3d0e170b8ca9572b85ee30357bee471738",
+    "error_ints/0.15.2/error_ints.back.json": "a55831cad2eb3b9069677539cbededbdf47bb0ae86fbbf971ec478ed15c3dfa3",
+    "error_ints/0.15.2/error_ints.code.json": "153e2cf99943f34c16f81f6e7e639585f352cc78fef03a37310e076253da82ab",
+    "error_ints/0.15.2/error_ints.nameOf.json": "d2071d8d80204a4adabc69b8bd4f8ef44877e771e4d9cefd8972233cac4649c3",
+    "error_ints/0.15.2/error_ints.roundTrip.json": "46c6f955680a55ce994f60b99d738cc04d5ed3d574166d744602a13b41fd5f45",
+    "error_ints/0.15.2/error_ints.viaMemory.json": "608ac5916ef9e96c57fd6143a683a603afecf11b62ae0de1bb5f822a1530c031",
+    "error_ints/0.16.0/error_ints.back.json": "292c0c6ae75619fded8ac00482366e27d3ce350c0ff66e196c45c4db179459a4",
+    "error_ints/0.16.0/error_ints.code.json": "3a82be8fe89a8d31acc7ad3893f1654aa5d565ecc8752580fd348e69fe504c4e",
+    "error_ints/0.16.0/error_ints.nameOf.json": "0345e2e78bae989fb3e08df88b2b12de06e8a2943210fbb00cf43765f42198ab",
+    "error_ints/0.16.0/error_ints.roundTrip.json": "55215a81802059cc97a3812498f88f6b400bdb1d74d3eb97ca4cbcdc2b3c29dd",
+    "error_ints/0.16.0/error_ints.viaMemory.json": "87e5f245f1da491abcd652619aaae2ddf82e83058d82fbcd82deb3dd88d8c294",
+    "error_ints/0.17.0/error_ints.back.json": "f381625ebf9ef0802977a6b1e2417a11e8624a866bad1167ae03ba233960381e",
+    "error_ints/0.17.0/error_ints.code.json": "83ca99fc6dc7a33899176e86511a439230b84249de3689e6034ad4c4f40aad64",
+    "error_ints/0.17.0/error_ints.nameOf.json": "f9547fbe2f7d4397945facc84ce6ff3284dc90bbf468e42c0f48bbcdc2098749",
+    "error_ints/0.17.0/error_ints.roundTrip.json": "b773f05999922198010393d27e7ccce7759bedfaa32c40226771d34c4029deb3",
+    "error_ints/0.17.0/error_ints.viaMemory.json": "72c3396fa26736698db2b0453437af15efa0b8cafb26fdca72e0f1ed6eabfe97",
+    "error_ints_w8/0.14.1/error_ints.back.json": "57b1a4bd6ae8abcaaa52b7546aa55aa6ecbeea905ff3c3d119bb8f2a3eb87eee",
+    "error_ints_w8/0.14.1/error_ints.code.json": "8511b9e418551b7aae99bd4315984c87c93c143e8b189ca9d0216ca08976878b",
+    "error_ints_w8/0.14.1/error_ints.nameOf.json": "508ad900eb1e67e51afb718e0b1eeee58c9835f371f9cd2271b00ebd738475a3",
+    "error_ints_w8/0.14.1/error_ints.roundTrip.json": "540282c503b0e48a7e44ab583b1403cd31ac05d098e51dbcd07727bbb298574c",
+    "error_ints_w8/0.14.1/error_ints.viaMemory.json": "a4e79513520f724a3f29defe6ffbc9ee143529718cc089afa6555ff7f4d3ab59",
+    "error_ints_w8/0.15.2/error_ints.back.json": "53e622b962792c0b183f1f007e263586002bfe29ea470cc09700a930fc1308f1",
+    "error_ints_w8/0.15.2/error_ints.code.json": "d4b6c727574cf11566123026be281e2a1943ed612d259fe22c32e15158593b66",
+    "error_ints_w8/0.15.2/error_ints.nameOf.json": "8999abd0499591eeb3cec77355e96778efeeba1e78d9f1efe3e8904435aca57b",
+    "error_ints_w8/0.15.2/error_ints.roundTrip.json": "3f6a140e5bc6da8c91118ed2447acd4c7e0184be0b6739cdb3ebab981b3e1ac0",
+    "error_ints_w8/0.15.2/error_ints.viaMemory.json": "6f7f7222fcb796c55723cc5d3a3052c861cdb4862913f750f293656269eddc4e",
+    "error_ints_w8/0.16.0/error_ints.back.json": "b169d2ca062833d6cdda10771f5abf2ae0eaa2dacce8925a86966eb5c748e1eb",
+    "error_ints_w8/0.16.0/error_ints.code.json": "eee0aadee76e3ace03b1309409610488fcde89803298566f863c0187f9b24d1d",
+    "error_ints_w8/0.16.0/error_ints.nameOf.json": "e9508429061a04ae197bde75d47a1bea1e6165c756ba4175621565a30554a2cd",
+    "error_ints_w8/0.16.0/error_ints.roundTrip.json": "fa2d3c6db3617b7587b0604ab1e7bdcd7519283da5f956376d6e84974cc0a704",
+    "error_ints_w8/0.16.0/error_ints.viaMemory.json": "bae4b2b1bc12ef06952d3a68232cecad0345b737279f5bdd1b895d50eb54278a",
+    "error_ints_w8/0.17.0/error_ints.back.json": "af156246cdd2237bb66208f910afe4e3af3a9c963e74df5eb6d681852a1a957f",
+    "error_ints_w8/0.17.0/error_ints.code.json": "9fa6960a3d6d563a19dc5ed8eb578b90cb7251dc983ab753e93daf557873d827",
+    "error_ints_w8/0.17.0/error_ints.nameOf.json": "f02041e80dab6b7776f5a9151124456e6921d9d77d32114b9c5d804d4e44d0c9",
+    "error_ints_w8/0.17.0/error_ints.roundTrip.json": "efefc35ffc17c8244c3235ca718ff6242eeef41374b257ee3834d8ebfc23b8ce",
+    "error_ints_w8/0.17.0/error_ints.viaMemory.json": "cb6c445f10e6974c9a1a314829130fc75031bea7bd7861bc4b4e344e2ee3ae28",
     "error_params/0.14.1/error_params.fail__anon_210.json": "a7fd7e8e06acf4b158d147719dc1473db29a2217af037d9c71b111fa916ee6f1",
     "error_params/0.14.1/error_params.fail__anon_221.json": "2deae8a057c9e178ec43c9e92ab4ab2d990a5888927343b65981d349236f80a2",
     "error_params/0.14.1/error_params.forward.json": "43c534f1e954a16df79ca88d83e3e459682e1c74c10166082ace764164751c7e",
@@ -36,6 +76,68 @@
     "error_params/0.17.0/error_params.skipFirst.json": "f65632996c8fcd9437b67fe854088d79dd97f296dd135118b20e8167aaf402e3",
     "error_params/0.17.0/error_params.unwrapEmpty.json": "7f9794c79317e847d983cc1b2e04e5f07ba59e149d9895864aa859a726739946",
     "error_params/0.17.0/error_params.viaFail.json": "ec8137d20b94a250c34933bea460b3b77753932c2f204207867ad12d41d30bd3",
+    "extern_storage/0.14.1/extern_storage.counter.json": "741203f913a29cc473a9aa81a622dbd43e2b5cad98f318007d79e9632207e82c",
+    "extern_storage/0.14.1/extern_storage.nameLen.json": "233cb8b90367bced6dd6783874d8acb9ece5fff94419f8267e97d88f83e5b4bb",
+    "extern_storage/0.14.1/extern_storage.pushLocal.json": "3e84d7027aa4885a4eebb0f729c43a76b5118a39b1505b2ac75c5f3d0df0f8e2",
+    "extern_storage/0.14.1/extern_storage.slotValue.json": "7f6a7485c4d0f1cd1edd3684f99d7b04ddbbfc4ebf8e3ba2a879a047bfdf59bf",
+    "extern_storage/0.14.1/extern_storage.sumList.json": "ade6e7d67dc67999abd205d8e45f977be29f1021a0eb4a14f8e5a01c6e938057",
+    "extern_storage/0.15.2/extern_storage.counter.json": "6a932b65b02bc3c33c73652dfc4bc8dd0eef340f0cfcb544d8b368ab5d7b8ec8",
+    "extern_storage/0.15.2/extern_storage.nameLen.json": "1cfe42883e8d23a16e96e9a0a1a565eec0ebf8a53f22b91e77ad50c7e78dc828",
+    "extern_storage/0.15.2/extern_storage.pushLocal.json": "f154b19bed0898954e4f4dcad182299a79fb1e72032208fb928acd784462611d",
+    "extern_storage/0.15.2/extern_storage.slotValue.json": "0b3e531f725c245967cf312f91d5591e05c34dc48b097136a6d564d8fd87d97e",
+    "extern_storage/0.15.2/extern_storage.sumList.json": "f53dd22b6bdbf26984c81089b95ffc413b6ca4964eb39af5fe6d1edf1745d2f4",
+    "extern_storage/0.16.0/extern_storage.counter.json": "b759b1f910dab0b5ad936683d84ea20956e5c4369fb69c3fdbab37b4764980e2",
+    "extern_storage/0.16.0/extern_storage.nameLen.json": "85049aecbeacd9ef90d0b5acf28e7819f1d2e0b8b9a45def955dfe56f5083ee9",
+    "extern_storage/0.16.0/extern_storage.pushLocal.json": "f47a91683e635edd6c7c80c308d61933ac9f0797cbefd5dd538f74281dc200a9",
+    "extern_storage/0.16.0/extern_storage.slotValue.json": "d4cef26faa554626ac7715e4e8ee6c7d2507f6a7619c5f07e7dd490d89e4ab8a",
+    "extern_storage/0.16.0/extern_storage.sumList.json": "7c70d56ed0a276346ba765e1d2461bddd235741db3fc6bd644a58d5e39b494b3",
+    "extern_storage/0.17.0/extern_storage.counter.json": "b4acb20e480cffb836035c7ec1c46ee714a2d99f732933a556eaf7c5db67f403",
+    "extern_storage/0.17.0/extern_storage.nameLen.json": "c56d6935f1290a31d4e7474aa77dc6299949539eee70536549df0152343e3e88",
+    "extern_storage/0.17.0/extern_storage.pushLocal.json": "9a700b4bf45d8dffb68134766a3ec820c5ea0dfe13ff8da24f371b789805bec8",
+    "extern_storage/0.17.0/extern_storage.slotValue.json": "c4bb2d873cc4c57f9f358bbb6a900af2f39c0bae33e5aa5162432cc793aea8bc",
+    "extern_storage/0.17.0/extern_storage.sumList.json": "a7af488226fb2bf9ec526241425cdcd58d8fe2daccce6d81a36579bc54004259",
+    "float_lanes/0.14.1/float_lanes.middle.json": "7854fdee8d243bdf7269fe59e51e38bff0ba78c0b022505fb0819e7cb5607399",
+    "float_lanes/0.14.1/float_lanes.swap.json": "5d4bc7457c26b3695bf9052225e5516297ba6e3ae25dc7ced84c483b69e62845",
+    "float_lanes/0.15.2/float_lanes.middle.json": "0b9ca44efc0ef2713a96a982226f12bd037dc1b4cbcd5e12d6c209c3899bbd03",
+    "float_lanes/0.15.2/float_lanes.swap.json": "7c64fd061ae5bf1f20a5fceeb4b6650035fd415625b1d31e8cdb01511179074e",
+    "float_lanes/0.16.0/float_lanes.middle.json": "1e36d1d7fc42aa28bc7167fdb9926fe703f52755728a671d680a47d0ad211766",
+    "float_lanes/0.16.0/float_lanes.swap.json": "85a86bae531df2c261460208ea47276519d3b6345e9f7eac5acf16c8cb80caed",
+    "float_lanes/0.17.0/float_lanes.middle.json": "6ad56182a2dc43b9b40a1fdcdebe2cbca031c7741e31894ced9ad6f50f7686d8",
+    "float_lanes/0.17.0/float_lanes.swap.json": "67a974cc4f55bd309affd60a23d91c9dcbd0615f0d8ff6b4c787d56025f7c7f5",
+    "runtime_lanes/0.14.1/runtime_lanes.fillSum.json": "4098f078d6a97bd08277d690dbf2e46fab6a74dd6608adb94874b1089deb3b14",
+    "runtime_lanes/0.14.1/runtime_lanes.setBool.json": "497955a8bf1797d58cee13ae19e44c554414aad59446c5f2f60884c5cf081c07",
+    "runtime_lanes/0.14.1/runtime_lanes.setF80.json": "3a87f6257dd938e31e6d138ed23f6798bf13e4e48bea87fecfcdab3d98dbe5a3",
+    "runtime_lanes/0.14.1/runtime_lanes.setU24.json": "290ee7b9547674d74e3b649b06522ba171e57d3b1187bc86db3ef023b98740d9",
+    "runtime_lanes/0.14.1/runtime_lanes.setU9.json": "bcebbf8fc560cbccfc09182c909fe5f8482b0e7b66f99156341f2174ca765686",
+    "runtime_lanes/0.15.2/runtime_lanes.fillSum.json": "cfe6987a6a32e22c8981be97476c6b7430ffaeaf3edcb592a2266bc39bacf8e5",
+    "runtime_lanes/0.15.2/runtime_lanes.setBool.json": "53e9710821a8dea53eb494280b4cf4bd4710efb7123302e1bbf4f91152889ebb",
+    "runtime_lanes/0.15.2/runtime_lanes.setF80.json": "386780afb7b8e4c1591086c674073c35b6c59efdabfbd958a6c6115177fb2c74",
+    "runtime_lanes/0.15.2/runtime_lanes.setU24.json": "c85bdcccbd7660c4d3983ecfa21cd706e857d68b36e2f7957e779a633c612e3a",
+    "runtime_lanes/0.15.2/runtime_lanes.setU9.json": "f6b8313df2c841fb1b03631c871f2201f800a2357c57a4fa51bc54f26e074911",
+    "tls_pointers/0.14.1/tls_pointers.currentValue.json": "99407a14cd395a9047ad3a280b06fd830f3a2f3a9ed24c88ce7ff575ea5555ae",
+    "tls_pointers/0.14.1/tls_pointers.leakSlot.json": "1ad13cd1e5cea9cd8a5167d0a8055ce42a04243d9dbdea1a970c581b8d50b2e1",
+    "tls_pointers/0.14.1/tls_pointers.leakedSlot.json": "6523ae16d3502f2bbc0d36c2dc834823a506bfcf3558c28909f5f2c3d87194a0",
+    "tls_pointers/0.14.1/tls_pointers.mainOnly.json": "d8a6a0a44b54174e76f3495dde6bb3e770f32bb0a5a3f88c9f2b9192332314a5",
+    "tls_pointers/0.14.1/tls_pointers.perThread.json": "27347489c0206d0cd0dbc420e8967a9b0af1eb8ff09689f24cc6128c83656a0a",
+    "tls_pointers/0.14.1/tls_pointers.worker.json": "50a2300da86b85b7b74216df552ff81c8ae2b3447ce674a1be01d210cd31d9cc",
+    "tls_pointers/0.15.2/tls_pointers.currentValue.json": "9f15284ae3838c0e97f70f245f09a49580d7b313f07e52152c0ae3951e850614",
+    "tls_pointers/0.15.2/tls_pointers.leakSlot.json": "5cb664f5b9221dcee9824adf731757f6998b561a5a3e11ce8dc86165916d4276",
+    "tls_pointers/0.15.2/tls_pointers.leakedSlot.json": "8286d3ebcfe77b36c294dfa41d8a12eb7e571fa646acaaf9a9caf0af12207b13",
+    "tls_pointers/0.15.2/tls_pointers.mainOnly.json": "c5df81794be2f26481b4caa434d497b43ec92fbdd2193d1bc58124cf93b89ee4",
+    "tls_pointers/0.15.2/tls_pointers.perThread.json": "8a15e72b04bd7c2a5e0f5f55fb388272abc2cc837695039f66671a92b6af5a24",
+    "tls_pointers/0.15.2/tls_pointers.worker.json": "874de6d1e531fceb776bf3e4d576e07acd4eb9bded1d4b940775c0047eb34531",
+    "tls_pointers/0.16.0/tls_pointers.currentValue.json": "8a778549ec49408134dd9e254a0db5b73c40f5661f3a7e6283437d764b045ea4",
+    "tls_pointers/0.16.0/tls_pointers.leakSlot.json": "0b52a53ae8f78d64774b34cfc18a17be9448939b5c887b846bfcc0185c81f954",
+    "tls_pointers/0.16.0/tls_pointers.leakedSlot.json": "6de6dcb5698e8cd2a5891127c80aca955d22738a981ae2ee9d8685be41363afc",
+    "tls_pointers/0.16.0/tls_pointers.mainOnly.json": "0cd7936d3d29eb53c550ac939621203ad29e72fb142a847a7a842cc2aa0b0ec8",
+    "tls_pointers/0.16.0/tls_pointers.perThread.json": "66dcd7ffea352cc85f45177949e2c2275d8244d4b4eb715672b2aad1b51a6539",
+    "tls_pointers/0.16.0/tls_pointers.worker.json": "69fe627d1475b2a45c16c5daff3be89f4205ee72ad9acd570f3c7457956c2ebe",
+    "tls_pointers/0.17.0/tls_pointers.currentValue.json": "0db330a332f479a9b9a408cbeb7ecdc5fc22ce08c648009f7619c67503d660f3",
+    "tls_pointers/0.17.0/tls_pointers.leakSlot.json": "1d09cf00705c2a764c2a77ea75f0538c0d65992c16db273a58b7fd3fc1dc105e",
+    "tls_pointers/0.17.0/tls_pointers.leakedSlot.json": "5ca58f9f20f43384ca034b089548921e305f218663f8d46feaa9ab707f048d0c",
+    "tls_pointers/0.17.0/tls_pointers.mainOnly.json": "305695c3d75f5613f067c51256d131bf924a1d217aa1628402f14eebbc45991d",
+    "tls_pointers/0.17.0/tls_pointers.perThread.json": "a002e600505e9ee5ceda7d738376ea0174c7d4e9861bc9cbafb62fda41db48a4",
+    "tls_pointers/0.17.0/tls_pointers.worker.json": "87ca49760caa0517a474a94804f2847fdd8e2218f11e2c70393ccbb79bfc3860",
     "vector_casts/0.14.1/mem.eqlBytes.json": "fbb6f507530a701f729f10429ea3ec0f7fde22c3d114f9c49795b1c9b9ec3fdd",
     "vector_casts/0.14.1/mem.eql__anon_539.json": "e8e24783e9a02372296f72da6ea48cb98efc82813e7abdec3eaf610782f7e7ed",
     "vector_casts/0.14.1/mem.sliceAsBytes__anon_605.json": "ed32f03eb7f5483f0847cb32b99a507b35f6204c265989c26232f20a7c8874bb",
@@ -105,27 +207,127 @@
     "vector_casts/0.17.0/vector_casts.u24LaneToItem.json": "232b16b5ba84ed0fbb5d5684bfde1f7388985f23d618b3afe853afa2ac2fb485",
     "vector_casts/0.17.0/vector_casts.wordToLanes.json": "cfe5934d811d7070f5f121b1abc21750ab276de3ae549077d3a37d67faf2a28d"
   },
+  "error_table_sha256": {
+    "error_ints/0.14.1": "52f33404eed6187f129035c938ecedc8621677a8cc67cac373eb52a01484412d",
+    "error_ints/0.15.2": "c7bab71e693998532448e31e3920758f28f4ba4c168873b36913daf6bfcd0ddf",
+    "error_ints/0.16.0": "0ddc8df55c6c3f684e51d8e89cbad85bd4e4a28076dcd52a46c5529ea74fc4cf",
+    "error_ints/0.17.0": "fcc03ba936b41d03229a7f7a90c81225144063811502a703b9dc9463a1c76fc3",
+    "error_ints_w8/0.14.1": "4b912ea1090580c3d43e1fc25663cd135f6429d80ce26b7b5f4c7da604d9de07",
+    "error_ints_w8/0.15.2": "b27f43e28d5221b5bb85c041f2030ba21cd827662dd25ba398d461a2f5d0719c",
+    "error_ints_w8/0.16.0": "9964220d2052f39718288a16853e4db815ce7ab9c29820ff9a397f1700776cd7",
+    "error_ints_w8/0.17.0": "238ca4781be6fdcdc8959bcecc3bbab4be7597e92bc327c7e91b5831e4a5211c"
+  },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "eb698912de78be2afd6412fbb0e5d5c58a95987f6d31a295bc148f7f0129d4e4",
+  "exporter_sha256": "29d6b1d5a1c36d1ea2019dba9911122352d7e1947adf4824e1e8d0bad0ca8612",
   "patched_compiler_sha256": {
-    "0.14.1": "74eff89ccbca8710e3365e2f6247cb64f83b54cfbcc04f98d1830998346000f5",
-    "0.15.2": "25a78489c2b0efe8421dd15229e8d9bbaf33845b8dc3f7eb58d749311c11fba3",
-    "0.16.0": "a012d86e7aaf410b746c66e6e48f0ac7f9dbec55372769a9ca03bdf837671cf3",
-    "0.17.0": "06bb59bed3e04c8e2b9b71599db50f4a587356fd1619521d646a5fe0ce71b4b2"
+    "0.14.1": "a332c55bf0875d913ad9367bac784d6b850ceab146649aa4563a7fe71371ce41",
+    "0.15.2": "f3058a78464c4914ac98e20482a5e38bd7a2f6a65d8f7aefcd5a082bc29bdda3",
+    "0.16.0": "c6f09f3350907161acce91565599a28845994c53f80683c6f509000c457a1a24",
+    "0.17.0": "d9f17f05d7f830b586d5b8748a5183ef3e0649f2eeb5f9cbaedc5acf396a2487"
   },
   "qualification": "Compiler exports of every function of each fixture source with patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter, x86_64-linux ReleaseSafe. They are the translator's evidence for the rows named in `sources`; other shapes are not covered.",
   "sources": {
+    "error_ints": {
+      "export_sha256": "f44b981515121fbba8eabee02ce798a78ac7a3a36a885794f9d9bce6d0670d5b",
+      "filter_sha256": null,
+      "row": "L10",
+      "source": "tests/roadmap/lang-long-tail/error_ints.zig",
+      "source_sha256": "db4f8b072e23f7189edf6216131c7dc67c9eb9d5a32c74ee42eb962bfc798417",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
+    "error_ints_w8": {
+      "export_sha256": "318857859f4f21e295f45a2b62a37732b8f850d83adb93145e0f6f9175a3869b",
+      "filter_sha256": null,
+      "row": "L10",
+      "source": "tests/roadmap/lang-long-tail/error_ints.zig",
+      "source_sha256": "db4f8b072e23f7189edf6216131c7dc67c9eb9d5a32c74ee42eb962bfc798417",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
     "error_params": {
+      "export_sha256": null,
       "filter_sha256": null,
       "row": "L10",
       "source": "tests/roadmap/lang-long-tail/error_params.zig",
-      "source_sha256": "eb0589f0c0d6a4a48aac6c452116ac3f3e5618a8c3d1a1354cff5b9cc565d69a"
+      "source_sha256": "eb0589f0c0d6a4a48aac6c452116ac3f3e5618a8c3d1a1354cff5b9cc565d69a",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
+    "extern_storage": {
+      "export_sha256": "b46de0ca7b969aba7d59ef09c0c4c6999afda44ad07205a2309c1f5bd183fc98",
+      "filter_sha256": null,
+      "row": "L12",
+      "source": "tests/roadmap/lang-long-tail/extern_storage.zig",
+      "source_sha256": "c5da4528e0ce93b6b1ad539a8647552a86266e4411a391cd1098779e932657ad",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
+    "float_lanes": {
+      "export_sha256": null,
+      "filter_sha256": null,
+      "row": "L09",
+      "source": "tests/roadmap/lang-long-tail/float_lanes.zig",
+      "source_sha256": "904e3d6b377b0c70ea403005e215bb5bf2a139d757b9cc04a0fd327d8880fd21",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
+    "runtime_lanes": {
+      "export_sha256": "0a676fdec7f52ee9b0714146967e4f011aa6dc9189d9fc82bfd879fa78c9c8fa",
+      "filter_sha256": null,
+      "row": "L09",
+      "source": "tests/roadmap/lang-long-tail/runtime_lanes.zig",
+      "source_sha256": "3c7e0daafd1a1aee36a45ee18840cad7e3349e294f5a2ffc0753f05d434e99af",
+      "versions": [
+        "0.15.2",
+        "0.14.1"
+      ]
+    },
+    "tls_pointers": {
+      "export_sha256": null,
+      "filter_sha256": null,
+      "row": "L12",
+      "source": "tests/roadmap/lang-long-tail/tls_pointers.zig",
+      "source_sha256": "3a6a1124107a6be1be77f7e548b568252ff3963d5b974f6bd2c55fb1390e9150",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
     },
     "vector_casts": {
+      "export_sha256": null,
       "filter_sha256": "f292fb142e4567fcdd5e7e0b60cf1c4df7984639158e42ba980f2642908a6caa",
       "row": "L09",
       "source": "tests/roadmap/lang-long-tail/vector_casts.zig",
-      "source_sha256": "682efa3fb0482f5b18a226e74103f0c948a565030d7d7c08a4cc3022bb6b30b0"
+      "source_sha256": "682efa3fb0482f5b18a226e74103f0c948a565030d7d7c08a4cc3022bb6b30b0",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ]
     }
   }
 }
