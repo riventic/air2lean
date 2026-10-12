@@ -1065,14 +1065,14 @@ jobs:
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
       - name: Generic allocator specification
-        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/alloc-spec"
           lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
 
       - name: Full-state separation logic
-        if: ${{ matrix.part == 'lean' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
@@ -1302,7 +1302,7 @@ jobs:
       # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
       # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
       - name: Translated allocators
-        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
@@ -1314,7 +1314,7 @@ jobs:
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked, `free`,
       # `resize`, `remap` proved against FAllocSpec for the stock and patched modules (ArenaSpec*.lean).
       - name: Translated ArenaAllocator
-        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
@@ -1324,7 +1324,7 @@ jobs:
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
-        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto
@@ -1644,7 +1644,7 @@ jobs:
       # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
       # separation-logic rules and kernel-checked examples, and the runtime regressions.
       - name: OS page-mapping model rules and runtime regressions
-        if: ${{ matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.Mmap
