@@ -13,8 +13,11 @@ import ZigLean.Sep.Full.AutoConc
   variable are substituted, user definitions of facts are unfolded). Atoms are what is left: the
   library's assertions (`up`, `known`, `bshare`, …), `@[fsym_atom]`s and opaque terms.
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code, binds,
-  trivial results). A call of a generated function (or of a pure generated helper under
-  `StateT.lift`) is inlined; a projection of a vtable is reduced.
+  trivial results) at the head only (`lazyMethods`: a continuation is normalized once it is the
+  head). A call of a generated function (or of a pure generated helper under `StateT.lift`) is
+  inlined; a projection of a vtable is reduced.
+* **Facts of atoms** (`@[fsym_facts]`): when a step needs more facts, the block, offset and
+  alignment of the pointers that the precondition owns memory at are added (`addFacts`).
 * **Commands** are executed by the first `@[fsym]` rule (or rule given to `fsym [...]`) whose
   command unifies. A rule about a part of the precondition is framed (the part is found by
   unification, the rest is the frame, the reordering is proved by `ac_rfl`); a rule about any
@@ -1239,6 +1242,20 @@ def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context) : Sim
         if e.isAppOfArity ``ite 5 && (ptrBeq? (e.getArg! 1)).isSome then
           let (r, _) ← Simp.main e fold (methods := Simp.mkDefaultMethodsCore #[])
           if r.expr != e then return .visit r
+      if e.isAppOfArity ``ite 5 then
+        -- only the condition: the walk takes a branch, normalized at the next step
+        match ← m.pre e with
+        | .continue none => pure ()
+        | s => return s
+        let rc ← Simp.simp (e.getArg! 1)
+        let r0 ← if rc.expr == e.getArg! 1 then pure ({ expr := e } : Simp.Result) else
+          try
+            let h₁ ← rc.getProof
+            let (t, f) := (e.getArg! 3, e.getArg! 4)
+            let pf ← mkAppM ``ite_congr #[h₁, ← mkConstFun rc.expr t, ← mkConstFun (mkNot rc.expr) f]
+            pure { expr := (← inferType pf).appArg!, proof? := some pf }
+          catch _ => return ← m.pre e
+        return ← finish r0
       unless e.isAppOfArity ``Bind.bind 6 do return ← m.pre e
       match ← m.pre e with
       | .continue none => pure ()
@@ -1247,11 +1264,19 @@ def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context) : Sim
       let rx ← Simp.simp args[4]!
       let e' := if rx.expr == args[4]! then e else mkAppN e.getAppFn (args.set! 4 rx.expr)
       let r0 ← Simp.mkCongrFun (← Simp.mkCongrArg (mkAppN e.getAppFn args[:4]) rx) args[5]!
-      match ← m.post e' with
-      | .done r => return .done (← r0.mkEqTrans r)
-      | .visit r | .continue (some r) =>
-        if r.expr == e' then return .done r0 else return .visit (← r0.mkEqTrans r)
-      | .continue none => return .done r0 }
+      finish r0 }
+where
+  /-- `fun _ : p => rfl : ∀ _ : p, x = x`. -/
+  mkConstFun (p x : Expr) : MetaM Expr := do
+    withLocalDeclD `h p fun h => do mkLambdaFVars #[h] (← mkEqRefl x)
+  /-- The node `r₀.expr` rewritten at its root (`post`), else done. -/
+  finish (r₀ : Simp.Result) : Simp.SimpM Simp.Step := do
+    let m := Simp.mkDefaultMethodsCore procs
+    match ← m.post r₀.expr with
+    | .done r => return .done (← r₀.mkEqTrans r)
+    | .visit r | .continue (some r) =>
+      if r.expr == r₀.expr then return .done r₀ else return .visit (← r₀.mkEqTrans r)
+    | .continue none => return .done r₀
 
 /-- Simplify the head of the program (`lazyMethods`) with `fsym_norm` and the caller's lemmas. -/
 def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
@@ -2541,14 +2566,21 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let gp ← destruct gp sp.fvarId
     let gn ← destruct gn sn.fvarId
     return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
-  -- cases on a variable
+  -- cases on a variable; a term (a field of the locals) is generalized first, with its equation
+  -- (`substCtor` then replaces it in the facts)
   let discr? : Option Expr ←
     if c.isAppOfArity ``Option.elim 5 then pure (some c.getAppArgs[2]!)
     else match ← matchMatcherApp? c with
-      | some m => pure (m.discrs.find? (·.isFVar))
+      | some m => pure (m.discrs.find? (·.isFVar) <|> m.discrs[0]?)
       | none => pure none
   if let some d := discr? then
     if d.isFVar then return ← casesWalk g d user extra fuel
+    if !d.hasLooseBVars && !(← isCaseCtorApp d) then
+      if let .const tn _ := (← whnfD (← inferType d)).getAppFn then
+        if let some (.inductInfo ii) := (← getEnv).find? tn then
+          if ii.ctors.length ≥ 2 && !ii.isRec then
+            let (xs, g') ← g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]
+            return ← casesWalk g' (.fvar xs[0]!) user extra fuel
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
