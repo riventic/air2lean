@@ -91,7 +91,7 @@ allocation succeeds under `m`'s policy and the address space has room for it (`M
 |---|---|
 | `doubleFree`: `freeAll(a, n); a.destroy(n);` | `doubleFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `doubleFree_unsafe`: `¬SafeNoLeak (doubleFree a v)` |
 | `useAfterFree`: `freeAll(a, n); return sum(n);` | `useAfterFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `useAfterFree_unsafe`: `¬SafeNoLeak (useAfterFree a v)` |
-| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` with `Room (m.withPlacement σ pm)` |
+| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` with `Room (m.withPlacement σ pm)`; the premise is needed: `doubleFree_noRoom` (a placement without room: `OutOfMemory`, no `.illegal`) |
 | `forgetFree`: `_ = try push(a, null, v);` | `forgetFree_leaks`: `m.Seq → Room m → ∃ m', run m = pure (.ok (), m') ∧ m'.heap ≠ m.heap`; `forgetFree_unsafe`: `¬SafeNoLeak (forgetFree a v)` |
 
 ## How each property maps to the model

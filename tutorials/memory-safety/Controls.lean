@@ -192,7 +192,8 @@ theorem forgetFree_leaks (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) 
 
 /-- Address reuse (M05) does not hide either bug: with any placement and provenance mode, the
 stale pointer still throws `.illegal`. The placement decides where the node goes, so the room is
-asked of the placed memory (O-H: a block that would end above the address space has no outcome). -/
+asked of the placed memory: without room in its address space (`Mem.roomFor`, O-H) `rawAlloc`
+returns `null` and the client stops at `OutOfMemory` before the bug. -/
 theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq)
     (σ : Placement) (pm : ProvenanceMode) (hc : Room (m.withPlacement σ pm)) :
     (doubleFree a v).run (m.withPlacement σ pm) = throw .illegal :=
@@ -202,6 +203,17 @@ theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq
     (σ : Placement) (pm : ProvenanceMode) (hc : Room (m.withPlacement σ pm)) :
     (useAfterFree a v).run (m.withPlacement σ pm) = throw .illegal :=
   useAfterFree_illegal a v (hs.withPlacement σ pm) hc
+
+/-- A placement without address space: no block fits below its `addrLimit`. -/
+def σNone : Placement := { propose := fun _ => none, addrLimit := 0 }
+
+/-- **The room premise of the reuse theorems is needed** (it is not the `.stackOverflow` of a
+stack block, STK-01): under `σNone` `rawAlloc` has no room, so `push` fails with `OutOfMemory`
+and `doubleFree` returns that error without throwing. -/
+theorem doubleFree_noRoom :
+    ((doubleFree default 7).run (({} : Mem).withPlacement σNone .strict)).run matches
+      some (.ok (.error "OutOfMemory", _)) := by
+  decide +kernel
 
 /-- The default memory (`{}`: one thread, no allocation fails) has room for a node. -/
 theorem default_seq : ({} : Mem).Seq :=
