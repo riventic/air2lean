@@ -115,6 +115,8 @@ elif kind == 'zig':
         pathlib.Path(os.environ['ZIG_AIR_JSON_DIR'], 'demo.foo.json').write_text('{}')
 elif kind == 'air2lean':
     translate(args[args.index('-o') + 1])
+elif kind == 'lake' and args == ['build', '-q', '--log-level=error', 'air2lean']:
+    pass  # check.sh builds the translator once before its examples.
 elif kind == 'lake' and args[:1] == ['build']:
     if mode == 'build-hang':
         hang()
@@ -348,6 +350,41 @@ class Escape(Stubbed):
         self.assertEqual(code, safe.DESCENDANTS, output)
         self.assert_stopped()
 
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'needs a child subreaper (Linux)')
+    def test_escaped_scrubbed_orphan_between_samples_is_adopted_and_stopped(self):
+        # The descendant forks through a short-lived parent, calls setsid and drops the environment
+        # marker, and no sample runs after the fork (interval 1h): only the subreaper link reveals it.
+        code, output = self.finish(self.run_stub('setsid-double-scrubbed-orphan', '--sample-interval', '3600'))
+        self.assertEqual(code, safe.DESCENDANTS, output)
+        self.assert_stopped()
+
+    @unittest.skipIf(sys.platform.startswith('linux'), 'host can contain escapees')
+    def test_required_containment_refuses_hosts_without_a_subreaper(self):
+        code, output = self.finish(self.run_stub('ok', '--require-containment'))
+        self.assertEqual(code, safe.NO_CONTAINMENT, output)
+        self.assertFalse(self.ready.exists())
+        self.assertFalse(self.recorded())
+
+    def test_adopted_children_are_owned_without_parent_or_marker(self):
+        class Leader:
+            pid, returncode = 77777, None
+        t = 'Thu Oct  8 12:00:00 2026'
+        table = {77777: (1, t, 'leader'), 20: (os.getpid(), t, 'orphan'), 21: (20, t, 'its child'),
+                 22: (os.getpid() + 1, t, 'unrelated')}
+        original = safe._processes
+        try:
+            safe._processes = lambda: table
+            self.assertEqual(sorted(safe.Escapees(Leader, 'tok', adopting=False).scan()), [])
+            adopting = safe.Escapees(Leader, 'tok', adopting=True)
+            adopting.owned.clear()
+            table_waitpid, os.waitpid = os.waitpid, lambda pid, flags: (0, 0)
+            try:
+                self.assertEqual(sorted(adopting.scan()), [20, 21])
+            finally:
+                os.waitpid = table_waitpid
+        finally:
+            safe._processes = original
+
     def test_marker_and_parent_links_in_a_process_table(self):
         class Leader:
             pid, returncode = 10, None
@@ -462,7 +499,7 @@ class Check(Stubbed):
         super().setUp()
         self.repo = self.base / 'repo'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('check.sh', 'workflow-common.sh', 'safe-output.py'):
+        for name in ('check.sh', 'workflow-common.sh', 'safe-output.py', 'par.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
         (self.repo / 'examples/demo').mkdir(parents=True)
         (self.repo / 'examples/demo/demo.zig').write_text('export fn foo() u32 { return 1; }\n')

@@ -142,7 +142,7 @@ them reversed, and the generated `reverse` turns them around.
 
 The theorems of `Main.lean` hold in the model under the premises of
 [docs/premises.md](../../docs/premises.md). The per-theorem list is in
-[docs/premise-index.md](../../docs/premise-index.md#tutorialsmemory-safetymainlean)
+[docs/premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md#tutorialsmemory-safetymainlean)
 (`python3 scripts/premises.py explain buildThenFree_memory_safe`):
 
 * [ALC-01](../../docs/premises.md#alc-01): one modelled allocator. Fresh `.heap` blocks;
@@ -164,10 +164,6 @@ The theorems of `Main.lean` hold in the model under the premises of
   `partial_fixpoint`s, and the specs here are total. Each run provably returns.
 * [PRF-01](../../docs/premises.md#prf-01): the committed `Gen.lean` uses the legacy 64-bit
   little-endian layout (a `Node` is 16 bytes).
-* [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
-  [ORD-02](../../docs/premises.md#ord-02): every load and store checks for a data race against
-  the thread and clock state (MM-14); in the sequential memory the theorem starts from, no
-  other thread exists, so the check never fires.
 * [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): the Lean kernel, the Zig exporter and translator, and
   the backend and native execution are trusted.

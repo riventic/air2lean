@@ -3,11 +3,19 @@ op128 07f2143e5b85427d0c95664b54b3489810ebe459c9ddee0bb0baef8306cbc386 1 @min/@m
 op128 472ab3d1aa4673565d93efebfd9f4123f6835f33e76691a4a4e7ff65eb49135b 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op128 86d95fb85a8bc9518ec5222f56c5be090580d689e7c2fc046ea5e489ca6e32c7 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op128 9e55499e2e61786200372cf225dfd6d066cc9142d7ca59dc430df974029fb5b9 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op128 29abba537395e9b252fc1dd7493836f46e0007e6e11163a7ab4ced375d3c6c4f 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op128 a1aebac87b91b8bbf076b91336656769fe3414c76785eeac8a2777beb99bb753 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op128 c58da894000bcd60b52d52f798aa72a30205a410043e04224da3b84f057c835c 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op128 d728f3c3ada70947c71f792754ec9e545c27083c41ec2cdefcb0725ef5ae4b82 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op16 094e322ad9b1037feb24ffc5a9640865a27c736a9a12ea94a58a43a532fcb59d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op16 4bf74f93cc9b1cbb792656fa83d103209d9ec0a4bc6eb76d30e41a000522fb5d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op16 795f808ba2c29984ee1cc09af5b094178e4ca55df2c474ceb41b64f20f571164 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op16 901421aad6d6294acde34b56129faccb7a40f8a4e51c91d169fe81911dc4038d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op16 efb87122c719f776f53c2a6c285a126525aeef92a2612eced9669feea5be3d51 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 4e3559aeb4686d62d10786eaf9d921b734f54c187833aecedb003ba9b828f1a7 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op16 5f5ab91afdd02f37f668d6a56c1b9d705af8e83e23342282d605628aaf2fe206 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op16 7aafdf62299da3fd582db49b6aa52e2732050f1b455940e48fe60261ceae082b 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op16 f9f1aafe22e724a50992776ade84a9547bf5c7ef68954f564de86e2bdbe0f3f0 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op32 310cfea49a275d70563d5dff5ab9ac3c83dc007565b74ef4b513dddcf28c9d50 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op32 86f4251b4ecb577111592b89055683de5598802162465e66b9e0c9797672a0d6 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op32 98989ca03a20a3a37b01e43a984c0bd4925f90238434e576293f631d5b09dd3d 3 @min/@max of opposite-sign zeros: the sign of the result is open
@@ -401,6 +409,10 @@ op80 fcf3df8833f47840d449188dbea30aebf8d5bac59145350edb12cf815a53677c 1 f80 inva
 op80 fd5d41ded420e40b464bb3299c592757497d0fa11e1e8971008ace404d8c4375 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 fdf3d3f4550526d2f56c2edfcb827cf6073670f236bbded8fd0c334c40a2c815 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 fe950dc69cba27167847dbcf2ab689acd02ef04077ffb69d976b613fff29b2b6 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
+op80 031a122d94178eb5f2a3b37b505dddac1e39f2883de89ae36ce04b7874bad1a0 1 @min/@max of opposite-sign zeros: the sign of the result is open
+op80 094fb6042ed48a7194f6a3b256abd9ff456d404827f58847d7cee60e68988a8b 1 @min/@max of opposite-sign zeros: the sign of the result is open
+op80 c3d9bd3485c77916047cc121bbfa05133ed36beeffe38bfe2d434a21ea3f99c8 1 @min/@max of opposite-sign zeros: the sign of the result is open
+op80 fd4c3853e3f6ba0e64c66e6f91704a9f342411637409436b91cc7d61634c1544 1 @min/@max of opposite-sign zeros: the sign of the result is open
 # Inexact @divExact quotients that are not NaN: illegal behaviour that ReleaseSafe does not check
 # (docs/illegal-behavior.md row 11); a NaN quotient stays the safety panic.
 divExact64 000455ada26420ca3dd8d21f72f873b03cef839059fa55cca00bea6c7e26078b 1 inexact float @divExact: illegal behaviour that ReleaseSafe does not check

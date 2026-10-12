@@ -23,6 +23,9 @@ def run(*args):
     return code, out.getvalue() + err.getvalue()
 
 
+# Every step after the reuse decision carries this guard (docs/ci.md, scripts/ci-reuse.py).
+GUARD = '        if: ${{ !env.AIR2LEAN_REUSED }}\n'
+
 class Scratch(unittest.TestCase):
     """Each test edits a private copy of exactly the committed inputs."""
 
@@ -76,8 +79,12 @@ class CommittedMatrix(Scratch):
             '0.15.2/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.14.1/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1',
-            '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1'})
+            '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1',
+            '0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1',
+            '0.15.2/aarch64-linux/aarch64-linux/abi64-le-v1',
+            '0.14.1/aarch64-linux/aarch64-linux/abi64-le-v1'})
         self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['job'], 'macos')
+        self.assertEqual(paths['0.14.1/aarch64-linux/aarch64-linux/abi64-le-v1']['job'], 'aarch64-linux')
         self.assertEqual({row['status'] for row in paths.values()}, {'backed'})
         self.assertEqual([row["gaps"] for row in paths.values()], [[]] * len(paths))
         self.assertEqual(report['input_only_profiles'], ['legacy-abi64-le'])
@@ -136,11 +143,19 @@ class Evidence(Scratch):
 
     def test_new_declared_host_without_a_job_fails(self):
         def change(data):
-            version(data, '0.16.0')['hosts'].append('aarch64-linux')
-            data['profiles'][0]['target_triples'].append('aarch64-linux-<abi>')
+            version(data, '0.17.0')['hosts'].append('aarch64-linux')
         self.edit_json('compatibility.json', change)
-        self.check_fails('0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1: declared supported',
-                         'aarch64-linux is listed as not declared')
+        self.check_fails('0.17.0/aarch64-linux/aarch64-linux/abi64-le-v1: declared supported')
+
+    def test_declared_target_listed_as_not_declared_fails(self):
+        self.edit_json(TM['MAP'], lambda d: d['not_declared'].append(
+            {'target': 'aarch64-linux', 'depends_on': ['T04'], 'reason': 'stale'}))
+        self.check_fails('aarch64-linux is listed as not declared')
+
+    def test_aarch64_linux_moved_off_its_runner_unbacks_its_paths(self):
+        self.edit_text(TM['WORKFLOW'], 'aarch64-linux:\n    runs-on: ubuntu-24.04-arm',
+                       'aarch64-linux:\n    runs-on: ubuntu-24.04')
+        self.check_fails('0.14.1/aarch64-linux/aarch64-linux/abi64-le-v1: job')
 
     def test_entry_for_an_undeclared_path_is_stale(self):
         def change(data):
@@ -149,6 +164,9 @@ class Evidence(Scratch):
         self.check_fails('0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1 is not a path')
 
     def test_restricted_job_without_diff_is_not_native_execution(self):
+        # The 0.14.1 row is not `full`: without its own AIR2LEAN_DIFF clause check.sh skips the diff.
+        self.edit_text('.github/workflows/ci.yml', "matrix.full && '1' || matrix.zig == '0.14.1' && '1' || '0'",
+                       "matrix.full && '1' || '0'")
         def change(data):
             entry = self.entry(data, '0.14.1', 'x86_64-linux')
             entry['evidence']['native_execution'] = ['Golden AIR, translate, build, differential test']
@@ -186,9 +204,9 @@ class Evidence(Scratch):
         self.check_fails('bound to Zig 0.16.0, not 0.15.2')
 
     def test_step_bound_to_another_version_fails(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n        env:\n'
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}\n',
-                       '      - name: macOS proofs\n        env:\n'
+                       '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: "0.17.0"\n')
         self.check_fails('bound to Zig 0.17.0, not 0.16.0', 'bound to Zig 0.17.0, not 0.15.2')
 
@@ -200,8 +218,8 @@ class Evidence(Scratch):
         job = workflow[start:end]
         rows = job[job.index('    strategy:\n'):job.index('    steps:\n')]
         job = job.replace(rows, '').replace('${{ matrix.zig }}', '0.16.0').replace(
-            '      - name: macOS proofs\n        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
-            '      - name: macOS proofs\n        env:\n          OTHER: 0.16.0\n')
+            '      - name: macOS proofs\n' + GUARD + '        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
+            '      - name: macOS proofs\n' + GUARD + '        env:\n          OTHER: 0.16.0\n')
         (self.root/TM['WORKFLOW']).write_text(workflow[:start] + job + workflow[end:])
 
         def change(data):
@@ -222,8 +240,8 @@ class Evidence(Scratch):
         self.check_fails("'macOS ABI target probe (0.16.0)': not found in the job")
 
     def test_unknown_condition_context_fails_closed(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n',
-                       "      - name: macOS proofs\n        if: steps.x.outputs.y == 'true'\n")
+        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD,
+                       "      - name: macOS proofs\n        if: ${{ !env.AIR2LEAN_REUSED && steps.x.outputs.y == 'true' }}\n")
         self.check_fails("unsupported term 'steps.x.outputs.y'")
 
     def test_ambiguous_matrix_selector_fails(self):
@@ -304,7 +322,7 @@ class AbiProfiles(Scratch):
         self.assertEqual(code, 0, output)
         rows = {row['profile']: row for row in json.loads(output)['abi_profiles']}
         self.assertEqual(set(rows), {f'{version}/{triple}/ReleaseSafe'
-                                     for version in ('0.16.0', '0.15.2', '0.14.1')
+                                     for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1')
                                      for triple in ('aarch64-linux-gnu', 'aarch64-macos-none')})
         self.assertEqual(rows['0.16.0/aarch64-linux-gnu/ReleaseSafe']['probe_job'], 'aarch64-linux')
 

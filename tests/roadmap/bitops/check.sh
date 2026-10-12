@@ -35,10 +35,13 @@ python3 -B scripts/theorem_universe.py gate "$work/GeneratedBitset.lean" --root 
 lake env lean tests/roadmap/bitops/Runtime.lean
 lake env lean tests/roadmap/bitops/Bitset.lean
 lake env lean --run tests/roadmap/bitops/Cases.lean "$work/generated"
-for name in clz ctz popcount clzVector ctzVector popcountVector shiftUnsigned shiftSigned shiftNarrow shiftVector shiftSignedVector invalidShiftVector loopCapture clzWide ctzWide popcountWide shiftWide wideVector; do
+cases='clz ctz popcount clzVector ctzVector popcountVector shiftUnsigned shiftSigned shiftNarrow shiftVector shiftSignedVector invalidShiftVector loopCapture clzWide ctzWide popcountWide shiftWide wideVector'
+for name in $cases; do
   [ -f "$work/generated/$name.lean" ] || { echo "missing generated bitops case: $name" >&2; exit 1; }
-  lake env lean -R "$work/generated" --run "$work/generated/$name.lean"
 done
+# Independent cases and mutants run in parallel (scripts/par.py, AIR2LEAN_JOBS).
+# shellcheck disable=SC2086  # space-separated list
+python3 -B scripts/par.py --mem-mib 2048 -- lake env lean -R "$work/generated" --run "$work/generated/{}.lean" ::: $cases
 cat "$work/Gen.lean" tests/roadmap/bitops/DiffMain.lean.inc > "$work/Diff.lean"
 "$zig_stock" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/native" \
   --dep bitops -Mroot=tests/roadmap/bitops/native.zig -Mbitops=tests/roadmap/bitops/bitops.zig
@@ -48,11 +51,12 @@ lake env lean -R "$work" --run "$work/Diff.lean" > "$work/lean.txt"
 cmp "$work/native.txt" "$work/lean.txt"
 python3 tests/roadmap/bitops/mutations.py "$work/mutants"
 lake env lean -R "$work/mutants" "$work/mutants/control.lean"
-for name in clz_is_ctz ctz_is_clz population_is_zero signed_shift_is_unsigned overflow_flag_inverted oversized_shift_allowed reverse_shift_operands_swapped count_bound_operands_swapped; do
-  lean_status=0
-  lake env lean -R "$work/mutants" "$work/mutants/$name.lean" > "$work/mutants/$name.log" 2>&1 || lean_status=$?
-  python3 tests/roadmap/bitops/classify_mutant.py "$lean_status" "$work/mutants/$name.log"
-done
+# shellcheck disable=SC2016  # expanded by the job's shell
+python3 -B scripts/par.py --mem-mib 2048 -- bash -c 'lean_status=0
+lake env lean -R "$1" "$1/$2.lean" > "$1/$2.log" 2>&1 || lean_status=$?
+python3 -B tests/roadmap/bitops/classify_mutant.py "$lean_status" "$1/$2.log"' mutant "$work/mutants" {} ::: \
+  clz_is_ctz ctz_is_clz population_is_zero signed_shift_is_unsigned overflow_flag_inverted oversized_shift_allowed \
+  reverse_shift_operands_swapped count_bound_operands_swapped
 python3 tests/roadmap/bitops/manifest.py "$work" "$AIR2LEAN_ZIG_AIR" "$zig_stock"
 if [ -n "${AIR2LEAN_BITOPS_OUT_DIR:-}" ]; then
   mkdir -p "$AIR2LEAN_BITOPS_OUT_DIR"

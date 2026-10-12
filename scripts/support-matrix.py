@@ -131,7 +131,8 @@ def default_selection(root, version, arch='x86_64'):
 def ci_matrix(root):
     """The `include` rows of the CI test matrix (a narrow parser: flat scalar keys only)."""
     text = read(root, '.github/workflows/ci.yml')
-    m = re.search(r'^ +matrix:\n +include:\n(.*?)^ +steps:', text, re.M | re.S)
+    start = text.find('\n  test:\n')  # the test job's matrix, not an earlier job's
+    m = re.search(r'^ +matrix:\n +include:\n(.*?)^ +steps:', text[max(start, 0):], re.M | re.S)
     if not m: raise Stale('.github/workflows/ci.yml: matrix include list not found')
     rows = []
     for line in m.group(1).splitlines():
@@ -206,7 +207,7 @@ def version_rows(root):
         if full:
             ci = 'full job (pipeline, diff test, proofs)'
         elif restricted:
-            ci = 'restricted job (translation and proofs; no diff harness)'
+            ci = 'restricted job (pipeline, diff test, proofs on the listed examples)'
         else:
             ci = 'none'
         if shards: ci += f'; {len(shards)} mutation shards'

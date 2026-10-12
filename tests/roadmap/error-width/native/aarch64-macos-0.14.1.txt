@@ -1,0 +1,1166 @@
+meta zig 0.14.1
+meta hidden 12
+config lim1 limit 1 total 1 skipped
+config lim1-over limit 1 total 2 skipped
+config lim2 limit 2 total 2 skipped
+config lim2-over limit 2 total 3 skipped
+config lim3 limit 3 total 3 skipped
+config lim4 limit 4 total 4 skipped
+config lim7 limit 7 total 7 skipped
+config lim8 limit 8 total 8 skipped
+config lim255 limit 255 total 255 compile ok
+enc size 1 1
+enc defined 1
+enc anyerror 1 1 8
+enc optional 1 1
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 255
+eu void 0 1 1 1 0 -
+eu u8 1 1 2 1 1 0
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 4 1 3 0
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 255
+bound above 256 panic
+bound max 255 ok
+bound over 256 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+name 5 Utf8OverlongEncoding
+name 6 Utf8EncodesSurrogateHalf
+name 7 Utf8CodepointTooLarge
+name 8 Utf8InvalidStartByte
+name 9 TruncatedInput
+name 10 Utf8CannotEncodeSurrogateHalf
+name 11 CodepointTooLarge
+name 12 BufferTooSmall
+name 13 Bad
+name 14 Other
+name 15 E3
+name 16 E4
+name 17 E5
+name 18 E6
+name 19 E7
+name 20 E8
+name 21 E9
+name 22 E10
+name 23 E11
+name 24 E12
+name 25 E13
+name 26 E14
+name 27 E15
+name 28 E16
+name 29 E17
+name 30 E18
+name 31 E19
+name 32 E20
+name 33 E21
+name 34 E22
+name 35 E23
+name 36 E24
+name 37 E25
+name 38 E26
+name 39 E27
+name 40 E28
+name 41 E29
+name 42 E30
+name 43 E31
+name 44 E32
+name 45 E33
+name 46 E34
+name 47 E35
+name 48 E36
+name 49 E37
+name 50 E38
+name 51 E39
+name 52 E40
+name 53 E41
+name 54 E42
+name 55 E43
+name 56 E44
+name 57 E45
+name 58 E46
+name 59 E47
+name 60 E48
+name 61 E49
+name 62 E50
+name 63 E51
+name 64 E52
+name 65 E53
+name 66 E54
+name 67 E55
+name 68 E56
+name 69 E57
+name 70 E58
+name 71 E59
+name 72 E60
+name 73 E61
+name 74 E62
+name 75 E63
+name 76 E64
+name 77 E65
+name 78 E66
+name 79 E67
+name 80 E68
+name 81 E69
+name 82 E70
+name 83 E71
+name 84 E72
+name 85 E73
+name 86 E74
+name 87 E75
+name 88 E76
+name 89 E77
+name 90 E78
+name 91 E79
+name 92 E80
+name 93 E81
+name 94 E82
+name 95 E83
+name 96 E84
+name 97 E85
+name 98 E86
+name 99 E87
+name 100 E88
+name 101 E89
+name 102 E90
+name 103 E91
+name 104 E92
+name 105 E93
+name 106 E94
+name 107 E95
+name 108 E96
+name 109 E97
+name 110 E98
+name 111 E99
+name 112 E100
+name 113 E101
+name 114 E102
+name 115 E103
+name 116 E104
+name 117 E105
+name 118 E106
+name 119 E107
+name 120 E108
+name 121 E109
+name 122 E110
+name 123 E111
+name 124 E112
+name 125 E113
+name 126 E114
+name 127 E115
+names from 128 unread
+config lim255-over limit 255 total 256 compile fail
+config lim256 limit 256 total 256 compile ok
+enc size 2 2
+enc defined 2
+enc anyerror 2 2 9
+enc optional 2 2
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 256
+eu void 0 1 2 2 0 -
+eu u8 1 1 4 2 0 2
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 6 2 0 2
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 256
+bound above 257 panic
+bound max 511 panic
+bound over 512 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+name 5 Utf8OverlongEncoding
+name 6 Utf8EncodesSurrogateHalf
+name 7 Utf8CodepointTooLarge
+name 8 Utf8InvalidStartByte
+name 9 TruncatedInput
+name 10 Utf8CannotEncodeSurrogateHalf
+name 11 CodepointTooLarge
+name 12 BufferTooSmall
+name 13 Bad
+name 14 Other
+name 15 E3
+name 16 E4
+name 17 E5
+name 18 E6
+name 19 E7
+name 20 E8
+name 21 E9
+name 22 E10
+name 23 E11
+name 24 E12
+name 25 E13
+name 26 E14
+name 27 E15
+name 28 E16
+name 29 E17
+name 30 E18
+name 31 E19
+name 32 E20
+name 33 E21
+name 34 E22
+name 35 E23
+name 36 E24
+name 37 E25
+name 38 E26
+name 39 E27
+name 40 E28
+name 41 E29
+name 42 E30
+name 43 E31
+name 44 E32
+name 45 E33
+name 46 E34
+name 47 E35
+name 48 E36
+name 49 E37
+name 50 E38
+name 51 E39
+name 52 E40
+name 53 E41
+name 54 E42
+name 55 E43
+name 56 E44
+name 57 E45
+name 58 E46
+name 59 E47
+name 60 E48
+name 61 E49
+name 62 E50
+name 63 E51
+name 64 E52
+name 65 E53
+name 66 E54
+name 67 E55
+name 68 E56
+name 69 E57
+name 70 E58
+name 71 E59
+name 72 E60
+name 73 E61
+name 74 E62
+name 75 E63
+name 76 E64
+name 77 E65
+name 78 E66
+name 79 E67
+name 80 E68
+name 81 E69
+name 82 E70
+name 83 E71
+name 84 E72
+name 85 E73
+name 86 E74
+name 87 E75
+name 88 E76
+name 89 E77
+name 90 E78
+name 91 E79
+name 92 E80
+name 93 E81
+name 94 E82
+name 95 E83
+name 96 E84
+name 97 E85
+name 98 E86
+name 99 E87
+name 100 E88
+name 101 E89
+name 102 E90
+name 103 E91
+name 104 E92
+name 105 E93
+name 106 E94
+name 107 E95
+name 108 E96
+name 109 E97
+name 110 E98
+name 111 E99
+name 112 E100
+name 113 E101
+name 114 E102
+name 115 E103
+name 116 E104
+name 117 E105
+name 118 E106
+name 119 E107
+name 120 E108
+name 121 E109
+name 122 E110
+name 123 E111
+name 124 E112
+name 125 E113
+name 126 E114
+name 127 E115
+name 128 E116
+name 129 E117
+name 130 E118
+name 131 E119
+name 132 E120
+name 133 E121
+name 134 E122
+name 135 E123
+name 136 E124
+name 137 E125
+name 138 E126
+name 139 E127
+name 140 E128
+name 141 E129
+name 142 E130
+name 143 E131
+name 144 E132
+name 145 E133
+name 146 E134
+name 147 E135
+name 148 E136
+name 149 E137
+name 150 E138
+name 151 E139
+name 152 E140
+name 153 E141
+name 154 E142
+name 155 E143
+name 156 E144
+name 157 E145
+name 158 E146
+name 159 E147
+name 160 E148
+name 161 E149
+name 162 E150
+name 163 E151
+name 164 E152
+name 165 E153
+name 166 E154
+name 167 E155
+name 168 E156
+name 169 E157
+name 170 E158
+name 171 E159
+name 172 E160
+name 173 E161
+name 174 E162
+name 175 E163
+name 176 E164
+name 177 E165
+name 178 E166
+name 179 E167
+name 180 E168
+name 181 E169
+name 182 E170
+name 183 E171
+name 184 E172
+name 185 E173
+name 186 E174
+name 187 E175
+name 188 E176
+name 189 E177
+name 190 E178
+name 191 E179
+name 192 E180
+name 193 E181
+name 194 E182
+name 195 E183
+name 196 E184
+name 197 E185
+name 198 E186
+name 199 E187
+name 200 E188
+name 201 E189
+name 202 E190
+name 203 E191
+name 204 E192
+name 205 E193
+name 206 E194
+name 207 E195
+name 208 E196
+name 209 E197
+name 210 E198
+name 211 E199
+name 212 E200
+name 213 E201
+name 214 E202
+name 215 E203
+name 216 E204
+name 217 E205
+name 218 E206
+name 219 E207
+name 220 E208
+name 221 E209
+name 222 E210
+name 223 E211
+name 224 E212
+name 225 E213
+name 226 E214
+name 227 E215
+name 228 E216
+name 229 E217
+name 230 E218
+name 231 E219
+name 232 E220
+name 233 E221
+name 234 E222
+name 235 E223
+name 236 E224
+name 237 E225
+name 238 E226
+name 239 E227
+name 240 E228
+name 241 E229
+name 242 E230
+name 243 E231
+name 244 E232
+name 245 E233
+name 246 E234
+name 247 E235
+name 248 E236
+name 249 E237
+name 250 E238
+name 251 E239
+name 252 E240
+name 253 E241
+name 254 E242
+name 255 E243
+names from 256 unread
+config lim1000 limit 1000 total 1000 compile ok
+enc size 2 2
+enc defined 2
+enc anyerror 2 2 10
+enc optional 2 2
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 1000
+eu void 0 1 2 2 0 -
+eu u8 1 1 4 2 0 2
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 6 2 0 2
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 1000
+bound above 1001 panic
+bound max 1023 panic
+bound over 1024 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+name 5 Utf8OverlongEncoding
+name 6 Utf8EncodesSurrogateHalf
+name 7 Utf8CodepointTooLarge
+name 8 Utf8InvalidStartByte
+name 9 TruncatedInput
+name 10 Utf8CannotEncodeSurrogateHalf
+name 11 CodepointTooLarge
+name 12 BufferTooSmall
+name 13 Bad
+name 14 Other
+name 15 E3
+name 16 E4
+name 17 E5
+name 18 E6
+name 19 E7
+name 20 E8
+name 21 E9
+name 22 E10
+name 23 E11
+name 24 E12
+name 25 E13
+name 26 E14
+name 27 E15
+name 28 E16
+name 29 E17
+name 30 E18
+name 31 E19
+name 32 E20
+name 33 E21
+name 34 E22
+name 35 E23
+name 36 E24
+name 37 E25
+name 38 E26
+name 39 E27
+name 40 E28
+name 41 E29
+name 42 E30
+name 43 E31
+name 44 E32
+name 45 E33
+name 46 E34
+name 47 E35
+name 48 E36
+name 49 E37
+name 50 E38
+name 51 E39
+name 52 E40
+name 53 E41
+name 54 E42
+name 55 E43
+name 56 E44
+name 57 E45
+name 58 E46
+name 59 E47
+name 60 E48
+name 61 E49
+name 62 E50
+name 63 E51
+name 64 E52
+name 65 E53
+name 66 E54
+name 67 E55
+name 68 E56
+name 69 E57
+name 70 E58
+name 71 E59
+name 72 E60
+name 73 E61
+name 74 E62
+name 75 E63
+name 76 E64
+name 77 E65
+name 78 E66
+name 79 E67
+name 80 E68
+name 81 E69
+name 82 E70
+name 83 E71
+name 84 E72
+name 85 E73
+name 86 E74
+name 87 E75
+name 88 E76
+name 89 E77
+name 90 E78
+name 91 E79
+name 92 E80
+name 93 E81
+name 94 E82
+name 95 E83
+name 96 E84
+name 97 E85
+name 98 E86
+name 99 E87
+name 100 E88
+name 101 E89
+name 102 E90
+name 103 E91
+name 104 E92
+name 105 E93
+name 106 E94
+name 107 E95
+name 108 E96
+name 109 E97
+name 110 E98
+name 111 E99
+name 112 E100
+name 113 E101
+name 114 E102
+name 115 E103
+name 116 E104
+name 117 E105
+name 118 E106
+name 119 E107
+name 120 E108
+name 121 E109
+name 122 E110
+name 123 E111
+name 124 E112
+name 125 E113
+name 126 E114
+name 127 E115
+name 128 E116
+name 129 E117
+name 130 E118
+name 131 E119
+name 132 E120
+name 133 E121
+name 134 E122
+name 135 E123
+name 136 E124
+name 137 E125
+name 138 E126
+name 139 E127
+name 140 E128
+name 141 E129
+name 142 E130
+name 143 E131
+name 144 E132
+name 145 E133
+name 146 E134
+name 147 E135
+name 148 E136
+name 149 E137
+name 150 E138
+name 151 E139
+name 152 E140
+name 153 E141
+name 154 E142
+name 155 E143
+name 156 E144
+name 157 E145
+name 158 E146
+name 159 E147
+name 160 E148
+name 161 E149
+name 162 E150
+name 163 E151
+name 164 E152
+name 165 E153
+name 166 E154
+name 167 E155
+name 168 E156
+name 169 E157
+name 170 E158
+name 171 E159
+name 172 E160
+name 173 E161
+name 174 E162
+name 175 E163
+name 176 E164
+name 177 E165
+name 178 E166
+name 179 E167
+name 180 E168
+name 181 E169
+name 182 E170
+name 183 E171
+name 184 E172
+name 185 E173
+name 186 E174
+name 187 E175
+name 188 E176
+name 189 E177
+name 190 E178
+name 191 E179
+name 192 E180
+name 193 E181
+name 194 E182
+name 195 E183
+name 196 E184
+name 197 E185
+name 198 E186
+name 199 E187
+name 200 E188
+name 201 E189
+name 202 E190
+name 203 E191
+name 204 E192
+name 205 E193
+name 206 E194
+name 207 E195
+name 208 E196
+name 209 E197
+name 210 E198
+name 211 E199
+name 212 E200
+name 213 E201
+name 214 E202
+name 215 E203
+name 216 E204
+name 217 E205
+name 218 E206
+name 219 E207
+name 220 E208
+name 221 E209
+name 222 E210
+name 223 E211
+name 224 E212
+name 225 E213
+name 226 E214
+name 227 E215
+name 228 E216
+name 229 E217
+name 230 E218
+name 231 E219
+name 232 E220
+name 233 E221
+name 234 E222
+name 235 E223
+name 236 E224
+name 237 E225
+name 238 E226
+name 239 E227
+name 240 E228
+name 241 E229
+name 242 E230
+name 243 E231
+name 244 E232
+name 245 E233
+name 246 E234
+name 247 E235
+name 248 E236
+name 249 E237
+name 250 E238
+name 251 E239
+name 252 E240
+name 253 E241
+name 254 E242
+name 255 E243
+name 256 E244
+name 257 E245
+name 258 E246
+name 259 E247
+name 260 E248
+name 261 E249
+name 262 E250
+name 263 E251
+name 264 E252
+name 265 E253
+name 266 E254
+name 267 E255
+name 268 E256
+name 269 E257
+name 270 E258
+name 271 E259
+name 272 E260
+name 273 E261
+name 274 E262
+name 275 E263
+name 276 E264
+name 277 E265
+name 278 E266
+name 279 E267
+name 280 E268
+name 281 E269
+name 282 E270
+name 283 E271
+name 284 E272
+name 285 E273
+name 286 E274
+name 287 E275
+name 288 E276
+name 289 E277
+name 290 E278
+name 291 E279
+name 292 E280
+name 293 E281
+name 294 E282
+name 295 E283
+name 296 E284
+name 297 E285
+name 298 E286
+name 299 E287
+name 300 E288
+name 301 E289
+name 302 E290
+name 303 E291
+name 304 E292
+name 305 E293
+name 306 E294
+name 307 E295
+name 308 E296
+name 309 E297
+name 310 E298
+name 311 E299
+name 312 E300
+name 313 E301
+name 314 E302
+name 315 E303
+name 316 E304
+name 317 E305
+name 318 E306
+name 319 E307
+name 320 E308
+name 321 E309
+name 322 E310
+name 323 E311
+name 324 E312
+name 325 E313
+name 326 E314
+name 327 E315
+name 328 E316
+name 329 E317
+name 330 E318
+name 331 E319
+name 332 E320
+name 333 E321
+name 334 E322
+name 335 E323
+name 336 E324
+name 337 E325
+name 338 E326
+name 339 E327
+name 340 E328
+name 341 E329
+name 342 E330
+name 343 E331
+name 344 E332
+name 345 E333
+name 346 E334
+name 347 E335
+name 348 E336
+name 349 E337
+name 350 E338
+name 351 E339
+name 352 E340
+name 353 E341
+name 354 E342
+name 355 E343
+name 356 E344
+name 357 E345
+name 358 E346
+name 359 E347
+name 360 E348
+name 361 E349
+name 362 E350
+name 363 E351
+name 364 E352
+name 365 E353
+name 366 E354
+name 367 E355
+name 368 E356
+name 369 E357
+name 370 E358
+name 371 E359
+name 372 E360
+name 373 E361
+name 374 E362
+name 375 E363
+name 376 E364
+name 377 E365
+name 378 E366
+name 379 E367
+name 380 E368
+name 381 E369
+name 382 E370
+name 383 E371
+name 384 E372
+name 385 E373
+name 386 E374
+name 387 E375
+name 388 E376
+name 389 E377
+name 390 E378
+name 391 E379
+name 392 E380
+name 393 E381
+name 394 E382
+name 395 E383
+name 396 E384
+name 397 E385
+name 398 E386
+name 399 E387
+name 400 E388
+name 401 E389
+name 402 E390
+name 403 E391
+name 404 E392
+name 405 E393
+name 406 E394
+name 407 E395
+name 408 E396
+name 409 E397
+name 410 E398
+name 411 E399
+name 412 E400
+name 413 E401
+name 414 E402
+name 415 E403
+name 416 E404
+name 417 E405
+name 418 E406
+name 419 E407
+name 420 E408
+name 421 E409
+name 422 E410
+name 423 E411
+name 424 E412
+name 425 E413
+name 426 E414
+name 427 E415
+name 428 E416
+name 429 E417
+name 430 E418
+name 431 E419
+name 432 E420
+name 433 E421
+name 434 E422
+name 435 E423
+name 436 E424
+name 437 E425
+name 438 E426
+name 439 E427
+name 440 E428
+name 441 E429
+name 442 E430
+name 443 E431
+name 444 E432
+name 445 E433
+name 446 E434
+name 447 E435
+name 448 E436
+name 449 E437
+name 450 E438
+name 451 E439
+name 452 E440
+name 453 E441
+name 454 E442
+name 455 E443
+name 456 E444
+name 457 E445
+name 458 E446
+name 459 E447
+name 460 E448
+name 461 E449
+name 462 E450
+name 463 E451
+name 464 E452
+name 465 E453
+name 466 E454
+name 467 E455
+name 468 E456
+name 469 E457
+name 470 E458
+name 471 E459
+name 472 E460
+name 473 E461
+name 474 E462
+name 475 E463
+name 476 E464
+name 477 E465
+name 478 E466
+name 479 E467
+name 480 E468
+name 481 E469
+name 482 E470
+name 483 E471
+name 484 E472
+name 485 E473
+name 486 E474
+name 487 E475
+name 488 E476
+name 489 E477
+name 490 E478
+name 491 E479
+name 492 E480
+name 493 E481
+name 494 E482
+name 495 E483
+name 496 E484
+name 497 E485
+name 498 E486
+name 499 E487
+name 500 E488
+name 501 E489
+name 502 E490
+name 503 E491
+name 504 E492
+name 505 E493
+name 506 E494
+name 507 E495
+name 508 E496
+name 509 E497
+name 510 E498
+name 511 E499
+names from 512 unread
+config default limit default total 40 compile ok
+enc size 2 2
+enc defined 2
+enc anyerror 2 2 16
+enc optional 2 2
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 40
+eu void 0 1 2 2 0 -
+eu u8 1 1 4 2 0 2
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 6 2 0 2
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 40
+bound above 41 panic
+bound max 65535 panic
+bound over 65536 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+name 5 Utf8OverlongEncoding
+name 6 Utf8EncodesSurrogateHalf
+name 7 Utf8CodepointTooLarge
+name 8 Utf8InvalidStartByte
+name 9 TruncatedInput
+name 10 Utf8CannotEncodeSurrogateHalf
+name 11 CodepointTooLarge
+name 12 BufferTooSmall
+name 13 Bad
+name 14 Other
+name 15 E3
+name 16 E4
+name 17 E5
+name 18 E6
+name 19 E7
+name 20 E8
+name 21 E9
+name 22 E10
+name 23 E11
+name 24 E12
+name 25 E13
+name 26 E14
+name 27 E15
+name 28 E16
+name 29 E17
+name 30 E18
+name 31 E19
+name 32 E20
+name 33 E21
+name 34 E22
+name 35 E23
+name 36 E24
+name 37 E25
+name 38 E26
+name 39 E27
+name 40 Top
+config lim65534 limit 65534 total 65534 compile ok
+enc size 2 2
+enc defined 2
+enc anyerror 2 2 16
+enc optional 2 2
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 65534
+eu void 0 1 2 2 0 -
+eu u8 1 1 4 2 0 2
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 6 2 0 2
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 65534
+bound above 65535 panic
+bound max 65535 panic
+bound over 65536 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+names from 32768 unread
+config lim65535 limit 65535 total 65535 compile ok
+enc size 2 2
+enc defined 2
+enc anyerror 2 2 16
+enc optional 2 2
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 65535
+eu void 0 1 2 2 0 -
+eu u8 1 1 4 2 0 2
+eu u16 2 2 4 2 2 0
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 6 2 0 2
+eu a2u16 4 2 6 2 4 0
+bound zero panic
+bound count 65535
+bound above 65536 panic
+bound max 65535 ok
+bound over 65536 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+names from 32768 unread
+config lim65536 limit 65536 total 65536 compile ok
+enc size 4 4
+enc defined 3
+enc anyerror 4 4 17
+enc optional 4 4
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 65536
+eu void 0 1 4 4 0 -
+eu u8 1 1 8 4 0 4
+eu u16 2 2 8 4 0 4
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 8 4 0 4
+eu a2u16 4 2 8 4 0 4
+bound zero panic
+bound count 65536
+bound above 65537 panic
+bound max 131071 panic
+bound over 131072 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+name 65534 E65522
+name 65535 E65523
+names from 65536 unread
+config lim100000 limit 100000 total 70000 compile ok
+enc size 4 4
+enc defined 3
+enc anyerror 4 4 17
+enc optional 4 4
+enc nonzero 1
+enc distinct 1
+enc le_code 1
+enc null_zero 1
+enc some_eq_plain 1
+enc roundtrip 1
+code Bad 13 Other 14 top 70000
+eu void 0 1 4 4 0 -
+eu u8 1 1 8 4 0 4
+eu u16 2 2 8 4 0 4
+eu u32 4 4 8 4 4 0
+eu u64 8 8 16 8 8 0
+eu a3u8 3 1 8 4 0 4
+eu a2u16 4 2 8 4 0 4
+bound zero panic
+bound count 70000
+bound above 70001 panic
+bound max 131071 panic
+bound over 131072 panic
+name 1 NoSpaceLeft
+name 2 Overflow
+name 3 InvalidUtf8
+name 4 Utf8ExpectedContinuation
+names from 65536 unread
+config lim8388608 limit 8388608 total 5 skipped
+config lim16777216 limit 16777216 total 5 skipped
+config lim2147483647 limit 2147483647 total 5 skipped
+config lim4294967295 limit 4294967295 total 5 skipped
+config lim0 limit 0 total 2 skipped

@@ -23,7 +23,10 @@ also fail or wait: wrap a whole workload once. Advisory locking coordinates
 participating callers; unguarded builds are outside its control. Existing
 `zig-patch/build.sh` already uses `-j1` for its compiler bootstrap.
 
-The guard sets `LEAN_NUM_THREADS=1`. For a direct `zig build` command, it inserts
+The guard sets `LEAN_NUM_THREADS=1` (`--lean-threads N` sets N; proof receipts and the
+performance gate require 1), `AIR2LEAN_JOBS=1` (`--jobs N` sets N) and `AIR2LEAN_MEM_MIB` to the
+`--rss-mib` budget; `scripts/par.py` sizes its worker pool from the last two (see
+[Parallel jobs](#parallel-jobs)). For a direct `zig build` command, it inserts
 `-j1` at a guaranteed build-option position, rejects conflicting build job counts
 and response files that could hide job options, and records both requested and
 executed arguments. Validation distinguishes the frontend from the later build
@@ -37,7 +40,7 @@ Response-like `@...` tokens before that boundary are refused conservatively,
 including literal filename values. Version-specific operands can also cause a
 conservative refusal (for example, `--debug-libc -j2`, absent in 0.14.1). A value
 named `-j1` does not replace the injected build option. It also stops a
-workload when a sample contains multiple leaf Zig processes. A build driver
+workload when a sample contains more leaf Zig processes than `--jobs` (default 1). A build driver
 supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
 are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
 truncation is matched conservatively at 15 bytes, so aliases sharing that prefix
@@ -115,7 +118,7 @@ signal exits become `128 + signal`. Guard outcomes disambiguate reserved codes:
 | 75 | lock busy or lock-wait expired |
 | 124 | workload timeout |
 | 125 | sampled RSS threshold exceeded |
-| 126 | observed parallel Zig compilers |
+| 126 | observed more parallel Zig compilers than `--jobs` |
 | 127 | command could not be started |
 | 128 + signal | cancellation or child signal |
 
@@ -129,3 +132,50 @@ This supplies measurement/coordination infrastructure for Q06. The real-module
 workload suite, per-phase translator timing, baseline derivation and regression
 gate are in `docs/perf-budgets.md`; run that recorder once under this guard. Its
 budgets remain pending until a serial measurement is recorded and committed.
+
+## Parallel jobs
+
+`scripts/par.py` runs independent jobs (one per item) on a bounded number of workers:
+
+```sh
+python3 scripts/par.py [--jobs N] [--mem-mib M] [--log-dir DIR] -- COMMAND... ::: ITEM...
+```
+
+The worker count is `--jobs`, else `AIR2LEAN_JOBS`, else the CPU count (affinity and a Linux
+cgroup quota, so `docker --cpus 4` counts 4). `--mem-mib M` is one job's peak memory: at most
+`AIR2LEAN_MEM_MIB / M` jobs run at once (default budget: 80% of the physical memory or of a lower
+cgroup limit). Each job's stdout and stderr are captured separately and written in job order, the
+first unfinished job live, so the output does not depend on the worker count; with one worker it
+is that of a sequential run. Every job runs; the exit status is that of the first failed job in
+job order, after a list of every failed job. A signal stops every job's process group. Jobs get
+`AIR2LEAN_JOBS=1`, so a job does not fan out again.
+
+Users: `scripts/check.sh` checks its examples (AIR export, translation, golden comparison) in
+parallel and builds every module in one `lake build`; `scripts/diff.sh` builds and runs the
+native harnesses of the examples in parallel (the Lean side is one `difftest` process). Under the guard both stay
+sequential unless the guard is given `--jobs`; on the shared development Mac use a lane's lock
+and a moderate count:
+
+```sh
+python3 scripts/build-guard.py --lock ~/.cache/air2lean/build-b.lock --jobs 4 --rss-mib 12000 \
+  --report /tmp/check.json --log /tmp/check.log -- scripts/check.sh
+```
+
+`tests/roadmap/parallel/test_par.py` tests the helper offline; `tests/roadmap/parallel/determinism.py`
+runs a changed script with `AIR2LEAN_JOBS=1` and in parallel and requires identical output and
+generated files.
+
+Cheaper local runs:
+
+- With `AIR2LEAN_CAS_DIR` set, `diff.sh` builds its stock-Zig artifacts through `scripts/cas.py
+  native` ([build-cache.md](build-cache.md)); an unchanged harness, libm or asm archive is not
+  compiled again. Unset, nothing is cached.
+- `scripts/build-mode-docker.sh` cross-compiles the native side on the host (`diff.sh --build-only`,
+  `-target x86_64-linux`) and runs only the binaries in the emulated container;
+  `AIR2LEAN_BUILD_MODE_CROSS=0` builds in the container instead.
+- `AIR2LEAN_CHANGED_FROM=REF` makes the default example selection of `check.sh`, `diff.sh` and
+  `build-mode-docker.sh` only the examples the changes since REF can affect
+  (`scripts/changed-examples.py`; a change outside one example's own files selects all). Local runs
+  only: CI and the merge queue always run every example.
+- `AIR2LEAN_LOCAL_CPUS` / `AIR2LEAN_LOCAL_MEMORY` size the containers of `scripts/local-ci.sh`
+  (defaults 2 and 8g).

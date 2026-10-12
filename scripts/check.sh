@@ -11,6 +11,11 @@
 # translations in place of the committed ones. Its path is written to
 # $AIR2LEAN_CHECK_REPORT_DIR/build-tree; later steps that build this version's proofs run there.
 #
+# Steps 1-2 run for each example in parallel (scripts/par.py: AIR2LEAN_JOBS workers, bounded by
+# memory), each example's output written in example order, so the output and every file are the
+# same for any number of workers. Every example is checked; a failure lists the failed ones and
+# stops before step 3. Step 3 builds every module in one `lake build` (Lake runs it in parallel).
+#
 # Usage: check.sh
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
@@ -34,6 +39,7 @@
 #                         also when the test runs in a check tree. Default: tests/diff/out/report.json.
 #   AIR2LEAN_STAGE_TIMEOUT  Seconds per stage (AIR dump, translation, lake build, diff) (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
+#   AIR2LEAN_JOBS         Examples checked at once (steps 1-2; scripts/par.py). Default: the CPU count.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -54,10 +60,11 @@ workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
 case "$workflow_stage_timeout" in
   '' | *[!0-9]*) echo "error: AIR2LEAN_STAGE_TIMEOUT must be whole seconds (0 disables)" >&2; exit 2 ;;
 esac
-air_dir='' cmp_dir=''
+air_dir='' cmp_dir='' results_dir=''
 cleanup() {
   [ -z "$air_dir" ] || rm -rf -- "$air_dir"
   [ -z "$cmp_dir" ] || rm -rf -- "$cmp_dir"
+  [ -z "$results_dir" ] || rm -rf -- "$results_dir"
 }
 trap cleanup EXIT
 trap 'workflow_interrupt 129' HUP
@@ -71,39 +78,40 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   echo "hint: build one with zig-patch/build.sh $zig_version (see zig-patch/README.md)" >&2
   exit 1
 }
+# With AIR2LEAN_CAS_DIR set, exports go through the shared cache (docs/build-cache.md).
+air_export=()
+[ -z "${AIR2LEAN_CAS_DIR:-}" ] || air_export=(python3 -B "$repo_root/scripts/cas.py" air --)
 
-# The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
-# (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
-# version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
-if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
-  examples=$AIR2LEAN_EXAMPLES
-else
-  source "$repo_root/scripts/example-selection.sh"
-  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
-fi
-gen_targets=()
-replacements=()
 report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
-rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
-if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
-  # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
-  python3 scripts/normalize-generated.py proof-status
-fi
+# <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
+# `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
+namespace_of() { printf '%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"; }
+host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+host_arch=$(uname -m)
+# aarch64-linux AIR is exported for the baseline CPU (`generic`): the translator rejects a profile
+# with `fullfp16`, whose `f16` `@mulAdd` is fused (docs/floats.md §Targets), and the native
+# harness is built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
+mcpu=''
+if [ "$host_os-$host_arch" = linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
 
-for ex in $examples; do
-  # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
-  # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
-  Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
-  gen_targets+=("Proofs.$Ex.Gen")
+if [ "${1:-}" = --example ]; then
+  # Steps 1-2 for one example, run by scripts/par.py below. When the checkout's module is not
+  # this translation, the `--replace` operand of scripts/check-tree.py is written to $3.
+  [ "$#" = 3 ] || { echo "usage: check.sh --example <ex> <result-file>" >&2; exit 2; }
+  ex=$2 result=$3
+  Ex=$(namespace_of "$ex")
   # One golden set for every Zig version (tests/golden/<ex>/air/). A file in
   # tests/golden/<version>/<ex>/air/ replaces the shared file of the same name for that version
   # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
   # `uname -s` in lower case) replaces it on that host OS only: std code that the compiler picks
   # by OS (`std.Thread`'s implementation) is in the type table. The translation does not change
-  # (the translator emits only the types that the code uses).
+  # (the translator emits only the types that the code uses). A file in
+  # tests/golden/<version>/<ex>/air-<os>-<arch>/ (arch: `uname -m`) replaces it on that host
+  # only (aarch64-linux, whose AIR is the x86_64-linux AIR except where the target shows).
   golden_dir="tests/golden/$ex/air"
   version_dir="tests/golden/$zig_version/$ex/air"
-  os_dir="tests/golden/$zig_version/$ex/air-$(uname -s | tr '[:upper:]' '[:lower:]')"
+  os_dir="tests/golden/$zig_version/$ex/air-$host_os"
+  arch_dir="tests/golden/$zig_version/$ex/air-$host_os-$host_arch"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
 
@@ -117,8 +125,9 @@ for ex in $examples; do
     fi
   done
   echo "== $ex: dumping AIR ==" >&2
-  workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
-    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
+  workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" \
+    ${air_export[@]+"${air_export[@]}"} "$zig_air" \
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $mcpu "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
     echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2
@@ -149,7 +158,7 @@ for ex in $examples; do
     workflow_publish --overwrite "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
   fi
 
-  echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
+  echo "== $ex: checking against golden ($golden_dir, then $version_dir, $os_dir, $arch_dir) ==" >&2
   # A validated receipt permits the known schema-12 profile/schema-11 transition.
   # Target/profile failures are already fatal; observable AIR data remains compared.
   # The number of a generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
@@ -179,6 +188,7 @@ for ex in $examples; do
   add_dir "$golden_dir" "$cmp_dir/golden" golden
   add_dir "$version_dir" "$cmp_dir/golden" golden
   add_dir "$os_dir" "$cmp_dir/golden" golden
+  add_dir "$arch_dir" "$cmp_dir/golden" golden
   add_dir "$air_dir" "$cmp_dir/new" actual
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
@@ -187,14 +197,17 @@ for ex in $examples; do
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/ (then rename each <name>__anon_<n>.json to <name>__anon_N.json)" >&2
     echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
     echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
+    echo "hint: if only this host OS and architecture differ, copy just the differing files to $arch_dir/" >&2
     exit 1
   fi
 
   # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version on Linux (the
   # reference host), except a version with its own tests/golden/<version>/<ex>/Gen.lean, and a
   # host OS with its own tests/golden/<version>/<ex>/Gen-<os>.lean (std code that differs per
-  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/).
-  gen_golden="tests/golden/$zig_version/$ex/Gen-$(uname -s | tr '[:upper:]' '[:lower:]').lean"
+  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/), and a
+  # host with its own Gen-<os>-<arch>.lean (aarch64-linux's float rules, `docs/floats.md` §Targets).
+  gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os-$host_arch.lean"
+  [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os.lean"
   [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
   [ -f "$gen_golden" ] || gen_golden="Proofs/$Ex/Gen.lean"
   # Generated comparisons skip only the first-line profile record (host-specific: the target
@@ -209,14 +222,45 @@ for ex in $examples; do
   fi
   # Build and test the new translation: the checkout's module only when it is the same one.
   if ! python3 scripts/normalize-generated.py compare "Proofs/$Ex/Gen.lean" "$generated" "$report" 2>/dev/null; then
-    replacements+=(--replace "Proofs/$Ex/Gen.lean=$report_dir/$ex.Gen.lean")
+    printf '%s\n' "Proofs/$Ex/Gen.lean=$report_dir/$ex.Gen.lean" >"$result"
   fi
+  exit 0  # The EXIT trap removes air_dir and cmp_dir.
+fi
+[ "$#" = 0 ] || { echo "usage: check.sh" >&2; exit 2; }
 
-  rm -rf "$air_dir" "$cmp_dir"
-  air_dir='' cmp_dir=''
+# The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
+# (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
+# version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
+rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
+if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
+  # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
+  python3 scripts/normalize-generated.py proof-status
+fi
+
+gen_targets=()
+for ex in $examples; do
+  case "$ex" in *[!a-zA-Z0-9_-]* | "") echo "error: invalid example: $ex" >&2; exit 1 ;; esac
+  gen_targets+=("Proofs.$(namespace_of "$ex").Gen")
+done
+[ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
+# Every example runs `lake exe air2lean`: build it once, so that no two examples build it (its
+# warnings are the translator build's, shown where it is built; errors are shown).
+workflow_run_stage lake build -q --log-level=error air2lean
+results_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
+# Each example's stages keep their own timeout; the examples together have none.
+# shellcheck disable=SC2086  # $examples is a space-separated list
+workflow_run_jobs --mem-mib 512 -- "$BASH" "$repo_root/scripts/check.sh" --example {} "$results_dir/{}" ::: $examples
+replacements=()
+for ex in $examples; do
+  if [ -s "$results_dir/$ex" ]; then replacements+=(--replace "$(cat "$results_dir/$ex")"); fi
 done
 
-[ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 tree=$repo_root
 if [ "${#replacements[@]}" -gt 0 ]; then
   tree=${AIR2LEAN_CHECK_TREE:-$repo_root/.lake/check-tree/$zig_version}

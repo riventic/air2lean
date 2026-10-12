@@ -1,0 +1,27 @@
+# Per-input exclusion pins (F3, scripts/diff-report.py): <fn> <input_sha256> <count>|<min>-<max> <reason>.
+fMax 04cd0102948648e91c492c652ddca364850c08161c4d7b56087407af4fe0f3e8 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax 1be6872faf5e27279e3360e13c9e0da079ce3bb05e6404d168e854814a0556d7 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax 4ffee8f74215da36b0c97bd1972aa2c29e121364a3730d2f5fc0e99d1f2310e0 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax 5657bd5b37930f156c07b47f53d34d0cf136550bba07d7289b5083cb017136bf 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax 66477b52de4d34d907007202fce3496d67d1dde288a3d88fa8e2749995db7354 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax 74887b0a519eee66ce24936a24df267c92d0f6ec8ac4b05e43b18e1f6507764e 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax a27cfc4dc830c398ab8203a42353ff4588dde15f26842a3ca87b8d62885551f1 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax a9ba809672fc08b9cda3993abf5dd6c4b3e5ffcff71c4ecb75cac78ff5fd5f52 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax ab4f2eb9f5fd8fe76e09dfea8edf89596f8121596f5cabf4c7b6156e7f3164fa 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMax f089e73b6cbdd8921c57db9fc360992bfe7945b7e65c04a19bc2c1abef89865c 1 @reduce(.Max) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin 04cd0102948648e91c492c652ddca364850c08161c4d7b56087407af4fe0f3e8 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin 319abd74871c0e70b00a247906bd8fa4b998d3abd0df61d789dc353a32cbccec 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin 4ffee8f74215da36b0c97bd1972aa2c29e121364a3730d2f5fc0e99d1f2310e0 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin 5657bd5b37930f156c07b47f53d34d0cf136550bba07d7289b5083cb017136bf 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin 84f72d760634925b6f0bec8c22712c0556ca89651c1164a54324617eec55e8a6 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin a27cfc4dc830c398ab8203a42353ff4588dde15f26842a3ca87b8d62885551f1 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin a9ba809672fc08b9cda3993abf5dd6c4b3e5ffcff71c4ecb75cac78ff5fd5f52 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin ab4f2eb9f5fd8fe76e09dfea8edf89596f8121596f5cabf4c7b6156e7f3164fa 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin bdf0178d31852f0955ef45ef5d3a5210b03db9308efa21d69b0a904fb2d39367 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+fMin f089e73b6cbdd8921c57db9fc360992bfe7945b7e65c04a19bc2c1abef89865c 1 @reduce(.Min) of opposite-sign zeros or a signaling NaN: result open (groups D, I)
+sMod 29cab49b4bbbf7c7a07dd3e9660752739967181e8b96d748fa44779938fce68f 1 minInt @mod -1: illegal behaviour
+sRem 29cab49b4bbbf7c7a07dd3e9660752739967181e8b96d748fa44779938fce68f 1 minInt @rem -1: illegal behaviour
+vMod 0d1c490ebf84b9edbeb7462ec9644035e99126e403fc4a40ef152d7cdfd1a495 1 minInt @mod -1 in one lane: illegal behaviour
+vMod 698e72eb75bff8c56571717c58716fe9059483819c981520fc64f9b53c5f9465 1 minInt @mod -1 in one lane: illegal behaviour
+vMod 6b2ce8faea98b536d9c91a047937b69aba3671c016228459335dec2d4a2ec5f0 1 minInt @mod -1 in one lane: illegal behaviour
+vMod a0ac4e0f606d7e39cecffaec38b3dbfea99802c48bfab6caba824ed34e83954b 1 minInt @mod -1 in one lane: illegal behaviour

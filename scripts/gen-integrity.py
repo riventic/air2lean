@@ -26,7 +26,13 @@ translation of one of its own cases. Verification never replaces a committed mod
 translation is accepted. It prints one JSON record per file (sha256 and the matching cases) and
 fails on any file without a match.
 
+`write` replaces each failing module by the fresh translation (scripts/regen.sh): the whole file
+for `exact` cases; for `body` and `golden` cases the fresh body after the committed first-line
+profile record, which these checks compare only for its float semantics (a record that names
+other ones than the translation is replaced by the fresh one). A module whose cases disagree is not written.
+
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
+       gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
        gen-integrity.py list   (each case and its inputs; no translation)
 """
@@ -45,11 +51,13 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-OSES = ("linux", "darwin")
+# Host keys of the golden overlays (scripts/check.sh): `uname -s` in lower case, then
+# `<os>-<uname -m>` for a host whose AIR or translation differs from its OS's (aarch64-linux).
+OSES = ("linux", "darwin", "linux-aarch64")
 PROFILE_PREFIX = b"-- air2lean-profile: "
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
-GEN_NAME = re.compile(r"Gen(-[a-z]+)?\.lean")
+GEN_NAME = re.compile(r"Gen(-[a-z]+(-[a-z0-9_]+)?)?\.lean")
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
@@ -102,6 +110,8 @@ FIXTURES = [
      ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
      ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
+    ("tests/roadmap/noalias/Gen.lean", "tests/roadmap/noalias/air",
+     ["--namespace", "Noalias", "--prefix", "na."], "exact"),
     ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
@@ -128,6 +138,14 @@ FIXTURES = [
      "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
      ["--namespace", "DeviceAsm", "--prefix", "device_asm.",
       "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/tsc.json")], "exact"),
+    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
+     ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
+] + [
+    (f"tests/roadmap/alloc-translated/AllocTranslated/{prog.title()}{target.title()}.lean",
+     f"tests/roadmap/alloc-translated/air/0.16.0/{prog}-{target}",
+     ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
+      "--allocator-model", "translated"], "exact")
+    for prog in ("page", "fba") for target in ("linux", "macos")
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
@@ -146,6 +164,13 @@ FIXTURES = [
     (f"tests/roadmap/error-width/expected/ErrorWidth{bits}.lean", f"tests/roadmap/error-width/air/bits{bits}",
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
     for bits in (8, 10, 16, 17)
+] + [
+    # tests/roadmap/lang-long-tail/check.sh: a version's own translation where it differs.
+    (f"tests/roadmap/lang-long-tail/LangLongTail/{ns}{'' if v == '0.16.0' else '-' + v}.lean",
+     f"tests/roadmap/lang-long-tail/air/{stem}/{v}", ["--namespace", ns, "--prefix", f"{stem}."], "exact")
+    for stem, ns, versions in (("error_params", "ErrorParams", ("0.16.0",)),
+                               ("vector_casts", "VectorCasts", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")))
+    for v in versions
 ]
 
 # Reviewed generated-looking files that are not current translator output.
@@ -223,9 +248,13 @@ def golden_cases():
                 # Linux is the reference host; another OS has a case when it has its own files.
                 if os_name != "linux" and not os_dir.is_dir() and not os_gen.is_file():
                     continue
-                expected = (os_gen if os_gen.is_file() else golden / "Gen.lean"
-                            if (golden / "Gen.lean").is_file() else ROOT / "Proofs" / Ex / "Gen.lean")
-                dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", os_dir) if d.is_dir()]
+                # An <os>-<arch> host also takes its OS's overlay (check.sh's order).
+                base_os = os_name.split("-")[0]
+                base_dir, base_gen = golden / f"air-{base_os}", golden / f"Gen-{base_os}.lean"
+                expected = next(g for g in (os_gen, base_gen, golden / "Gen.lean", ROOT / "Proofs" / Ex / "Gen.lean")
+                                if g.is_file())
+                overlays = (base_dir, os_dir) if base_os != os_name else (os_dir,)
+                dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", *overlays) if d.is_dir()]
                 yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
                            f"{ex} {version} {os_name}", version)
 
@@ -405,6 +434,44 @@ def run_check(translator, cases, only):
     return errors
 
 
+def run_write(translator, cases, only):
+    """Rewrite each module whose cases all translate to one body that differs from it."""
+    errors = []
+    by_path = {}
+    for index, case in enumerate(cases):
+        if (not only or only in case.path or only in case.label) and (ROOT / case.path).is_file() \
+                and all(d.exists() for d in case.dirs):
+            by_path.setdefault(case.path, []).append((index, case))
+    for path, members in sorted(by_path.items()):
+        try:
+            if all(translator.matches(index, case, path) is None for index, case in members):
+                continue
+            committed = (ROOT / path).read_bytes()
+            fresh = {}
+            for index, case in members:
+                out = translator.output(index, case)
+                if case.mode == "exact":
+                    fresh[case.label] = out
+                else:
+                    # The committed profile record, unless its float semantics are stale.
+                    first, sep, _ = committed.partition(b"\n")
+                    if header_error(committed, out):
+                        first, sep, _ = out.partition(b"\n")
+                    header = first + sep if first.startswith(PROFILE_PREFIX) else b""
+                    fresh[case.label] = header + comparable(out, case.mode)
+        except ValueError as error:
+            errors.append(f"{path}: {error}")
+            continue
+        if len(set(fresh.values())) != 1:
+            errors.append(f"{path}: its cases translate differently ({', '.join(sorted(fresh))}); not written")
+            continue
+        staged = ROOT / (path + ".partial")
+        staged.write_bytes(next(iter(fresh.values())))
+        os.replace(staged, ROOT / path)
+        print(f"wrote {path}", file=sys.stderr)
+    return errors + run_check(translator, cases, only)
+
+
 def run_attest(translator, cases, paths):
     errors = coverage_errors(cases)
     records = []
@@ -431,7 +498,7 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "attest", "list"))
+    parser.add_argument("command", choices=("check", "write", "attest", "list"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
                                                              str(ROOT / ".lake/build/bin/air2lean")))
@@ -467,6 +534,8 @@ def run(args, cases):
         translator = Translator(args.translator, work)
         if args.command == "check":
             return run_check(translator, cases, args.only)
+        if args.command == "write":
+            return run_write(translator, cases, args.only)
         return run_attest(translator, cases, [str(Path(p)) for p in args.paths])
 
 

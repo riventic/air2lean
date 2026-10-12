@@ -40,6 +40,9 @@ prepare() {
     cp -a "$compiler" "/work/zig-air-$version"
     printf '%s\n' "$key" >"/work/zig-air-$version/.local-ci-key"
   fi
+  # The whole-tree generated files CI's rows install (docs/ci.md#whole-tree-generated-files): the
+  # coverage inventories and premise index regenerated on this tree (pristine sources in /cache).
+  AIR2LEAN_CACHE=/cache python3 -B scripts/generated.py materialize --heavy skip
 }
 
 if [ "${1:-}" = --prepare ]; then
@@ -180,8 +183,10 @@ lake_key=$(cat lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
 diff_key=$(cat tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
 tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-toolchains}
 cache_namespace=$(printf '%s' "$tool_volume" | shasum -a 256 | cut -c1-16)
-container=$(docker create --platform linux/amd64 --memory=8g --memory-swap=8g \
-  --cpus=2 --pids-limit=512 --init \
+# AIR2LEAN_LOCAL_CPUS (default 2) and AIR2LEAN_LOCAL_MEMORY (default 8g) size the container; a
+# GitHub runner has 4 CPUs and 16 GB. scripts/par.py takes its worker count from the CPU quota.
+container=$(docker create --platform linux/amd64 --memory="${AIR2LEAN_LOCAL_MEMORY:-8g}" \
+  --memory-swap="${AIR2LEAN_LOCAL_MEMORY:-8g}" --cpus="${AIR2LEAN_LOCAL_CPUS:-2}" --pids-limit=512 --init \
   --mount "type=bind,src=$snapshot,dst=/snapshot,readonly" \
   --mount "type=volume,src=$tool_volume,dst=/cache" \
   --mount "type=volume,src=air2lean-linux-amd64-$cache_namespace-lake-$lake_key,dst=/work/.lake" \

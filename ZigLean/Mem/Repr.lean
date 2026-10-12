@@ -17,7 +17,7 @@ from them. A destination part that needs a padding-derived (undefined) bit throw
 | Zig | Model | null |
 |---|---|---|
 | `*T` → `?*T` (wrap) | `optPtrWrap p = some p` | never null |
-| `?*T` → `*U` (unwrap) | `optPtrUnwrap` | `.panic` |
+| `?*T` → `*U` (unwrap) | `optPtrUnwrap` | `.illegal` |
 | `?*T` → `usize` | `optPtrAddr` | 0 |
 | `usize` → `?*T` | `optPtrFromAddr` | 0 gives null |
 
@@ -36,10 +36,11 @@ def reprCast (β : Type) {α : Type} [Enc α] [Enc β] (x : α) : Result β :=
 def optPtrWrap (p : Ptr) : Option Ptr := some p
 
 /-- `?*T` → `*U`: requires a non-null pointer. The checked (safe) build tests the address
-before the cast; a null operand here throws `.panic`, as `ptrRequireNonNull` does. -/
+before the cast (ordinary AIR); a null operand here is illegal behaviour (`.illegal`), as in
+`ptrRequireNonNull`. -/
 def optPtrUnwrap : Option Ptr → Result Ptr
   | some p => pure p
-  | none => throw .panic
+  | none => throw .illegal
 
 /-- `@intFromPtr` of `?*T`: null is address 0. -/
 def optPtrAddr : Option Ptr → MemM Int
@@ -52,7 +53,7 @@ def optPtrFromAddr (n : Nat) : MemM (Option Ptr) :=
 
 theorem optPtrUnwrap_wrap (p : Ptr) : optPtrUnwrap (optPtrWrap p) = pure p := rfl
 
-theorem optPtrUnwrap_null : optPtrUnwrap none = throw .panic := rfl
+theorem optPtrUnwrap_null : optPtrUnwrap none = throw .illegal := rfl
 
 /-- Unwrapping succeeds exactly on a wrapped pointer: the round trip `?*T → *T → ?*T` holds
 only for a non-null operand. -/
