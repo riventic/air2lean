@@ -364,12 +364,12 @@ theorem LDMono.push {m m' : Mem} {nb : Block}
   · cases hj; exact hbnd hlj
   · exact hd.2 j o hj hlj
 
-/-- A block that `alloc` makes with room (`Mem.roomFor`) keeps the live layout. -/
-theorem LDMono.alloc {m m' : Mem} {size align : Nat} {nb : Block}
-    (hroom : m.roomFor size align = true) (ha : nb.addr = m.newAddr size align)
+/-- A block that `alloc` makes with room (`Mem.allocOk`) keeps the live layout. -/
+theorem LDMono.alloc {m m' : Mem} {kind : BlockKind} {size align : Nat} {nb : Block}
+    (hroom : m.allocOk kind size align = true) (ha : nb.addr = m.allocAddr kind size align)
     (hs : nb.bytes.size = size) (h : m'.blocks = m.blocks.push nb) : LDMono m m' :=
-  LDMono.push (fun _ => by rw [ha, hs]; exact m.newAddr_addrFree _ _)
-    (fun _ => by rw [ha, hs]; exact Mem.roomFor_le hroom) h
+  LDMono.push (fun _ => by rw [ha, hs]; exact (Mem.allocOk_fit hroom).2)
+    (fun _ => by rw [ha, hs]; exact Mem.allocOk_le hroom) h
 
 
 end Full

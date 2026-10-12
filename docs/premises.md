@@ -915,7 +915,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
   (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
   `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
-  total-correctness statement shows room, `Mem.roomFor`, e.g. with `TotalTripleIn`). The
+  total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
+  inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-18,
+  STK-02). The
   full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
   (`Mem.LiveBounded`). A global at program start that the placement does not place and that has
   no room after `Mem.top` goes to the first fit (`Mem.globalPlace`, `Mem.firstFit`), so the
@@ -938,25 +940,45 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: A statement about a function that recursion reaches (a `partial_fixpoint`
   definition, or a call of `Zig.enterFrame`) assumes that the native stack does not overflow
-  on the runs it covers, unless it bounds `Mem.stackLimit` itself. The generated `mem0` has
-  no stack budget (`stackLimit = none`); a recursive function that uses memory charges an
-  estimated frame (`Zig.frameBase` plus its escaping locals) to `Mem.stackUsed` and, under a
-  selected budget, throws `.stackOverflow` when it does not fit. The estimate is not a bound
-  on the native frame (spills, saved registers, inlining), and pure recursive functions
-  (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
-  signal, which no model outcome under `stackLimit = none` reflects (MM-5,
+  on the runs it covers. The generated `mem0` gives no thread a stack budget (`Mem.stacks`
+  empty); then the statement assumes this for every call chain. With a budget `S` of thread `t`
+  (`Mem.withStack`, MM-18) it assumes only that the native stack of `t` holds every call chain
+  whose model charge stays within `S`: a stack block charges `size + align`
+  (`Zig.stackCharge`), the frame of a recursive function that uses memory `Zig.frameBase`, and
+  the charges are popped LIFO; the model throws `.stackOverflow` at the charge that passes `S`.
+  The charge is not a bound on the native frame (spills, saved registers, inlining), and pure
+  recursive functions (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its
+  stack dies on a signal, which no model outcome without a budget reflects (MM-5, MM-18,
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md)). The same outcome
-  covers address-space exhaustion of stack blocks: an `alloc` (stack local, thread-local
-  instance, runtime cell) without room below `Placement.addrLimit` throws `.stackOverflow`
-  (O-H, SEM-07). Every partial-correctness statement (`Triple`, `TTriple`, `FTriple`, `CTriple`,
-  and the strict concurrent `run_safe`, which excludes every other error) reads `.stackOverflow`
-  as it reads a run that does not terminate; a total-correctness statement excludes it, so one
-  that allocates shows room (legacy `TotalTripleIn`; in the full-state logic, until room is a
-  resource, the start-memory run premise of `FTriple.run_init_ok`). Regressions:
-  `tests/roadmap/memory-hardening/NoRoom.lean`, `tests/roadmap/outcome-accounting`.
-- Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow` (a statement that bounds `Mem.stackLimit` itself does not need it).
+  covers address-space exhaustion of a block without an allocator of a thread without a budget:
+  an `alloc` (stack local, thread-local instance, runtime cell) without room below
+  `Placement.addrLimit` throws `.stackOverflow` (O-H, SEM-07). Every partial-correctness
+  statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
+  which excludes every other error) reads `.stackOverflow` as it reads a run that does not
+  terminate; a total-correctness statement excludes it, so one that allocates shows room
+  (legacy `TotalTripleIn`; in the full-state logic, until the stack-depth resource of
+  `docs/sep-full-state.md` §Stack depth lands, the start-memory run premise of
+  `FTriple.run_init_ok`). Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
+  `tests/roadmap/memory-hardening/Stack.lean`, `tests/roadmap/stack-region`,
+  `tests/roadmap/outcome-accounting`.
+- Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow`.
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
   `tests/roadmap/memory-hardening/README.md`.
+
+<a id="stk-02"></a>
+### STK-02 — Stack reserves lie in address space the native run never maps
+
+- Kind: environment.
+- Statement: A thread with a stack budget `S` owns a reserve `[base, base + S)` (MM-18,
+  `Mem.withStack`, `Placement.reserve`) that every other block of the model avoids; its stack
+  blocks that the placement does not place go there. The premise: every live thread's reserve
+  can be placed in address space that the native run does not map while the thread lives, so
+  the placement that proposes every native address and puts each reserve there reproduces the
+  native layout. It needs `S ≤ 2^40` and budgets of the live threads that sum to well below the
+  address space the native run leaves unmapped (e.g. 64 threads of 1 GiB in a `2^47` space).
+- Derived from: token `withStack` (a memory without a budget has no reserve).
+- Sources: `ZigLean/Mem/Basic.lean`, [architecture-audit/memory-model.md](architecture-audit/memory-model.md)
+  §MM-18, `tests/roadmap/stack-region`.
 
 ## External models
 

@@ -299,9 +299,9 @@ def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             pure (.ret i40))
           | e => pure e)
         | e => pure e))) : Zig.CM Tgt claimOnceLocals claimOnceExit).run' { (default : claimOnceLocals) with phase := s0, wins := s3, ctx := s6 }
-  Zig.free s0
-  Zig.free s3
   Zig.free s6
+  Zig.free s3
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -379,10 +379,10 @@ def disjoint (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
         let i35 ← pure (Zig.addWrap i33 i34)
         let i36 ← pure ((.ok i35) : Except Zig.ErrName (BitVec 32))
         pure (.ret i36)))) : Zig.CM Tgt disjointLocals disjointExit).run' { (default : disjointLocals) with x := s2, y := s4, c1 := s6, c2 := s11 }
-  Zig.free s2
-  Zig.free s4
-  Zig.free s6
   Zig.free s11
+  Zig.free s6
+  Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -571,9 +571,9 @@ def parallelCounter (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
         | e => pure e)
       | e => pure e)
     | e => pure e) : Zig.CM Tgt parallelCounterLocals parallelCounterExit).run' { (default : parallelCounterLocals) with ctxs := s4, counter := s1, handles := s25 }
-  Zig.free s4
-  Zig.free s1
   Zig.free s25
+  Zig.free s1
+  Zig.free s4
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -628,9 +628,9 @@ def race (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (
         let i31 ← Zig.load (BitVec 32) 4 i2
         let i32 ← pure ((.ok i31) : Except Zig.ErrName (BitVec 32))
         pure (.ret i32)))) : Zig.CM Tgt raceLocals raceExit).run' { (default : raceLocals) with flag := s2, c1 := s4, c2 := s9 }
-  Zig.free s2
-  Zig.free s4
   Zig.free s9
+  Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -716,9 +716,9 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
           let i37 ← pure ((.ok v33) : Except Zig.ErrName (BitVec 32))
           pure (.ret i37))
         | e => pure e))) : Zig.CM Tgt xchgRaceLocals xchgRaceExit).run' { (default : xchgRaceLocals) with flag := s2, c1 := s5, c2 := s10 }
-  Zig.free s2
-  Zig.free s5
   Zig.free s10
+  Zig.free s5
+  Zig.free s2
   match e with
   | .ret v => pure v
   | _ => throw .panic

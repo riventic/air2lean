@@ -399,12 +399,13 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     refine WP.bind (WP.callRC_ok rfl ?_)
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
-    refine WP.bind (WP.liftMem_owned (free_front (R := flagA s3 Ar 0) (enc_u32 0) hl0 (by decide))
+    -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
+    refine WP.bind (WP.liftMem_owned (free_front (enc_u32 0) hr0 (by decide))
       hi₅'.own rfl (by rw [hsz₅]; decide)
       (by rw [show ownOf G₁ { m₅ with current := 0 } 0 = hR ∪ hL from hown₅]
-          exact ⟨hL, hR, hdLR, Heap.union_comm hdLR.symm, hLa, hRa⟩)
+          exact ⟨hR, hL, hdLR.symm, rfl, hRa, hLa⟩)
       fun _ m₆ h₆ _ ho₆ hq₆ hs₆ _ _ => ?_)
-    refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 0) hr0 (by decide)) ho₆
+    refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 0) hl0 (by decide)) ho₆
       (hs₆.current) (by rw [hs₆.threads]; show 0 < m₅.threads.size; rw [hsz₅]; decide) hq₆
       fun _ m₇ _ _ _ _ ht₇ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc hc0, rfl⟩, joined_of ?_ fun i h0 hlt => ?_⟩
@@ -503,10 +504,10 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     have hsz₁₀ : m₁₀.threads.size = 2 := by rw [hth₁₀, Array.size_setIfInBounds, hsz₉]
-    refine WP.bind (WP.liftMem_upd (free_front (R := flagA s3 Ar 0) (enc_u32 v) hl0 (by decide))
-      ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide) ⟨hk1, hR, hd.symm, Heap.union_comm hd, hka1, hRa⟩
+    refine WP.bind (WP.liftMem_upd (free_front (enc_u32 0) hr0 (by decide))
+      ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide) ⟨hR, hk1, hd, rfl, hRa, hka1⟩
       fun _ m₁₁ h₁₁ ho₁₁ hq₁₁ hc₁₁ ht₁₁ => ?_)
-    refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 0) hr0 (by decide)) ho₁₁ hc₁₁
+    refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 v) hl0 (by decide)) ho₁₁ hc₁₁
       (by rw [ht₁₁, hsz₁₀]; decide) hq₁₁ fun _ m₁₂ _ _ _ _ ht₁₂ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc₂ hc0, rfl⟩, joined_of ?_ fun i hi0 hlt => ?_⟩
     · rw [ht₁₂, ht₁₁, hth₁₀, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi₉.t0
@@ -672,11 +673,11 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   subst r₂
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
-  -- The frees.
-  refine WP.bind (WP.liftMem_upd (free_front (R := flagA s3 Ar (addWrap v 1)) (enc_u32 v) hl0
-    (by decide)) ho₁₆ hc₁₆ (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) hA₁₆
+  -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
+  refine WP.bind (WP.liftMem_upd (free_front (enc_u32 (addWrap v 1)) hr0
+    (by decide)) ho₁₆ hc₁₆ (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) (sep_comm hA₁₆)
     fun _ m₁₇ h₁₇ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)
-  refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 _) hr0 (by decide)) ho₁₇ hc₁₇
+  refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 v) hl0 (by decide)) ho₁₇ hc₁₇
     (by rw [ht₁₇, ht₁₆, ht₁₅, hsz₁₄]; decide) hq₁₇ fun _ m₁₈ _ _ _ _ ht₁₈ => ?_)
   refine WP.pure' ⟨.inl rfl, fun r hr hs => hja r ?_ hs⟩
   rwa [ht₁₈, ht₁₇, ht₁₆, ht₁₅] at hr
