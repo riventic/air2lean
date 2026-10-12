@@ -23,7 +23,8 @@ The rules are proved on `Holds` directly (no legacy lifting): `Holds.alloc` (the
 new block holds its bytes and full extent, `newBlockRes`, with the same frame) and `Holds.free`
 (the memory with a block ended holds nothing more, from its bytes and full extent). Each rule
 is also a thread rule (`FTTriple.alloc`, `FTTriple.allocZero`, `FTTotalTriple.free`): the
-sequential triple and the step's locality (`ZigLean/Sep/Full/ThreadStep.lean`).
+sequential triple and the step's locality (`ZigLean/Sep/Full/ThreadStep.lean`); `FTTriple.free'`
+and `free_front` are its partial forms.
 -/
 
 namespace Zig
