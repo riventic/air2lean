@@ -20,6 +20,7 @@
 #                                         build-modes.py, perf-budgets.py
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
 #   premise index and theorem inventory   premises.py, theorem-inventory.py, no-sorry.sh
+#   legacy proof logic only loses users   legacy-logic.py (base: --base or CI's base branch)
 #   AIR and trust                         validate-air.py, trust-report.py,
 #                                         float-semantics.py, mutation-map.py, model inclusion
 #   review ledger (structure only)        release-record.py ledger --allow-unfetched
@@ -70,6 +71,8 @@ check 'declared target matrix' python3 scripts/target-matrix.py check --strict
 check 'theorem premise index' python3 -B scripts/premises.py check
 check 'theorem inventory' python3 -B scripts/theorem-inventory.py check
 check 'sorry/admit/native_decide and kernel escape hatches' scripts/no-sorry.sh
+check 'legacy proof logic: no new users' python3 -B scripts/legacy-logic.py
+check 'legacy proof logic: ratchet regressions' python3 -B -m unittest discover -s tests/roadmap/one-logic -p 'test_*.py'
 check 'golden AIR export validation' python3 -B scripts/validate-air.py
 check 'stage trust report' python3 -B scripts/trust-report.py check
 check 'float-semantics labels' python3 scripts/float-semantics.py check
