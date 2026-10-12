@@ -477,6 +477,30 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
     return errors, summary
 
 
+def reobservation_errors(relation: dict, committed: dict | None, fresh: dict) -> list[str]:
+    """A fresh observation of a recorded target reproduces the record: equal sources, cases and
+    version, and each case related to the recorded one by its class, the target against itself.
+    The compiler hash is provenance only (a wasm32 record observed with the macOS and the Linux
+    build of one release comes from different binaries), and a tolerated class admits another
+    NaN: wasm32 leaves a NaN's sign and payload to the engine's host (V8 on x86_64 makes it
+    negative, on aarch64 positive)."""
+    if committed is None:
+        return ['no committed record']
+    meta = [k for k in fresh if k not in ('compiler_sha256', 'results')]
+    errors = [f'{k}: recorded {committed.get(k)!r}, observed {fresh[k]!r}' for k in meta if committed.get(k) != fresh[k]]
+    if errors or set(committed.get('results', {})) != set(fresh['results']):
+        return errors or ['the recorded kernels differ']
+    bits = relation['targets'][fresh['target']]['pointer_bits']
+    calls = cases(relation)
+    for name, rows in calls.items():
+        for i, args in enumerate(rows):
+            reason = relate(relation['kernels'][name], args, committed['results'][name][i],
+                            fresh['results'][name][i], {'native': bits, 'wasm32': bits}, minor(fresh['zig_version']))
+            if reason:
+                errors.append(f'{name}{tuple(args)}: {reason}')
+    return errors
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -495,13 +519,11 @@ def main(argv=None) -> int:
         path, data = record(args.zig, args.target, relation)
         if args.verify:
             committed = json.loads(path.read_text()) if path.is_file() else None
-            # The observations, sources and cases must match. The compiler hash is provenance only:
-            # a wasm32 record observed with the macOS and with the Linux build of one Zig release
-            # comes from different binaries.
-            same = committed is not None and {k: v for k, v in committed.items() if k != 'compiler_sha256'} == \
-                {k: v for k, v in data.items() if k != 'compiler_sha256'}
-            print(f'{path.relative_to(ROOT)}: {"matches" if same else "DIFFERS from"} the fresh observation')
-            return 0 if same else 1
+            problems = reobservation_errors(relation, committed, data)
+            print(f'{path.relative_to(ROOT)}: {"DIFFERS from" if problems else "matches"} the fresh observation')
+            if problems:
+                print('\n'.join(problems[:20]), file=sys.stderr)
+            return 1 if problems else 0
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(dump_record(data))
         print(f'wrote {path.relative_to(ROOT)}')

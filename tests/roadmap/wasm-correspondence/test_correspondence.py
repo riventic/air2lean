@@ -106,6 +106,22 @@ class Relation(unittest.TestCase):
         self.assertTrue(any('records Zig 0.17.0' in e for e in errors))
         self.assertNotIn('0.16.0 x86_64-linux/wasm32-freestanding', summary)
 
+    def test_reobservation_admits_another_nan_only(self):
+        """wasm32 leaves a NaN's sign to the engine's host: a re-observation on another host
+        reproduces a record when only tolerated NaNs differ."""
+        record = json.loads((self.records / '0.16.0/wasm32-freestanding.json').read_text())
+        fresh = copy.deepcopy(record)
+        sqrt = fresh['results']['f64_sqrt']
+        nan = next(i for i, r in enumerate(sqrt) if r != 'trap' and wc.is_nan(r, 'f64'))
+        sqrt[nan] ^= 1 << 63
+        fresh['compiler_sha256'] = '0' * 64
+        self.assertEqual(wc.reobservation_errors(self.relation, record, fresh), [])
+        fresh['results']['int_mix'][0] ^= 1
+        self.assertTrue(any('int_mix' in e for e in wc.reobservation_errors(self.relation, record, fresh)))
+        fresh['results']['int_mix'][0] ^= 1
+        fresh['zig_version'] = '0.17.0'
+        self.assertTrue(wc.reobservation_errors(self.relation, record, fresh))
+
     def test_illegal_cases_are_not_compared(self):
         entry = self.relation['kernels']['f64_to_i64']
         self.assertTrue(wc.illegal(entry, [0x7FF8000000000000], 17))
