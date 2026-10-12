@@ -130,6 +130,8 @@ initialize registerBuiltinAttribute {
   descr := "a range law `X lo m ⋆ X m hi = X lo hi` that the full-state symbolic executor `fsym` plans by"
   add := fun decl _ kind => do
     let law ← (RangeLaw.ofDecl decl).run' {} {}
+    if let some l := (fsymPlanExt.getState (← getEnv)).find? (·.head == law.head) then
+      throwError "@[fsym_plan] {decl}: `{law.head}` already has the range law {l.decl}"
     fsymPlanExt.add law kind
 }
 

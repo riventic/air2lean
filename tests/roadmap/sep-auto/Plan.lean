@@ -54,8 +54,15 @@ example {b : BlockId} : True := by
 
 theorem not_law {lo hi : Nat} : span lo hi = span lo hi := rfl
 
+theorem span_split' {lo m hi : Nat} (h1 : lo ≤ m) (h2 : m ≤ hi) : (span lo m ⋆ span m hi) = span lo hi :=
+  span_split h1 h2
+
 /-- error: @[fsym_plan] SepAuto.Plan.not_law: the left side is not a separating conjunction; expected a range law `X … lo m … ⋆ X … m hi … = X … lo hi …` -/
 #guard_msgs in
 attribute [fsym_plan] not_law
+
+/-- error: @[fsym_plan] SepAuto.Plan.span_split': `SepAuto.Plan.span` already has the range law SepAuto.Plan.span_split -/
+#guard_msgs in
+attribute [fsym_plan] span_split'
 
 end SepAuto.Plan
