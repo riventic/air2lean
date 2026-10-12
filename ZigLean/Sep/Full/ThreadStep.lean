@@ -383,8 +383,7 @@ theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size al
 /-- The memory after `free` of block `b`. -/
 theorem _root_.Zig.StepIn.kill (m : Mem) (hF : Heap) (b : BlockId) (blk : Block) :
     StepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-    by simp, fun _ he => .inl he, fun _ he => .inl he⟩
+  StepIn.setBlock m hF b _
 
 theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
     m.NoRevive { m with blocks := m.blocks.set! b { blk with live := false } } :=
