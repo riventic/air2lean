@@ -23,13 +23,19 @@ def translator(emit='e' * 64):
     return t
 
 
+def runtime(basic='b' * 64):
+    t = dict(lean='4.34.0', modules=[['ZigLean.Basic', basic], ['ZigLean.Mem.Basic', 'c' * 64]], revision='')
+    t['revision'] = fp.translator_revision(t)
+    return t
+
+
 def sidecar():
     functions = [dict(source=name, air_name=name, air_file=name + '.json', definition=name,
                       proof_api=None, callees=callees, lines=[[0, 1]],
                       canonical=dict(body=[dict(id=0, tag='ret', args=[dict(val=name)])]))
                  for name, callees in GRAPH.items()]
     return dict(format=fp.SIDECAR, namespace='Demo', metadata=dict(profile='p'),
-                options=dict(spawn_policy='available', models=None), translator=translator(),
+                options=dict(spawn_policy='available', models=None), translator=translator(), runtime=runtime(),
                 functions=functions)
 
 
@@ -78,13 +84,20 @@ def main():
     report = fp.compare(base, emitter)
     assert report['invalidated'] == sorted(GRAPH) and report['translator_changed'], report
     assert not fp.compare(base, moved)['translator_changed']
+    # The runtime revision participates the same way: a ZigLean change invalidates everything.
+    changed_runtime = copy.deepcopy(base); changed_runtime['runtime'] = runtime('f' * 64)
+    report = fp.compare(base, changed_runtime)
+    assert report['invalidated'] == sorted(GRAPH) and report['runtime_changed'] and not report['translator_changed'], report
+    assert not fp.compare(base, moved)['runtime_changed']
+    forged_runtime = copy.deepcopy(base); forged_runtime['runtime']['modules'][0][1] = 'f' * 64
+    no_runtime = copy.deepcopy(base); del no_runtime['runtime']
     forged = copy.deepcopy(base); forged['translator']['modules'][0][1] = 'f' * 64
     unsorted = copy.deepcopy(base); unsorted['translator']['modules'].reverse()
     unsorted['translator']['revision'] = fp.translator_revision(unsorted['translator'])
     missing = copy.deepcopy(base); del missing['translator']
     for bad in [dict(base, format='x'), dict(base, functions=base['functions'] * 2),
                 dict(base, functions=[dict(base['functions'][0], extra=1)]),
-                dict(base, format='air2lean-source-map-v1'), forged, unsorted, missing]:
+                dict(base, format='air2lean-source-map-v1'), forged, unsorted, missing, forged_runtime, no_runtime]:
         try:
             with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as handle:
                 json.dump(bad, handle)

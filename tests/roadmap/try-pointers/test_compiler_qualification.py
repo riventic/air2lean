@@ -28,8 +28,8 @@ class CompilerQualificationTests(unittest.TestCase):
         return next(self.case.glob(f'**/{name}.json'))
 
     def test_retained_record_passes(self):
-        self.assertEqual(len(gate.inspect()), 7)
-        self.assertEqual(len(gate.inspect(self.case)), 7)
+        self.assertEqual(len(gate.inspect()), 7 * 4)  # 7 functions, 4 Zig versions
+        self.assertEqual(len(gate.inspect(self.case)), 7 * 4)
 
     def test_changed_air_is_stale(self):
         path = self.air('try_pointers.writeAlias')

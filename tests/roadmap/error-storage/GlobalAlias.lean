@@ -260,7 +260,7 @@ def main : IO Unit := do
     "type 'opaque' is outside the subset"
   -- An error-code bit-pointer is rejected by the packed-field check (L08) before provenance.
   reject { codeAddress with name := "folded_alias.codeBitPointer", layouts := codeLayouts.set! codePtr { pointer 1 with hostSize := 1, vectorIndexExported := true } }
-    "a bit-pointer to a type other than an integer, a `bool`, an enum or a packed struct"
+    "a bit-pointer to a type other than an integer, a `bool`, a float, an enum, a packed struct"
   reject { codeAddress with name := "folded_alias.codeWrongGlobal", body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 99 0)}] }
     "unknown global id 99"
   reject { codeAddress with name := "folded_alias.codeWrongName", globals := #[{codeGlobal with name := some "folded_alias.otherTarget"}] }

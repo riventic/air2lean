@@ -1,4 +1,5 @@
 import ZigLean.Conc.Unroll
+import ZigLean.ResultRun
 import Proofs.Threadsync.Deadline
 import ZigLean.Conc.Word
 import ZigLean.Witness
@@ -3153,10 +3154,10 @@ theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
     (Enc.decode bs : Result Tally).run = some (.ok
       { wg := { state := { raw := a }, event := { impl := { state := { raw := b } } } },
         m := mutexOf c, n := d }) := by
-  have ha' : intOfBytes 64 (bs.extract 0 8) = pure a := ha
-  have hb' : intOfBytes 32 (bs.extract 8 12) = pure b := hb
-  have hc' : intOfBytes 32 (bs.extract 16 20) = pure c := hc
-  have hd' : intOfBytes 32 (bs.extract 20 24) = pure d := hd
+  have ha' := Result.eq_pure_of_run ha
+  have hb' := Result.eq_pure_of_run hb
+  have hc' := Result.eq_pure_of_run hc
+  have hd' := Result.eq_pure_of_run hd
   simp only [Enc.decode, Enc.decodeAt, Enc.size, Array.extract_extract, intSize,
     show alignUp ((64 + 7) / 8) (intAlign 64) = 8 from rfl,
     show alignUp ((32 + 7) / 8) (intAlign 32) = 4 from rfl]

@@ -249,7 +249,7 @@ class Evidence(Scratch):
         def change(data):
             self.entry(data, '0.16.0', 'x86_64-linux')['matrix'] = {'zig': '0.16.0'}
         self.edit_json(TM['MAP'], change)
-        self.check_fails('matches 14 rows')
+        self.check_fails('matches 15 rows')
 
 
 class Gaps(Scratch):

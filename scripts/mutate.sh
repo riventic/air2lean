@@ -131,7 +131,7 @@
 # Usage: mutate.sh
 # Env:
 #   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
-#   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
+#   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: zig.default of compatibility.json (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
@@ -149,8 +149,9 @@ set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+. "$repo_root/scripts/zig-default.sh"
 
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
+zig_version=${AIR2LEAN_ZIG_VERSION:-$(air2lean_default_zig_version "$repo_root")}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 [ -x "$zig_air" ] || {
   echo "error: patched zig not found/executable at $zig_air" >&2

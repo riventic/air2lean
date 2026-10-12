@@ -222,17 +222,14 @@ if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
                      'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
 job = workflow['jobs']['test']
 # CI-only reuse machinery (docs/ci.md): the reuse decision, the in-run artifact unpacking that
-# local-ci.sh --prepare replaces (and `scripts/generated.py materialize` for the generated files), and the trace coverage and record steps. Local CI never reuses,
-# traces or records; scripts/release-record.py does not count these steps as gates.
-# The image (Dockerfile.local-ci) provides the system packages CI installs before tracing.
+# local-ci.sh --prepare replaces (and `scripts/generated.py materialize` for the generated files), and the record
+# step. Local CI never reuses or records (`part` mode restricts the checkout like CI's decision);
+# scripts/release-record.py does not count these steps as gates.
+# The image (Dockerfile.local-ci) provides the system packages CI installs.
 ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build', 'Install the generated files',
-           'Install system packages',
-           'Declared inputs cover every observation', 'Record the result for reuse'}
-# The traced shell is GitHub's bash when AIR2LEAN_TRACE_DIR is unset, as it is here.
-traced_shell = {'run': {'shell': 'bash scripts/ci-trace.sh {0}'}}
-if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow
-        or job.get('defaults', traced_shell) != traced_shell
-        or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps', 'defaults'}
+           'Install system packages', 'Record the result for reuse'}
+if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow or 'defaults' in job
+        or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
         or set(job['strategy']) - {'fail-fast', 'matrix'}
         or set(job['strategy']['matrix']) != {'include'}):
     raise ValueError('unsupported CI runner, defaults or workflow environment')
@@ -240,6 +237,15 @@ mode, version = sys.argv[1:]
 rows = job['strategy']['matrix']['include']
 if mode == 'full':
     rows = [row for row in rows if row['zig'] == version and not row['mutate']]
+elif mode in ('part', 'discover'):
+    # One row in the restricted checkout CI gives it (scripts/ci-reuse.py restrict): `version` is
+    # its part id, e.g. test/0.16.0/inputs. A withheld file it reads fails the row (as root here,
+    # through check-restricted in "Checkout unchanged by verification").
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('ci_reuse', 'scripts/ci-reuse.py')
+    reuse = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reuse)
+    rows = [row for row in rows if reuse.part_id('test', row) == version]
 elif mode == 'mutations':
     rows = [row for row in rows if row['mutate']]
 elif mode != 'matrix':
@@ -289,14 +295,18 @@ for step in job['steps']:
         if step.get('env') or step.get('if') != expected_if:
             raise ValueError(f"changed tool setup environment/guard: {step['name']}")
 
+failed = []
 for number, row in enumerate(rows):
     if set(row) - {'zig', 'part', 'examples', 'full', 'mutate', 'shard'}:
         raise ValueError('unsupported matrix row fields')
+    call(['python3', 'scripts/ci-reuse.py', 'unrestrict'])
     call(['git', 'restore', '.'])
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
           '-e', 'host-zig/', '-e', 'zig-air-*/'])
     prune_current_cache(Path.cwd())
     call(['bash', 'scripts/local-ci.sh', '--prepare', row['zig']])
+    if mode in ('part', 'discover'):  # discover: the whole checkout, listing the undeclared files read
+        call(['python3', 'scripts/ci-reuse.py', 'restrict', '--part', version] + ['--discover'] * (mode == 'discover'))
     temp = f"/artifacts/row-{number}-{row['zig']}"
     Path(temp).mkdir()
     context = {f'matrix.{key}': value for key, value in row.items()}
@@ -312,4 +322,17 @@ for number, row in enumerate(rows):
         code = render(step['run'], context)
         step_env = env | {key: render(value, context) for key, value in step.get('env', {}).items()}
         print(f"== CI {row}: {step['name']} ==", flush=True)
-        call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)
+        try:
+            call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)
+        except subprocess.CalledProcessError:
+            if mode != 'discover':
+                raise
+            failed.append(step['name'])  # discovery goes on: every undeclared read counts
+        if mode == 'discover':  # attribute the reads to this step, then forget them
+            try:
+                call(['python3', 'scripts/ci-reuse.py', 'check-restricted', '--reset'])
+            except subprocess.CalledProcessError:
+                failed.append(step['name'] + ' (read undeclared files)')
+if mode == 'discover':
+    if failed:
+        raise SystemExit('discovery: failed steps (on the whole checkout): ' + '; '.join(failed))

@@ -174,7 +174,8 @@ def instructions(body, state, inlined=False, scope=None):
 
     `state['line']` is the nearest preceding non-inlined dbg_stmt line (legacy, approximate). The span
     follows the exporter's `src`/`column`: the nearest preceding dbg_stmt in the instruction's own inline
-    scope; branch bodies start from their parent's statement, an inlined body from its callee's `src`."""
+    scope; branch bodies start from their parent's statement, an inlined body from its callee's `src`.
+    `state['chain']` holds the enclosing inline blocks' call sites (outermost first) at each yield."""
     scope = scope if scope is not None else dict(src=None, line=None, column=None)
     for inst in body if isinstance(body, list) else ():
         if not isinstance(inst, dict): continue
@@ -184,7 +185,14 @@ def instructions(body, state, inlined=False, scope=None):
         yield inst, state['line'], inlined, span_of(scope)
         if inst.get('tag') == 'dbg_inline_block':
             inner = dict(src=valid_src(inst.get('src')), line=None, column=None)
-            yield from instructions(inst.get('body'), state, True, inner)
+            # The call site is the statement that holds the inlined call; `state['chain']` is the stack of
+            # call sites from the outermost inline block to the innermost one, read by the consumer while
+            # it handles a yielded instruction.
+            chain = state.setdefault('chain', [])
+            span, status = span_of(scope)
+            chain.append(dict(call_site=span, call_site_status=status, callee_span=span_of(dict(inner))[0]))
+            try: yield from instructions(inst.get('body'), state, True, inner)
+            finally: chain.pop()
             continue
         for key in ('body', 'then', 'else'):
             yield from instructions(inst.get(key), state, inlined, dict(scope))
@@ -233,7 +241,8 @@ def localize(root, example, function, failure, ctor, air_dir=None):
         if fn_span[0] is not None: out['source_map'] = 'exact_statement'
         out['functions'].append(dict(name=current, air_file=str(path.relative_to(root)) if path.is_relative_to(root) else str(path),
                                      zig_file=zig_file, zig_decl_line=decl, source_span=fn_span[0], source_span_status=fn_span[1]))
-        for inst, line, inlined, (span, status) in instructions(doc.get('body'), {'line': None}, scope=dict(top)):
+        walk_state = {'line': None}
+        for inst, line, inlined, (span, status) in instructions(doc.get('body'), walk_state, scope=dict(top)):
             callee = inst.get('callee') if isinstance(inst.get('callee'), dict) else {}
             for target in (callee.get('func'), callee.get('comptime_fn')):
                 if isinstance(target, str) and target in docs and target not in seen and len(seen) < MAX_FUNCTIONS:
@@ -243,7 +252,16 @@ def localize(root, example, function, failure, ctor, air_dir=None):
             site = dict(function=current, air_id=inst.get('id'), tag=inst.get('tag'), dbg_line=line, inlined=inlined,
                         zig_file=zig_file, zig_line=decl + line - 1 if decl and line else None,
                         source_span=span, source_span_status=status)
-            if status == 'statement' and not inlined: site['zig_line'] = span['line']
+            if status == 'statement':
+                # Exact when the span is the instruction's own statement; inside an inlined body it is the
+                # callee's statement, in the callee's file.
+                site['zig_line'] = span['line']
+                if inlined: site['zig_file'] = span['file']
+            if inlined:
+                # Where the inlined code is reached from: every enclosing call site, outermost first. A body
+                # whose callee exports no `src` keeps only these (`source_span` stays unavailable_in_AIR).
+                site['inline_chain'] = [dict(c) for c in walk_state.get('chain', ())]
+                site['call_site_span'] = site['inline_chain'][-1]['call_site'] if site['inline_chain'] else None
             if callee.get('func'): site['callee'] = callee['func']
             out['candidate_sites'].append(site)
     out['functions_truncated'] = len(seen) >= MAX_FUNCTIONS
@@ -472,6 +490,95 @@ def with_native(root, info, zig_source, example, function, raw_input, *, gen=Non
     return info
 
 
+# --- Differential-row replay (any shape the production harnesses cover) -------------------
+# A sequential case of any example whose production harness (tests/diff/<ex>/harness.zig and
+# tests/diff/Diff.lean) handles the function: structs, slices, memory buffers, optionals, error
+# unions, floats, allocators. Both production runners are rerun on exactly the recorded input row
+# in a scratch directory (every other function of the example gets an empty input file), and each
+# fresh output line must equal the line the differential run recorded. Nothing is generated or
+# re-derived: the shapes are exactly those the differential test supports, and a host difference
+# (float bits, libm) is `not_reproduced`, never a program bug.
+
+DIFF_SHARED = ('tests/diff/common.zig', 'tests/diff/compat.zig')
+
+
+def diff_row_sources(root, example):
+    """SHA-256 over the Zig sources a row replay builds: the example, its harness, the shared runner."""
+    files = sorted(p for p in (root/'examples'/example).rglob('*.zig') if p.is_file() and not p.is_symlink())
+    files += [root/'tests/diff'/example/'harness.zig', *(root/p for p in DIFF_SHARED)]
+    return hashlib.sha256(json.dumps([[str(p.relative_to(root)), EVAL.sha256(p)] for p in files if p.is_file()]).encode()).hexdigest()
+
+
+def diff_row_request(root, example, function, index, native_line, model_line):
+    """A row-replay request, or None when the example has no production harness here."""
+    if not REPORT.IDENT.fullmatch(example) or not REPORT.IDENT.fullmatch(function): return None
+    if not (root/'tests/diff'/example/'harness.zig').is_file() or not (root/'examples'/example/f'{example}.zig').is_file(): return None
+    inputs = root/'tests/diff'/example/'inputs'
+    if not (inputs/f'{function}.jsonl').is_file(): return None
+    row = CLI.row(inputs/f'{function}.jsonl', index)
+    return dict(example=example, function=function, input_index=index, row=row.rstrip('\n'),
+                row_sha256=hashlib.sha256(row.encode()).hexdigest(),
+                sources_sha256=diff_row_sources(root, example), native_line=native_line, model_line=model_line)
+
+
+def diff_row_block(request):
+    return dict(status='not_run', kind='diff_row', request=request,
+                command=['python3', 'scripts/counterexample.py', 'replay', '--bundle', '<this bundle>'])
+
+
+def run_row(root, request, zig, difftest, timeout):
+    """Run both production runners on the request's row. Returns (status, detail, zig_line, lean_line)."""
+    example, function = request['example'], request['function']
+    difftest = Path(difftest)
+    if not difftest.is_file(): return 'unavailable', f'missing Lean runner {difftest}; run `(cd tests/diff && lake build difftest)`', None, None
+    try: version = subprocess.run([zig, 'version'], capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except subprocess.TimeoutExpired: return 'timeout', 'zig version timed out', None, None
+    except OSError as error: return 'unavailable', str(error), None, None
+    with tempfile.TemporaryDirectory(prefix='air2lean-row-') as temp:
+        temp = Path(temp)
+        inputs = temp/'tests/diff'/example/'inputs'; inputs.mkdir(parents=True)
+        for path in (root/'tests/diff'/example/'inputs').glob('*.jsonl'):
+            (inputs/path.name).write_text(request['row'] + '\n' if path.stem == function else '')
+        cmd = [zig, 'build-exe', '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"zigharness"}',
+               '--dep', example, '--dep', 'common', f'-Mroot={root/"tests/diff"/example/"harness.zig"}',
+               f'-M{example}={root/"examples"/example/f"{example}.zig"}', f'-Mcommon={root/"tests/diff/common.zig"}']
+        try:
+            built = subprocess.run(cmd, cwd=temp, capture_output=True, text=True, timeout=timeout)
+            if built.returncode != 0: return 'error', 'native build failed: ' + built.stderr.strip()[-400:], None, None
+            native = subprocess.run([str(temp/'zigharness')], cwd=temp, capture_output=True, text=True, timeout=timeout)
+            lean = subprocess.run([str(difftest)], cwd=temp, env=dict(os.environ, AIR2LEAN_EXAMPLES=example),
+                                  capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired: return 'timeout', 'native build, native run or Lean run timed out', None, None
+        except OSError as error: return 'error', str(error), None, None
+        def read(side):
+            path = temp/'tests/diff/out'/side/example/f'{function}.jsonl'
+            return path.read_text().splitlines() if path.is_file() else []
+        zig_lines, lean_lines = (read('zig') if native.returncode == 0 else []), (read('lean') if lean.returncode == 0 else [])
+    if len(zig_lines) != 1 or len(lean_lines) != 1:
+        return 'error', f'runners exit {native.returncode}/{lean.returncode} with {len(zig_lines)}/{len(lean_lines)} output lines', None, None
+    return 'ok', version, zig_lines[0].strip(), lean_lines[0].strip()
+
+
+def diff_row_confirm(root, replay, zig, difftest, timeout):
+    """Replay the recorded row; `verified` only when both fresh lines equal the recorded ones."""
+    request = replay['request']
+    # A bundle is untrusted input: names must be identifiers and the row must be the hashed one.
+    if not (isinstance(request, dict) and all(isinstance(request.get(k), str) for k in ('example', 'function', 'row', 'row_sha256'))
+            and REPORT.IDENT.fullmatch(request['example']) and REPORT.IDENT.fullmatch(request['function'])
+            and hashlib.sha256((request['row'] + '\n').encode()).hexdigest() == request['row_sha256']):
+        return dict(status='error', detail='malformed row-replay request')
+    if diff_row_sources(root, request['example']) != request['sources_sha256']:
+        return dict(status='error', detail='harness, example or runner sources changed since the bundle was written')
+    try: current = CLI.row(root/'tests/diff'/request['example']/'inputs'/f"{request['function']}.jsonl", request['input_index'])
+    except (Invalid, OSError): return dict(status='error', detail='the input row is missing')
+    if hashlib.sha256(current.encode()).hexdigest() != request['row_sha256']: return dict(status='error', detail='the input row changed')
+    status, detail, zig_line, lean_line = run_row(root, request, zig, difftest, timeout)
+    if status != 'ok': return dict(status=status, detail=detail)
+    same = zig_line == request['native_line'] and lean_line == request['model_line']
+    return dict(status='verified' if same else 'not_reproduced', zig_version=detail,
+                observed=dict(native_line=zig_line, model_line=lean_line))
+
+
 def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs=4096, seed=0, timeout=300,
                 replay=True, air_dir=None, runner=None, zig_source=None, zig=None):
     """Search small inputs for a violation of `spec`; the violation is replayed in a fresh Lean process."""
@@ -576,6 +683,9 @@ def schedule_bundle(root, receipt_path, index=None, *, replay=False, binary=None
     return bundle(root, observed=observed, schedule=schedule, replay=replay_info, judgement=judgement, **common)
 
 
+DIFFTEST = 'tests/diff/.lake/build/bin/difftest'
+
+
 def default_zig():
     return os.environ.get('AIR2LEAN_ZIG', 'zig')
 
@@ -588,7 +698,8 @@ def replay_block(request, expected, binary):
 
 
 def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None,
-                zig_source=None, zig=None):
+                zig_source=None, zig=None, difftest=None):
+    difftest = difftest or root/DIFFTEST
     data = REPORT.read_summary(summary)
     if data.get('complete') is not True: raise Invalid('incomplete differential summary')
     # A replay must run the code that produced the summary, as `schedules.py replay --summary` requires.
@@ -627,6 +738,12 @@ def case_bundle(root, summary, example, function, index, *, replay=False, binary
         if request is not None:
             replay_info = with_native(root, lean_block(request), zig_source, example, function, raw_input, air_dir=air_dir)
             if replay: replay_info.update(confirm(root, replay_info, timeout, zig))
+        elif search is None and zig_source is None:
+            # Any other sequential shape: rerun the example's production runners on this row.
+            row_request = diff_row_request(root, example, function, index, native_line, model_line)
+            if row_request is not None:
+                replay_info = diff_row_block(row_request)
+                if replay: replay_info.update(diff_row_confirm(root, replay_info, zig or default_zig(), difftest, timeout))
     if zig_source is not None and 'zig_native' not in (replay_info or {}):
         raise Invalid('--zig-source needs a sequential case whose function the Lean replay supports')
     if replay_info is None:
@@ -661,7 +778,7 @@ def search_bundle(root, args):
 REPLAY_EXIT = {'verified': 0, 'not_reproduced': 1, 'timeout': 2, 'error': 3, 'unavailable': 3}
 
 
-def replay_bundle(root, path, binary, timeout, zig=None):
+def replay_bundle(root, path, binary, timeout, zig=None, difftest=None):
     """Re-run a bundle's embedded request. Exit: 0 reproduced, 1 not reproduced, 2 unsolved, 3 setup."""
     data = CLI.read_json(path)
     if type(data) is not dict or data.get('schema') != SCHEMA or data.get('qualified') is not False: raise Invalid('unsupported bundle')
@@ -678,6 +795,13 @@ def replay_bundle(root, path, binary, timeout, zig=None):
               f" observed={outcome.get('observed', {}).get('kind', '-')}"
               + (f" zig_native={native['status']} native_observed={native.get('observed', {}).get('line', '-')}" if native else ''))
         if native and native.get('detail'): print(f"counterexample: {native['detail']}", file=sys.stderr)
+        if outcome.get('detail'): print(f"counterexample: {outcome['detail']}", file=sys.stderr)
+        return REPLAY_EXIT[outcome['status']]
+    if replay.get('kind') == 'diff_row':
+        outcome = diff_row_confirm(root, replay, zig or default_zig(), difftest or root/DIFFTEST, timeout)
+        observed = outcome.get('observed', {})
+        print(f"REPLAY: status={outcome['status']} {data.get('example')}.{data.get('function')}#{data.get('input_index')} diff_row"
+              f" native={observed.get('native_line', '-')} model={observed.get('model_line', '-')}")
         if outcome.get('detail'): print(f"counterexample: {outcome['detail']}", file=sys.stderr)
         return REPLAY_EXIT[outcome['status']]
     request, expected = replay['request'], replay['expected']
@@ -726,6 +850,8 @@ def parser():
         sub.add_argument('--zig-source', type=Path, help='Zig file defining --function: also replay the native program on the input')
     rep = subs.add_parser('replay', help='re-run a bundle; exit 0 reproduced, 1 not reproduced, 2 unsolved, 3 setup')
     rep.add_argument('--bundle', type=Path, required=True)
+    for sub in (case, rep):
+        sub.add_argument('--difftest', type=Path, default=None, help='Lean differential runner for row replays (default tests/diff/.lake/build/bin/difftest)')
     for sub in (case, goal, rep):
         sub.add_argument('--native-zig', default=default_zig(), help='stock zig for the native replay (default $AIR2LEAN_ZIG or zig)')
     for sub in (search, receipt, case, rep):
@@ -739,7 +865,8 @@ def execute(args, root=ROOT):
     CLI.nat(args.timeout, 900, 'timeout')
     if args.timeout == 0: raise Invalid('timeout must be positive')
     if getattr(args, 'interpret', False): args.binary = root/'scripts/schedules-interpreted.sh'
-    if args.command == 'replay': return replay_bundle(root, args.bundle, args.binary, args.timeout, args.native_zig)
+    if args.command == 'replay':
+        return replay_bundle(root, args.bundle, args.binary, args.timeout, args.native_zig, args.difftest)
     if args.command == 'goal-search':
         if not 0 < args.max_inputs <= EVAL.MAX_CASES: raise Invalid(f'max-inputs must be in 1..{EVAL.MAX_CASES}')
         data = goal_bundle(root, args.example, args.function, args.spec, args.pre, gen=args.gen, max_inputs=args.max_inputs,
@@ -757,7 +884,7 @@ def execute(args, root=ROOT):
     else:
         data = case_bundle(root, args.summary, args.example, args.function, args.input_index, replay=args.replay,
                            binary=args.binary, timeout=args.timeout, air_dir=args.air_dir,
-                           zig_source=args.zig_source, zig=args.native_zig)
+                           zig_source=args.zig_source, zig=args.native_zig, difftest=args.difftest)
     if 'command' in data['replay']:
         data['replay']['command'] = [str(args.output) if c == '<this bundle>' else c for c in data['replay']['command']]
     REPORT.atomic_json(args.output, data)
