@@ -15,7 +15,7 @@ esac
 [ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/claims
-lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total
+lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total ZigLean.Sep.Full.Witness
 lake env lean -o .lake/build/lib/lean/tests/roadmap/claims/Fixture.olean tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
 if [ "$write" = 1 ]; then
