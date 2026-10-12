@@ -27,6 +27,10 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
 * **Read-only fields** of a `const` global (`cpts`, `Full/Const.lean`): `FTotalTriple.cfield_load`
   from the provider `ConstAt.add` (a part of known `const` bytes).
 
+The byte, field and payload rules are thread rules (`FTTotalTriple.*`, `docs/sep-threads.md` S2)
+read sequentially (`toFTotalTriple`); the read-only ones are sequential only (no thread rule
+for `const` reads yet, `docs/sep-threads.md` S2).
+
 Proof-only: not reachable from `ZigLean.lean`.
 -/
 
@@ -100,56 +104,169 @@ theorem up_pts_of_region {v : T} {r : Res} (hs : bs.size = Enc.size T)
 
 /-! ## Byte rules -/
 
+/-- The bytes `[k, k + n)` of a region. -/
+theorem OwnsPtr.region_add {p : Ptr} {k n : Nat} (hk : k + n ≤ bs.size) :
+    OwnsPtr (up (Zig.region p a bs)) (p.add k) n := by
+  rintro b hb r ⟨⟨_, _, _, -, -, hbt⟩, hk', hg⟩
+  exact OwnsPtr.bytesAt_add hk b hb r ⟨hbt, hk', hg⟩
+
+/-- **Load** of a `U` at byte `o` of a region whose bytes there decode to `v`, in a thread. -/
+theorem FTTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o)
+    (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
+      (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
+  FTTotalTriple.ofSeq ((FTotalTriple.ofTotal_up (TotalTriple.region_load hn hb ho hfit hv)
+    (Tame.load U b _) (SizeFree.region q a bs) (Keeps.load U b _)).post
+      fun _ _ h => sep_lift.mpr (up_lift.mp h))
+    (ThreadLocal.load hn (OwnsPtr.region_add hfit))
+
+/-- **Store** of a `U` at byte `o` of a region, in a thread. -/
+theorem FTTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
+      (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
+  FTTotalTriple.ofSeq (FTotalTriple.ofTotal_up (Region.storeItem w hn hfit hb ho) (Tame.store b _ w)
+    (SizeFree.region q a bs) (Keeps.store b _ w))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
+      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.region_add hfit))
+
+/-- `region_loadAt` at the offset `k` of generated code, in a thread. -/
+theorem FTTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ bs.size)
+    (hv : Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add k))
+      (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) := by
+  have t := FTTotalTriple.region_loadAt (q := q) hn hb ho hfit hv
+  rwa [Int.toNat_of_nonneg h0] at t
+
+/-- `region_storeAt` at the offset `k` of generated code, in a thread. -/
+theorem FTTotalTriple.region_store [LawfulEnc U] {k : Int} (w : U) (hn : 0 < Enc.size U)
+    (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ bs.size) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add k) w)
+      (fun _ => up (Zig.region q a (writeBytes bs k.toNat (Enc.encode w)))) := by
+  have t := FTTotalTriple.region_storeAt (q := q) w hn hb ho hfit
+  rwa [Int.toNat_of_nonneg h0] at t
+
+/-- `region_loadAt` at byte 0, in a thread. -/
+theorem FTTotalTriple.region_load0 {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (hfit : Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract 0 (Enc.size U)) = pure v) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) := by
+  have t := FTTotalTriple.region_loadAt (q := q) (bs := bs) (o := 0) hn hb (Nat.dvd_zero b) (by omega)
+    (by rwa [Nat.zero_add])
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+
+/-- `region_storeAt` at byte 0, in a thread. -/
+theorem FTTotalTriple.region_store0 [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (hfit : Enc.size U ≤ bs.size) :
+    FTTotalTriple (up (Zig.region q a bs)) (Zig.store b q w)
+      (fun _ => up (Zig.region q a (writeBytes bs 0 (Enc.encode w)))) := by
+  have t := FTTotalTriple.region_storeAt (q := q) (bs := bs) (o := 0) w hn hb (Nat.dvd_zero b) (by omega)
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+
 /-- **Load** of a `U` at byte `o` of a region whose bytes there decode to `v`. -/
 theorem FTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o)
     (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
       (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
-  (FTotalTriple.ofTotal_up (TotalTriple.region_load hn hb ho hfit hv) (Tame.load U b _)
-    (SizeFree.region q a bs) (Keeps.load U b _)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
+  (FTTotalTriple.region_loadAt hn hb ho hfit hv).toFTotalTriple
 
 /-- **Store** of a `U` at byte `o` of a region. -/
 theorem FTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
       (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
-  FTotalTriple.ofTotal_up (Region.storeItem w hn hfit hb ho) (Tame.store b _ w)
-    (SizeFree.region q a bs) (Keeps.store b _ w)
+  (FTTotalTriple.region_storeAt w hn hb ho hfit).toFTotalTriple
 
 /-- `region_loadAt` at the offset `k` of generated code (`p.add 2`: an `Int` literal). -/
 theorem FTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ bs.size)
     (hv : Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add k))
-      (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) := by
-  have t := FTotalTriple.region_loadAt (q := q) hn hb ho hfit hv
-  rwa [Int.toNat_of_nonneg h0] at t
+      (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
+  (FTTotalTriple.region_load hn hb h0 ho hfit hv).toFTotalTriple
 
 /-- `region_storeAt` at the offset `k` of generated code. -/
 @[fsym] theorem FTotalTriple.region_store [LawfulEnc U] {k : Int} (w : U) (hn : 0 < Enc.size U)
     (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add k) w)
-      (fun _ => up (Zig.region q a (writeBytes bs k.toNat (Enc.encode w)))) := by
-  have t := FTotalTriple.region_storeAt (q := q) w hn hb ho hfit
-  rwa [Int.toNat_of_nonneg h0] at t
+      (fun _ => up (Zig.region q a (writeBytes bs k.toNat (Enc.encode w)))) :=
+  (FTTotalTriple.region_store w hn hb h0 ho hfit).toFTotalTriple
 
 /-- `region_loadAt` at byte 0. -/
 theorem FTotalTriple.region_load0 {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (hfit : Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract 0 (Enc.size U)) = pure v) :
-    FTotalTriple (up (Zig.region q a bs)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) := by
-  have t := FTotalTriple.region_loadAt (q := q) (bs := bs) (o := 0) hn hb (Nat.dvd_zero b) (by omega)
-    (by rwa [Nat.zero_add])
-  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+    FTotalTriple (up (Zig.region q a bs)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
+  (FTTotalTriple.region_load0 hn hb hfit hv).toFTotalTriple
 
 /-- `region_storeAt` at byte 0. -/
 @[fsym] theorem FTotalTriple.region_store0 [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (hfit : Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b q w)
-      (fun _ => up (Zig.region q a (writeBytes bs 0 (Enc.encode w)))) := by
-  have t := FTotalTriple.region_storeAt (q := q) (bs := bs) (o := 0) w hn hb (Nat.dvd_zero b) (by omega)
-  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+      (fun _ => up (Zig.region q a (writeBytes bs 0 (Enc.encode w)))) :=
+  (FTTotalTriple.region_store0 w hn hb hfit).toFTotalTriple
 
 /-! ## Fields -/
+
+/-- **Load of a field** in a thread: a `U` at byte `o` of a typed value `s`, where every byte
+string of `s` holds `v`. -/
+theorem FTTotalTriple.field_loadAt {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o)
+    (hfit : o + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
+    FTTotalTriple (up (pts q a s)) (Zig.load U b (q.add o)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) :=
+  (FTTotalTriple.ex fun bs => FTTotalTriple.lift fun ⟨hs, hd⟩ =>
+    (FTTotalTriple.region_loadAt (q := q) hn hb ho (hs ▸ hfit) (hv bs hs hd)).post fun _ _ hx => by
+      obtain ⟨e, hr⟩ := sep_lift.mp hx
+      exact sep_lift.mpr ⟨e, up_pts_of_region hs hd hr⟩).pre fun _ h => up_pts_iff.mp h
+
+/-- **Store of a field** in a thread: `w` at byte `o` of a typed value `s`; every byte string of
+`s` with `w` written there decodes to `s'`. -/
+theorem FTTotalTriple.field_storeAt [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < Enc.size U)
+    (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
+    (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (writeBytes bs o (Enc.encode w)) = pure s') :
+    FTTotalTriple (up (pts q a s)) (Zig.store b (q.add o) w) (fun _ => up (pts q a s')) :=
+  (FTTotalTriple.ex fun bs => FTTotalTriple.lift fun ⟨hs, hd⟩ =>
+    (FTTotalTriple.region_storeAt (q := q) w hn hb ho (hs ▸ hfit)).post fun _ _ hr =>
+      up_pts_of_region (by rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega), hs])
+        (hw bs hs hd) hr).pre fun _ h => up_pts_iff.mp h
+
+/-- `field_loadAt` at the offset `k` of generated code, in a thread. -/
+theorem FTTotalTriple.field_load {k : Int} {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
+    FTTotalTriple (up (pts q a s)) (Zig.load U b (q.add k)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) := by
+  have t := FTTotalTriple.field_loadAt (q := q) hn hb ho hfit hv
+  rwa [Int.toNat_of_nonneg h0] at t
+
+/-- `field_storeAt` at the offset `k` of generated code, in a thread. -/
+theorem FTTotalTriple.field_store [LawfulEnc U] {k : Int} {s s' : T} (w : U) (hn : 0 < Enc.size U)
+    (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ Enc.size T)
+    (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (writeBytes bs k.toNat (Enc.encode w)) = pure s') :
+    FTTotalTriple (up (pts q a s)) (Zig.store b (q.add k) w) (fun _ => up (pts q a s')) := by
+  have t := FTTotalTriple.field_storeAt (q := q) w hn hb ho hfit hw
+  rwa [Int.toNat_of_nonneg h0] at t
+
+/-- `field_loadAt` at byte 0, in a thread. -/
+theorem FTTotalTriple.field_load0 {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
+    (hfit : Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract 0 (Enc.size U)) = pure v) :
+    FTTotalTriple (up (pts q a s)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) := by
+  have t := FTTotalTriple.field_loadAt (T := T) (q := q) (o := 0) hn hb (Nat.dvd_zero b) (by omega)
+    (fun bs hs hd => by rw [Nat.zero_add]; exact hv bs hs hd)
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+
+/-- `field_storeAt` at byte 0, in a thread. -/
+theorem FTTotalTriple.field_store0 [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < Enc.size U)
+    (hb : b ∣ a) (hfit : Enc.size U ≤ Enc.size T)
+    (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (writeBytes bs 0 (Enc.encode w)) = pure s') :
+    FTTotalTriple (up (pts q a s)) (Zig.store b q w) (fun _ => up (pts q a s')) := by
+  have t := FTTotalTriple.field_storeAt (T := T) (q := q) (o := 0) w hn hb (Nat.dvd_zero b) (by omega) hw
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
 
 /-- **Load of a field**: a `U` at byte `o` of a typed value `s`, where every byte string of `s`
 holds `v`. -/
@@ -158,10 +275,7 @@ theorem FTotalTriple.field_loadAt {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b 
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTotalTriple (up (pts q a s)) (Zig.load U b (q.add o)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) :=
-  (FTotalTriple.ex fun bs => FTotalTriple.lift fun ⟨hs, hd⟩ =>
-    (FTotalTriple.region_loadAt (q := q) hn hb ho (hs ▸ hfit) (hv bs hs hd)).post fun _ _ hx => by
-      obtain ⟨e, hr⟩ := sep_lift.mp hx
-      exact sep_lift.mpr ⟨e, up_pts_of_region hs hd hr⟩).pre fun _ h => up_pts_iff.mp h
+  (FTTotalTriple.field_loadAt hn hb ho hfit hv).toFTotalTriple
 
 /-- **Store of a field**: `w` at byte `o` of a typed value `s`; every byte string of `s` with
 `w` written there decodes to `s'`. -/
@@ -170,47 +284,39 @@ theorem FTotalTriple.field_storeAt [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < En
     (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (writeBytes bs o (Enc.encode w)) = pure s') :
     FTotalTriple (up (pts q a s)) (Zig.store b (q.add o) w) (fun _ => up (pts q a s')) :=
-  (FTotalTriple.ex fun bs => FTotalTriple.lift fun ⟨hs, hd⟩ =>
-    (FTotalTriple.region_storeAt (q := q) w hn hb ho (hs ▸ hfit)).post fun _ _ hr =>
-      up_pts_of_region (by rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega), hs])
-        (hw bs hs hd) hr).pre fun _ h => up_pts_iff.mp h
+  (FTTotalTriple.field_storeAt w hn hb ho hfit hw).toFTotalTriple
 
 /-- `field_loadAt` at the offset `k` of generated code. -/
 theorem FTotalTriple.field_load {k : Int} {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
-    FTotalTriple (up (pts q a s)) (Zig.load U b (q.add k)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) := by
-  have t := FTotalTriple.field_loadAt (q := q) hn hb ho hfit hv
-  rwa [Int.toNat_of_nonneg h0] at t
+    FTotalTriple (up (pts q a s)) (Zig.load U b (q.add k)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) :=
+  (FTTotalTriple.field_load hn hb h0 ho hfit hv).toFTotalTriple
 
 /-- `field_storeAt` at the offset `k` of generated code. -/
 theorem FTotalTriple.field_store [LawfulEnc U] {k : Int} {s s' : T} (w : U) (hn : 0 < Enc.size U)
     (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ Enc.size T)
     (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (writeBytes bs k.toNat (Enc.encode w)) = pure s') :
-    FTotalTriple (up (pts q a s)) (Zig.store b (q.add k) w) (fun _ => up (pts q a s')) := by
-  have t := FTotalTriple.field_storeAt (q := q) w hn hb ho hfit hw
-  rwa [Int.toNat_of_nonneg h0] at t
+    FTotalTriple (up (pts q a s)) (Zig.store b (q.add k) w) (fun _ => up (pts q a s')) :=
+  (FTTotalTriple.field_store w hn hb h0 ho hfit hw).toFTotalTriple
 
 /-- `field_loadAt` at byte 0. -/
 theorem FTotalTriple.field_load0 {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (hfit : Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract 0 (Enc.size U)) = pure v) :
-    FTotalTriple (up (pts q a s)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) := by
-  have t := FTotalTriple.field_loadAt (T := T) (q := q) (o := 0) hn hb (Nat.dvd_zero b) (by omega)
-    (fun bs hs hd => by rw [Nat.zero_add]; exact hv bs hs hd)
-  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+    FTotalTriple (up (pts q a s)) (Zig.load U b q) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) :=
+  (FTTotalTriple.field_load0 hn hb hfit hv).toFTotalTriple
 
 /-- `field_storeAt` at byte 0. -/
 theorem FTotalTriple.field_store0 [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < Enc.size U)
     (hb : b ∣ a) (hfit : Enc.size U ≤ Enc.size T)
     (hw : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (writeBytes bs 0 (Enc.encode w)) = pure s') :
-    FTotalTriple (up (pts q a s)) (Zig.store b q w) (fun _ => up (pts q a s')) := by
-  have t := FTotalTriple.field_storeAt (T := T) (q := q) (o := 0) w hn hb (Nat.dvd_zero b) (by omega) hw
-  simpa only [Int.natCast_zero, Ptr.add_zero] using t
+    FTotalTriple (up (pts q a s)) (Zig.store b q w) (fun _ => up (pts q a s')) :=
+  (FTTotalTriple.field_store0 w hn hb hfit hw).toFTotalTriple
 
 end Bytes
 
@@ -220,12 +326,27 @@ section ErrUnion
 
 variable {α : Type} [Enc α] {q : Ptr} {a b : Nat} {x : α}
 
+/-- **Load of the payload** of an error union that holds `.ok x`, in a thread. -/
+theorem FTTotalTriple.errPayload_load (hn : 0 < Enc.size α) (hb : b ∣ a)
+    (hpo : b ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).2) :
+    FTTotalTriple (up (pts q a (Except.ok x : Except ErrName α))) (Zig.load α b (errPayloadPtr α q))
+      (fun r => ⟪r = x⟫ ⋆ up (pts q a (Except.ok x : Except ErrName α))) :=
+  FTTotalTriple.field_loadAt hn hb hpo (errUnion_bounds _ _).2.1 fun _ _ h => (errUnion_decode_ok h).2
+
+/-- **Store of the payload** of an error union that holds `.ok x`, in a thread. -/
+theorem FTTotalTriple.errPayload_store [LawfulEnc α] (y : α) (hn : 0 < Enc.size α)
+    (hb : b ∣ a) (hpo : b ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).2) :
+    FTTotalTriple (up (pts q a (Except.ok x : Except ErrName α))) (Zig.store b (errPayloadPtr α q) y)
+      (fun _ => up (pts q a (Except.ok y : Except ErrName α))) :=
+  FTTotalTriple.field_storeAt y hn hb hpo (errUnion_bounds _ _).2.1 fun _ hs h =>
+    errUnion_decode_setPayload y hs (errUnion_decode_ok h).1
+
 /-- **Load of the payload** of an error union that holds `.ok x`, through its payload pointer. -/
 @[fsym] theorem FTotalTriple.errPayload_load (hn : 0 < Enc.size α) (hb : b ∣ a)
     (hpo : b ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).2) :
     FTotalTriple (up (pts q a (Except.ok x : Except ErrName α))) (Zig.load α b (errPayloadPtr α q))
       (fun r => ⟪r = x⟫ ⋆ up (pts q a (Except.ok x : Except ErrName α))) :=
-  FTotalTriple.field_loadAt hn hb hpo (errUnion_bounds _ _).2.1 fun _ _ h => (errUnion_decode_ok h).2
+  (FTTotalTriple.errPayload_load hn hb hpo).toFTotalTriple
 
 /-- **Store of the payload** of an error union that holds `.ok x`: it then holds `.ok y` (the
 error code is not written). -/
@@ -233,8 +354,7 @@ error code is not written). -/
     (hb : b ∣ a) (hpo : b ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).2) :
     FTotalTriple (up (pts q a (Except.ok x : Except ErrName α))) (Zig.store b (errPayloadPtr α q) y)
       (fun _ => up (pts q a (Except.ok y : Except ErrName α))) :=
-  FTotalTriple.field_storeAt y hn hb hpo (errUnion_bounds _ _).2.1 fun _ hs h =>
-    errUnion_decode_setPayload y hs (errUnion_decode_ok h).1
+  (FTTotalTriple.errPayload_store y hn hb hpo).toFTotalTriple
 
 end ErrUnion
 

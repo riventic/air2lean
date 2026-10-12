@@ -320,6 +320,12 @@ theorem conseq (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) (hq : ∀ v
     FTTotalTriple P' c Q' :=
   ⟨ht.1.conseq hp hq, fun m r rF hh h' hc ho => ht.2 m r rF hh (hp _ h') hc ho⟩
 
+theorem pre (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) : FTTotalTriple P' c Q :=
+  ht.conseq hp fun _ _ h => h
+
+theorem post (ht : FTTotalTriple P c Q) (hq : ∀ v r, Q v r → Q' v r) : FTTotalTriple P c Q' :=
+  ht.conseq (fun _ h => h) hq
+
 theorem frame (ht : FTTotalTriple P c Q) : FTTotalTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   refine ⟨ht.1.frame, fun m r rF hh hpr hc ho => ?_⟩
   obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr

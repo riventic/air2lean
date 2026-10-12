@@ -146,11 +146,39 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   statement, its thread rule (`FTTotalTriple.ofSeq` of the sequential proof and its locality),
   and the `@[fsym]` sequential rule is `.toFTotalTriple` of it.
 
+  Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
+  `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
+  `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
+  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `region_add`,
+  `regionIn_add`, `regionIn_start`.
+
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. Next: `Arr`, `Typed`,
-  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`; their locality must show
-  `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
+  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. `Full/Arr`
+  (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`, `errPayload_*`; not the
+  read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`,
+  `checkSentinelIndex_of`, `FTTotalTriple.ofRegion`, `memsetUndef`, `regionStore*`,
+  `regionLoadWritten*`, `memcpyRegions*`). Next: `Mmap` (`mmap`/`munmap`/`mremap`; their
+  locality must show `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
+
+  **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
+  check passes only if no recorded write to the global is concurrent with the reader. Every
+  write that is recorded went through `Mem.accessW` (or a mapping's kind check), which rejects a
+  `const` global, so no reachable memory has one; but `Mem.FConc` does not say so, and a thread
+  rule must hold in every `FConc` memory. Counterexample to `FTTotalTriple.cload` as stated: a
+  memory whose footprint has a write by thread 1 to a live `const` block, concurrent with thread
+  0, where thread 0 holds `cpts` of it (knowledge only: `Mem.kn` reads the blocks); the load
+  throws `.illegal`. A thread rule needs a memory invariant "no recorded write to a `const`
+  block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts;
+  decision pending.
+
+  **Open: `mremap` growth in place (`mremapGrow'`).** The grown bytes `[S, lo + n)` of the old
+  block come alive without a recorded access, so the thread owns them only if every recorded
+  access to those offsets happened before its clock. The precondition holds only the extent
+  (`bext`), which is ghost state, not linked to clocks: a footprint entry of thread 1 at offset
+  `S` (its `munmap` of the old tail, concurrent with thread 0) makes the post's ownership false.
+  A thread rule needs ownership of a whole extent to cover every recorded access to the block
+  (`Mem.Owns` of the extent's offsets); decision pending.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
