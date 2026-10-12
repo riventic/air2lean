@@ -634,21 +634,19 @@ def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
       { bytes := Array.replicate size .undef, align, kind, live := true,
         addr := m.newAddr size align } }
 
-/-- A run with no outcome: the address space has no room for a block (`alloc`). Like a run that
-does not terminate, it is outside every partial-correctness statement; a total-correctness
-statement shows room (`Mem.roomFor`, premise SEM-07). -/
-def noRoom {α : Type} : MemM α := StateT.lift (ExceptT.mk none)
-
 /-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`); its address is the
-placement's (`Mem.newAddr`). If the block does not fit inside the address space
-(`Mem.roomFor`), the allocation fails as for an exhausted address space: the run has no outcome
-(`noRoom`). The block is never placed above `Placement.addrLimit` (O-H). -/
+placement's (`Mem.newAddr`). The block is never placed above `Placement.addrLimit` (O-H): without
+room (`Mem.roomFor`) the run throws `.stackOverflow`, the outcome of an exhausted stack budget
+(MM-5, premise STK-01). `alloc` makes the blocks that have no allocator of their own: stack
+locals (`allocStack`), thread-local instances and the runtime's cells; every allocator path
+checks room first and fails as out of memory (`rawAlloc` returns null, `mmap` fails with
+`ENOMEM`). -/
 def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   let m ← get
   if m.roomFor size align then
     set (m.afterAlloc kind size align)
     pure ⟨some m.blocks.size, 0⟩
-  else noRoom
+  else throw .stackOverflow
 
 /-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
 `e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
@@ -977,11 +975,41 @@ def ptrProject (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := fun m =>
 
 /-! ## Globals -/
 
-/-- `m` with one more global block, `m.blocks.size`: `bytes`, at the placement's address
-(`Mem.newAddr`). `kind`: `.global` for a `var`, `.constGlobal` for anything else. -/
+/-- First fit from `A`: while `[A, A + size)` meets a live block, move `A` past that block
+(rounded up to `align`), at most `fuel` times. -/
+def Mem.fitFrom (m : Mem) (size align : Nat) : Nat → Nat → Nat
+  | 0, A => A
+  | fuel + 1, A =>
+    match m.blocks.find? (fun blk => !blk.clearOf A size) with
+    | none => A
+    | some blk => m.fitFrom size align fuel (alignUp (blk.addr + blk.bytes.size) align)
+
+/-- The lowest aligned address from 4096 up that the first-fit walk finds clear of every live
+block (`Mem.fitFrom`). One step per block suffices (`Mem.firstFit_spec`). -/
+def Mem.firstFit (m : Mem) (size align : Nat) : Nat :=
+  m.fitFrom size align (m.blocks.size + 1) (alignUp 4096 align)
+
+/-- The address of a global at program start: the placement's (`Mem.newAddr`) while it fits in
+the address space (`Mem.roomFor`), else the first fit (`Mem.firstFit`). The first fit packs the
+globals into the gaps the placement left, so the globals of every program whose globals fit
+(`Mem.GlobalsFit`) end below `2 ^ 63` under every placement (`Mem.ofGlobals_liveBounded`). -/
+def Mem.globalPlace (m : Mem) (size align : Nat) : Nat :=
+  if m.roomFor size align then m.newAddr size align else m.firstFit size align
+
+/-- The globals fit in the address space with room to spare: `4096 + (n + 1) * T ≤ 2 ^ 63`, `T`
+the sum of their sizes and alignments. The translator rejects a program whose globals do not. -/
+def Mem.GlobalsFit (gs : List (Array Byte × Nat × BlockKind)) : Prop :=
+  4096 + (gs.length + 1) * (gs.map fun g => g.1.size + g.2.1).sum ≤ 2 ^ 63
+
+instance (gs : List (Array Byte × Nat × BlockKind)) : Decidable (Mem.GlobalsFit gs) := by
+  unfold Mem.GlobalsFit; infer_instance
+
+/-- `m` with one more global block, `m.blocks.size`: `bytes`, at `Mem.globalPlace`. `kind`:
+`.global` for a `var`, `.constGlobal` for anything else. -/
 def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) (kind : BlockKind) : Mem :=
   { m with
-    blocks := m.blocks.push { bytes, align, kind, live := true, addr := m.newAddr bytes.size align } }
+    blocks := m.blocks.push
+      { bytes, align, kind, live := true, addr := m.globalPlace bytes.size align } }
 
 /-- The memory at program start under the placement `σ`: block `k` is global `k`, with its
 initial bytes, alignment and kind, at the address that `σ` gives it. -/

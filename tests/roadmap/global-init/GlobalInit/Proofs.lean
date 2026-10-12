@@ -90,7 +90,7 @@ theorem bump_from_start (σ : Placement) (ext : ExternInit)
     (hx : ext.counter.toNat + 1 < 2 ^ 32) :
     match (bump.run (mem0 σ ext)).run with
     | some (.ok (r, _)) => r = ext.counter + 1
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | none => True := by
   obtain ⟨h, hF, hd, hm, hp⟩ := counter_init σ ext
   have := bump_spec ext.counter hx (mem0 σ ext) h hF hd hm hp (mem0_seq σ ext)

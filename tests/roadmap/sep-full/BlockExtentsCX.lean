@@ -153,7 +153,7 @@ theorem no_cell_size (Q : Ptr → FAssn) :
   intro h
   have hx := h m1 _ _ (holds1 2 Ghost.unit (by simpa [gF] using GOk.unit m1)) ⟨own1_bytesAt 2, rfl, rfl⟩ seq1
   rw [run_project] at hx
-  exact hx
+  cases hx
 
 /-- **New model, with the extent**: the block's full extent gives its size. -/
 theorem cell_size_bext {A : Nat} {x : Byte} :

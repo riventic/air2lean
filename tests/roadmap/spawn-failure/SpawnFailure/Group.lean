@@ -704,7 +704,7 @@ theorem groupAsync_spec (env : Env) (henv : env.spawn = .available) {σ : Placem
 /-- **No run of `groupAsync io v` gives an error**, for every schedule, resource outcome and
 budget: no race on `out` between the child and `main`, no invalid join, no use after free. -/
 theorem groupAsync_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run ≠
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
   (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ io lim)

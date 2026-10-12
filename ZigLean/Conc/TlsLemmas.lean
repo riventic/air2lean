@@ -431,7 +431,7 @@ def TTripleIn {α : Type} (t : ThreadId) (R : Array ThreadRec) (P : Assn) (c : M
     m.current < m.clocks.size → m.Owns m.current hP →
     match (c.run m).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Owns m'.current hQ ∧
         StepIn hF m m'
@@ -463,7 +463,7 @@ theorem bind {S : β → Assn} {f : α → MemM β} (hc : TTripleIn t R P c Q)
   | none => intro; trivial
   | some r =>
     cases r with
-    | error e => intro h1; exact h1.elim
+    | error e => intro h1; exact h1
     | ok r =>
       obtain ⟨v, m'⟩ := r
       rintro ⟨hQ, hd', hm', hq, ho', hs⟩
@@ -560,8 +560,8 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
   have hx := ht m (own t) _ hc hR hd hm hp hcs (hc ▸ ho.owns t htl)
-  refine WP.liftMem (fun e he => ?_) fun a m' hr => ?_
-  · rw [he] at hx; exact hx.elim
+  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
     have ho'' : m'.Owns t hQ := by rw [hs.current, hc] at ho'; exact ho'

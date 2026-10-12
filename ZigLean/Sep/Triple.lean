@@ -351,7 +351,7 @@ def Triple {α : Type} (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
   ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq →
     match (c.run m).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
 
@@ -408,7 +408,7 @@ theorem bind {R : β → Assn} {f : α → MemM β} (hc : Triple P c Q) (hf : �
   | none => intro; trivial
   | some r =>
     cases r with
-    | error e => intro h1; exact h1.elim
+    | error e => intro h1; exact h1
     | ok r =>
       obtain ⟨v, m'⟩ := r
       rintro ⟨hQ, hd', hm', hq, hs'⟩

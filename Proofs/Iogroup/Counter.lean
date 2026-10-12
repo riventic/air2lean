@@ -1660,7 +1660,7 @@ theorem groupCounter_spec (env : Env) {σ : Placement} {fuel : Nat} {o : Nat →
 /-- **No run of `groupCounter` gives an error**: no data race on the counter, no deadlock at the
 futex or at `Group.await`, no panic, under every schedule. -/
 theorem groupCounter_safe (env : Env) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (groupCounter io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (groupCounter io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (fun _ => rfl) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Group` counter returns 3 within

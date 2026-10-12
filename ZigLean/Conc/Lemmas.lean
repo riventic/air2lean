@@ -1790,19 +1790,18 @@ theorem join_eq {m m' : Mem} {tid : ThreadId}
         ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
         throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
 
-/-- An allocation gives no error. -/
-theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) :
+/-- An allocation gives no error but `.stackOverflow`: no room in the address space (STK-01). -/
+theorem alloc_err {m : Mem} {kind : BlockKind} {size align : Nat} {e : Error}
+    (h : ((alloc kind size align).run m).run = some (.error e)) : e = .stackOverflow := by
+  cases hroom : m.roomFor size align
+  · rw [alloc_run_noRoom m hroom] at h; cases h; rfl
+  · rw [alloc_run_eq m hroom] at h; cases h
+
+/-- An allocation with room (`Mem.roomFor`) gives no error. -/
+theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat}
+    (hroom : m.roomFor size align = true) (e : Error) :
     ((alloc kind size align).run m).run ≠ some (.error e) := by
-  intro h
-  unfold alloc at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  split at h₁
-  · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
-    · exact MemM.set_err h₂
-    · exact MemM.pure_err h₃
-  · cases h₁
+  rw [alloc_run_eq m hroom]; intro h; cases h
 
 /-- A free of a live block whose end races with no access (`Mem.freeRaces`) gives no error. -/
 theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)

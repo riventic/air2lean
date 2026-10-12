@@ -1141,10 +1141,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
-          lake build ZigLean.Mem.Lemmas Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Total ZigLean.Sep.Block ZigLean.Sep.Full.Triple Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done
+          # NoRoom.lean (two theorems) and GlobalsFit.lean (one): standard axioms only.
+          python3 - "$RUNNER_TEMP/memory-hardening" <<'EOF'
+          import re, sys
+          for name, count in (('NoRoom', 2), ('GlobalsFit', 1)):
+              text = open(f'{sys.argv[1]}/{name}.log').read()
+              used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+              assert text.count('depends on axioms') == count and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
 
       - name: Validate AIR input and whole-program signatures
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

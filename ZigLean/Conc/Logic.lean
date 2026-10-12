@@ -153,7 +153,7 @@ protocol, and each result `b` at the memory `m` and the depth `d` that is left s
 def Safe {β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem → Nat → Prop) :
     {n : Nat} → Nat → (ThreadId → γ) → CoN Tgt (β × Mem) n → Prop
   | _, _, _, .leaf none => True
-  | _, _, _, .leaf (some (.error _)) => P.strict = false
+  | _, _, _, .leaf (some (.error e)) => P.strict = false ∨ e = .stackOverflow
   | n, N, G, .leaf (some (.ok (b, m))) => m.threads.size = N ∧ Q b G m n
   | _, N, G, .sync op m k => m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
@@ -213,10 +213,10 @@ theorem bind {x : ConcM Tgt α} {f : α → ConcM Tgt β} {Q : β → (ThreadId 
     (h : P.WP t x (fun a G m d => P.WP t (f a) Q G m d) G m n) : P.WP t (x >>= f) Q G m n :=
   Safe.bind (f := fun a k m => f a k m) (x n m) h
 
-/-- A step in `MemM`: no stop. It keeps the number of threads. In strict mode it does not throw
-(`herr`). -/
-theorem liftMem {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
+/-- A step in `MemM`: no stop. It keeps the number of threads. In strict mode it throws only
+`.stackOverflow` (`herr`; premise STK-01). -/
+theorem liftMem' {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false ∨ e = .stackOverflow)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
       m'.threads.size = m.threads.size ∧ Q a G m' n) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
@@ -229,6 +229,15 @@ theorem liftMem {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → 
   | some (.ok (a, m')) =>
     rw [show x.run m = ExceptT.mk (some (.ok (a, m'))) from hx]
     simp only [ExceptT.mk, Safe]; exact h a m' hx
+
+/-- A step in `MemM`: no stop. It keeps the number of threads. In strict mode it does not throw
+(`herr`). -/
+theorem liftMem {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
+    (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
+      m'.threads.size = m.threads.size ∧ Q a G m' n) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  liftMem' (fun e he => .inl (herr e he)) h
 
 /-- A sync op: the thread stops with the ghost value `g` and the invariant; `Q` holds of each
 response when it goes on. At depth `0` there is no result. -/
@@ -562,13 +571,15 @@ theorem settle_ok {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) �
 theorem settle_safe {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
     {s : Sched.State Tgt α} {n N : Nat} {G : ThreadId → γ} {tree : CoN Tgt (β × Mem) n}
     (hstr : P.strict = true) (hs : P.Safe t Q N G tree)
-    (hQ : ∀ b G m d, Q b G m d → joinedAll t m) (e : Error) :
+    (hQ : ∀ b G m d, Q b G m d → joinedAll t m) {e : Error} (he : e ≠ .stackOverflow) :
     Sched.settle t s tree ≠ .error (some e) := by
   cases tree with
   | leaf r =>
     rcases r with _ | _ | ⟨b, m⟩
     · simp [Sched.settle]
-    · simp only [Safe] at hs; rw [hstr] at hs; cases hs
+    · simp only [Safe] at hs; rw [hstr] at hs
+      simp only [Sched.settle, ne_eq, Except.error.injEq, Option.some.injEq]
+      rintro rfl; simp_all
     · simp only [Safe] at hs
       simp only [Sched.settle, checkJoined_of (hQ _ _ _ _ hs.2)]
       simp
@@ -789,20 +800,20 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
     (hinv : P.inv G s.mem) (hp : P.PausedOk t Q (G t) p)
     (hQ : ∀ b G m d, Q b G m d → joinedAll t m)
     (hgo : Sched.canGo s t p.op = true) (hdone : ∀ u, s.isDone u = true → P.fin (G u))
-    (e : Error) : Sched.turn env dispatch fuel o t s p ≠ .error (some e) := by
+    {e : Error} (he : e ≠ .stackOverflow) : Sched.turn env dispatch fuel o t s p ≠ .error (some e) := by
   obtain ⟨d, op, k⟩ := p
   have hstep := hp G s.mem rfl hinv
   intro h
   cases op with
   | yield =>
     simp only [Sched.turn, Sched.turnTrace] at h
-    exact settle_safe hstr hstep hQ e h
+    exact settle_safe hstr hstep hQ he h
   | choose n =>
     simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
-    exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ e h
+    exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ he h
   | pick count =>
     simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
-    exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ e h
+    exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ he h
   | wake ptr n =>
     simp only [Sched.turn, Sched.turnTrace] at h
     generalize hso : Sched.State.chooseWake { s with mem := { s.mem with current := t } } o ptr n = so
@@ -811,7 +822,7 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
     obtain ⟨st, tr, rfl⟩ := chooseWake_eq hso
     obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n cs { s.mem with current := t }
     simp only [Sched.State.onMem, bind, Except.bind, hw] at h
-    exact settle_safe hstr (hstep cs m₁ hw) hQ e h
+    exact settle_safe hstr (hstep cs m₁ hw) hQ he h
   | wait ptr e' =>
     have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
       simpa [Sched.canGo] using hgo
@@ -822,18 +833,18 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
     | true =>
       simp only [↓reduceIte, Sched.State.choose, two_ne_zero_nat] at h hK
       split at h
-      · exact settle_safe hstr hK.2 hQ e h
+      · exact settle_safe hstr hK.2 hQ he h
       · simp at h
     | false =>
       simp only [Bool.false_eq_true, ↓reduceIte] at h hK
-      exact settle_safe hstr hK hQ e h
+      exact settle_safe hstr hK hQ he h
   | asyncChoice =>
     simp only [Sched.turn, Sched.turnTrace] at h
     generalize hso : Sched.State.asyncChoice env { s with mem := { s.mem with current := t } } o = so
       at h
     obtain ⟨c, s₀⟩ := so
     obtain ⟨⟨st, tr, rfl⟩, hc3⟩ := asyncChoice_eq hso
-    exact settle_safe hstr (hstep c hc3) hQ e h
+    exact settle_safe hstr (hstep c hc3) hQ he h
   | spawn tgt =>
     obtain ⟨hfail, g₀, hg₀, hk⟩ := hstep
     simp only [Sched.turn, Sched.turnTrace] at h
@@ -845,7 +856,7 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
     split at h
     rotate_left
     · rename_i hc
-      exact settle_safe hstr (hfail (henv (hcf hc)) _) hQ e h
+      exact settle_safe hstr (hfail (henv (hcf hc)) _) hQ he h
     simp only [Sched.State.onMem, bind, Except.bind] at h
     match hf : (Thread.fork.run { s.mem with current := t }).run with
     | none =>
@@ -858,7 +869,7 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
         ExceptT.bind, ExceptT.bindCont, Option.bind] at hf
     | some (.ok (child, m₁)) =>
       simp only [hf] at h
-      exact settle_safe hstr (hk child m₁ hf) hQ e h
+      exact settle_safe hstr (hk child m₁ hf) hQ he h
   | spawnGated tgt =>
     obtain ⟨g₀, hg₀, -, hk⟩ := hstep
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
@@ -873,16 +884,16 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
         ExceptT.mk, ExceptT.run, ExceptT.bind, ExceptT.bindCont, Option.bind] at hf
     | some (.ok (child, m₁)) =>
       simp only [hf] at h
-      exact settle_safe hstr (hk child m₁ hf) hQ e h
+      exact settle_safe hstr (hk child m₁ hf) hQ he h
   | gate =>
     simp only [Sched.turn, Sched.turnTrace] at h
-    exact settle_safe hstr hstep.2 hQ e h
+    exact settle_safe hstr hstep.2 hQ he h
   | join tid =>
     have hv := (hstep.1 hstr).2.2.2
     have hf : P.fin (G tid) := hdone tid (by simpa [Sched.canGo, hv] using hgo)
     obtain ⟨m₁, hj⟩ := (hstep.2 hf).1 hstr
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hj] at h
-    exact settle_safe hstr ((hstep.2 hf).2 m₁ hj) hQ e h
+    exact settle_safe hstr ((hstep.2 hf).2 m₁ hj) hQ he h
 
 variable (P) in
 /-- The state between two turns keeps the protocol with the ghost values `G`: the invariant
@@ -970,7 +981,8 @@ variable (P) in
 /-- A result of a run: an `ok` result satisfies `QM`; in strict mode it is not an error. -/
 def Good {α : Type} (QM : α → (ThreadId → γ) → Mem → Nat → Prop) (r : Except Error (α × Mem)) :
     Prop :=
-  (∀ v m, r = .ok (v, m) → ∃ G d, QM v G m d) ∧ (P.strict = true → ∀ e, r ≠ .error e)
+  (∀ v m, r = .ok (v, m) → ∃ G d, QM v G m d) ∧
+    (P.strict = true → ∀ e, e ≠ .stackOverflow → r ≠ .error e)
 
 /-- A valid join handle is not a gated deferred task. -/
 theorem gated_of_joinValid {m : Mem} {t tid : ThreadId} (h : Thread.joinValid m t tid = true) :
@@ -1143,7 +1155,7 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
       simp only [hrun, ↓reduceIte, Option.some.injEq] at h
       subst h
       exact ⟨fun _ _ h => (by cases h),
-        fun hstr _ _ => ready_ne hstr hs (Array.isEmpty_iff.mp hemp)⟩
+        fun hstr _ hne _ => ready_ne hstr hs (Array.isEmpty_iff.mp hemp)⟩
     · rename_i hne
       have hpos : 0 < s.ready.size := by
         rw [Array.isEmpty_iff_size_eq_zero] at hne; omega
@@ -1177,14 +1189,14 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
           | some e' =>
             simp only [Sched.outOf, Option.some.injEq] at h
             subst h
-            exact ⟨fun _ _ h => (by cases h), fun hstr _ _ =>
-              turn_safe env henv dispatch fuel o hstr hS₁.inv hok (hQM hstr) hgo hS₁.done e' he⟩
+            exact ⟨fun _ _ h => (by cases h), fun hstr _ hne heq => by
+              cases heq; exact turn_safe env henv dispatch fuel o hstr hS₁.inv hok (hQM hstr) hgo hS₁.done hne he⟩
         · rename_i ts v' s₂ ht
           obtain ⟨G₂, -, -, -, -, hr⟩ := turn_ok env henv dispatch fuel o hdisp hS₁.inv hS₁.size
             hok hgo hS₁.done ht
           simp only [Option.some.injEq] at h
           subst h
-          refine ⟨fun v m h => ?_, fun _ _ h => (by cases h)⟩
+          refine ⟨fun v m h => ?_, fun _ _ _ h => (by cases h)⟩
           simp only [Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           rcases hr with ⟨hov, -⟩ | ⟨b, d, -, hov, hq⟩
@@ -1218,9 +1230,9 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
             | some e' =>
               simp only [Sched.outOf, Option.some.injEq] at h
               subst h
-              exact ⟨fun _ _ h => (by cases h), fun hstr _ _ =>
-                turn_safe (s := s₁) env henv dispatch fuel o hstr hS₁.inv hok
-                  (fun _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr) (hgo₁ _ _ hgo) hS₁.done e' he⟩
+              exact ⟨fun _ _ h => (by cases h), fun hstr _ hne heq => by
+                cases heq; exact turn_safe (s := s₁) env henv dispatch fuel o hstr hS₁.inv hok
+                  (fun _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr) (hgo₁ _ _ hgo) hS₁.done hne he⟩
           · rename_i ts ov s₂ ht
             obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok (s := s₁) env henv dispatch fuel o
               hdisp hS₁.inv hS₁.size hok (hgo₁ _ _ hgo) hS₁.done ht
@@ -1277,12 +1289,13 @@ theorem run_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spa
     | some e' =>
       simp only [Sched.outOf, Option.some.injEq] at h
       subst h
-      exact ⟨fun _ _ h => (by cases h), fun hstr _ _ => settle_safe hstr hsafe (hQM hstr) e' he⟩
+      exact ⟨fun _ _ h => (by cases h), fun hstr _ hne heq => by
+        cases heq; exact settle_safe hstr hsafe (hQM hstr) hne he⟩
   · rename_i ts v' s₁ hs
     obtain ⟨-, -, hr⟩ := settle_ok hsafe hs
     simp only [Option.some.injEq] at h
     subst h
-    refine ⟨fun v m h => ?_, fun _ _ h => (by cases h)⟩
+    refine ⟨fun v m h => ?_, fun _ _ _ h => (by cases h)⟩
     simp only [Except.ok.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
     rcases hr with ⟨hov, -⟩ | ⟨b, d, -, hov, hq⟩
@@ -1314,7 +1327,9 @@ theorem run_sound {α : Type} (env : Env) (henv : env.spawn = .fallible → P.sp
     ∃ G d, QM v G m d :=
   (run_spec env henv dispatch G0 hdisp hQM hsize hmain h).1 v m rfl
 
-/-- **No error.** In strict mode no run, under any schedule, gives an error. -/
+/-- **No error.** In strict mode no run, under any schedule, gives an error other than
+`.stackOverflow` (a stack block without room in the address space, or a frame over the stack
+budget: premise STK-01, which every partial statement reads as non-termination). -/
 theorem run_safe {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spawnFails = true)
     (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ) (hstr : P.strict = true)
@@ -1323,9 +1338,9 @@ theorem run_safe {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spa
     (hQM : ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
     (hmain : ∀ n, P.WP 0 main QM G0 { m0 with current := 0 } n)
-    {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    {fuel : Nat} {o : Nat → Nat} {e : Error} (he : e ≠ .stackOverflow) :
     (Sched.run env dispatch fuel o main m0).run ≠ some (.error e) := fun h =>
-  (run_spec env henv dispatch G0 hdisp (fun _ => hQM) hsize hmain h).2 hstr e rfl
+  (run_spec env henv dispatch G0 hdisp (fun _ => hQM) hsize hmain h).2 hstr e he rfl
 
 end Proto
 end Conc

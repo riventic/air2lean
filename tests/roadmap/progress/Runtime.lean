@@ -50,7 +50,7 @@ private theorem hintProtocol_joined {G : ThreadId → Unit} {m : Mem}
 /-- Kernel-checkable absence of model failures for a source spin hint, for every oracle and
 fuel. No result is allowed; this is not an eventual-completion theorem. -/
 theorem spin_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run env (fun _ => pure ()) fuel o (spinLoopHint : ConcM Unit Unit) {}).run ≠
+    e ≠ .stackOverflow → (Sched.run env (fun _ => pure ()) fuel o (spinLoopHint : ConcM Unit Unit) {}).run ≠
       some (.error e) := by
   apply Conc.Proto.run_safe (P := hintProtocol) (QM := fun _ G m _ => hintProtocol.inv G m)
     env (fun _ => rfl) (fun _ => pure ()) (fun _ => ()) rfl
@@ -66,7 +66,7 @@ theorem spin_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : 
 
 /-- An ordinary source error returned by yield is allowed; no oracle produces a model panic. -/
 theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run env (fun _ => pure ()) fuel o (threadYield : ConcM Unit (Except ErrName Unit)) {}).run ≠
+    e ≠ .stackOverflow → (Sched.run env (fun _ => pure ()) fuel o (threadYield : ConcM Unit (Except ErrName Unit)) {}).run ≠
       some (.error e) := by
   apply Conc.Proto.run_safe (P := hintProtocol) (QM := fun _ G m _ => hintProtocol.inv G m)
     env (fun _ => rfl) (fun _ => pure ()) (fun _ => ()) rfl

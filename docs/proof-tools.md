@@ -456,12 +456,18 @@ with concrete arguments (the environment `env` included). It:
 The proof uses only the standard axioms; nothing is evaluated outside the kernel. A wrong
 value, a run out of fuel, an error, or a loop that needs more than `k` runs of its body leaves
 the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
-`k` bounds each loop's body runs per entry, so a loop entered again gets `k` more. A
-definition defined by `partial_fixpoint` itself (a recursive function) is rejected, not cut.
+`k` bounds each loop's body runs per entry, so a loop entered again gets `k` more.
+
+A `partial_fixpoint` definition or mutual group (a recursive call group of generated code,
+`Lean.Order.fix F h`) is cut the same way: it becomes `Unroll.fixSel k s (fun s => F) h`, which
+is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `exact`
+(`fixN_le_fix`, `monotone_fixSel`); `k` bounds the nested unfoldings of the group. A definition
+met again inside its own expansion (a recursion through a dispatch table) stays uncut there.
 
 The `completes` companions of the concurrent all-schedules theorems
 ([theorem-inventory.md](theorem-inventory.md)) use it: one concrete schedule (the oracle that
 always picks option 0), fuel 1000, `mem0`. `tests/roadmap/proof-tools/Unroll.lean` checks a
 run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
-goal without a run. Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run
+goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
+early). Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run
 `lake env lean tests/roadmap/proof-tools/Unroll.lean`.

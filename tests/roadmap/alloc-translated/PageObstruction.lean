@@ -75,14 +75,15 @@ theorem seq_of_blocks {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clo
     m.Seq :=
   ⟨singleThread_empty hf hc⟩
 
-/-- A triple's precondition, split off a memory, rules out an error from every memory with the same
-heap. -/
+/-- A triple's precondition, split off a memory, rules out an error other than `.stackOverflow`
+(STK-01) from every memory with the same heap. -/
 theorem no_error_of_triple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
     {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP)
-    (hs : m.Seq) {e : Error} (herr : errOf (c.run m) = some e) : False := by
+    (hs : m.Seq) {e : Error} (herr : errOf (c.run m) = some e) (hne : e ≠ .stackOverflow) :
+    False := by
   have := ht m hP hF hd hm hp hs
   rw [run_of_errOf herr] at this
-  exact this
+  exact hne this
 
 /-! ## O3: an atomic location of another size at `addr_hint` -/
 
@@ -162,7 +163,7 @@ theorem alloc_no_triple_after_free (L : Logic) (hL : L.Sound) (c : Ptr) (ra : Bi
   intro ht
   rw [alloc_args] at ht
   exact no_error_of_triple (hL ht) hd (by rw [hinted_heap]; exact hm) hp hintedLost_seq
-    alloc_hintedLost
+    alloc_hintedLost (by decide)
 
 /-! ## O4: the derived hint address is ambiguous -/
 

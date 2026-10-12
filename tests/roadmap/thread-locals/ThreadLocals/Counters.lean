@@ -433,7 +433,8 @@ theorem cnt_hcnt : cnt 7 hcnt := by
   simp only [hcnt, enc_u32, Int.toNat_zero, Nat.zero_le, true_and, Nat.zero_add, Nat.sub_zero]
 
 theorem mem0_blocks :
-    (mem0 .fresh).blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := rfl
+    (mem0 .fresh).blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := by
+  with_unfolding_all exact rfl
 
 theorem hcnt_sub : hcnt.Sub (mem0 .fresh).heap := by
   rintro ⟨b, x⟩ c h
@@ -773,7 +774,7 @@ theorem twoCounters_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat
 /-- **No run of `twoCounters` gives an error**: the concurrent increments of the three
 instances do not race. -/
 theorem twoCounters_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
     main_spec
 

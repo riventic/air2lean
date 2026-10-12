@@ -698,7 +698,7 @@ theorem threadPair_spec (env : Env) (henv : env.spawn = .available) {σ : Placem
 /-- **No run of `threadPair v` gives an error**: a refused capture is freed by `main` with no
 race, the errdefer join is valid, and no child outlives the stack it captured. -/
 theorem threadPair_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run ≠
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
   (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ lim)

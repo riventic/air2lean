@@ -21,11 +21,14 @@ theorem finished_run_returns_four (env : Env) (henv : env.spawn = .available) (�
     (o : Nat → Nat)
     (r : Except Error (Except ErrName (BitVec 32) × Mem))
     (finished : (Sched.run env dispatch fuel o (mutexCounter io) (mem0 σ)).run = some r) :
-    ∃ m, r = .ok (.ok 4, m) := by
+    r = .error .stackOverflow ∨ ∃ m, r = .ok (.ok 4, m) := by
   cases r with
-  | error e => exact absurd finished (mutexCounter_safe env henv io)
+  | error e =>
+    by_cases he : e = .stackOverflow
+    · exact .inl (by rw [he])
+    · exact absurd finished (mutexCounter_safe env henv io he)
   | ok vm =>
     obtain ⟨v, m⟩ := vm
-    exact ⟨m, by rw [mutexCounter_spec env henv io finished]⟩
+    exact .inr ⟨m, by rw [mutexCounter_spec env henv io finished]⟩
 
 end ConcurrentClients

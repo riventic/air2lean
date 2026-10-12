@@ -80,23 +80,6 @@ theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
     have := Mem.lt_top hblk; have := le_alignUp m.top align
     simp only; omega
 
-/-- `alloc` with room in the address space (`Mem.roomFor`) makes the block `m.blocks.size`. -/
-theorem alloc_run_eq (m : Mem) {kind : BlockKind} {size align : Nat}
-    (hroom : m.roomFor size align = true) :
-    (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) := by
-  show (if m.roomFor size align = true then
-      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr)) else noRoom :
-      MemM Ptr).run m = _
-  rw [if_pos hroom]; rfl
-
-/-- Without room (`Mem.roomFor`) `alloc` has no outcome (`noRoom`). -/
-theorem alloc_run_noRoom (m : Mem) {kind : BlockKind} {size align : Nat}
-    (hroom : m.roomFor size align = false) : ((alloc kind size align).run m).run = none := by
-  show ((if m.roomFor size align = true then
-      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr)) else noRoom :
-      MemM Ptr).run m).run = none
-  rw [if_neg (by simp [hroom])]; rfl
-
 /-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. This
 holds for every address the block gets: the heap is per block id. -/
 theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
@@ -227,7 +210,7 @@ theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
       ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
   fun m hP _ hd hm hp hst => by
     cases hroom : m.roomFor size align
-    · rw [alloc_run_noRoom m hroom]; trivial
+    · rw [alloc_run_noRoom m hroom]; try trivial
     obtain ⟨p, m', h', hr, h0, hd', hm', -, hst', -, A, hA, hb, -⟩ :=
       alloc_run hd hm kind size align ha hroom hst hk
     have hP0 : hP = Heap.empty := hp

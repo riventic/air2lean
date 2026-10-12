@@ -2136,15 +2136,15 @@ theorem main_spec (σ : Placement) (d : Nat) :
       { mem0 σ with current := 0 } d := by
   unfold parallelCounter
   have hpa0 : PreA { mem0 σ with current := 0 } := ⟨rfl, rfl, rfl, rfl, by simp [mem0, Mem.ofGlobals]⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s4 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s4 m₁ ha₁ => ?_)
   have hpa1 := preA_alloc hpa0 ha₁
   obtain ⟨rfl, hm₁⟩ := Proto.alloc_ok ha₁
   refine ⟨by rw [hm₁] <;> rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₂ ha₂ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s1 m₂ ha₂ => ?_)
   have hpa2 := preA_alloc hpa1 ha₂
   obtain ⟨rfl, hm₂⟩ := Proto.alloc_ok ha₂
   refine ⟨by rw [hm₂] <;> rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s25 m₃ ha₃ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s25 m₃ ha₃ => ?_)
   have hpa3 := preA_alloc hpa2 ha₃
   obtain ⟨rfl, hm₃⟩ := Proto.alloc_ok ha₃
   refine ⟨by rw [hm₃] <;> rfl, ?_⟩
@@ -2338,7 +2338,7 @@ theorem parallelCounter_spec (env : Env) (henv : env.spawn = .available) {σ : P
 /-- **No run of `parallelCounter n` gives an error**, under any schedule: no data race, no
 deadlock, no overflow, no other illegal behaviour. -/
 theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o (parallelCounter n) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (parallelCounter n) (mem0 σ)).run ≠ some (.error e) :=
   (proto n).run_safe env (Proto.of_available henv) dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n σ)

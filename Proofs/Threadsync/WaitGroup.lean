@@ -3543,7 +3543,7 @@ theorem waitGroup_spec (env : Env) (henv : env.spawn = .available) {σ : Placeme
 /-- **No run of `threadsync.waitGroup` gives an error**: no data race on the `Tally` (its whole
 read included), no deadlock at a futex, no panic, under every schedule. -/
 theorem waitGroup_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.WaitGroup` client returns 2 within

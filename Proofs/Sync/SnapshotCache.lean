@@ -796,7 +796,7 @@ theorem cache_completes :
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at
 the futex, no lifetime error at the free, under every schedule. -/
 theorem cache_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec mutex σ io)
 

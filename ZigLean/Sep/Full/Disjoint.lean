@@ -211,7 +211,7 @@ theorem _root_.Zig.Mem.newAddr_addrFree (m : Mem) (size align : Nat) :
 /-- A global's block is placed like any new block. -/
 theorem PDMono.addGlobal (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
     PDMono m (m.addGlobal bs a k) :=
-  PDMono.push (fun _ => m.newAddr_addrFree _ _) rfl
+  PDMono.push (fun _ => m.globalPlace_addrFree _ _) rfl
 
 /-- The memory at program start keeps live blocks apart, so `Mem.FSeq`'s `LiveDisjoint` holds of
 every memory reachable from it. -/
@@ -227,6 +227,70 @@ theorem _root_.Zig.Mem.ofGlobals_liveDisjoint (σ : Placement)
   | cons g gs ih =>
     obtain ⟨bs, a, k⟩ := g
     exact fun m h => ih _ (PDMono.addGlobal m bs a k h)
+
+private theorem sum_cost (l : List Block) (s a : Nat) :
+    (l.map fun b => s + b.bytes.size + a).sum = l.length * (s + a) + (l.map (·.bytes.size)).sum := by
+  induction l with
+  | nil => simp
+  | cons x l ih => simp only [List.map_cons, List.sum_cons, List.length_cons, Nat.succ_mul, ih]; omega
+
+private theorem liveBounded_addGlobal (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind)
+    (T : Nat) (n : Nat) (hm : m.LiveBounded)
+    (hfit : 4096 + (m.blocks.size + n + 2) * ((m.blocks.toList.map (·.bytes.size)).sum + (bs.size + a + T))
+      ≤ 2 ^ 63) :
+    (m.addGlobal bs a k).LiveBounded := by
+  intro j blk hj hl
+  rw [Mem.addGlobal_blocks, Array.getElem?_push] at hj
+  split at hj
+  · cases hj
+    show m.globalPlace bs.size a + bs.size ≤ 2 ^ 63
+    unfold Mem.globalPlace
+    split
+    · exact Mem.roomFor_le ‹_›
+    · have hb := (m.firstFit_spec bs.size a).2.2.2
+      rw [sum_cost, Array.length_toList] at hb
+      generalize (m.blocks.toList.map (·.bytes.size)).sum = L at hb hfit
+      generalize m.blocks.size = K at hb hfit
+      have h1 : (K + 1) * (bs.size + a) ≤ (K + 1) * (L + (bs.size + a + T)) :=
+        Nat.mul_le_mul_left _ (by omega)
+      have h2 : (K + 2) * (L + (bs.size + a + T)) ≤ (K + n + 2) * (L + (bs.size + a + T)) :=
+        Nat.mul_le_mul_right _ (by omega)
+      rw [Nat.succ_mul] at h1 h2
+      omega
+  · exact hm j blk hj hl
+
+private theorem liveBounded_fold : ∀ (gs : List (Array Byte × Nat × BlockKind)) (m : Mem),
+    m.LiveBounded →
+    4096 + (m.blocks.size + gs.length + 1) *
+      ((m.blocks.toList.map (·.bytes.size)).sum + (gs.map fun g => g.1.size + g.2.1).sum) ≤ 2 ^ 63 →
+    (gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) m).LiveBounded
+  | [], _, hm, _ => hm
+  | (bs, a, k) :: gs, m, hm, hfit => by
+    simp only [List.foldl_cons, List.length_cons, List.map_cons, List.sum_cons] at hfit ⊢
+    have hfit' : 4096 + (m.blocks.size + gs.length + 2) *
+        ((m.blocks.toList.map (·.bytes.size)).sum + (bs.size + a + (gs.map fun g => g.1.size + g.2.1).sum))
+        ≤ 2 ^ 63 := by
+      rwa [show m.blocks.size + (gs.length + 1) + 1 = m.blocks.size + gs.length + 2 by omega] at hfit
+    refine liveBounded_fold gs _ (liveBounded_addGlobal m bs a k _ _ hm hfit') ?_
+    rw [Mem.addGlobal_blocks, Array.size_push, Array.toList_push, List.map_append, List.sum_append,
+      show m.blocks.size + 1 + gs.length + 1 = m.blocks.size + gs.length + 2 by omega]
+    refine Nat.le_trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ ?_) _) hfit'
+    simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil]
+    omega
+
+/-- **Every global ends inside the address space** at program start, under every placement, if
+the globals fit (`Mem.GlobalsFit`): a placed global ends below `Placement.addrLimit`, any other
+one is packed by the first fit (`Mem.globalPlace`). With `Mem.ofGlobals_liveDisjoint`, the
+memory at program start has the layout of `Mem.FSeq` (`Mem.LiveLayout`). -/
+theorem _root_.Zig.Mem.ofGlobals_liveBounded (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs) :
+    (Mem.ofGlobals σ gs).LiveBounded :=
+  liveBounded_fold gs _ (fun _ _ hb _ => by simp at hb) (by simpa [Mem.GlobalsFit] using h)
+
+theorem _root_.Zig.Mem.ofGlobals_liveLayout (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs) :
+    (Mem.ofGlobals σ gs).LiveLayout :=
+  ⟨Mem.ofGlobals_liveDisjoint σ gs, Mem.ofGlobals_liveBounded σ gs h⟩
 
 /-- A range inside a clear one is clear. -/
 theorem _root_.Zig.Mem.addrFree_mono {m : Mem} {A n A' n' : Nat} (h : m.addrFree A n = true)

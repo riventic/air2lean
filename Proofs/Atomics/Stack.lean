@@ -1804,17 +1804,17 @@ theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 stackPush QM G0 { mem0 σ with current := 0 } d := by
   unfold stackPush
   -- the blocks: the `Stack`, the two `PushCtx`
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = sPtr := by rw [hq₁]; rfl
   subst e0 hm₁
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₂ ha₂ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s1 m₂ ha₂ => ?_)
   obtain ⟨hq₂, hm₂⟩ := alloc_ok ha₂
   have e1 : s1 = cPtr 1 := by rw [hq₂]; rfl
   subst e1 hm₂
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s2 m₃ ha₃ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s2 m₃ ha₃ => ?_)
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e2 : s2 = cPtr 2 := by rw [hq₃]; rfl
   subst e2
@@ -2103,7 +2103,7 @@ theorem stackPush_spec (env : Env) (henv : env.spawn = .available) {σ : Placeme
 /-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
 overflow, under every schedule. -/
 theorem stackPush_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within

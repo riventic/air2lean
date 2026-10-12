@@ -38,8 +38,10 @@ class Outcome(str, Enum):
     SEARCH_CAP = 'search_cap'
 
 
-# Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
-# union value is an ordinary returned value and is not among them.
+# Model failures (`Zig.Error`). A total triple rules out each of them; a partial one each but
+# STACK_OVERFLOW, which it reads as non-termination (premise STK-01). A Zig error union value is
+# an ordinary returned value and is not among them. Observed stack overflow still refuses an
+# absence claim: sampled evidence is conservative.
 SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
                              Outcome.DEADLOCK, Outcome.HARDWARE_TRAP, Outcome.STACK_OVERFLOW})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.

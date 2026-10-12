@@ -44,3 +44,29 @@ example : (1 : Nat) = 1 := by
 example {σ ε : Type} (body : M σ ε) (again : ε → Bool) (k : Nat) :
     Lean.Order.PartialOrder.rel (loopN body again k) (loop body again) :=
   loopN_le_loop body again k
+
+/-! A `partial_fixpoint` group (as a recursive call group of generated code): `unroll_sched`
+cuts its fixpoint after `k` unfoldings (`fixSel`, `fixN_le_fix`). -/
+
+mutual
+def evenC (n : Nat) : ConcM Unit (Except ErrName (BitVec 32)) :=
+  if n = 0 then pure (.ok 1) else oddC (n - 1)
+partial_fixpoint
+def oddC (n : Nat) : ConcM Unit (Except ErrName (BitVec 32)) :=
+  if n = 0 then pure (.ok 0) else evenC (n - 1)
+partial_fixpoint
+end
+
+theorem even_six : Witness.okVal (Sched.run ⟨.any, .available⟩ (fun _ => pure ()) 100 (fun _ => 0)
+    (evenC 6) {}) = some 1 := by
+  unroll_sched 8
+
+/-- info: 'even_six' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms even_six
+
+-- Rejected: the group needs 7 unfoldings; cut after 3 the run has no result.
+/-- error: unroll_sched: the kernel does not compute the run with loops cut after 3 iterations to the goal's value (another result or error, out of fuel, or a loop that needs more iterations) -/
+#guard_msgs (whitespace := lax) in
+example : Witness.okVal (Sched.run ⟨.any, .available⟩ (fun _ => pure ()) 100 (fun _ => 0)
+    (evenC 6) {}) = some 1 := by
+  unroll_sched 3

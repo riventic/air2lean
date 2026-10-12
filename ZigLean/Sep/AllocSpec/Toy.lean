@@ -268,6 +268,6 @@ theorem trapFree_alloc_none {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
   have f := hs.free ⟨p, len⟩ k ra bs hk (by rw [hsz]) (by omega) m' (hI' ∪ hG) hF hd' hm'
     ⟨hI', hG, hdd, rfl, hI'', hg⟩ hst'
   rw [hfree] at f
-  exact f
+  cases f
 
 end Zig

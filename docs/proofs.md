@@ -77,7 +77,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 ## Proofs over all schedules
 
-`ZigLean/Conc/Logic.lean` is a program logic for concurrent functions (`Zig.ConcM`, [docs/std-models.md](std-models.md) §Thread model). `Conc.Proto.run_sound`: every result of `Sched.run env dispatch fuel o main m0`, for every oracle `o`, every `fuel` and every environment `env` that the protocol covers (`env.spawn = .available`, or any with `Proto.spawnFails`), satisfies `main`'s post (partial correctness: an error or no result satisfies every spec). In strict mode (`Proto.strict := true`) also no run gives an error: `Conc.Proto.run_safe` (no data race, no deadlock, no overflow, no other illegal behaviour; no result, out of fuel, is still allowed). One proof gives both (`run_spec`).
+`ZigLean/Conc/Logic.lean` is a program logic for concurrent functions (`Zig.ConcM`, [docs/std-models.md](std-models.md) §Thread model). `Conc.Proto.run_sound`: every result of `Sched.run env dispatch fuel o main m0`, for every oracle `o`, every `fuel` and every environment `env` that the protocol covers (`env.spawn = .available`, or any with `Proto.spawnFails`), satisfies `main`'s post (partial correctness: an error or no result satisfies every spec). In strict mode (`Proto.strict := true`) also no run gives an error other than `.stackOverflow`: `Conc.Proto.run_safe` (no data race, no deadlock, no overflow, no other illegal behaviour; no result, out of fuel, is still allowed, and so is a stack overflow, premise STK-01, which every partial statement reads as non-termination). One proof gives both (`run_spec`).
 
 | Part | What |
 |---|---|
@@ -99,7 +99,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 **Detached threads and transferred handles** (`Proofs/Detach/`, C07). `Worker.lean`: `main` allocates a heap buffer, spawns a worker that receives the whole buffer (an `owned` transfer, `Owned.fork`), detaches it and returns without a join; the worker writes the buffer and frees it. No run gives an error (`worker_safe`: no race, no use after free, no missing join), and a run that ends returns 7 with the worker's handle consumed (`worker_result`). `Transfer.lean`: `main` spawns `A`, spawns `B` with `A`'s handle and hands it to `B` (`transferHandleC`); `B` joins `A`, `main` joins `B`. No run gives an error (`transfer_safe`, with the rank `main < B < A`), and `A`'s record names `B` as its owner and is consumed (`transfer_result`). `ZigLean/Conc/Detach.lean` has the model rules: one owner (`join_owner_unique`), join or detach once (`join_after_join`, `join_after_detach`, `detach_after_detach`), the transfer (`transfer_joinValid`, `join_after_transfer`), and dead stack data (`frame_exit_kills`: after a frame's exit every load or store of its block, by any thread, is `.illegal`).
 
-`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error (`mutexCounter_safe`). `Proofs/Iogroup/Counter.lean` proves the same for `groupCounter` (three `Io.Group` tasks, each adds 1 under an `Io.Mutex`; 3 after `Group.await`), for every outcome of each `Group.async` (a thread, `main` running the task itself, or a task deferred until `await`). Both proofs use the lock rules (§A lock that owns a resource).
+`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error other than a stack overflow (`mutexCounter_safe`, premise STK-01: `e ≠ .stackOverflow`). `Proofs/Iogroup/Counter.lean` proves the same for `groupCounter` (three `Io.Group` tasks, each adds 1 under an `Io.Mutex`; 3 after `Group.await`), for every outcome of each `Group.async` (a thread, `main` running the task itself, or a task deferred until `await`). Both proofs use the lock rules (§A lock that owns a resource).
 
 **What a thread has seen** (`Proofs/Atomics/`). The invariant states it on the messages of an atomic location, with the clocks:
 
@@ -171,11 +171,15 @@ change the heap.
 
 [theorem-inventory.md](theorem-inventory.md) gives each theorem below its scope class, its precise domain and its current check result for each Zig version/target translation. The theorems of `Proofs/Atomics/Proofs.lean` and `Proofs/Sync/Proofs.lean` hold for one schedule (an oracle and fuel that the kernel runs), and the `*_spec` rules of `Proofs/Sync/Lock.lean` and `Proofs/Sync/RwLockContract.lean` for one operation: none of them is a theorem over all schedules.
 
+Every `*_safe` theorem over all schedules states its conclusion for the errors other than
+`.stackOverflow` (`e ≠ .stackOverflow → …`): a stack block without room or a frame over the stack
+budget is premise [STK-01](premises.md#stk-01), read as non-termination.
+
 | File | Theorems |
 |---|---|
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
-| `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
+| `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error but `.stackOverflow`, STK-01) |
 | `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |
 | `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error), `groupCounter_reclaim` (join before free: the three tasks' read shares of `io` are back when `main` frees it, `ZigLean/Conc/Share.lean`) |

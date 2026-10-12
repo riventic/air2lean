@@ -98,7 +98,7 @@ theorem Triple.withPlacement {α : Type} {P : Assn} {c : MemM α} {Q : α → As
     (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
     match (c.run (m.withPlacement σ pm)).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq :=
   ht _ hP hF hd hm hp (hs.withPlacement σ pm)

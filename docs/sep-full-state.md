@@ -73,9 +73,13 @@ split and `FSeq` in place of `Seq`.
 ```
 FTriple P c Q := ∀ m r rF, Holds m r rF → P r → m.FSeq →
   match (c.run m).run with
-  | none => True | some (.error _) => False
+  | none => True | some (.error e) => e = .stackOverflow
   | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq
 ```
+
+A stack overflow (`.stackOverflow`: an exhausted stack budget, or a stack block without room in
+the address space) counts like a run with no result (premise STK-01); every other error is
+excluded.
 
 ### Why tags on bytes, and not a separate `↦ₐ` resource
 
