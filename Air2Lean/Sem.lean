@@ -332,6 +332,7 @@ def panicOf? : String → Option Zig.Error
   | "debug.FullPanic((function 'defaultPanic')).invalidErrorCode" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).castToNull" => some .panic
   | "debug.FullPanic((function 'defaultPanic')).incorrectAlignment" => some .panic
+  | "debug.FullPanic((function 'defaultPanic')).sliceCastLenRemainder" => some .panic
   | _ => none
 
 /-- The value of one straight-line instruction (no control flow, memory or calls). -/

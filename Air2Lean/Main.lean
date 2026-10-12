@@ -332,13 +332,18 @@ private def run (args : List String) : IO UInt32 := do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
       let errorTable ← readErrorTable a.airDir
-      let models ← match a.modelRegistry with
-        | none => pure #[]
+      let (models, interfaces) ← match a.modelRegistry with
+        | none => pure (#[], #[])
         | some path =>
           let contents ← StrictJson.readFile path
-          match ModelRegistry.parse contents with
-          | .ok models => pure models
-          | .error error => throw (IO.userError error)
+          match ModelRegistry.parse contents, ModelRegistry.parseInterfaces contents with
+          | .ok models, .ok interfaces => pure (models, interfaces)
+          | .error error, _ | _, .error error => throw (IO.userError error)
+      -- The generated proof lemmas do not take the environment (`Ext`). (AIR certificates
+      -- already exclude every model registry.)
+      if !interfaces.isEmpty && a.proofApi then
+        throw (IO.userError "--proof-api does not support open interfaces \
+          (the model registry's 'interfaces', docs/interfaces.md)")
       let device ← match a.deviceContract with
         | none => pure none
         | some path =>
@@ -381,6 +386,10 @@ private def run (args : List String) : IO UInt32 := do
         -- A template lists the extern calls that bind to no definition as model symbols.
         if a.registryTemplate then return (← resolveExternsCollect funcs models).1
         let resolved ← resolveExterns funcs models
+        -- docs/interfaces.md: the open function types, before every whole-program analysis
+        -- (a function that calls the environment is concurrent).
+        let openTys ← ModelRegistry.openFnTypes interfaces resolved
+        let resolved := resolved.map ({ · with openFnTys := openTys })
         checkProgram resolved models profiles[0]?
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
         unless a.assumeNoLb do checkLoadBuffering resolved
@@ -428,6 +437,9 @@ private def run (args : List String) : IO UInt32 := do
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
+              (if interfaces.isEmpty then "" else
+                "-- air2lean-interfaces: " ++ (ModelRegistry.interfaceReport interfaces
+                  ((funcs[0]?.map (·.openFnTys)).getD #[])).compress ++ "\n") ++
               (match device with
                 | none => ""
                 | some c => "-- air2lean-device: " ++ c.report.compress ++ "\n")

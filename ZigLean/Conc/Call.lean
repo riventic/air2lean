@@ -22,6 +22,12 @@ variable {Tgt σ α : Type}
 /-- A call from a concurrent function to another one. -/
 @[inline] def callC (r : ConcM Tgt α) : CM Tgt σ α := StateT.lift r
 
+/-- A call into the environment (`docs/interfaces.md`): the last arm of a call through a pointer
+of an open interface's function type, taken for a pointer that is no function of the program
+(the generated `Ext.call<i>`). The identity; a marker for the proof rules and the token of
+premise EXT-05. -/
+def extCall (r : ConcM Tgt α) : ConcM Tgt α := r
+
 /-- A call from a concurrent function to a function that uses memory: no stop. -/
 @[inline] def callMC (r : MemM α) : CM Tgt σ α := StateT.lift (ConcM.liftMem r)
 
