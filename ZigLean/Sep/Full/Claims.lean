@@ -215,5 +215,90 @@ theorem Holds.pclaim_disjoint {m : Mem} {r rF : Res} {R : FAssn} {p : Ptr} {lo�
   rw [hpb] at hpb'; cases hpb'
   exact hh.bclaim_disjoint (R := R) ⟨r₁, _, hd, rfl, hb, r₂, r₃, hd', rfl, hb', hr3⟩ ha
 
+/-! ## Claims are born with their block -/
+
+/-- Untagged claim cells: valid under every ledger status, no tag. -/
+theorem onRange_share_ok (lo hi : Nat) (x : Nat) (ls : LStat) (hu : ls.Uniq) :
+    (ECell.onRange lo hi (ECell.shareT none Frac.one 0) x).Valid ∧
+      (ECell.onRange lo hi (ECell.shareT none Frac.one 0) x).TagOk ls := by
+  simp only [ECell.onRange, ECell.shareT_none]
+  split
+  · exact ECell.share_one_ok ls hu
+  · exact ⟨ECell.valid_unit, ECell.tagOk_unit ls⟩
+
+theorem onRange_share_tags (lo hi x γ e k : Nat) :
+    ((ECell.onRange lo hi (ECell.shareT none Frac.one 0) x).tsh γ e k).val = 0 ∧
+      ((ECell.onRange lo hi (ECell.shareT none Frac.one 0) x).rc γ e k).val = 0 := by
+  simp only [ECell.onRange, ECell.shareT_none]
+  split <;> exact ⟨rfl, rfl⟩
+
+/-- **Claims on a block no part claims** can be added: the root world of each byte gets the
+whole. -/
+theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (hok : GOk m g gF)
+    (hz : ∀ x, (g.cl b x).add (gF.cl b x) = ECell.unit) (hb : b < m.blocks.size)
+    (hC : ∀ x (ls : LStat), ls.Uniq → (C x).Valid ∧ (C x).TagOk ls)
+    (hCt : ∀ x γ e k, ((C x).tsh γ e k).val = 0 ∧ ((C x).rc γ e k).val = 0) :
+    GOk m (g.add (Ghost.atCl b C)) gF := by
+  obtain ⟨⟨⟨hv, hx, hcv, NC, hNC⟩, N, hN⟩, ht, hcf⟩ := hok
+  have hu : (g.add gF).ls.Uniq := Ghost.Valid.uniq (g := g.add gF) ⟨hv, hx, hcv, NC, hNC⟩
+  have e : (g.add (Ghost.atCl b C)).add gF = (g.add gF).add (Ghost.atCl b C) := by
+    rw [Ghost.add_assoc, Ghost.add_comm (Ghost.atCl b C), ← Ghost.add_assoc]
+  unfold GOk Ghost.Ok
+  rw [e]
+  have eled : ((g.add gF).add (Ghost.atCl b C)).led = (g.add gF).led := by
+    funext γ; simp [Ghost.add, Ghost.atCl]
+  have ex : ((g.add gF).add (Ghost.atCl b C)).extent = (g.add gF).extent := by
+    funext x; simp [Ghost.add, Ghost.atCl]
+  have els : ((g.add gF).add (Ghost.atCl b C)).ls = (g.add gF).ls := by
+    funext γ e p; simp only [Ghost.ls, eled]
+  have ecl : ∀ x y, ((g.add gF).add (Ghost.atCl b C)).cl x y =
+      if x = b then C y else (g.add gF).cl x y := by
+    intro x y
+    by_cases h : x = b
+    · subst h; simp only [Ghost.add_cl, Ghost.atCl, if_true, hz, ECell.unit_add]
+    · simp only [Ghost.add_cl, Ghost.atCl, h, if_false, ECell.add_unit]
+  refine ⟨⟨⟨by rw [eled]; exact hv, by rw [ex, els]; exact hx, fun x y => ?_, NC, fun γ hγ x y e k => ?_⟩,
+    N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+  · rw [ecl, els]; split
+    · exact hC y _ hu
+    · exact hcv x y
+  · rw [ecl]; split
+    · exact hCt y γ e k
+    · exact hNC γ hγ x y e k
+  · rw [eled, ex]; exact hN γ hγ
+  · by_cases h : x = b
+    · exact absurd hb (Nat.not_lt.mpr (h ▸ hx))
+    · rw [ecl, if_neg h]; exact hcf x hx y
+
+/-- **The creator of a block claims its bytes** (any range `[lo, hi)`): a program whose run
+creates block `nb v` (absent before, present after) yields the untagged claim next to its post,
+when the post holds no claim on the new block. -/
+theorem FTriple.mintClaim {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (nb : α → BlockId)
+    (lo hi : Nat) (ht : FTriple P c Q)
+    (hfresh : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m.blocks.size ≤ nb v ∧ nb v < m'.blocks.size)
+    (hQ : ∀ v r, Q v r → ∀ x, r.gh.cl (nb v) x = ECell.unit) :
+    FTriple P c (fun v => Q v ⋆ bclaim (nb v) lo hi) := by
+  intro m r rF hh hp hs
+  have h := ht m r rF hh hp hs
+  revert h
+  cases hrun : (c.run m).run with
+  | none => intro; trivial
+  | some x =>
+    cases x with
+    | error e => exact id
+    | ok p =>
+      obtain ⟨v, m'⟩ := p
+      rintro ⟨r', hh', hq, hs'⟩
+      obtain ⟨h1, h2⟩ := hfresh m v m' hrun
+      have hz : ∀ y, (r'.gh.cl (nb v) y).add (rF.gh.cl (nb v) y) = ECell.unit := fun y => by
+        rw [hQ v r' hq y, hh.ghost.2.2.frame (nb v) h1 y, ECell.add_unit]
+      refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
+          r'.gh.add (Ghost.atCl (nb v) (ECell.onRange lo hi (ECell.shareT none Frac.one 0)))⟩,
+        ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
+          by rw [Know.union_none]; exact hh'.know, hh'.knowF,
+          GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok lo hi y ls hu)
+            (fun y γ e k => onRange_share_tags lo hi y γ e k)⟩,
+        ⟨r', ⟨FHeap.empty, Know.none, _⟩, FHeap.disjoint_empty _, rfl, hq, rfl, rfl, rfl⟩, hs'⟩
+
 end Full
 end Zig
