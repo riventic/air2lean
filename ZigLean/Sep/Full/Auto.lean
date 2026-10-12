@@ -265,15 +265,22 @@ def withRunCaches {α : Type} (x : TacticM α) : TacticM α := do
   try withOptions (·.set `fsym.run id) x
   finally fsymRuns.modify (·.erase id)
 
+/-- The context of a negative cache entry: the number of facts and the last hypothesis (sibling
+branches with as many facts are different contexts). -/
+def ctxStamp (n : Nat) : MetaM Nat := do
+  let last := ((← getLCtx).lastDecl.map (·.fvarId.name.hash)).getD 0
+  return (mixHash (hash n) last).toNat
+
 /-- A cached probe for `key`: `run` with `n` facts. -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
+  let stamp ← ctxStamp n
   match (← (← caches).probe.get).get? key with
   | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
-  | some (.inr m) => if n ≤ m then return none
+  | some (.inr m) => if m == stamp then return none
   | none => pure ()
   let r ← run
-  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr n))
+  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr stamp))
   return r
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
@@ -951,10 +958,10 @@ equation)`. An undecided condition is retried only once there are more facts. -/
 def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
   let args := a.getAppArgs
   let (c, inst, x, y) := (args[1]!, args[2]!, args[3]!, args[4]!)
-  let n := (← propHyps).size
+  let n ← ctxStamp (← propHyps).size
   let key := mkApp (mkConst `fsym.ite) c
   if let some (.inr m) := (← (← caches).probe.get).get? key then
-    if n ≤ m then return none
+    if n == m then return none
   let hp ← mkFreshExprMVar c
   if ← arith hp.mvarId! quick then
     return some (← mkAppOptM ``ite_pos_eq #[c, inst, ← instantiateMVars hp, x, y], x)
