@@ -202,6 +202,18 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+* **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
+  invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
+  `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
+  `u`'s hypotheses are side goals, and `EUpd (Q₀ ⋆ R) (Q v)` closes the return (`tryUpd`; an
+  update that closes it is preferred, else the first that applies with its arithmetic goals
+  left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
+  arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
+  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
+  a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
+  adds its fields next to it; two owned nonempty regions of one block have the same address and
+  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
