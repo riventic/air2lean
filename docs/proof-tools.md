@@ -231,13 +231,13 @@ Range conversions are `fsym`'s step rules for checked arithmetic and unsigned `@
 `sum_toNat_lt` (`l.length ≤ 2 ^ k` items of width `w` fit in `w + k` bits) as ordinary
 theorems.
 
-`tests/roadmap/loop-tactics/Queue.lean` proves the generated `Lists.sum` from
-`examples/lists/lists.zig`, a walk over a singly linked queue from its head. `sum_total` is an
-`FTotalTriple`: given the explicit capacity premise `xs.length ≤ 2 ^ 32`, `sum` returns the
-exact sum of the items without an overflow panic and leaves the queue unchanged. The invariant
-is a list segment with the number of remaining nodes as the ghost measure (`loop_ghost`); the
-body's steps are `fsym` walks over the nodes' fields. `sum_total_legacy` derives the legacy
-total triple through `FTotalTriple.toTotal_on`.
+`Proofs/Lists/Linked.lean` proves the generated `Lists.sum` from `examples/lists/lists.zig`, a
+walk over a singly linked list from its head, once for every node owner `X`: the invariant is a
+list segment with the number of remaining nodes as the ghost measure (`loop_ghost`), and the
+body's steps are `fsym` walks over the nodes' fields. `tests/roadmap/loop-tactics/Queue.lean` is
+its instance at `X := fun _ => emp` with no proof of its own: given the explicit capacity premise
+`xs.length ≤ 2 ^ 32`, `sum` returns the exact sum of the items without an overflow panic and
+leaves the queue unchanged.
 
 `tests/roadmap/loop-tactics/nested/Proof.lean` proves the translated `pairs` of
 `tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
