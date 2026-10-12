@@ -1,4 +1,5 @@
 import ZigLean.Conc.Total
+import ZigLean.Conc.Stops
 
 open Zig Zig.Conc.Total
 
@@ -59,3 +60,34 @@ example (env : Env) : ¬ EventuallyReturns env (fun (_ : Unit) => pure ()) (stuc
     (fun _ _ => True) := stuck_not_eventuallyReturns env _ _ _
 example (env : Env) (B : Nat) : ¬ ReturnsWithin B env (fun (_ : Unit) => pure ())
     (stuck : ConcM Unit Unit) {} (fun _ _ => True) := stuck_not_returnsWithin B env _ _ _
+
+/-! ## Turn budgets (`ZigLean/Conc/Stops.lean`) -/
+
+namespace TurnBudgets
+
+open Zig.Conc
+
+/-- A loop that gives `n` hints: `n` turns, by `Stops.loop` with the measure `n` and `stops`
+for the body. -/
+def hints : CM Unit Nat Bool := do
+  let n ← get
+  if n = 0 then pure false else do
+    spinLoopHintC
+    set (n - 1)
+    pure true
+
+example (n : Nat) (m : Mem) :
+    Stops (fun _ => True) (fun _ => pure ()) ((Zig.loop hints id).run n) (fun _ _ _ => True) m n := by
+  refine Stops.loop hints id (fun s _ B => s ≤ B) (fun s => s) (fun _ _ _ => True)
+    (fun s m B hs => ?_) n m n (Nat.le_refl _)
+  unfold hints spinLoopHintC
+  stops
+  all_goals simp only [id] at *
+  all_goals first | omega | simp_all
+
+-- Fail closed: a futex wait has no budget, at any size.
+example (p : Ptr) (B : Nat) :
+    ¬ Stops (fun _ => True) (fun (_ : Unit) => pure ()) (ConcM.sync (.wait p 0))
+      (fun _ _ _ => True) {} B := Stops.not_wait
+
+end TurnBudgets

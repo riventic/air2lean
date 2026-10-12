@@ -368,6 +368,7 @@ macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.lif
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.spawnC'); (focus intro_pi; intro_pi; kid_budget; done); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.joinC'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.pickC'); (focus omega))
+macro_rules | `(tactic| stops_leaf) => `(tactic| (with_reducible apply Stops.spinLoopHint'); (focus omega))
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_reducible apply Stops.runLift)
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicLoadC)
 macro_rules | `(tactic| stops_leaf) => `(tactic| with_progress unfold Zig.atomicStoreC)
