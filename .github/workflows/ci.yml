@@ -2383,6 +2383,7 @@ jobs:
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}
         env:
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
           AIR2LEAN_MUTATION_SHARDS: "5"

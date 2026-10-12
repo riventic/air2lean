@@ -43,6 +43,7 @@ _spec = importlib.util.spec_from_file_location('artifact_manifest', ROOT / 'scri
 am = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(am)
 
+# The compiler the committed fixtures were exported with: a fixture's version, not the default.
 VERSION = '0.16.0'
 GLOBAL_LINKS = ('compiler_patch', 'translator', 'runtime', 'toolchain')
 # Files outside the Lean import closure that the receipt's audit also depends on (check.sh inputs).
@@ -399,7 +400,7 @@ def main(argv):
     y.add_argument('--rerun', metavar='WORKDIR', help='also rerun the guarded proof receipt and compare audits (needs Lean, lock)')
     g = sub.add_parser('regenerate', help='rerun the pipeline and compare with the fixture (needs Zig, Lean, lock)')
     g.add_argument('workdir')
-    g.add_argument('--zig-air', default=os.environ.get('AIR2LEAN_ZIG_AIR', str(ROOT / 'zig-air-0.16.0/bin/zig')))
+    g.add_argument('--zig-air', default=os.environ.get('AIR2LEAN_ZIG_AIR', str(ROOT / f'zig-air-{VERSION}/bin/zig')))
     g.add_argument('--stock-zig', default=os.environ.get('AIR2LEAN_ZIG', 'zig'))
     g.add_argument('--timeout', type=int, default=7200)
     g.add_argument('--lock-wait', type=int, default=14400)

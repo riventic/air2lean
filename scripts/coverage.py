@@ -317,6 +317,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
+    'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).

@@ -15,11 +15,12 @@
     }
   },
   "zig": {
-    "default": "0.16.0",
+    "default": "0.17.0",
+    "ci_once": "0.16.0",
     "versions": [
       {
         "version": "0.17.0",
-        "status": "in-qualification",
+        "status": "qualified",
         "hosts": ["x86_64-linux", "aarch64-macos"],
         "source": {
           "url": "https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz",
