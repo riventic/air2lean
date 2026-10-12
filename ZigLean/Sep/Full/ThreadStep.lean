@@ -643,7 +643,7 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
       cases x <;> simp [Except.map, Mem.withFp_withFp]; rfl
     · obtain ⟨m₃, e3, rfl⟩ := run_withFp_ok h0 e2
       obtain ⟨hst', hrev'⟩ := h0' w m₃ e3
-      exact ⟨hst'.withFp, fun b x hb h => hrev' b x hb h⟩
+      exact ⟨hst'.withFp, hrev'⟩
   refine ⟨(RunFp.bind (RunFp.of_noFp hrun) fun v m₁ e => (step v m₁ e).1).noFp, fun w m₂ e => ?_⟩
   obtain ⟨v, m₁, e1, e2⟩ := Proto.MemM.bind_ok e
   obtain ⟨hst, hrev⟩ := hloc v m₁ e1

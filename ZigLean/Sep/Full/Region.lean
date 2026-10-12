@@ -117,14 +117,17 @@ end Apart
 
 /-! ## Pointer order -/
 
-namespace FTotalTriple
+/- The thread rules are the proofs (they read no byte); the sequential rules are read from them
+(`FTTotalTriple.toFTotalTriple`). -/
+
+namespace FTTotalTriple
 
 variable {P : FAssn} {p q : Ptr} {b b' : BlockId} {A A' : Nat}
 
 /-- **Pointer `<=`** of two pointers into blocks at known addresses: the addresses compared. -/
 theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
     (h' : AddrOf b' A' P) :
-    FTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) := by
+    FTTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) := by
   unfold Zig.ptrLe
   refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
   refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
@@ -135,13 +138,41 @@ theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf 
 /-- **Pointer `<`** of two pointers into blocks at known addresses: the addresses compared. -/
 theorem ptrLt_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
     (h' : AddrOf b' A' P) :
-    FTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) := by
+    FTTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) := by
   unfold Zig.ptrLt
   refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
   refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
   subst hx hy
   exact conseq (ret (Q := fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) _)
     (fun _ hh => sep_lift.mpr ⟨rfl, hh⟩) (fun _ _ h => h)
+
+/-- The model's bounds check of an item `s[i]` in bounds: no effect. -/
+theorem checkIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat < len.toNat) :
+    FTTotalTriple P (checkIndex len i) (fun _ => P) := by
+  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+/-- The bounds check of an item of an operand with a sentinel (`i ≤ len`): no effect. -/
+theorem checkSentinelIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat ≤ len.toNat) :
+    FTTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
+  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+
+end FTTotalTriple
+
+namespace FTotalTriple
+
+variable {P : FAssn} {p q : Ptr} {b b' : BlockId} {A A' : Nat}
+
+/-- **Pointer `<=`** of two pointers into blocks at known addresses: the addresses compared. -/
+theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
+    (h' : AddrOf b' A' P) :
+    FTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrLe_of hpb hqb h h').toFTotalTriple
+
+/-- **Pointer `<`** of two pointers into blocks at known addresses: the addresses compared. -/
+theorem ptrLt_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
+    (h' : AddrOf b' A' P) :
+    FTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrLt_of hpb hqb h h').toFTotalTriple
 
 end FTotalTriple
 
@@ -154,13 +185,13 @@ namespace FTotalTriple
 variable {P : FAssn} {w : Nat} {len i : BitVec w}
 
 /-- The model's bounds check of an item `s[i]` in bounds: no effect. -/
-@[fsym] theorem checkIndex_of (h : i.toNat < len.toNat) : FTotalTriple P (checkIndex len i) (fun _ => P) := by
-  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+@[fsym] theorem checkIndex_of (h : i.toNat < len.toNat) : FTotalTriple P (checkIndex len i) (fun _ => P) :=
+  (FTTotalTriple.checkIndex_of h).toFTotalTriple
 
 /-- The bounds check of an item of an operand with a sentinel (`i ≤ len`): no effect. -/
 @[fsym] theorem checkSentinelIndex_of (h : i.toNat ≤ len.toNat) :
-    FTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
-  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
+    FTotalTriple P (checkSentinelIndex len i) (fun _ => P) :=
+  (FTTotalTriple.checkSentinelIndex_of h).toFTotalTriple
 
 end FTotalTriple
 
@@ -321,8 +352,8 @@ end FTotalTriple
 
 /-! ## Thread rules
 
-The rules above in a thread (`docs/sep-threads.md` S2): a pointer comparison and a bounds check
-from the thread's pointer rules, a byte operation as its sequential rule with the locality of its
+The byte operations above in a thread (`docs/sep-threads.md` S2; the pointer order and bounds
+checks are thread rules already): each is its sequential rule with the locality of its
 access (`FTTotalTriple.ofSeq`, the region's owned bytes `OwnsPtr.regionIn_add`). -/
 
 namespace OwnsPtr
@@ -344,40 +375,6 @@ theorem regionIn_start {n : Nat} (hn : n ≤ bs.size) : OwnsPtr (up (regionIn p 
 end OwnsPtr
 
 namespace FTTotalTriple
-
-section Order
-
-variable {P : FAssn} {p q : Ptr} {b b' : BlockId} {A A' : Nat}
-
-theorem ptrLe_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
-    (h' : AddrOf b' A' P) :
-    FTTotalTriple P (Zig.ptrLe p q) (fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) := by
-  unfold Zig.ptrLe
-  refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
-  refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
-  subst hx hy
-  exact conseq (ret (Q := fun r => ⟪r = decide ((A : Int) + p.off ≤ (A' : Int) + q.off)⟫ ⋆ P) _)
-    (fun _ hh => sep_lift.mpr ⟨rfl, hh⟩) (fun _ _ h => h)
-
-theorem ptrLt_of (hpb : p.block = some b) (hqb : q.block = some b') (h : AddrOf b A P)
-    (h' : AddrOf b' A' P) :
-    FTTotalTriple P (Zig.ptrLt p q) (fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) := by
-  unfold Zig.ptrLt
-  refine bind (ptrAddr_of hpb h) fun x => lift fun hx => ?_
-  refine bind (ptrAddr_of hqb h') fun y => lift fun hy => ?_
-  subst hx hy
-  exact conseq (ret (Q := fun r => ⟪r = decide ((A : Int) + p.off < (A' : Int) + q.off)⟫ ⋆ P) _)
-    (fun _ hh => sep_lift.mpr ⟨rfl, hh⟩) (fun _ _ h => h)
-
-theorem checkIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat < len.toNat) :
-    FTTotalTriple P (checkIndex len i) (fun _ => P) := by
-  unfold checkIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
-
-theorem checkSentinelIndex_of {w : Nat} {len i : BitVec w} (h : i.toNat ≤ len.toNat) :
-    FTTotalTriple P (checkSentinelIndex len i) (fun _ => P) := by
-  unfold checkSentinelIndex; rw [if_pos h]; exact ret (Q := fun _ => P) ()
-
-end Order
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
 

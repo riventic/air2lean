@@ -646,6 +646,21 @@ theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
       (fun _ => up (bytesAt q A S K' (writeBytes bs k (Enc.encode w)))) :=
   storeBytes_bytesAt hn hk ha hK
 
+/-- `FTotalTriple.memset_bytesAt` in a thread. -/
+theorem memset_bytesAt {α : Type} [Enc α] {n : BitVec 64} {v : Option α}
+    (hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size α)
+    (hk : k + n.toNat * Enc.size α ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hK : K' ≠ .constGlobal) :
+    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.memset al (q.add k) n v)
+      (fun _ => up (bytesAt q A S K' (writeBytes bs k (memsetBytes n.toNat v)))) := by
+  refine ofSeq (FTotalTriple.memset_bytesAt hsz hk ha hK) ?_
+  unfold Zig.memset
+  refine ThreadLocal.ite (fun _ => ThreadLocal.pure _) fun h =>
+    ThreadLocal.readBind (fun _ _ => rfl) fun _ => ?_
+  have hpos : 0 < n.toNat * Enc.size α := Nat.mul_pos (by omega) (by omega)
+  cases v <;> simp only [memsetBytes] at hsz <;>
+    exact ThreadLocal.storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact OwnsPtr.bytesAt_add hk)
+
 /-- `FTotalTriple.memmove_bytesAt` in a thread. -/
 theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
     {bd bsrc : Array Byte} {n : BitVec 64} (hkd : k + n.toNat * sz ≤ bd.size)
