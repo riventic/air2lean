@@ -87,7 +87,8 @@ records `mechanical` or `reviewed-override`.
 | `erased-at-emission` | Exported and normalized to constructors that `emitScalar` maps to `(env, none)` (line/debug metadata). |
 | `emitted-unqualified` | Exported (explicit arm, or a fallback branch naming the tag directly or via a `Compat.is*` helper), normalized, every constructor has an emitter dispatch arm, and a selected compiler-generated fixture contains the tag. |
 | `emitted-unfixtured` | The same source stages pass, but no selected compiler-generated fixture contains the tag; a reviewed `FIXTURE_REQUESTS` row names candidate source or why none exists. Without one the row is forbidden. |
-| `unreachable-at-export` | Reviewed override only. |
+| `resolved-in-canon` | Exported, and `Canon.errTraces` resolves it before `normalizeOp` into the canonical tags of `Canon.errTraceTags` (or operands); a selected compiler-generated fixture contains it. The error-return-trace tags and `ret_addr` (`docs/air-json.md` §Error return trace). |
+| `unreachable-at-export` | Producer scan: the tag is not an enum literal of any source file that builds AIR before the export hook (`Sema.zig`, `Zcu/PerThread.zig`; backends and the post-hook `Air/Legalize.zig` excluded), nor of an `Air.zig` helper returning a `Tag` (`producer_literals`); the scan does not decide when a tag is computed from a name or integer or another file builds AIR. Otherwise a reviewed override. |
 | `unclassified-forbidden` | Anything else: unknown version branches that disagree, data-dependent `unsupported` arms, a fallback without a marker, or a constructor without a dispatch arm. |
 
 **Types** (`std.builtin.Type`): `exported-checker-restricted` (explicit
@@ -189,9 +190,10 @@ rules). It fails when:
 
 * an `emitted-unqualified` row has no recorded fixture that is a committed golden or
   a file in a reviewed `COMPILER_FIXTURE_ROOTS` directory and still contains the tag;
+* an `emitted-unqualified` or `resolved-in-canon` row has no committed compiler fixture
+  containing the tag (as above);
 * an `emitted-unfixtured` row records fixture paths or lacks its current
-  `FIXTURE_REQUESTS` entry (a function present in the request source, or `None` with
-  a reason);
+  `FIXTURE_REQUESTS` entry (a function present in the request source);
 * a `rejected-*` row lacks a `rejection.reason` equal to the translator's current
   text: `runtimeTagReason?` (compiler state/effect), `exporterTagReason?`
   (exporter marker) or `optimizedFloatGuidance` (fast-math), all in
@@ -204,7 +206,7 @@ Compiler-generated fixtures are the selected goldens (exported by `check.sh`'s
 patched-compiler dump and compared on each run) plus the exports with
 recorded provenance in `tests/roadmap/thread-tuples/air`, `tests/roadmap/try-pointers/air`,
 `tests/roadmap/bitops/qualified/0.16.0/air`, `tests/roadmap/spawn-failure/air`,
-`tests/roadmap/idle-loops/air`, `tests/roadmap/runtime-tags/air` (all three versions), the 0.14.1, 0.15.2 and 0.16.0 exports in
+`tests/roadmap/idle-loops/air`, `tests/roadmap/runtime-tags/air` and `tests/roadmap/error-tracing/air` (all four versions), `tests/roadmap/null-pointers/air` and `air-reject`, `tests/roadmap/const-bases/air-fresh` and `air-llvm`, `tests/roadmap/union-bases/air`, the 0.14.1, 0.15.2 and 0.16.0 exports in
 `tests/roadmap/aggregate-casts/air`, and the 0.16.0 and 0.15.2 exports in
 `tests/roadmap/env-boundaries/air` and `tests/roadmap/noreturn-variants/air`. Hand-written AIR (`undef-operands`, `undef-locals`,
 `global-init`, `aggregate-casts/air-handwritten`, `packed-fields`, `error-width`, `try-pointers/aliases`),
@@ -212,19 +214,22 @@ compiler AIR for layout rejections (`noreturn-variants/air-reject`), fuzzer muta
 versions; they count for a version only through `check.sh`'s per-version
 re-export comparison.
 
-Counts (AIR tags passing every source stage):
+Counts (AIR tags passing every source stage; `coverage.py l14`):
 
 | Zig | With compiler fixture (`emitted-unqualified`) | Without (`emitted-unfixtured`) | Rejected with reason and guidance |
 | --- | ---: | ---: | ---: |
-| 0.14.1 | 156 | 4 | 42 |
-| 0.15.2 | 160 | 4 | 43 |
-| 0.16.0 | 161 | 3 | 45 |
+| 0.14.1 | 157 | 0 | 38 |
+| 0.15.2 | 161 | 0 | 39 |
+| 0.16.0 | 161 | 0 | 41 |
+| 0.17.0 | 167 | 0 | 45 |
 
-The four remaining `emitted-unfixtured` tags have no Sema producer that a
-`-fno-error-tracing` export can reach: `is_null_ptr`, `is_err` and `is_err_ptr` have none in
-any supported compiler, and `is_non_err_ptr` is produced on 0.15.2 and 0.14.1 only by
-`zirRetLoad` under error return tracing (0.16.0 produces it for a by-reference error-union
-capture with an error switch, exported). Before the runtime-tags export, 0.14.1's larger gap came from examples whose `zig-versions` excludes 0.14.1.
+No emitted tag lacks a compiler fixture. `is_null_ptr`, `is_err` and `is_err_ptr` are
+`unreachable-at-export` in every version by the producer scan: Sema only produces the `is_non_*`
+forms, and the backends' legalization runs after the hook. `is_non_err_ptr` on 0.15.2 and
+0.14.1 is produced only by `zirRetLoad` under error return tracing; the error-tracing export
+(`tests/roadmap/error-tracing`, every version, `-ferror-tracing`) contains it, together with the
+four trace tags (`resolved-in-canon`). Its model runs equal the native runs of all four versions
+on aarch64-macos (0.15.2–0.17.0), x86_64-linux and aarch64-linux.
 
 **Stage decisions for rejected tags.** Each rejection message names the tag and
 appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
@@ -234,8 +239,8 @@ appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
 | --- | --- | --- |
 | `inferred_alloc*`, `legalize_*`, `cmp_lt(e)_errors_len`, `error_set_has_value` | Not meaningful at the analyzed-AIR export stage (inference, legalization or finalized error universe) | Inspect the exporter/compiler stage; cast to a superset error set |
 | `*_optimized`, `int_from_float_optimized_safe` | Lower first: rebuild in strict float mode | Remove `@setFloatMode(.optimized)` |
-| `err_return_trace*`, `save_err_return_trace_index`, `runtime_nav_ptr`, `vector_store_elem` | Need new semantics (trace state, TLS/extern identity, vector-lane memory) | Keep out of translated functions until modelled |
-| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state | Remove, pass explicit values, or export fixed-arity functions |
+| `runtime_nav_ptr`, `vector_store_elem` | Need new semantics (TLS/extern identity, vector-lane memory) | Keep out of translated functions until modelled |
+| `breakpoint`, `prefetch`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state | Remove, pass explicit values, or export fixed-arity functions |
 | `wasm_memory_*`, `work_*` | Outside qualified targets | Keep out of translated functions |
 | `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
 
@@ -259,13 +264,8 @@ Some tags need a particular lowering, so a function can differ from what one wou
 `div_trunc`/`rem` and `shl_with_overflow` checks), `bool_and` comes from the invalid-error-code
 safety check, and 0.16.0 lowers `p[i]` of a many-pointer to `ptr_elem_ptr` plus `load`, so its
 `ptr_elem_val` comes from the sentinel check of a comptime-length sentinel slice. A tag with a
-fixture drops out of the requests (`FIXTURE_REQUESTS` keeps rows only while an inventory,
-here 0.17.0, still lacks an export).
-
-`is_null_ptr`, `is_err` and
-`is_err_ptr` have no candidate: no Sema producer was found in any supported
-compiler source, so they need an `unreachable-at-export` review or a
-compiler-generated counterexample.
+fixture drops out of the requests (`FIXTURE_REQUESTS` keeps rows only while an inventory
+still lacks an export; every version, 0.17.0 included, now has one).
 
 ## Upgrade change impact
 
