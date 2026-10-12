@@ -13,10 +13,13 @@ pub const W = packed struct(u64) { x: f32, y: u3, z: u29 };
 var r: R = undefined;
 var w: W = undefined;
 
-// Field accesses through bit-pointers (L08).
+// Field accesses through bit-pointers (L08). Each function first defines the whole host: Zig
+// 0.14.1 and 0.15.2 read a field by loading the whole struct, and the model's load of a packed
+// struct with an undefined bit is `.unspecified` (README.md §Scope).
 
 /// A packed-union field written as a whole, read through its integer view.
 pub fn setUnion() u16 {
+    r = @bitCast(@as(u40, 0));
     r.a = 3;
     r.u = .{ .i = 0x1234 };
     return r.u.i;
@@ -24,6 +27,7 @@ pub fn setUnion() u16 {
 
 /// Writing the union field keeps the 4-bit field below it.
 pub fn unionKeepsA() u4 {
+    r = @bitCast(@as(u40, 0));
     r.a = 9;
     r.u = .{ .i = 0xFFFF };
     return r.a;
@@ -31,24 +35,28 @@ pub fn unionKeepsA() u4 {
 
 /// A nested packed struct inside the union inside the struct.
 pub fn unionHalfHi() u8 {
+    r = @bitCast(@as(u40, 0));
     r.u = .{ .p = .{ .lo = 0x11, .hi = 0x22 } };
     return r.u.p.hi;
 }
 
 /// The float view of the union, read back as integer bits.
 pub fn unionFloatView() u16 {
+    r = @bitCast(@as(u40, 0));
     r.u = .{ .h = 1.0 };
     return r.u.i;
 }
 
 /// A float field at bit 20.
 pub fn setFloat() u16 {
+    r = @bitCast(@as(u40, 0));
     r.f = 1.5;
     return @bitCast(r.f);
 }
 
 /// Writing the float keeps the `bool` and enum fields above it.
 pub fn floatKeepsNeighbours() u8 {
+    r = @bitCast(@as(u40, 0));
     r.on = true;
     r.mode = .high;
     r.f = -2.0;
@@ -57,6 +65,7 @@ pub fn floatKeepsNeighbours() u8 {
 
 /// A float field written, doubled in place and read.
 pub fn floatInPlace(x: f16) f16 {
+    r = @bitCast(@as(u40, 0));
     r.f = x;
     r.f = r.f * 2;
     return r.f;
@@ -64,6 +73,7 @@ pub fn floatInPlace(x: f16) f16 {
 
 /// A 32-bit float field between integer stores.
 pub fn wideFloat(x: f32) f32 {
+    w = @bitCast(@as(u64, 0));
     w.y = 5;
     w.x = x;
     w.z = 7;

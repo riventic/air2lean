@@ -545,8 +545,18 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
         -- tag enum lists its names in the same order (`docs/air-json.md`). An `extern` or
         -- `packed` union constant has a `utag` too, unless the compiler made it from bytes.
         let some tagJ := optField j "utag"
-          | throw s!"{fnName}: union constant without 'utag' (an `extern` or `packed` union \
-              constant without an active field is outside the subset)"
+          | match ty with
+            | .union _ "packed" none _ =>
+              -- A `packed` union constant made from bits (`@bitCast`): its backing integer,
+              -- `uval` of the integer type (`Emit.lean` writes `Zig.Packed.ofBits`).
+              let n ← parseIntLit fnName (← (← uvalJ.getObjVal? "val").getStr?)
+              let some w := packedWidth types tyId
+                | throw s!"{fnName}: packed union constant of type {tyId} has no bit width"
+              unless integerFits false w n do
+                throw s!"{fnName}: packed union constant does not fit type {tyId}"
+              return .int tyId n
+            | _ => throw s!"{fnName}: union constant without 'utag' (an `extern` union \
+                constant without an active field is outside the subset)"
         let .enumTag tagTy v ← parseVal fnName types tagJ
           | throw s!"{fnName}: union constant: 'utag' is not an enum constant"
         let some (.enum _ _ _ tagFields) := types[tagTy]?

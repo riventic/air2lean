@@ -100,6 +100,12 @@ def buildModeRenames : ZigVersion → List (String × String)
   | v0_14_1 | v0_15_2 | v0_16_0 => []
   | v0_17_0 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
 
+/-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs or tagged
+unions is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the items too. -/
+def bitCastAutoItems : ZigVersion → Bool
+  | v0_14_1 | v0_15_2 => true
+  | v0_16_0 | v0_17_0 => false
+
 /-- Comptime lane pointers into bit-packed vectors have native evidence
 (`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.0 has none
 yet. -/

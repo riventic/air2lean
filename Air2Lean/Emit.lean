@@ -1016,7 +1016,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD (placeholder s!"unbound inst {id}")
   | .int tid n =>
     match fc.tyOfId tid with
-    | .struct _ "packed" _ =>
+    | .struct _ "packed" _ | .union _ "packed" none _ =>
       let bits := (packedBits fc.types tid).getD 0
       s!"(Zig.Packed.ofBits {tagLit bits n} : {fc.emitTyOf tid})"
     | _ => tagLit (fc.tyBits tid) n

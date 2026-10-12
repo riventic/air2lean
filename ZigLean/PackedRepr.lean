@@ -78,4 +78,19 @@ def Packed.bitCast (β : Type) {α : Type} {n m : Nat} [Packed α n] [Packed β 
     (x : α) (h : n = m := by decide) : Result β := do
   Packed.ofBits? ((← Packed.toBits? x).cast h)
 
+/-- The round trip of a logical `@bitCast`, under its representation condition: `x`'s bits are all
+determined and make `x` again, and the bits of every `β` value are themselves (no padding, no
+undetermined bits, every bit pattern valid: an integer, a packed struct of integers, an array of
+these). An enum or a float on the `β` side breaks the condition (an unnamed tag is no value; a
+NaN has no determined bits), and the round trip then need not hold. -/
+theorem Packed.bitCast_roundtrip {α β : Type} {n : Nat} [Packed α n] [Packed β n] (x : α)
+    (hmask : Packed.mask x = BitVec.allOnes n) (hvalid : Packed.valid (α := α) (Packed.toBits x))
+    (hx : Packed.ofBits (Packed.toBits x) = x)
+    (hβ : ∀ b : BitVec n, Packed.toBits (Packed.ofBits b : β) = b ∧
+      Packed.mask (Packed.ofBits b : β) = BitVec.allOnes n ∧ Packed.valid (α := β) b) :
+    (Packed.bitCast β x rfl >>= fun y => Packed.bitCast α y rfl) = pure x := by
+  have h1 := hβ (Packed.toBits x)
+  simp [Packed.bitCast, Packed.toBits?, Packed.defBits?, hmask, Packed.ofBits?, h1.1, h1.2.1,
+    h1.2.2, hvalid, hx]
+
 end Zig

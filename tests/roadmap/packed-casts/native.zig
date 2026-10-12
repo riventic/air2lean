@@ -1,4 +1,5 @@
-//! Prints each case of `packed_casts.zig` (and, on Zig 0.17, of `logical017.zig`) as one
+//! Prints each case of `packed_casts.zig` (and of `logical017.zig` on Zig 0.17, of
+//! `vector_fields.zig` and `auto_items.zig` on 0.14.1/0.15.2) as one
 //! line `name: value` on stderr, values in hex; `Model.lean` prints the model's lines for the
 //! same cases.
 //! A float is printed as its bits. Run by `check.sh --native`.
@@ -7,6 +8,10 @@ const builtin = @import("builtin");
 const pc = @import("packed_casts.zig");
 const logical = builtin.zig_version.minor >= 17;
 const l17 = if (logical) @import("logical017.zig") else struct {};
+/// Vector fields of packed structs exist in 0.14.1 and 0.15.2 only.
+const vector_fields = builtin.zig_version.minor <= 15;
+const vf = if (vector_fields) @import("vector_fields.zig") else struct {};
+const ai = if (vector_fields) @import("auto_items.zig") else struct {};
 
 /// `uN` of `bits` bits, for the widths here (`std.meta.Int` is gone in 0.17).
 fn Uint(comptime bits: u16) type {
@@ -73,6 +78,15 @@ pub fn main() void {
     hexs("intToFloats", pc.intToFloats(0x4040_0000_BF80_0000));
     hex("vecToInt", pc.vecToInt(.{ 0.5, 4.0 }));
     hexs("intToVec", vec(2, f32, pc.intToVec(0x3F80_0000_C000_0000)));
+    if (vector_fields) {
+        hex("setVector", vf.setVector(1, 2, 3));
+        hex("lane1", vf.lane1(0x321A));
+        hex("laneSum", vf.laneSum(0x321A));
+        hex("structsToInt", ai.structsToInt(.{ .{ .a = 1, .b = 2 }, .{ .a = 3, .b = 4 } }));
+        hex("structB1", ai.structB1(0x0004_0003_0002_0001));
+        hex("unionPayload1", ai.unionPayload1(0x0000_BEEF_0001_1234));
+        hex("unionsToInt", ai.unionsToInt(.{ .{ .a = 0x1234 }, .{ .b = 0x56 } }));
+    }
     if (logical) {
         hex("nestedToInt", l17.nestedToInt(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 } }));
         const nested = l17.intToNested(0xFEDCBA);

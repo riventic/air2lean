@@ -477,23 +477,37 @@ def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Boo
 an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
 @bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
 for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
-storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out, and
-for a pointer or optional pointer at any depth: the model's pointer bytes carry provenance and
-are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). A
-vector of integer, float or `bool` lanes has `len·@bitSizeOf(lane)` bits: the LLVM backend's
-memory image packs the lanes without padding (`Zig.Vec.packedEnc`, L09). -/
-partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
+storage, sentinel array), which `@bitCast` rejects or the model leaves out, and for a pointer or
+optional pointer at any depth: the model's pointer bytes carry provenance and are not integer
+bits, so a pointer-bearing representation cast is rejected (fail closed). A vector of integer,
+float or `bool` lanes has `len·@bitSizeOf(lane)` bits: the LLVM backend's memory image packs the
+lanes without padding (`Zig.Vec.packedEnc`, L09). A packed struct or union is its backing
+integer.
+
+`autoItems` (Zig 0.14.1 and 0.15.2, `ZigVersion.bitCastAutoItems`): Sema checks only the outer
+types, so an *array item* may be an `auto` struct or a tagged union; its bits are its ABI size
+(`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
+tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). A tuple item stays
+outside: the memory model has no tuple layout. -/
+partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
+    (autoItems : Bool := false) : Option Nat := do
   let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
+  let recur (t : TyId) := reprBitSize types layouts t autoItems
   match ← types[id]? with
   | .int _ bits | .float bits => pure bits
   | .bool => pure 1
-  | .enum _ tag _ _ => reprBitSize types layouts tag
+  | .enum _ tag _ _ => recur tag
   | .struct _ "packed" _ | .union _ "packed" none _ => packedBits types id
   | .struct _ "extern" fields | .union _ "extern" none fields =>
-    for (_, t) in fields do let _ ← reprBitSize types layouts t
+    for (_, t) in fields do let _ ← recur t
     abiBits
   | .array len child false =>
-    let eb ← reprBitSize types layouts child
+    let eb ← match types[child]? with
+      | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
+        if !autoItems then none else do
+          for (_, t) in fields do let _ ← recur t
+          (layouts[child]?.bind (·.size)).map (8 * ·)
+      | _ => recur child
     let es ← layouts[child]?.bind (·.size)
     pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
   | .vector len child =>
@@ -855,6 +869,11 @@ def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
   let pty ← cx.memPtrTy line ptr
   let some vec := ptrChild cx.types pty
     | cx.fail line "a lane pointer that does not point into a vector"
+  -- A bit-pointer to a vector is a vector field of a packed struct (Zig 0.14.1/0.15.2), whose
+  -- lane pointers those compilers miscompile (`docs/upstream/packed-vector-lane-ptr.md`).
+  if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+    cx.fail line "a vector lane pointer into a vector field of a packed struct is outside the \
+      subset (Zig 0.14.1/0.15.2 drop the field's bit offset, docs/upstream/packed-vector-lane-ptr.md)"
   let some (.vector n e) := cx.types[vec]?
     | cx.fail line "a lane pointer that does not point into a vector"
   let l := cx.layouts[ty]?.getD {}
@@ -1430,8 +1449,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           unless byteStridedLane cx.types c do
             cx.fail line "a Zig ≤0.16 `@bitCast` between an array and a vector of another item \
               type whose source items do not fill whole bytes is outside the subset"
-        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
-            reprBitSize cx.types cx.layouts ty)
+        let autoItems := cx.dialect.any (·.version.bitCastAutoItems)
+        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty autoItems,
+            reprBitSize cx.types cx.layouts ty autoItems)
           | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
               pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
               tagged union, slice, sentinel array or error storage, at any depth) is outside \
@@ -2640,6 +2660,22 @@ private def checkBitPtrConstant (f : Func) (v : Val) : Except String Unit :=
     else pure ()
   | none => pure ()
 
+/-- A lane pointer constant (`&g.v[i]` folded to `{global, off}`) must point into a global vector:
+Zig 0.14.1/0.15.2 also fold `&s.v[i]` for a vector *field* `v` of a packed struct `s`, without the
+field's bit offset, and miscompile stores through it (`docs/upstream/packed-vector-lane-ptr.md`).
+`CheckCtx.lanePtr` rejects the instruction form. -/
+private def checkLaneConstant (f : Func) (v : Val) : Except String Unit :=
+  match v with
+  | .ptrConst pty g _ =>
+    if laneBitPtrTy f.layouts pty then
+      match (f.globals[g]?).bind (f.types[·.ty]?) with
+      | some (.vector ..) => pure ()
+      | _ => throw s!"{f.name}: a vector lane pointer into a global that is not a vector (a \
+          vector field of a packed struct: Zig 0.14.1/0.15.2 drop the field's bit offset, \
+          docs/upstream/packed-vector-lane-ptr.md) is outside the subset"
+    else pure ()
+  | _ => pure ()
+
 /-- A big-endian profile (T03, `ZigLean/Endian.lean`) parameterizes the byte order of
 integers, floats, slices, enums, packed structs (their backing integer and bit-pointer hosts),
 whole-byte vector lanes and every aggregate built from them. The rest is unqualified on a
@@ -2799,6 +2835,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
           checkTy f.name f.types f.layouts 0 vty
           checkedConstTypes := checkedConstTypes.insert vty
       checkBitPtrConstant f v
+      checkLaneConstant f v
       checkNullConstants f.name f.types f.layouts v
       checkNoThreadlocalConstant f v
       checkPointerConstant f v
@@ -2928,7 +2965,7 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
   | .undef _, _ => pure ()
   | .int _ n, .int signed bits =>
     unless integerFits signed bits n do throw s!"{f.name}: integer constant does not fit type {expected}"
-  | .int _ n, .struct _ "packed" _ =>
+  | .int _ n, .struct _ "packed" _ | .int _ n, .union _ "packed" none _ =>
     let some bits := packedBits f.types expected | fail
     if bits > 65535 then throw s!"{f.name}: packed integer width exceeds 65535 bits"
     unless integerFits false bits n do throw s!"{f.name}: packed integer constant does not fit type {expected}"
@@ -4180,6 +4217,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       let result := do
         checkNullConstants f.name f.types f.layouts v
         checkBitPtrConstant f v
+        checkLaneConstant f v
         checkNoThreadlocalConstant f v
         checkPointerConstant f v
           (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
