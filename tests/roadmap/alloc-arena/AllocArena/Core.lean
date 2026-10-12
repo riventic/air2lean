@@ -355,6 +355,18 @@ theorem OV.avail_tail {w : OV} {N : Ptr} {b : BlockId} {x : Nat} (hf : w.first =
     w.Avail b x := by
   unfold OV.Avail OV.InTail; exact Or.inr (Or.inr ⟨N, hf, hb, h1, h2⟩)
 
+/-- A byte of the tail of the first node `N`. -/
+theorem OV.InTail.of_first {w : OV} {N : Ptr} {b : BlockId} {x : Nat} (hf : w.first = some N)
+    (h : w.InTail b x) : N.block = some b ∧ N.off.toNat + 24 + w.ei ≤ x ∧ x < N.off.toNat + w.sz := by
+  obtain ⟨N', hf', hb, h1, h2⟩ := h
+  rw [hf] at hf'; cases hf'; exact ⟨hb, h1, h2⟩
+
+/-- The re-pointed grant `i` has the bytes of its new region. -/
+theorem GrantHas.set {M : GMap} {i : Nat} {p : Ptr} {n : Nat} {q : Frac} {A : Nat} {K : BlockKind}
+    {b : BlockId} {x : Nat} (hb : p.block = some b) (h1 : p.off.toNat ≤ x) (h2 : x < p.off.toNat + n) :
+    GrantHas b x (M.set i (some (p, n, q, A, K)) i) := by
+  rw [GMap.set_same]; exact ⟨hb, h1, h2⟩
+
 /-- **Coverage**: every byte of every used node's buffer is available (`OV.Avail`). -/
 def OV.Cov (w : OV) : Prop := ∀ nd ∈ w.nodes, ∀ b x, InNode nd b x → w.Avail b x
 
@@ -1282,8 +1294,7 @@ theorem free_last_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
       (fun b x hb1 h1 h2 => OV.avail_tail hfirst (by rw [← hpN]; exact hb1) (by dsimp only; omega)
         (by dsimp only; omega))
       fun b x h => by
-        obtain ⟨N', hf', hb1, h1, h2⟩ := h
-        rw [hfirst] at hf'; cases hf'
+        obtain ⟨hb1, h1, h2⟩ := h.of_first hfirst
         exact OV.avail_tail hfirst hb1 (by dsimp only; omega) h2)
   refine ⟨_, sep_lift.mpr ⟨facts_free (k := k') (ei := v.w.ei - s.len.toNat) (tail := bs ++ v.w.tail)
     hw hMi hb' ?_ hcov, of_eq ?_ h''⟩⟩
@@ -1319,8 +1330,7 @@ theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = som
       { v.w with M := v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K')), ei := v.w.ei,
                  tail := v.w.tail, jh := jh' } :=
     OV.Cov.same hw.2.2.2.2.2 rfl (OV.avail_shrink (n' := n) hMi (fun j hj => GMap.set_ne _ _ hj)
-      (fun b x hb h1 h2 => by
-        show GrantHas b x (v.w.M.set v.i _ v.i); rw [GMap.set_same]; exact ⟨hb, h1, h2⟩)
+      (fun _ _ hb h1 h2 => GrantHas.set hb h1 h2)
       hg.1 (fun b x hb h1 h2 => Or.inl (hg.2 b x hb h1 h2)) fun _ _ h => Or.inr (Or.inr h))
   refine rpost_true0 (facts_repoint (n' := n) (ei := v.w.ei) (tail := v.w.tail) hw hMi
     (GrantOk.len (hw.2.2.1 _ _ hMi)) ?_ hcov) hle (i := v.i) (of_eq ?_ h)
@@ -1412,14 +1422,12 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
       { v.w with M := v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K')),
                  ei := v.w.ei - (s.len.toNat - n), tail := tl ++ v.w.tail, jh := v.w.jh } :=
     OV.Cov.same hw.2.2.2.2.2 rfl (OV.avail_shrink (n' := n) hMi (fun j hj => GMap.set_ne _ _ hj)
-      (fun b x hb1 h1 h2 => by
-        show GrantHas b x (v.w.M.set v.i _ v.i); rw [GMap.set_same]; exact ⟨hb1, h1, h2⟩)
+      (fun _ _ hb1 h1 h2 => GrantHas.set hb1 h1 h2)
       (fun _ h => h)
       (fun b x hb1 h1 h2 => OV.avail_tail hfirst (by rw [← hpN]; exact hb1) (by dsimp only; omega)
         (by dsimp only; omega))
       fun b x h => by
-        obtain ⟨N', hf', hb1, h1, h2⟩ := h
-        rw [hfirst] at hf'; cases hf'
+        obtain ⟨hb1, h1, h2⟩ := h.of_first hfirst
         exact OV.avail_tail hfirst hb1 (by dsimp only; omega) h2)
   refine rpost_true0 (facts_repoint (n' := n) (ei := v.w.ei - (s.len.toNat - n)) (tail := tl ++ v.w.tail) hw hMi
     (GrantOk.len (hw.2.2.1 _ _ hMi)) ?_ hcov) hle (i := v.i) (of_eq ?_ h)
@@ -1496,16 +1504,12 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
                  ei := v.w.ei + (n - s.len.toNat), tail := v.w.tail.extract (n - s.len.toNat) v.w.tail.size,
                  jh := v.w.jh } :=
     OV.Cov.same hw.2.2.2.2.2 rfl (OV.avail_shrink (n' := n) hMi (fun j hj => GMap.set_ne _ _ hj)
-      (fun b x hb1 h1 h2 => by
-        show GrantHas b x (v.w.M.set v.i _ v.i); rw [GMap.set_same]; exact ⟨hb1, h1, h2⟩)
+      (fun _ _ hb1 h1 h2 => GrantHas.set hb1 h1 h2)
       (fun _ h => h) (fun _ _ _ h1 h2 => by omega)
       fun b x h => by
-        obtain ⟨N', hf', hb1, h1, h2⟩ := h
-        rw [hfirst] at hf'; cases hf'
+        obtain ⟨hb1, h1, h2⟩ := h.of_first hfirst
         by_cases hx : x < s.ptr.off.toNat + n
-        · refine Or.inr (Or.inl ⟨v.i, ?_⟩)
-          show GrantHas b x (v.w.M.set v.i _ v.i); rw [GMap.set_same]
-          exact ⟨by rw [hpN]; exact hb1, by omega, hx⟩
+        · exact Or.inr (Or.inl ⟨v.i, GrantHas.set (by rw [hpN]; exact hb1) (by omega) hx⟩)
         · exact OV.avail_tail hfirst hb1 (by dsimp only; omega) h2)
   refine rpost_true (facts_repoint (n' := n) (K' := v.w.K) (ei := v.w.ei + (n - s.len.toNat))
     (tail := v.w.tail.extract (n - s.len.toNat) v.w.tail.size) hw hMi
@@ -1719,14 +1723,12 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
     refine OV.Cov.step hcv (OV.avail_step (i := w.mN) hg.1 (fun j hj => GMap.set_ne _ _ hj)
       (fun b x h => by rw [hfin _ (Nat.le_refl _)] at h; exact h.elim) fun b x h => ?_)
       fun nd hnd b x hx => Or.inl ?_
-    · obtain ⟨N', hf', hb1, h1, h2⟩ := h
-      rw [hfirst] at hf'; cases hf'
+    · obtain ⟨hb1, h1, h2⟩ := h.of_first hfirst
       by_cases hx1 : x < N.off.toNat + 24 + ai
       · exact Or.inl (hg.2 b x hb1 (by omega) (by omega))
       · by_cases hx2 : x < N.off.toNat + 24 + ai + n
-        · refine Or.inr (Or.inl ⟨w.mN, ?_⟩)
-          show GrantHas b x (w.M.set w.mN _ w.mN); rw [GMap.set_same]
-          exact ⟨by simpa [Ptr.add] using hb1, by omega, by omega⟩
+        · exact Or.inr (Or.inl ⟨w.mN, GrantHas.set (by simpa [Ptr.add] using hb1) (by omega)
+            (by omega)⟩)
         · exact OV.avail_tail hfirst hb1 (by dsimp only [OV.carve]; omega) h2
     · simp only [OV.carve, OV.nodes, hfirst, List.mem_cons] at hnd
       simp only [OV.nodes, hfirst, List.mem_cons]
@@ -2015,8 +2017,7 @@ theorem grow_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
     · -- the new bytes join the tail
       refine OV.Cov.step hcv (OV.avail_step (i := 0) (fun _ h => h) (fun _ _ => rfl)
         (fun b x h => Or.inr (Or.inl ⟨0, h⟩)) fun b x h => ?_) fun nd hnd b x hx => ?_
-      · obtain ⟨N', hf', hb1, h1, h2⟩ := h
-        rw [hfirst] at hf'; cases hf'
+      · obtain ⟨hb1, h1, h2⟩ := h.of_first hfirst
         exact OV.avail_tail hfirst hb1 h1 (by dsimp only [OV.grow]; omega)
       · rw [hnodes] at hnd
         rcases List.mem_cons.mp hnd with rfl | hnd

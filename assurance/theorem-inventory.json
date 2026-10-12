@@ -763,16 +763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "a2f14d9004dded8e6e950269386daabdad4445ef",
-        "tracked_dirty": false
+        "head": "fa707534318327d1fa9eef992f7e97ecc7167807",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T17:38:38.186685+00:00",
-      "elapsed_seconds": 0.244,
+      "started_utc": "2026-10-12T18:36:46.359967+00:00",
+      "elapsed_seconds": 252.603,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "fd9010c92366e041d5e9558c656c1f7c731c2a9a0aa0ed029023e5e41ada4a4b",
+      "log_sha256": "b081f0746b2aa2fba181ed91d901d53e637bd53a32570786e525ed3546378f9c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Effects",
@@ -805,6 +805,7 @@
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Options.Proofs",
@@ -954,9 +955,10 @@
         "Proofs.Layout.Mem": "8c08029566218f6280e03729056e286723e3cb796e939cd12f375354458e2338",
         "Proofs.Layout.Proofs": "8e8032af7d24b077da13c72fd70673ac910ce4c4b913a52e08a1cb04363836b3",
         "Proofs.Lists.Append": "95a70c37aab728234587153a83056cb70543e5d48de29cbfb59b58f98c0639c6",
-        "Proofs.Lists.Bounded": "0df31e3a790a761cd4fc4b2acb2bac8935bf9bfb98203689526b606278556f11",
+        "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
