@@ -73,6 +73,19 @@ partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId :=
     | some ty => (childTys ty).any fun child => hasErrorStorage types child (seen.push id)
     | none => false
 
+/-- A value's storage holds a model handle whose bytes are the model's, not the target's:
+`std.mem.Allocator` and `std.Io` (16 zero bytes for two pointers) and `std.Thread` (the model's
+thread id). A view of those bytes as other data would read invented bits
+(`docs/architecture-audit/enc-exactness.md`), so a pointer cast exposing them is rejected. -/
+partial def hasOpaqueModelStorage (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
+  if seen.contains id then false
+  else if seen.size ≥ 256 then true
+  else match types[id]? with
+    | some .allocator | some .thread | some .io => true
+    | some (.ptr ..) => false
+    | some ty => (childTys ty).any fun child => hasOpaqueModelStorage types child (seen.push id)
+    | none => false
+
 /-- Unlike byte-storage classification, capability classification follows pointer
 edges. Unknown, cyclic and exhausted type traversals cannot prove a safe view. -/
 private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
@@ -1365,6 +1378,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
+      -- The bytes of a model handle are not the target's: no view of them as other data. A cast
+      -- to or from `*anyopaque` reinterprets no bytes (its pointee cannot be read).
+      let anyopaque (t : TyId) : Bool := cx.types[t]? == some (.other "anyopaque")
+      if let (some source, some target) := (ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty) then
+        unless qualifierOnly || optionalWrapOnly || source == target || anyopaque source ||
+            anyopaque target do
+          if hasOpaqueModelStorage cx.types source || hasOpaqueModelStorage cx.types target then
+            cx.fail line "a pointer cast exposing the bytes of a std.mem.Allocator, std.Thread or std.Io as other data is outside the model (their bytes are the model's handles, not the target's)"
     -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
     -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
     -- ≤0.16 memory rules below.

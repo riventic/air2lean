@@ -239,6 +239,18 @@ output); any other width selects the width-parameterized `<name>W bits` of
 def errOp (errBits : Nat) (name : String) : String :=
   if errBits == 16 then s!"Zig.{name}" else s!"Zig.{name}W {errBits}"
 
+/-- The storage dictionary of an integer with padding bits (`bits ≠ 8 * intSize bits`) where the
+dialect stores it extended (`Dialect.intExtOrder?`, Zig 0.17.0): `Zig.intEncExt`. -/
+def intExtEnc (intExt : Option String) (signed : Bool) (bits : Nat) : Option String :=
+  -- `Zig.intSize`: the byte count rounded up to its alignment (a power of 2, at most 16).
+  let bytes := (bits + 7) / 8
+  let align := if bytes ≤ 1 then 1 else if bytes ≤ 2 then 2 else if bytes ≤ 4 then 4
+    else if bytes ≤ 8 then 8 else 16
+  let size := (bytes + align - 1) / align * align
+  match intExt with
+  | some o => if bits != 8 * size then some s!"Zig.intEncExt {o} {signed} {bits}" else none
+  | none => none
+
 /-- An explicit type-indexed storage dictionary. No instance for `String` is registered.
 Named aggregate dictionaries choose these recursively for their fields. At a non-default
 error width every error union also gets an explicit dictionary, since the registered
@@ -246,12 +258,13 @@ error width every error union also gets an explicit dictionary, since the regist
 allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes (`Check.lean` rejects
 an optional of one, which would need a separate flag). -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) :
-    Option String :=
+    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64)
+    (intExt : Option String := none) : Option String :=
   let emitStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
       (id : TyId) (layouts : Array Layout) :=
-    emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits)
+    emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) (intExt := intExt)
   match types[id]? with
+  | some (.int signed bits) => intExtEnc intExt signed bits
   | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
   | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
   | some (.optional c) =>
@@ -278,8 +291,9 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
 def withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
-    (id : TyId) (expr : String) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) : String :=
-  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) with
+    (id : TyId) (expr : String) (layouts : Array Layout := #[]) (ptrBits : Nat := 64)
+    (intExt : Option String := none) : String :=
+  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) (intExt := intExt) with
   | none => expr
   | some enc =>
     s!"(letI : Zig.Enc ({emitTy structNames types types[id]! (ptrBits := ptrBits)}) := {enc}; {expr})"
@@ -297,6 +311,8 @@ structure NamedType where
   layout : Layout
   /-- The source function's `error_set_bits`. -/
   errBits : Nat := 16
+  /-- The source function's `Dialect.intExtOrder?`. -/
+  intExt : Option String := none
   deriving Inhabited
 
 /-- The Lean name of a named Zig type. The tag enum of `union(enum)` has the Zig name
@@ -358,7 +374,8 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
       | .struct name .. | .enum name .. | .union name .. =>
         let entry : NamedType := { zigName := name, leanName := namedLeanName prefix_ name, ty,
                                    srcTypes := f.types, srcLayouts := f.layouts,
-                                   layout := f.layouts[i]?.getD {}, errBits := f.errorSetBits }
+                                   layout := f.layouts[i]?.getD {}, errBits := f.errorSetBits,
+                                   intExt := f.dialect.intExtOrder? }
         match found.findIdx? (·.zigName == name) with
         | none => found := found.push entry
         -- Another function's file can have the layout that this one does not.
@@ -412,7 +429,7 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     emitTy structNames types ty (ptrBits := ptrBits)
   let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
       (id : TyId) (expr : String) (layouts : Array Layout) :=
-    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits) (intExt := s.intExt)
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
   let hn := helperLookup s.ty (structNames.map (·.2))
@@ -469,9 +486,13 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
         [s!"    match {n}.{hn "ofInt?"} (Zig.val {signed} b) with",
          "    | some v => pure v", "    | none => throw .illegal"]
       else ["    pure ⟨b⟩"]
+    -- A tag with padding bits that the dialect stores extended: `Zig.intEncExt` (`intExtEnc`).
+    let (encF, decF) := match intExtEnc s.intExt signed bits with
+      | some enc => (s!"({enc}).encode", s!"({enc}).decode")
+      | none => ("Zig.Enc.encode", "Zig.Enc.decode")
     String.intercalate "\n" (head ++
-      [s!"  encode v := Zig.Enc.encode v.{hn "toBits"}", "  decode bs := do",
-       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs"] ++ dec)
+      [s!"  encode v := {encF} v.{hn "toBits"}", "  decode bs := do",
+       s!"    let b : BitVec {bits} ← {decF} bs"] ++ dec)
   | _ => ""
 
 def emitNamedType (structNames : Array (String × String)) (s : NamedType) : String :=
@@ -480,7 +501,7 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     emitTy structNames types ty (ptrBits := ptrBits)
   let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
       (id : TyId) (expr : String) (layouts : Array Layout) :=
-    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits) (intExt := s.intExt)
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
@@ -890,7 +911,8 @@ def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
   emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
-  withStorageEnc (ptrBits := fc.ptrBits) fc.structNames fc.types fc.errBits tid expr fc.layouts
+  withStorageEnc (ptrBits := fc.ptrBits) (intExt := fc.dialect.intExtOrder?) fc.structNames fc.types
+    fc.errBits tid expr fc.layouts
 
 /-- The bytes `bytes` of the constant `v` of type `tid`, with the exact bits of each NaN constant
 in it written over its undefined bits (`nanConstParts`, `docs/floats.md` §NaN in memory). -/
@@ -4486,7 +4508,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
             some (emitTy structNames worker.types worker.types[child]!,
               Nat.min ((worker.layouts[parameter]?.bind (·.ptrAlign)).getD 1)
                 ((worker.layouts[child]?.bind (·.align)).getD 1),
-              emitStorageEnc structNames worker.types worker.errorSetBits child worker.layouts)
+              emitStorageEnc structNames worker.types worker.errorSetBits child worker.layouts
+                (intExt := worker.dialect.intExtOrder?))
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)
@@ -4495,7 +4518,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let futureDescriptions := futures.map fun (nm, f, fields, r) =>
     let (_, name, args, kind) := describe nm f fields
     let complete := withStorageEnc structNames f.types f.errorSetBits r
-      "Zig.Future.complete futureSlot futureResult" f.layouts
+      "Zig.Future.complete futureSlot futureResult" f.layouts (intExt := f.dialect.intExtOrder?)
     (nm, name, args, kind, complete, fields.map (captureClass f.types))
   -- Every `Io.Group.async` and `Io.async` call needs the task's caller execution (the eager
   -- outcome) under every spawn policy (`groupAsyncWithPolicyC`, `asyncWithPolicyC`).

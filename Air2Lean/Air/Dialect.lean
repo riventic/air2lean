@@ -54,6 +54,14 @@ def bitCast : ZigVersion → BitCast
   | v0_14_1 | v0_15_2 | v0_16_0 => .memory
   | v0_17_0 => .logical
 
+/-- A store of an integer with padding bits (`u10`, `i24`, an `enum(u24)` tag) writes the whole
+ABI integer, zero- or sign-extended, and a load is poison unless the padding is that extension
+(`Zig.intEncExt`, `docs/architecture-audit/enc-exactness.md`). Before 0.17.0 a store leaves the
+padding unspecified and a load ignores it (`Zig.intEncOf`). -/
+def intPaddingExtended : ZigVersion → Bool
+  | v0_14_1 | v0_15_2 | v0_16_0 => false
+  | v0_17_0 => true
+
 /-- The compiler_rt float routines whose results differ by version (`docs/floats.md`
 §Per-version differences; `--float-semantics compiler-rt`). -/
 inductive CompilerRt where
@@ -269,6 +277,15 @@ def ofVersion (version : ZigVersion) : Dialect := { version }
 def bigEndian (d : Dialect) : Bool := d.endian == .big
 
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
+
+/-- The byte order term of `Zig.intEncExt` if integers with padding bits are stored extended:
+from 0.17.0 (`ZigVersion.intPaddingExtended`), and at every version with the self-hosted x86_64
+backend, whose store writes the extension and whose load reads the whole ABI integer
+(`tests/roadmap/enc-exactness`, Debug x86_64 from 0.15.2). Else `none`. -/
+def intExtOrder? (d : Dialect) : Option String :=
+  if d.version.intPaddingExtended || d.backend == "stage2_x86_64" then
+    some (if d.bigEndian then ".big" else ".little")
+  else none
 
 /-- The qualified target; `none` for a legacy profile (the x86_64 reference model). -/
 def target? (d : Dialect) : Option Target := Target.find? d.arch d.os
