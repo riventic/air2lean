@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "status": "pass",
- "theorem_count": 35,
+ "theorem_count": 39,
  "theorems": [
   {
    "conclusion": {
@@ -102,6 +102,10 @@
       "extra": [],
       "fn": "OfNat.ofNat",
       "fn_module": "Init.Prelude",
+      "nat": {
+       "pp": "2",
+       "value": 2
+      },
       "params": [
        "implicit",
        "default",
@@ -1612,6 +1616,10 @@
       "extra": [],
       "fn": "OfNat.ofNat",
       "fn_module": "Init.Prelude",
+      "nat": {
+       "pp": "1",
+       "value": 1
+      },
       "params": [
        "implicit",
        "default",
@@ -1735,6 +1743,264 @@
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.exit_within.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Assn"
+      },
+      "extra": [],
+      "fn": "Zig.Assn",
+      "fn_module": "ZigLean.Sep.Assert",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.TotalTripleWithin"
+   },
+   "conclusion_dependencies": [
+    "Bool",
+    "Nat",
+    "Unit",
+    "id",
+    "instAddNat",
+    "instHAdd",
+    "instOfNatNat",
+    "ClaimFixture.exitBody",
+    "HAdd.hAdd",
+    "OfNat.ofNat",
+    "Unit.unit",
+    "Zig.TotalTripleWithin"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.exit_within_sym",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "Bool"
+      },
+      "extra": [],
+      "fn": "Bool",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Nat"
+       },
+       {
+        "closed": "Nat"
+       },
+       {
+        "closed": "Nat"
+       },
+       {
+        "closed": "instHAdd"
+       },
+       {
+        "bvar": 1
+       },
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "HAdd.hAdd"
+      },
+      "extra": [],
+      "fn": "HAdd.hAdd",
+      "fn_module": "Init.Prelude",
+      "nat": {
+       "pp": "n + 1",
+       "value": null
+      },
+      "params": [
+       "implicit",
+       "implicit",
+       "implicit",
+       "inst_implicit",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "ClaimFixture.exitBody"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.exitBody",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Bool"
+       }
+      ],
+      "atom": {
+       "closed": "id"
+      },
+      "extra": [],
+      "fn": "id",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "implicit",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit.unit"
+      },
+      "extra": [],
+      "fn": "Unit.unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Assn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "n",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "3e72fba74db819ee16ece50a219351e1",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Bounded",
+     "name": "Zig.TotalTripleWithin"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.exit_within_sym.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Eq",
+    "Exists",
+    "Nat",
+    "True",
+    "Union.union",
+    "Zig.Assn",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.exit_within_sym.nonvacuous",
    "statement": {
     "args": [
      {
@@ -3728,6 +3994,246 @@
   },
   {
    "conclusion": {
+    "head": "Zig.TotalTripleStk"
+   },
+   "conclusion_dependencies": [
+    "Nat",
+    "instOfNatNat",
+    "ClaimFixture.ret",
+    "OfNat.ofNat",
+    "Zig.TotalTripleStk"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.ret_stk",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Nat"
+       },
+       {
+        "closed": null
+       },
+       {
+        "closed": "instOfNatNat"
+       }
+      ],
+      "atom": {
+       "closed": "OfNat.ofNat"
+      },
+      "extra": [],
+      "fn": "OfNat.ofNat",
+      "fn_module": "Init.Prelude",
+      "nat": {
+       "pp": "32",
+       "value": 32
+      },
+      "params": [
+       "implicit",
+       "default",
+       "inst_implicit"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Nat"
+       },
+       {
+        "closed": null
+       },
+       {
+        "closed": "instOfNatNat"
+       }
+      ],
+      "atom": {
+       "closed": "OfNat.ofNat"
+      },
+      "extra": [],
+      "fn": "OfNat.ofNat",
+      "fn_module": "Init.Prelude",
+      "nat": {
+       "pp": "0",
+       "value": 0
+      },
+      "params": [
+       "implicit",
+       "default",
+       "inst_implicit"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Assn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "19499c564bdbb97386ae2e703a8322df",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Stack",
+     "name": "Zig.TotalTripleStk"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimFixture.ret_stk.nonvacuous"
+     }
+    }
+   },
+   "opaque_dependencies": [],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Eq",
+    "Exists",
+    "Nat",
+    "True",
+    "instLENat",
+    "instOfNatNat",
+    "LE.le",
+    "OfNat.ofNat",
+    "Union.union",
+    "Zig.Assn",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.StackRoom",
+    "Zig.Mem.heap",
+    "Zig.Mem.stackUsed"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.ret_stk.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Assn"
+      },
+      "extra": [],
+      "fn": "Zig.Assn",
+      "fn_module": "ZigLean.Sep.Assert",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [],
+   "allowed": true
+  },
+  {
+   "conclusion": {
     "head": "Zig.TTriple"
    },
    "conclusion_dependencies": [
@@ -4924,6 +5430,16 @@
    "kind": "theorem"
   },
   {
+   "name": "ClaimFixture.exit_within_sym",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within_sym.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.exit_within_total",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
@@ -5010,6 +5526,16 @@
   },
   {
    "name": "ClaimFixture.ret_some",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_stk",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_stk.nonvacuous",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },

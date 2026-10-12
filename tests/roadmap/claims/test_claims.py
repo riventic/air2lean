@@ -51,6 +51,11 @@ EXPECTED = {
     'ClaimFixture.exit_within_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.exit_within.nonvacuous': ('unclassified', None),
     'ClaimFixture.exit_within_total.nonvacuous': ('unclassified', None),
+    # A bound over a variable, and total correctness under the stack budget (P03/P05).
+    'ClaimFixture.exit_within_sym': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.exit_within_sym.nonvacuous': ('unclassified', None),
+    'ClaimFixture.ret_stk': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.ret_stk.nonvacuous': ('unclassified', None),
     'ClaimFixture.countdown_bounded.nonvacuous': ('unclassified', None),
     'ClaimFixture.spin_no_run': ('unclassified', None),
     'ClaimFixture.spin_not_within': ('unclassified', None),
@@ -66,8 +71,10 @@ EXPECTED = {
     'ClaimFixture.premise_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.ret_returns.nonvacuous': ('unclassified', None),
 }
-BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs'},
-          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns'}}
+BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs', 'value': 1, 'expr': '1'},
+          'ClaimFixture.exit_within_sym': {'unit': 'loop_body_runs', 'value': None, 'expr': 'n + 1'},
+          'ClaimFixture.ret_stk': {'unit': 'stack_bytes', 'value': 32, 'expr': '32'},
+          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns', 'value': 2, 'expr': '2'}}
 
 
 def classified(report, heads=None):
@@ -234,9 +241,11 @@ class ClassifyTests(unittest.TestCase):
 class AssessTests(unittest.TestCase):
     """Binding, domain, hypotheses and witnesses from the extracted kernel statements."""
 
-    def goal(self, theorem, strength, definition, domain='all', report=FIXTURE, heads=None, **extra):
-        return claims.check_goal({'theorem': theorem, 'strength': strength, 'domain': domain}, theorems_of(report),
-                                 definition=definition, heads=heads, **extra)
+    def goal(self, theorem, strength, definition, domain='all', report=FIXTURE, heads=None, bound=None, **extra):
+        goal = {'theorem': theorem, 'strength': strength, 'domain': domain}
+        if bound is not None:
+            goal['bound'] = bound
+        return claims.check_goal(goal, theorems_of(report), definition=definition, heads=heads, **extra)
 
     def test_subject_must_be_the_root(self):
         self.assertEqual(self.goal('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret')['status'], 'accepted')
@@ -313,11 +322,42 @@ class AssessTests(unittest.TestCase):
     def test_bounded_and_concurrent_returns(self):
         countdown = 'Zig.Conc.Total.countdown'
         goal = self.goal('ClaimFixture.countdown_bounded', 'total_correctness', countdown, 'scoped: initial memory {}')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', {'unit': 'scheduler_turns'}), goal['reason'])
+        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.countdown_bounded']),
+                         goal['reason'])
         goal = self.goal('ClaimFixture.countdown_eventually', 'total_correctness', countdown, 'scoped: initial memory {}')
         self.assertEqual((goal['status'], goal['bound']), ('accepted', None), goal['reason'])
         goal = self.goal('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', {'unit': 'loop_body_runs'}), goal['reason'])
+        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.exit_within']),
+                         goal['reason'])
+
+    def test_declared_bounds_are_checked_against_the_theorem(self):
+        within = ('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
+        sym = ('ClaimFixture.exit_within_sym', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
+        accepted = [(within, {'unit': 'loop_body_runs', 'max': 1}), (within, {'unit': 'loop_body_runs', 'max': 5}),
+                    (sym, {'unit': 'loop_body_runs', 'expr': 'n  + 1'}),
+                    (('ClaimFixture.ret_stk', 'total_correctness', 'ClaimFixture.ret', 'all'),
+                     {'unit': 'stack_bytes', 'max': 32})]
+        for args, bound in accepted:
+            with self.subTest(bound=bound):
+                goal = self.goal(*args, bound=bound)
+                self.assertEqual(goal['status'], 'accepted', goal['reason'])
+        rejected = [(within, {'unit': 'loop_body_runs', 'max': 0}, 'exceeds the declared max'),
+                    (within, {'unit': 'scheduler_turns', 'max': 9}, 'bounds loop_body_runs'),
+                    (sym, {'unit': 'loop_body_runs', 'max': 100}, 'not a closed number'),
+                    (sym, {'unit': 'loop_body_runs', 'expr': 'n'}, 'is not the declared'),
+                    (within, {'unit': 'loop_body_runs'}, 'a declared bound is'),
+                    (within, {'unit': 'loop_body_runs', 'max': -1}, 'a declared bound is'),
+                    (('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret', 'all'),
+                     {'unit': 'loop_body_runs', 'max': 3}, 'states no bound')]
+        for args, bound, reason in rejected:
+            with self.subTest(bound=bound):
+                goal = self.goal(*args, bound=bound)
+                self.assertEqual(goal['status'], 'rejected')
+                self.assertIn(reason, goal['reason'])
+
+    def test_stack_triples_carry_the_stack_premise(self):
+        goal = self.goal('ClaimFixture.ret_stk', 'total_correctness', 'ClaimFixture.ret', 'all')
+        self.assertEqual((goal['status'], goal['premises']), ('accepted', ['STK-01']), goal['reason'])
 
     def test_premise_dependent_return_cannot_meet_unconditional_goals(self):
         for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):

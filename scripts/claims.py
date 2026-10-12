@@ -29,7 +29,7 @@ CLAIMS = (NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN)
 GUARANTEED_RETURN_UNDER_PREMISE = 'guaranteed-return-under-premise'
 REGISTRY_CLAIMS = (*CLAIMS, GUARANTEED_RETURN_UNDER_PREMISE)
 # Units of an explicit return bound that a registered head can state (`bound` in the registry).
-BOUND_UNITS = ('loop_body_runs', 'scheduler_turns')
+BOUND_UNITS = ('loop_body_runs', 'scheduler_turns', 'stack_bytes')
 
 # Lean's `Eq` (core; a redefinition cannot be imported next to it): the computation is the
 # left-hand side.
@@ -52,16 +52,18 @@ ASM_OPAQUE = re.compile(r'(?:^|\.)airAsm_[0-9]+\Z')
 ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
 
 
-def premises_of(theorem: dict, claims) -> list[str] | None:
+def premises_of(theorem: dict, claims, entry=None) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
-    opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one.
-    None if the report lacks the closure (`opaque_dependencies`)."""
+    opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
+    the registered premises of its conclusion head (`premises` in the registry, e.g. STK-01 for
+    `TotalTripleStk`). None if the report lacks the closure (`opaque_dependencies`)."""
     opaques = theorem.get('opaque_dependencies')
     if not isinstance(opaques, list):
         return None
+    head = list((entry or {}).get('premises', []))
     if not any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
-        return []
-    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
+        return head
+    return head + (['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01'])
 
 
 def load_heads(path: Path = HEADS_PATH) -> dict:
@@ -77,6 +79,9 @@ def load_heads(path: Path = HEADS_PATH) -> dict:
                  and isinstance(entry['claims'], list) and bool(entry['claims'])
                  and set(entry['claims']) <= set(REGISTRY_CLAIMS)
                  and entry.get('bound', None) in (None, *BOUND_UNITS)
+                 and ('bound' in entry) == ('bound_arg' in entry)
+                 and (type(entry.get('bound_arg', 0)) is int and entry.get('bound_arg', 0) >= 0)
+                 and isinstance(entry.get('premises', []), list)
                  and type(entry['program']) is int and entry['program'] >= 0
                  and isinstance(entry['state'], list) and all(type(i) is int and i >= 0 for i in entry['state']))
         if not valid:
@@ -154,10 +159,47 @@ def claim_class(claims) -> str:
     return GUARANTEED_RETURN_UNDER_PREMISE if GUARANTEED_RETURN_UNDER_PREMISE in claims else 'unclassified'
 
 
-def bound_of(entry) -> dict | None:
-    """The unit of an explicit return bound stated by a registered conclusion head, or None."""
+def bound_of(entry, statement=None) -> dict | None:
+    """The explicit bound stated by a registered conclusion head, or None: its unit, and from the
+    head's bound argument (`bound_arg`) its value when the argument is a closed number (`value`)
+    and its printed form (`expr`), as the extractor records them."""
     unit = entry.get('bound') if isinstance(entry, dict) else None
-    return {'unit': unit} if unit else None
+    if not unit:
+        return None
+    args = _list((statement or {}).get('args'))
+    index = entry.get('bound_arg')
+    arg = args[index] if type(index) is int and index < len(args) and isinstance(args[index], dict) else {}
+    nat = arg.get('nat') if isinstance(arg.get('nat'), dict) else {}
+    value = nat.get('value')
+    expr = nat.get('pp')
+    return {'unit': unit, 'value': value if type(value) is int and value >= 0 else None,
+            'expr': expr if isinstance(expr, str) else None}
+
+
+def check_bound(declared, found) -> str | None:
+    """Why a manifest goal's `bound` is not what the theorem proves, or None. A declared
+    `{unit, max}` needs a closed proved bound of that unit at most `max` (a smaller bound implies
+    it); a declared `{unit, expr}` needs exactly that printed bound (whitespace aside), for a bound
+    over the theorem's variables. Anything else is rejected: the bound is checked, never assumed."""
+    if not isinstance(declared, dict) or 'unit' not in declared or len(declared) != 2 or not (
+            ('max' in declared and type(declared['max']) is int and declared['max'] >= 0) or
+            ('expr' in declared and isinstance(declared['expr'], str) and declared['expr'].strip())):
+        return 'a declared bound is {"unit": U, "max": N} or {"unit": U, "expr": "<printed bound>"}'
+    if found is None:
+        return f'declared a {declared["unit"]} bound, but the conclusion states no bound'
+    if found['unit'] != declared['unit']:
+        return f'declared a {declared["unit"]} bound, but the conclusion bounds {found["unit"]}'
+    if 'max' in declared:
+        if found['value'] is None:
+            return (f'declared max {declared["max"]}, but the proved bound is not a closed number '
+                    f'({found["expr"] or "unknown"}); declare it as "expr"')
+        if found['value'] > declared['max']:
+            return f'the proved bound {found["value"]} exceeds the declared max {declared["max"]}'
+        return None
+    norm = lambda text: ' '.join(text.split())
+    if found['expr'] is None or norm(found['expr']) != norm(declared['expr']):
+        return f'the proved bound {found["expr"] or "unknown"} is not the declared {declared["expr"]}'
+    return None
 
 
 def derived_strength(claims) -> str | None:
@@ -238,7 +280,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     found = claims_of(theorem, heads, nodes)
     result = {'head': name, 'head_problem': problem, 'claims': [c for c in REGISTRY_CLAIMS if c in found],
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
-              'bound': bound_of(entry),
+              'bound': bound_of(entry, statement_of(theorem)),
               'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
               'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
     statement = statement_of(theorem)
@@ -337,7 +379,8 @@ def classify(report: dict, heads: dict | None = None) -> dict:
                          'type_strength': found['type_strength'], 'bound': found['bound'],
                          'witnesses': found['witnesses'], 'caps': found['caps'],
                          'caller_obligations': obligations.get(theorem['name'], []),
-                         'premises': premises_of(theorem, found['claims']),
+                         'premises': premises_of(theorem, found['claims'],
+                                                 head_entry(theorem, heads, nodes)[1]),
                          'allowed': theorem.get('allowed') is True})
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
@@ -368,9 +411,10 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
-    found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
+    heads = load_heads() if heads is None else heads
+    found = assess(theorem, heads, definition, generated=generated,
                    allowed=allowed, audited=theorems, nodes=nodes)
-    premises = premises_of(theorem, found['claims'])
+    premises = premises_of(theorem, found['claims'], head_entry(theorem, heads, nodes)[1])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
                   derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
     if theorem.get('allowed') is not True:
@@ -402,6 +446,10 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         return {**result, 'status': 'rejected',
                 'reason': f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is '
                           f'scoped: {json.dumps(found["domain"])}'}
+    if 'bound' in goal:
+        problem = check_bound(goal['bound'], found['bound'])
+        if problem:
+            return {**result, 'status': 'rejected', 'reason': problem}
     # Outcome evidence can only refuse an absence claim the declared strength asserts.
     for claim in OUTCOMES.STRENGTH_ABSENCE[declared] if outcome_counts is not None else ():
         verdict = OUTCOMES.absence(claim, outcome_counts)

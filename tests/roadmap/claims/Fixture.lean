@@ -1,5 +1,6 @@
 import ZigLean.Sep.Witness
 import ZigLean.Sep.Bounded
+import ZigLean.Sep.Stack
 import ZigLean.Conc.Own
 import ZigLean.Conc.Total
 
@@ -135,6 +136,23 @@ theorem exit_within_total (P : Assn) :
 nonvacuity_witness exit_within_total :=
   ⟨emp, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
     Mem.seq_default, trivial⟩
+
+/-- A bound over a variable: `n + 1` body runs, for every `n`. -/
+theorem exit_within_sym (P : Assn) (n : Nat) :
+    TotalTripleWithin (n + 1) P exitBody id () (fun _ _ => P) :=
+  (exit_within P).mono (Nat.le_add_left 1 n)
+
+nonvacuity_witness exit_within_sym :=
+  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
+    Mem.seq_default, trivial⟩
+
+/-- Total correctness under the stack budget (`TotalTripleStk`): room for 32 bytes of frames. -/
+theorem ret_stk (P : Assn) (v : Nat) : TotalTripleStk P (ret v) (fun _ => P) 32 0 :=
+  TotalTripleStk.of_total (ret_total P v) (StackFree.pure v)
+
+nonvacuity_witness ret_stk :=
+  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
+    Mem.seq_default, Mem.StackRoom.of_none rfl 32, Nat.le_refl _, trivial⟩
 
 /-- The spinning loop has no counted run. -/
 theorem spin_no_run : ∀ s m k e s' m', ¬ LoopRuns spinBody id s m k e s' m' := by

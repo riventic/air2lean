@@ -229,7 +229,7 @@ def load_manifest(path):
         if not isinstance(root['goals'], list):
             raise Invalid('goals must be a list')
         for goal in root['goals']:
-            obj(goal, ('theorem', 'strength', 'domain'))
+            obj(goal, ('theorem', 'strength', 'domain'), ('bound',))
             string(goal['theorem'])
             string(goal['domain'])
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
@@ -1453,6 +1453,10 @@ def audit_goal(root, goal, theorems, nodes, modules):
     if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):
         return dict(row, status='domain_mismatch',
                     reason=f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is scoped')
+    if 'bound' in goal:
+        problem = claims.check_bound(goal['bound'], found['bound'])
+        if problem:
+            return dict(row, status='bound_mismatch', bound=found['bound'], reason=problem)
     return dict(row, status='allowed', reason=None)
 
 
