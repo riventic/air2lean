@@ -1245,7 +1245,7 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, ORD-06, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05, ORD-06 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03, EXT-04, ORD-06 |
 | Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |
 | Native/WASM correspondence records (`scripts/wasm-correspondence.py`, [research/T05.md](research/T05.md)) | PRF-04, TRU-03 |
