@@ -190,22 +190,40 @@ def usesEscapingAllocs (f : Func) : Array InstId :=
         | none => acc
       | _ => acc
 
-/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, an enum (its tag
-integer), or another packed struct. `none` for every other type (outside the subset). -/
+/-- The bit size of `id` as a field of a packed struct or union (`Zig.Packed`, its logical bit
+representation): an integer, a `bool`, a float, an enum (its tag integer), another packed struct
+(the sum of its fields), a packed union (its widest field: Zig 0.16+ requires equal widths,
+0.14.1/0.15.2 pad the narrower ones) or a vector of these (0.14.1/0.15.2 allow vector fields;
+`len` lanes, lane 0 lowest). `none` for every other type: pointers (0.14.1/0.15.2 only; the
+model's pointers carry provenance, not bits), arrays and the rest are outside the subset. -/
 partial def packedBits (types : Array Ty) (id : TyId) : Option Nat :=
   match types[id]? with
-  | some (.int _ bits) => some bits
+  | some (.int _ bits) | some (.float bits) => some bits
   | some .bool => some 1
   | some (.enum _ tag _ _) => packedBits types tag
   | some (.struct _ "packed" fields) =>
     fields.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedBits types t
+  | some (.union _ "packed" none fields) =>
+    if fields.isEmpty then none else
+    fields.foldlM (init := 0) fun acc (_, t) => Nat.max acc <$> packedBits types t
+  | some (.vector len c) => (len * ·) <$> packedBits types c
   | _ => none
 
-/-- A packed struct field of type `id` has an enum, in any depth. -/
+/-- A packed struct field of type `id` has an enum, in any depth (its bits can be no value). -/
 partial def packedHasEnum (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.enum ..) => true
   | some (.struct _ "packed" fields) => fields.any (packedHasEnum types ·.2)
+  | some (.vector _ c) => packedHasEnum types c
+  | _ => false
+
+/-- A packable type `id` can hold bits that are not determined (`Zig.Packed.mask`): a float (a
+NaN) or a packed union (undefined bits), in any depth. -/
+partial def packedHasMask (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.float _) | some (.union _ "packed" none _) => true
+  | some (.struct _ "packed" fields) => fields.any (packedHasMask types ·.2)
+  | some (.vector _ c) | some (.array _ c _) => packedHasMask types c
   | _ => false
 
 /-- The first bit of field `idx` of the packed struct `fields`: field 0 is at bit 0. -/

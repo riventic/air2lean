@@ -149,7 +149,28 @@ FIXTURES = [
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
-    for ns, target in (("S390x", "s390x-linux"), ("X64", "x86_64-linux"))
+    for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
+] + [
+    # T03 concurrency.sh: concurrency.zig per Zig version and target.
+    (f"tests/roadmap/big-endian/conc-gen/{v}-{target}.lean",
+     f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
+     ["--namespace", "Conc", "--prefix", "concurrency."], "exact")
+    for v in ("0.15.2", "0.17.0") for target in ("s390x-linux", "mips64-linux", "x86_64-linux")
+] + [
+    # L07/L08 packed-casts/check.sh: one translation per source and version.
+    (f"tests/roadmap/packed-casts/gen/{v}/{ns}.lean", f"tests/roadmap/packed-casts/air/{v}/{src}",
+     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    for src, ns, versions in (
+        ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.0")),
+        ("logical017", "Logical017", ("0.17.0",)),
+        ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
+        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
+    for v in versions
+] + [
+    # L04 try-pointers/lifetimes/check.sh.
+    (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
+     ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")

@@ -166,7 +166,7 @@ def loadBitsOf (o : ByteOrder) (α : Type) {n : Nat} [Packed α n] (hostSize ali
 def storeBitsOf (o : ByteOrder) {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat)
     (p : Ptr) (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
-  storeBytes p align (o.arrange (writeField (o.arrange bs) bitOffset (some (Packed.toBits v))))
+  storeBytes p align (o.arrange (writeField (o.arrange bs) bitOffset (Packed.defBits? v)))
 
 /-- `storeUndefBits` at order `o`. -/
 def storeUndefBitsOf (o : ByteOrder) (n hostSize align bitOffset : Nat) (p : Ptr) : MemM Unit := do

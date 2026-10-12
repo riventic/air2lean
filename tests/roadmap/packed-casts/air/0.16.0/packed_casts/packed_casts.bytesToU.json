@@ -1,0 +1,172 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "packed_casts.bytesToU",
+ "module": "root",
+ "src": {
+  "file": "packed_casts.zig",
+  "module": "packed_casts",
+  "decl_line": 114
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "bitcast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "array",
+   "len": 2,
+   "child": 4,
+   "sentinel": false,
+   "abi_size": 2,
+   "abi_align": 1
+  },
+  {
+   "k": "union",
+   "name": "packed_casts.U",
+   "module": "root",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "i",
+     "ty": 5
+    },
+    {
+     "name": "h",
+     "ty": 6
+    },
+    {
+     "name": "p",
+     "ty": 7
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "float",
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "struct",
+   "name": "packed_casts.Half",
+   "module": "root",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "lo",
+     "ty": 4
+    },
+    {
+     "name": "hi",
+     "ty": 4
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}
