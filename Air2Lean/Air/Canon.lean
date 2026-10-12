@@ -68,11 +68,14 @@ supported version, so one translation (and the proofs over it) serves all versio
    the check; the model's checked formation (`Zig.ptrProject`) is `.illegal` at once. The pass
    moves a pointer formation (`ptr_add`, `ptr_sub`, `ptr_elem_ptr`, a struct field pointer, a
    pointer-to-pointer `bitcast`) past the safety checks (`checkCond?`) that come before its
-   first use in its body, to just before that use; chains (`ptr_add` then `bitcast`) move
-   together. A pointer formation has no effect but its `.illegal`, and a check does not read it,
-   so a run that passes the checks is unchanged, and a run that fails one now panics there as
-   the native program does: `s[a..b]` with `a` past the allocation and `b < a` or `b > s.len`,
-   and a null C pointer with any start (`docs/null-pointers.md`).
+   first use in its body, to just before that use, when only straight-line code without calls,
+   inline assembly or atomics comes between (`sinkable`: no early exit or loop is skipped, and
+   nothing can resize the base's block, which `Mem.inBounds` judges at formation); chains
+   (`ptr_add` then `bitcast`) move together. A pointer formation has no effect but its
+   `.illegal`, and a check does not read it, so a run that passes the checks is unchanged, and
+   a run that fails one now panics there as the native program does: `s[a..b]` with `a` past
+   the allocation and `b < a` or `b > s.len`, and a null C pointer with any start
+   (`docs/null-pointers.md`).
 7. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
@@ -819,20 +822,31 @@ def pointerFormation (f : RawFunc) (tyOf : Val → Option TyId) (i : RawInst) : 
 def deepUses (i : RawInst) : Array InstId :=
   (flatten #[i]).flatMap fun j => j.uses ++ j.args.flatMap valRefs
 
+/-- `sinkPastChecks` (module doc): an instruction that a pointer formation may move past. A
+safety check or a debug instruction; else straight-line code (no nested body, so no early
+exit or loop) that cannot resize the base's block or let another thread do so before the
+formation is judged in bounds: no call, inline assembly or atomic operation. -/
+def sinkable (j : RawInst) : Bool :=
+  (checkCond? j).isSome || isDbgTag j.tag ||
+    (j.body.isEmpty && j.thenBody.isEmpty && j.elseBody.isEmpty && j.cases.isEmpty &&
+      !(["call", "assembly", "atomic_", "cmpxchg", "fence"].any (j.tag.startsWith ·)))
+
 /-- `sinkPastChecks` (module doc), in `body` and its nested bodies. -/
 partial def sinkBody (movable : RawInst → Bool) (body : Array RawInst) : Array RawInst := Id.run do
   let sink := sinkBody movable
   let mut b := body.map fun i =>
     { i with body := sink i.body, thenBody := sink i.thenBody, elseBody := sink i.elseBody,
              cases := i.cases.map fun c => { c with body := sink c.body } }
+  -- Moving reorders the body but changes no instruction, so each one's uses stay valid.
+  let uses : Std.HashMap InstId (Array InstId) :=
+    b.foldl (init := {}) fun m j => if isDbgTag j.tag then m else m.insert j.id (deepUses j)
   for id in (body.filter movable).reverse.map (·.id) do
     let some p := b.findIdx? (·.id == id) | continue
     let some moved := b[p]? | continue
     -- Debug instructions do not use a value; those of `id` move with it.
-    let usesId (j : RawInst) := !isDbgTag j.tag && (deepUses j).contains id
-    let some q := (b.extract (p + 1) b.size).findIdx? usesId | continue
+    let some q := (b.extract (p + 1) b.size).findIdx? (uses[·.id]?.any (·.contains id)) | continue
     let between := b.extract (p + 1) (p + 1 + q)
-    unless between.any (checkCond? · |>.isSome) do continue
+    unless between.any (checkCond? · |>.isSome) && between.all sinkable do continue
     let dbg := between.filter fun j => isDbgTag j.tag && j.uses.contains id
     let rest := between.filter fun j => !(isDbgTag j.tag && j.uses.contains id)
     b := b.extract 0 p ++ rest ++ #[moved] ++ dbg ++ b.extract (p + 1 + q) b.size
