@@ -125,6 +125,7 @@
     "ZigLean.Conc.PtrAtomicLemmas": ["ORD-05", "THR-08"],
     "ZigLean.Conc.Progress": ["THR-07"],
     "ZigLean.Conc.Total": ["THR-07", "SEM-04"],
+    "ZigLean.Conc.Returns": ["THR-08", "SEM-04"],
     "ZigLean.Conc.TimedSched": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedBody": ["TMR-02"],
     "ZigLean.Conc.TimedBudget": ["TMR-02", "THR-05"],
