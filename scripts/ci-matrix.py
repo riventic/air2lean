@@ -5,9 +5,10 @@
   ci-matrix.py write [--root DIR]    rewrite the generated regions
 
 Each Zig version that compatibility.json declares for x86_64-linux gets `golden` and `lean` rows in the `test`
-job; the default version also gets the parts that run once (`inputs`, `native`, `audit`,
-`receipt`, one row per T06 build mode) and one mutation row per line of
-scripts/mutation-shards.txt. A version in RESTRICTED runs the examples that
+job; the `zig.ci_once` version (not necessarily the default: its steps gate on the version they
+were qualified on, and the T06 build-mode records exist for it) also gets the parts that run
+once (`inputs`, `native`, `audit`, `receipt`, one row per T06 build mode) and one mutation row
+per line of scripts/mutation-shards.txt. A version in RESTRICTED runs the examples that
 scripts/example-selection.sh selects for it, without the diff harness. The `macos` job has one
 row per version whose hosts include aarch64-macos, the `zig-air` job (the patched compiler of
 each x86_64-linux version, built once per run) one per x86_64-linux version. Every step of the test job names its part
@@ -36,7 +37,7 @@ def region(job):
 
 def rows(root):
     compat = json.loads((root/'compatibility.json').read_text(encoding='utf-8'))
-    default = compat['zig']['default']
+    once = compat['zig']['ci_once']
     versions = [v['version'] for v in compat['zig']['versions'] if 'x86_64-linux' in v['hosts']]
     shards = len([l for l in (root/'scripts/mutation-shards.txt').read_text().splitlines() if l.strip()])
 
@@ -46,10 +47,10 @@ def rows(root):
         return {'zig': version, 'part': part, 'examples': examples,
                 'full': not restricted and not mutate, 'mutate': mutate, **shard}
 
-    ordered = [default] + [v for v in versions if v != default]
+    ordered = [once] + [v for v in versions if v != once]
     test = [row(v, part) for v in ordered
-            for part in ('golden', 'lean') + (ONCE if v == default else ())]
-    test += [row(default, 'mutation', shard=n) for n in range(1, shards + 1)]
+            for part in ('golden', 'lean') + (ONCE if v == once else ())]
+    test += [row(once, 'mutation', shard=n) for n in range(1, shards + 1)]
     macos = [{'zig': v['version']} for v in compat['zig']['versions'] if 'aarch64-macos' in v['hosts']]
     return {'test': test, 'macos': macos, 'zig-air': [{'zig': v} for v in ordered]}
 

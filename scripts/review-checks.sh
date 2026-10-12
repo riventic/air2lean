@@ -92,7 +92,9 @@ check="$test_dir/check"
 mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air" \
   "$check/Proofs/Basic" "$check/bin"
 cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" \
-  "$repo_root/scripts/workflow-common.sh" "$repo_root/scripts/safe-output.py" "$repo_root/scripts/par.py" "$check/scripts/"
+  "$repo_root/scripts/workflow-common.sh" "$repo_root/scripts/safe-output.py" "$repo_root/scripts/par.py" \
+  "$repo_root/scripts/zig-default.sh" "$repo_root/scripts/compat.py" "$check/scripts/"
+cp "$repo_root/compatibility.json" "$check/"
 cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
 {
   "schema": 11,
@@ -201,7 +203,8 @@ done
 # Execute mutation w on copies of every source the script backs up. No live source is touched.
 mutate="$test_dir/mutate"
 mkdir -p "$mutate/scripts" "$mutate/examples/atomics" "$mutate/examples/recursion" "$mutate/bin"
-cp "$repo_root/scripts/mutate.sh" "$mutate/scripts/"
+cp "$repo_root/scripts/mutate.sh" "$repo_root/scripts/zig-default.sh" "$repo_root/scripts/compat.py" "$mutate/scripts/"
+cp "$repo_root/compatibility.json" "$mutate/"
 # Two shards: w alone in shard2; all other real labels in shard1, maintaining complete coverage.
 awk '{ for (i = 1; i <= NF; i++) if ($i != "w") printf "%s ", $i } END { print ""; print "w" }' \
   "$repo_root/scripts/mutation-shards.txt" >"$mutate/scripts/mutation-shards.txt"
