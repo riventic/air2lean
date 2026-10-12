@@ -63,9 +63,25 @@
     },
     "test/0.16.0/inputs": {
       "inputs": [
+        "**",
+        "docs/allocation-policy-report.json",
+        "docs/c-frontend.md",
+        "docs/env-boundaries.md",
+        "docs/premises.md",
+        "docs/std-models.md",
+        "docs/trust-report.md"
+      ],
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation, plus the documentation files its gates read (local discovery, scripts/local-ci.sh discover); the gates that read the prose documentation are in test/0.16.0/docs"
+    },
+    "test/0.16.0/docs": {
+      "inputs": [
         "**"
       ],
-      "note": "the whole tree: the support matrix (README.md, PLAN.md, ROADMAP.md, docs/support-matrix.md), build-mode records (README.md and every docs/*.md paragraph that names a release mode) and host-accounting gates read the documentation"
+      "note": "the whole tree: support matrix, theorem inventory, mutation map, build-mode records and host accounting read README.md, PLAN.md, ROADMAP.md and every docs/*.md (local discovery)"
     },
     "test/0.16.0/native": {
       "inputs": [
@@ -92,9 +108,15 @@
     },
     "test/0.16.0/receipt": {
       "inputs": [
-        "**"
+        "**",
+        "docs/allocation-policy-report.json",
+        "docs/premises.md"
       ],
-      "note": "the whole tree: the proof receipt fingerprints every tracked file (scripts/proof-receipt.py), so a withheld one fails it (run 38235990118: CLAUDE.md)"
+      "exclude": [
+        "docs/**",
+        "*.md"
+      ],
+      "note": "every tracked file except the prose documentation; the proof receipt binds withheld files by their index blob (scripts/proof-receipt.py) and is then no release receipt"
     },
     "test/0.16.0/Debug": {
       "inputs": [

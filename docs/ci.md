@@ -305,8 +305,8 @@ commit is on `main`, and only through the restricted-checkout key, which does no
 observing what a part reads. Before, docs-only PR #149 took 29.5 min in the queue (`merge_group`
 run 38220406483, 07:54-08:24Z 2026-10-12, 286 runner-minutes): all 35 jobs executed, the longest
 `mutation/3` 18.1, macOS 0.15.2 20.2, `audit` 17.0, `receipt` 16.4 min. With this design such
-a change keeps the key of every reusable part except `test/0.16.0/inputs` and
-`test/0.16.0/receipt`, which read the documentation (see "Current declarations"); `generated`, `provenance` (`"reuse": false`: their
+a change keeps the key of every reusable part except `test/0.16.0/docs`, whose gates read the
+documentation (see "Current declarations"); `generated`, `provenance` (`"reuse": false`: their
 artifacts are this commit's `generated` branch entry) and the support jobs run too. The measured round is in "After the
 restricted checkout" below.
 
@@ -476,20 +476,22 @@ and the native wide bit-operation differential. What changes:
   `docs/` they read). `aarch64-linux`, `bitops-native-arm` and `build-modes-aarch64-linux` from
   the traces of runs 38166335511 and 38173731089.
 - Every tracked file except the prose documentation (`docs/**`, top-level `*.md`), plus the
-  documentation files their gates are known to read (`docs/allocation-policy-report.json`;
-  `README.md` for the host-accounting claims of the golden rows; `docs/premises.md` for
-  `audit`): the 0.16.0 `golden`, `lean`, `native` and `audit` parts,
-  the golden rows of 0.14.1, 0.15.2 and 0.17.0, and the macOS rows. They were commit-bound (their
-  gates read `HEAD`) or `"reuse": false` (`audit`: under the former tracer it exceeded the job
-  limit); in the restricted checkout `HEAD` is a function of the key. Conservative: a gate that
-  reads another documentation file fails red and the file is added; narrowing further is a
-  follow-up.
-- The whole tree: `test/0.16.0/inputs` and `test/0.16.0/receipt`. The support-matrix,
-  build-mode-record and host-accounting gates of `inputs` read `README.md`, `PLAN.md`,
-  `ROADMAP.md` and every `docs/*.md`; the proof receipt fingerprints every tracked file (run
-  38235990118 failed red on the withheld `CLAUDE.md`). So a documentation change executes both
-  (about 11-16 min); moving the documentation gates into a small part, and binding the receipt
-  to the restricted HEAD, are the next steps for a docs-only round of a few minutes.
+  documentation files their gates read (found with `scripts/local-ci.sh discover`, which
+  attributes every read to its step): `docs/allocation-policy-report.json`; `README.md` for the
+  host-accounting claims of the golden rows; `docs/premises.md` for `audit` and `receipt`;
+  `docs/c-frontend.md`, `docs/env-boundaries.md`, `docs/premises.md`, `docs/std-models.md` and
+  `docs/trust-report.md` for `inputs`. These are the 0.16.0 `golden`, `lean`, `inputs`,
+  `native`, `receipt` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.0, and the
+  macOS rows. They were commit-bound (their gates read `HEAD`) or `"reuse": false` (`audit`:
+  under the former tracer it exceeded the job limit); in the restricted checkout `HEAD` is a
+  function of the key. The proof receipt of `receipt` fingerprints every tracked file: a
+  withheld one is bound by its index blob instead of being read, and the receipt records how
+  many (`tree.withheld`); a release refuses such a receipt (`proof-receipt.py verify --release`),
+  release receipts come from the unrestricted `provenance` job.
+- The whole tree: `test/0.16.0/docs`, the gates that read the prose documentation (support
+  matrix, theorem inventory, mutation map, build-mode records, host accounting: `README.md`,
+  `PLAN.md`, `ROADMAP.md` and every `docs/*.md`), split out of `inputs` so that a documentation
+  change executes only this small part.
 - `"reuse": false` (always run, whole checkout): `generated` and `provenance`. Their artifacts
   are published as this commit's `generated` branch entry, which binds the commit and its tree
   (docs/ci.md#whole-tree-generated-files): a result passed by reference to another commit's run

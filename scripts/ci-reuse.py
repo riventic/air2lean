@@ -443,7 +443,7 @@ def restricted_state(root):
     return json.loads(state.read_text()) if state.is_file() else None
 
 
-def check_restricted(root, as_root=None):
+def check_restricted(root, as_root=None, reset=False):
     """Problems: withheld files that a step changed, or (when the steps run as root, which the
     missing permission does not stop) read: atime after the checkout. As another user a read
     already failed, and an access time can come from a system daemon (Spotlight on macOS).
@@ -454,9 +454,12 @@ def check_restricted(root, as_root=None):
         return []
     problems = []
     if state.get('discover'):  # symlinks keep their checkout atime; a removed file was not read
-        return ['%s: undeclared file was read' % rel for rel in state['withheld']
-                if os.path.isfile(Path(root, rel)) and not os.path.islink(Path(root, rel))
+        read = [rel for rel in state['withheld'] if os.path.isfile(Path(root, rel)) and not os.path.islink(Path(root, rel))
                 and os.stat(Path(root, rel)).st_atime_ns > state['since_ns']]
+        if reset:  # the next check reports only what later steps read
+            for rel in read:
+                os.utime(Path(root, rel), ns=(0, os.stat(Path(root, rel)).st_mtime_ns))
+        return ['%s: undeclared file was read' % rel for rel in read]
     for rel in state['withheld']:
         path = Path(root, rel)
         try:
@@ -687,7 +690,8 @@ def main(argv=None):
     p.add_argument('--seal', action='store_true', help='CI: remove the tested commit from the repository')
     p.add_argument('--discover', action='store_true',
                    help='local diagnostic: keep the checkout whole, list the undeclared files read')
-    sub.add_parser('check-restricted')
+    p = sub.add_parser('check-restricted')
+    p.add_argument('--reset', action='store_true', help='discover mode: forget the reads reported')
     sub.add_parser('unrestrict')
     p = sub.add_parser('record')
     p.add_argument('--out', type=Path, required=True)
@@ -724,7 +728,7 @@ def main(argv=None):
             unrestrict(args.root)
             return 0
         if args.command == 'check-restricted':
-            problems = check_restricted(args.root)
+            problems = check_restricted(args.root, reset=args.reset)
             for problem in problems:
                 print('error: %s (declare it in %s if the part needs it)' % (problem, DECLARATIONS), file=sys.stderr)
             return 1 if problems else 0

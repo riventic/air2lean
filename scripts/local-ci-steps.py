@@ -328,6 +328,8 @@ for number, row in enumerate(rows):
             if mode != 'discover':
                 raise
             failed.append(step['name'])  # discovery goes on: every undeclared read counts
+        if mode == 'discover':  # attribute the reads to this step
+            subprocess.run(['python3', 'scripts/ci-reuse.py', 'check-restricted', '--reset'])
 if mode == 'discover':
     call(['python3', 'scripts/ci-reuse.py', 'check-restricted'])  # lists the undeclared files read
     if failed:

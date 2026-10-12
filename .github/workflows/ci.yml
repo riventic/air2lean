@@ -348,7 +348,8 @@ jobs:
   # One row per (Zig version, part): scripts/ci-matrix.py derives the rows from
   # compatibility.json. Every step names its part in its `if`; a version has `golden` (pipeline,
   # diff test, proofs) and `lean` (version-dependent regressions) rows, and the default version
-  # also the parts that run once (offline checks and translator gates in `inputs`; `native`;
+  # also the parts that run once (offline checks and translator gates in `inputs`, the gates that
+  # read the documentation in `docs`; `native`;
   # `audit`; `receipt`; one row per T06 build mode) and the mutation shards.
   test:
     needs: [lake, zig-air, generated]
@@ -373,6 +374,11 @@ jobs:
             mutate: false
           - zig: "0.16.0"
             part: "inputs"
+            examples: ""
+            full: true
+            mutate: false
+          - zig: "0.16.0"
+            part: "docs"
             examples: ""
             full: true
             mutate: false
@@ -581,7 +587,7 @@ jobs:
 
       # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
       - name: Host and skipped-case accounting regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/host-accounting/test_accounting.py
@@ -609,7 +615,7 @@ jobs:
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
@@ -685,7 +691,7 @@ jobs:
       # theorem has a current recorded check per translation, and no document labels a
       # single-step or single-schedule theorem as holding under every schedule.
       - name: Theorem inventory scope and check results
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
           python3 -B scripts/theorem-inventory.py check
@@ -719,7 +725,7 @@ jobs:
       # Q02: every register ID maps to negative tests and designated mutants; complete rows
       # need both. The Python-side mutants run in memory against existing regressions.
       - name: Mutation map and Python-side mutants
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
@@ -733,7 +739,7 @@ jobs:
 
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/build-modes -v
