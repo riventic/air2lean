@@ -172,5 +172,148 @@ theorem mem1_fseq (bs : Array Byte) (kind : BlockKind) (h : 4096 + bs.size ≤ 2
     obtain rfl : blk bs kind = bl := Option.some.inj hb
     simpa [blk] using h
 
+/-! ## Bytes and values of concrete memories
+
+`Witness.mem1 bs` holds the bytes `bs` in block `0` at address 4096, `Witness.mem2` two blocks
+(`ZigLean/Mem/Witness.lean`). A precondition over them holds of the whole heap (`FAdmit.up`). -/
+
+open Assn
+
+theorem mem1_heap (bs : Array Byte) (kind : BlockKind) (l : Loc)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (mem1 bs kind).heap l =
+      if l.1 = 0 ∧ l.2 < bs.size then some ⟨bs[l.2]!, 4096, bs.size, kind⟩ else none := by
+  obtain ⟨b, o⟩ := l
+  rcases b with _ | b
+  · by_cases h : o < bs.size <;> simp [Mem.heap, mem1, blk, h, hk]
+  · simp [Mem.heap, mem1]
+
+theorem mem1_seq (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).Seq :=
+  ⟨singleThread_empty rfl Nat.zero_lt_one⟩
+
+theorem mem1_bytesAt (bs : Array Byte) (kind : BlockKind) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    bytesAt p0 4096 bs.size kind bs (mem1 bs kind).heap :=
+  ⟨0, rfl, by decide, fun l => by simp [mem1_heap _ _ _ hk, p0]⟩
+
+theorem mem1_bytesAt' {bs : Array Byte} {kind : BlockKind} {S : Nat} (h : bs.size = S) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    bytesAt p0 4096 S kind bs (mem1 bs kind).heap := h ▸ mem1_bytesAt bs kind hk
+
+/-- `p0` points to the value that the block holds. -/
+theorem mem1_pts {T : Type} [Enc T] {bs : Array Byte} {kind : BlockKind} {a : Nat} {v : T}
+    (hs : bs.size = Enc.size T) (hv : Enc.decode bs = pure v) (ha : 4096 % a = 0)
+    (hk : kind ≠ .constGlobal) (hlo : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    pts p0 a v (mem1 bs kind).heap :=
+  ⟨4096, bs.size, kind, bs, by simpa [p0] using ha, hs, hv, mem1_bytesAt bs kind hlo, hk⟩
+
+theorem mem1_pts' {T : Type} [Enc T] [LawfulEnc T] (v : T) {a : Nat} (ha : 4096 % a = 0) :
+    pts p0 a v (mem1 (Enc.encode v)).heap :=
+  mem1_pts (LawfulEnc.size_encode v) (LawfulEnc.decode_encode v) ha (by decide)
+
+/-- `p0` points to the empty array. -/
+theorem mem1_arr0 {T : Type} [Enc T] (ha : 4096 % Enc.align T = 0) :
+    arr p0 ([] : List T) (mem1 #[]).heap :=
+  ⟨4096, _, .heap, #[], by simpa [p0] using ha, by simp, fun i hi => by simp at hi,
+    mem1_bytesAt _ _, by decide⟩
+
+/-- `p0` points to the one-item array `[v]`. -/
+theorem mem1_arr1 {T : Type} [Enc T] [LawfulEnc T] (v : T) (ha : 4096 % Enc.align T = 0) :
+    arr p0 [v] (mem1 (Enc.encode v)).heap := by
+  have hs := LawfulEnc.size_encode v
+  refine ⟨4096, _, .heap, Enc.encode v, by simpa [p0] using ha, by simp [hs], fun i hi => ?_,
+    mem1_bytesAt _ _, by decide⟩
+  have : i = 0 := by simp at hi; omega
+  subst this
+  simpa [← hs] using LawfulEnc.decode_encode v
+
+/-- `p0` of `mem1` holds the `u32` `0`, the one-item array `[0]`, or one undefined byte. -/
+theorem pts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  mem1_pts' 0 (by decide)
+
+theorem arr32 : arr p0 [(0 : BitVec 32)] (mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  mem1_arr1 0 (by decide +kernel)
+
+theorem byte1 (kind : BlockKind)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
+  mem1_bytesAt _ _ hk
+
+/-- Two values one after the other: `p0` points to `v` and `p0.add (Enc.size T)` to `w`. -/
+theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v : T) (w : U)
+    {a b : Nat} (ha : 4096 % a = 0) (hb : (4096 + Enc.size T) % b = 0) :
+    (pts p0 a v ∗ pts (p0.add (Enc.size T)) b w)
+      (mem1 (Enc.encode v ++ Enc.encode w)).heap := by
+  have hv := LawfulEnc.size_encode v
+  have hw := LawfulEnc.size_encode w
+  obtain ⟨h₁, h₂, hd, he, hb₁, hb₂⟩ :=
+    bytesAt_split (mem1_bytesAt (Enc.encode v ++ Enc.encode w) .heap) (k := Enc.size T)
+      (by simp [hv])
+  have e₁ : (Enc.encode v ++ Enc.encode w).extract 0 (Enc.size T) = Enc.encode v := by
+    simp [Array.extract_append, ← hv]
+  have e₂ : (Enc.encode v ++ Enc.encode w).extract (Enc.size T)
+      (Enc.encode v ++ Enc.encode w).size = Enc.encode w := by
+    simp [Array.extract_append, ← hv]
+  rw [e₁] at hb₁
+  rw [e₂] at hb₂
+  refine ⟨h₁, h₂, hd, he, ⟨_, _, _, _, by simpa [p0] using ha, hv, LawfulEnc.decode_encode v, hb₁,
+    by decide⟩, ⟨_, _, _, _, ?_, hw, LawfulEnc.decode_encode w, hb₂, by decide⟩⟩
+  simpa [p0, Ptr.add] using hb
+
+theorem mem2_heap (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) (l : Loc)
+    (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (mem2 bs₁ bs₂ k₁ k₂).heap l =
+      if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩
+      else if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none := by
+  obtain ⟨b, o⟩ := l
+  rcases b with _ | _ | b
+  · by_cases h : o < bs₁.size <;> simp [Mem.heap, mem2, blk, h, hk₁]
+  · by_cases h : o < bs₂.size <;> simp [Mem.heap, mem2, blk, h, hk₂]
+  · simp [Mem.heap, mem2]
+
+theorem mem2_seq {bs₁ bs₂ : Array Byte} (k₁ k₂ : BlockKind) (h : bs₁.size < 4096) :
+    (mem2 bs₁ bs₂ k₁ k₂).Seq :=
+  ⟨singleThread_empty rfl Nat.zero_lt_one⟩
+
+/-- Each block of `mem2` is owned separately. -/
+theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind)
+    (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (bytesAt p0 4096 bs₁.size k₁ bs₁ ∗ bytesAt p1 8192 bs₂.size k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
+  refine ⟨fun l => if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩ else none,
+    fun l => if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none,
+    fun l => ?_, funext fun l => ?_, ⟨0, rfl, by decide, fun l => by simp [p0]⟩,
+    ⟨1, rfl, by decide, fun l => by simp [p1]⟩⟩
+  · by_cases h : l.1 = 0
+    · right; simp [h]
+    · left; simp [h]
+  · rw [mem2_heap _ _ _ _ _ hk₁ hk₂]
+    by_cases h : l.1 = 0 ∧ l.2 < bs₁.size
+    · simp [h]
+    · simp only [h, ↓reduceIte, Heap.union_apply, Option.none_or]
+
+theorem mem2_bytesAt' {bs₁ bs₂ : Array Byte} {k₁ k₂ : BlockKind} {S₁ S₂ : Nat} (h₁ : bs₁.size = S₁)
+    (h₂ : bs₂.size = S₂) (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (bytesAt p0 4096 S₁ k₁ bs₁ ∗ bytesAt p1 8192 S₂ k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
+  subst h₁ h₂; exact mem2_bytesAt bs₁ bs₂ k₁ k₂ hk₁ hk₂
+
+/-! ## Runs that return, decided -/
+
+/-- A successful result as an `Option`: `okb d` exactly when `d = some (.ok r)`. -/
+def okb {ε β : Type} : Option (Except ε β) → Bool
+  | some (.ok _) => true
+  | _ => false
+
+theorem ok_of_okb {ε β : Type} {d : Option (Except ε β)} (h : okb d = true) :
+    ∃ r, d = some (.ok r) := by
+  match d, h with
+  | some (.ok r), _ => exact ⟨r, rfl⟩
+
+/-! ## Weakening -/
+
+theorem FAdmit.mono {P P' : FAssn} (h : FAdmit P) (hp : ∀ r, P r → P' r) : FAdmit P' :=
+  have ⟨m, r, rF, hh, hP, hs, _⟩ := h
+  ⟨m, r, rF, hh, hp r hP, hs, trivial⟩
+
 end Witness
 end Zig
