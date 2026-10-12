@@ -112,6 +112,8 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-04](../../docs/premises.md#ord-04): the RC11 approximation, no load buffering and weak
   CAS failure for the atomics of the lock.
+- [ORD-06](../../docs/premises.md#ord-06): the compiled lock's behaviours on each target are among the model's outcomes
+  (memory-model adequacy).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.

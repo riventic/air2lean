@@ -167,7 +167,8 @@ The theorems of `Main.lean` hold in the model under the premises of
 * [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
   [ORD-02](../../docs/premises.md#ord-02): every load and store checks for a data race against
   the thread and clock state (MM-14); in the sequential memory the theorem starts from, no
-  other thread exists, so the check never fires.
+  other thread exists, so the check never fires. [ORD-06](../../docs/premises.md#ord-06) (memory-model adequacy) comes with
+  THR-01 and ORD-01.
 * [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): the Lean kernel, the Zig exporter and translator, and
   the backend and native execution are trusted.
