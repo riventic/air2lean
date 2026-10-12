@@ -113,8 +113,8 @@ over the AST with that stage as the oracle (`check.sh --reproduces`), and the mi
 is written to `OUT_DIR/shrunk-<seed>/`. The heavy mode runs compilers and Lean sequentially; wrap it in one
 build guard.
 
-CI runs `--light` on every job, `--air` with 300 seeds against the built translator and `--heavy`
-over seeds 0-2 in the full 0.16.0 job. Larger ranges are a manual job (the same command with the
+CI runs `--light` (both profiles) on every job, `--air` with 1000 seeds against the built translator and `--heavy`
+over seeds 0-2 of each profile in the full 0.16.0 job. Larger ranges are a manual job (the same command with the
 patched and stock 0.16.0 compilers). Caps: `--heavy` refuses `COUNT` above
 `AIR2LEAN_FUZZ_HEAVY_MAX` (default 50); shrinking spends at most `AIR2LEAN_FUZZ_SHRINK_BUDGET`
 pipeline probes (default 150). A shrink step only counts if the failure keeps the same normalized
@@ -138,6 +138,22 @@ types (renamed `un<N>`/`lp<N>`); the old `zig-air-0.16.0` exporter predates poin
 (stale tool, not a harness bug: use a current patched build); shrinking accepted any failure at
 the same stage (now matched on the normalized error) and had no cap.
 
+## Heavy differential run, larger ranges (batch A)
+
+Commit of this change on macOS aarch64; stock Zig 0.16.0 native tests, a freshly built patched
+0.16.0 exporter (zig-patch of that commit), Lean v4.34.0; `check.sh --heavy` under `build-guard.py`.
+
+| Profile | Seeds | Result |
+|---|---|---|
+| core | 40-139 (100) | all pass native test, translation and the `#guard` values |
+| wide | 0-99 (100) | all pass the same three stages |
+
+A corrupted-expectation control on a wide seed is rejected by Lean. The malformed-AIR fuzzer ran
+20000 further seeds (10000-29999) against the built translator: 0 failures (CI runs seeds 0-999).
+The wide profile found no new translator bug in this range; its value is regression coverage of
+wide integers, array/slice/optional/struct lowering and element/field pointer aliasing. Larger ranges
+remain a manual command (`AIR2LEAN_FUZZ_HEAVY_MAX` caps one invocation at 50 by default).
+
 ## Limits
 
 The JSON oracle detects crashes, placeholders and inconsistent diagnostics. It does not
@@ -145,5 +161,5 @@ decide whether an accepted mutated input is semantically correct. The corpus is 
 committed snapshot, so changing goldens changes what a seed generates. Reproduce a run with
 the same commit. The Zig generator covers a
 deliberately small, UB-free subset (no division by variables, no overflow traps, no
-recursion, no slices, floats or threads); a native-test failure can be a generator or
+recursion, no floats, threads, allocation or multi-dimensional or generic types); a native-test failure can be a generator or
 evaluator bug rather than a translator bug.
