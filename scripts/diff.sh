@@ -41,7 +41,16 @@
 # against the listed kinds and fails the run on any other difference (F3). A panic, error or
 # exclusion against a value is never a host difference. CI (x86_64-linux) is the reference.
 #
-# Usage: diff.sh
+# The native side (each example's harness, the libm archive and its self-check, the asm archive)
+# is built and the harnesses run in parallel, one job per example (scripts/par.py: AIR2LEAN_JOBS
+# workers, output in example order). With AIR2LEAN_CAS_DIR set, every stock-Zig build goes through
+# the shared cache (`scripts/cas.py native`, docs/build-cache.md): an unchanged harness is not
+# compiled again. `diff.sh --build-only DIR` only builds the native side into DIR; a later run
+# with AIR2LEAN_DIFF_PREBUILT=DIR (the same mode, backend, flags and target) runs those binaries.
+# scripts/build-mode-docker.sh uses this to cross-compile on the host and run in an emulated
+# container.
+#
+# Usage: diff.sh | diff.sh --build-only DIR
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
 #   AIR2LEAN_DIFF_OPTIMIZE  Optimize mode of the native harness: Debug, ReleaseSafe (default),
@@ -52,6 +61,9 @@
 #   AIR2LEAN_DIFF_BACKEND   Native code generator: llvm or stage2_x86_64 (-fno-llvm). Unset: Zig's default.
 #   AIR2LEAN_DIFF_LINK_FLAGS  Extra build-exe flags for the harness (the emulated x86_64 runs pass
 #                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
+#   AIR2LEAN_DIFF_TARGET  Zig target of the native side (`-target`), e.g. x86_64-linux to
+#                       cross-compile for another host. Unset: this host.
+#   AIR2LEAN_DIFF_PREBUILT  Native side built by `diff.sh --build-only` (above). Unset: build here.
 #   AIR2LEAN_DIFF_ZIG_CACHE  Zig global cache dir for the stock-zig builds of this script (the
 #                       harnesses and libm). Unset: Zig's default. CI keeps one per build mode.
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
@@ -60,6 +72,12 @@
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+build_only=
+case "$#:${1:-}" in
+  0:) ;;
+  2:--build-only) build_only=$(mkdir -p -- "$2" && cd -- "$2" && pwd) ;;
+  *) echo "usage: diff.sh [--build-only DIR]" >&2; exit 2 ;;
+esac
 cd "$repo_root"
 
 # Invalidate old completed evidence before compiler/version/selection setup.
@@ -70,7 +88,7 @@ diff_phase=setup
 finish_diff() {
   local status=$? evidence_examples=""
   if [ "$diff_phase" != setup ]; then evidence_examples=$examples; fi
-  if [ "$status" -ne 0 ]; then
+  if [ "$status" -ne 0 ] && [ -z "$build_only" ]; then
     if ! python3 scripts/diff-report.py failure --summary "$AIR2LEAN_DIFF_REPORT" \
       --root "$repo_root" --examples "$evidence_examples" --phase "$diff_phase"; then
       echo "error: could not record differential failure evidence" >&2
@@ -80,7 +98,7 @@ finish_diff() {
   return "$status"
 }
 trap finish_diff EXIT
-python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root"
+[ -n "$build_only" ] || python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root"
 
 zig_bin=${AIR2LEAN_ZIG:-zig}
 if [ -n "${AIR2LEAN_DIFF_ZIG_CACHE:-}" ]; then export ZIG_GLOBAL_CACHE_DIR=$AIR2LEAN_DIFF_ZIG_CACHE; fi
@@ -115,7 +133,8 @@ done
 [ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 
 # Clear this selection's old sidecars only after setup has validated it.
-python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
+[ -n "$build_only" ] ||
+  python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
 diff_phase=build_native
 
 # The names of an example's functions are the names of its input files (layout convention).
@@ -123,19 +142,37 @@ functions_of() {
   (cd "tests/diff/$1/inputs" && for f in *.jsonl; do printf '%s ' "${f%.jsonl}"; done)
 }
 
-echo "== building zig harnesses ==" >&2
-build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
-for ex in $examples; do
-  # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
-  # shellcheck disable=SC2086  # $backend_flag is empty or one flag
-  "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$build_dir/$ex" \
-    --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" \
-    -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig
-  "$build_dir/$ex"
-done
+# A stock-Zig build, from the shared cache when AIR2LEAN_CAS_DIR is set (docs/build-cache.md).
+stock_zig() {
+  if [ -n "${AIR2LEAN_CAS_DIR:-}" ]; then
+    python3 -B "$repo_root/scripts/cas.py" native -- "$zig_bin" "$@"
+  else
+    "$zig_bin" "$@"
+  fi
+}
+# A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
+target_flags="-mcpu=baseline${AIR2LEAN_DIFF_TARGET:+ -target $AIR2LEAN_DIFF_TARGET}"
+build_harness() {
+  # shellcheck disable=SC2086  # $backend_flag is empty or one flag, $target_flags are flags
+  stock_zig build-exe -O"$optimize" $target_flags $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$native_dir/$1" \
+    --dep "$1" --dep common -Mroot="tests/diff/$1/harness.zig" \
+    -M"$1"="examples/$1/$1.zig" -Mcommon=tests/diff/common.zig
+}
+export -f stock_zig build_harness
+export repo_root zig_bin optimize backend_flag target_flags
 
-diff_phase=build_libm
-echo "== building libm ==" >&2
+native_dir=${build_only:-${AIR2LEAN_DIFF_PREBUILT:-}}
+build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
+if [ -z "$native_dir" ]; then native_dir=$build_dir; fi
+export native_dir
+if [ -z "${AIR2LEAN_DIFF_PREBUILT:-}" ]; then
+  echo "== building zig harnesses ==" >&2
+  # shellcheck disable=SC2086  # $examples is a space-separated list
+  python3 scripts/par.py --mem-mib 1024 -- "$BASH" -c 'set -euo pipefail; build_harness "$1"' build_harness {} \
+    ::: $examples
+
+  diff_phase=build_libm
+  echo "== building libm ==" >&2
 # tests/diff/libm/libm.zig re-exports 8 compiler_rt transcendental functions per float width
 # (see its doc comment for the ABI). It calls compiler_rt by Zig name through a `crt` module we
 # generate here: a copy of the stock zig's own compiler_rt/ (needed for its internal cross-file
@@ -157,13 +194,14 @@ echo "== building libm ==" >&2
 # Both versions' compiler_rt.zig import their sibling files as literal "compiler_rt/<name>.zig",
 # so the copied dir must be named exactly "compiler_rt" on disk. A module's imports must stay
 # inside its root file's directory tree, so the re-export file (the module root) lives at
-# $build_dir, one level above compiler_rt/, with the stub compiler_rt.zig alongside it — putting
+# $crt_root, one level above compiler_rt/, with the stub compiler_rt.zig alongside it — putting
 # both "../compiler_rt.zig" and "compiler_rt/*.zig" in path. The stub is inert for 0.15.2: its
 # op files never import the top-level compiler_rt.zig at all.
-lib_dir=$("$zig_bin" env | sed -n 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p')
-crt_dir="$build_dir/compiler_rt"
-cp -R "$lib_dir/compiler_rt" "$crt_dir"
-cat >"$build_dir/compiler_rt.zig" <<'EOF'
+  lib_dir=$("$zig_bin" env | sed -n 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p')
+  crt_root="$build_dir/crt"
+  mkdir "$crt_root"
+  cp -R "$lib_dir/compiler_rt" "$crt_root/compiler_rt"
+cat >"$crt_root/compiler_rt.zig" <<'EOF'
 const builtin = @import("builtin");
 pub const want_ppc_abi = builtin.cpu.arch.isPowerPC();
 pub const want_float_exceptions = !builtin.cpu.arch.isWasm();
@@ -190,7 +228,7 @@ pub const @"f64" = BytesAbi(f64);
 pub const @"f80" = BytesAbi(f80);
 pub const @"f128" = BytesAbi(f128);
 EOF
-cat >"$build_dir/air2lean_root.zig" <<'EOF'
+cat >"$crt_root/air2lean_root.zig" <<'EOF'
 pub const sin = @import("compiler_rt/sin.zig");
 pub const cos = @import("compiler_rt/cos.zig");
 pub const tan = @import("compiler_rt/tan.zig");
@@ -200,7 +238,6 @@ pub const log = @import("compiler_rt/log.zig");
 pub const log2 = @import("compiler_rt/log2.zig");
 pub const log10 = @import("compiler_rt/log10.zig");
 EOF
-mkdir -p tests/diff/out/libm
 # -fcompiler-rt: the Lean-side link is a plain clang/lld link, not a zig one, so it doesn't get
 # Zig's own implicit compiler-rt support the way a zig-compiled consumer (e.g. selfcheck) does.
 # sin.zig's f80/f128 wide paths need helpers like __extendxftf2 that only compiler_rt.o provides;
@@ -212,24 +249,38 @@ mkdir -p tests/diff/out/libm
 # overflow" in rem_pio2_large) on inputs where the real `@cos` returns a value. A per-module -O
 # for the crt module alone does not change its code (the archive stays the same). libm.zig itself
 # only uses @bitCast and @truncate, which have no safety checks.
-"$zig_bin" build-lib -static -fcompiler-rt -fPIC -OReleaseFast -mcpu=baseline --name air2lean_libm \
-  -femit-bin=tests/diff/out/libm/air2lean_libm.a \
-  --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$build_dir/air2lean_root.zig"
+  # shellcheck disable=SC2086  # $target_flags are flags
+  stock_zig build-lib -static -fcompiler-rt -fPIC -OReleaseFast $target_flags --name air2lean_libm \
+    -femit-bin="$native_dir/air2lean_libm.a" \
+    --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$crt_root/air2lean_root.zig"
+  # Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
+  # (tests/diff/libm/selfcheck.zig's doc comment): fatal on Linux, informational elsewhere.
+  # shellcheck disable=SC2086  # $target_flags are flags
+  stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} \
+    -femit-bin="$native_dir/libm_selfcheck" tests/diff/libm/selfcheck.zig "$native_dir/air2lean_libm.a"
 
-echo "== libm self-check ==" >&2
-# Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
-# (tests/diff/libm/selfcheck.zig's doc comment): fatal on Linux, informational elsewhere.
-"$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/libm_selfcheck" \
-  tests/diff/libm/selfcheck.zig tests/diff/out/libm/air2lean_libm.a
-"$build_dir/libm_selfcheck"
-
-echo "== building asm archive ==" >&2
+  echo "== building asm archive ==" >&2
 # tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's ops with ordinary Zig builtins
 # (@byteSwap/@popCount/@clz, `/` and `%`) instead of inline asm, so it builds on any host, unlike the example
 # itself (x86_64 only). No compiler_rt dependency (unlike libm): these are plain integer ops.
-mkdir -p tests/diff/out/asm
-"$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \
-  -femit-bin=tests/diff/out/asm/air2lean_asm.a -Mroot=tests/diff/asm/asm.zig
+  # shellcheck disable=SC2086  # $target_flags are flags
+  stock_zig build-lib -static -fPIC -OReleaseFast $target_flags --name air2lean_asm \
+    -femit-bin="$native_dir/air2lean_asm.a" -Mroot=tests/diff/asm/asm.zig
+fi
+[ -z "$build_only" ] || exit 0
+
+diff_phase=build_native
+echo "== running zig harnesses ==" >&2
+# A harness writes only tests/diff/out/zig/<ex>/; each case keeps its own deadline and memory
+# limit (tests/diff/common.zig `forkCall`).
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/par.py --mem-mib 512 -- "$native_dir/{}" ::: $examples
+diff_phase=build_libm
+mkdir -p tests/diff/out/libm tests/diff/out/asm
+cp "$native_dir/air2lean_libm.a" tests/diff/out/libm/air2lean_libm.a
+cp "$native_dir/air2lean_asm.a" tests/diff/out/asm/air2lean_asm.a
+echo "== libm self-check ==" >&2
+"$native_dir/libm_selfcheck"
 
 diff_phase=run_model
 echo "== building + running lean side ==" >&2

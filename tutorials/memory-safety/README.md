@@ -142,7 +142,7 @@ them reversed, and the generated `reverse` turns them around.
 
 The theorems of `Main.lean` hold in the model under the premises of
 [docs/premises.md](../../docs/premises.md). The per-theorem list is in
-[docs/premise-index.md](../../docs/premise-index.md#tutorialsmemory-safetymainlean)
+[docs/premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md#tutorialsmemory-safetymainlean)
 (`python3 scripts/premises.py explain buildThenFree_memory_safe`):
 
 * [ALC-01](../../docs/premises.md#alc-01): one modelled allocator. Fresh `.heap` blocks;

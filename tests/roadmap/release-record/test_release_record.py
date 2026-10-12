@@ -213,6 +213,29 @@ class RecordTests(Repo):
         with self.assertRaisesRegex(rr.ReleaseError, 'pull_request run'):
             self.record(github_runs=[self.run_json({}, event='pull_request')])
 
+    def test_merge_group_run_is_evidence_for_its_commit(self):
+        record = self.record(github_runs=[self.run_json({
+            FULL: {'Unit': 'success', 'Full only': 'success', 'Mutation check': 'skipped'},
+            MUTATE: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'success'}}, event='merge_group')])
+        self.assertEqual(record['status'], 'complete')
+
+    def test_reused_job_is_no_evidence_and_never_hides_a_skip(self):
+        # docs/ci.md: a reused part skips every gate after a passing decision step. That run
+        # executed nothing, so its gates stay missing until the executing run is passed too.
+        reused = self.run_json({FULL: {'Reuse a recorded result': 'success', 'Unit': 'skipped',
+                                       'Full only': 'skipped', 'Mutation check': 'skipped'},
+                                MUTATE: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'success'}})
+        record = self.record(github_runs=[reused])
+        self.assertEqual([g['status'] for g in record['gates'] if g['job'] == FULL], ['missing', 'missing'])
+        self.assertEqual(record['status'], 'incomplete')
+        record = self.record(github_runs=[reused, self.passing_run()])
+        self.assertEqual(record['status'], 'complete')
+        # A skip after a failure is not reuse: it stays a failure.
+        stopped = self.run_json({FULL: {'Reuse a recorded result': 'success', 'Unit': 'failure',
+                                        'Full only': 'skipped', 'Mutation check': 'skipped'}})
+        record = self.record(github_runs=[stopped])
+        self.assertEqual([g['status'] for g in record['gates'] if g['job'] == FULL], ['failed', 'failed'])
+
     def test_missing_gates_make_record_incomplete_until_declared_unavailable(self):
         only_full = self.run_json({FULL: {'Unit': 'success', 'Full only': 'success', 'Mutation check': 'skipped'}})
         record = self.record(github_runs=[only_full])
@@ -412,7 +435,10 @@ class RealWorkflowTests(Repo):
 
     def test_current_workflow_plan_and_ledger_structure(self):
         plan = rr.build_plan(ROOT, rr.git_text(ROOT, 'rev-parse', 'HEAD'))
-        self.assertTrue(all(job['gates'] for job in plan['jobs'] if job['name'] not in rr.SUPPORT_JOBS))
+        support = [job for job in plan['jobs'] if job['reproduce'] == 'not a gate']
+        self.assertEqual({job['name'].split(' (')[0] for job in support}, rr.SUPPORT_JOBS)
+        self.assertTrue(all(job['gates'] for job in plan['jobs'] if job not in support))
+        self.assertTrue({'generated', 'provenance'} <= {job['name'] for job in plan['jobs'] if job['gates']})
         errors, _, counts = rr.check_ledger(ROOT, allow_unfetched=True)
         self.assertEqual(errors, [])
         self.assertTrue(counts)

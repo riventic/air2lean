@@ -64,7 +64,7 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
 
 ## Assumptions and remaining obligations
 
-[`docs/premise-index.md`](../../docs/premise-index.md) derives these premises for `Main.lean`
+[`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives these premises for `Main.lean`
 (definitions in [`docs/premises.md`](../../docs/premises.md)):
 
 - [PRF-01](../../docs/premises.md#prf-01): the legacy 64-bit little-endian reference model
