@@ -102,6 +102,7 @@ class ReceiptTests(unittest.TestCase):
         self.patchroot = mock.patch.object(r, 'ROOT', self.root)
         self.patchroot.start()
         self.dirty = False
+        self.withheld = set()
         self.patchgit = mock.patch.object(r, 'git', side_effect=self.git)
         self.patchgit.start()
         self.patchenv = mock.patch.dict(os.environ, {'PATH': str(self.tc / 'bin'), 'LEAN_NUM_THREADS': '1'}, clear=True)
@@ -147,6 +148,15 @@ class ReceiptTests(unittest.TestCase):
             return ('\0'.join(self.names) + '\0').encode()
         if args == ('ls-files', '--others', '--exclude-standard', '-z'):
             return b''
+        if args == ('rev-parse', '--absolute-git-dir'):
+            (self.base / 'gitdir').mkdir(exist_ok=True)
+            if self.withheld:
+                (self.base / 'gitdir/air2lean-restricted.json').write_text(json.dumps(
+                    {'commit': '0123456789abcdef0123456789abcdef01234567', 'withheld': sorted(self.withheld)}))
+            return (str(self.base / 'gitdir') + '\n').encode()
+        if args == ('ls-files', '-t', '-s', '-z'):
+            return ''.join('%s 100644 %s 0\t%s\0' % ('S' if n in self.withheld else 'H', '1' * 40, n)
+                           for n in self.names).encode()
         self.fail('unexpected Git invocation: ' + str(args))
 
     def write(self, name, value):
@@ -386,6 +396,27 @@ class ReceiptTests(unittest.TestCase):
         (self.attempt / 'receipt.json').write_text(json.dumps({k: v for k, v in receipt.items() if k != 'kernel_replay'}))
         with self.assertRaisesRegex(ValueError, 'invalid receipt'):
             r.verify(self.attempt)
+
+    def test_restricted_checkout_binds_withheld_files_and_is_no_release_receipt(self):
+        # docs/ci.md#restricted-checkout: a withheld (skip-worktree, unreadable) file is bound by its
+        # index blob, never read; such a receipt verifies but a release refuses it.
+        notes = self.root / 'docs/notes.md'
+        self.source('docs/notes.md', b'prose\n')
+        self.names.sort()
+        notes.chmod(0)
+        self.withheld = {'docs/notes.md'}
+        self.plan['revision'] = r.revision()
+        self.plan['sources'] = r.source_inventory(self.names)
+        row = next(row for row in self.plan['sources'] if row['path'] == str(notes))
+        self.assertEqual((row['kind'], row['blob'], row['bytes']), ('withheld', '1' * 40, 0))
+        self.attempt_files()
+        r.seal(self.attempt)
+        self.assertEqual(r.verify(self.attempt)['tree'], 'restricted')
+        with self.assertRaisesRegex(ValueError, 'restricted checkout'):
+            r.verify(self.attempt, release=True)
+        notes.chmod(0o644)  # a readable file marked withheld is refused
+        with self.assertRaisesRegex(ValueError, 'withheld source is readable'):
+            r.source_inventory(self.names)
 
     def test_dirty_tree_receipt_needs_recorded_permission(self):
         self.dirty = True

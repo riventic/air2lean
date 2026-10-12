@@ -1,58 +1,84 @@
 #!/usr/bin/env python3
-"""CI result reuse: input keys, traced observations, coverage and records (docs/ci.md).
+"""CI result reuse: input keys, restricted checkouts and records (docs/ci.md).
 
   ci-reuse.py key --part ID [--manifest F]      the input key of a part at HEAD (--manifest: its preimage)
-  ci-reuse.py decide --job JOB --row JSON       (CI step) reuse a recorded result or arm the tracer
-  ci-reuse.py reduce --workspace DIR --out F    (scripts/ci-trace.sh) strace stream on stdin -> observations
-  ci-reuse.py check-trace [--part ID] [DIR]     every traced observation lies in the part's declared inputs
+  ci-reuse.py decide --job JOB --row JSON       (CI step) reuse a recorded result, or restrict the
+                                                checkout to the part's declared inputs and arm a record
+  ci-reuse.py restrict (--part ID | --support JOB) [--seal | --discover]
+                                                restrict the checkout to the declared inputs (CI support
+                                                jobs; local runs of one part)
+  ci-reuse.py unrestrict                        back to the tested commit (local runs)
+  ci-reuse.py check-restricted                  (CI step) no withheld file was changed (or, as root, read)
   ci-reuse.py record --out F                    (CI step) the record a passing execution uploads
   ci-reuse.py check-workflow                    every part is declared; every step after the decision is guarded
-  ci-reuse.py suggest --part ID DIR             declaration patterns that would cover a trace
 
 A *part* is one CI job row: `test/<zig>/<part>[/<shard>]`, `macos/<zig>`, or a matrix-free job
-name. .github/ci-inputs.json declares each part's inputs (content patterns, listed directories,
-whether it lists all tracked names) or `"commit_bound": true` (its key is the tested commit) or
-`"reuse": false` (always runs). The key hashes the declared inputs at HEAD, the part's job
-definition (its own matrix row only) and the jobs it needs, every hashFiles() pattern of those
-jobs, the reuse machinery and the runner image. A record is the artifact `ci-reuse-<key>` of a
-passing execution whose syscall trace showed no observation outside the declared inputs. Offline
-except `decide` (GitHub REST API, with GH_TOKEN); stdlib only.
+name. .github/ci-inputs.json declares each part's inputs (content patterns, minus `exclude`
+patterns) or `"reuse": false` (always runs). An executing part runs in a *restricted checkout*:
+HEAD is a parentless commit with fixed metadata whose tree holds the declared files with their
+content and every other tracked file as a withheld placeholder (same name, fixed content,
+unreadable in the worktree). So whatever the part reads, lists or asks git is a function of the
+declared content and the tracked names; reading a withheld file fails (EACCES), and
+check-restricted fails the job when one was read anyway (root) or changed. The key hashes
+exactly that: the declared content, all tracked names, the part's job definition (its own matrix
+row) and the jobs it needs (with their declared inputs and the whole-tree generated files it
+installs), every hashFiles() pattern of those jobs, the reuse machinery and the runner image. A
+record is the artifact `ci-reuse-<key>` of a passing restricted execution. Offline except
+`decide` (GitHub REST API, with GH_TOKEN); stdlib only.
 """
 import argparse
 import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA = 'air2lean-ci-reuse/1'
+DECLARATIONS_SCHEMA = 'air2lean-ci-inputs/2'
 DECLARATIONS = '.github/ci-inputs.json'
 WORKFLOW = '.github/workflows/ci.yml'
 WORKFLOW_NAME = 'CI'
-# target-matrix.py evaluates the step conditions that decide which steps a key contains.
-MACHINERY = ('scripts/ci-reuse.py', 'scripts/ci-trace.sh', 'scripts/target-matrix.py', DECLARATIONS)
-# Jobs that are not parts: they build what the parts consume, or aggregate results.
+# The reuse machinery and what it imports: always declared, never withheld.
+MACHINERY = ('scripts/ci-reuse.py', 'scripts/release-record.py', 'scripts/generated.py', 'scripts/cas.py',
+             'scripts/target-matrix.py', 'assurance/generated.json', DECLARATIONS)
+# Jobs that are not parts: they build what the parts consume, or aggregate results. `lake` and
+# `zig-air` run restricted to their declared inputs (`support` in the declarations), which every
+# part that needs them adds to its own.
 SUPPORT_JOBS = ('lake', 'zig-air', 'preflight', 'all-checks')
+RESTRICTED_SUPPORT = ('lake', 'zig-air')
 DECISION_STEP = 'Reuse a recorded result'
-COVERAGE_STEP = 'Declared inputs cover every observation'
-RECORD_STEPS = (COVERAGE_STEP, 'Record the result for reuse')  # the only untraced steps after the decision
+RESTRICT_STEP = 'Restrict the checkout to the declared inputs'
+REFERENCE_STEP = 'Upload the reuse reference'
+RECORD_STEPS = ('Record the result for reuse', 'Upload the reuse record')
 GUARD = '!env.AIR2LEAN_REUSED'
-# A `github.*` value inside an expression other than the workspace path differs per run.
-RUN_SPECIFIC = re.compile(r'\$\{\{[^}]*\bgithub\.(?!workspace\b)')
+# A `github.*` value other than the workspace path, a repository variable, a secret or a dispatch
+# input can differ between runs while the job text does not.
+RUN_SPECIFIC = re.compile(r'\$\{\{[^}]*\b(?:github\.(?!workspace\b)|vars\.|secrets\.|inputs\.)')
 # Producer events whose records a pull_request run may reuse (never a fork: see lookup()).
 RECORD_EVENTS = ('pull_request', 'merge_group', 'workflow_dispatch')
-DECLARATION_KEYS = {'reuse', 'inputs', 'listings', 'tree_names', 'commit_bound', 'note'}
+# A merge_group run reuses only records of runs that tested a commit now on main, never a PR's.
+QUEUE_RECORD_EVENTS = ('merge_group', 'workflow_dispatch')
+# The nightly run executes every part on the whole, unrestricted checkout: no reuse, no record.
+FULL_EVENTS = ('schedule',)
+DECLARATION_KEYS = {'reuse', 'inputs', 'exclude', 'note'}
+# The withheld placeholder: a NUL first so that no parser accepts it, then what it is.
+WITHHELD = b'\0air2lean: withheld by the restricted CI checkout; not a declared input of this part ' \
+           b'(.github/ci-inputs.json, docs/ci.md#restricted-checkout)\n'
+RESTRICTED_STATE = 'air2lean-restricted.json'  # in the git directory
+IDENTITY = {'GIT_AUTHOR_NAME': 'air2lean restricted checkout', 'GIT_AUTHOR_EMAIL': 'ci@air2lean.invalid',
+            'GIT_AUTHOR_DATE': '@0 +0000', 'GIT_COMMITTER_NAME': 'air2lean restricted checkout',
+            'GIT_COMMITTER_EMAIL': 'ci@air2lean.invalid', 'GIT_COMMITTER_DATE': '@0 +0000'}
 
 _spec = importlib.util.spec_from_file_location('air2lean_release_record', ROOT / 'scripts/release-record.py')
 RR = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(RR)
+SCHEMA = RR.REUSE_SCHEMA  # records and the reuse references release records read
 _spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
 GENERATED = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(GENERATED)
@@ -73,11 +99,16 @@ def sha256(text):
     return hashlib.sha256(text.encode() if isinstance(text, str) else text).hexdigest()
 
 
-def git(root, *args):
-    result = subprocess.run(['git', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode:
+def git(root, *args, env=None, input=None, check=True):
+    result = subprocess.run(['git', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=env, input=input)
+    if result.returncode and check:
         raise ReuseError('git %s: %s' % (' '.join(args), result.stderr.decode(errors='replace').strip()))
     return result.stdout
+
+
+def git_dir(root):
+    return Path(root, git(root, 'rev-parse', '--git-dir').decode().strip())
 
 
 # --- Patterns: `dir/**` (everything below), `*` (one path component), `**/` (any depth). ---
@@ -101,24 +132,23 @@ def glob_regex(pattern):
 
 
 class Inputs:
-    """A part's declared inputs: content patterns, listed directories, all tracked names."""
+    """A declared input set: tracked files matching a wildcard pattern of `patterns` and no
+    `exclude` pattern, every exact path of `patterns`, and the `forced` patterns (reuse machinery,
+    hashFiles() patterns, support jobs' inputs) unconditionally."""
 
-    def __init__(self, patterns, listings=(), tree_names=False):
-        self.patterns = sorted(set(patterns))
-        self.regexes = [glob_regex(p) for p in self.patterns]
-        self.listings = sorted({d.strip('/') if d not in ('', '.', '/') else '' for d in listings})
-        self.tree_names = tree_names
+    def __init__(self, patterns, exclude=(), forced=()):
+        self.patterns, self.exclude, self.forced = sorted(set(patterns)), sorted(set(exclude)), sorted(set(forced))
+        exact = [p for p in self.patterns if not set(p) & set('*?')]
+        self._include = [glob_regex(p) for p in self.patterns if p not in exact]
+        self._exclude = [glob_regex(p) for p in self.exclude]
+        self._forced = [glob_regex(p) for p in self.forced + exact]
 
     def content(self, path):
-        return any(r.fullmatch(path) for r in self.regexes)
+        return (any(r.fullmatch(path) for r in self._forced)
+                or any(r.fullmatch(path) for r in self._include) and not any(r.fullmatch(path) for r in self._exclude))
 
-    def subtree(self, directory):
-        """Every path below `directory` is content (a `d/**` pattern at or above it, or `**`)."""
-        probe = (directory + '/' if directory else '') + '\0any/\0path'
-        return any(r.fullmatch(probe) for r in self.regexes)
-
-    def listing(self, directory):
-        return self.tree_names or directory in self.listings or self.subtree(directory)
+    def describe(self):
+        return {'inputs': self.patterns, 'exclude': self.exclude, 'forced': self.forced}
 
 
 def hashfiles_patterns(text):
@@ -139,10 +169,17 @@ def hashfiles_patterns(text):
         start = end
 
 
-# --- The workflow, its parts and their declarations. ---
+# --- The workflow, its parts and their declarations: from the worktree, or (revision given) from
+# --- a commit, as a restricted checkout may withhold them. ---
 
-def load_workflow(root):
-    return RR.parse_workflow_yaml((Path(root) / WORKFLOW).read_text(encoding='utf-8'))
+def blob(root, revision, path):
+    if revision is None:
+        return Path(root, path).read_text(encoding='utf-8')
+    return git(root, 'show', '%s:%s' % (revision, path)).decode('utf-8')
+
+
+def load_workflow(root, revision=None):
+    return RR.parse_workflow_yaml(blob(root, revision, WORKFLOW))
 
 
 def job_rows(job):
@@ -167,9 +204,9 @@ def parts(workflow):
     return found
 
 
-def load_declarations(root):
-    data = json.loads((Path(root) / DECLARATIONS).read_text(encoding='utf-8'))
-    if data.get('schema') != 'air2lean-ci-inputs/1':
+def load_declarations(root, revision=None):
+    data = json.loads(blob(root, revision, DECLARATIONS))
+    if data.get('schema') != DECLARATIONS_SCHEMA:
         raise ReuseError('%s: unknown schema %r' % (DECLARATIONS, data.get('schema')))
     return data
 
@@ -181,14 +218,21 @@ def declaration(data, part):
     unknown = set(entry) - DECLARATION_KEYS
     if unknown:
         raise ReuseError('%s: part %r has unknown keys %s' % (DECLARATIONS, part, ', '.join(sorted(unknown))))
+    if entry.get('reuse') is not False and not entry.get('inputs'):
+        raise ReuseError('%s: reusable part %r declares no inputs' % (DECLARATIONS, part))
     return entry
 
 
-def part_inputs(data, entry, hashfiles=()):
-    defaults = data.get('defaults') or {}
-    return Inputs(list(defaults.get('inputs', [])) + list(entry.get('inputs', [])) + list(MACHINERY) + list(hashfiles),
-                  list(defaults.get('listings', [])) + list(entry.get('listings', [])),
-                  bool(entry.get('tree_names')))
+def support_inputs(data, job_id):
+    entry = (data.get('support') or {}).get(job_id)
+    if not entry or not entry.get('inputs') or set(entry) - {'inputs', 'note'}:
+        raise ReuseError('%s: support job %r needs exactly "inputs" (and a "note")' % (DECLARATIONS, job_id))
+    return list(entry['inputs'])
+
+
+def needs_of(job):
+    needs = job.get('needs') or []
+    return [needs] if isinstance(needs, str) else list(needs)
 
 
 def may_run(step, context):
@@ -235,480 +279,206 @@ def tracked_tree(root, revision='HEAD'):
     return tree
 
 
-def tree_dirs(tree):
-    dirs = {''}
-    for path in tree:
-        parts_ = path.split('/')[:-1]
-        for i in range(1, len(parts_) + 1):
-            dirs.add('/'.join(parts_[:i]))
-    return dirs
-
-
-def children(tree, directory):
-    prefix = directory + '/' if directory else ''
-    return sorted({p[len(prefix):].split('/', 1)[0] for p in tree if p.startswith(prefix)})
-
-
 def runner_identity(environ=os.environ):
     return {key: environ.get(key, 'local') for key in ('ImageOS', 'ImageVersion', 'RUNNER_OS', 'RUNNER_ARCH')}
 
 
-def manifest(root, part, environ=os.environ, revision='HEAD'):
-    """The key preimage of `part` at `revision`; None for a part declared "reuse": false."""
-    workflow = load_workflow(root)
+def generated_digests(root):
+    """{path: sha256 or None} of the whole-tree generated files in the worktree (installed from
+    the run's `generated` job, which derives them from the whole tree; docs/ci.md)."""
+    found = {}
+    for rel in sorted(GENERATED.paths(root)):
+        path = Path(root, rel)
+        found[rel] = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+    return found
+
+
+def part_inputs(root, data, job_id, revision=None, entry=None, workflow=None):
+    """The Inputs of a part (`entry`) or a restricted support job (entry None) of `job_id`."""
+    workflow = workflow or load_workflow(root, revision)
+    job = workflow['jobs'][job_id]
+    forced = list(MACHINERY) + sorted(hashfiles_patterns(canonical(
+        {'job': job, 'needs': {n: workflow['jobs'][n] for n in needs_of(job)}})))
+    for need in needs_of(job):
+        if need in RESTRICTED_SUPPORT:
+            forced += support_inputs(data, need)
+    defaults = data.get('defaults') or {}
+    if entry is None:
+        return Inputs(list(defaults.get('inputs', [])) + support_inputs(data, job_id), (), forced)
+    return Inputs(list(defaults.get('inputs', [])) + list(entry.get('inputs', [])), entry.get('exclude', ()), forced)
+
+
+def manifest(root, part, environ=os.environ, revision=None):
+    """The key preimage of `part` at `revision` (default: HEAD's tree, the worktree's workflow and
+    declarations); None for a part declared "reuse": false."""
+    workflow = load_workflow(root, revision)
     found = parts(workflow)
     if part not in found:
         raise ReuseError('%s has no part %r' % (WORKFLOW, part))
-    data = load_declarations(root)
+    data = load_declarations(root, revision)
     entry = declaration(data, part)
     if entry.get('reuse') is False:
         return None
     job_id, row = found[part]
     jobs = workflow['jobs']
-    needs = jobs[job_id].get('needs') or []
-    needs = [needs] if isinstance(needs, str) else needs
+    needs = needs_of(jobs[job_id])
     definitions = {'job': job_definition(jobs[job_id], row), 'needs': {n: jobs[n] for n in needs},
                    'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
-    hashfiles = sorted(hashfiles_patterns(canonical(definitions)))
-    inputs = part_inputs(data, entry, hashfiles)
-    tree = tracked_tree(root, revision)
-    result = {
+    inputs = part_inputs(root, data, job_id, revision, entry, workflow)
+    tree = tracked_tree(root, revision or 'HEAD')
+    return {
         'schema': SCHEMA, 'part': part, 'job_name': RR.job_name(job_id, row) if row else job_id,
-        'definitions': definitions, 'runner': runner_identity(environ),
-        'declaration': {'inputs': inputs.patterns, 'listings': inputs.listings, 'tree_names': inputs.tree_names},
+        'definitions': definitions, 'runner': runner_identity(environ), 'declaration': inputs.describe(),
         'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
-        'listings': {d: children(tree, d) for d in inputs.listings},
+        'names': sha256('\0'.join(sorted(tree))),
+        'generated': generated_digests(root) if 'generated' in needs else {},
     }
-    if inputs.tree_names:
-        result['tree_names'] = sha256('\0'.join(sorted(tree)))
-    if entry.get('commit_bound'):
-        result['commit'] = git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
-    return result
 
 
 def key_of(preimage):
     return sha256(canonical(preimage))
 
 
-# --- Trace reduction: one strace stream -> the workspace observations of one step. ---
+# --- The restricted checkout (docs/ci.md#restricted-checkout). ---
 
-# (dirfd argument index or None, path argument index) of each path a syscall names.
-PATH_ARGS = {
-    'open': [(None, 0)], 'creat': [(None, 0)], 'openat': [(0, 1)], 'openat2': [(0, 1)],
-    'stat': [(None, 0)], 'lstat': [(None, 0)], 'stat64': [(None, 0)], 'lstat64': [(None, 0)],
-    'newfstatat': [(0, 1)], 'fstatat64': [(0, 1)], 'statx': [(0, 1)], 'statfs': [(None, 0)],
-    'access': [(None, 0)], 'faccessat': [(0, 1)], 'faccessat2': [(0, 1)],
-    'readlink': [(None, 0)], 'readlinkat': [(0, 1)], 'execve': [(None, 0)], 'execveat': [(0, 1)],
-    'chdir': [(None, 0)], 'mkdir': [(None, 0)], 'mkdirat': [(0, 1)], 'rmdir': [(None, 0)],
-    'unlink': [(None, 0)], 'unlinkat': [(0, 1)], 'rename': [(None, 0), (None, 1)],
-    'renameat': [(0, 1), (2, 3)], 'renameat2': [(0, 1), (2, 3)], 'link': [(None, 0), (None, 1)],
-    'linkat': [(0, 1), (2, 3)], 'symlink': [(None, 1)], 'symlinkat': [(1, 2)], 'truncate': [(None, 0)],
-    'chmod': [(None, 0)], 'fchmodat': [(0, 1)], 'fchmodat2': [(0, 1)], 'chown': [(None, 0)],
-    'lchown': [(None, 0)], 'fchownat': [(0, 1)], 'utime': [(None, 0)], 'utimes': [(None, 0)],
-    'utimensat': [(0, 1)], 'futimesat': [(0, 1)], 'mknod': [(None, 0)], 'mknodat': [(0, 1)],
-    'getxattr': [(None, 0)], 'lgetxattr': [(None, 0)], 'listxattr': [(None, 0)], 'llistxattr': [(None, 0)],
-    'setxattr': [(None, 0)], 'lsetxattr': [(None, 0)], 'removexattr': [(None, 0)], 'lremovexattr': [(None, 0)],
-    'inotify_add_watch': [(None, 1)], 'name_to_handle_at': [(0, 1)],
-}
-WRITES = {'creat', 'mkdir', 'mkdirat', 'rmdir', 'unlink', 'unlinkat', 'rename', 'renameat', 'renameat2',
-          'link', 'linkat', 'symlink', 'symlinkat', 'truncate', 'chmod', 'fchmodat', 'fchmodat2', 'chown',
-          'lchown', 'fchownat', 'utime', 'utimes', 'utimensat', 'futimesat', 'mknod', 'mknodat',
-          'setxattr', 'lsetxattr', 'removexattr', 'lremovexattr'}
-READS = {'execve', 'execveat', 'readlink', 'readlinkat', 'getxattr', 'lgetxattr', 'listxattr', 'llistxattr'}
-LINE = re.compile(r'(\d+)\s+(.*)')
-CALL = re.compile(r'([a-z_0-9]+)\((.*)\)\s+=\s+(.*)', re.S)
-FD = re.compile(r'(AT_FDCWD|-?\d+)<(.*)>')
-GIT_GLOBAL_WITH_VALUE = {'-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env'}
-GIT_NAMES_FLAGS = {'-z', '--cached', '-c', '--others', '-o', '--exclude-standard', '--full-name', '--'}
-GIT_NEUTRAL_REV_PARSE = {'--show-toplevel', '--git-dir', '--absolute-git-dir', '--is-inside-work-tree',
-                         '--show-prefix', '--show-cdup', '--git-common-dir'}
-
-
-def split_args(text):
-    """Top-level comma-separated arguments of one strace call (quotes and brackets respected)."""
-    args, depth, quote, start, i = [], 0, False, 0, 0
-    while i < len(text):
-        c = text[i]
-        if quote:
-            if c == '\\':
-                i += 1
-            elif c == '"':
-                quote = False
-        elif c == '"':
-            quote = True
-        elif c in '([{<':
-            depth += 1
-        elif c in ')]}>':
-            depth -= 1
-        elif c == ',' and depth == 0:
-            args.append(text[start:i].strip())
-            start = i + 1
-        i += 1
-    args.append(text[start:].strip())
-    return args
+def restrict(root, inputs, label, revision='HEAD', seal=False):
+    """Check out a parentless commit with fixed metadata whose tree is `revision`'s with every
+    file outside `inputs` replaced by the WITHHELD placeholder; make those files unreadable and
+    skip-worktree, and record them. Returns the synthetic commit."""
+    root = Path(root)
+    state = git_dir(root) / RESTRICTED_STATE
+    if state.exists():
+        raise ReuseError('the checkout is already restricted (%s)' % state)
+    tested = git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
+    tree = tracked_tree(root, revision)
+    placeholder = git(root, 'hash-object', '-w', '--stdin', input=WITHHELD).decode().strip()
+    withheld = sorted(path for path in tree if not inputs.content(path))
+    hidden = set(withheld)
+    lines = ['%s %s\t%s' % (*tree[path], path) if path not in hidden else '100644 %s\t%s' % (placeholder, path)
+             for path in sorted(tree)]
+    with tempfile.TemporaryDirectory() as scratch:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(scratch) / 'index'), **IDENTITY)
+        git(root, 'update-index', '-z', '--index-info', env=env,
+            input=''.join(line + '\0' for line in lines).encode('utf-8', 'surrogateescape'))
+        restricted_tree = git(root, 'write-tree', env=env).decode().strip()
+    commit = git(root, 'commit-tree', restricted_tree, env=dict(os.environ, **IDENTITY),
+                 input=('air2lean restricted checkout of %s\n' % label).encode()).decode().strip()
+    git(root, 'checkout', '--quiet', '--force', '--detach', commit)
+    if withheld:
+        git(root, 'update-index', '--skip-worktree', '-z', '--stdin',
+            input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
+    for path in withheld:  # unreadable; an access time before the mtime makes any read update it
+        os.chmod(root / path, 0)
+        os.utime(root / path, ns=(0, os.stat(root / path).st_mtime_ns))
+    if seal:
+        seal_history(root, tested)
+    since = max([os.stat(root / p, follow_symlinks=False).st_ctime_ns for p in withheld] or [0])
+    state.write_text(canonical({'label': label, 'tested_commit': tested, 'commit': commit, 'placeholder': placeholder,
+                                'withheld': withheld, 'since_ns': since}))
+    print('restricted checkout of %s: HEAD %s (tested %s), %d of %d tracked files withheld'
+          % (label, commit[:12], tested[:12], len(withheld), len(tree)))
+    return commit
 
 
-def c_string(arg):
-    """The value of a strace-quoted string argument, or None (NULL, a pointer, an elided string)."""
-    m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"(\.\.\.)?', arg, re.S)
-    if not m or m.group(2):
-        return None
-    raw = m.group(1)
-    out, i = bytearray(), 0
-    while i < len(raw):
-        if raw[i] == '\\' and i + 1 < len(raw):
-            nxt = raw[i + 1]
-            if nxt == 'x':
-                out.append(int(raw[i + 2:i + 4], 16))
-                i += 4
-                continue
-            if nxt in '01234567':
-                digits = re.match(r'[0-7]{1,3}', raw[i + 1:]).group(0)
-                out.append(int(digits, 8))
-                i += 1 + len(digits)
-                continue
-            out += {'n': b'\n', 't': b'\t', 'r': b'\r', 'v': b'\v', 'f': b'\f'}.get(nxt, nxt.encode())
-            i += 2
-            continue
-        out += raw[i].encode()
-        i += 1
-    return out.decode('utf-8', 'surrogateescape')
+def discover(root, inputs, label):
+    """Local diagnostic: leave the checkout whole, but report (check-restricted) every file outside
+    `inputs` that the steps read, so that one passing run lists what a declaration lacks. Never
+    used for a key or a record."""
+    root = Path(root)
+    state = git_dir(root) / RESTRICTED_STATE
+    if state.exists():
+        raise ReuseError('the checkout is already restricted (%s)' % state)
+    tested = git(root, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+    withheld = sorted(path for path in tracked_tree(root) if not inputs.content(path))
+    if withheld:  # git then never stats or reads them; an access time before the mtime updates on any read
+        git(root, 'update-index', '--skip-worktree', '-z', '--stdin',
+            input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
+    for path in withheld:
+        if not os.path.islink(root / path):
+            os.utime(root / path, ns=(0, os.stat(root / path).st_mtime_ns))
+    state.write_text(canonical({'label': label, 'tested_commit': tested, 'commit': tested, 'discover': True,
+                                'withheld': withheld, 'since_ns': 1}))
+    print('discovery for %s: %d tracked files outside the declared inputs are watched' % (label, len(withheld)))
 
 
-def git_class(argv):
-    """What a git command observes of the checkout: none, names (tracked names), status, commit."""
-    args, i = list(argv[1:]), 0
-    while i < len(args) and args[i].startswith('-'):
-        flag = args[i].split('=', 1)[0]
-        i += 2 if flag in GIT_GLOBAL_WITH_VALUE and '=' not in args[i] else 1
-    if i >= len(args):
-        return 'none' if any(a in ('--version', '--exec-path') for a in args) else 'commit'
-    command, rest = args[i], args[i + 1:]
-    if command == 'version':
-        return 'none'
-    if command == 'status':
-        return 'status'
-    if command == 'ls-files':
-        return 'names' if all(a in GIT_NAMES_FLAGS or not a.startswith('-') for a in rest) else 'commit'
-    if command == 'rev-parse' and rest and all(a in GIT_NEUTRAL_REV_PARSE for a in rest):
-        return 'none'
-    if command == 'remote' and rest[:1] == ['get-url']:
-        return 'none'
-    # Content-addressed objects named by full ids (a ledger's reviewed revisions): what they read
-    # depends only on the ids, which come from observed tracked files.
-    positional = [a for a in rest if not a.startswith('-')]
-    if command in ('fetch', 'show', 'cat-file', 'rev-parse') and positional and all(
-            a == 'origin' or re.fullmatch(r'[0-9a-f]{40}(\^\{commit\}|:[^\0]*)?', a) for a in positional) \
-            and any(a != 'origin' for a in positional):
-        return 'none'
-    return 'commit'
+def seal_history(root, tested):
+    """Drop every remote (with the credentials actions/checkout configured for it), ref, reflog
+    and unreachable object, so that the withheld content is not in the repository at all (not
+    even through `git show $GITHUB_SHA:path`) and no `git fetch origin` brings it back; CI only."""
+    for remote in git(root, 'remote').decode().split():
+        git(root, 'remote', 'remove', remote)
+    for key in git(root, 'config', '--local', '--name-only', '--get-regexp', r'^(http\..*\.extraheader|includeif\..*)$',
+                   check=False).decode().split():
+        git(root, 'config', '--local', '--unset-all', key)
+    for ref in git(root, 'for-each-ref', '--format=%(refname)').decode().split():
+        git(root, 'update-ref', '-d', ref)
+    git(root, 'reflog', 'expire', '--expire=now', '--all')
+    git(root, 'repack', '-a', '-d', '-q')
+    git(root, 'prune', '--expire=now')
+    shallow = git_dir(root) / 'shallow'
+    if shallow.exists():
+        shallow.unlink()
+    if subprocess.run(['git', '-C', str(root), 'cat-file', '-e', tested + '^{tree}'],
+                      capture_output=True).returncode == 0:
+        raise ReuseError('the tested commit %s is still in the repository after sealing' % tested)
 
 
-class Reducer:
-    """Folds strace -f -y lines into {path: kinds}, git commands and unresolved paths."""
-
-    def __init__(self, workspace):
-        self.workspace = os.path.normpath(workspace)
-        self.pending = {}         # pid -> text of an <unfinished ...> call
-        self.cwd = {}             # pid -> last known working directory
-        self.deferred = {}        # pid -> [(relative path, kind)] before its cwd is known
-        self.exe = {}             # pid -> (executable, argv) of its image (last execve, else its parent's)
-        self.inherited = {}       # pid -> [(path, kind)] before its clone returned: its parent's image
-        self.parent = {}          # child pid -> parent pid
-        self.exited = set()       # pids that exited before their clone returned in the parent
-        self.clone_entry = {}     # pid -> its cwd when it entered an unfinished clone
-        self.observed = {}        # workspace-relative path -> set of kinds
-        self.git = {}             # canonical argv json -> class, for git commands touching .git
-        self.gitdir_by_others = set()
-        self.unresolved = []
-        self.lines = 0
-
-    # The relative path in the workspace, '' for the workspace itself, None outside.
-    def relative(self, path):
-        path = os.path.normpath(path)
-        if path == self.workspace:
-            return ''
-        if path.startswith(self.workspace + '/'):
-            return path[len(self.workspace) + 1:]
-        return None
-
-    def note(self, pid, path, kind):
-        # A process or thread runs its parent's image until its own execve. Until the parent's
-        # clone returns (strace may print the child first), that image is not known yet.
-        if pid not in self.exe:
-            self.inherited.setdefault(pid, []).append((path, kind))
-            return
-        self.attribute(self.exe[pid], path, kind)
-
-    def attribute(self, image, path, kind):
-        """One observation by a process running `image` ((executable, argv) or None: unknown)."""
-        rel = self.relative(path)
-        if rel is None:
-            return
-        argv = image[1] if image and (os.path.basename(image[0]) == 'git' or '/git-core/' in image[0]) else None
-        if rel == '.git' or rel.startswith('.git/'):
-            if argv is not None:
-                self.git[canonical(argv)] = git_class(argv)
-            else:
-                self.gitdir_by_others.add(rel)
-            return
-        if argv is not None and git_class(argv) in ('status', 'names', 'none'):
-            return  # modelled by the command (docs/ci.md): status reads what the traced writes changed
-        self.observed.setdefault(rel, set()).add(kind)
-
-    def resolve(self, pid, path, kind):
-        if path.startswith('/'):
-            self.note(pid, path, kind)
-        elif pid in self.cwd:
-            self.note(pid, os.path.join(self.cwd[pid], path), kind)
-        else:
-            self.deferred.setdefault(pid, []).append((path, kind))
-
-    def forget(self, pid):
-        if pid not in self.exe:
-            self.exited.add(pid)  # its observations wait in `inherited` for the parent's clone
-        self.exe.pop(pid, None)
-        self.cwd.pop(pid, None)
-        self.pending.pop(pid, None)
-
-    def learn_cwd(self, pid, cwd):
-        self.cwd[pid] = cwd
-        for path, kind in self.deferred.pop(pid, []):
-            self.note(pid, os.path.join(cwd, path), kind)
-
-    def feed(self, line):
-        self.lines += 1
-        m = LINE.match(line.rstrip('\n'))
-        if not m:
-            return
-        pid, text = int(m.group(1)), m.group(2)
-        if text.startswith('+++ '):  # exited or killed: the pid may be reused by a new process
-            self.forget(pid)
-            return
-        if text.startswith('---'):
-            return
-        if text.endswith('<unfinished ...>'):
-            self.pending[pid] = text[:-len('<unfinished ...>')].rstrip()
-            name = re.match(r'([a-z_0-9]+)\(', text)
-            if name and name.group(1) in ('clone', 'clone3', 'fork', 'vfork') and pid in self.cwd:
-                self.clone_entry[pid] = self.cwd[pid]
-            return
-        resumed = re.match(r'<\.\.\. ([a-z_0-9]+) resumed>(.*)', text, re.S)
-        if resumed:
-            text = self.pending.pop(pid, resumed.group(1) + '(') + resumed.group(2)
-        self.call(pid, text)
-
-    def call(self, pid, text):
-        m = CALL.fullmatch(text.strip())
-        if not m:
-            return
-        name, args, result = m.group(1), split_args(m.group(2)), m.group(3)
-        failed = result.startswith('-1')
-        for arg in args[:1]:
-            fd = FD.match(arg)
-            if fd and fd.group(1) == 'AT_FDCWD' and pid not in self.cwd:
-                self.learn_cwd(pid, fd.group(2))
-            elif fd and fd.group(1) == 'AT_FDCWD':
-                self.cwd[pid] = fd.group(2)
-        if name in ('clone', 'clone3', 'fork', 'vfork'):
-            child = re.match(r'(\d+)', result)
-            if child:
-                child = int(child.group(1))
-                self.parent[child] = pid
-                cwd = self.clone_entry.pop(pid, self.cwd.get(pid))
-                if cwd is not None and child not in self.cwd:
-                    self.learn_cwd(child, cwd)
-                # E.g. git's index-preload threads stat every tracked file as part of its command.
-                image = self.exe.get(pid)
-                if child in self.exited:
-                    self.exited.discard(child)
-                else:
-                    self.exe.setdefault(child, image)
-                for path, kind in self.inherited.pop(child, []):
-                    self.attribute(image, path, kind)
-            return
-        if name == 'getcwd':
-            return
-        if name in ('getdents64', 'getdents'):
-            fd = FD.match(args[0])
-            if fd:
-                self.note(pid, fd.group(2), 'list')
-            return
-        if name == 'fchdir':
-            fd = FD.match(args[0])
-            if fd and not failed:
-                self.learn_cwd(pid, fd.group(2))
-            return
-        if name == 'execve' and not failed:
-            path = c_string(args[0]) or ''
-            argv = [c_string(a) or '' for a in split_args(args[1][1:-1])] if args[1:2] and args[1].startswith('[') else []
-            if not path.startswith('/') and pid in self.cwd:
-                path = os.path.join(self.cwd[pid], path)
-            self.exe[pid] = (path, argv)
-        specs = PATH_ARGS.get(name)
-        if specs is None:
-            # Any other %file call: every string naming a path counts as a write (the strictest kind).
-            specs = [(None, i) for i, a in enumerate(args) if a.startswith('"')]
-            kind = 'write'
-        elif name in WRITES:
-            kind = 'write'
-        elif name in ('open', 'openat', 'openat2'):
-            index = 1 if name == 'open' else 2
-            flags = args[index] if len(args) > index else ''
-            kind = 'write' if re.search(r'O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND', flags) else \
-                'probe' if 'O_DIRECTORY' in flags or failed else 'read'
-            # A read-write open of an existing file can read its old content too.
-            if 'O_RDWR' in flags and 'O_TRUNC' not in flags and not failed:
-                fd = FD.match(result)
-                if fd:
-                    self.note(pid, fd.group(2), 'read')
-        elif name in READS:
-            kind = 'probe' if failed else 'read'
-        else:
-            kind = 'probe'
-        for dirfd, index in specs:
-            if index >= len(args):
-                continue
-            path = c_string(args[index])
-            if path is None:
-                continue
-            if name == 'chdir' and not failed:
-                base = self.cwd.get(pid)
-                if path.startswith('/') or base is not None:
-                    self.learn_cwd(pid, os.path.normpath(os.path.join(base or '/', path)))
-            if dirfd is not None and not path.startswith('/'):
-                fd = FD.match(args[dirfd])
-                if fd:
-                    self.note(pid, os.path.join(fd.group(2), path), kind)
-                else:
-                    self.unresolved.append('%s(%s) in pid %d' % (name, path, pid))
-                continue
-            self.resolve(pid, path, kind)
-        if name in ('open', 'openat', 'openat2', 'creat') and not failed:
-            fd = FD.match(result)
-            if fd:  # the resolved path (through symlinks) of the opened file
-                self.note(pid, fd.group(2), 'read' if kind == 'probe' else kind)
-
-    def finish(self):
-        for pid, items in self.deferred.items():
-            base = self.cwd.get(self.parent.get(pid))
-            for path, kind in items:
-                if base is None:
-                    self.unresolved.append('relative %s in pid %d with unknown cwd' % (path, pid))
-                else:
-                    self.note(pid, os.path.join(base, path), kind)
-        self.deferred = {}
-        for pid, items in self.inherited.items():  # a clone that never returned: image unknown
-            for path, kind in items:
-                self.attribute(None, path, kind)
-        self.inherited = {}
-        return {'complete': True, 'lines': self.lines,
-                'observed': {p: sorted(k) for p, k in sorted(self.observed.items())},
-                'git': {argv: cls for argv, cls in sorted(self.git.items())},
-                'gitdir_by_others': sorted(self.gitdir_by_others), 'unresolved': self.unresolved}
+def unrestrict(root):
+    """Undo restrict(): back to the tested commit with every file readable (local runs)."""
+    state = restricted_state(root)
+    if state is None:
+        return
+    for rel in state['withheld']:
+        if os.path.lexists(Path(root, rel)) and not state.get('discover'):
+            os.chmod(Path(root, rel), 0o644)
+    if state['withheld']:
+        git(root, 'update-index', '--no-skip-worktree', '-z', '--stdin',
+            input=''.join(p + '\0' for p in state['withheld']).encode('utf-8', 'surrogateescape'))
+    git(root, 'checkout', '--quiet', '--force', state['tested_commit'])
+    (git_dir(root) / RESTRICTED_STATE).unlink()
 
 
-# --- Coverage of observations by a declaration. ---
-
-def deepest_tracked_dir(path, dirs):
-    parent = str(PurePosixPath(path).parent) if '/' in path else ''
-    while parent not in dirs:
-        parent = str(PurePosixPath(parent).parent) if '/' in parent else ''
-    return parent
+def restricted_state(root):
+    state = git_dir(root) / RESTRICTED_STATE
+    return json.loads(state.read_text()) if state.is_file() else None
 
 
-def coverage(observations, inputs, tree, commit_bound=False, generated=()):
-    """Violations: (path, kinds, what the declaration lacks) for every uncovered observation.
-
-    `generated` are the whole-tree generated files (assurance/generated.json): untracked, but
-    derived from the whole tree by the `generated` job, so only a whole-tree declaration covers them."""
-    dirs = tree_dirs(tree)
+def check_restricted(root, as_root=None, reset=False):
+    """Problems: withheld files that a step changed, or (when the steps run as root, which the
+    missing permission does not stop) read: atime after the checkout. As another user a read
+    already failed, and an access time can come from a system daemon (Spotlight on macOS).
+    Empty when the checkout is not restricted."""
+    as_root = os.geteuid() == 0 if as_root is None else as_root
+    state = restricted_state(root)
+    if state is None:
+        return []
     problems = []
-    for step in observations:
-        if not step.get('complete'):
-            problems.append(('<step %s>' % step.get('step'), [], 'trace incomplete'))
+    if state.get('discover'):  # symlinks keep their checkout atime; a removed file was not read
+        read = [rel for rel in state['withheld'] if os.path.isfile(Path(root, rel)) and not os.path.islink(Path(root, rel))
+                and os.stat(Path(root, rel)).st_atime_ns > state['since_ns']]
+        if reset:  # the next check reports only what later steps read
+            for rel in read:
+                os.utime(Path(root, rel), ns=(0, os.stat(Path(root, rel)).st_mtime_ns))
+        return ['%s: undeclared file was read' % rel for rel in read]
+    for rel in state['withheld']:
+        path = Path(root, rel)
+        try:
+            info = os.stat(path, follow_symlinks=False)
+        except FileNotFoundError:
+            problems.append('%s: withheld file was removed' % rel)
             continue
-        for path in step.get('unresolved', []):
-            problems.append((path, [], 'path not resolvable to the workspace'))
-        if not commit_bound:
-            for argv, cls in step.get('git', {}).items():
-                if cls == 'commit':
-                    problems.append(('git ' + ' '.join(json.loads(argv)[1:]), [],
-                                     'reads commit identity: declare "commit_bound": true'))
-                elif cls == 'names' and not inputs.tree_names:
-                    problems.append(('git ' + ' '.join(json.loads(argv)[1:]), [],
-                                     'lists every tracked name: declare "tree_names": true'))
-            for path in step.get('gitdir_by_others', []):
-                problems.append((path, [], 'a non-git process reads .git: declare "commit_bound": true'))
-        if commit_bound:
-            continue
-        for path, kinds in step.get('observed', {}).items():
-            if path in tree:
-                if not inputs.content(path):
-                    problems.append((path, kinds, 'content not declared (add an inputs pattern)'))
-            elif path in dirs:
-                if 'list' in kinds and not inputs.listing(path):
-                    problems.append((path, kinds, 'listing not declared (add it to listings)'))
-                if 'write' in kinds and not inputs.subtree(path):
-                    problems.append((path, kinds, 'tracked directory changed: declare %s/**' % path))
-                if set(kinds) - {'list', 'write'}:
-                    parent = str(PurePosixPath(path).parent) if '/' in path else ''
-                    if path and not inputs.listing(parent):
-                        problems.append((path, kinds, 'listing of %r not declared' % (parent or '.')))
-            elif path in generated:
-                # Installing one (`scripts/generated.py install` only writes it) reveals nothing.
-                if set(kinds) - {'write'} and not inputs.subtree(''):
-                    problems.append((path, kinds, 'whole-tree generated file (%s): declare "**"' % GENERATED.REGISTRY))
-            else:
-                anchor = deepest_tracked_dir(path, dirs)
-                if not inputs.listing(anchor):
-                    problems.append((path, kinds, 'untracked path: listing of %r not declared' % (anchor or '.')))
-    return sorted({(p, tuple(k), w) for p, k, w in problems})
-
-
-def read_traces(directory):
-    directory = Path(directory)
-    steps = []
-    for started in sorted(directory.glob('*.started')):
-        step = started.stem
-        reduced = directory / (step + '.json')
-        data = json.loads(reduced.read_text()) if reduced.is_file() else {'complete': False}
-        data['step'] = step
-        steps.append(data)
-    return steps
-
-
-def suggest(observations, tree):
-    """A declaration covering a trace: content patterns (`dir/**` per observed file's directory,
-    and per written tracked directory), listings, and `tree_names` when git listed every name."""
-    dirs, patterns, listings, names = tree_dirs(tree), set(), set(), False
-    for step in observations:
-        names = names or 'names' in step.get('git', {}).values()
-        for path, kinds in step.get('observed', {}).items():
-            if path in tree:
-                parent = str(PurePosixPath(path).parent) if '/' in path else ''
-                patterns.add(parent + '/**' if parent else path)
-            elif path in dirs:
-                if 'list' in kinds:
-                    listings.add(path or '.')
-                if 'write' in kinds:
-                    patterns.add(path + '/**' if path else '**')
-                if set(kinds) - {'list'} and path:
-                    parent = str(PurePosixPath(path).parent) if '/' in path else ''
-                    listings.add(parent or '.')
-            else:
-                listings.add(deepest_tracked_dir(path, dirs) or '.')
-    collapsed = {p for p in patterns if not any(
-        q != p and q.endswith('/**') and p.startswith(q[:-2]) for q in patterns)}
-    declaration = {'inputs': sorted(collapsed), 'listings': sorted(listings)}
-    return {**declaration, 'tree_names': True} if names else declaration
+        if info.st_mode & 0o777 or info.st_size != len(WITHHELD):
+            problems.append('%s: withheld file was changed' % rel)
+        elif as_root and info.st_atime_ns > state['since_ns']:
+            problems.append('%s: withheld file was read' % rel)
+    return problems
 
 
 # --- Workflow checks: declarations complete, steps guarded, no run-specific expressions. ---
 
-def check_workflow(root):
-    workflow = load_workflow(root)
-    data = load_declarations(root)
+def check_workflow(root, revision=None):
+    workflow = load_workflow(root, revision)
+    data = load_declarations(root, revision)
     errors = []
     found = parts(workflow)
     declared = set((data.get('parts') or {}))
@@ -721,6 +491,14 @@ def check_workflow(root):
             declaration(data, part)
         except ReuseError as error:
             errors.append(str(error))
+    for job_id in RESTRICTED_SUPPORT:
+        try:
+            support_inputs(data, job_id)
+        except ReuseError as error:
+            errors.append(str(error))
+        names = [s.get('name') for s in workflow['jobs'].get(job_id, {}).get('steps') or []]
+        if names[1:2] != [RESTRICT_STEP]:
+            errors.append('support job %s does not run %r right after its checkout' % (job_id, RESTRICT_STEP))
     for job_id in sorted({job for job, _ in found.values()}):
         steps = workflow['jobs'][job_id].get('steps') or []
         names = [s.get('name') for s in steps]
@@ -728,24 +506,18 @@ def check_workflow(root):
             errors.append('job %s has no %r step' % (job_id, DECISION_STEP))
             continue
         start = names.index(DECISION_STEP)
-        traced = workflow['jobs'][job_id].get('defaults', {}).get('run', {}).get('shell') == 'bash scripts/ci-trace.sh {0}'
-        if str(workflow['jobs'][job_id].get('runs-on', '')).startswith('ubuntu') and not traced:
-            errors.append('job %s runs on Linux without the traced shell (defaults.run.shell)' % job_id)
-        if traced and COVERAGE_STEP not in names:
-            errors.append('traced job %s has no %r step' % (job_id, COVERAGE_STEP))
-        end = names.index(COVERAGE_STEP) if COVERAGE_STEP in names else len(steps)
-        for index, step in enumerate(steps[start + 1:], start + 1):
+        for step in steps[start + 1:]:
             condition = str(step.get('if', ''))
+            if step.get('name') == REFERENCE_STEP:
+                if condition != "${{ env.AIR2LEAN_REUSED != '' }}":
+                    errors.append('job %s step %r must run exactly when the part was reused' % (job_id, REFERENCE_STEP))
+                continue
             if GUARD not in condition:
                 errors.append('job %s step %r runs after %r without %s in its if'
                               % (job_id, step.get('name'), DECISION_STEP, GUARD))
             elif '||' in condition and not all(GUARD in d for d in condition.split('||')):
                 errors.append('job %s step %r: every || branch of its if needs %s' % (job_id, step.get('name'), GUARD))
-            if 'AIR2LEAN_UNTRACED' in canonical(step) and step.get('name') not in RECORD_STEPS:
-                errors.append('job %s step %r opts out of the tracer' % (job_id, step.get('name')))
-            if 'shell' in step:
-                errors.append('job %s step %r sets its own shell (it would escape the tracer)' % (job_id, step.get('name')))
-            if start < index < end and RUN_SPECIFIC.search(canonical(step)):
+            if step.get('name') not in RECORD_STEPS and RUN_SPECIFIC.search(canonical(step)):
                 errors.append('job %s step %r uses a run-specific github.* expression' % (job_id, step.get('name')))
         if RUN_SPECIFIC.search(canonical({k: v for k, v in workflow['jobs'][job_id].items() if k != 'steps'})):
             errors.append('job %s uses a run-specific github.* expression outside its steps' % job_id)
@@ -763,11 +535,18 @@ def api(path, token, base=None):
         return json.loads(response.read())
 
 
-def lookup(key, job_name, repository, token, fetch=api):
-    """The newest acceptable record of `key`: (run id, run URL, job id) or None.
+def on_main(repository, commit, token, fetch=api):
+    """Whether `commit` is main or an ancestor of it (GitHub compare API)."""
+    compared = fetch('/repos/%s/compare/%s...main' % (repository, commit), token)
+    return compared.get('status') in ('identical', 'ahead')
+
+
+def lookup(key, job_name, repository, token, fetch=api, events=RECORD_EVENTS, require_main=False):
+    """The newest acceptable record of `key`: (run id, run URL, job id, job URL) or None.
 
     Accepted only from this repository's CI workflow (never a fork's head repository), from a
-    RECORD_EVENTS run, whose job `job_name` completed with success, per the GitHub API.
+    run of one of `events`, whose job `job_name` completed with success, per the GitHub API;
+    with `require_main`, only from a run whose head commit is on main.
     """
     listed = fetch('/repos/%s/actions/artifacts?name=ci-reuse-%s&per_page=30' % (repository, key), token)
     for artifact in sorted(listed.get('artifacts', []), key=lambda a: a.get('created_at', ''), reverse=True):
@@ -777,8 +556,10 @@ def lookup(key, job_name, repository, token, fetch=api):
         if source.get('head_repository_id') != source.get('repository_id') or not source.get('id'):
             continue
         run = fetch('/repos/%s/actions/runs/%d' % (repository, source['id']), token)
-        if (run.get('path') != WORKFLOW or run.get('name') != WORKFLOW_NAME or run.get('event') not in RECORD_EVENTS
+        if (run.get('path') != WORKFLOW or run.get('name') != WORKFLOW_NAME or run.get('event') not in events
                 or (run.get('head_repository') or {}).get('full_name') != repository):
+            continue
+        if require_main and not on_main(repository, run.get('head_sha', ''), token, fetch):
             continue
         page = 1
         while True:
@@ -810,7 +591,7 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     row = json.loads(row_json) if row_json else None
     part = part_id(job_id, row or None)
     if not environ.get('GITHUB_RUN_ID'):
-        print('%s: not a GitHub Actions run: every step runs untraced, no record' % part)
+        print('%s: not a GitHub Actions run: the checkout stays unrestricted, no record' % part)
         return 0
     env_file, summary = environ.get('GITHUB_ENV'), environ.get('GITHUB_STEP_SUMMARY')
     data = load_declarations(root)
@@ -820,22 +601,33 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     if preimage is None:
         append(summary, '**%s** always runs (`"reuse": false` in %s).\n' % (part, DECLARATIONS))
         return 0
+    if event in FULL_EVENTS:
+        append(summary, '**%s** runs on the whole checkout (%s run: no reuse, no restriction, no record).\n'
+               % (part, event))
+        return 0
     key = key_of(preimage)
     out = Path(environ['RUNNER_TEMP']) / 'ci-reuse'
     out.mkdir(parents=True, exist_ok=True)
     (out / 'manifest.json').write_text(canonical(preimage))
-    lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key]
+    tested = git(root, 'rev-parse', 'HEAD').decode().strip()
+    lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key, 'AIR2LEAN_TESTED_COMMIT=' + tested]
     message = '**%s** input key `%s`' % (part, key)
-    if event == 'pull_request':
+    if event in ('pull_request', 'merge_group'):
+        queue = event == 'merge_group'
         found = None
         try:
-            found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch)
+            found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
+                           QUEUE_RECORD_EVENTS if queue else RECORD_EVENTS, require_main=queue)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             print('record lookup failed (%s): the part runs' % error)
-        chosen = self_check_part(environ, [p for p in parts(load_workflow(root))
-                                           if (data['parts'].get(p) or {}).get('reuse') is not False])
+        chosen = None if queue else self_check_part(
+            environ, [p for p in parts(load_workflow(root)) if (data['parts'].get(p) or {}).get('reuse') is not False])
         if found and part != chosen:
             run_id, run_url, job_id_, job_url = found
+            (out / 'reference.json').write_text(canonical({
+                'schema': SCHEMA, 'part': part, 'job_name': preimage['job_name'], 'key': key, 'tested_commit': tested,
+                'reused_in_run': environ.get('GITHUB_RUN_ID'), 'run_id': run_id, 'run_url': run_url,
+                'job_id': job_id_, 'job_url': job_url}))
             append(env_file, '\n'.join(lines + ['AIR2LEAN_REUSED=%s' % run_url]) + '\n')
             append(summary, '%s: **reused** - passed in run [%s](%s), job [%s](%s), on a tree with the same '
                    'input key. Every later step is skipped (docs/ci.md#where-records-live-and-how-a-reused-'
@@ -847,67 +639,35 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
             message += ': **self-check** - recorded green in run [%s](%s); executing it again' % (found[0], found[1])
         else:
             message += ': no record, executing'
-    traced = environ.get('RUNNER_OS') == 'Linux' and not entry.get('commit_bound')
-    if event in RECORD_EVENTS and (traced or entry.get('commit_bound')):
+    restrict(root, part_inputs(root, data, job_id, entry=entry), part, seal=True)
+    if event in RECORD_EVENTS:
         lines.append('AIR2LEAN_RECORD=1')
-    if traced:
-        if not shutil.which('strace'):
-            subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', 'strace'], check=False)
-            if not shutil.which('strace'):
-                subprocess.run(['sudo', 'apt-get', 'update', '-q'], check=True)
-                subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', 'strace'], check=True)
-        traces = out / 'traces'
-        traces.mkdir(exist_ok=True)
-        lines += ['AIR2LEAN_TRACE_DIR=%s' % traces, 'AIR2LEAN_REUSE_TOOL=%s' % (Path(root).resolve() / 'scripts/ci-reuse.py')]
     append(env_file, '\n'.join(lines) + '\n')
-    append(summary, message + ('; traced' if traced else '') + '.\n')
+    append(summary, message + ' in a restricted checkout.\n')
     print(message)
     return 0
 
 
-def check_trace(root, part, directory, environ=os.environ):
-    if not directory:
-        print('untraced run: nothing to check, no record will be written')
-        return 0
-    data = load_declarations(root)
-    entry = declaration(data, part)
-    preimage = manifest(root, part, environ)
-    if preimage is None:
-        print('%s always runs: nothing to check' % part)
-        return 0
-    inputs = part_inputs(data, entry, hashfiles_patterns(canonical(preimage['definitions'])))
-    steps = read_traces(directory)
-    problems = coverage(steps, inputs, tracked_tree(root), bool(entry.get('commit_bound')), GENERATED.paths(root))
-    observed = sum(len(s.get('observed', {})) for s in steps)
-    Path(directory, 'coverage.json').write_text(canonical(
-        {'part': part, 'steps': len(steps), 'observed': observed, 'problems': problems}))
-    if problems:
-        print('error: %s observed %d path(s) outside its declared inputs (%s); fix the declaration '
-              'or the step:' % (part, len(problems), DECLARATIONS), file=sys.stderr)
-        for path, kinds, what in problems[:200]:
-            print('  %s [%s]: %s' % (path, ','.join(kinds), what), file=sys.stderr)
-        print('suggested declaration: %s' % canonical(suggest(steps, tracked_tree(root))), file=sys.stderr)
-        return 1
-    print('OK: %d traced steps of %s, %d workspace paths observed, all inside the declared inputs'
-          % (len(steps), part, observed))
-    return 0
-
-
 def record(root, out, environ=os.environ):
-    part, key = environ.get('AIR2LEAN_PART'), environ.get('AIR2LEAN_REUSE_KEY')
-    if not part or not key:
-        raise ReuseError('no part or key in the environment: the decision step did not arm a record')
-    preimage = manifest(root, part, environ)
-    if key_of(preimage) != key:
+    part, key, tested = (environ.get('AIR2LEAN_PART'), environ.get('AIR2LEAN_REUSE_KEY'),
+                         environ.get('AIR2LEAN_TESTED_COMMIT'))
+    if not part or not key or not tested:
+        raise ReuseError('no part, key or tested commit in the environment: the decision step did not arm a record')
+    state = restricted_state(root)
+    if state is None or state['tested_commit'] != tested or state['label'] != part:
+        raise ReuseError('%s did not run in its restricted checkout; no record' % part)
+    problems = check_restricted(root)
+    if problems:
+        raise ReuseError('%s touched withheld files; no record: %s' % (part, '; '.join(problems[:5])))
+    preimage = json.loads(Path(environ['RUNNER_TEMP'], 'ci-reuse', 'manifest.json').read_text())
+    head = git(root, 'rev-parse', 'HEAD').decode().strip()
+    if key_of(preimage) != key or head != state['commit'] or (
+            preimage['generated'] and generated_digests(root) != preimage['generated']):
         raise ReuseError('the inputs of %s changed during the run; no record' % part)
-    trace_dir = environ.get('AIR2LEAN_TRACE_DIR')
-    coverage_file = Path(trace_dir, 'coverage.json') if trace_dir else None
-    if trace_dir and not coverage_file.is_file():
-        raise ReuseError('traced run without a coverage check; no record')
     body = {'schema': SCHEMA, 'key': key, 'part': part, 'job_name': preimage['job_name'],
             'run_id': environ.get('GITHUB_RUN_ID'), 'run_attempt': environ.get('GITHUB_RUN_ATTEMPT'),
-            'event': environ.get('AIR2LEAN_EVENT'), 'tested_commit': git(root, 'rev-parse', 'HEAD').decode().strip(),
-            'coverage': json.loads(coverage_file.read_text()) if coverage_file else None, 'manifest': preimage}
+            'event': environ.get('AIR2LEAN_EVENT'), 'tested_commit': tested, 'restricted_commit': state['commit'],
+            'withheld': len(state['withheld']), 'manifest': preimage}
     Path(out).write_text(canonical(body))
     print('record ci-reuse-%s for %s' % (key, part))
     return 0
@@ -923,28 +683,21 @@ def main(argv=None):
     p = sub.add_parser('decide')
     p.add_argument('--job', required=True)
     p.add_argument('--row', default='')
-    p = sub.add_parser('reduce')
-    p.add_argument('--workspace', required=True)
-    p.add_argument('--out', type=Path, required=True)
-    p = sub.add_parser('check-trace')
-    p.add_argument('--part', default=os.environ.get('AIR2LEAN_PART'))
-    p.add_argument('directory', nargs='?', default=os.environ.get('AIR2LEAN_TRACE_DIR'))
+    p = sub.add_parser('restrict')
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument('--part')
+    target.add_argument('--support', choices=RESTRICTED_SUPPORT)
+    p.add_argument('--seal', action='store_true', help='CI: remove the tested commit from the repository')
+    p.add_argument('--discover', action='store_true',
+                   help='local diagnostic: keep the checkout whole, list the undeclared files read')
+    p = sub.add_parser('check-restricted')
+    p.add_argument('--reset', action='store_true', help='discover mode: forget the reads reported')
+    sub.add_parser('unrestrict')
     p = sub.add_parser('record')
     p.add_argument('--out', type=Path, required=True)
     sub.add_parser('check-workflow')
-    p = sub.add_parser('suggest')
-    p.add_argument('--part', required=True)
-    p.add_argument('directory', type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'reduce':
-            reducer = Reducer(args.workspace)
-            for line in sys.stdin.buffer:
-                reducer.feed(line.decode('utf-8', 'surrogateescape'))
-            temp = args.out.with_suffix('.part')
-            temp.write_text(canonical(reducer.finish()))
-            temp.replace(args.out)
-            return 0
         if args.command == 'key':
             preimage = manifest(args.root, args.part)
             if preimage is None:
@@ -956,8 +709,29 @@ def main(argv=None):
             return 0
         if args.command == 'decide':
             return decide(args.root, args.job, args.row)
-        if args.command == 'check-trace':
-            return check_trace(args.root, args.part, args.directory)
+        if args.command == 'restrict':
+            data = load_declarations(args.root)
+            if args.support:
+                restrict(args.root, part_inputs(args.root, data, args.support), args.support, seal=args.seal)
+            else:
+                job_id, _row = parts(load_workflow(args.root))[args.part]
+                entry = declaration(data, args.part)
+                if entry.get('reuse') is False:
+                    raise ReuseError('%s is "reuse": false: it runs on the whole checkout' % args.part)
+                inputs = part_inputs(args.root, data, job_id, entry=entry)
+                if args.discover:
+                    discover(args.root, inputs, args.part)
+                else:
+                    restrict(args.root, inputs, args.part, seal=args.seal)
+            return 0
+        if args.command == 'unrestrict':
+            unrestrict(args.root)
+            return 0
+        if args.command == 'check-restricted':
+            problems = check_restricted(args.root, reset=args.reset)
+            for problem in problems:
+                print('error: %s (declare it in %s if the part needs it)' % (problem, DECLARATIONS), file=sys.stderr)
+            return 1 if problems else 0
         if args.command == 'record':
             return record(args.root, args.out)
         if args.command == 'check-workflow':
@@ -967,9 +741,6 @@ def main(argv=None):
             if not errors:
                 print('OK: every part of %s is declared and every step after the reuse decision is guarded' % WORKFLOW)
             return 1 if errors else 0
-        if args.command == 'suggest':
-            print(json.dumps(suggest(read_traces(args.directory), tracked_tree(args.root)), indent=2))
-            return 0
     except (ReuseError, RR.ReleaseError, OSError, ValueError) as error:
         print('error: %s' % error, file=sys.stderr)
         return 2
