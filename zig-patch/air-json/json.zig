@@ -194,6 +194,12 @@ const Compat = struct {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
     }
 
+    /// `vector_store_elem` (0.14.1, 0.15.2; 0.16.0 rejects a runtime vector index in Sema): a
+    /// store of one lane at a runtime index, `v[i] = x` through a vector pointer.
+    fn isVectorStoreElem(tag: Air.Inst.Tag) bool {
+        return if (v16) false else tag == .vector_store_elem;
+    }
+
     /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
     fn isRuntimeLane(vector_index: InternPool.Key.PtrType.VectorIndex) bool {
         return if (v16) false else vector_index == .runtime;
@@ -539,6 +545,67 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
     return buffer[0 .. end + 5];
 }
 
+/// Set once an exported function converts between errors and integers (`convertsErrorInt`):
+/// `@intFromError`, `@errorFromInt` and its `errors_len` check mean the compilation's error
+/// numbering, which is final only when analysis ends, so `dumpErrorTable` writes it then.
+var error_ints_used = std.atomic.Value(bool).init(false);
+
+/// The file of the error numbering (`docs/air-json.md` §Error table). Not a `.json` name: it
+/// describes no function.
+const error_table_name = "error-table.air2lean";
+
+/// After analysis (`<version>/hook.patch`, in `Compilation.update`): if an exported function
+/// converts between errors and integers, write the compilation's global error set in code
+/// order (code `i + 1` is `names[i]`) with the error integer's width, beside the function files.
+pub fn dumpErrorTable(pt: Zcu.PerThread) void {
+    if (!error_ints_used.load(.monotonic)) return;
+    const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
+    var dir = Compat.openDir(pt, dir_path) catch |err| {
+        std.log.warn("air2lean: cannot open {s}: {s}", .{ dir_path, @errorName(err) });
+        return;
+    };
+    defer Compat.closeDir(pt, &dir);
+    const file = openErrorTable(pt, dir) catch |err| {
+        std.log.warn("air2lean: no error table: {s}", .{@errorName(err)});
+        return;
+    };
+    defer Compat.closeFile(pt, file);
+    var sink: Compat.Sink = undefined;
+    sink.init(pt, file);
+    writeErrorTable(&sink.j, pt.zcu) catch |err| {
+        std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+        return;
+    };
+    sink.flush() catch |err| std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+}
+
+/// The error table file, created or (a re-export into the same directory) truncated.
+fn openErrorTable(pt: Zcu.PerThread, dir: Compat.Dir) !Compat.File {
+    return Compat.createFile(pt, dir, error_table_name) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+        const file = try Compat.openExistingFile(pt, dir, error_table_name);
+        errdefer Compat.closeFile(pt, file);
+        try Compat.truncateFile(pt, file);
+        return file;
+    };
+}
+
+fn writeErrorTable(j: *Compat.Json, zcu: *Zcu) Error!void {
+    const ip = &zcu.intern_pool;
+    try j.beginObject();
+    try j.objectField("schema");
+    try j.write(12);
+    try j.objectField("zig_version");
+    try j.write(build_options.version);
+    try j.objectField("error_set_bits");
+    try j.write(zcu.errorSetBits());
+    try j.objectField("names");
+    try j.beginArray();
+    for (ip.global_error_set.getNamesFromMainThread()) |name| try j.write(name.toSlice(ip));
+    try j.endArray();
+    try j.endObject();
+}
+
 // Exclusive creation protects fresh files. Repeated analysis may export the same
 // function again: permit this only after validating its existing full JSON name,
 // without truncating first. The advisory lock coordinates cooperating exporters.
@@ -837,6 +904,23 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
+    /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
+    /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Tags
+    /// are compared by name: not every version has each.
+    fn convertsErrorInt(w: *W, tag: Air.Inst.Tag, inst: Air.Inst.Index) bool {
+        const name = @tagName(tag);
+        for ([_][]const u8{ "int_from_error", "error_from_int", "cmp_lt_errors_len", "cmp_lte_errors_len" }) |t| {
+            if (std.mem.eql(u8, name, t)) return true;
+        }
+        if (!std.mem.eql(u8, name, "bitcast")) return false;
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        const result = w.air.typeOfIndex(inst, ip).zigTypeTag(zcu) == .error_set;
+        const operand = w.air.typeOf(w.data(inst).ty_op.operand, ip).zigTypeTag(zcu) == .error_set;
+        return result != operand;
+    }
+
     fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
         return w.air.instructions.items(.data)[@intFromEnum(inst)];
     }
@@ -867,6 +951,7 @@ const W = struct {
         try w.j.write(@intFromEnum(inst));
         try w.field("tag");
         try w.j.write(@tagName(tag));
+        if (w.convertsErrorInt(tag, inst)) error_ints_used.store(true, .monotonic);
         switch (tag) {
             .inferred_alloc, .inferred_alloc_comptime => {},
             else => {
@@ -1193,6 +1278,11 @@ const W = struct {
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             } else if (Compat.isFieldVal(tag)) {
                 try w.writeStructField(inst);
+            } else if (!Compat.v16 and Compat.isVectorStoreElem(tag)) {
+                // The vector pointer, the lane index and the lane value.
+                const d = w.data(inst).vector_store_elem;
+                const b = w.air.extraData(Air.Bin, d.payload).data;
+                try w.writeArgs(&.{ d.vector_ptr, b.lhs, b.rhs });
             } else if (!Compat.v14) {
                 // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into
                 // `shuffle_one` (single source) and `shuffle_two` (two sources). The two forms

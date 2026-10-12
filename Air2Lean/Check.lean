@@ -2493,7 +2493,7 @@ private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Exc
   checkNullConstants f.name f.types f.layouts init
   checkGlobalAliasConstants f init
   checkLlvmPayloadConstants f init
-  checkPointerPresence init fun k =>
+  checkPointerPresence f init fun k =>
     s!"{f.name}: `threadlocal` global {what}: a pointer constant without a global ({k}) is \
       outside the subset"
   checkTy f.name f.types f.layouts 0 g.ty
