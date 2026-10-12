@@ -1,8 +1,8 @@
 import ZigLean.Mem.Lemmas
 import ZigLean.Mem.Alloc
 
-/-! MM-16 regressions: per-thread stack regions (`docs/architecture-audit/memory-model.md`
-§MM-16). Every run is evaluated by the kernel (`decide +kernel`).
+/-! MM-18 regressions: per-thread stack regions (`docs/architecture-audit/memory-model.md`
+§MM-18). Every run is evaluated by the kernel (`decide +kernel`).
 
 * The three scenarios that made a stack-room resource unsound over the old model, in their fixed
   form: a `free` gives the charge back (1), heap traffic (2) and a placement at the end of the
@@ -11,7 +11,7 @@ import ZigLean.Mem.Alloc
 * `.stackOverflow` exactly at the budget, and the general lemma `alloc_stack_overflow`.
 * Splittable room is unsound: after an out-of-order `free` the next block overflows a budget that
   a credit returned by that `free` would cover.
-* Native layouts stay reachable (E1, E1' of MM-16): some placement puts an inlined callee's local
+* Native layouts stay reachable (E1, E1' of MM-18): some placement puts an inlined callee's local
   above its caller's, and a later local on the address of a dead one. -/
 
 open Zig
@@ -19,7 +19,7 @@ open Zig
 /-- An address space of 4096 + 256 bytes: the reserve and a few blocks fit. -/
 def small : Placement := { propose := fun _ => none, addrLimit := 4096 + 256 }
 
-/-- The start memory of `σ` with a main-thread stack budget `S` (MM-16, `Mem.withStack`). -/
+/-- The start memory of `σ` with a main-thread stack budget `S` (MM-18, `Mem.withStack`). -/
 def withBudget (σ : Placement) (S : Nat) : Mem := ({ place := σ } : Mem).withStack S
 
 /-- `n` times: a stack block of 8 bytes made and freed (a loop that calls a function with one
@@ -121,7 +121,7 @@ def inOrder : MemM Unit := do
 
 theorem lifo_returns : (inOrder.run' (withBudget small 32)).run = some (.ok ()) := by decide +kernel
 
-/-- A placement with the native layout of MM-16 E1/E1': the caller's local (block 0), an inlined
+/-- A placement with the native layout of MM-18 E1/E1': the caller's local (block 0), an inlined
 callee's local above it (block 1) and a later local of the caller on the callee's dead slot
 (block 2). -/
 def native : Placement :=

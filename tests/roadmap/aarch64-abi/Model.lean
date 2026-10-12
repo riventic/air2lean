@@ -87,6 +87,31 @@ example : Enc.size (Vec Bool 16) = 2 := rfl
 example : Enc.size (Float .f80) = 16 ∧ Enc.align (Float .f80) = 16 := ⟨rfl, rfl⟩
 example : linuxGnu.floats ≠ macosNone.floats := by decide
 
+/-! ### Zig 0.17.0 layouts
+
+Zig 0.17.0 (LLVM 22) aligns `f80` to 8 bytes on both profiles, and `f128` on aarch64-macos (where
+it is not `c_longdouble`); the bit-packed `f80x2` vector is 8-aligned, and its second lane is not
+where `Vec.packedEnc` puts it. The model keeps 16 and the packed image. These rows are declared
+divergences of the 0.17.0 files: the translator compares the layout of every type in memory with
+the exporter's (`checkMemTy`), so it rejects these types in memory on 0.17.0 aarch64. -/
+
+/-- The rows of a 0.17.0 file whose alignment is 8, not the model's 16. -/
+def layoutDivergences017 (triple : String) : List String :=
+  ["float f80", "vector f80x2"] ++ (if triple == "aarch64-macos-none" then ["float f128"] else [])
+
+/-- The table that a file of `version` must record: the kernel-checked one, with the 0.17.0
+divergent rows at alignment 8. -/
+def Recorded.forVersion (r : Recorded) (version triple : String) : Recorded :=
+  if version != "0.17.0" then r else
+  let ds := layoutDivergences017 triple
+  { r with
+    floats := r.floats.map fun (n, f, s, a) => (n, f, s, if ds.contains s!"float {n}" then 8 else a)
+    vectors := r.vectors.map fun (n, k, w, b, s, a) =>
+      (n, k, w, b, s, if ds.contains s!"vector {n}" then 8 else a) }
+
+/-- The model's `f80` and `f128` are 16-aligned, so each 0.17.0 row is a divergence. -/
+example : Enc.align (Float .f80) = 16 ∧ Enc.align (Float .f128) = 16 := ⟨rfl, rfl⟩
+
 /-! ## Float and atomic results (run time) -/
 
 def hexNat? (s : String) : Option Nat :=
@@ -175,19 +200,21 @@ def atomicCase (bits : Nat) (won lost added swapped loaded : String) : Bool :=
 
 /-- Results that differ from the model on that profile, with the reason. Each must diverge:
 a listed case that matches fails the check (the list is stale). -/
-def divergences : List (String × String) := [
+def softF80Divergences : List (String × String) := [
   -- `unnormal+0` itself is allowed: the model classifies the unnormal it returns as a NaN.
   ("fop f80 isnan(unnormal(e=1,i=0))", "soft-float f80 (compiler_rt) treats an unnormal as a number, not NaN (the model and x87: NaN)"),
-  ("fop f80 pseudo-denormal+0", "soft-float f80 keeps the pseudo-denormal encoding; the model (x87) normalizes it"),
-  ("atomic u24 padff", "cmpxchg compares the 4-byte cell, padding byte included: it fails although the u24 values are equal"),
-  ("atomic u40 padff", "cmpxchg compares the 8-byte cell, padding bytes included: it fails although the u40 values are equal"),
-  ("rmw i24 Max e54321 2bcdef", "signed Max of a negative i24 cell and a positive operand keeps the negative cell: the native i24 Max is not the signed maximum (padded width)"),
-  ("rmw i40 Max 8987654321 7890abcdef", "signed Max of a negative i40 cell and a positive operand keeps the negative cell: the native i40 Max is not the signed maximum (padded width)")]
+  ("fop f80 pseudo-denormal+0", "soft-float f80 keeps the pseudo-denormal encoding; the model (x87) normalizes it")]
 
 /-- Zig before 0.16.0: the soft-float `@sqrt` of f80 and f128 on aarch64 is computed at f64
 precision (`sqrt(2)` has 53 correct bits, the rest zero). 0.16.0 rounds correctly. -/
+def divergences : List (String × String) := softF80Divergences
+
+/-- The declared divergences of each version: the soft-float `f80` rows, and before 0.16.0 the
+`f64`-precise `@sqrt`. (Padded-width `cmpxchg` and `.Max`/`.Min` rows are not declared: they
+are `rejectedByTranslator`.) -/
 def divergencesIn (version : String) : List (String × String) :=
-  if version == "0.14.1" || version == "0.15.2" then divergences ++ [
+  if version == "0.17.0" then softF80Divergences
+  else if version == "0.14.1" || version == "0.15.2" then divergences ++ [
     ("fop f80 sqrt(2)", "@sqrt of f80 is correct to f64 precision only (compiler_rt before 0.16.0)"),
     ("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")]
   else divergences
@@ -302,6 +329,32 @@ def parseLayouts (ref : Recorded) (lines : List (List String)) : Except String R
     | _ => pure ()
   return r
 
+/-- An integer representation with padding bits (bit width other than `8 * @sizeOf`): the
+translator rejects a `cmpxchg` and an RMW `.Max`/`.Min` on it (`PADDED_ATOMIC`,
+`CheckCtx.checkPaddedAtomic` in `Air2Lean/Check.lean`), so a divergent native result of exactly
+those operations is not a claim of the model. -/
+def padded (ty : String) : Bool :=
+  match intBits? ty with
+  | some bits => bits != 8 * Zig.intSize bits
+  | none => false
+
+/-- The `atomic` row of a padded type when only its `cmpxchg` results differ: the first
+`cmpxchg` failed (`won = false`, the cell keeps `max - 1`) and every later result follows from
+the cell it actually left. Any other difference stays a failure. -/
+def paddedAtomicCase (bits : Nat) (won lost added swapped loaded : String) : Bool :=
+  let max := 2 ^ bits - 1
+  won == "false" && hexNat? lost == some (max - 1) && hexNat? added == some (max - 1) &&
+    hexNat? swapped == some ((max + 1) % 2 ^ bits) && hexNat? loaded == some 0x5a
+
+/-- A result line that diverges in an operation the translator rejects (`PADDED_ATOMIC`): a
+padded `atomic` row whose only difference is its `cmpxchg` (`paddedAtomicCase`), or an `rmw`
+`.Max`/`.Min` row of a padded type. -/
+def rejectedByTranslator : List String → Bool
+  | ["atomic", name, _, _, _, _, won, lost, added, swapped, loaded, _] =>
+    padded name && (intBits? name).any fun bits => paddedAtomicCase bits won lost added swapped loaded
+  | ["rmw", ty, op, _, _, _, _] => padded ty && (op == "Max" || op == "Min")
+  | _ => false
+
 def main (args : List String) : IO UInt32 := do
   let [triple, path] := args
     | IO.eprintln "usage: Model.lean aarch64-linux-gnu|aarch64-macos-none FILE"; return 2
@@ -323,10 +376,14 @@ def main (args : List String) : IO UInt32 := do
   let r ← match parseLayouts ref lines with
     | .ok r => pure r
     | .error e => throw (IO.userError s!"aarch64-abi: {path}: {e}")
-  unless r == ref do
+  unless r == ref.forVersion version triple do
     IO.eprintln s!"aarch64-abi: {path}: layout lines differ from the kernel-checked {triple} table:\n{repr r}"
     return 1
+  if version == "0.17.0" then
+    for row in layoutDivergences017 triple do
+      IO.println s!"divergence (not a match) {row}: 8-aligned in Zig 0.17.0, 16 in the model"
   let mut matched := 0
+  let mut rejected : List String := []
   let mut diverged : List String := []
   let mut bad : List String := []
   for l in lines do
@@ -354,8 +411,10 @@ def main (args : List String) : IO UInt32 := do
     if key.isEmpty then continue
     match (divergencesIn version).lookup key, ok with
     | none, true => matched := matched + 1
+    | none, false =>
+      if rejectedByTranslator l then rejected := rejected ++ [key]
+      else bad := bad ++ [s!"{key}: the recorded result is not allowed by the model"]
     | some why, false => diverged := diverged ++ [s!"{key}: {why}"]
-    | none, false => bad := bad ++ [s!"{key}: the recorded result is not allowed by the model"]
     | some _, true => bad := bad ++ [s!"{key}: declared divergence now matches (stale)"]
   let keys := lines.filterMap fun l => match l with
     | ["fop", ty, name, _] => some s!"fop {ty} {name}"
@@ -365,11 +424,15 @@ def main (args : List String) : IO UInt32 := do
   for (key, _) in divergencesIn version do
     unless keys.contains key do bad := bad ++ [s!"{key}: declared divergence is not in the file"]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
+  for k in rejected do
+    IO.println s!"rejected by the translator (PADDED_ATOMIC, not a match) {k}: a padded-width \
+      cmpxchg or .Max/.Min"
   for b in bad do IO.eprintln s!"aarch64-abi: {b}"
   unless bad.isEmpty do return 1
   IO.println s!"aarch64-abi: {triple} (Zig {version}): {r.ints.length + r.floats.length + r.vectors.length + r.atomics.length} \
     layout rows equal the kernel-checked table; {matched} float, atomic and synchronization results allowed by the model; \
-    {diverged.length} declared divergences (not counted as matches)"
+    {diverged.length} declared divergences and {rejected.length} padded-width results the translator \
+    rejects (neither counted as matches)"
   return 0
 
 end T04

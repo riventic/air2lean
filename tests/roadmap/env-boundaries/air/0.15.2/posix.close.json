@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,9 +39,15 @@
  },
  "name": "posix.close",
  "module": "std",
+ "src": {
+  "file": "posix.zig",
+  "module": "std",
+  "decl_line": 285
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -51,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 31
   },
   {
    "id": 6,
@@ -73,7 +83,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 18
   },
   {
    "id": 9,
@@ -83,6 +94,7 @@
     "ty": 5,
     "func": "posix.errno__anon_1522",
     "module": "std",
+    "instance_key": "c57b4435c781f8ef64888c1ef324e0248ad8ccb2174d47aee499ab856992825e",
     "noreturn": false
    },
    "args": [
@@ -95,7 +107,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 13
   },
   {
    "id": 19,
@@ -120,7 +133,8 @@
        "id": 12,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 10
+       "line": 10,
+       "column": 18
       },
       {
        "id": 13,
@@ -154,7 +168,8 @@
        "id": 15,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 11
+       "line": 11,
+       "column": 18
       },
       {
        "id": 16,
@@ -175,7 +190,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 12
+     "line": 12,
+     "column": 17
     },
     {
      "id": 18,

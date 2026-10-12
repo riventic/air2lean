@@ -14,6 +14,7 @@ import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 import ZigLean.VC.Rules
+import ZigLean.VecMem
 
 /-!
 # The proof framework in one import (`docs/proof-framework.md`)

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,10 +39,16 @@
  },
  "name": "futures.awaitOwned",
  "module": "root",
+ "src": {
+  "file": "futures.zig",
+  "module": "futures",
+  "decl_line": 34
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -86,7 +95,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,
@@ -122,7 +132,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 10,
@@ -133,7 +144,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 21
   },
   {
    "id": 12,
@@ -162,7 +174,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 21
   },
   {
    "id": 20,
@@ -172,6 +185,7 @@
     "ty": 9,
     "func": "Io.async__anon_26211",
     "module": "std",
+    "instance_key": "73db0818d57bffa09be235d04ad12408cd4cd723c3f9182fb63816b930edd7da",
     "noreturn": false,
     "comptime_fn": "futures.fill",
     "comptime_fn_module": "root"
@@ -213,7 +227,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 12
   },
   {
    "id": 25,
@@ -238,7 +253,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 27,
@@ -254,7 +270,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 29,

@@ -87,7 +87,7 @@ private def functionDef (fc : FCtx) (f : Func) : String :=
     let fields := stack.toList.map fun (id, field, _, _) => s!"{field} := s{id}"
     s!"\{ (default : {fc.localsName}) with {String.intercalate ", " fields} }"
   let action := s!"({doBlock (statements fc #[] f.body.toList)} : Zig.TimedBody.TM {fc.localsName} {fc.exitName})"
-  -- Reverse allocation order: every free is of the top of the stack (MM-16).
+  -- Reverse allocation order: every free is of the top of the stack (MM-18).
   let frees := stack.toList.reverse.map fun (id, _, _, _) =>
     s!"  Zig.TimedSched.Program.liftMem (Zig.free s{id})"
   let ret := if fc.tyOfId f.ret == .void then "  | .ret => pure ()" else "  | .ret value => pure value"

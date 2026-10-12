@@ -70,7 +70,7 @@ theorem mul_unsigned_of_lt {a b : BitVec n} (h : a.toNat * b.toNat < 2 ^ n) :
 theorem subSat_unsigned_toNat (a b : BitVec 64) : (subSat false a b).toNat = a.toNat - b.toNat := by
   have ha := a.isLt
   have hb := b.isLt
-  simp only [subSat, clamp, val, Bool.false_eq_true, ↓reduceIte]
+  simp only [subSat, clamp, intLo_unsigned, intHi_unsigned, val, Bool.false_eq_true, ↓reduceIte]
   rw [BitVec.toNat_ofInt]
   have h64 : ((2 : Int) ^ 64) = 18446744073709551616 := by rfl
   have h64' : (2 : Nat) ^ 64 = 18446744073709551616 := by rfl
@@ -83,7 +83,7 @@ theorem intCast_unsigned_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
   have hfit : (a.toNat : Int) ≤ 2 ^ m - 1 := by
     have : ((2 ^ m : Nat) : Int) = 2 ^ m := by norm_cast
     omega
-  simp only [intCast, val, Bool.false_eq_true, ↓reduceIte, Int.natCast_nonneg, hfit, and_self]
+  simp only [intCast, intLo_unsigned, intHi_unsigned, val, Bool.false_eq_true, ↓reduceIte, Int.natCast_nonneg, hfit, and_self]
   rw [BitVec.ofInt_natCast]
 
 /-! ## Range bounds -/

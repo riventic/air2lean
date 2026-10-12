@@ -160,11 +160,11 @@ The same terms as the 64-bit operations, for an index or count of any width. Eac
 
 /-- `Zig.index` for a `usize` of `n` bits. -/
 @[inline] def indexOf {α : Type} {n : Nat} (a : Array α) (i : BitVec n) : Result α :=
-  if h : i.toNat < a.size then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < a.size then pure a[i.toNat] else throw .illegal
 
 /-- `Zig.vindex` for a `usize` of `n` bits. -/
 @[inline] def vindexOf {α : Type} {k n : Nat} (a : Vector α k) (i : BitVec n) : Result α :=
-  if h : i.toNat < k then pure a[i.toNat] else throw .outOfBounds
+  if h : i.toNat < k then pure a[i.toNat] else throw .illegal
 
 /-- `Zig.len` as a `usize` of `n` bits. An array of a pure function's `[]const T` comes from
 `readSliceOf`, so its size is a `usize` of the target. -/

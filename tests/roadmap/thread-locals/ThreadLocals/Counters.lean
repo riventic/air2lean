@@ -751,7 +751,7 @@ theorem main_spec (d : Nat) :
   refine WP.pure' ?_
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
-  -- In reverse order of allocation (MM-16): `b`, then `a`.
+  -- In reverse order of allocation (MM-18): `b`, then `a`.
   have F' := sep_left_comm (sep_assoc (sep_comm (sep_left_comm (sep_assoc F₁₇))))
   refine WP.bind (WP.liftMem_upd (free_front (R := cnt 8 ∗ u32At s0 Aa .stack 9) (enc_u32 9) hb0
     (by decide)) ho₁₇ hc₁₇ htl₁₇ F' fun _ m₁₈ h₁₈ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)

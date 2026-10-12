@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,9 +118,15 @@
  },
  "name": "layout.numInt",
  "module": "root",
+ "src": {
+  "file": "layout.zig",
+  "module": "layout",
+  "decl_line": 293
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -158,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 5,
@@ -241,6 +251,7 @@
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__func_733",
         "module": "std",
+        "instance_key": "e50d34c3f104250a39634e58b006f2a3adc61b847203b755d2d0d5b7bdc25433",
         "noreturn": true
        },
        "args": [
@@ -286,7 +297,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 19,

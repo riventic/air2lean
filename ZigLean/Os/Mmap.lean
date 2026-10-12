@@ -158,7 +158,7 @@ def mremapFill (P cur n : Nat) : Array Byte :=
 /-- Mapping `b` (`blk`, live from `lo`) can grow in place to `len` bytes of pages: the range
 `[blk.addr + lo, blk.addr + lo + len)` ends at or below `L` (the address space,
 `Os.Target.addrLimit`) and is clear of every other live block and of every stack reserve
-(`Mem.reservesFree`, MM-16). -/
+(`Mem.reservesFree`, MM-18). -/
 def Mem.mappingRoom (m : Mem) (L : Nat) (b : BlockId) (blk : Block) (lo len : Nat) : Bool :=
   decide (blk.addr + lo + len ≤ L) &&
     m.blocks.zipIdx.all (fun (o, j) => j == b || o.clearOf (blk.addr + lo) len) &&

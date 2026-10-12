@@ -6,7 +6,7 @@
 // E1': the inlined callee's local and a later local of the caller share one address.
 // E2:  sibling calls reuse a dead frame's addresses.
 // E3:  a spawned thread's local lies in an anonymous mapping that is not the main stack (Linux:
-//      the mapping that std.Thread.spawn mmaps, MM-17).
+//      the mapping that std.Thread.spawn mmaps, MM-19).
 const std = @import("std");
 const builtin = @import("builtin");
 

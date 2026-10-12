@@ -9,7 +9,7 @@
 # aarch64-linux and runs it in the local-CI images (--platform linux/amd64 under Rosetta, native
 # linux/arm64). Every run must show E1' (an inlined callee's local and a later local of its caller
 # share an address) and E2 (sibling calls share a slot), and on Linux E3 (a spawned thread's local
-# lies in an anonymous mapping, MM-17). E1 (inlined callee above its caller) is printed: it holds
+# lies in an anonymous mapping, MM-19). E1 (inlined callee above its caller) is printed: it holds
 # on most rows and not on aarch64-linux 0.14.1/0.15.2, so the order is not fixed either way. The
 # model reproduces these layouts under some placement (Regressions.lean `e1_native_layout`).
 set -euo pipefail

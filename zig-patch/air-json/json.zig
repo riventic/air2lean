@@ -20,6 +20,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const Sema = @import("../Sema.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 const Identity = @import("identity.zig");
@@ -94,6 +95,10 @@ const Compat = struct {
         if (v16) try file.setLength(pt.zcu.comp.io, 0) else try file.setEndPos(0);
     }
 
+    fn deleteFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !void {
+        if (v16) try dir.deleteFile(pt.zcu.comp.io, name) else try dir.deleteFile(name);
+    }
+
     fn closeFile(pt: Zcu.PerThread, file: File) void {
         if (v16) file.close(pt.zcu.comp.io) else file.close();
     }
@@ -122,6 +127,15 @@ const Compat = struct {
             try s.fw.interface.flush();
         }
     };
+
+    /// `std.builtin.StackTrace` (`std.lang` in 0.17.0), or null while it is not resolved.
+    fn stackTraceType(zcu: *Zcu) ?Type {
+        const index = if (v17)
+            zcu.std_lang_decl_values.get(.StackTrace)
+        else
+            zcu.builtin_decl_values.get(.StackTrace);
+        return if (index == .none) null else Type.fromInterned(index);
+    }
 
     /// `Air.extra` is a slice in 0.14.1 and an array list in 0.15.2+.
     fn extra(air: *const Air) []const u32 {
@@ -191,6 +205,35 @@ const Compat = struct {
     /// `struct_field_val`, renamed `agg_field_val` in 0.17.0 (`ty_pl`, payload `StructField`).
     fn isFieldVal(tag: Air.Inst.Tag) bool {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
+    }
+
+    /// The `@errorFromInt` bound check: `cmp_lt_errors_len`, renamed `cmp_lte_errors_len` in
+    /// 0.16.0 (both compare `<=` with the error count). A `un_op`.
+    fn isErrorsLen(tag: Air.Inst.Tag) bool {
+        return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
+    }
+
+    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.0's
+    /// `int_from_error`/`error_from_int`, the errors_len check, and 0.14.1's `error_name`, which
+    /// indexes the name table with the sign-extended code.
+    fn isErrorIntTag(tag: Air.Inst.Tag) bool {
+        return isErrorsLen(tag) or if (v17)
+            tag == .int_from_error or tag == .error_from_int
+        else if (v14)
+            tag == .error_name
+        else
+            false;
+    }
+
+    /// The `bitcast` that before 0.17.0 also lowers `@intFromError`/`@errorFromInt`.
+    fn isBitcast(tag: Air.Inst.Tag) bool {
+        return if (v17) false else tag == .bitcast;
+    }
+
+    /// `vector_store_elem` (0.14.1, 0.15.2; 0.16.0 rejects a runtime vector index in Sema): a
+    /// store of one lane at a runtime index, `v[i] = x` through a vector pointer.
+    fn isVectorStoreElem(tag: Air.Inst.Tag) bool {
+        return if (v16) false else tag == .vector_store_elem;
     }
 
     /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
@@ -538,6 +581,73 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
     return buffer[0 .. end + 5];
 }
 
+/// Set once an exported function converts between errors and integers (`convertsErrorInt`):
+/// `@intFromError`, `@errorFromInt` and its `errors_len` check mean the compilation's error
+/// numbering, which is final only when analysis ends, so `dumpErrorTable` writes it then.
+var error_ints_used = std.atomic.Value(bool).init(false);
+
+/// The file of the error numbering (`docs/air-json.md` §Error table). Not a `.json` name: it
+/// describes no function.
+const error_table_name = "error-table.air2lean";
+
+/// After analysis (`<version>/hook.patch`, in `Compilation.update`): if an exported function
+/// converts between errors and integers, write the compilation's global error set in code
+/// order (code `i + 1` is `names[i]`) with the error integer's width, beside the function files.
+pub fn dumpErrorTable(pt: Zcu.PerThread) void {
+    const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
+    var dir = Compat.openDir(pt, dir_path) catch |err| {
+        std.log.warn("air2lean: cannot open {s}: {s}", .{ dir_path, @errorName(err) });
+        return;
+    };
+    defer Compat.closeDir(pt, &dir);
+    // Without a conversion, a table an earlier compilation left in the directory must not
+    // describe these files.
+    if (!error_ints_used.load(.monotonic)) {
+        Compat.deleteFile(pt, dir, error_table_name) catch |err| if (err != error.FileNotFound)
+            std.log.warn("air2lean: cannot remove a stale error table: {s}", .{@errorName(err)});
+        return;
+    }
+    const file = openErrorTable(pt, dir) catch |err| {
+        std.log.warn("air2lean: no error table: {s}", .{@errorName(err)});
+        return;
+    };
+    defer Compat.closeFile(pt, file);
+    var sink: Compat.Sink = undefined;
+    sink.init(pt, file);
+    writeErrorTable(&sink.j, pt.zcu) catch |err| {
+        std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+        return;
+    };
+    sink.flush() catch |err| std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
+}
+
+/// The error table file, created or (a re-export into the same directory) truncated.
+fn openErrorTable(pt: Zcu.PerThread, dir: Compat.Dir) !Compat.File {
+    return Compat.createFile(pt, dir, error_table_name) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+        const file = try Compat.openExistingFile(pt, dir, error_table_name);
+        errdefer Compat.closeFile(pt, file);
+        try Compat.truncateFile(pt, file);
+        return file;
+    };
+}
+
+fn writeErrorTable(j: *Compat.Json, zcu: *Zcu) Error!void {
+    const ip = &zcu.intern_pool;
+    try j.beginObject();
+    try j.objectField("schema");
+    try j.write(12);
+    try j.objectField("zig_version");
+    try j.write(build_options.version);
+    try j.objectField("error_set_bits");
+    try j.write(zcu.errorSetBits());
+    try j.objectField("names");
+    try j.beginArray();
+    for (ip.global_error_set.getNamesFromMainThread()) |name| try j.write(name.toSlice(ip));
+    try j.endArray();
+    try j.endObject();
+}
+
 // Exclusive creation protects fresh files. Repeated analysis may export the same
 // function again: permit this only after validating its existing full JSON name,
 // without truncating first. The advisory lock coordinates cooperating exporters.
@@ -728,6 +838,14 @@ const W = struct {
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        // The illegal behaviours that the patched Sema (`<version>/hook.patch`) lowers to `unreach`
+        // where it has no safety check; absent without that patch.
+        if (@hasDecl(Sema, "air_json_unchecked_ib")) {
+            try w.field("unchecked_ib");
+            try w.j.beginArray();
+            for (Sema.air_json_unchecked_ib) |name| try w.j.write(name);
+            try w.j.endArray();
+        }
         try w.field("profile");
         try w.writeProfile(owner_nav);
         try w.field("name");
@@ -739,12 +857,23 @@ const W = struct {
         try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
-        const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
+        const fn_info = ip.indexToKey(fn_ty.toIntern()).func_type;
+        const param_types = fn_info.param_types.get(ip);
         w.param_types = param_types;
         for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
         try w.j.endArray();
+        // The `noalias` parameters, as indices into `params` (the LLVM backend's `noalias`
+        // argument attribute). Only the first 32 parameters can be `noalias`.
+        try w.field("noalias");
+        try w.j.beginArray();
+        for (0..@min(param_types.len, 32)) |i| {
+            if (@as(u1, @truncate(fn_info.noalias_bits >> @as(u5, @intCast(i)))) != 0) try w.j.write(i);
+        }
+        try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
+        // The hidden error-return-trace parameter (§Error return trace).
+        if (w.takesErrTrace(fn_ty)) try w.writeErrTrace();
         // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
         // program can resolve to (docs/air-json.md §Extern calls).
         if (w.exportedName(owner_nav)) |symbol| {
@@ -783,6 +912,29 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// Whether a function of type `fn_ty` (or a pointer to one) takes the error return trace as a
+    /// hidden parameter: the backends' rule (`codegen/llvm.zig`, `fn_info.cc == .auto and
+    /// comp.config.any_error_tracing`), not the per-module `error_tracing` flag.
+    fn takesErrTrace(w: *W, fn_ty: Type) bool {
+        const zcu = w.pt.zcu;
+        const ty = if (fn_ty.zigTypeTag(zcu) == .pointer) fn_ty.childType(zcu) else fn_ty;
+        const info = zcu.typeToFunc(ty) orelse return false;
+        return info.cc == .auto and zcu.comp.config.any_error_tracing;
+    }
+
+    /// The type `?*StackTrace` of the hidden error-return-trace parameter as `err_trace`, or the
+    /// `err_trace_unresolved` marker while `StackTrace` is not resolved.
+    fn writeErrTrace(w: *W) Error!void {
+        const stack_trace = Compat.stackTraceType(w.pt.zcu) orelse {
+            try w.field("err_trace_unresolved");
+            try w.j.write(true);
+            return;
+        };
+        const ptr = try w.pt.singleMutPtrType(stack_trace);
+        try w.field("err_trace");
+        try w.writeTypeRef(try w.pt.optionalType(ptr.toIntern()));
+    }
+
     /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
     /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
     /// unbound, which the translator rejects.
@@ -819,6 +971,22 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
+    /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
+    /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Also
+    /// 0.14.1's `error_name`, which indexes the name table with the sign-extended code: only the
+    /// error count bounds the codes it reads. Tags are compared by name: not every version has
+    /// each.
+    fn convertsErrorInt(w: *W, tag: Air.Inst.Tag, inst: Air.Inst.Index) bool {
+        if (Compat.isErrorIntTag(tag)) return true;
+        if (!Compat.isBitcast(tag)) return false;
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        const result = w.air.typeOfIndex(inst, ip).zigTypeTag(zcu) == .error_set;
+        const operand = w.air.typeOf(w.data(inst).ty_op.operand, ip).zigTypeTag(zcu) == .error_set;
+        return result != operand;
+    }
+
     fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
         return w.air.instructions.items(.data)[@intFromEnum(inst)];
     }
@@ -849,6 +1017,9 @@ const W = struct {
         try w.j.write(@intFromEnum(inst));
         try w.field("tag");
         try w.j.write(@tagName(tag));
+        // Once set, the flag stays: skip the type queries for the rest of the compilation.
+        if (!error_ints_used.load(.monotonic) and w.convertsErrorInt(tag, inst))
+            error_ints_used.store(true, .monotonic);
         switch (tag) {
             .inferred_alloc, .inferred_alloc_comptime => {},
             else => {
@@ -1063,6 +1234,22 @@ const W = struct {
                 try w.field("callee");
                 try w.writeRef(pl_op.operand);
                 try w.writeArgs(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.args_len]));
+                // The callee also receives the caller's error return trace (§Error return trace).
+                if (w.takesErrTrace(w.air.typeOf(pl_op.operand, ip))) try w.writeErrTrace();
+            },
+            // Error return tracing (`docs/air-json.md` §Error return trace): the current trace,
+            // its replacement, a load of one of its fields, and the return address.
+            .err_return_trace, .ret_addr => {},
+            .set_err_return_trace => try w.writeArgs(&.{w.data(inst).un_op}),
+            .save_err_return_trace_index => {
+                const ty_pl = w.data(inst).ty_pl;
+                const struct_ty = Compat.tyPlType(ty_pl);
+                try w.field("index");
+                try w.j.write(ty_pl.payload);
+                // The pointer to that field that the backends load through
+                // (`airSaveErrReturnTraceIndex`): the field at its natural alignment.
+                try w.field("ptr_ty");
+                try w.writeTypeRef(try w.pt.singleMutPtrType(struct_ty.fieldType(ty_pl.payload, zcu)));
             },
             .dbg_var_ptr, .dbg_var_val, .dbg_arg_inline => {
                 const pl_op = w.data(inst).pl_op;
@@ -1175,6 +1362,14 @@ const W = struct {
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             } else if (Compat.isFieldVal(tag)) {
                 try w.writeStructField(inst);
+            } else if (Compat.isErrorsLen(tag)) {
+                try w.writeArgs(&.{w.data(inst).un_op});
+            } else if (!Compat.v16 and Compat.isVectorStoreElem(tag)) {
+                // (`!Compat.v16` is comptime: 0.16.0+ has no `vector_store_elem` data field.)
+                // The vector pointer, the lane index and the lane value.
+                const d = w.data(inst).vector_store_elem;
+                const b = w.air.extraData(Air.Bin, d.payload).data;
+                try w.writeArgs(&.{ d.vector_ptr, b.lhs, b.rhs });
             } else if (!Compat.v14) {
                 // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into
                 // `shuffle_one` (single source) and `shuffle_two` (two sources). The two forms
@@ -1539,6 +1734,36 @@ const W = struct {
         return ty.abiSize(zcu) != 0;
     }
 
+    /// The payload offset of field `index` of the `auto` union `agg`, when the compiler's
+    /// (`Type.structFieldOffset`, also `lowerPtr`'s) equals the model's (`unionLayout` in
+    /// `Air2Lean/Check.lean`): the exported tag or safety tag and the natural size and alignment
+    /// of every field that is not `noreturn`, the one with the larger alignment first, the tag if
+    /// equal. Otherwise (explicit field alignment, an untagged `auto` union) `null`.
+    fn unionPayloadOffset(w: *W, agg: Type, field_index: u64) ?u64 {
+        const zcu = w.pt.zcu;
+        if (agg.containerLayout(zcu) != .auto or !sizedLayout(zcu, agg)) return null;
+        const names_ty = agg.unionTagTypeHypothetical(zcu);
+        if (field_index >= names_ty.enumFieldCount(zcu)) return null;
+        const index: usize = @intCast(field_index);
+        if (agg.unionFieldTypeByIndex(index, zcu).isNoReturn(zcu)) return null;
+        const tag = agg.unionTagType(zcu) orelse Compat.unionSafetyTag(zcu, agg) orelse return null;
+        var payload_align: u64 = 1;
+        for (0..names_ty.enumFieldCount(zcu)) |i| {
+            const fty = agg.unionFieldTypeByIndex(i, zcu);
+            if (fty.isNoReturn(zcu)) continue;
+            if (!Compat.hasLayout(zcu, fty) or fty.comptimeOnly(zcu)) return null;
+            payload_align = @max(payload_align, fty.abiAlignment(zcu).toByteUnits() orelse return null);
+        }
+        const tag_size = tag.abiSize(zcu);
+        const tag_align = tag.abiAlignment(zcu).toByteUnits() orelse return null;
+        const model: u64 = if (tag_align >= payload_align)
+            std.mem.alignForward(u64, tag_size, payload_align)
+        else
+            0;
+        const compiler = agg.structFieldOffset(index, zcu);
+        return if (compiler == model) compiler else null;
+    }
+
     /// Resolve addresses only; this does not read or initialize an optional/error payload.
     /// Canonical parent pointers are const/volatile/allowzero align(1) in InternPool in
     /// every supported version. Their volatile bit is address metadata, not an access.
@@ -1612,6 +1837,11 @@ const W = struct {
                                 return .{ .unsupported = "field" };
                             break :blk agg.structFieldOffset(@intCast(f.index), zcu);
                         },
+                        // Sema's `ptrField` keeps an `extern`/`packed` union's field pointer as
+                        // its parent pointer, so only an `auto` (tagged or bare) union is a
+                        // `field` base: its payload offset.
+                        .@"union" => w.unionPayloadOffset(agg, f.index) orelse
+                            return .{ .unsupported = "union_field" },
                         else => return .{ .unsupported = "field" },
                     },
                     .opt_payload => blk: {

@@ -167,6 +167,21 @@ def check_generic_instance(binary, work):
     assert report['unaffected'] == sorted(r['source'] for r in old['functions']), report
 
 
+def import_closure(root):
+    """Modules of `ZigLean` reachable from `import ZigLean`, by reading the checkout's import lines."""
+    seen, todo = set(), [root]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        for line in (ROOT / (name.replace('.', '/') + '.lean')).read_text().splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0] == 'import' and parts[1].split('.')[0] == 'ZigLean':
+                todo.append(parts[1])
+    return seen
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('translator', type=Path)
@@ -185,6 +200,15 @@ def main():
             source = ROOT / (module.replace('.', '/') + '.lean')
             assert hashlib.sha256(source.read_bytes()).hexdigest() == sha, \
                 f'{module}: translator built from other sources than this checkout'
+        # The runtime revision is the import closure of `import ZigLean`, hashed from this checkout.
+        runtime = fp.load_sidecar(work / 'recursion-base.source-map.json')['runtime']
+        rt_modules = dict(runtime['modules'])
+        assert 'ZigLean.Basic' in rt_modules and 'ZigLean' in rt_modules, sorted(rt_modules)[:5]
+        for module, sha in rt_modules.items():
+            source = ROOT / (module.replace('.', '/') + '.lean')
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == sha, \
+                f'{module}: runtime built from other sources than this checkout'
+        assert sorted(rt_modules) == sorted(import_closure('ZigLean')), 'runtime modules differ from the import closure'
         # A sidecar bound to another module's Lean output is rejected as stale.
         stale = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'index',
                                 str(work / 'recursion-base.source-map.json'),

@@ -1,0 +1,301 @@
+{
+ "schema": 1,
+ "note": "T05 native/WASM correspondence (docs/research/T05.md). Checked by scripts/wasm-correspondence.py check.",
+ "source": "tests/roadmap/wasm-correspondence/kernels.zig",
+ "modules": {
+  "pointer_width": "tests/roadmap/pointer-width/pointer_width.zig"
+ },
+ "optimize": "ReleaseSafe",
+ "targets": {
+  "wasm32-freestanding": {
+   "pointer_bits": 32,
+   "model_target": "wasm32-freestanding"
+  },
+  "x86_64-linux": {
+   "pointer_bits": 64,
+   "model_target": "x86_64-linux"
+  },
+  "aarch64-macos": {
+   "pointer_bits": 64,
+   "model_target": "aarch64-macos"
+  }
+ },
+ "matrix": {
+  "0.17.0": [
+   "wasm32-freestanding",
+   "x86_64-linux",
+   "aarch64-macos"
+  ],
+  "0.16.0": [
+   "wasm32-freestanding",
+   "x86_64-linux",
+   "aarch64-macos"
+  ],
+  "0.15.2": [
+   "wasm32-freestanding",
+   "x86_64-linux"
+  ],
+  "0.14.1": [
+   "wasm32-freestanding",
+   "x86_64-linux"
+  ]
+ },
+ "domains": {
+  "u64": {
+   "edges": [
+    "0",
+    "1",
+    "2",
+    "0x7f",
+    "0x7fffffff",
+    "0x80000000",
+    "0xfffffffe",
+    "0xffffffff",
+    "0x100000000",
+    "0x3fffffff",
+    "0x40000000",
+    "0x4000000000000000",
+    "0x7fffffffffffffff",
+    "0x8000000000000000",
+    "0xfffffffffffffffe",
+    "0xffffffffffffffff"
+   ]
+  },
+  "shift": {
+   "edges": [
+    "0",
+    "1",
+    "31",
+    "32",
+    "63",
+    "64",
+    "65",
+    "127"
+   ],
+   "random_mod": 80
+  },
+  "count": {
+   "edges": [
+    "0",
+    "1",
+    "2",
+    "7",
+    "31",
+    "32",
+    "33",
+    "64"
+   ],
+   "random_mod": 1000
+  },
+  "f64": {
+   "edges": [
+    "0x0",
+    "0x8000000000000000",
+    "0x3ff0000000000000",
+    "0xbff0000000000000",
+    "0x4000000000000000",
+    "0x3fe0000000000000",
+    "0x1",
+    "0x10000000000000",
+    "0x7fefffffffffffff",
+    "0x7ff0000000000000",
+    "0xfff0000000000000",
+    "0x7ff8000000000000",
+    "0x7ff4000000000000",
+    "0xfff8000000000000",
+    "0x400921fb54442d18",
+    "0x43e0000000000000",
+    "0xc3e0000000000000",
+    "0x43dfffffffffffff",
+    "0x4415af1d78b58c40"
+   ]
+  },
+  "f32": {
+   "edges": [
+    "0x0",
+    "0x80000000",
+    "0x3f800000",
+    "0xbf800000",
+    "0x1",
+    "0x800000",
+    "0x7f7fffff",
+    "0x7f800000",
+    "0xff800000",
+    "0x7fc00000",
+    "0x7fa00000",
+    "0x40490fdb",
+    "0x33800000",
+    "0x4b800000"
+   ],
+   "random_mod": 4294967296
+  }
+ },
+ "kernels": {
+  "des_time_add32": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64"
+   ],
+   "why": "u32 arithmetic and an error union of fixed width: no pointer-width, float or ABI dependence."
+  },
+  "des_time_add64": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64"
+   ],
+   "why": "u64 arithmetic: wasm32 has native i64 operations; no pointer-width dependence."
+  },
+  "des_event_before": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64",
+    "u64",
+    "u64"
+   ],
+   "edge_cap": 300,
+   "random": 200,
+   "why": "integer comparisons only."
+  },
+  "des_queue_drain": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "count"
+   ],
+   "why": "the heap indices are usize but bounded by 32, below both widths' limits; the array is a stack local."
+  },
+  "int_mix": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64"
+   ],
+   "why": "fixed-width wrapping arithmetic and bit builtins; u128 is lowered by both backends exactly."
+  },
+  "int_divmod": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64"
+   ],
+   "why": "i64 division: division by zero and minInt / -1 are safety panics on both targets."
+  },
+  "int_add_checked": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "u64"
+   ],
+   "why": "u64 overflow is a safety panic on both targets."
+  },
+  "int_shl_exact": {
+   "class": "exact",
+   "domains": [
+    "u64",
+    "shift"
+   ],
+   "why": "a shift amount >= 64 fails the u6 cast (a safety panic) on both targets."
+  },
+  "usize_bits": {
+   "class": "target-specific",
+   "domains": [],
+   "expect": "bits",
+   "why": "@bitSizeOf(usize) is the profile's pointer width."
+  },
+  "pw_byte_count": {
+   "class": "target-specific",
+   "domains": [
+    "u64"
+   ],
+   "expect": "NONE if a >= 2 ** bits or 4 * a >= 2 ** bits else 4 * a",
+   "why": "pointer_width.byteCount overflows at 2^bits (PRF-04): theorems byteCount_w32 and byteCount_x64."
+  },
+  "pw_succ": {
+   "class": "target-specific",
+   "domains": [
+    "u64"
+   ],
+   "expect": "TRAP if a % 2 ** bits == 2 ** bits - 1 else a % 2 ** bits + 1",
+   "why": "pointer_width.succ overflows at 2^bits - 1 (PRF-04): theorems succ_w32 and succ_x64."
+  },
+  "f64_arith": {
+   "class": "tolerated",
+   "format": "f64",
+   "ulp": 0,
+   "domains": [
+    "f64",
+    "f64"
+   ],
+   "why": "IEEE-754 binary64 +, *, / are correctly rounded on both; a NaN's sign and payload are not specified (wasm32 may canonicalize)."
+  },
+  "f64_sqrt": {
+   "class": "tolerated",
+   "format": "f64",
+   "ulp": 0,
+   "domains": [
+    "f64"
+   ],
+   "why": "sqrt is correctly rounded (sqrtsd, fsqrt, f64.sqrt); NaN sign and payload are not specified."
+  },
+  "f32_fma": {
+   "class": "tolerated",
+   "format": "f32",
+   "ulp": 0,
+   "domains": [
+    "f32",
+    "f32",
+    "f32"
+   ],
+   "random": 200,
+   "why": "@mulAdd rounds once on both (an instruction natively, compiler_rt fmaf on wasm32); NaN sign and payload are not specified."
+  },
+  "f64_sin": {
+   "class": "tolerated",
+   "format": "f64",
+   "ulp": 1,
+   "domains": [
+    "f64"
+   ],
+   "random": 200,
+   "why": "@sin is a libm call (compiler_rt, or the platform libm on macOS): faithfully rounded, not correctly rounded (MTH-02)."
+  },
+  "f64_to_i64": {
+   "class": "exact",
+   "domains": [
+    "f64"
+   ],
+   "random": 200,
+   "why": "truncation toward zero is exact, and an out-of-range operand is a safety panic on both (0.15.2 on). A NaN (every version), and an out-of-range operand before 0.15.2 (no safety check), are illegal behaviour that safe mode does not detect (docs/floats.md): x86_64 returns minInt, aarch64 and wasm32 return 0 or saturate.",
+   "illegal": "(a >> 52) & 2047 == 2047 and a & (2 ** 52 - 1) != 0 or zig < 15 and (a >> 52) & 2047 >= 1086 and a != 0xc3e0000000000000"
+  }
+ },
+ "claims": [
+  {
+   "kernel": "pw_byte_count",
+   "target": "wasm32-freestanding",
+   "theorem": "PointerWidth.Proofs.byteCount_w32",
+   "file": "tests/roadmap/pointer-width/PointerWidth/Proofs.lean"
+  },
+  {
+   "kernel": "pw_byte_count",
+   "target": "x86_64-linux",
+   "theorem": "PointerWidth.Proofs.byteCount_x64",
+   "file": "tests/roadmap/pointer-width/PointerWidth/Proofs.lean"
+  },
+  {
+   "kernel": "pw_succ",
+   "target": "wasm32-freestanding",
+   "theorem": "PointerWidth.Proofs.succ_w32",
+   "file": "tests/roadmap/pointer-width/PointerWidth/Proofs.lean"
+  },
+  {
+   "kernel": "pw_succ",
+   "target": "x86_64-linux",
+   "theorem": "PointerWidth.Proofs.succ_x64",
+   "file": "tests/roadmap/pointer-width/PointerWidth/Proofs.lean"
+  }
+ ]
+}

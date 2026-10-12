@@ -34,9 +34,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -211,6 +211,12 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "List.toArray"
        },
        {
@@ -230,6 +236,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -298,6 +306,18 @@
    "opaque_dependencies": [
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Logic",
+    "ZigLean.Conc.Progress",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
+   ],
    "allowed": true
   },
   {
@@ -360,6 +380,9 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Conc.Basic"
+   ],
    "allowed": true
   },
   {
@@ -393,9 +416,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -545,6 +568,12 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "List.toArray"
        },
        {
@@ -564,6 +593,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -632,6 +663,18 @@
    "opaque_dependencies": [
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Logic",
+    "ZigLean.Conc.Progress",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
+   ],
    "allowed": true
   },
   {
@@ -665,9 +708,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -820,6 +863,12 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "List.toArray"
        },
        {
@@ -839,6 +888,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -914,6 +965,18 @@
    "opaque_dependencies": [
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Logic",
+    "ZigLean.Conc.Progress",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
+   ],
    "allowed": true
   },
   {
@@ -947,9 +1010,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -1110,6 +1173,12 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "List.toArray"
        },
        {
@@ -1129,6 +1198,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -1203,6 +1274,18 @@
    },
    "opaque_dependencies": [
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Logic",
+    "ZigLean.Conc.Progress",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
    ],
    "allowed": true
   },
@@ -1343,6 +1426,20 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Conc",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Seq",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -1407,6 +1504,20 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -1488,6 +1599,24 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Conc",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Seq",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -1648,6 +1777,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -1739,6 +1877,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Triple"
+   ],
    "allowed": true
   },
   {
@@ -1804,6 +1951,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -1967,6 +2123,17 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Bounded",
+    "ZigLean.Sep.Cost",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -2032,6 +2199,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -2194,6 +2370,18 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Bounded",
+    "ZigLean.Sep.Cost",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Loop",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -2259,6 +2447,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -2353,6 +2550,16 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -2416,6 +2623,20 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -2511,6 +2732,17 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -2623,6 +2855,17 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -2687,6 +2930,20 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -2762,6 +3019,20 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -2874,6 +3145,17 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -2938,6 +3220,20 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -3076,6 +3372,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -3205,6 +3506,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -3328,6 +3634,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -3453,6 +3764,16 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total",
+    "ZigLean.Sep.Triple"
+   ],
    "allowed": true
   },
   {
@@ -3570,6 +3891,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -3640,6 +3970,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -3748,6 +4087,16 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total",
+    "ZigLean.Sep.Triple"
+   ],
    "allowed": true
   },
   {
@@ -3814,6 +4163,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -3889,6 +4247,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -4048,6 +4415,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -4142,6 +4514,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -4208,6 +4589,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -4364,6 +4754,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -4512,6 +4907,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -4657,6 +5057,11 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic"
+   ],
    "allowed": true
   },
   {
@@ -4767,6 +5172,16 @@
    "opaque_dependencies": [
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Conc.Own",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -4875,6 +5290,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   },
   {
@@ -4941,6 +5365,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Witness"
+   ],
    "allowed": true
   },
   {
@@ -5087,6 +5520,12 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Sep.Cost"
+   ],
    "allowed": true
   },
   {
@@ -5273,6 +5712,16 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Bounded",
+    "ZigLean.Sep.Cost",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -5307,9 +5756,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -5407,6 +5856,16 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
+   ],
    "allowed": true
   },
   {
@@ -5440,9 +5899,9 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
-    "Zig.StackState",
     "Zig.ThreadId",
     "Zig.ThreadRec",
     "Zig.VClock",
@@ -5607,6 +6066,12 @@
         "closed": "Zig.Env.Host.mk"
        },
        {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
         "closed": "List.toArray"
        },
        {
@@ -5626,6 +6091,8 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
+       "default",
        "default",
        "default",
        "default",
@@ -5692,6 +6159,16 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Total",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Enc",
+    "ZigLean.Mem.Thread"
+   ],
    "allowed": true
   },
   {
@@ -5803,6 +6280,18 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -5871,6 +6360,22 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -5950,6 +6455,22 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -6062,6 +6583,18 @@
     "Lean.opaqueId",
     "String.Internal.append"
    ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
    "allowed": true
   },
   {
@@ -6130,6 +6663,22 @@
    "opaque_dependencies": [
     "Lean.opaqueId",
     "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Mmap",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "allowed": true
   },
@@ -6213,6 +6762,15 @@
     }
    },
    "opaque_dependencies": [],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Heap",
+    "ZigLean.Sep.Total"
+   ],
    "allowed": true
   }
  ],

@@ -150,7 +150,7 @@ def remapBytes (bs : Array Byte) (n : Nat) : Array Byte :=
 
 /-- Block `b` (`blk`) can grow in place to `n` bytes: the grown range `[blk.addr, blk.addr + n)`
 stays below 2^64 and is disjoint from every other live block (`docs/address-placement.md`) and
-from every stack reserve (`Mem.reservesFree`, MM-16). The only constraint is disjointness, as for
+from every stack reserve (`Mem.reservesFree`, MM-18). The only constraint is disjointness, as for
 a new block (`Mem.placeOk`): whether the space is free follows from the placement of the other
 blocks, not from an allocation order. -/
 def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=

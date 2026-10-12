@@ -4,7 +4,7 @@
 
 Translate a subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** supports a bounded subset of Zig 0.16.0, 0.15.2 and 0.14.1; Zig 0.17.0 is in qualification ([CI scope](docs/zig-0.17-ci.md)) and 0.16.0 stays the default. The original Outcome closeout’s Zig 0.16.0 differential report records 87,064 cases: 85,987 exact matches, 497 illegal cases and 580 unspecified cases, with zero setup failures or mismatches; one example and three functions are skipped. The report is complete with `qualified=false`; these totals belong to that original scope, not a later focused subset, and do not establish compiler/native correspondence or proof applicability. Machine-checked proofs have their stated domains and exclusions. The generated [support matrix](docs/support-matrix.md) is the current summary of versions, examples, inventory and open requirements; the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md) hold the requirement detail, and [PLAN.md](PLAN.md) the design and historical milestones.
+**Status:** supports a bounded subset of Zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1; Zig 0.17.0 is qualified and the default (`compatibility.json` `zig.default`; [CI scope](docs/zig-0.17-ci.md)). The original Outcome closeout’s Zig 0.16.0 differential report records 87,064 cases: 85,987 exact matches, 497 illegal cases and 580 unspecified cases, with zero setup failures or mismatches; one example and three functions are skipped. The report is complete with `qualified=false`; these totals belong to that original scope, not a later focused subset, and do not establish compiler/native correspondence or proof applicability. Machine-checked proofs have their stated domains and exclusions. The generated [support matrix](docs/support-matrix.md) is the current summary of versions, examples, inventory and open requirements; the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md) hold the requirement detail, and [PLAN.md](PLAN.md) the design and historical milestones.
 
 | Examples | What they cover |
 |---|---|
@@ -103,8 +103,8 @@ scripts/local-ci.sh mutations                       # only the five mutation CI 
 ```
 
 Run the focused checks while editing, then the matrix locally before using GitHub CI
-as final verification. The 0.14.1 row uses CI's restricted examples and skips the
-differential harness; 0.15.2 also builds the macOS threadsync translation's proofs.
+as final verification. The 0.14.1 row uses CI's restricted examples; 0.15.2 also builds
+the macOS threadsync translation's proofs.
 If all three full-version rows already passed locally, run `mutations` to finish
 the matrix without repeating them. Full, matrix and mutations modes execute the actual shell steps and environments from
 `.github/workflows/ci.yml`, including coverage, budgets, project/flow gates and proof
@@ -180,7 +180,7 @@ Unsupported features include `threadlocal` globals outside pointer-free, error-f
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm as opaque functions (x86_64 only): register operands, and read-write (`+r`, `+m`) and memory (`=m`) lvalue outputs under an explicit effect contract ([A01](docs/generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01)) | `m`/immediate inputs, a `"memory"` clobber outside the reviewed registry, clobbers of a pinned operand's register |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs, except for the known gap of an inexact float `@divExact` until its build-mode records are re-recorded, and with the native stack holding every call chain unless a stack budget is set (premise STK-01); the premise, that exception and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs, and with the native stack holding every call chain unless a stack budget is set (premise STK-01); the premise, that exception and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 
@@ -189,19 +189,19 @@ The Lean kernel checks the proof about the generated Lean code. Applying that re
 ## Zig versions
 
 <!-- support-matrix:begin zig-versions (generated by scripts/support-matrix.py; do not edit by hand) -->
-Supported: Zig **0.17.0** (in qualification), **0.16.0** (default), **0.15.2** and **0.14.1**. Default example selection (`scripts/example-selection.sh` on x86_64; `asm` needs x86_64):
+Supported: Zig **0.17.0** (default), **0.16.0**, **0.15.2** and **0.14.1**. Default example selection (`scripts/example-selection.sh` on x86_64; `asm` needs x86_64):
 
 | Zig | CI | Examples | Not selected |
 |---|---|---|---|
-| 0.17.0 (in qualification) | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
-| 0.16.0 (default) | full job (pipeline, diff test, proofs); 5 mutation shards | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
+| 0.17.0 (default) | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
+| 0.16.0 | full job (pipeline, diff test, proofs); 5 mutation shards | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
 | 0.15.2 | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `threads`, `threadsync`, `variants`, `vectors` | `iogroup`, `sync` |
-| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`, `errors`, `floatops`, `floats`, `layout`, `options`, `pointers`, `recursion`, `variants` | `asm`, `atomics`, `floatconv`, `iogroup`, `lists`, `slices`, `sync`, `threads`, `threadsync`, `vectors` |
+| 0.14.1 | restricted job (pipeline, diff test, proofs on the listed examples) | `basic`, `errors`, `floatops`, `floats`, `layout`, `options`, `pointers`, `recursion`, `variants` | `asm`, `atomics`, `floatconv`, `iogroup`, `lists`, `slices`, `sync`, `threads`, `threadsync`, `vectors` |
 
 Full matrix: [docs/support-matrix.md](docs/support-matrix.md).
 <!-- support-matrix:end zig-versions -->
 
-The 0.14.1 compiler builds on Linux only. Zig 0.17.0 is in qualification: CI runs a full 0.17.0 job, but version-specific source/native gates, the mutation shards and the default stay on their qualified versions until it is qualified ([docs/zig-0.17-ci.md](docs/zig-0.17-ci.md)). One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
+The 0.14.1 compiler builds on Linux only. Zig 0.17.0 is qualified: CI runs a full 0.17.0 job, but version-specific source/native gates, the once-per-run parts and the mutation shards stay on the versions they were qualified on ([docs/zig-0.17-ci.md](docs/zig-0.17-ci.md)). One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
 
 ## License
 

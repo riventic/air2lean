@@ -314,4 +314,44 @@ theorem resolve_ok {Sig Args Result : Type} [DecidableEq Sig] {table : List (Sig
     exact hf
   · simp [hs] at he
 
+
+/-! ## Binding a call site to a contract (E02)
+
+A translated call through a function pointer is `dispatch` over the callable-address table's
+targets of its signature (`resolve`): translated functions and registry models bound at a code
+address (`&ext_visit`, `Air2Lean/Air/Normalize.lean`'s `externCodeGlobal`). If every such target
+satisfies one contract, the call site satisfies it too, for every pointer: the unknown-address
+arm throws `.illegal`, which the contract must list as a failure. A client of the call site then
+reasons from the contract alone (`CallbackContract.call`), whichever target runs. -/
+
+/-- Every target satisfies `c`, and `c` admits the `.illegal` failure: the dispatch satisfies
+`c` at every pointer. -/
+theorem Contract.Holds.dispatch {Args Result : Type} {c : Contract Args Result}
+    {termination : Termination} {errors : List Error} {effects : Effects}
+    {targets : List (Ptr × (Args → MemM Result))}
+    (h : ∀ t ∈ targets, c.Holds termination errors effects t.2)
+    (illegal : Error.illegal ∈ errors) (fails : ∀ a m, c.failure a m .illegal) (p : Ptr) :
+    c.Holds termination errors effects (External.dispatch targets p) := by
+  induction targets with
+  | nil => exact fun a m _ => ⟨illegal, fails a m⟩
+  | cons t rest ih =>
+    obtain ⟨q, f⟩ := t
+    by_cases hp : p = q
+    · subst hp
+      have hd : External.dispatch ((p, f) :: rest) p = f := by funext a; simp [External.dispatch]
+      rw [hd]
+      exact h _ (List.mem_cons_self ..)
+    · have hd : External.dispatch ((q, f) :: rest) p = External.dispatch rest p := by
+        funext a; simp [External.dispatch, hp]
+      rw [hd]
+      exact ih (fun t ht => h t (List.mem_cons_of_mem _ ht))
+
+/-- `Contract.Holds.dispatch` for a callback contract. -/
+theorem CallbackContract.Holds.dispatch {Args Result : Type} {cc : CallbackContract Args Result}
+    {targets : List (Ptr × (Ptr × Args → MemM Result))}
+    (h : ∀ t ∈ targets, cc.Holds t.2) (illegal : Error.illegal ∈ cc.errors)
+    (fails : ∀ a m, cc.contract.failure a m .illegal) (p : Ptr) (wf : cc.WellFormed) :
+    cc.Holds (External.dispatch targets p) :=
+  ⟨wf, Contract.Holds.dispatch (fun t ht => (h t ht).2) illegal fails p⟩
+
 end Zig.External

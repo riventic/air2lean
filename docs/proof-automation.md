@@ -65,7 +65,8 @@ many successful calls with 20 to 30 facts.
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
   rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
-  providers from atoms (`AddrOf`, `Reaches`), the planner's local updates (region
+  providers (`AddrOf`, `Reaches`, `Live`, `Active`; §Providers), pointer `==` across live blocks
+  (`ptrEqAddr_live`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
   lemmas (masks, overflow bits, shifts, no-wrap rewrites, atoms for `omega`).
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
@@ -86,6 +87,30 @@ For an atom of `Q` whose head `X` has a range law, the planner carves it out of 
 the first's end) are joined first (the law forwards). The law's hypotheses are side goals of the
 arithmetic solver. A head with a law is an atom (never unfolded). Regression:
 `tests/roadmap/sep-auto/Plan.lean` (claims and a user's own range assertion).
+
+### Providers
+
+A rule takes what it needs of the memory from a **provider**, a property of every memory that
+holds the precondition `P`: `AddrOf b A P` (block `b` at address `A`), `Reaches b k P` (at least
+`k` bytes), `Live b k P` (live, at least `k` bytes), `Active t P` (the tag `t` of a share is
+active). A provider kind `K` is a constant with a lemma `K.of_within : K … X → Within X P → K … P`.
+`fsym` proves a provider goal by
+
+* an **atom lemma** (`@[fsym_provider]`, conclusion `K … X` of an atom `X`: a region, a typed
+  value, `known`, an untagged share, an allocator's own state) on one of the parts of `P`, or
+* a **lemma about the whole precondition** (`@[fsym_provider]`, conclusion `K … P` of a variable
+  `P`), whose hypotheses are goals again: `Within X P` (a part of `P` that unifies with `X`),
+  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`; `Live.share`: a
+  share whose tag is active (`Within (bshare b q k t) P`, `Active t P`); `Active.root`;
+  `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+
+The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
+candidate leaves must all be proved. So a node pointer reaches its node's end through a share
+tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
+pointers into blocks that may differ (`ptrEqAddr_live`: both in bounds, or both past their
+blocks' starts) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+(`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
+definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
 ## How it works
 
@@ -116,13 +141,18 @@ arithmetic solver. A head with a law is an atom (never unfolded). Regression:
   (a field of a node, an argument) gets one from what the precondition owns at it. A facts
   lemma may need the memory, or be about an ordered pair of atoms (`MemFacts X φ` with `X` an atom
   or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
-  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart. Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`).
+  `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart (by
+  addresses, `MemFacts.regions_apart`; by offsets in one block, `facts_regions_block`). A facts
+  lemma's premises are proved from the context (blocks `p.block = some b`) or by the arithmetic
+  solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
+  case splits). Block
+  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
-  (from the context), providers (from the atoms, with backtracking) and arithmetic.
+  (from the context), providers (§Providers, with backtracking) and arithmetic.
 * **Word results are opaque** (symbolic execution in SSA form): a checked `a + b` gives a fresh
   `r` with the fact `r.toNat = a.toNat + b.toNat` (subtraction is stated additively), so later
   terms mention `r`, not the growing expression that computed it.
@@ -219,7 +249,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
-* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
+* A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`,
+  `Live`, `Active`); one from the whole precondition: `@[fsym_provider] theorem … (hw : Within X P)
+  … : Live b k P`. A new provider kind `K` needs `K.of_within`.
 * A new range resource to plan (split, join): its range law tagged `@[fsym_plan]`, and
   `@[fsym_drop]` for its atoms that may be forgotten. Another kind of planning (lending, a
   different algebra) is an engine change in `Auto.lean` (the fsym lane), not a user extension.
