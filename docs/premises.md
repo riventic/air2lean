@@ -253,12 +253,12 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: The placement oracle (SEM-07) may give a new block the address of a freed block.
   Block ids stay unique and every liveness check uses them, so lifetime theorems over arbitrary
-  `Mem` hold under every placement (`Triple.withPlacement`). `@ptrFromInt` of an address that two
+  `Mem` hold under every placement (`FTriple.withPlacement`, `FTotalTriple.withPlacement`). `@ptrFromInt` of an address that two
   blocks cover (a dead and a live block, or one block's end and an adjacent block's start) is
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
