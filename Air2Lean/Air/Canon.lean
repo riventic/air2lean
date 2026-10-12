@@ -60,7 +60,11 @@ supported version, so one translation (and the proofs over it) serves all versio
    0.14.1 uses `bitcast` of a `u8` 0). Liveness marks these and their field/element pointers
    unused, so no code is generated for them. The pass drops them when nothing but other such
    pointers and debug instructions reads them; a read one is rejected by `Check.lean`.
-6. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+6. `dropDeadRuntimeLanePtrs`. For `v[i] = x` with a runtime index into a vector whose lanes are
+   bit-packed, 0.14.1 and 0.15.2 make a lane pointer with `vector_index: "runtime"` that nothing
+   reads, then store with `vector_store_elem` through the vector pointer (L09). The pass drops
+   the unread lane pointer; a read one stays and is rejected.
+7. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -588,6 +592,26 @@ def dropDeadAllocPlaceholders (f : RawFunc) : RawFunc := Id.run do
     if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
   return { f with body }
 
+/-- `dropDeadRuntimeLanePtrs` (module doc). For `v[i] = x` with a runtime index, Zig 0.14.1 and
+0.15.2 first make the lane pointer `&v[i]` (`ptr_elem_ptr`, a pointer type with
+`vector_index: "runtime"`) and then store with `vector_store_elem` through the vector pointer;
+Liveness marks the lane pointer unused, so no code is generated for it. The pass drops such a
+`ptr_elem_ptr` and its debug uses only if nothing else reads it; a read one stays, and
+`Check.lean` rejects its type. -/
+def dropDeadRuntimeLanePtrs (f : RawFunc) : RawFunc := Id.run do
+  let all := flatten f.body
+  let runtimeLanePtr (i : RawInst) : Bool :=
+    i.tag == "ptr_elem_ptr" && (i.ty.bind (f.layouts[·]?)).any (·.runtimeLane)
+  let dead : Std.HashSet InstId := all.foldl (init := {}) fun d i =>
+    if runtimeLanePtr i then d.insert i.id else d
+  if dead.isEmpty then return f
+  let read (id : InstId) := all.any fun i => !isDbgTag i.tag && i.uses.contains id
+  let dead := dead.fold (init := ({} : Std.HashSet InstId)) fun d id => if read id then d else d.insert id
+  if dead.isEmpty then return f
+  let body := rewriteBody (body := f.body) fun i =>
+    if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
+  return { f with body }
+
 /-- `renumber` (module doc). -/
 def renumber (f : RawFunc) : RawFunc :=
   let all := flatten f.body
@@ -654,12 +678,13 @@ def argRanks (f : RawFunc) : Except String RawFunc := do
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }
 
-/-- The six rewrites (module doc). -/
+/-- The seven rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
-  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
+  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies
+    (dropDeadRuntimeLanePtrs (dropDeadAllocPlaceholders f))))
   validateRefs f
   pure (renumber f)
 

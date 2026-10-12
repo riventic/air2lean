@@ -45,9 +45,11 @@ for version in "${versions[@]}"; do
     # compilation, so a fixture whose model depends on it exports its native probe's
     # compilation); `module`: the name prefix of the fixture's own functions (default <stem>.);
     # `args`: more compiler flags (`--error-limit 255`).
-    root_src="" module="$stem." args=""
+    # `only_versions`: the versions that compile the source (default all).
+    root_src="" module="$stem." args="" only_versions=""
     # shellcheck disable=SC1090
     [ -f "$here/$stem.export" ] && . "$here/$stem.export"
+    if [ -n "$only_versions" ] && [[ " $only_versions " != *" $version "* ]]; then continue; fi
     # <stem>.filter, if present: more AIR name prefixes (the std functions the fixture calls).
     filter="$module"
     [ -f "$here/$stem.filter" ] && filter="$filter,$(paste -sd, "$here/$stem.filter")"

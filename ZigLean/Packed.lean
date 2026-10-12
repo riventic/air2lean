@@ -33,6 +33,12 @@ instance : Packed Bool 1 where
   toBits b := if b then 1#1 else 0#1
   ofBits v := v == 1#1
 
+/-- A float lane is its bits (`Float.bits`): the lane of a lane pointer into a bit-packed float
+vector (`@Vector(n, f80)`'s 80-bit lanes, L09; `Zig.loadLane`/`Zig.storeLane`). -/
+instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
+  toBits f := f.bits
+  ofBits b := ⟨b⟩
+
 /-- The `n` bits of `α` at bit `o` of `host`. -/
 def Packed.get {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : α :=
   Packed.ofBits (host.extractLsb' o n)
@@ -206,5 +212,13 @@ def storeLane {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Na
     (v : α) : MemM Unit := do
   let bs ← loadBytes p hostSize align
   storeBytes p align (bs.mapIdx fun k b => b.setLane k bitOffset n (Packed.toBits v).toNat)
+
+/-- `vector_store_elem`: `v[i] = x` through a pointer `p` to a bit-packed vector of `lanes`
+lanes of `w` bits with a runtime index (Zig 0.14.1/0.15.2; 0.16.0 rejects a runtime vector
+index): the store through the lane pointer of lane `i` (`storeLane` at bit `i * w`). An index
+past the lanes is illegal behaviour; a safe build checks it first (the `outOfBounds` panic). -/
+def storeLaneAt {α : Type} {w : Nat} [Packed α w] (lanes hostSize align : Nat) (p : Ptr)
+    (i : BitVec 64) (v : α) : MemM Unit :=
+  if i.toNat < lanes then storeLane hostSize align (i.toNat * w) p v else throw .illegal
 
 end Zig

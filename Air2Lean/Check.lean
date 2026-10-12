@@ -198,9 +198,14 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     -- A lane pointer's host is the vector's integer bytes (`Zig.loadLane`), of any count.
     if l.hostSize != 0 then
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
-      let some bits := packedBits types child
+      -- A lane pointer's lane may also be a float (its bits, `Zig.Packed (Float fmt)`, L09).
+      let laneFloat := if l.laneBitPtr then (types[child]?).bind fun
+          | .float bits => some bits
+          | _ => none
+        else none
+      let some bits := packedBits types child <|> laneFloat
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
-            `bool`, an enum or a packed struct is outside the subset"
+            `bool`, an enum or a packed struct (or a float lane of a vector) is outside the subset"
       if l.bitOffset + bits > 8 * l.hostSize then
         throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
@@ -1795,6 +1800,27 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless blen.any (fun n => idx < n) do
           cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
       | _ => pure ()
+    pure line
+  | .vectorStoreElem vptr idx v =>
+    -- Zig 0.14.1/0.15.2 `v[i] = x` with a runtime index (L09): the lane store at bit `i * w` of
+    -- the bit-packed vector (`Zig.storeLaneAt`), with the comptime lane pointers' evidence.
+    unless cx.dialect.any (·.lanePtrBitPtrs) do
+      cx.fail line s!"a runtime-index vector lane store is outside the subset, except into the \
+        bit-packed vector of a schema-12 profile of Zig \
+        {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
+    cx.memAccess line vptr
+    let pty ← cx.memPtrTy line vptr
+    let some (.vector _ e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+      | cx.fail line "`vector_store_elem` through a pointer that does not point to a vector"
+    unless (ptrChild cx.types pty).any fun vec => (cx.layouts[vec]?.map (·.packedLanes)).getD false do
+      cx.fail line "`vector_store_elem` into a vector without the bit-packed layout"
+    if ((cx.types[e]?).bind laneBits?).isNone then
+      cx.fail line "`vector_store_elem` into a vector of lanes other than integers, floats or `bool`"
+    unless (cx.valTy? idx).bind (cx.types[·]?) == some (.int false 64) do
+      cx.fail line "`vector_store_elem` with an index other than `usize`"
+    if v matches .undef _ then
+      cx.fail line "a store of `undefined` to a vector lane is outside the subset"
     pure line
   | .errorsLenLe a =>
     unless (cx.valTy? a).bind (cx.types[·]?) == some (.int false cx.errBits) do

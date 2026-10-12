@@ -238,9 +238,11 @@ def Layout.laneBitPtr (l : Layout) : Bool :=
 def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
   (layouts[ty]?.map (·.laneBitPtr)).getD false
 
-/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+/-- The bit width of a lane that a lane pointer may address: an integer's or a float's bits (a
+float lane is its bits, `Zig.Packed (Float fmt)`), 1 for `bool`. -/
 def laneBits? : Ty → Option Nat
   | .int _ bits => some bits
+  | .float bits => some bits
   | .bool => some 1
   | _ => none
 
@@ -619,6 +621,9 @@ inductive Op where
   the code `a` is at most the compilation's error count (both tags compare `<=`, L10). Needs
   the compilation's numbering (`Func.errorTable`). -/
   | errorsLenLe (a : Val)
+  /-- `vector_store_elem` (Zig 0.14.1/0.15.2): `v[idx] = val` through the vector pointer `vptr`
+  with a runtime lane index (L09; `Zig.storeLaneAt`). -/
+  | vectorStoreElem (vptr idx val : Val)
   | structFieldVal (s : Val) (index : Nat)
   | aggregateInit (elems : Array Val)
   | call (callee : Val) (args : Array Val)

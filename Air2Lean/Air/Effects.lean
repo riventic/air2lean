@@ -213,6 +213,7 @@ def Op.effectsIn (mode : AllocatorModel) (op : Op) : Effects :=
   -- The name tables are in memory.
   | .tagName a | .errorName a => { Effects.pure #[a] with memoryOnly := true }
   | .errorsLenLe a => Effects.pure #[a]
+  | .vectorStoreElem p i v => .valueAccess .write #[(p, .store)] #[p, i, v] true
   -- A place has no optional-payload or error-union path: the local becomes a stack block.
   | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p => .valueAccess .read #[(p, .load)] #[p] false
   | .optPayloadPtr set p | .errPayloadPtr set p =>
@@ -328,6 +329,7 @@ def Op.ctorName : Op → String
   | .slicePtr .. => "slicePtr" | .arrayToSlice .. => "arrayToSlice"
   | .sliceFieldPtr .. => "sliceFieldPtr" | .memset .. => "memset" | .memcpy .. => "memcpy"
   | .tagName .. => "tagName" | .errorName .. => "errorName" | .errorsLenLe .. => "errorsLenLe"
+  | .vectorStoreElem .. => "vectorStoreElem"
   | .structFieldVal .. => "structFieldVal" | .aggregateInit .. => "aggregateInit"
   | .call .. => "call" | .block .. => "block" | .loop .. => "loop" | .br .. => "br"
   | .«repeat» .. => "repeat" | .condBr .. => "condBr" | .switchBr .. => "switchBr"

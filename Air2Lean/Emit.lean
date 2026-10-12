@@ -1893,6 +1893,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy _ a b => #[a, b]
   | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a | .errorsLenLe a => #[a]
+  | .vectorStoreElem p i v => #[p, i, v]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
@@ -2886,6 +2887,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .errorName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"errorNameOf {rv a}"); (env, some l)
+  | .vectorStoreElem vptr idx v =>
+    -- `v[i] = x` with a runtime index (0.14.1/0.15.2, L09): the lane store at bit `i * w`.
+    let (n, e) := match (fc.valTyId? vptr).bind (ptrChild fc.types) |>.bind (fc.types[·]?) with
+      | some (.vector n e) => (n, e)
+      | _ => (0, 0)
+    let w := ((fc.types[e]?).bind laneBits?).getD 0
+    (env, some s!"Zig.storeLaneAt (α := {fc.emitTyOf e}) {n} {(n * w + 7) / 8} {fc.ptrAlign vptr} \
+      {rv vptr} {rv idx} {rv v}")
   | .errorsLenLe a =>
     -- `cmp_lt(e)_errors_len`: the code is at most the compilation's error count (L10).
     let (env, l) := bindLet fc env inst.id s!"pure (decide (({rv a}).toNat ≤ errorTable.size))"

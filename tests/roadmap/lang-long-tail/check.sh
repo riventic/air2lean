@@ -34,6 +34,8 @@ fixtures=(
   "extern_storage ExternStorage"
   "error_ints ErrorInts"
   "error_ints_w8 ErrorInts ErrorIntsW8"
+  "runtime_lanes RuntimeLanes"
+  "float_lanes FloatLanes"
 )
 versions=(0.17.0 0.16.0 0.15.2 0.14.1)
 # The retained translation of a version: LangLongTail/<Key>-<version>.lean where the version's
@@ -60,9 +62,10 @@ elaborate() {
 rejected() { [ -f "$here/$1.reject" ] && grep -q "^$2 " "$here/$1.reject"; }
 # The settings of <stem>.export (export.sh): `module` (the fixture's name prefix), `root_src`
 # (the native probe that is also the exported program), `args` (compiler flags of both),
-# `native_extra` (more inputs of the native build, a C file and -lc).
+# `native_extra` (more inputs of the native build, a C file and -lc), `only_versions` (the
+# versions that compile the source; default all).
 export_setting() {
-  (root_src="" module="$1." args="" native_extra=""
+  (root_src="" module="$1." args="" native_extra="" only_versions=""
    # shellcheck disable=SC1090
    [ -f "$here/$1.export" ] && . "$here/$1.export"
    eval "echo \"\$$2\"")
@@ -71,7 +74,9 @@ for entry in "${fixtures[@]}"; do
   read -r stem ns key extra <<< "$entry"
   key=${key:-$ns}
   prefix=$(export_setting "$stem" module)
+  only=$(export_setting "$stem" only_versions)
   for version in "${versions[@]}"; do
+    if [ -n "$only" ] && [[ " $only " != *" $version "* ]]; then continue; fi
     if rejected "$stem" "$version"; then
       message=$(grep "^$version " "$here/$stem.reject" | cut -d' ' -f2-)
       # shellcheck disable=SC2086 # extra holds whitespace-separated translator flags
@@ -90,8 +95,12 @@ for entry in "${fixtures[@]}"; do
     path=$(elaborate "$key" "$ns" "$version")
     LEAN_PATH="$path" "${lean_cmd[@]}" --run "$here/Model$ns.lean" "$here/native/$stem-$version.txt"
   done
+  # The proofs are about LangLongTail/<Key>.lean: the 0.16.0 translation, or the newest version
+  # that compiles the source.
   if [ -f "$here/Proofs$key.lean" ]; then
-    LEAN_PATH="$work/$key/0.16.0:$base_path" "${lean_cmd[@]}" "$here/Proofs$key.lean"
+    proved=0.16.0
+    [ -n "$only" ] && proved=${only%% *}
+    LEAN_PATH="$work/$key/$proved:$base_path" "${lean_cmd[@]}" "$here/Proofs$key.lean"
   fi
 done
 python3 "$here/test_cli.py" "$translator"
@@ -106,8 +115,10 @@ if [ "${1:-}" = --native ]; then
     root_src=$(export_setting "$stem" root_src)
     args=$(export_setting "$stem" args)
     native_extra=$(export_setting "$stem" native_extra)
+    only=$(export_setting "$stem" only_versions)
     ran=0
     for version in "${versions[@]}"; do
+      if [ -n "$only" ] && [[ " $only " != *" $version "* ]]; then continue; fi
       var="AIR2LEAN_ZIG_NATIVE_$(echo "$version" | cut -d. -f1-2 | tr . _)"
       zig=${!var:-}
       [ -n "$zig" ] || continue

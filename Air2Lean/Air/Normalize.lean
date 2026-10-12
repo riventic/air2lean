@@ -72,8 +72,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"),
   (#["legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call"],
     "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
-  (#["vector_store_elem"],
-    "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"),
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
@@ -356,6 +354,10 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "tag_name" => let a ← arg1 fnName raw; return .tagName a
   | "error_name" => let a ← arg1 fnName raw; return .errorName a
   | "cmp_lt_errors_len" | "cmp_lte_errors_len" => let a ← arg1 fnName raw; return .errorsLenLe a
+  | "vector_store_elem" =>
+    let [p, i, v] := raw.args.toList
+      | throw s!"{fnName}: inst {raw.id}: 'vector_store_elem' needs 3 args"
+    return .vectorStoreElem p i v
   | "struct_field_val" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -474,6 +476,7 @@ def decodedTags : Array String := #[
   "slice_len", "slice_elem_val", "ptr_add", "ptr_sub", "ptr_elem_ptr", "slice_elem_ptr",
   "ptr_elem_val", "array_elem_val", "slice", "slice_ptr", "array_to_slice", "ptr_slice_len_ptr",
   "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name", "cmp_lt_errors_len", "cmp_lte_errors_len",
+  "vector_store_elem",
   "struct_field_val", "aggregate_init", "block", "dbg_inline_block", "loop", "br", "repeat",
   "cond_br", "switch_br", "loop_switch_br", "switch_dispatch", "try", "try_cold", "try_ptr",
   "try_ptr_cold", "ret", "ret_safe", "unreach", "trap", "dbg_stmt", "dbg_var_ptr", "dbg_var_val",
