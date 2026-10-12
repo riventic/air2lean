@@ -71,13 +71,15 @@ def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
 theorem gF_ok : GOk m1 Ghost.unit gF := by
   refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
     fun b => ?_, Ghost.CValid.congr (g := Ghost.unit) (by funext x y; simp [gF, Ghost.atExt, Ghost.unit])
-      (by funext γ e p; simp [Ghost.ls, Ghost.add, gF, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit⟩,
+      (by funext γ e p; simp [Ghost.ls, Ghost.add, gF, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit,
+      by simpa [gF] using CCell.valid_unit⟩,
     0, fun _ _ => ⟨rfl, fun b e k => ?_, fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
     fun _ _ _ => by simp [gF, Ghost.atExt, Ghost.unit]⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
-        fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit⟩)).auth1_ok
+        fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit,
+        CCell.unit.add CCell.unit⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩

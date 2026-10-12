@@ -710,74 +710,65 @@ which `held` carries the whole claim before and after (`heldW`, `rresizePostW`).
 client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
 splits and joins the claim along with the bytes.
 
-## Stack depth (design, stack-region lane, awaiting approval)
+### Credits and room: non-mintable resources (2026-10-12)
 
-Total `allocStack`/`enterFrame` rules need a resource that guarantees the next stack block. The
-model side (per-thread stack regions with a LIFO budget and a reserve) is
-`docs/architecture-audit/memory-model.md` §MM-16; this section is the resource on top of it.
-Nothing is implemented yet.
+**The problem.** Two counted resources were requested: `credits n` (time/turn credits for the
+concurrent termination proofs, [sep-threads.md](sep-threads.md)) and `room n` (address room, so
+that a total `alloc` can rule out `.stackOverflow`). Both must be **non-mintable**: no judgment may
+end with more of them than it started with; only the adequacy theorem hands an initial supply to
+`main`. A count that `Holds` does not see can be minted by every judgment (`EUpd emp (credits 1)`
+holds whenever `Ghost.Ok` ignores the count).
 
-**Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
-sound only if the freed block is the top of its thread's stack: a stack slot is free again only
-when everything above it is gone. With splittable credits the logic cannot know that.
-Counterexample (budget `c + c'`): `alloc b` (pay `c`), `alloc b'` (pay `c'`), `free b` (get `c`
-back, but `b'` still lies above `b`, so the slack is still 0), then `alloc b''` with the credit
-overflows. So the resource is the thread's depth itself, held exclusively, as a stack pointer
-is in separation logic for assembly.
+**Two variants compared.**
 
-**Resources** (a new `Ghost` component, next to `cl` and the credits `cr`):
+1. *A non-mint conjunct per judgment*: every witness of `EUpd`, `Upd`, `FTriple`, `FTotalTriple`,
+   `CTriple`, `FTTriple`/`FTTotalTriple` adds `r'.gh.cr ≤ r.gh.cr`. Each direct proof of a rule
+   (`intro m r rF …`, about 110 of them) must prove it, and every future judgment must repeat it.
+2. *An authoritative supply in validity* (Iris's `●n ⋅ ◯k` with `k ≤ n`): the credit cell has
+   fragments and an exclusive authority `●N`, and `Ghost.Valid` requires at most one authority
+   and fragments `≤ N` when it is present. The judgments already quantify over **every** frame
+   `rF` that composes; a frame that holds `●N` with exactly `N` fragments outstanding leaves no
+   room for one more fragment, so no judgment can produce one. No definition of a judgment and no
+   proof that keeps the ghost state of its precondition changes.
 
-* `sp t S D`: thread `t` has the budget `S`, and its LIFO depth plus its cells is at most `D`
-  (`Mem.used t ≤ D`). Exclusive: one fragment per thread with a budget. The cells (TLS
-  instances, `errno`) are reserved when the budget is set, so the first fragment is
-  `sp t S cells` and no later cell creation needs it.
-* `ent t ℓ c o`: a live stack entry of `t`, pushed at logical depth `ℓ` with charge `c`; `o` is
-  its block (`some b`) or a frame charge (`none`). Exclusive.
-* `room t n := ∃ D S, sp t S D ⋆ ⌜D + n ≤ S⌝` is notation, not a resource: it does not split.
-  A function that needs `k` bytes of stack is specified for every depth:
-  `∀ D, D + k ≤ S → FTotalTriple (sp t S D ⋆ P) f (fun v => sp t S D ⋆ Q v)`.
+Variant 2 is used: it is sound for every judgment that preserves `Holds m' r' rF` for an arbitrary
+`rF` (all of the above; `Upd` quantifies over every `Ghost.Ok` frame), including future ones, and
+its blast radius is the `Ghost` structure (one more field: each anonymous `Ghost` and each
+field-by-field `ext1` proof gets one more component, each hand-made `Ghost.Valid` one more conjunct).
 
-**Holds** (a conjunct of `GOk`, the arena lane's `Res`/`Ghost`):
+**Credits.** `Ghost.cr : CCell` with `frag : Nat` (`credits n`, `◯n`) and `auth : Nat → Nat` (how
+many authorities `●N` hold the value `N`; additive, so that validity is closed under dropping parts,
+`Ghost.Ok.mono`). `CCell.Valid`: every count is at most 1, at most one value has an authority, and
+the fragments are at most its value. `credits (a + b) = credits a ⋆ credits b` and `credits 0 = emp`
+are equalities; `credits n` is dropped with `EUpd.drop`. There is no rule that creates a fragment.
+`creditAuth N` (`●N`) is not given to programs: the adequacy theorem keeps it in the frame and gives
+`main` `credits N` (`Holds.addCredits`). Kernel-checked regression
+(`tests/roadmap/sep-full/CreditsCX.lean`): `¬ EUpd emp (credits 1)`, and the same for `Upd`.
 
-* every thread `t` with a budget has exactly one `sp t S D` in `r ⊔ rF`, with `S = S_t` and
-  `Mem.used t ≤ D`;
-* the `ent` fragments of `t` are exactly its live entries; in push order their logical intervals
-  `[ℓ, ℓ + c)` follow each other, the last ends at or below `D`, and each entry's real end
-  (`Mem.used` at its push plus `c`) is at or below its logical end `ℓ + c`.
+**Room: obstruction in the current memory model** (found 2026-10-12; for the memory-model lane).
+The requested design ("Σ room ≤ the free address space below `Placement.addrLimit`; a total
+`alloc` of `k` bytes consumes `k` plus a padding bound, `free` returns it") is not sound in the
+current model (`ZigLean/Mem/Basic.lean`), for three reasons:
 
-**Rules** (`@[fsym]`, `Full/Block`, with the current thread `t`, below):
+1. *`free` cannot return room.* The fallback address of a new block is `alignUp Mem.top align`,
+   and `Mem.top` is past every block, dead or live. Freed address space is reused only when the
+   placement proposes it, never by the fallback.
+2. *Other primitives consume the same space without room.* `rawAlloc`/`mmap` (`Mem.mapAddr` is
+   `Mem.newAddr`) and an in-place `mremap` growth raise `Mem.top`. Their rules (precondition
+   `emp`; `FAllocSpec`; the page, FBA and arena proofs) cannot re-establish `Holds` against a frame
+   that holds room. Charging room to them (variant B) would weaken rules that hold today: rejected.
+3. *The placement can exhaust the fallback.* An accepted proposal near `addrLimit` (natively the
+   stack mapping sits just below `2^47`) raises `Mem.top` to about `addrLimit`, so a later fallback
+   fails with any amount of free space below. A sound "free space" must count the placement's
+   future proposals: `addrLimit - max(Mem.top m, every proposal for a block id ≥ m.blocks.size)`.
 
-* `allocStack size align`, `c = size + align`:
-  `sp t S D ⋆ ⌜D + c ≤ S⌝ ⊢ ⟨p⟩ sp t S (D + c) ⋆ ent t D c (some b) ⋆ up (bytesAt p A size …) ⋆ bext b …`
-  (total: the model's check `used + c ≤ S` follows from `used ≤ D`).
-* `free p` of that block: `sp t S (ℓ + c) ⋆ ent t ℓ c (some b) ⋆ bytes ⋆ bext ⊢ sp t S ℓ`. The
-  fragment `sp t S (ℓ + c)` makes `b` the top: an entry pushed after `b` would have a logical
-  interval above `ℓ + c` with positive charge, ending above `D = ℓ + c`. So the free pops `b`,
-  and the depth drops to at most `ℓ`.
-* `enterFrame`/`leaveFrame`: the same with `o = none` and `c = frameBase`.
-* Every other primitive keeps `Mem.used` of every thread (the frame of the conjunct): a new
-  `Tame` field, proved once per primitive.
-
-**Not mintable without touching the judgments.** `GOk` requires exactly one `sp` per budgeted
-thread somewhere in `r ⊔ rF`, so `EUpd emp (sp t S D)` fails in every memory (a second fragment
-is invalid), and no judgment can produce an `sp` from nothing. Unlike the credits, this needs
-no new conjunct in `EUpd`/`FTriple`/`FTotalTriple`/`CTriple`/`Upd`. The only introductions are
-the start memory (`Full/Init`: `sp 0 S k₀` under `Mem.withStack S`, `k₀` the main thread's
-cells) and the spawn rule (the child's `sp c S_c k_c`). Regressions: `¬ EUpd emp (sp 0 S 0)`, `¬ (sp t S D ⋆ sp t S D')`, and a
-total `allocStack` from `sp t S D` with `D + c > S` is unprovable (a memory with `used = D` throws
-`.stackOverflow`).
-
-**The current thread.** The rules apply only when `t` runs. A sequential triple quantifies over
-memories with any `m.current`, so the rule needs it from the precondition: knowledge `cur t`
-(`m.current = t`), kept by every `MemM` primitive (none switches threads), given by `Full/Init`
-(`cur 0`) and by the thread rules to each thread's own resources. Knowledge of another thread's
-`cur` in an invariant is useless, not unsound (`Holds` fails while that thread does not run).
-Open point for the CSL lane (step 4).
-
-**Interim (C).** Until this lands, a total statement that allocates on the stack takes room as
-a premise of the adequacy theorem. That premise must be about the run ("this run throws no
-`.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
-resource is unsound (`memory-model.md` §MM-16, scenario 1).
+Coordinator decision (2026-10-12): the target is (A), a native-faithful separate stack region for
+`alloc` (stack locals, thread-local instances, runtime cells) with its own bump/LIFO pointer, so
+that room is the stack region's slack, authoritative in `Holds` exactly as credits are, consumed by
+`alloc` and returned by `free` of the top block, with no change to the allocator rules (new
+memory-model lane). Until (A) lands: (C), a premise of the adequacy theorem (`Full/Init`) about the
+start memory, not a judgment parameter and not a new judgment. The room cell will then be a second
+`CCell`-like component of `Ghost` whose authority is tied to the memory in `GOk`.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
