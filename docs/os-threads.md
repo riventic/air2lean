@@ -116,6 +116,20 @@ The new thread's thread-local instances are C02's (`tlsEnter` in the dispatcher)
 stricter than the kernel. `pthread_create` writes the handle the same way. Std's child reads
 neither.
 
+**Linux stack (MM-19).** `clone`'s `stack` is the top of the child's stack: it must lie in a
+live OS mapping with `addr + lo < stack ≤ addr + size` (std's thread mapping: guard page, stack,
+TLS area, `Instance`), else the spawn is `.unspecified`. The parent's write of the stack part
+`[addr + lo, stack)` is recorded before the fork (the hand-over edge). After the fork the mapping's
+first live offset moves up to the stack top, and the range becomes the child's native stack
+(`StackState.native`): the child's stack blocks may be placed there (`Mem.homeOk`), no other
+block may (the stack reserves), and an access through the mapping below the stack top is
+`.illegal` (the parent's, conservatively). At the child's exit `cloneExit` first frees the
+child's stack blocks there and gives the range back to the mapping, with undefined bytes written
+by the child; the joiner's `munmap` after the join then succeeds. So `@intFromPtr(&local)` of a
+child's local lies inside its thread mapping, as natively
+(`tests/roadmap/stack-region/ThreadStack.lean`; `docs/architecture-audit/memory-model.md` §MM-19).
+macOS `pthread_create` maps the stack itself; a child's locals are placed like any block.
+
 **Linux exit and join.** The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`.
 After `entry` returns, `cloneExit` does `CHILD_CLEARTID` in one turn: a release store of `0` to
 `ctid` that carries the thread's final clock, a wake of every waiter at `ctid`, and the end of

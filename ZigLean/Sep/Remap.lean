@@ -91,9 +91,10 @@ theorem afterByteRemap_owned_frame {m : Mem} {b : BlockId} {blk : Block} {hF : H
   · have h := blockHeap_owned b { blk with bytes := remapBytes blk.bytes n }
     simpa [remapBytes_size] using h
 
-/-- The transition does not change thread clocks, histories or scheduler state. -/
+/-- The transition changes no thread clock or scheduler state; of the histories it only forgets
+the accesses past the old end (`Mem.forgetFrom`). -/
 theorem afterByteRemap_sameThreads (m : Mem) (b : BlockId) (blk : Block) (n : Nat) :
-    m.SameThreads (m.afterByteRemap b blk n) :=
+    (m.forgetFrom b blk.bytes.size).SameThreads (m.afterByteRemap b blk n) :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Whole-block replacement preserves the sequential-memory invariant. -/
@@ -101,7 +102,7 @@ theorem afterByteRemap_seq {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
     (_hb : m.blocks[b]? = some blk) (_hl : blk.live)
     (_hd : Heap.Disjoint (blockHeap b blk) hF) (_hm : m.heap = blockHeap b blk ∪ hF)
     (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq :=
-  ⟨(afterByteRemap_sameThreads m b blk n).singleThread hst.single⟩
+  ⟨(afterByteRemap_sameThreads m b blk n).singleThread (hst.single.forgetFrom _ _)⟩
 
 /-- The actual in-place runtime branch, with explicit access/race/resource premises.
 No undefined byte is decoded, and no external frame assumption is hidden in the run fact. -/

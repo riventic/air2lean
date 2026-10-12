@@ -53,11 +53,15 @@ and liveness are per block id, and the only address facts they give are the ones
 the alignment of the new block and that its address range is clear of every live block
 (`Mem.newAddr_clear`). Nothing about the order of blocks or a gap between them. -/
 
-/-- A block clear of every live block by `Mem.addrFree` is clear of every live cell. -/
+/-- A block clear of every live block by `Mem.addrFree` is clear of the live bytes of every live
+cell's block (from its first live offset, `BlockKind.mappedLo`). -/
 theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l : Loc} {c : Cell}
-    (hc : m.heap l = some c) : n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr := by
+    (hc : m.heap l = some c) :
+    n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr + c.kind.mappedLo := by
   obtain ⟨b, o⟩ := l
   obtain ⟨blk, hblk, hl, ho, rfl⟩ := Mem.heap_some hc
+  obtain ⟨blk', hblk', hlo⟩ := Mem.heap_some_lo hc
+  rw [hblk] at hblk'; cases hblk'
   unfold Mem.addrFree at hf
   rw [Array.all_eq_true] at hf
   obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hblk
@@ -71,7 +75,8 @@ theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l 
 no byte with a live one. This is all that holds for every placement (no order, no gap). -/
 theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
     (hc : m.heap l = some c) :
-    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨ m.newAddr size align + size ≤ c.addr := by
+    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨
+      m.newAddr size align + size ≤ c.addr + c.kind.mappedLo := by
   unfold Mem.newAddr
   split
   · exact Mem.addrFree_cell (Mem.placed?_ok ‹_›).2.2.2 hc
@@ -143,7 +148,8 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size + 1 ∧
       ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' ∧
-        ∀ l c, m.heap l = some c → size = 0 ∨ c.addr + c.size ≤ A ∨ A + size ≤ c.addr := by
+        ∀ l c, m.heap l = some c →
+          size = 0 ∨ c.addr + c.size ≤ A ∨ A + size ≤ c.addr + c.kind.mappedLo := by
   obtain ⟨p, m', h', hr, h0, -, -, hd', hm', hdd, -, A, hAe, hA, hb⟩ :=
     alloc_run_core hd hm kind size align ha hroom hk
   have e := hr.symm.trans (alloc_run_eq m hroom)
