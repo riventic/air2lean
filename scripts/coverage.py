@@ -346,6 +346,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
     'tests/roadmap/error-tracing/air/{version}': 'tests/roadmap/error-tracing/provenance.json',
+    'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
+    'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',

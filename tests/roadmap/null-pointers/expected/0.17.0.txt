@@ -1,0 +1,27 @@
+0 1 0 0 0
+1 0 1 1 1
+8 0 8 8 1
+4095 0 4095 4095 1
+65535 0 65535 65535 1
+18446744073709551615 0 18446744073709551615 18446744073709551615 1
+read 0 37
+zero 0
+storeLoad 0 1
+storedIsNull 1 0
+allowzeroStoreLoad 0 1
+nodeNext 0 1 nodeVal 5
+nodeRoundTrip 9
+arrayItem 1 0
+cAdd 0 1
+cSub 0 0
+cIndex 0 1
+cElem 7 9
+nextPtr 0
+valPtr 8
+allowzeroNextPtr 0
+allowzeroAdd 0 1
+toOptional 1 1
+fromOptional 0 1
+addIsNull 1 illegal
+nullNextPtr panic
+model nonzeroFromNull cAdd illegal cSub illegal cIndex illegal valPtr panic allowzeroAdd illegal
