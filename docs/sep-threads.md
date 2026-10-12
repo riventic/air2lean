@@ -86,34 +86,63 @@ which a sequential triple does not say. So:
   short today (the client steps are single primitives under `WP.liftM_owned`), so the backend is
   not on the critical path of the migration.
 
-### Decision: `CTriple` is derived from `FTTriple` (one concurrent judgment pair)
+### Decision (T-ctriple, R2): `CTriple` becomes the stop-wise thread triple
 
-The concurrent judgment pair is `FTTriple` / `FTTotalTriple`. `CTriple` does not survive as a
-judgment of its own: it becomes the thread triple of a concurrent function's in-thread reading,
+Today `CTriple P x Q := ∀ n, FTriple P (Sched.soloRun n x) Q` (`Full/Conc.lean`): a sequential
+statement about a `ConcM` body read in the caller's thread (oracle choice `0`, no other thread
+between its stops). Its clients are `PageAlloc`'s `alloc`, the arena and `sep-auto/Conc`.
 
-```
-CTriple P x Q := ∀ n, FTTriple P (Sched.soloRun n x) Q          (after migration step T-ctriple)
-```
+**Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
+thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
+*any* `c < count m₁` (`Conc/Logic.lean`, `Safe`/`Step`). A thread triple of the uninterrupted
+`soloRun` from `m` says nothing about the continuation `k c m₁`, so no rule for a thread follows;
+its only consumer would stay the sequential caller, which the current definition already serves.
 
-and today's definition (`∀ n, FTriple P (soloRun n x) Q`) follows from it by `toFTriple`, so the
-statements of its clients (`PageAlloc`'s `alloc`, the arena) are kept or strengthened. Migration
-step **T-ctriple**: restate `Full/Conc.lean`'s rules (`bind`, `liftMem` from an `FTTriple`,
-`pick_bind`, `loop`, `admissible*`, `step`, `readStep`, `upd`) over `FTTriple`; port the
-`FTriple` atomic rules on owned words (`Atomic`, `AtomicPtr`, `AtomicRules`) to thread rules (an
-atomic access by the owner of the word does not race); switch `fsym`'s concurrent backend to
-`TLogic` (below); re-check the page allocator and the arena. Until T-ctriple, `CTriple` is the
-sequential `FTriple` of a `MemM` program (`soloRun`), not a concurrent judgment.
+**The definition (R2).** `CTriple P x Q` is a thread triple over the run tree `x n m`, stop by
+stop: from every memory where the thread owns `P` (`Holds`, `FConc`, `Owns`), the segment up to
+the next stop (or the result) is an `FTTriple` segment (the frame kept, race free); at a pick
+stop the thread holds some `r'`, and for **every** memory `m₁` and frame `rF₁` in which it still
+owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m₁)`, the rest
+`k c m₁` is again such a run. A stop of another kind (yield, futex, spawn, join, …) has no case
+(the definition is `False` there: fail closed; those belong to protocols). Consequences:
 
-### Relation to `CTriple` (one concurrent logic)
+* the **old statement follows** (`m₁ = m'`, `rF₁ = rF`, `c = 0`), so every existing `CTriple`
+  statement is kept or strengthened (the strength examples restate them word for word);
+* **`WP.call_fowned`**: a thread `t` of a protocol whose invariant keeps the thread's part
+  (`FOwned`) runs a `CTriple` function inside `Proto.WP`. Allocator specifications
+  (`FAllocSpec`) become usable inside threads.
 
-`CTriple P x Q` (`Full/Conc.lean`) is `FTriple` of the in-thread reading `Sched.soloRun` of a
-concurrent function (oracle choice `0`): a *sequential* statement about a `ConcM` body called by
-a sequential caller. It is not a logic for several threads, and it is reused as it is: a
-sequential caller of concurrent code keeps using `CTriple` and its `fsym` backend. The logic for
-several threads stays `Proto.WP` (all schedules) with `FOwned` (below) as its heap layer; a
-thread's `MemM` steps enter it through `WP.liftMem_fowned` with an `FTTriple`. So there is one
-concurrent logic (`Proto.WP`), one heap logic (`Res`, `Holds`, `⋆`), and `FTTriple` is the
-`FTriple` of a step inside a run.
+**What it needs.** `FTriple`/`FTotalTriple` rules are not thread rules (above), so:
+
+* **S1 — race relation and atomic thread rules** (csl lane: `Conc/Clock`, `Full/Thread*`,
+  `Full/Atomic`, `Full/AtomicPtr`, `Full/AtomicRules`). `FTTriple`'s race conjunct is the legacy
+  `StepIn`, which fixes `atomics`, `seen` and `nextMsg`; every atomic op changes them, so no
+  atomic thread rule is provable today. A generalized relation for `FTTriple` lets a step change
+  the atomic locations over non-frame bytes (each location keeps its index; the locations over
+  frame bytes, the other threads' `seen` entries stay), with `nextMsg` only growing; the legacy
+  layer keeps `StepIn`. Then the atomic rules on owned words are proved once as thread rules
+  (the owner's access does not race, `locIdx` does not retire under the word's tag) and the
+  sequential `FTriple` rules follow by `toFTriple`.
+* **S2 — primitives as thread-total rules** (csl lane, new files or additive edits to
+  `Ops`/`Block`/`Arr`/`Mmap`; existing statements kept): `load`/`store`/`ptrProject`/arrays/
+  slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the
+  `FTotalTriple` rules derived by `toFTotalTriple`. A `StateT.lift` step of a `Result` touches
+  no memory and is a thread rule as it is.
+* **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
+  `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
+  thread rules apply (an `FTotalTriple` rule there would be unsound).
+* **S4 — the switch** (csl lane): `CTriple` redefined as above with its rules (`bind`, `liftMem`
+  from an `FTTriple`, `pick_bind`, `loop`, `admissible*`, `upd`/`eupd`, `facts` over `FConc`),
+  the concurrent backend on thread rules, `WP.call_fowned`; re-check `alloc-translated`,
+  `alloc-arena`, `sep-auto`.
+
+### Relation to `Proto.WP` (one concurrent logic)
+
+The logic for several threads is `Proto.WP` (all schedules) with `FOwned` (below) as its heap
+layer; a thread's `MemM` steps enter it through `WP.liftMem_fowned` with an `FTTriple`, and after
+S4 a concurrent function's calls through `WP.call_fowned` with a `CTriple`. So there is one
+concurrent logic (`Proto.WP`), one heap logic (`Res`, `Holds`, `⋆`), and one thread judgment pair
+(`FTTriple`/`FTTotalTriple`, with `CTriple` its stop-wise form for `ConcM`).
 
 ## The threads' parts: `FOwned`
 
@@ -235,6 +264,7 @@ theorems (`## Strength` at the end of the file).
 |---|---|---|---|
 | `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
 | `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec`, `free_front` ported (`FTTAdmit.of_exts`) |
+| `Proofs/Cancel/Group` | `cancelClient_spec`, `cancelClient_canceled_not_completed` | verbatim | none (start memory `{}`, `FOwned.start`; the legacy `Covered` is `FOwned.cover` with the empty rest) |
 
 ## Phases
 
@@ -242,9 +272,9 @@ theorems (`## Strength` at the end of the file).
 |---|---|---|
 | T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
-| T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel`, `Proofs/Iogroup`, `Proofs/Detach/Transfer` | next |
+| T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas`, `Detach`, `TlsLemmas` restated; `spawn-failure`, `thread-locals`, `thread-tuples`, `detached-threads` | next |
-| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
-| T6 | native primitive thread rules (no bridge); `TLogic` `fsym` backend (engine change) | next |
-| T-term | credits in `Res` (request), `WPT`, `returnsWithin` from credits; #178's theorems | next |
+| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
+| T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
+| T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |

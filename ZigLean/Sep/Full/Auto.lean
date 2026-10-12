@@ -1529,28 +1529,121 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
       mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
   return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
 
-/-- **A planner extension** (`@[fsym_plan]`): the assertion constants `heads` it plans (their
-atoms are not pre-assigned by unification) and `run`, which rearranges the state for the
-postcondition's atoms (by `St.step`). -/
-structure Planner where
-  heads : Array Name
-  run : St → Array Expr → TacticM St
-
-instance : Inhabited Planner := ⟨{ heads := #[], run := fun st _ => pure st }⟩
-
-unsafe def evalPlannerUnsafe (n : Name) : TacticM Planner := evalConstCheck Planner ``Planner n
-
-@[implemented_by evalPlannerUnsafe] opaque evalPlanner (n : Name) : TacticM Planner
-
-/-- The registered planner extensions. -/
-def planners : TacticM (Array Planner) := do
-  (fsymPlanExt.getState (← getEnv)).mapM evalPlanner
-
 def proveArith (ty : Expr) (quick := false) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
   if ← arith m.mvarId! quick then return some (← instantiateMVars m)
   trace[fsym] "arith failed: {ty}"
   return none
+
+/-! ### Range laws (`@[fsym_plan]`)
+
+A range law `X … lo m … ⋆ X … m hi … = X … lo hi …` (`RangeLaw`, e.g. `bclaim_split`) lets the
+planner treat the atoms of `X` like regions without bytes: an atom of the postcondition is carved
+out of a state atom that covers it (the law twice, backwards), adjacent state atoms are joined
+first when none covers it (the law forwards). The law's hypotheses are bounds, proved by the
+arithmetic solver. -/
+
+/-- `x` with its range bounds replaced by `lo` and `hi`. -/
+def RangeLaw.withBounds (law : RangeLaw) (x lo hi : Expr) : Expr :=
+  mkAppN x.getAppFn ((x.getAppArgs.set! law.lo lo).set! law.hi hi)
+
+/-- `x` is an atom of the law's head with the law's arity. -/
+def RangeLaw.args? (law : RangeLaw) (x : Expr) : Option (Array Expr) :=
+  if x.isAppOf law.head && law.lo < x.getAppNumArgs && law.hi < x.getAppNumArgs then
+    some x.getAppArgs else none
+
+/-- The law's instance `X lo m ⋆ X m hi = X lo hi` with `X lo hi` unified with `whole` and the
+split point `m`; the hypotheses are proved by the arithmetic solver. -/
+def RangeLaw.inst (law : RangeLaw) (whole m : Expr) : TacticM (Option Expr) := do
+  let lem ← mkConstWithFreshMVarLevels law.decl
+  let (args, _, ty) ← forallMetaTelescopeReducing (← inferType lem)
+  let some (_, lhs, c) := ty.eq? | return none
+  unless ← withReducible (isDefEq c whole) do return none
+  unless ← withReducible (isDefEq lhs.appFn!.appArg!.getAppArgs[law.hi]! m) do return none
+  for x in args do
+    if (← x.mvarId!.isAssigned) then continue
+    let xty ← instantiateMVars (← inferType x)
+    unless ← isProp xty do return none
+    let some h ← proveArith xty (quick := true) | return none
+    x.mvarId!.assign h
+  let h ← instantiateMVars (mkAppN lem args)
+  if h.hasExprMVar then return none
+  return some h
+
+/-- The atom `q` (bounds `qlo`, `qhi`) carved out of an unreserved state atom that covers it:
+`X lo hi` becomes `X lo qlo ⋆ X qlo qhi ⋆ X qhi hi`. -/
+def carveRange (law : RangeLaw) (st : St) (q : Expr) (reserved : Array Expr) :
+    TacticM (Option (St × Expr)) := do
+  let some qa := law.args? q | return none
+  let (qlo, qhi) := (qa[law.lo]!, qa[law.hi]!)
+  for i in [0:st.ats.size] do
+    let x := st.ats[i]!
+    if reserved.contains x then continue
+    let some xa := law.args? x | continue
+    let s0 ← saveState
+    try
+      unless ← withReducible (isDefEq (law.withBounds x qlo qhi) q) do throwError "other arguments"
+      let some _ ← proveArith (← mkAppM ``LE.le #[qlo, qhi]) (quick := true) | throwError "range"
+      let some h1 ← law.inst x qlo | throwError "split at {qlo}"
+      let rest := law.withBounds x qlo xa[law.hi]!
+      let some h2 ← law.inst rest qhi | throwError "split at {qhi}"
+      let st ← st.step #[i] #[law.withBounds x xa[law.lo]! qlo, rest] (← mkAppM ``atom_eq #[← mkEqSymm h1])
+      let mid := law.withBounds x qlo qhi
+      let st ← st.step #[1] #[mid, law.withBounds x qhi xa[law.hi]!] (← mkAppM ``atom_eq #[← mkEqSymm h2])
+      return some (st, mid)
+    catch ex =>
+      trace[fsym] "range carve ({law.decl}): {ex.toMessageData}"
+      s0.restore
+  return none
+
+/-- Join two unreserved adjacent state atoms of the law's head (the second from the first's end). -/
+def joinRanges (law : RangeLaw) (st : St) (reserved : Array Expr) : TacticM (Option St) := do
+  for i in [0:st.ats.size] do
+    let x := st.ats[i]!
+    if reserved.contains x then continue
+    let some xa := law.args? x | continue
+    for j in [0:st.ats.size] do
+      let y := st.ats[j]!
+      if i == j || reserved.contains y then continue
+      let some ya := law.args? y | continue
+      unless law.withBounds x ya[law.lo]! ya[law.hi]! == y do continue
+      let s0 ← saveState
+      try
+        let m := xa[law.hi]!
+        let some e ← proveArith (← mkEq ya[law.lo]! m) (quick := true) | throwError "adjacent"
+        -- `y` restated from `x`'s end
+        let y' := law.withBounds x m ya[law.hi]!
+        let motive ← withLocalDeclD `z (← inferType m) fun z =>
+          mkLambdaFVars #[z] (law.withBounds x z ya[law.hi]!)
+        let st1 ← st.step #[j] #[y'] (← mkAppM ``atom_eq #[← mkCongrArg motive e])
+        let some h ← law.inst (law.withBounds x xa[law.lo]! ya[law.hi]!) m | throwError "join"
+        return some (← st1.step #[if i < j then i + 1 else i, 0] #[law.withBounds x xa[law.lo]! ya[law.hi]!]
+          (← mkAppM ``atom_eq #[h]))
+      catch ex =>
+        trace[fsym] "range join ({law.decl}): {ex.toMessageData}"
+        s0.restore
+  return none
+
+/-- **The range planner**: each determined atom of the postcondition whose head has a range law
+is carved out of a state atom that covers it, joining adjacent state atoms when none covers it. -/
+def planRanges (st : St) (qats : Array Expr) : TacticM St := do
+  let laws := fsymPlanExt.getState (← getEnv)
+  if laws.isEmpty then return st
+  let mut st := st
+  let mut reserved : Array Expr := #[]
+  for a in qats do
+    let a ← instantiateMVars a
+    let some law := laws.find? (a.isAppOf ·.head) | continue
+    if a.hasExprMVar || (law.args? a).isNone then continue
+    if st.ats.any (fun x => x == a && !reserved.contains x) then reserved := reserved.push a; continue
+    let mut done := false
+    for _ in [0:16] do
+      if let some (st', x) ← carveRange law st a reserved then
+        st := st'; reserved := reserved.push x; done := true; break
+      let some st' ← joinRanges law st reserved | break
+      st := st'
+    unless done do trace[fsym] "ranges: no atom of the state covers {a}"
+  return st
 
 def regionArgs? (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``Zig.Full.FAssn.up 1 && e.appArg!.isAppOfArity ``Zig.regionIn 6 then
@@ -2018,8 +2111,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let mut Qi ← reduceProjs Qi
     let mut pQ := pQ
     let mut st ← St.init P
-    let exts ← planners
-    let planned (a : Expr) : Bool := exts.any fun x => x.heads.any (a.isAppOf ·)
+    let laws := fsymPlanExt.getState (← getEnv)
+    let planned (a : Expr) : Bool := laws.any (a.isAppOf ·.head)
     -- pre-assign by the atoms that unify outright; an atom that unfolds once its witnesses are
     -- assigned (a `match` on an existential) is opened again
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
@@ -2114,8 +2207,8 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
     st ← planShares st qsh
     trace[fsym] "plan: shares done"
-    -- planner extensions (`@[fsym_plan]`)
-    for x in exts do st ← x.run st qats
+    -- range laws (`@[fsym_plan]`)
+    st ← planRanges st qats
     -- authorities with a determined fraction: the block's untagged shares go back
     for a in qats do
       let a ← instantiateMVars a

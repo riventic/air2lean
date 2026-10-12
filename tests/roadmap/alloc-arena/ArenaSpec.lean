@@ -10,10 +10,12 @@ arena invariant `inv CI γ e ctx` below, read in the caller's thread (`CTriple`,
 from the generated code only. No model of the arena is used. `alloc` is not here: the stock arena
 does not meet `FAllocSpec`'s `alloc` field for any child (O-E, O-B in `docs/alloc-arena.md`).
 
-**The invariant** `own CI γ e ctx` (for a child allocator invariant `CI`, ghost name `γ`, epoch `e`):
+**The invariant** `own CI γ e ctx` (for a child allocator `CI : Child`: its invariant, context
+pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, epoch `e`):
 
-* the arena struct at `ctx`: the child allocator (16 bytes, not read here), `used_list` and
-  `free_list` as pointer-valued atomic words (`aptsE`);
+* the arena struct at `ctx`: the child allocator (16 bytes `CI.bytes`: `cctx` and `vtp`, not read
+  here) and the child's vtable as persistent knowledge (`vtR`), `used_list` and `free_list` as
+  pointer-valued atomic words (`aptsE`);
 * the ghost authority `gauthP γ e M CI.tag`: the grant map `M` of epoch `e`, grant id ↦ region
   and lent fraction (`docs/sep-full-state.md` §Ghost state), under the child's tag;
 * the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`

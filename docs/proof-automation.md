@@ -50,14 +50,13 @@ many successful calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoAttr.lean`: the registries. `@[fsym]` marks a step rule (a triple about
   one command); `@[fsym_atom]` marks an assertion that `fsym` keeps opaque (also for imported
   constants, such as the library's `Junk`); the simp sets `fsym_norm` (programs) and `fsym_arith`
-  (arithmetic side goals); `@[fsym_plan]` registers a planner extension (a `Planner`: the
-  assertion constants it plans and a step of the planner's state), `@[fsym_drop]` a drop lemma
+  (arithmetic side goals); `@[fsym_plan]` registers a **range law**
+  `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
+  table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims).
-* `ZigLean/Sep/Full/AutoClaims.lean`: the claims planner (byte-range claims,
-  `docs/sep-full-state.md` §Byte-range claims): a claim of `Q` is carved out of a state claim of
-  its block and tag that covers it (`claim_split3`), adjacent state claims are joined first when
-  none covers it (`claim_join`), and claims left over are dropped (`claim_drop`). Import it (not
-  just `Auto`) to prove allocator specifications: grants carry claims.
+* `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
+  claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
+  Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
   rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
   providers from atoms (`AddrOf`, `Reaches`), the planner's local updates (region
@@ -66,7 +65,21 @@ many successful calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
+  item stores and the read-back of a stored item, `@memcpy` between separate regions, the
+  pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
+  owned regions lie at disjoint address ranges), put in the context by `MemFacts.pre` (`fsym`
+  does not yet add memory facts of atom pairs itself: `addFacts` covers single atoms only).
 * `ZigLean/Sep/Full/Auto.lean`: the tactic.
+
+### Range laws
+
+For an atom of `Q` whose head `X` has a range law, the planner carves it out of a state atom of
+`X` with the same other arguments that covers it (the law twice, backwards:
+`X lo hi ⟶ X lo a ⋆ X a c ⋆ X c hi`); when none covers it, adjacent state atoms (the second from
+the first's end) are joined first (the law forwards). The law's hypotheses are side goals of the
+arithmetic solver. A head with a law is an atom (never unfolded). Regression:
+`tests/roadmap/sep-auto/Plan.lean` (claims and a user's own range assertion).
 
 ## How it works
 
@@ -132,8 +145,7 @@ many successful calls with 20 to 30 facts.
   block's shares back (`auth_unlend`) until the fractions are equal (equations of the context, also
   under an arithmetic premise); a region's size label and kind are relabelled (`EUpd.relabel`);
   **knowledge** `known b A` comes from the state's or from an owned region of the block
-  (`known_of_region`); **planner extensions** (`@[fsym_plan]`, the claims planner) run after the
-  shares; atoms left over that a drop lemma (`@[fsym_drop]`) forgets are dropped (knowledge,
+  (`known_of_region`); **range laws** (`@[fsym_plan]`, claims) are planned after the shares; atoms left over that a drop lemma (`@[fsym_drop]`) forgets are dropped (knowledge,
   claims); an assertion-level `if` of `Q` that
   the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
@@ -202,9 +214,9 @@ parallel; a run is identified by the option `fsym.run`).
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
 * A provider for a new atom: `@[fsym_provider] theorem … : Reaches b k (myPred …)` (or `AddrOf`).
-* A new kind of ghost resource to plan (split, join, lend): a `Planner` value tagged
-  `@[fsym_plan]` in a module that imports `Auto` (its `run` rearranges the state's atoms by
-  `St.step` with `EUpd` lemmas), and `@[fsym_drop]` for its atoms that may be forgotten.
+* A new range resource to plan (split, join): its range law tagged `@[fsym_plan]`, and
+  `@[fsym_drop]` for its atoms that may be forgotten. Another kind of planning (lending, a
+  different algebra) is an engine change in `Auto.lean` (the fsym lane), not a user extension.
 * Normalization: `attribute [fsym_norm] …` for programs, `attribute [fsym_arith] …` for
   arithmetic. A simp lemma must match the child-normalized form of terms (`0#1`, not the literal
   `(0 : BitVec 1)`).
