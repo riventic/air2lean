@@ -1,6 +1,7 @@
 import ZigLean.Conc.Detach
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadBridge
 
 /-!
 # A detached worker that owns its heap buffer, over all schedules (C07)
