@@ -677,6 +677,14 @@ jobs:
           # F2/S1/H1: one theorem universe, kernel replay records and report freshness (no Lean).
           python3 -B tests/roadmap/theorem-universe/test_universe.py -v
 
+      # T05: the native/wasm32 correspondence relation over the committed observation records
+      # (no compiler; the 0.16.0 records are re-observed in the native part).
+      - name: Native/WASM correspondence relation
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        run: |
+          python3 -B tests/roadmap/wasm-correspondence/test_correspondence.py
+          python3 -B scripts/wasm-correspondence.py check
+
       # W3: the real-allocator/Io inclusion checker and its committed evidence (the native and
       # model runs are local: tests/roadmap/model-inclusion/check.sh).
       - name: Model inclusion evidence
@@ -1906,6 +1914,16 @@ jobs:
           lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
+
+      # T05: re-observe the 0.16.0 x86_64-linux and wasm32-freestanding records (wasm32 under Node).
+      - name: Native/WASM correspondence records (x86_64-linux, wasm32)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target native --verify
+          python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target wasm32 --verify
 
       # T03: s390x and mips64 (big endian) and x86_64 translations of one source, both-order
       # proofs, the big-endian rejections, and the native program on s390x and mips64 under

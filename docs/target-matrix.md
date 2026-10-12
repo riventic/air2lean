@@ -82,7 +82,8 @@ native probe of the same version (`scripts/aarch64-abi.py check`, below). The su
 uploaded as `diff-summary-aarch64-linux`.
 
 Not declared: `wasm32-wasi` (needs T02 pointer-width parameterization and T05
-native/WASM correspondence).
+native/WASM correspondence; the bounded relation of [research/T05.md](research/T05.md) relates
+wasm32-freestanding builds to x86_64-linux and aarch64-macos ones).
 WASM execution joins this matrix only when `compatibility.json` declares it, and the
 checker then requires its native-execution, probe and proof steps like any other path.
 

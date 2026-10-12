@@ -1042,6 +1042,14 @@
       ],
       "negative_tests": [
         {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_concurrency_claim_lists_memory_model_premise"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_concurrency_theorem_without_adequacy_premise_fails"
+        },
+        {
           "path": "Proofs/Atomics/Proofs.lean",
           "anchor": "theorem mp_sees_data"
         },
@@ -1059,6 +1067,11 @@
         }
       ],
       "mutants": [
+        {
+          "name": "claims-memory-model-premise-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
         {
           "name": "k",
           "path": "scripts/mutate.sh",
