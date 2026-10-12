@@ -605,6 +605,7 @@
         "Proofs.Lists.Sep",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
+        "Proofs.Lists.Linked",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
         "Proofs.Threads.Proofs",
@@ -614,16 +615,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8f53996e0751d979f9eb32894f3ee11c83751f57",
+        "head": "7871b3eb41f09bb7ea081d319be50f8f0ae944e4",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T17:19:15.666363+00:00",
-      "elapsed_seconds": 55.502,
+      "started_utc": "2026-10-12T18:27:37.550887+00:00",
+      "elapsed_seconds": 13.613,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "ce3550eef8432b687ed715cc6640a1a55ded323c898c05e466819e277fc8a8cf",
+      "log_sha256": "59dd581a131084a46f591f62e82ed61cc07e0d17b6575f877daa66207f6bacab",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -633,6 +634,7 @@
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -670,6 +672,7 @@
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
         "Proofs.Lists.Append": "95a70c37aab728234587153a83056cb70543e5d48de29cbfb59b58f98c0639c6",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
         "Proofs.Slices.Sep": "013f757a8c270f5af3c5258192288d41cdf889d037b9def683d586b8b6b22f11",
@@ -1176,6 +1179,7 @@
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Policy",
+        "Proofs.Lists.Linked",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mutex",
         "Proofs.Sync.Semaphore",
@@ -1192,22 +1196,23 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "eff12e848585ff5a406aba8907bc7b15ce7280f3",
+        "head": "7871b3eb41f09bb7ea081d319be50f8f0ae944e4",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T17:00:48.912813+00:00",
-      "elapsed_seconds": 71.02,
+      "started_utc": "2026-10-12T18:27:51.585963+00:00",
+      "elapsed_seconds": 12.381,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "ea726f70ca3c2518a9ba0ab755f38f6c9878a9055de1d420a23d6162ff9d0089",
+      "log_sha256": "06ac777d287d92ffbc8bc1065a105b4d57ae725fce5d884c4ee7288d2f162e44",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Sync.Contracts",
@@ -1242,6 +1247,7 @@
         "Proofs.Lists.Append": "95a70c37aab728234587153a83056cb70543e5d48de29cbfb59b58f98c0639c6",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Sync.Contracts": "42524e90a9cf4b569ca0009f086148f67569883ebe79944b21a6064e01dea7af",
