@@ -118,6 +118,19 @@ class Reduction(unittest.TestCase):
         ])
         self.assertEqual(out['observed'], {'scripts/a.py': ['read'], 'tests/t/run.py': ['read']})
 
+    def test_a_reused_pid_does_not_keep_the_old_image(self):
+        out = reduce([
+            '60 execve("/usr/bin/git", ["git", "status"], 0x0 /* 1 var */) = 0',
+            '60 +++ exited with 0 +++',
+            '70 execve("/usr/bin/bash", ["bash", "s.sh"], 0x0 /* 1 var */) = 0',
+            '70 clone(child_stack=NULL, flags=SIGCHLD <unfinished ...>',
+            '60 openat(AT_FDCWD</w>, "/w/scripts/a.py", O_RDONLY) = 3</w/scripts/a.py>',  # a new shell child
+            '60 +++ exited with 0 +++',
+            '70 <... clone resumed>) = 60',
+            '60 newfstatat(AT_FDCWD</w>, "/w/docs/x.md", {...}, 0) = 0',  # a third process, clone not yet seen
+        ])
+        self.assertEqual(out['observed'], {'docs/x.md': ['probe'], 'scripts/a.py': ['read']})
+
     def test_git_classes(self):
         self.assertEqual(cr.git_class(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard']), 'names')
         self.assertEqual(cr.git_class(['git', 'ls-files', '-s']), 'commit')

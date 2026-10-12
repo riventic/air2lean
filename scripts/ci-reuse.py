@@ -36,7 +36,8 @@ SCHEMA = 'air2lean-ci-reuse/1'
 DECLARATIONS = '.github/ci-inputs.json'
 WORKFLOW = '.github/workflows/ci.yml'
 WORKFLOW_NAME = 'CI'
-MACHINERY = ('scripts/ci-reuse.py', 'scripts/ci-trace.sh', DECLARATIONS)
+# target-matrix.py evaluates the step conditions that decide which steps a key contains.
+MACHINERY = ('scripts/ci-reuse.py', 'scripts/ci-trace.sh', 'scripts/target-matrix.py', DECLARATIONS)
 # Jobs that are not parts: they build what the parts consume, or aggregate results.
 SUPPORT_JOBS = ('lake', 'zig-air', 'preflight', 'all-checks')
 DECISION_STEP = 'Reuse a recorded result'
@@ -192,12 +193,17 @@ def part_inputs(data, entry, hashfiles=()):
 
 def may_run(step, context):
     """False only when the step's `if` is false for this row in every executing run: it reads
-    nothing but the row, the runner OS and the reuse decision (`env.AIR2LEAN_REUSED` is empty in
-    an executing run). A status function, another step's output or any other context: True."""
+    nothing but the row's own matrix values, a fixed runner's OS and the reuse decision
+    (`env.AIR2LEAN_REUSED` is empty in an executing run). A status function, another step's
+    output, a matrix value the row lacks (GitHub's null coercion) or any other context: True."""
     condition = step.get('if', True)
     if isinstance(condition, bool):
         return condition
     if re.search(r'\w\s*\(', condition):  # the evaluator's status functions have fixed values
+        return True
+    if context['runner.os'] is None and 'runner.os' in condition:
+        return True
+    if any(name not in context['matrix'] for name in re.findall(r'\bmatrix\.([\w-]+)', condition)):
         return True
     try:
         return TM.condition(condition, context)
@@ -211,7 +217,8 @@ def job_definition(job, row):
     job = json.loads(canonical(job))
     if row is not None:
         job['strategy']['matrix']['include'] = [row]
-        context = {'matrix': row, 'runner.os': RR.runner_os(job)}
+        host = TM.runner_host(str(job.get('runs-on', '')))
+        context = {'matrix': row, 'runner.os': host and TM.RUNNER_OS[host.split('-', 1)[1]]}
         job['steps'] = [step for step in job.get('steps') or [] if may_run(step, context)]
     return job
 
@@ -408,6 +415,7 @@ class Reducer:
         self.exe = {}             # pid -> (executable, argv) of its image (last execve, else its parent's)
         self.inherited = {}       # pid -> [(path, kind)] before its clone returned: its parent's image
         self.parent = {}          # child pid -> parent pid
+        self.exited = set()       # pids that exited before their clone returned in the parent
         self.clone_entry = {}     # pid -> its cwd when it entered an unfinished clone
         self.observed = {}        # workspace-relative path -> set of kinds
         self.git = {}             # canonical argv json -> class, for git commands touching .git
@@ -456,6 +464,13 @@ class Reducer:
         else:
             self.deferred.setdefault(pid, []).append((path, kind))
 
+    def forget(self, pid):
+        if pid not in self.exe:
+            self.exited.add(pid)  # its observations wait in `inherited` for the parent's clone
+        self.exe.pop(pid, None)
+        self.cwd.pop(pid, None)
+        self.pending.pop(pid, None)
+
     def learn_cwd(self, pid, cwd):
         self.cwd[pid] = cwd
         for path, kind in self.deferred.pop(pid, []):
@@ -467,7 +482,10 @@ class Reducer:
         if not m:
             return
         pid, text = int(m.group(1)), m.group(2)
-        if text.startswith(('---', '+++')):
+        if text.startswith('+++ '):  # exited or killed: the pid may be reused by a new process
+            self.forget(pid)
+            return
+        if text.startswith('---'):
             return
         if text.endswith('<unfinished ...>'):
             self.pending[pid] = text[:-len('<unfinished ...>')].rstrip()
@@ -502,7 +520,10 @@ class Reducer:
                     self.learn_cwd(child, cwd)
                 # E.g. git's index-preload threads stat every tracked file as part of its command.
                 image = self.exe.get(pid)
-                self.exe.setdefault(child, image)
+                if child in self.exited:
+                    self.exited.discard(child)
+                else:
+                    self.exe.setdefault(child, image)
                 for path, kind in self.inherited.pop(child, []):
                     self.attribute(image, path, kind)
             return

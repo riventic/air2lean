@@ -33,7 +33,7 @@ other step.
 | 38178362017 | pull_request | 37.5 | 349 (72) | 11.7 / 81 | 39 / 308 | 19.4 | 25.6 |
 | 38179421984 | push (old workflow) | 32.2 | 265 (58) | 12.6 / 156 | 13 / 250 | 17.4 | 23.4 |
 
-- 35 jobs per run (22 test rows, 3 macOS, 3 aarch64-linux, 4 `zig-air`, `lake`, `generated`,
+- 35 jobs per run (20 test rows, 3 macOS, 3 aarch64-linux, 4 `zig-air`, `lake`, `generated`,
   `preflight`, `provenance`, `all-checks`). The Free plan runs 20 jobs at a time, 5 of them
   macOS, across all workflows: from 23:06 to 23:33 on 2026-10-11 every one of the 20 slots was
   busy (one dispatched run, one PR run, `ci-cache.yml`), so a run's wall time is mostly the
@@ -351,11 +351,13 @@ and the native wide bit-operation differential. What changes:
   row's proof build only rebuilds the modules that the PR or a Darwin translation changes. Before,
   the macOS cache held only `lake build` defaults and every row rebuilt all of `Proofs` in its
   check tree (5-10 min).
-- Every Lake cache key contains `hashFiles('.github/workflows/ci-cache.yml')` after the
-  toolchain hash: the recipe that built the entry (which targets, which packages) is part of the
-  key, so an entry saved by an older recipe is never a hit for a newer one (the `restore-keys`
-  prefix still restores the newest entry of any recipe as a warm start; Lake's content traces
-  rebuild what differs). Before, the macOS
+- Every root-package Lake cache key (`lake-root-*`) contains
+  `hashFiles('.github/workflows/ci-cache.yml')` after the toolchain hash: the recipe that built
+  the entry (which targets) is part of the key, so an entry saved by an older recipe is never a
+  hit for a newer one. `restore-keys` prefer the newest entry of the same recipe and fall back to
+  any recipe as a warm start (Lake's content traces rebuild what differs). The hash covers the
+  whole file, so any edit of `ci-cache.yml` costs one rebuild of these entries on `main`. The
+  `tests/diff` package entries keep their toolchain-only keys (one recipe: `lake build`). Before, the macOS
   entry built by the old workflow without `Proofs` kept its key, `ci-cache.yml` skipped the
   build, and every macOS row rebuilt `Proofs`.
 - Patched compilers are cached under a key over exactly the inputs of `zig-patch/build.sh` for

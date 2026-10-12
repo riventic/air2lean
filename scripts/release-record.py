@@ -239,16 +239,12 @@ REUSE_CONTEXT = {'env.AIR2LEAN_REUSED': ''}
 REUSE_STEP = 'Reuse a recorded result'
 
 
-def runner_os(job):
-    """`runner.os` of a job's fixed `runs-on` label."""
-    return 'macOS' if str(job.get('runs-on', '')).startswith('macos') else 'Linux'
-
-
 def row_gates(job, row, wanted, expression, where):
     """(gates, not applicable) among the `wanted` step names of one matrix row (or `{}`)."""
     context = {'matrix.%s' % key: value for key, value in row.items()}
     context.update(REUSE_CONTEXT)
-    context.update({'runner.os': runner_os(job), 'github.workspace': '/work'})
+    runner = str(job.get('runs-on', ''))
+    context.update({'runner.os': 'macOS' if runner.startswith('macos') else 'Linux', 'github.workspace': '/work'})
     gates, skipped = [], []
     for step in job.get('steps') or []:
         if step['name'] not in wanted:
