@@ -59,8 +59,8 @@
 #                       safety checks, so an input on which the model throws is illegal behavior there:
 #                       it is counted as ub_excluded, not compared.
 #   AIR2LEAN_DIFF_BACKEND   Native code generator: llvm or stage2_x86_64 (-fno-llvm). Unset: Zig's default.
-#   AIR2LEAN_DIFF_LINK_FLAGS  Extra build-exe flags for the harness (the emulated x86_64 runs pass
-#                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
+#   AIR2LEAN_ROSETTA_LINK_FLAGS  Extra build-exe flags for every executable here (`-z norelro`
+#                       when the x86_64 binaries run under Rosetta; scripts/rosetta.sh, docs/rosetta.md).
 #   AIR2LEAN_DIFF_TARGET  Zig target of the native side (`-target`), e.g. x86_64-linux to
 #                       cross-compile for another host. Unset: this host.
 #   AIR2LEAN_DIFF_PREBUILT  Native side built by `diff.sh --build-only` (above). Unset: build here.
@@ -157,7 +157,7 @@ stock_zig() {
 target_flags="-mcpu=baseline${AIR2LEAN_DIFF_TARGET:+ -target $AIR2LEAN_DIFF_TARGET}"
 build_harness() {
   # shellcheck disable=SC2086  # $backend_flag is empty or one flag, $target_flags are flags
-  stock_zig build-exe -O"$optimize" $target_flags $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$native_dir/$1" \
+  stock_zig build-exe -O"$optimize" $target_flags $backend_flag ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -femit-bin="$native_dir/$1" \
     --dep "$1" --dep common -Mroot="tests/diff/$1/harness.zig" \
     -M"$1"="examples/$1/$1.zig" -Mcommon=tests/diff/common.zig
 }
@@ -260,7 +260,7 @@ EOF
   # Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
   # (tests/diff/libm/selfcheck.zig's doc comment): fatal on Linux, informational elsewhere.
   # shellcheck disable=SC2086  # $target_flags are flags
-  stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} \
+  stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} \
     -femit-bin="$native_dir/libm_selfcheck" tests/diff/libm/selfcheck.zig "$native_dir/air2lean_libm.a"
 
   echo "== building asm archive ==" >&2

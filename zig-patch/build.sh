@@ -189,8 +189,11 @@ fi
 # other runners; a newer CPU's instructions then crash it ("Illegal instruction").
 # -Dversion-string: the tarball has no .git; from 0.17.0 build.zig fails without one unless the
 # version is given (older versions fall back to the same release string).
+# Rosetta (Docker Desktop, linux/amd64) cannot load the JIT-built build runner of Zig 0.17;
+# air2lean_rosetta_run patches it and runs again (scripts/rosetta.sh); elsewhere it just runs.
+source "$script_dir/../scripts/rosetta.sh"
 echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
-(cd "$src_dir" && zig build \
+(cd "$src_dir" && air2lean_rosetta_run zig build \
   -Dversion-string="$version" \
   -Doptimize="$optimize" \
   -Dstrip=true \
