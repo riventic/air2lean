@@ -50,13 +50,30 @@ no such limits.
 
 `zig_gen.py` generates a JSON AST for a Zig program with up to two globals, up to two
 helper functions (some returning `error{Fuzz}!u32`) and `work(p0: u32, p1: u32) u32`.
-Statements cover locals of `u32`/`i32`/`u8`/`bool`, pointers to locals and globals,
+Two profiles share one generator, typechecker, reference evaluator, renderer and shrinker.
+`--profile core` (the default) is the original subset: statements cover locals of
+`u32`/`i32`/`u8`/`bool`, pointers to locals and globals,
 stores through pointers, `bump`/`swap` helper calls (including `swap(&x, &x)` aliasing),
 a `union(enum) { a: u32, b: i32 }` with re-tagging and capturing switches, `defer` and
 `errdefer` blocks, `if`, bounded `while` loops with `break`, integer `switch` and early
 `return`/`return error.Fuzz`. Expressions use wrapping arithmetic, bit operations, shifts,
 modulo by constants, comparisons, short-circuit logic, `@bitCast`/`@truncate`/`@intCast`/
-widening casts, calls and `catch`.
+widening casts, calls and `catch`. A test pins the core renderings of seeds 0-39 by hash,
+so the seeds checked by the heavy runs keep their meaning.
+
+`--profile wide` adds, with their own seed space:
+
+| Feature | Constructs |
+|---|---|
+| `wide_int` | `u16`/`u64`/`i64` locals, arithmetic and comparisons at their own width, and a cast table (`widen`/`truncate`/`bitCast`/`intCast` between `u8`, `u16`, `u32`, `u64`, `i32`, `i64`) |
+| `array` | `[4]u32` locals, indexed reads and writes (`a[(i % 4)]`), compound assignment, pointers to elements (`&a[k]`) that alias the array through `swap`/`bump`/stores |
+| `slice` | `[]u32` views `a[lo..hi]` (possibly empty) that write through to the array, indexed reads and writes, `for (s) \|e\|` loops with `break`/`return` |
+| `optional` | `?u32` locals from `if (c) e else null`, `orelse`, capturing `if (o) \|v\|`, reassignment |
+| `struct` | `struct { x: u32, y: i32 }` locals, field reads/writes, by-value copies, pointers to fields and the pointer-taking helper `bumpP(*P, u32)` |
+
+Indexes are side-effect free (literals and locals, never globals or calls), so Zig's unspecified
+operand order between an lvalue and its right-hand side cannot affect the reference result;
+every index is reduced modulo the static length, so no bounds trap is reachable.
 
 - `typecheck` states the generator's invariants: lexical scope, types, no shadowing,
   immutable parameters, Zig's unused-local, never-mutated and unreachable-code rules,

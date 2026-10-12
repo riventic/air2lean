@@ -114,9 +114,11 @@ def denied_by(strength: str) -> frozenset[Outcome]:
 
 
 def default_admits(strength: str) -> frozenset[Outcome]:
-    """What a contract admits unless it declares otherwise: returned values and error returns (a
-    returned value, never a model failure). Failures are admitted only by explicit declaration."""
-    return CONTRACT_OUTCOMES - SAFETY_FAILURES
+    """What a contract admits unless it declares otherwise. A strength with an absence claim
+    (safety, partial and total correctness) admits returned values and error returns (a returned
+    value, never a model failure): failures are admitted only by explicit declaration. A strength
+    that claims nothing about failures (resource bound, correspondence) is not refuted by one."""
+    return CONTRACT_OUTCOMES - (SAFETY_FAILURES if denied_by(strength) else frozenset())
 
 
 def contract_admits(strength: str, declared) -> frozenset[Outcome]:

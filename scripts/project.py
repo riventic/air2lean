@@ -891,9 +891,12 @@ def self_relation(theorem, definition):
         return 'reflexive', left.get('args'), right.get('args')
     la, ra = left.get('args') or [], right.get('args') or []
     canonical = lambda atoms: sorted(json.dumps(a, sort_keys=True) for a in atoms)
-    if len(la) == len(ra) and canonical(la) == canonical(ra) and la != ra:
-        swapped = sum(x != y for x, y in zip(la, ra))
-        kind = 'commutative' if swapped == 2 else 'argument_permutation'
+    differing = [i for i, (x, y) in enumerate(zip(la, ra)) if x != y]
+    if len(la) == len(ra) and len(differing) == 2 and la[differing[0]] == ra[differing[1]] \
+            and la[differing[1]] == ra[differing[0]]:
+        kind = 'commutative'  # exactly two arguments swapped
+    elif len(la) == len(ra) and la != ra and canonical(la) == canonical(ra):
+        kind = 'argument_permutation'
     elif any(isinstance(a, dict) and definition in (a.get('open'), a.get('closed')) for a in la + ra):
         kind = 'self_composition'
     elif la == ra:
@@ -1156,7 +1159,7 @@ def coverage_level(record, require_export=False):
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
-    for goal in goals:
+    for goal in direct:  # Other goals already block, and their contracts are unbacked.
         contract = goal['outcome_contract']
         if contract['status'] == 'refuted':
             blockers.append(f'goal {goal["theorem"]}: outcome contract refuted ({contract["reason"]}; '

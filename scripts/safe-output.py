@@ -80,13 +80,17 @@ def _become_subreaper():
 
 def _processes():
     """pid -> (ppid, start time, command and, where visible, environment); {} if ps fails."""
+    helper = None
     try:
-        with subprocess.Popen(['ps', '-axeww', '-o', 'pid=,ppid=,lstart=,command='], stdout=subprocess.PIPE,
-                              text=True, env=dict(os.environ, LC_ALL='C')) as helper:
-            listing, _ = helper.communicate(timeout=5)
-            if helper.returncode:
-                return {}
+        helper = subprocess.Popen(['ps', '-axeww', '-o', 'pid=,ppid=,lstart=,command='], stdout=subprocess.PIPE,
+                                  text=True, env=dict(os.environ, LC_ALL='C'))
+        listing, _ = helper.communicate(timeout=5)
+        if helper.returncode:
+            return {}
     except (OSError, subprocess.SubprocessError):
+        if helper is not None:  # A hung `ps` must not hang the runner: kill and reap it.
+            helper.kill()
+            helper.wait()
         return {}
     rows = {}
     for line in listing.splitlines():

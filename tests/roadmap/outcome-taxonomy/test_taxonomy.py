@@ -266,9 +266,12 @@ class ClaimsEvidenceTests(unittest.TestCase):
 class ContractTests(unittest.TestCase):
     """The taxonomy as a contract vocabulary (V06): what a goal admits, judged against outcome counts."""
 
-    def test_default_contract_admits_values_and_error_returns_only(self):
-        for strength in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
+    def test_default_contract_admits_values_and_error_returns_only_where_absence_is_claimed(self):
+        for strength in ('safety', 'partial_correctness', 'total_correctness'):
             self.assertEqual(outcomes.contract_admits(strength, None), {O.VALID, O.NONDETERMINISTIC_VALID, O.ERROR_RETURN})
+        # A strength that claims nothing about failures is not refuted by one.
+        for strength in ('resource_bound', 'correspondence'):
+            self.assertEqual(outcomes.contract_admits(strength, None), outcomes.CONTRACT_OUTCOMES)
 
     def test_declarations_are_validated(self):
         self.assertEqual(outcomes.contract_admits('resource_bound', ['valid', 'panic', 'deadlock']),

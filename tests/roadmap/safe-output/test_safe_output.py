@@ -348,7 +348,7 @@ class Escape(Stubbed):
         self.assertEqual(code, safe.DESCENDANTS, output)
         self.assert_stopped()
 
-    @unittest.skipUnless(safe._become_subreaper(), 'needs a child subreaper (Linux)')
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'needs a child subreaper (Linux)')
     def test_escaped_scrubbed_orphan_between_samples_is_adopted_and_stopped(self):
         # The descendant forks through a short-lived parent, calls setsid and drops the environment
         # marker, and no sample runs after the fork (interval 1h): only the subreaper link reveals it.
@@ -356,7 +356,7 @@ class Escape(Stubbed):
         self.assertEqual(code, safe.DESCENDANTS, output)
         self.assert_stopped()
 
-    @unittest.skipIf(safe._become_subreaper(), 'host can contain escapees')
+    @unittest.skipIf(sys.platform.startswith('linux'), 'host can contain escapees')
     def test_required_containment_refuses_hosts_without_a_subreaper(self):
         code, output = self.finish(self.run_stub('ok', '--require-containment'))
         self.assertEqual(code, safe.NO_CONTAINMENT, output)

@@ -249,10 +249,11 @@ class CoverageTests(unittest.TestCase):
         # never direct and the root never reaches a functional level.
         a, b = {'bvar': 0}, {'bvar': 1}
         nested = {'open': 'Example.root', 'bvars': [0]}
-        cases = {'commutative': ([a, b], [b, a]), 'argument_permutation': ([a, b, {'bvar': 2}], [b, {'bvar': 2}, a]),
-                 'self_composition': ([nested], [a]), 'other_arguments': ([a], [b])}
-        for kind, (left, right) in cases.items():
-            with self.subTest(kind=kind):
+        cases = [('commutative', [a, b], [b, a]), ('commutative', [a, a, b], [a, b, a]),  # two arguments swapped
+                 ('argument_permutation', [a, b, {'bvar': 2}], [b, {'bvar': 2}, a]),
+                 ('self_composition', [nested], [a]), ('other_arguments', [a], [b])]
+        for kind, left, right in cases:
+            with self.subTest(kind=kind, left=left):
                 rhs = computation('Example.root', right)
                 shape = structure(computation('Example.root', left), head='Eq', nonvacuity='trivial')
                 shape['args'][2] = rhs
