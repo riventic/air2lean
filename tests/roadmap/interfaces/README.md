@@ -23,8 +23,12 @@ standard axioms):
 
 - `ListsSpec.lean`: `create`, `push` and `destroy` of `lists` for every allocator, from
   `CAllocSpec` of the environment's allocator at the vtable (`CVTable.env`);
-- `MixSpec.lean`: `allocBytesAligned` of `mix` for every allocator, from `CAllocSpec` of the
-  dispatch (`CVTable.dispatch`): one rule for the call whose arms are the FixedBufferAllocator
-  and the environment.
+- `MixSpec.lean`: `allocBytesAligned`, `create` and `make` of `mix` for every allocator, from
+  `CAllocSpec` of the dispatch (`CVTable.dispatch`): one rule for the call whose arms are the
+  FixedBufferAllocator and the environment;
+- `ClosureCX.lean`: the dispatch through the FixedBufferAllocator's vtable is its translated
+  code whatever the environment, and the counterexample to the unsound alternative: lifting the
+  environment's contract to a vtable of the program would prove a double-issuing closure
+  allocator correct.
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

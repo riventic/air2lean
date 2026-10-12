@@ -122,6 +122,19 @@ def reduceProjs (e : Expr) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
+/-- `List.map f` over a list literal expanded to the literal of the images, beta-reduced (a
+table's arms at a call's arguments, `Table.callOr`). Then `reduceProjs` turns an argument of the
+call (`(c, ?n, …).2.1`) into the metavariable itself, which unification assigns the program's
+literal as written; left as a projection, unification unfolds the literal (`4#64` to its
+structure) to meet it. -/
+def expandMapLits (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    if x.isHeadBetaTarget then return .visit x.headBeta
+    unless x.isAppOfArity ``List.map 4 do return .continue
+    let l := x.appArg!
+    unless l.isAppOfArity ``List.cons 3 || l.isAppOfArity ``List.nil 1 do return .continue
+    return .visit (← whnfD x))
+
 /-- Raw natural-number literals as numerals (`OfNat.ofNat n`): unification can assign a rule's
 argument a raw literal (`BitVec.ofNat 6 ?k =?= 3`, an interface's alignment), which the
 precondition's atoms (`2 ^ ?k`) must match as the state writes them. Equal up to `instOfNatNat`. -/
@@ -2702,8 +2715,10 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let some tx := target? | s.restore; return none
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
-      -- reduced first, so that a literal argument unifies as written, not in its unfolded form
+      -- and the table's arms (`Table.callOr`'s `t.map …`) reduced first, so that a literal
+      -- argument unifies as written, not in its unfolded form
       let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
+      let cmd ← reduceProjs (← expandMapLits cmd)
       unless headKey cmd == headKey tx do s.restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"

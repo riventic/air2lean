@@ -55,8 +55,9 @@ for entry in "${programs[@]}"; do
   cmp "$work/Interfaces/$module.lean" "$here/Interfaces/$module.lean"
 done
 # The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
-# only the standard axioms.
-for spec in ListsSpec MixSpec; do
+# only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
+# using the environment's contract for a vtable of the program.
+for spec in ListsSpec MixSpec ClosureCX; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"

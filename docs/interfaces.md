@@ -79,8 +79,8 @@ lane `codex/alloc-param`).
   `CAllocSpec.dispatch`; `CVTable.dispatch_of_fresh` (a vtable none of whose entries is a
   function of the program is the environment's allocator `CVTable.env t.env fns`) gives
   `CAllocSpec.dispatch_env`. `CVTable.dispatch_closure_env`: the dispatch through a closure
-  vtable does not depend on the environment, and `tests/roadmap/interfaces` has the
-  counterexample to the unsound alternative: a design that used the environment's contract for
+  vtable does not depend on the environment, and `tests/roadmap/interfaces/Interfaces/ClosureCX.lean`
+  has the counterexample to the unsound alternative: a design that used the environment's contract for
   a closure vtable would prove a double-issuing closure allocator correct.
 * A client takes `CAllocSpec (CVTable.dispatch t fns) ctx I`: about the code that runs, so
   sound whichever arm it is; it is discharged by (2) or (3). A program without allocator
