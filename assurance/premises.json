@@ -219,6 +219,7 @@
     "ZigLean.Sep.Full.Ghost": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Extent": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Ops": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
+    "ZigLean.Sep.Full.Local": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Pinned": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Mmap": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Atomic": ["SEM-02", "SEM-03", "ORD-01", "THR-08"],
