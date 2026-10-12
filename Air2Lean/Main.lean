@@ -251,6 +251,23 @@ def parseArgs (args : List String) : Except String Args := do
       throw s!"invalid --profile '{p}'\n{usage}"
   pure a
 
+/-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any. -/
+def readErrorTable (dir : System.FilePath) : IO (Option Raw.ErrorTableFile) := do
+  let path := dir / Raw.errorTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseErrorTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- `f` with the compilation's numbering, which must be of its Zig version and error width. -/
+def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
+  | none => pure f
+  | some t => do
+    unless t.zigVersion == toString f.dialect.version && t.errorSetBits == f.dialect.errorSetBits do
+      throw s!"{f.name}: {Raw.errorTableFileName} is of Zig {t.zigVersion} with {t.errorSetBits}-bit \
+        errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
+    pure { f with errorTable := some t.names }
+
 /-- Shared checked path for parsed AIR; metadata remains available to the CLI. -/
 def processRaw (raw : Raw.RawFunc) : Except String Func := do
   let f ← normalize raw
@@ -314,6 +331,7 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      let errorTable ← readErrorTable a.airDir
       let models ← match a.modelRegistry with
         | none => pure #[]
         | some path =>
@@ -347,7 +365,7 @@ private def run (args : List String) : IO UInt32 := do
             let (normalized, normalizeNs) ← timed fun _ => (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              normalize raw : Except String Func)
+              withErrorTable (← normalize raw) errorTable : Except String Func)
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"

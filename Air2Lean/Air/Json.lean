@@ -885,4 +885,26 @@ def parseIdentifiedFunc (j : Json) (allocatorModel : AllocatorModel := .std) :
 def parseFile (contents : String) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
   parseIdentifiedFunc (← StrictJson.parse contents) allocatorModel
 
+/-- The file of the compilation's error numbering beside the AIR files (`docs/air-json.md`
+§Error table, L10). -/
+def errorTableFileName : String := "error-table.air2lean"
+
+/-- The compilation's error numbering: code `i + 1` is `names[i]`. -/
+structure ErrorTableFile where
+  zigVersion : String
+  errorSetBits : Nat
+  names : Array String
+
+/-- Parse `error-table.air2lean`: schema 12, the Zig version, the error width and the names in
+code order, each once. -/
+def parseErrorTable (contents : String) : Except String ErrorTableFile := do
+  let j ← StrictJson.parse contents
+  let schema ← j.getObjValAs? Nat "schema"
+  unless schema == 12 do throw s!"error table: schema {schema}, expected 12"
+  let names ← j.getObjValAs? (Array String) "names"
+  let unique := names.foldl (fun (seen : Std.HashSet String) n => seen.insert n) {}
+  unless unique.size == names.size do throw "error table: an error name occurs twice"
+  return { zigVersion := ← j.getObjValAs? String "zig_version",
+           errorSetBits := ← j.getObjValAs? Nat "error_set_bits", names }
+
 end Air2Lean.Raw

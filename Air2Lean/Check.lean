@@ -1872,10 +1872,15 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
       slice, vector or packed struct"
 
 /-- A shared budget proves absence of embedded pointer capabilities, including
-inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
-private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
+inactive optional payload types. Unknown types, cycles and exhausted work fail closed.
+`dataPtrs`: a pointer to data (not a function, whose value must be an address-taken function,
+M20) counts as a leaf, its bytes a `Zig.Ptr` (`extern` storage, `checkExternGlobal`). -/
+private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) (dataPtrs := false) :
+    Option Nat := do
   if fuel == 0 then none
   let ty ← f.types[root]?
+  if let .ptr _ _ child := ty then
+    return ← if dataPtrs && !(f.types[child]?.map isFnTy).getD true then some (fuel - 1) else none
   let count ← match ty with
     | .int .. | .float .. | .bool | .void | .errorSet (some _) => some 0
     | .array .. | .vector .. | .optional .. | .enum .. => some 1
@@ -1887,7 +1892,7 @@ private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Op
   if count > remaining then none
   let children := childTys ty
   for child in children do
-    remaining ← pointerFreeInitializerType f child remaining
+    remaining ← pointerFreeInitializerType f child remaining dataPtrs
   return remaining
 
 /-- Complete constructor values whose typed encoding contains no `errFrag`.
@@ -2454,18 +2459,25 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     if pa > ga then throw (alignment pa ga)
 
 /-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
-field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
-error-free type whose bytes the model encodes qualifies. -/
+field of `ExternInit` (`docs/generated-code.md` §Globals). A named, error-free, union-free
+type whose bytes the model encodes qualifies. It may hold data pointers (L12): their initial
+values are `Zig.Ptr`s of `ext`, which can point into the external blocks `ext.storage` that
+`mem0` adds after the program's globals, into a program global, or nowhere. A function pointer
+is rejected (an indirect call dispatches on the address-taken functions of the program, M20),
+and so is a pointer-bearing `extern` in a program with error-bearing globals: the finite
+error-storage fragment tracks every pointer into those (`dependsOnErrorGlobal`). -/
 private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `extern` global {what}: {why}; external initial state is an explicit \
-      `ExternInit` parameter of `mem0` only for named, pointer-free, error-free storage"
+      `ExternInit` parameter of `mem0` only for named, error-free, union-free storage"
   if g.name.isNone then fail "it has no name"
   if g.init.isSome then fail "the AIR file gives it an initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  if (pointerFreeInitializerType f g.ty 1024 (dataPtrs := true)).isNone then
+    fail "its type can hold a function pointer, a union or an unresolved type"
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  if carriesPointer f g.ty && f.globals.any (fun g => hasErrorStorage f.types g.ty) then
+    fail "it holds a pointer, and the program has error-bearing globals"
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 

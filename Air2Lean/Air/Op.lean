@@ -615,6 +615,10 @@ inductive Op where
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/
   | errorName (a : Val)
+  /-- `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0), the check before `@errorFromInt`:
+  the code `a` is at most the compilation's error count (both tags compare `<=`, L10). Needs
+  the compilation's numbering (`Func.errorTable`). -/
+  | errorsLenLe (a : Val)
   | structFieldVal (s : Val) (index : Nat)
   | aggregateInit (elems : Array Val)
   | call (callee : Val) (args : Array Val)
@@ -736,6 +740,10 @@ structure Func where
   /-- The OS component of the profile's target triple (`linux`, `macos`); empty for a legacy
   profile. Selects the trusted OS model's ABI (`Zig.Os.Target`). -/
   targetOs : String := ""
+  /-- The compilation's error numbering, code `i + 1` = `errorTable[i]`, from the exporter's
+  `error-table.air2lean` beside the AIR files (`docs/air-json.md` §Error table, L10); `none`
+  without one. Integer/error casts translate only with it. -/
+  errorTable : Option (Array String) := none
 
 /-- A single or many pointer type through which an access is an ordinary memory access: not a
 slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and

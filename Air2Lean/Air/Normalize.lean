@@ -74,8 +74,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
   (#["vector_store_elem"],
     "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"),
-  (#["cmp_lt_errors_len", "cmp_lte_errors_len"],
-    "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"),
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
@@ -357,6 +355,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy true a b
   | "tag_name" => let a ← arg1 fnName raw; return .tagName a
   | "error_name" => let a ← arg1 fnName raw; return .errorName a
+  | "cmp_lt_errors_len" | "cmp_lte_errors_len" => let a ← arg1 fnName raw; return .errorsLenLe a
   | "struct_field_val" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -474,7 +473,7 @@ def decodedTags : Array String := #[
   "atomic_store_release", "atomic_store_seq_cst", "atomic_rmw", "cmpxchg_weak", "cmpxchg_strong",
   "slice_len", "slice_elem_val", "ptr_add", "ptr_sub", "ptr_elem_ptr", "slice_elem_ptr",
   "ptr_elem_val", "array_elem_val", "slice", "slice_ptr", "array_to_slice", "ptr_slice_len_ptr",
-  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name",
+  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name", "cmp_lt_errors_len", "cmp_lte_errors_len",
   "struct_field_val", "aggregate_init", "block", "dbg_inline_block", "loop", "br", "repeat",
   "cond_br", "switch_br", "loop_switch_br", "switch_dispatch", "try", "try_cold", "try_ptr",
   "try_ptr_cold", "ret", "ret_safe", "unreach", "trap", "dbg_stmt", "dbg_var_ptr", "dbg_var_val",

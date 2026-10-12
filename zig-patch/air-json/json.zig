@@ -194,6 +194,12 @@ const Compat = struct {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
     }
 
+    /// The `@errorFromInt` bound check: `cmp_lt_errors_len`, renamed `cmp_lte_errors_len` in
+    /// 0.16.0 (both compare `<=` with the error count). A `un_op`.
+    fn isErrorsLen(tag: Air.Inst.Tag) bool {
+        return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
+    }
+
     /// `vector_store_elem` (0.14.1, 0.15.2; 0.16.0 rejects a runtime vector index in Sema): a
     /// store of one lane at a runtime index, `v[i] = x` through a vector pointer.
     fn isVectorStoreElem(tag: Air.Inst.Tag) bool {
@@ -1278,6 +1284,8 @@ const W = struct {
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             } else if (Compat.isFieldVal(tag)) {
                 try w.writeStructField(inst);
+            } else if (Compat.isErrorsLen(tag)) {
+                try w.writeArgs(&.{w.data(inst).un_op});
             } else if (!Compat.v16 and Compat.isVectorStoreElem(tag)) {
                 // The vector pointer, the lane index and the lane value.
                 const d = w.data(inst).vector_store_elem;
