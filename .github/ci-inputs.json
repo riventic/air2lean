@@ -92,15 +92,9 @@
     },
     "test/0.16.0/receipt": {
       "inputs": [
-        "**",
-        "docs/allocation-policy-report.json",
-        "docs/premises.md"
+        "**"
       ],
-      "exclude": [
-        "docs/**",
-        "*.md"
-      ],
-      "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations)"
+      "note": "the whole tree: the proof receipt fingerprints every tracked file (scripts/proof-receipt.py), so a withheld one fails it (run 38235990118: CLAUDE.md)"
     },
     "test/0.16.0/Debug": {
       "inputs": [
