@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # C02 thread-local storage: retranslate the retained 0.16.0 and 0.15.2 exports, compare with
 # ThreadLocals/Gen.lean, kernel-check the proofs, run sampled schedules and mutants, and run
-# the CLI rejection regressions. Needs `lake build air2lean ZigLean.Conc.TlsLemmas`; no Zig.
+# the CLI rejection regressions. Needs `lake build air2lean ZigLean.Conc.TlsLemmas
+# ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts`; no Zig.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"

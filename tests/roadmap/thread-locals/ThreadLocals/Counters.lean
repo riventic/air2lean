@@ -47,14 +47,12 @@ abbrev u32At (p : Ptr) (A : Nat) (K : BlockKind) (b : BlockId) (v : BitVec 32) :
 /-- `main`'s instance of `counter`: block 0 of `mem0` at the address `Ac`, and its knowledge. -/
 abbrev cnt (Ac : Nat) (v : BitVec 32) : FAssn := u32At ⟨some 0, 0⟩ Ac .global 0 v ⋆ known 0 Ac
 
-theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
-
 theorem wr (v w : BitVec 32) : writeBytes (Enc.encode v) 0 (Enc.encode w) = Enc.encode w :=
-  writeBytes_all (by rw [enc_u32, enc_u32])
+  writeBytes_all (by rw [LawfulEnc.size_encode_u32, LawfulEnc.size_encode_u32])
 
 theorem enc_zero : writeBytes (Array.replicate 4 .undef) 0 (Enc.encode (0 : BitVec 32)) =
     Enc.encode (0 : BitVec 32) :=
-  writeBytes_all (by simp [enc_u32])
+  writeBytes_all (by simp [LawfulEnc.size_encode_u32])
 
 theorem sep_lcomm {P Q R : FAssn} {r : Res} (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
   sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
@@ -270,7 +268,7 @@ theorem tlsInit_ok : ∀ x ∈ tlsInit, 0 < x.2.2 ∧ 0 < x.2.1.size := by
   intro x hx
   rw [tlsInit_eq, List.mem_singleton] at hx
   subst hx
-  exact ⟨by decide, by show 0 < (Enc.encode (7 : BitVec 32)).size; rw [enc_u32]; decide⟩
+  exact ⟨by decide, by show 0 < (Enc.encode (7 : BitVec 32)).size; rw [LawfulEnc.size_encode_u32]; decide⟩
 
 /-- `counter += 1` through the pointer `p`. -/
 def seg (p : Ptr) : MemM Unit :=
@@ -291,13 +289,13 @@ theorem seg_spec {b : BlockId} {A : Nat} {v w : BitVec 32} (hA : A % 4 = 0)
       (fun _ => u32At ⟨some b, 0⟩ A .global b w) := by
   unfold seg
   refine (FTTriple.loadAt (k := 0) (a := 4) (v := v) rfl (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simpa using hA) (LawfulEnc.decode_extract v)).bind fun x =>
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simpa using hA) (LawfulEnc.decode_extract v)).bind fun x =>
       FTTriple.lift fun hx => ?_
   subst x
   refine (FTTriple.liftR_ok hw).bind fun y => FTTriple.lift fun hy => ?_
   subst y
   refine (FTTriple.storeAt (k := 0) (a := 4) w rfl (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simpa using hA) (by decide)).post fun _ _ h => ?_
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simpa using hA) (by decide)).post fun _ _ h => ?_
   rwa [wr] at h
 
 /-- The output: the instance's value, stored in `out` (block `bo`, address `Ao`). -/
@@ -307,13 +305,13 @@ theorem out_spec {b bo : BlockId} {A Ao : Nat} {out : Ptr} {v : BitVec 32} (hA :
       (load (BitVec 32) 4 ⟨some b, 0⟩ >>= fun x => store (α := BitVec 32) 4 out x)
       (fun _ => u32At out Ao .stack bo v ⋆ u32At ⟨some b, 0⟩ A .global b v) := by
   refine ((FTTriple.loadAt (k := 0) (a := 4) (v := v) rfl (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simpa using hA) (LawfulEnc.decode_extract v)).frameL
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simpa using hA) (LawfulEnc.decode_extract v)).frameL
     (R := u32At out Ao .stack bo 0)).bind fun x => ?_
   refine FTTriple.pre (P := ⟪x = v⟫ ⋆ (u32At out Ao .stack bo 0 ⋆ u32At ⟨some b, 0⟩ A .global b v))
     (FTTriple.lift fun hx => ?_) fun _ h => sep_lcomm h
   subst x
   refine (FTTriple.storeAt (k := 0) (a := 4) v hob (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simp [ho, hAo]) (by decide)).frame.post fun _ _ h => ?_
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simp [ho, hAo]) (by decide)).frame.post fun _ _ h => ?_
   rwa [wr] at h
 
 theorem add7 : (Zig.add false (7 : BitVec 32) 1).run = some (.ok 8) := by decide
@@ -323,10 +321,10 @@ theorem add8' : (Zig.add false (8 : BitVec 32) 1).run = some (.ok 9) := by decid
 theorem dying_one {b : BlockId} {A : Nat} {v : BitVec 32} {R : FAssn} {r : Res}
     (h : (u32At ⟨some b, 0⟩ A .global b v ⋆ R) r) : (tlsDying [b] ⋆ R) r := by
   obtain ⟨r₁, r₂, hd, e, h1, h2⟩ := h
-  refine ⟨r₁, r₂, hd, e, sep_emp.mpr ⟨A, Enc.encode v, sep_lift.mpr ⟨by rw [enc_u32]; decide, ?_⟩⟩, h2⟩
+  refine ⟨r₁, r₂, hd, e, sep_emp.mpr ⟨A, Enc.encode v, sep_lift.mpr ⟨by rw [LawfulEnc.size_encode_u32]; decide, ?_⟩⟩, h2⟩
   show (up (bytesAt ⟨some b, 0⟩ A (Enc.encode v).size .global (Enc.encode v)) ⋆
     bext b (Enc.encode v).size .global) r₁
-  rw [enc_u32]; exact h1
+  rw [LawfulEnc.size_encode_u32]; exact h1
 
 /-! ## The kids -/
 
@@ -365,7 +363,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     have hinst' : u32At ⟨some b, 0⟩ Ac' .global b 7 r₁b := by
       have h := hinst
       simp only [gblk] at h
-      rw [show init7.size = 4 from enc_u32 7] at h
+      rw [show init7.size = 4 from LawfulEnc.size_encode_u32 7] at h
       exact h
     have hp₂ : (u32At out A .stack bo 0 ⋆ u32At ⟨some b, 0⟩ Ac' .global b 7)
         (upd (ownOf G m) u r₁ u) := by
@@ -497,13 +495,13 @@ theorem mem0_size (σ : Placement) : (mem0 σ).threads.size = 1 := rfl
 theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, cnt Ac 7 r ∧
     FOwned (upd (fun _ => rnil) 0 r) rO { mem0 σ with current := 0 } := by
   obtain ⟨hh, hg⟩ := initRes_holds σ gs0 (by intro g hg; simp at hg; subst hg; rfl)
-  have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, enc_u32])
+  have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, LawfulEnc.size_encode_u32])
   have ho := FOwned.one (m := { mem0 σ with current := 0 })
     (Holds.congrMem (m := Mem.ofGlobals σ gs0) rfl rfl hh) rfl rfl rfl hs.2.1 hs.2.2
   have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) (initRes σ gs0) := hg
   obtain ⟨Ac, hg⟩ := sep_emp.mp hg'
   obtain ⟨hAc, hg⟩ := sep_lift.mp hg
-  rw [enc_u32, gext, if_pos (by decide : (0 : Nat) < 4)] at hg
+  rw [LawfulEnc.size_encode_u32, gext, if_pos (by decide : (0 : Nat) < 4)] at hg
   exact ⟨_, Ac, hAc (by decide), _, sep_assoc' (sep_mono_right (fun _ h => sep_comm h) hg), ho⟩
 
 /-- `main`'s `tlsPtr` finds its instance, block 0. -/
@@ -517,7 +515,7 @@ theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some main
 theorem free_front {R : FAssn} {p : Ptr} {A : Nat} {k : BlockId} {v : BitVec 32}
     (hpb : p.block = some k) (h0 : p.off = 0) :
     FTTriple (u32At p A .stack k v ⋆ R) (Zig.free p) (fun _ => R) :=
-  (FTTriple.free' hpb (enc_u32 v) h0 (by decide)).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
+  (FTTriple.free' hpb (LawfulEnc.size_encode_u32 v) h0 (by decide)).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
 
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 4000000 in
@@ -639,14 +637,14 @@ theorem main_spec (σ : Placement) (d : Nat) :
   simp only [StateT.run_bind]
   refine WP.bind (WP.liftM_tlsPtr (main_inst hc₈ ht0₈) ?_)
   refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (p := ⟨some 0, 0⟩) (k := 0) (a := 4)
-    (v := (7 : BitVec 32)) rfl (by simp [Ptr.add]) (by decide) (by rw [enc_u32]; decide)
+    (v := (7 : BitVec 32)) rfl (by simp [Ptr.add]) (by decide) (by rw [LawfulEnc.size_encode_u32]; decide)
     (by simpa using hAc) (LawfulEnc.decode_extract 7)).frame (R := known 0 Ac))
     ho₈ hc₈ hsz₈ hCa fun r₁ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
   obtain ⟨rfl, hC₉⟩ := lift_l hq₉
   rw [upd_upd] at ho₉
   refine WP.bind (WP.callRC_ok (v := (8 : BitVec 32)) add7 ?_)
   refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (p := ⟨some 0, 0⟩) (k := 0) (a := 4)
-    (8 : BitVec 32) rfl (by simp [Ptr.add]) (by decide) (by rw [enc_u32]; decide) (by simpa using hAc)
+    (8 : BitVec 32) rfl (by simp [Ptr.add]) (by decide) (by rw [LawfulEnc.size_encode_u32]; decide) (by simpa using hAc)
     (by decide)).frame (R := known 0 Ac))
     ho₉ hc₉ (by rw [ht₉]; exact hsz₈) hC₉ fun _ m₁₀ r₁₀ _ ho₁₀ hC₁₀ hc₁₀ ht₁₀ => ?_)
   rw [upd_upd] at ho₁₀
@@ -792,7 +790,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- `a * 10000 + b * 100 + counter`.
   refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (p := s0) (A := Aa) (S := 4) (K := .stack)
     (k := 0) (a := 4) (v := (9 : BitVec 32)) hab (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simp [ha0, hAa]) (LawfulEnc.decode_extract 9)).frameL.frame.post
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simp [ha0, hAa]) (LawfulEnc.decode_extract 9)).frameL.frame.post
     fun _ _ h => sep_assoc (sep_mono_left (fun _ h => sep_lcomm h) h))
     ho₁₄ hc₁₄ htl hA fun r₁ m₁₅ r₁₅ _ ho₁₅ hq₁₅ hc₁₅ ht₁₅ => ?_)
   obtain ⟨rfl, F₁₅⟩ := sep_lift.mp hq₁₅
@@ -800,7 +798,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.bind (WP.callRC_ok (v := (90000 : BitVec 32)) mul9a ?_)
   refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (p := s2) (A := Ab) (S := 4) (K := .stack)
     (k := 0) (a := 4) (v := (9 : BitVec 32)) hbb (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simp [hb0, hAb]) (LawfulEnc.decode_extract 9)).frameL.post
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simp [hb0, hAb]) (LawfulEnc.decode_extract 9)).frameL.post
     fun _ _ h => sep_lcomm h)
     ho₁₅ hc₁₅ (by rw [ht₁₅]; exact htl) F₁₅ fun r₂ m₁₆ r₁₆ _ ho₁₆ hq₁₆ hc₁₆ ht₁₆ => ?_)
   obtain ⟨rfl, F₁₆⟩ := sep_lift.mp hq₁₆
@@ -810,7 +808,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.bind (WP.liftM_tlsPtr (main_inst hc₁₆ (by rw [ht₁₆, ht₁₅]; exact hth₁₄₀)) ?_)
   refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (p := ⟨some 0, 0⟩) (A := Ac) (S := 4)
     (K := .global) (k := 0) (a := 4) (v := (8 : BitVec 32)) rfl (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simpa using hAc) (LawfulEnc.decode_extract 8)).frame.frame.frame
+    (by rw [LawfulEnc.size_encode_u32]; decide) (by simpa using hAc) (LawfulEnc.decode_extract 8)).frame.frame.frame
     (R := u32At s2 Ab .stack kb 9))
     ho₁₆ hc₁₆ (by rw [ht₁₆, ht₁₅]; exact htl) F₁₆ fun r₃ m₁₇ r₁₇ _ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)
   obtain ⟨rfl, F₁₇⟩ := lift_l (lift_l' hq₁₇)

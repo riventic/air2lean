@@ -116,5 +116,9 @@ theorem _root_.Zig.LawfulEnc.decode_extract {T : Type} [Enc T] [LawfulEnc T] (v 
   rw [Nat.zero_add, ← LawfulEnc.size_encode v, Array.extract_size]
   exact LawfulEnc.decode_encode v
 
+/-- A `u32` is 4 bytes. -/
+theorem _root_.Zig.LawfulEnc.size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 :=
+  LawfulEnc.size_encode v
+
 end Full
 end Zig
