@@ -76,9 +76,10 @@ nothing). In a concurrent run another thread may have written that byte concurre
 races and gives `.illegal`. A thread rule must also say that the step touches only owned bytes,
 which a sequential triple does not say. So:
 
-* thread rules for **primitives** are proved once each (ownership gives `NoRace`, then the
-  sequential run lemma). Until the native ones exist, `FTTriple.ofTTriple` lifts the legacy
-  `TTriple` rules (next section);
+* thread rules for **primitives** come from their sequential triples and their **locality**
+  (`Full/ThreadStep.lean`, S2 below): the thread owns what the step touches, so the step runs in
+  the concurrent memory as in the same memory without its record of accesses. Where no native
+  rule exists yet, `FTTriple.ofTTriple` lifts the legacy `TTriple` rules (next section);
 * **`fsym` on thread triples** needs a backend whose step rules are thread rules: an `@[fsym]`
   rule with an `FTTriple` conclusion, and the structural steps over a record `TLogic`
   (`FLogic` without `ofTotal`, with `toPartial := toFTriple`). That is an engine change in
@@ -128,6 +129,28 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the
   `FTotalTriple` rules derived by `toFTotalTriple`. A `StateT.lift` step of a `Result` touches
   no memory and is a thread rule as it is.
+
+  **Mechanism** (`Full/ThreadStep.lean`, one kernel for every primitive). A primitive reads the
+  record of accesses (`Mem.footprint`) only in its race check. `ThreadLocal P c`: from every
+  memory `m` where the thread owns `P`, the run of `c` is its run from `m.noFp` (a sequential
+  memory) with `m`'s record in front (`Mem.withFp`), and a result of the run from `m.noFp` is a
+  `StepIn` of the frame's bytes that makes no byte of an old block alive (`Mem.NoRevive`). The
+  kernel `FTTotalTriple.ofSeq : FTotalTriple P c Q → ThreadLocal P c → FTTotalTriple P c Q`
+  (and `FTTriple.ofSeq`, partial) reads the sequential triple in `m.noFp`: the resources, the
+  postcondition and the invariant come from it, race freedom from locality, and ownership of the
+  post's bytes from both (a byte of the post is a byte of the pre or in a new block). Locality is
+  proved once per memory operation from ownership (`ThreadLocal.loadBytes`, `load`, `storeBytes`,
+  `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
+  end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
+  as it is has its thread rule directly (`FTTotalTriple.of_read`). Each primitive then has one
+  statement, its thread rule (`FTTotalTriple.ofSeq` of the sequential proof and its locality),
+  and the `@[fsym]` sequential rule is `.toFTotalTriple` of it.
+
+  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
+  (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
+  `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. Next: `Arr`, `Typed`,
+  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`, which replace a block by a new
+  one: `NoRevive` holds).
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
@@ -228,8 +251,9 @@ by `fsym` rules. There is no separate `Stops`/`Turns` judgment and no `stops`/`h
 
 `Full/Thread.lean` does not import the legacy layer: clock ownership and `StepIn` live in
 `ZigLean/Conc/Clock.lean`. The bridge below and the primitive thread rules lifted through it
-(`alloc'`, `free'`, `storeAt`, `loadAt`, `ptrProjectAt`) are `Full/ThreadBridge.lean`, the one
-full-state module that imports `ZigLean/Conc/Own.lean`; it goes with the native rules (T6).
+(`storeAt`, `loadAt`, `ptrProjectAt`; `alloc'` and `free'` are the native rules of `Full/Block`)
+are `Full/ThreadBridge.lean`, the one full-state module that imports `ZigLean/Conc/Own.lean`; it
+goes with the native rules (T6).
 
 `FTTriple.ofTTriple : TTriple P c Q → Tame c → SizeFree P → Keeps c → FTTriple (up P) c (up ∘ Q)`
 lifts a legacy thread triple, as `FTriple.ofTriple_up` lifts a legacy triple. A client file
