@@ -56,7 +56,7 @@ are updates that read the labels from the memory (`EUpd.arr_join`, `EUpd.arr_unf
 `FTotalTriple.arr_load` and `FTotalTriple.arr_store` (an in-bounds item `p.elem (Enc.size T) i`
 at the type's alignment; the array stays whole, the bound `i.toNat < xs.length` is a side
 condition), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
-`Reaches.arr`. For example:
+`Live.arr`. For example:
 
 ```lean
 import ZigLean.Sep.Full.AutoAll

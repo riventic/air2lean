@@ -14,7 +14,7 @@ import ZigLean.Sep.Full.Strength
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
   in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array; the
-  facts of an array (`facts_arr`) and its extent for pointer formation `&xs[i]` (`Reaches.arr`).
+  facts of an array (`facts_arr`) and its extent for pointer formation `&xs[i]` (`Live.arr`).
 -/
 
 namespace Zig
@@ -367,11 +367,11 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
 @[fsym_facts] theorem Auto.facts_arr : Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
   rintro r ⟨⟨-, -, -, -, -, -, -, ⟨b, hb, h0, -⟩, -⟩, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
-/-- A nonempty array owns its bytes: its block reaches one past its last item (for pointer
-formation `&xs[i]`, `ptrProject_elem_of`). -/
-@[fsym_provider] theorem Reaches.arr {b : BlockId} (hpb : p.block = some b) (hn : 0 < Enc.size T)
-    (hl : 0 < vs.length) : Reaches b (p.off.toNat + Enc.size T * vs.length) (up (Zig.arr p vs)) :=
-  Auto.Reaches.bytes hpb fun _ hp => by
+/-- A nonempty array owns its bytes: its block is live and reaches one past its last item (for
+pointer formation `&xs[i]`, `ptrProject_elem_of`, through `Reaches.of_live`). -/
+@[fsym_provider] theorem Live.arr {b : BlockId} (hpb : p.block = some b) (hn : 0 < Enc.size T)
+    (hl : 0 < vs.length) : Live b (p.off.toNat + Enc.size T * vs.length) (up (Zig.arr p vs)) :=
+  Live.bytes hpb fun _ hp => by
     obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
     exact ⟨A, S, K, bs, by rw [hs]; exact Nat.mul_pos hn hl, by omega, hb⟩
 
