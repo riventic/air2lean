@@ -148,7 +148,8 @@ def errTraceTagReason : String :=
 /-- The reason a tag that reaches `normalizeOp` is rejected before decoding, if any. -/
 def stateTagReason? (tag : String) : Option String :=
   (runtimeTagReason? tag).orElse fun _ =>
-    if (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
+    -- `ret_addr` reaching here is the oracle op of `--allocator-model translated`.
+    if tag != "ret_addr" && (Raw.errTraceTags.lookup tag).isSome then some errTraceTagReason else none
 
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
   if (runtimeNavGlobal? raw).isSome then return

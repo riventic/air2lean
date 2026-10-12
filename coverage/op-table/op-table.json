@@ -2,8 +2,7 @@
  "tags":
  [{"tag": "ret_addr",
    "runtime_reason": null,
-   "exporter_reason":
-   "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument",
+   "exporter_reason": null,
    "emit": "straight-line",
    "effect": "value",
    "constructor": "retAddr"},

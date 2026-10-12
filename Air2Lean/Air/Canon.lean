@@ -678,17 +678,22 @@ the current trace for the instructions after it; `err_return_trace` is the curre
 when it was set from a pointer); `save_err_return_trace_index` loads its field through the trace's
 pointer (`optional_payload`, `struct_field_ptr`, `load`, as `airSaveErrReturnTraceIndex`); a call
 whose callee takes the trace passes the current one as a last argument. `ret_addr` is an unknown
-machine address: the model stores it as undefined bytes, its only admitted use. -/
+machine address: the model stores it as undefined bytes, its only admitted use (under
+`--allocator-model translated` it stays the oracle op). -/
 partial def errTraces (f : RawFunc) : Except String RawFunc := do
   let all := flatten f.body
-  let traceUse (i : RawInst) := !i.unsupported && ((errTraceTags.lookup i.tag).isSome || i.errTrace.isSome)
+  -- Under `--allocator-model translated` `ret_addr` is the oracle op (`Op.retAddr`), left as is.
+  let oracleRet := f.allocatorModel == .translated
+  let traceUse (i : RawInst) :=
+    !i.unsupported && (((errTraceTags.lookup i.tag).isSome && !(oracleRet && i.tag == "ret_addr")) ||
+      i.errTrace.isSome)
   if f.errTrace.isNone && !all.any traceUse then return f
   let producers : Std.HashMap InstId TyId := all.foldl (init := {}) fun m i =>
     match i.ty with | some t => m.insert i.id t | none => m
   let unresolved := s!"{f.name}: the exporter could not resolve `std.builtin.StackTrace` for the \
     error return trace; re-export after a function that uses it is analysed, or without error tracing"
   for i in all do
-    if i.tag == "ret_addr" && !i.unsupported then
+    if i.tag == "ret_addr" && !i.unsupported && !oracleRet then
       let stores := all.filter fun u => u.uses.contains i.id
       unless stores.all fun u => (u.tag == "store" || u.tag == "store_safe") &&
           u.args[1]? == some (.inst i.id) && u.args[0]? != some (.inst i.id) do
@@ -724,6 +729,7 @@ partial def errTraces (f : RawFunc) : Except String RawFunc := do
       if i.unsupported then out := out.push i; continue
       match i.tag with
       | "ret_addr" =>
+        if oracleRet then out := out.push i; continue
         let some ty := i.ty | throw s!"{f.name}: inst {i.id}: `ret_addr` without a type"
         st := { st with subst := st.subst.insert i.id (.undef ty) }
       | "set_err_return_trace" =>
