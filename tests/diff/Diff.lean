@@ -195,9 +195,14 @@ def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) (wide : Bool) : String 
 aarch64 host an `f80` `!=` is compiler_rt's `__nexf2`, which reads a NaN only off the maximum
 exponent (`comparef.cmp_f80`): an unnormal or pseudo-denormal renders as its bits there. x87
 reads every invalid encoding as a NaN (`Float.isNaN`). The model makes every soft-float `f80` op
-on these encodings `.unspecified` (`Zig.Float.softF80Chk`); only a sign-bit op returns one. -/
-def softF80Host : Bool :=
-  System.Platform.target.startsWith "arm64" || System.Platform.target.startsWith "aarch64"
+on these encodings `.unspecified` (`Zig.Float.softF80Chk`); only a sign-bit op returns one.
+The harness's host is this one, or the arch of a cross target (`AIR2LEAN_TARGET`, scripts/diff.sh:
+an x86_64-windows harness under Wine on an aarch64 Mac). -/
+initialize softF80Host : Bool ← do
+  let arch := match ← IO.getEnv "AIR2LEAN_TARGET" with
+    | some t => if t.isEmpty then System.Platform.target else t
+    | none => System.Platform.target
+  return arch.startsWith "arm64" || arch.startsWith "aarch64"
 
 def renderedNaN {fmt : Zig.FloatFmt} (v : Zig.Float fmt) : Bool :=
   match fmt with
