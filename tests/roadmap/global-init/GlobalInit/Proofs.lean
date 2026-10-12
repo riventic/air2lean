@@ -1,6 +1,6 @@
 import GlobalInit.Gen
 import ZigLean.Sep.Full.Auto
-import ZigLean.Sep.Full.Start
+import ZigLean.Sep.Full.Init
 
 /-!
 # Clients of explicit external initial state (L12)

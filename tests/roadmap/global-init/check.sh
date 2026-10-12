@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # L12: explicit external initial state and absent-initializer rejection. Needs a built
-# translator and `lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Start ZigLean.Sep.Full.Strength`;
+# translator and `lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Init ZigLean.Sep.Full.Strength`;
 # runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
