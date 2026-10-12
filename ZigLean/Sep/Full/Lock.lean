@@ -616,6 +616,354 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
       have htn : L.ph (G t) ≠ .holds := fun e => hut (hi.w.one u t hu e)
       exact hRk htn _ (hi.res u hu)
 
+/-! ## Spawn and join -/
+
+theorem wordR_congr {m m' : Mem} (h : m'.blocks = m.blocks) : L.wordR m' = L.wordR m := by
+  have : m'.heap = m.heap := by funext ⟨b, x⟩; simp only [Mem.heap, h]
+  simp only [LockWord.wordR, cellsAt, this]
+
+/-- A spawn by `t`, which is out of the lock's code: `t` keeps `part g₁`, the new thread gets
+`part g₀` and starts out of the lock's code. -/
+theorem Inv.fork {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t c : ThreadId} {g₁ g₀ : γ}
+    {gt : Bool} (hi : L.Inv G rX m) (hout : L.ph (G t) = .out)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
+    (hsplit : L.part (G t) = rsum (L.part g₁) (L.part g₀))
+    (hd : FHeap.Disjoint (L.part g₁).heap (L.part g₀).heap)
+    (h₁ : L.ph g₁ = .out) (h₁h : L.held g₁ = rnil)
+    (h₀ : L.ph g₀ = .out) (h₀h : L.held g₀ = rnil)
+    (hRk : ∀ r, L.R G r → L.R (upd (upd G c g₀) t g₁) r) :
+    L.Inv (upd (upd G c g₀) t g₁) rX m' := by
+  obtain ⟨ht, hjt⟩ := hi.ht (by rw [hout]; decide)
+  have hheld : L.held (G t) = rnil := hi.idle t (by rw [hout]; decide)
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hownt : L.own G m t = rsum (L.part g₁) (L.part g₀) := by
+    rw [own_live hjt, hheld, rsum_rnil, hsplit]
+  have ho' := FOwned.fork (r₁ := L.part g₁) (r₂ := L.part g₀) (ho.current t |> fun _ => ho) ht
+    hownt hd hf
+  have hjb := joinedB_fork hf
+  obtain ⟨hc, hw, hown⟩ := hi.w.fork (gt := gt) (by exact hout) hf
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  have hct : m.threads.size ≠ t := fun h => by rw [h] at ht; exact Nat.lt_irrefl _ ht
+  have hGc : L.ph (G m.threads.size) = .gone := by
+    cases hx : L.ph (G m.threads.size) <;> first | rfl |
+      exact absurd (hi.w.live _ (by simp only [pl]; rw [hx]; decide)).1 (Nat.lt_irrefl _)
+  have hjc : joinedB m m.threads.size = false := by
+    simp [joinedB, Array.getElem?_eq_none (Nat.le_refl _)]
+  have hpl : L.pl (upd (upd G m.threads.size g₀) t g₁) = upd (L.pl G) m.threads.size .out := by
+    funext u; simp only [pl, upd]
+    by_cases h1 : u = t
+    · simp [h1, h₁, hout, Ne.symm hct]
+    · by_cases h2 : u = m.threads.size
+      · simp [h1, h2, h₀, hct]
+      · simp [h1, h2]
+  have hphu : ∀ u, L.ph (upd (upd G m.threads.size g₀) t g₁ u) = .holds ↔ L.ph (G u) = .holds := by
+    intro u
+    have := congrFun hpl u; simp only [pl] at this; rw [this, LockWord.upd_apply]
+    split
+    · rename_i h; subst h; rw [hGc]; decide
+    · exact Iff.rfl
+  have hfree := free_iff_of (L := L) hphu
+  refine ⟨by rw [hpl]; exact hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_,
+    fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
+  · have e : L.own (upd (upd G m.threads.size g₀) t g₁) { m with
+        current := t,
+        clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
+        threads := m.threads.push { spawner := t, joined := false, gated := gt } } =
+        upd (upd (L.own G m) t (L.part g₁)) m.threads.size (L.part g₀) := by
+      funext u
+      unfold FLock.own; rw [hjb]
+      by_cases h1 : u = t
+      · subst h1; simp [upd, hjt, Ne.symm hct, h₁h, rsum_rnil]
+      · by_cases h2 : u = m.threads.size
+        · subst h2; simp [upd, hjc, hct, h₀h, rsum_rnil]
+        · simp [upd, h1, h2, FLock.own]
+    rw [e]; exact ho'
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
+    exact ⟨hRk rL h1, by rw [hpl]; exact hown _ h2⟩
+  · unfold upd
+    by_cases h1 : u = t
+    · simp only [h1, ↓reduceIte, h₁h]; exact FHeap.disjoint_empty _
+    · by_cases h2 : u = m.threads.size
+      · simp only [h1, h2, hct, ↓reduceIte, h₀h]; exact FHeap.disjoint_empty _
+      · simp only [h1, h2, ↓reduceIte]; exact hi.pdisj u
+  · rw [ne_eq, hphu] at hu; unfold upd
+    by_cases h1 : u = t
+    · simp only [h1, ↓reduceIte, h₁h]
+    · by_cases h2 : u = m.threads.size
+      · simp only [h1, h2, hct, ↓reduceIte, h₀h]
+      · simp only [h1, h2, ↓reduceIte]; exact hi.idle u hu
+  · rw [hphu] at hu
+    have hc' : u ≠ m.threads.size := fun e => by rw [e, hGc] at hu; cases hu
+    have hut : u ≠ t := fun e => by rw [e, hout] at hu; cases hu
+    rw [show upd (upd G m.threads.size g₀) t g₁ u = G u by simp [upd, hc', hut]]
+    exact hRk _ (hi.res u hu)
+
+/-- A join of `u` by `t`, both out of the lock's code: `t` takes `u`'s part. -/
+theorem Inv.join {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t u : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hut : u ≠ t) (hu0 : u ≠ 0) (hout : L.ph (G t) = .out)
+    (huo : L.ph (G u) = .gone)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
+    (hg : L.part g = rsum (L.part (G t)) (L.own G m u)) (hgo : L.ph g = .out)
+    (hgh : L.held g = rnil) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+    L.Inv (upd G t g) rX m' := by
+  obtain ⟨ht, hjt⟩ := hi.ht (by rw [hout]; decide)
+  have hheld : L.held (G t) = rnil := hi.idle t (by rw [hout]; decide)
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have ho' := ho.join ht hut hj
+  obtain ⟨hw, hown⟩ := hi.w.join hut hu0 (by exact hout) (by exact huo) hj
+  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  have hjb : ∀ w, joinedB { m with
+      current := t,
+      clocks := m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)),
+      threads := m.threads.set! u { rec with joined := true } } w =
+      if w = u then true else joinedB m w := by
+    intro w
+    unfold joinedB
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    by_cases hw : w = u
+    · subst hw; simp [hu0, hul]
+    · simp [hw, Ne.symm hw]
+  have hpl : L.pl (upd G t g) = L.pl G := by
+    rw [pl_upd, hgo, ← hout]; funext w; simp only [LockWord.upd_apply]; split
+    · rename_i e; subst e; rfl
+    · rfl
+  have hholds : ∀ w, L.ph (upd G t g w) = .holds ↔ L.ph (G w) = .holds := fun w => by
+    have := congrFun hpl w; simp only [pl] at this; rw [this]
+  have hfree := free_iff_of (L := L) hholds
+  refine ⟨by rw [hpl]; exact hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_,
+    fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun w => ?_, fun w hw' => ?_, fun w hw' => ?_⟩
+  · have e : L.own (upd G t g) { m with
+        current := t,
+        clocks := m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)),
+        threads := m.threads.set! u { rec with joined := true } } =
+        upd (upd (L.own G m) u rnil) t (rsum (L.own G m t) (L.own G m u)) := by
+      funext w
+      unfold FLock.own; rw [hjb]
+      by_cases h1 : w = u
+      · subst h1; simp [upd, hut]
+      · by_cases h2 : w = t
+        · subst h2; simp [upd, h1, hjt, hg, hgh, hheld, rsum_rnil, FLock.own]
+        · simp [upd, h1, h2]
+    rw [e]; exact ho'
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
+    exact ⟨hRk rL h1, by rw [hpl]; exact hown _ h2⟩
+  · unfold upd; split
+    · rw [hgh]; exact FHeap.disjoint_empty _
+    · exact hi.pdisj w
+  · rw [ne_eq, hholds] at hw'; unfold upd; split
+    · exact hgh
+    · exact hi.idle w hw'
+  · rw [hholds] at hw'
+    have hwt : w ≠ t := fun e => by rw [e, hout] at hw'; cases hw'
+    rw [upd_ne _ _ hwt]; exact hRk _ (hi.res w hw')
+
+/-! ## The start and the end of the lock -/
+
+/-- **The start of the lock**: thread `t`, whose clock is above every thread's, gives the word
+`rW` (exactly the word's bytes, which hold `0`) and the resource `rL` (with `R`) of its part to the
+rest `rX`. Each thread is out of the lock's code (and alive) or gone, no atomic location is in the
+word's block, and no thread waits at a futex. -/
+theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res} {m : Mem}
+    {t : ThreadId} (ho : FOwned own rX m) (hjt : joinedB m t = false) (ht : t < m.threads.size)
+    (hown : ∀ u, u ≠ t → L.own G m u = own u)
+    (hsplit : own t = rsum (L.part (G t)) (rsum rL rW))
+    (hd : FHeap.Disjoint (L.part (G t)).heap (rsum rL rW).heap)
+    (hdLW : FHeap.Disjoint rL.heap rW.heap)
+    (hW : ∀ l, rW.heap l ≠ none ↔ L.In l) (hWk : rW.know = Know.none) (hWg : rW.gh = Ghost.unit)
+    (hph : ∀ u, (L.ph (G u) = .out ∧ u < m.threads.size ∧ joinedB m u = false) ∨
+      L.ph (G u) = .gone) (hheld : ∀ u, L.held (G u) = rnil) (hR : L.R G rL)
+    (hblk : L.BlkOk m) (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b)
+    (hq : m.waiters = #[]) (hall : AllLe m (m.clocks[t]!)) :
+    L.Inv G rX m := by
+  have hfree : L.Free G := fun u => by
+    show L.ph (G u) ≠ _; rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> decide
+  have hownE : L.own G m = upd own t (L.part (G t)) := by
+    funext u; unfold upd
+    by_cases hu : u = t
+    · subst hu; simp [own_live hjt, hheld, rsum_rnil]
+    · simp only [hu, ↓reduceIte]; exact hown u hu
+  -- `t` owns the word and the resource: every access to them happened before every thread
+  have htown := ho.owns t ht
+  rw [hsplit] at htown
+  have hsubT : ∀ (h : FHeap), (∀ l, h l ≠ none → (rsum rL rW).heap l ≠ none) →
+      ∀ l, h.erase l ≠ none → (FHeap.erase (rsum (L.part (G t)) (rsum rL rW)).heap) l ≠ none := by
+    intro h hs l hl
+    have := hs l (by simpa [FHeap.erase] using hl)
+    simp only [FHeap.erase, rsum, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and] at this ⊢
+    intro _; exact this
+  have hle : ∀ (h : FHeap), (∀ l, h l ≠ none → (rsum rL rW).heap l ≠ none) →
+      ∀ e ∈ m.footprint, (e.Touches h.erase ∨ m.blocks.size ≤ e.block) →
+        ∀ u < m.threads.size, VClock.le e.clock (m.clocks[u]!) = true :=
+    fun h hs e he htc u hu => VClock.le_trans (htown.sub (hsubT h hs) e he htc) (hall u hu)
+  have hW' : ∀ l, rW.heap l ≠ none → (rsum rL rW).heap l ≠ none := fun l hl => by
+    simp only [rsum, FHeap.union_apply]; cases rL.heap l <;> simp_all
+  have hL' : ∀ l, rL.heap l ≠ none → (rsum rL rW).heap l ≠ none := fun l hl => by
+    simp only [rsum, FHeap.union_apply]; cases e : rL.heap l <;> simp_all
+  have hw : L.WInv (L.pl G) m :=
+    LockWord.WInv.make (ho.csize) (fun u => hph u) hblk h0 hat hq fun e he hh u hu _ =>
+      hle rW.heap hW' e he (.inl (LockWord.touches_word hh fun x h1 h2 => by
+        simpa [FHeap.erase] using (hW (L.b, x)).mpr ⟨rfl, h1, h2⟩)) u hu
+  have hLoff : L.Off rL.heap.erase := LockWord.off_erase.mpr fun l hl => by
+    rcases hdLW l with e | e
+    · exact e
+    · exact absurd e ((hW l).mpr hl)
+  -- the rest: give `rL ⋆ rW` to it, then read `rW` as the word's cells
+  have ho1 := ho.give ht hsplit hd
+  rw [← hownE] at ho1
+  -- `t`'s part (with `rL` and `rW`) is apart from the rest
+  have hTX : ∀ l, rX.heap l ≠ none → (own t).heap l = none := fun l hn => ho.part_off ht hn
+  have hWX : FHeap.Disjoint rW.heap rX.heap := fun l => by
+    cases e : rX.heap l with
+    | none => exact .inr rfl
+    | some _ =>
+      have h2 := hTX l (by rw [e]; simp)
+      rw [hsplit] at h2
+      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at h2
+      exact .inl h2.2.2
+  have hLX : FHeap.Disjoint rL.heap rX.heap := fun l => by
+    cases e : rX.heap l with
+    | none => exact .inr rfl
+    | some _ =>
+      have h2 := hTX l (by rw [e]; simp)
+      rw [hsplit] at h2
+      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at h2
+      exact .inl h2.2.1
+  have hxoff : L.Off rX.heap.erase := LockWord.off_erase.mpr fun l hl => by
+    rcases hWX l with e | e
+    · exact absurd e ((hW l).mpr hl)
+    · exact e
+  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun _ => ⟨hR, fun e he htc => .inl fun u hu _ =>
+      hle rL.heap hL' e he htc u hu⟩, fun h => absurd hfree h⟩, hxoff,
+    fun u => by rw [hheld]; exact FHeap.disjoint_empty _, fun u _ => hheld u,
+    fun u hu => absurd hu (hfree u)⟩
+  -- `rsum (rsum rL rW) rX` as `rsum (wordR m) (rsum rL rX)`
+  refine ho1.congrRestU (fun l => ?_) (fun l fc' hl => ?_) ?_ ?_
+  · by_cases hl : L.In l
+    · have hWl := (hW l).mpr hl
+      have hLl := (hdLW l).resolve_right hWl
+      have hXl := (hWX l).resolve_left hWl
+      simp only [rsum, FHeap.union_apply, cellsAt_of hl, hLl, hXl, Option.none_or, Option.or_none]
+      obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp hWl
+      rw [hfc]
+      have := ho1.rest_cell (l := l) (fc := fc) (by simp [rsum, FHeap.union_apply, hLl, hfc])
+      cases e : m.heap l with
+      | none => rw [e] at this; cases this
+      | some c => rw [e] at this; simpa [Cell.norm] using this
+    · have hWl : rW.heap l = none := by
+        cases e : rW.heap l with
+        | none => rfl
+        | some _ => exact absurd ((hW l).mp (by rw [e]; simp)) hl
+      simp [rsum, FHeap.union_apply, cellsAt_none hl, hWl]
+  · by_cases hl' : L.In l
+    · have hWl := (hW l).mpr hl'
+      have hLl := (hdLW l).resolve_right hWl
+      have hXl := (hWX l).resolve_left hWl
+      simp only [rsum, FHeap.union_apply, cellsAt_of hl', hLl, hXl, Option.none_or,
+        Option.or_none, Option.map_eq_some_iff] at hl
+      obtain ⟨c, -, rfl⟩ := hl
+      exact .inl rfl
+    · simp only [rsum, FHeap.union_apply, cellsAt_none hl', Option.none_or] at hl
+      refine .inr ⟨fc', ?_, rfl⟩
+      have hWl : rW.heap l = none := by
+        cases e : rW.heap l with
+        | none => rfl
+        | some _ => exact absurd ((hW l).mp (by rw [e]; simp)) hl'
+      simp only [rsum, FHeap.union_apply]
+      cases e : rL.heap l <;> simp_all
+  · simp [rsum, LockWord.wordR, cellsAt, hWk, Know.none_union, Know.union_assoc]
+  · simp [rsum, LockWord.wordR, cellsAt, hWg, Ghost.add_assoc]
+
+/-- **The end of the lock**: no thread holds it, and thread `t` (not `gone`) has a clock above every
+thread's. Then `t` takes the resource `rL` (with `R`) and the word's cells into its part. -/
+theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
+    (hF : L.Free G) (hg : L.ph (G t) ≠ .gone)
+    (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true) :
+    ∃ rL, L.R G rL ∧
+      FOwned (upd (L.own G m) t (rsum (L.own G m t) (rsum rL (L.wordR m)))) rX m := by
+  obtain ⟨ht, -⟩ := hi.ht hg
+  obtain ⟨rL, ho, hLoff, hLX, hFr, -⟩ := hi.rest
+  obtain ⟨hR, hLown⟩ := hFr hF
+  have hWL : FHeap.Disjoint (L.wordR m).heap rL.heap := fun l => by
+    by_cases hl : L.In l
+    · exact .inr (LockWord.off_erase.mp hLoff l hl)
+    · exact .inl (cellsAt_none hl)
+  have hWX : FHeap.Disjoint (L.wordR m).heap rX.heap := fun l => by
+    by_cases hl : L.In l
+    · exact .inr (LockWord.off_erase.mp hi.xoff l hl)
+    · exact .inl (cellsAt_none hl)
+  have e1 : rsum (L.wordR m) (rsum rL rX) = rsum (rsum rL (L.wordR m)) rX := by
+    rw [← rsum_assoc, rsum_comm hWL]
+  rw [e1] at ho
+  refine ⟨rL, hR, ho.take ht (FHeap.disjoint_union_left.mpr ⟨hLX, hWX⟩) ?_⟩
+  simp only [rsum, FHeap.erase_union]
+  refine Mem.OwnsC.union (fun e he htc => ?_) (fun e he htc => ?_)
+  · rcases hLown e he htc with h | ⟨i, l, hl, hle⟩
+    · exact VClock.le_trans (h t ht hg) (VClock.le_refl _)
+    · obtain ⟨⟨v, hv, hle'⟩, -⟩ := hi.w.rel i l hl
+      exact VClock.le_trans hle (VClock.le_trans hle' (hall v hv))
+  · rcases htc with ⟨x, h1, h2, h3⟩ | hb
+    · have hin : L.In (e.block, x) := Classical.byContradiction fun hn =>
+        h3 (by simp [FHeap.erase, cellsAt_none hn])
+      obtain ⟨hb, hx1, hx2⟩ := hin
+      rcases hi.w.wfp e he ⟨hb, x, h1, h2, hx1, hx2⟩ with ⟨-, v, hv, hle⟩ | h
+      · exact VClock.le_trans hle (hall v hv)
+      · exact h t ht hg
+    · -- an access to a block that does not exist yet happened before `t`: `t` owns its part
+      exact ho.owns t ht e he (.inr hb)
+
+/-! ## A recorded access to bytes of the protocol's rest -/
+
+/-- A recorded access of the current thread `t` (not a write) to `n` bytes of the protocol's own
+rest `rX` (a read of a read-shared buffer): the invariant holds after it. -/
+theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} {k : AccessKind} (hi : L.Inv G rX m) (hk : k ≠ .write) (hc : m.current = t)
+    (ht : t < m.threads.size) (hb : b < m.blocks.size) (hn : 0 < n)
+    (hX : ∀ x, o ≤ x → x < o + n → rX.heap (b, x) ≠ none) :
+    L.Inv G rX (m.recordAt b o n k) := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hrest : ∀ x, o ≤ x → x < o + n → (rsum (L.wordR m) (rsum rL rX)).heap (b, x) ≠ none :=
+    fun x h1 h2 => by
+      have := hX x h1 h2
+      simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+      intro _ _; exact this
+  have hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o := by
+    by_cases hbb : b = L.b
+    · subst hbb
+      by_cases hlo : o + n ≤ L.o
+      · exact .inr (.inl hlo)
+      · by_cases hhi : L.o + 4 ≤ o
+        · exact .inr (.inr hhi)
+        · exfalso
+          have x0 : ∃ x, o ≤ x ∧ x < o + n ∧ L.o ≤ x ∧ x < L.o + 4 :=
+            ⟨if o ≤ L.o then L.o else o, by split <;> omega, by split <;> omega,
+              by split <;> omega, by split <;> omega⟩
+          obtain ⟨x, h1, h2, h3, h4⟩ := x0
+          have := hX x h1 h2
+          have h0 := LockWord.off_erase.mp hi.xoff (L.b, x) ⟨rfl, h3, h4⟩
+          exact this h0
+    · exact .inl hbb
+  have hLb : ∀ x, o ≤ x → x < o + n → rL.heap.erase (b, x) = none := fun x h1 h2 => by
+    have := (hLX (b, x)).resolve_right (hX x h1 h2)
+    simp [FHeap.erase, this]
+  have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
+  refine ⟨hi.w.readK hk hn hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
+    hi.idle, hi.res⟩
+  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
+    rw [this]
+    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
+    rw [e]
+    refine ho.recordRest hc ht hb fun u hu x h1 h2 => ?_
+    refine ho.part_off hu (hrest x h1 ?_)
+    rcases h2 with h2 | rfl
+    · exact h2
+    · omega
+  · obtain ⟨h1, h2⟩ := hF hF'
+    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2) hn⟩
+
 end FLock
 
 end Full

@@ -228,6 +228,39 @@ theorem congrRest {rO' : Res} (ho : FOwned own rO m) (hs : FHeap.Sim rO'.heap rO
     (hk : rO'.know = rO.know) (hg : rO'.gh = rO.gh) : FOwned own rO' m :=
   ⟨let ⟨rT, h1, h2⟩ := ho.holds; ⟨rT, h1, h2.congrF hs hk hg⟩, ho.owns, ho.outside, ho.csize, ho.conc⟩
 
+/-- A rest with the same bytes up to `Cell.norm`, whose tag constraints are the old ones or
+none (a constraint can always be dropped), with the same knowledge and ghost state. -/
+theorem congrRestU {rO' : Res} (ho : FOwned own rO m)
+    (hn : ∀ l, (rO'.heap l).map (fun fc => fc.cell.norm) = (rO.heap l).map (fun fc => fc.cell.norm))
+    (ha : ∀ l fc', rO'.heap l = some fc' → fc'.atom = none ∨ ∃ fc, rO.heap l = some fc ∧ fc.atom = fc'.atom)
+    (hk : rO'.know = rO.know) (hg : rO'.gh = rO.gh) : FOwned own rO' m := by
+  obtain ⟨rT, hs, hh⟩ := ho.holds
+  have hnone : ∀ l, rO'.heap l = none ↔ rO.heap l = none := fun l => by
+    have := hn l
+    constructor
+    · intro e; rw [e] at this; cases e' : rO.heap l <;> simp_all
+    · intro e; rw [e] at this; cases e' : rO'.heap l <;> simp_all
+  refine ⟨⟨rT, hs, fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, hh.know, hk ▸ hh.knowF,
+    hg ▸ hh.ghost⟩, ho.owns, ho.outside, ho.csize, ho.conc⟩
+  · rcases hh.disj l with e | e
+    · exact .inl e
+    · exact .inr ((hnone l).mpr e)
+  · rw [hh.heap.1 l]
+    simp only [FHeap.union_apply]
+    cases e : rT.heap l with
+    | some _ => rfl
+    | none => simp only [Option.none_or]; exact (hn l).symm
+  · simp only [FHeap.union_apply] at hl
+    cases e : rT.heap l with
+    | some fc0 =>
+      rw [e] at hl; cases hl
+      exact hh.heap.2 l fc (by simp [e])
+    | none =>
+      rw [e, Option.none_or] at hl
+      rcases ha l fc hl with h0 | ⟨fc', h', hat⟩
+      · unfold TagSat; rw [h0]; trivial
+      · rw [← hat]; exact hh.heap.2 l fc' (by simp [e, h'])
+
 /-- A byte of the rest is a live byte of the memory, up to `Cell.norm`. -/
 theorem rest_cell (ho : FOwned own rO m) {l : Loc} {fc : FCell} (hl : rO.heap l = some fc) :
     (m.heap l).map Cell.norm = some fc.cell.norm := by
