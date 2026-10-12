@@ -170,6 +170,7 @@ private theorem gextGh_eq (j : BlockId) (S : Nat) (K : BlockKind) :
   · funext b
     by_cases hb : b = j <;> by_cases hS : 0 < S <;> simp [hb, hS, Ghost.atExt, Ghost.exts, Ghost.unit]
   · funext b x; split <;> simp [Ghost.atExt, Ghost.exts, Ghost.unit]
+  · split <;> simp
 
 private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
     (h : ∀ b, E b = none ∨ E' b = none) :
@@ -180,6 +181,7 @@ private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
     simp only [Ghost.add, Ghost.exts]
     rcases h b with e | e <;> rw [e] <;> split <;> simp_all
   · funext b x; simp [Ghost.add, Ghost.exts]
+  · simp
 
 private theorem initR_gh (m : Mem) (n : Nat) : (initR m n).gh = Ghost.exts (initE m n) := by
   induction n with

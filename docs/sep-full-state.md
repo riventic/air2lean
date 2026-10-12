@@ -710,6 +710,66 @@ which `held` carries the whole claim before and after (`heldW`, `rresizePostW`).
 client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
 splits and joins the claim along with the bytes.
 
+### Credits and room: non-mintable resources (2026-10-12)
+
+**The problem.** Two counted resources were requested: `credits n` (time/turn credits for the
+concurrent termination proofs, [sep-threads.md](sep-threads.md)) and `room n` (address room, so
+that a total `alloc` can rule out `.stackOverflow`). Both must be **non-mintable**: no judgment may
+end with more of them than it started with; only the adequacy theorem hands an initial supply to
+`main`. A count that `Holds` does not see can be minted by every judgment (`EUpd emp (credits 1)`
+holds whenever `Ghost.Ok` ignores the count).
+
+**Two variants compared.**
+
+1. *A non-mint conjunct per judgment*: every witness of `EUpd`, `Upd`, `FTriple`, `FTotalTriple`,
+   `CTriple`, `FTTriple`/`FTTotalTriple` adds `r'.gh.cr ≤ r.gh.cr`. Each direct proof of a rule
+   (`intro m r rF …`, about 110 of them) must prove it, and every future judgment must repeat it.
+2. *An authoritative supply in validity* (Iris's `●n ⋅ ◯k` with `k ≤ n`): the credit cell has
+   fragments and an exclusive authority `●N`, and `Ghost.Valid` requires at most one authority
+   and fragments `≤ N` when it is present. The judgments already quantify over **every** frame
+   `rF` that composes; a frame that holds `●N` with exactly `N` fragments outstanding leaves no
+   room for one more fragment, so no judgment can produce one. No definition of a judgment and no
+   proof that keeps the ghost state of its precondition changes.
+
+Variant 2 is used: it is sound for every judgment that preserves `Holds m' r' rF` for an arbitrary
+`rF` (all of the above; `Upd` quantifies over every `Ghost.Ok` frame), including future ones, and
+its blast radius is the `Ghost` structure (one more field: each anonymous `Ghost` and each
+field-by-field `ext1` proof gets one more component, each hand-made `Ghost.Valid` one more conjunct).
+
+**Credits.** `Ghost.cr : CCell` with `frag : Nat` (`credits n`, `◯n`) and `auth : Nat → Nat` (how
+many authorities `●N` hold the value `N`; additive, so that validity is closed under dropping parts,
+`Ghost.Ok.mono`). `CCell.Valid`: every count is at most 1, at most one value has an authority, and
+the fragments are at most its value. `credits (a + b) = credits a ⋆ credits b` and `credits 0 = emp`
+are equalities; `credits n` is dropped with `EUpd.drop`. There is no rule that creates a fragment.
+`creditAuth N` (`●N`) is not given to programs: the adequacy theorem keeps it in the frame and gives
+`main` `credits N` (`Holds.addCredits`). Kernel-checked regression
+(`tests/roadmap/sep-full/CreditsCX.lean`): `¬ EUpd emp (credits 1)`, and the same for `Upd`.
+
+**Room: obstruction in the current memory model** (found 2026-10-12; for the memory-model lane).
+The requested design ("Σ room ≤ the free address space below `Placement.addrLimit`; a total
+`alloc` of `k` bytes consumes `k` plus a padding bound, `free` returns it") is not sound in the
+current model (`ZigLean/Mem/Basic.lean`), for three reasons:
+
+1. *`free` cannot return room.* The fallback address of a new block is `alignUp Mem.top align`,
+   and `Mem.top` is past every block, dead or live. Freed address space is reused only when the
+   placement proposes it, never by the fallback.
+2. *Other primitives consume the same space without room.* `rawAlloc`/`mmap` (`Mem.mapAddr` is
+   `Mem.newAddr`) and an in-place `mremap` growth raise `Mem.top`. Their rules (precondition
+   `emp`; `FAllocSpec`; the page, FBA and arena proofs) cannot re-establish `Holds` against a frame
+   that holds room. Charging room to them (variant B) would weaken rules that hold today: rejected.
+3. *The placement can exhaust the fallback.* An accepted proposal near `addrLimit` (natively the
+   stack mapping sits just below `2^47`) raises `Mem.top` to about `addrLimit`, so a later fallback
+   fails with any amount of free space below. A sound "free space" must count the placement's
+   future proposals: `addrLimit - max(Mem.top m, every proposal for a block id ≥ m.blocks.size)`.
+
+Coordinator decision (2026-10-12): the target is (A), a native-faithful separate stack region for
+`alloc` (stack locals, thread-local instances, runtime cells) with its own bump/LIFO pointer, so
+that room is the stack region's slack, authoritative in `Holds` exactly as credits are, consumed by
+`alloc` and returned by `free` of the top block, with no change to the allocator rules (new
+memory-model lane). Until (A) lands: (C), a premise of the adequacy theorem (`Full/Init`) about the
+start memory, not a judgment parameter and not a new judgment. The room cell will then be a second
+`CCell`-like component of `Ghost` whose authority is tied to the memory in `GOk`.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem

@@ -119,7 +119,9 @@ end ECell
 
 /-- The ghost state with the claim cells `C` on block `b` and nothing else. -/
 def Ghost.atCl (b : BlockId) (C : Nat → ECell) : Ghost :=
-  ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun b' x => if b' = b then C x else ECell.unit⟩
+  ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun b' x => if b' = b then C x else ECell.unit, CCell.unit⟩
+
+@[simp] theorem Ghost.atCl_cr (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).cr = CCell.unit := rfl
 
 theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
     (Ghost.atCl b C).add (Ghost.atCl b C') = Ghost.atCl b fun x => (C x).add (C' x) := by
@@ -127,6 +129,7 @@ theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
   · funext γ; simp [Ghost.add, Ghost.atCl]
   · funext x; simp [Ghost.add, Ghost.atCl]
   · funext x y; simp only [Ghost.add, Ghost.atCl]; split <;> simp
+  · simp
 
 /-- **An exclusive claim** on the bytes `[lo, hi)` of block `b` in world `t` (the root for
 `t = none`, a tag's world for `t = some (γ, e)`). Owns no bytes, no knowledge. -/
@@ -234,8 +237,8 @@ theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b :
     (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ∀ x, ECell.StepE ls (C x) (C' x))
     (hz : (∀ x, C x = ECell.unit) → ∀ x, C' x = ECell.unit) :
     GOk m (L.add (Ghost.atCl b C')) gF := by
-  obtain ⟨⟨⟨hv, hx, hcv, NC, hNC⟩, N, hN⟩, ht, hcf⟩ := hok
-  have hV : Ghost.Valid ((L.add (Ghost.atCl b C)).add gF) := ⟨hv, hx, hcv, NC, hNC⟩
+  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf⟩ := hok
+  have hV : Ghost.Valid ((L.add (Ghost.atCl b C)).add gF) := ⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩
   have eled : ((L.add (Ghost.atCl b C')).add gF).led = ((L.add (Ghost.atCl b C)).add gF).led := rfl
   have ex : ((L.add (Ghost.atCl b C')).add gF).extent = ((L.add (Ghost.atCl b C)).add gF).extent := rfl
   have els : ((L.add (Ghost.atCl b C')).add gF).ls = ((L.add (Ghost.atCl b C)).add gF).ls := rfl
@@ -246,8 +249,8 @@ theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b :
     · simp [Ghost.atCl, hL, hb]
   have hst := h ((L.add (Ghost.atCl b C)).add gF).ls
     (fun γ e p h => Ghost.ls_add _ _ _ _ _ (Ghost.ls_add _ _ _ _ _ h)) hV.uniq
-  refine ⟨⟨⟨hv, by rw [ex, els]; exact hx, fun x y => ?_, Max.max NC N, fun γ hγ x y e k => ?_⟩,
-    N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+  refine ⟨⟨⟨hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, Max.max NC N, fun γ hγ x y e k => ?_⟩,
+    by simpa using hcr⟩, N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
   · rw [ecl, els]
     have h0 := hcv x y
     rw [ecl] at h0
@@ -382,7 +385,7 @@ theorem Holds.bclaim_disjoint {m : Mem} {r rF : Res} {R : FAssn} {b : BlockId} {
   refine Classical.byContradiction fun hn => ?_
   obtain ⟨r₁, r₂₃, -, rfl, ⟨-, -, g1⟩, r₂, r₃, -, rfl, ⟨-, -, g2⟩, -⟩ := h
   let x := Max.max lo₁ lo₂
-  have hv := (hh.ghost.1.1.2.2.1 b x).2
+  have hv := (hh.ghost.1.1.2.2.1.1 b x).2
   have hact : Act ((r₁.gh.add (r₂.gh.add r₃.gh)).add rF.gh).ls t := ha.mono (Ghost.ls_add _ _)
   have h1 := ECell.ftot_act_le hv hact 1
   simp only [ftot, Ghost.add_cl, g1, g2, Ghost.atCl, if_true, ECell.onRange] at h1
@@ -426,8 +429,8 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     (hC : ∀ x (ls : LStat), ls.Uniq → (C x).Valid ∧ (C x).TagOk ls)
     (hCt : ∀ x γ e k, ((C x).tsh γ e k).val = 0 ∧ ((C x).rc γ e k).val = 0) :
     GOk m (g.add (Ghost.atCl b C)) gF := by
-  obtain ⟨⟨⟨hv, hx, hcv, NC, hNC⟩, N, hN⟩, ht, hcf⟩ := hok
-  have hu : (g.add gF).ls.Uniq := Ghost.Valid.uniq (g := g.add gF) ⟨hv, hx, hcv, NC, hNC⟩
+  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf⟩ := hok
+  have hu : (g.add gF).ls.Uniq := Ghost.Valid.uniq (g := g.add gF) ⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩
   have e : (g.add (Ghost.atCl b C)).add gF = (g.add gF).add (Ghost.atCl b C) := by
     rw [Ghost.add_assoc, Ghost.add_comm (Ghost.atCl b C), ← Ghost.add_assoc]
   unfold GOk Ghost.Ok
@@ -444,8 +447,8 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     by_cases h : x = b
     · subst h; simp only [Ghost.add_cl, Ghost.atCl, if_true, hz, ECell.unit_add]
     · simp only [Ghost.add_cl, Ghost.atCl, h, if_false, ECell.add_unit]
-  refine ⟨⟨⟨by rw [eled]; exact hv, by rw [ex, els]; exact hx, fun x y => ?_, NC, fun γ hγ x y e k => ?_⟩,
-    N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+  refine ⟨⟨⟨by rw [eled]; exact hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, NC, fun γ hγ x y e k => ?_⟩,
+    by simpa using hcr⟩, N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
   · rw [ecl, els]; split
     · exact hC y _ hu
     · exact hcv x y
