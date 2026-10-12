@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # E02: function-pointer call sites bound to registry contracts. Needs a built translator and
-# `lake build ZigLean ZigLean.External.Callback ZigLean.Sep.Loop Proofs.Asm.Effects`; runs no
+# `lake build ZigLean ZigLean.External.Callback ZigLean.Mem.Run Proofs.Asm.Effects`; runs no
 # compiler. For each Zig version the committed exports translate under their registries (the
 # 0.17.0 ones byte for byte to Callbacks/Gen.lean and Callbacks/Async.lean); the proofs check
 # against the fresh 0.17.0 translations; test_cli.py covers the rejections.
