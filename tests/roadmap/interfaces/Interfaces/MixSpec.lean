@@ -18,21 +18,22 @@ def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
 variable [Ext]
 
 /-- The program's allocator functions (the FixedBufferAllocator's entries at the addresses of
-`mem0`) and the environment (`Ext.call0` for `alloc`; the program calls no other entry through
-an open pointer). -/
-def tables : AllocTables Tgt where
+`mem0`) and the environment: `Ext.call0` for `alloc`, and `e`'s other entries, which the program
+never calls through an open pointer (a fixed `.illegal` there would make `CAllocSpec` of an
+environment allocator unsatisfiable, `docs/interfaces.md`). -/
+def tables (e : AllocEnv Tgt) : AllocTables Tgt where
   alloc := [(⟨some 0, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
   resize := [(⟨some 1, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
   remap := [(⟨some 2, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
   free := [(⟨some 3, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
-  env := { AllocEnv.closed with alloc := fun f a => Ext.call0 f a.1 a.2.1 (al a.2.2.1) a.2.2.2 }
+  env := { e with alloc := fun f a => Ext.call0 f a.1 a.2.1 (al a.2.2.1) a.2.2.2 }
 
 set_option maxHeartbeats 2000000 in
 /-- **`allocBytesAligned` for every allocator**: the code that the vtable `fns` reaches (the
 FixedBufferAllocator or the environment) meets `CAllocSpec`. -/
 theorem allocBytes_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (n ra : BitVec 64)
-    (hn : 0 < n.toNat) (hfit : I.fits n.toNat 2)
-    (h : CAllocSpec (CVTable.dispatch tables fns) ctx I) :
+    (e : AllocEnv Tgt) (hn : 0 < n.toNat) (hfit : I.fits n.toNat 2)
+    (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList)
       (mem_Allocator_allocBytesAligned__anon_c9141768de1a ⟨ctx, vtp⟩ n ra)
       (fun r => I.own ⋆ (I.allocResult 2 n.toNat r ⋆ vtR vtp fns.toList)) := by
