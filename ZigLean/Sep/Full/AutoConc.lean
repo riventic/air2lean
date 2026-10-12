@@ -84,12 +84,38 @@ variable {w : Nat} {P : FAssn}
   rw [Int.emod_eq_of_lt (by omega) (by omega)]
   omega
 
+/-- A remainder by a smaller power of two through a remainder by a larger one (`2 ^ x ∣ M`):
+`omega` reads `z % M` for a literal `M`, not `z % 2 ^ x`. -/
+theorem mod_pow_of_le {z x c M : Nat} (hM : M = 2 ^ c) (h : x ≤ c) : z % 2 ^ x = z % M % 2 ^ x := by
+  subst hM; exact (Nat.mod_mod_of_dvd z (Nat.pow_dvd_pow 2 h)).symm
+
 theorem optPtrAddr_some (p : Ptr) : optPtrAddr (some p) = ptrAddr p := rfl
 theorem optPtrAddr_none : optPtrAddr none = pure 0 := rfl
 
 end Seq
 
 attribute [fsym_norm] optPtrAddr_some optPtrAddr_none
+attribute [fsym_arith] Array.size_replicate Zig.subWrap Zig.addWrap Zig.mulWrap BitVec.sub_self
+attribute [fsym_norm] Option.isSome_some Option.isSome_none Option.isNone_some Option.isNone_none
+
+/-! ## Partial rules in `FLogic.partial` -/
+
+namespace P
+
+/- `Auto.step`/`stepAll` for a partial rule (`FTriple`) in `FLogic.partial` (whose `T` is
+`FTriple`); `L` is that logic, kept for the arguments `fsym` passes. -/
+variable (L : FLogic) {α β : Type} {P P₀ R : FAssn} {Q : β → FAssn}
+include L
+
+theorem step {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : FTriple P₀ c Q₀)
+    (k : ∀ v, FTriple (Q₀ v ⋆ R) (f v) Q) : FTriple (P₀ ⋆ R) (c >>= f) Q :=
+  FTriple.bind r.frame k
+
+theorem stepAll {c : MemM α} {f : α → MemM β} {Q₀ : α → FAssn} (r : FTriple P c Q₀)
+    (k : ∀ v, FTriple (Q₀ v) (f v) Q) : FTriple P (c >>= f) Q :=
+  FTriple.bind r k
+
+end P
 
 /-! ## `CTriple` steps -/
 
