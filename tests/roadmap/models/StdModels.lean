@@ -56,11 +56,24 @@ def main : IO Unit := do
     for v in ZigVersion.all do
       require (m.qualifies v == m.reviewed.any (·.zigVersion == v))
         s!"{m.symbol}: {v} qualification without its reviewed std source"
-    -- The typed projections agree with the row, including anonymous instances.
-    for name in #[m.symbol, m.symbol ++ "__anon_7"] do
-      require ((stdModel? name).map (·.symbol) == some m.symbol) s!"{name}: lookup"
-      require (modelledStdFn name == !(rejectedThreadFn? name).isSome) s!"{name}: disposition"
-      require ((allocFn? name).isSome || (threadFn? name).isSome || (rejectedThreadFn? name).isSome) s!"{name}: projection"
+    -- The typed projections agree with the row in its `--allocator-model`, including
+    -- anonymous instances; the row is absent in the other mode.
+    for mode in #[AllocatorModel.std, .translated] do
+      for name in #[m.symbol, m.symbol ++ "__anon_7"] do
+        if m.activeIn mode then
+          require ((stdModel? name mode).map (·.symbol) == some m.symbol) s!"{name}: lookup"
+          require (modelledStdFn name mode == !(rejectedThreadFn? name).isSome) s!"{name}: disposition"
+          require ((allocFn? name mode).isSome || (threadFn? name).isSome || (osFn? name mode).isSome ||
+            (rejectedThreadFn? name).isSome) s!"{name}: projection"
+        else
+          require ((stdModel? name mode).isNone && !modelledStdFn name mode) s!"{name}: inactive row"
+  -- Allocator rows are std-only, OS rows translated-only (`docs/allocator-model.md`).
+  require (stdModels.all fun m => match m.kind with
+    | .alloc _ => m.allocatorModel == some .std
+    | .os _ => m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
+    | _ => m.allocatorModel.isNone) "allocator-model row scopes"
+  require ((allocFn? "mem.Allocator.alloc__anon_3" .translated).isNone) "translated allocator wrappers"
+  require (osFn? "posix.mmap" .translated == some .mmap && (osFn? "posix.mmap").isNone) "OS projection"
   require ((stdModel? "mem.Allocator.dupeSentinel__anon_1").isNone) "prefix is not a model name"
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
@@ -158,7 +171,12 @@ def main : IO Unit := do
       s!"model '{symbol}' hand-models std code"
   for symbol in #["os.linux.read", "posix.mmap"] do
     require (projectStdBinding? symbol).isNone s!"{symbol}: OS primitive refused"
-    let _ ← get <| ModelRegistry.check #[{ model with symbol }] raw.profile #[caller f "client" symbol]
+  let _ ← get <| ModelRegistry.check #[{ model with symbol := "os.linux.read" }] raw.profile
+    #[caller f "client" "os.linux.read"]
+  -- `posix.mmap` is the built-in OS boundary of `--allocator-model translated` (OSM-01): a
+  -- project binding never shadows it, in either mode.
+  expectError (ModelRegistry.check #[{ model with symbol := "posix.mmap" }] raw.profile
+    #[caller f "client" "posix.mmap"]) "model 'posix.mmap' conflicts with translated AIR or a built-in model"
   -- A user module's names never trigger the std rule (the registry example binds `project.*`).
   for symbol in #["project.identity", "lists.helper", "client.posix.read", "mempool.alloc"] do
     require (projectStdBinding? symbol).isNone s!"{symbol}: user-module name refused as std"

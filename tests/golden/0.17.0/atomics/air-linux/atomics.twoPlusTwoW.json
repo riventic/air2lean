@@ -1,6 +1,9 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
@@ -37,6 +40,7 @@
  "name": "atomics.twoPlusTwoW",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

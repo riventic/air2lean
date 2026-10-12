@@ -407,7 +407,11 @@ def run_mutant(name, mutants=None):
     script, anchor, replacement, test, binding, kills = (mutants or MUTANTS)[name]
     control = run_tests(load_test_module(test), kills)
     if not control.wasSuccessful():
-        raise AssertionError(f'{name}: control does not pass its killing tests')
+        # Name each failing test and the last line of its traceback: a control failure is a
+        # finding about the test itself, and the run must say which assertion or error it was.
+        details = '; '.join(f'{case.id()}: {trace.strip().splitlines()[-1]}'
+                            for case, trace in control.failures + control.errors)
+        raise AssertionError(f'{name}: control does not pass its killing tests ({details})')
     module = load_test_module(test)
     setattr(module, binding, mutated_binding(getattr(module, binding), script, anchor, replacement))
     result = run_tests(module, kills)

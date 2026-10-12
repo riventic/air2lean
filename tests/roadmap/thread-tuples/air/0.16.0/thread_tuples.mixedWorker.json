@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,12 +39,18 @@
  },
  "name": "thread_tuples.mixedWorker",
  "module": "root",
+ "src": {
+  "file": "thread_tuples.zig",
+  "module": "thread_tuples",
+  "decl_line": 16
+ },
  "params": [
   0,
   1,
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -72,7 +81,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -132,7 +142,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 10,
