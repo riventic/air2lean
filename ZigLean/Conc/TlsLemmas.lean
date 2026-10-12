@@ -533,7 +533,8 @@ theorem tlsExit_run_one {m : Mem} {key b : BlockId} (h : m.tlsOf m.current = #[(
 /-- Thread end with one instance: the thread gives up its block. -/
 theorem TTripleIn.tlsExit_one {t : ThreadId} {R : Array ThreadRec} {key b : BlockId} {A S : Nat}
     {K : BlockKind} {bs : Array Byte} {Q : Assn}
-    (hR : ((R[t]?).map (·.tls)).getD #[] = #[(key, b)]) (hS : bs.size = S) (hpos : 0 < S) :
+    (hR : ((R[t]?).map (·.tls)).getD #[] = #[(key, b)]) (hS : bs.size = S) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
     TTripleIn t R (bytesAt ⟨some b, 0⟩ A S K bs ∗ Q) tlsExit (fun _ => Q) := by
   intro m hP hF hct hR' hd hm hp hc ho
   have hreg : m.tlsOf m.current = #[(key, b)] := by
@@ -541,7 +542,7 @@ theorem TTripleIn.tlsExit_one {t : ThreadId} {R : Array ThreadRec} {key b : Bloc
   rw [tlsExit_run_one hreg]
   have ht : TTriple (bytesAt ⟨some b, 0⟩ A S K bs ∗ Q)
       (free ⟨some b, 0⟩ >>= fun _ => (pure () : MemM Unit)) (fun _ => Q) :=
-    ((TTriple.free hS rfl hpos).frame.conseq (fun _ h => h)
+    ((TTriple.free hS rfl hpos hK).frame.conseq (fun _ h => h)
       fun _ _ h => sep_emp.mp (sep_comm h)).bind fun _ => TTriple.ret (Q := fun _ => Q) ()
   exact ht m hP hF hd hm hp hc ho
 

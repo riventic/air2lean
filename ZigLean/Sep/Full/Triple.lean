@@ -395,6 +395,12 @@ theorem Holds.tagF {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FC
   · rw [FHeap.union_apply, e, Option.none_or, hc]
   · rw [e] at hc; cases hc
 
+/-- **Knowledge true in the memory can be added at any time** (a fact of `Mem.kn m` is
+persistent, so whoever holds it later keeps it true). -/
+theorem Holds.addKnow {m : Mem} {r rF : Res} {k : Know} (hk : Know.Sub k m.kn)
+    (hh : Holds m r rF) : Holds m ⟨r.heap, r.know.union k, r.gh⟩ rF :=
+  ⟨hh.disj, hh.heap, hh.know.union hk, hh.knowF, hh.ghost⟩
+
 /-- **Knowledge from ownership.** Owning a byte of block `b`, whose cell has the address `A`,
 gives `known b A`. -/
 theorem FTriple.know_intro {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {b : BlockId}
@@ -408,10 +414,7 @@ theorem FTriple.know_intro {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAs
   have hres : (P ⋆ known b A) ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ :=
     ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
-  have hk : Know.Sub (r.know.union (Know.single (.addr b A))) m.kn :=
-    hh.know.union (Know.sub_single hkn)
-  exact ht m ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ rF
-    ⟨hh.disj, hh.heap, hk, hh.knowF, hh.ghost⟩ hres hs
+  exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hs
 
 theorem ptrAddr_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (off : Int) : (ptrAddr ⟨some b, off⟩).run m = pure ((blk.addr : Int) + off, m) := by

@@ -6,10 +6,12 @@ import ZigLean.Sep.Full.Ops
 
 A `const` global (a vtable, a string literal, any `const` data) is read-only static storage: a
 write to it throws `.illegal` (`Mem.accessW`), and so does a `free` of it (`Zig.free`); every other
-step that changes a block checks the block's kind first (`munmap`/`mremap`: `.mapped`; byte remap:
-`.heap`; owned remap and reset: `.owned`). So a live `const` global keeps its bytes, its address
-and its life in every later memory (`KMono`), and what a program has seen of it is knowledge, not
-ownership: `Mem.kn` has a fact `.cbyte b o c` for every byte of a live `const` global.
+step that changes a block is reached only after a kind check (`munmap`/`mremap`: `.mapped`; byte
+remap: `.heap`; owned remap and reset: `.owned`; an atomic write's message, `insertMsg`: its
+`accessW`). Each primitive's `KMono` proof (`Tame`, the atomic and `mmap` rules) checks this, so a
+new primitive cannot skip it. So a live `const` global keeps its bytes, its address and its life
+in every later memory (`KMono`), and what a program has seen of it is knowledge, not ownership:
+`Mem.kn` has a fact `.cbyte b o c` for every byte of a live `const` global.
 
 * `cbytesAt p A bs`: **persistent**: the live `const` global at `p` (block address `A`) holds the
   bytes `bs`. It owns no bytes and no ghost state, so it is duplicable (`Persistent.dup`) and many
@@ -74,12 +76,6 @@ theorem Persistent.drop (hP : Persistent P) : EUpd (P ⋆ R) R := by
   exact ⟨r₂, ⟨hd, hm, Know.Sub.right hkn, hkF, hg⟩, hr⟩
 
 end Persistent
-
-/-- **Knowledge true in the memory can be added at any time** (a fact of `Mem.kn m` is
-persistent, so whoever holds it later keeps it true). -/
-theorem Holds.addKnow {m : Mem} {r rF : Res} {k : Know} (hk : Know.Sub k m.kn)
-    (hh : Holds m r rF) : Holds m ⟨r.heap, r.know.union k, r.gh⟩ rF :=
-  ⟨hh.disj, hh.heap, hh.know.union hk, hh.knowF, hh.ghost⟩
 
 /-! ## `const` bytes -/
 
@@ -164,6 +160,15 @@ theorem cbytesAt_intro {p : Ptr} {A S : Nat} {bs : Array Byte} (hpos : 0 < bs.si
     rw [hblk] at hblk'; cases hblk'; exact hx
   exact cbytesAt_of_kn hpb h0 hsub hh hp
 
+/-- **Absorbing knowledge one already has**: a persistent `X` whose facts `r` already has holds
+next to anything `r` holds. -/
+theorem Persistent.absorb {X P : FAssn} {k : Know} {r : Res}
+    (hx : X ⟨FHeap.empty, k, Ghost.unit⟩) (hk : Know.Sub k r.know) (hp : P r) : (X ⋆ P) r := by
+  refine ⟨⟨FHeap.empty, k, Ghost.unit⟩, r, fun _ => .inl rfl, ?_, hx, hp⟩
+  obtain ⟨rh, rk, rg⟩ := r
+  simp only at hk ⊢
+  rw [FHeap.empty_union, Ghost.unit_add, Know.union_of_sub hk]
+
 /-- **Part of known `const` bytes**: the bytes `[k, k + n)` of `bs`, at `p + k`, are known too
 (the knowledge stays whole: it is persistent). -/
 theorem cbytesAt_part {p : Ptr} {A k n : Nat} {bs : Array Byte} {r : Res} (hkn : k + n ≤ bs.size)
@@ -177,28 +182,14 @@ theorem cbytesAt_part {p : Ptr} {A k n : Nat} {bs : Array Byte} {r : Res} (hkn :
     · simp only [Array.size_extract] at hi
       refine .inr ⟨k + i, by omega, ?_⟩
       simp [Array.getElem_extract, Nat.add_assoc]
-  refine ⟨⟨FHeap.empty, cknow b A (p.add k).off.toNat (bs.extract k (k + n)), Ghost.unit⟩, r,
-    fun _ => .inl rfl, ?_, ⟨rfl, rfl, b, by simpa [Ptr.add] using hpb, by simp [Ptr.add]; omega, rfl⟩,
-    ⟨e1, e2, b, hpb, h0, hk⟩⟩
-  obtain ⟨rh, rk, rg⟩ := r
-  simp only at e1 e2 hsub ⊢
-  subst e1 e2
-  rw [FHeap.empty_union, Ghost.unit_add, Know.union_of_sub hsub]
+  exact Persistent.absorb ⟨rfl, rfl, b, by simpa [Ptr.add] using hpb, by simp [Ptr.add]; omega, rfl⟩
+    hsub ⟨e1, e2, b, hpb, h0, hk⟩
 
 /-- `const` bytes that decode to `v` at an address aligned to `a` are a read-only typed value. -/
 theorem cpts_of_cbytesAt {T : Type} [Enc T] {p : Ptr} {a A : Nat} {bs : Array Byte} {v : T}
     {r : Res} (ha : (A + p.off.toNat) % a = 0) (hs : bs.size = Enc.size T)
     (hv : Enc.decode bs = pure v) (h : cbytesAt p A bs r) : cpts p a v r :=
   ⟨A, bs, ha, hs, hv, h⟩
-
-/-- **Absorbing knowledge one already has**: a persistent `X` whose facts `r` already has holds
-next to anything `r` holds. -/
-theorem Persistent.absorb {X P : FAssn} {k : Know} {r : Res}
-    (hx : X ⟨FHeap.empty, k, Ghost.unit⟩) (hk : Know.Sub k r.know) (hp : P r) : (X ⋆ P) r := by
-  refine ⟨⟨FHeap.empty, k, Ghost.unit⟩, r, fun _ => .inl rfl, ?_, hx, hp⟩
-  obtain ⟨rh, rk, rg⟩ := r
-  simp only at hk ⊢
-  rw [FHeap.empty_union, Ghost.unit_add, Know.union_of_sub hk]
 
 /-! ## Reading `const` bytes -/
 

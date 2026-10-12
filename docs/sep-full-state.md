@@ -611,8 +611,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
 `ConstKnow.vtOwn_twice`).
 
 * **Model fact.** A write to a `.constGlobal` block throws `.illegal` (`Mem.accessW`: stores,
-  atomic stores, RMW, `cmpxchg`); every other step that changes a block checks its kind first
-  (`munmap`/`mremap`: `.mapped`; byte remap: `.heap`; owned remap and reset: `.owned`) except
+  atomic stores, RMW, `cmpxchg`); every other step that changes a block is reached only after a
+  kind check (`munmap`/`mremap`: `.mapped`; byte remap: `.heap`; owned remap and reset: `.owned`;
+  an atomic write's message: its `accessW`; each primitive's `KMono` proof checks it) except
   `Zig.free`, which ended any live block at offset 0. **Model correction**: `Zig.free` of a `const`
   global throws `.illegal` (native code cannot free static storage; no generated `free` reaches
   one: it frees stack slots, and `rawFree`/`ownedFree` check the kind first). The legacy free
@@ -636,8 +637,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   (`@[fsym_provider]`).
 * **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
   `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
-  owned bytes). The owned form, for a vtable in any block (built at run time), is `vtOwn` with the
-  old rules (`vtOwn_load`, `vtOwn_project`), same statements. Regression:
+  owned bytes). The owned form, for a vtable in any block (built at run time), is the old
+  predicate renamed `vtOwn` (an `Assn`, used under `up`) with the old rules (`vtOwn_load`,
+  `vtOwn_project`), same statements. Regression:
   `tests/roadmap/sep-full/ConstKnow.lean` (two handles whose invariants each hold the vtable, a
   store to and a free of a `const` global are `.illegal`).
 

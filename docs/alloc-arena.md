@@ -319,8 +319,11 @@ free list) is not attempted.
 child vtable (or the child itself through its own handle) frames both in; the exclusive form
 `up (vtOwn …)` cannot be held twice (`ConstKnow.vtOwn_twice`). The model fact behind it: a `const`
 global is never written (`Mem.accessW`) or freed (`Zig.free` of one is `.illegal`, a model
-correction). Statements only got stronger: no arena, FBA or page statement mentioned `vtR`; the
-arena's planned `own ∋ up (vtR …)` becomes the persistent `vtR`.
+correction). No arena, FBA or page statement mentioned `vtR`. `vtR` changed type (it was an
+`Assn` under `up`, it is now an `FAssn`): the old exclusive predicate and its rules are `vtOwn`,
+`vtOwn_load`, `vtOwn_project` with unchanged statements, so a client written against
+`up (vtR …)` switches to `up (vtOwn …)` or to the persistent `vtR` (`vtR_intro`); the arena's
+planned `own ∋ up (vtR …)` becomes the persistent `vtR`.
 
 Not proved yet, in order:
 

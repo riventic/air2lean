@@ -282,12 +282,16 @@ theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
 
 /-- The pointer to entry `i` of the vtable: formed (MM-3), no effect. -/
 theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
-    {b : BlockId} (hpb : vtp.block = some b) (hv : 0 ≤ vtp.off) :
+    (hv : 0 ≤ vtp.off) :
     FTotalTriple (vtR vtp fns) (ptrProject vtp (·.add (8 * i)))
-      (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ vtR vtp fns) := by
-  have hr := (vtR_entry (vtp := vtp) hi).reaches (b := b) (by simpa using hpb) fun _ _ h => h.2.1
-  exact FTotalTriple.ptrProject_of hpb hr hv (by simp [Ptr.add]; omega) (by omega)
-    (by simp [Ptr.add, Enc.size]; omega)
+      (fun q => ⟪q = vtp.add (8 * i)⟫ ⋆ vtR vtp fns) :=
+  FTotalTriple.of_read fun m r rF hh hp _ => by
+    obtain ⟨b, blk, bs, hqb, hblk, -, -, h0, hpos, -, hx⟩ := vtR_entry (vtp := vtp) hi m r rF hh hp
+    obtain ⟨hlt, -⟩ := Array.getElem?_eq_some_iff.mp (hx (bs.size - 1) (by omega))
+    have hvb : vtp.block = some b := by simpa [Ptr.add] using hqb
+    have hoff : (vtp.add (8 * i)).off = vtp.off + 8 * i := by simp [Ptr.add]
+    exact ptrProject_add_run (inBounds_of hvb hblk hv (by omega))
+      (inBounds_of hqb hblk h0 (by omega))
 
 /-- The vtable from known `const` bytes `bs` at `vtp` that hold the entries `fns`: its facts are
 facts of `bs`. -/
