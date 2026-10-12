@@ -77,13 +77,13 @@ theorem dupe_spec (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array 
   fsym [hA, mulWithOverflow_one]
 
 /-! `realloc` (`reallocAdvanced__anon_0df1`, `realloc__anon_af0c`) and `allocSentinel`
-(`__anon_79cb`) wait on the engine (`~/.cache/air2lean/handoffs/codex__fsym-engine.md`):
+(`__anon_79cb`) wait on two `fsym` engine features (planning order, atoms equal up to arithmetic):
 the walk of both reaches the returns, and what is left is the return entailment of a grant whose
 bytes changed after the allocation (the `@memset(_, undefined)` of the fresh bytes, the
 `@memcpy` of the moved prefix, the stored sentinel). Its token `I.tok p bs.size …` still names
 the size of the allocation's existential `bs`, so the postcondition's grant `I.granted p k ?bs'`
-gets `?bs' := bs` from the token before the region is planned (request #12, mechanism M2), and
-the region's `n + 1` bytes match the postcondition's only up to arithmetic (request #20). -/
+gets `?bs' := bs` from the token before the region is planned, and the region's `n + 1` bytes
+match the postcondition's only up to arithmetic. -/
 
 /-! ## Release -/
 
