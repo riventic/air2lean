@@ -13,6 +13,7 @@ import ZigLean.Sep.Full.Region
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
   in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array;
+  `arr_ptrProject` (the pointer to an item, one past the end and the empty array included);
   `arr_memset` (all items) and `arr_memmove` (ranges that may overlap), both from the rules on
   owned bytes (`arr_of`); the facts of an array (`facts_arr`) and its extent for pointer
   formation `&xs[i]` (`Live.arr`).
@@ -363,6 +364,17 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
   FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
+
+/-- **Pointer to item `i ≤ vs.length`** of an owned array (one past the end included, and the
+empty array: `ptr_add`, `ptr_elem_ptr`, `slice_elem_ptr`): the memory is unchanged. The item
+size of generated code is a literal (`hsz`). -/
+@[fsym] theorem FTotalTriple.arr_ptrProject {i : BitVec 64} {size : Nat} (hsz : size = Enc.size T)
+    (hi : i.toNat ≤ vs.length) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.ptrProject p (·.elem size i))
+      (fun r => ⟪r = p.elem size i⟫ ⋆ up (Zig.arr p vs)) :=
+  FTotalTriple.of_read fun _ _ _ hh hp _ =>
+    have ⟨_, hp', hm⟩ := up_fix (SizeFree.arr p vs) hh hp
+    hsz ▸ arr_ptrProject_run hp'.1 hm hi
 
 /-- **A rule on an array from a rule on its owned bytes**: the rule turns the array's bytes into
 bytes that hold the items `vs'`; the alignment and kind are facts of the labels, which the bytes
