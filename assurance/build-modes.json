@@ -213,11 +213,16 @@
     {
       "mode": "Debug",
       "backend": "stage2_x86_64",
-      "status": "unqualified",
-      "claim": "none",
-      "scope": "No claim. The differential examples ran natively with -ODebug -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
-      "premise": "None stated: the backend divergences below are unresolved.",
-      "premises": [],
+      "status": "qualified",
+      "claim": "tested-input-agreement",
+      "scope": "Debug keeps every safety check. Native x86_64-linux runs of the differential examples with -fno-llvm -mcpu=baseline, recorded in the linux/amd64 local-CI container (Rosetta; emulated: true). Each run tests the backend's own translation: scripts/stage2-translations.py exports every example with the patched compiler for the stage2_x86_64 profile and requires its translation to equal the committed one the run builds; floatops and layout are rejected on that profile (CheckCtx.checkStage2Backend: float @mod, signed packed-union fields narrower than a register) and examples/asm does not compile, so they are excluded_examples. 34343 cases, no mismatch. stage2_x86_64 AIR is still translated only with --allow-unqualified-build-mode (the translation default is ReleaseSafe/stage2_llvm). No claim goes beyond the tested inputs.",
+      "premise": "The Debug -fno-llvm build of the same source behaves, on the tested inputs, like the ReleaseSafe analyzed-AIR model (PRF-02, SEM-01), provided export and translation (TRU-02) and the self-hosted x86_64 lowering (TRU-03) are faithful, and the program is outside the stage2_x86_64 rejections. Evidence is the 0-mismatch differential run only.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
       "evidence": [
         {
           "kind": "run",
@@ -230,21 +235,21 @@
       "commands": [
         "bash scripts/build-mode-docker.sh 0.16.0 Debug stage2_x86_64 /abs/out-dir"
       ],
-      "findings": [
-        "stage2-x86_64-float-mod-rounding",
-        "stage2-x86_64-f80-signed-zero-minmax",
-        "stage2-x86_64-narrow-int-extension"
-      ],
-      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
+      "findings": []
     },
     {
       "mode": "ReleaseSafe",
       "backend": "stage2_x86_64",
-      "status": "unqualified",
-      "claim": "none",
-      "scope": "No claim. The differential examples ran natively with -OReleaseSafe -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
-      "premise": "None stated: the backend divergences below are unresolved.",
-      "premises": [],
+      "status": "qualified",
+      "claim": "tested-input-agreement",
+      "scope": "ReleaseSafe keeps every safety check. Native x86_64-linux runs of the differential examples with -fno-llvm -mcpu=baseline, recorded in the linux/amd64 local-CI container (Rosetta; emulated: true). Each run tests the backend's own translation: scripts/stage2-translations.py exports every example with the patched compiler for the stage2_x86_64 profile and requires its translation to equal the committed one the run builds; floatops and layout are rejected on that profile (CheckCtx.checkStage2Backend: float @mod, signed packed-union fields narrower than a register) and examples/asm does not compile, so they are excluded_examples. 34343 cases, no mismatch. stage2_x86_64 AIR is still translated only with --allow-unqualified-build-mode (the translation default is ReleaseSafe/stage2_llvm). No claim goes beyond the tested inputs.",
+      "premise": "The ReleaseSafe -fno-llvm build of the same source behaves, on the tested inputs, like the ReleaseSafe analyzed-AIR model (PRF-02, SEM-01), provided export and translation (TRU-02) and the self-hosted x86_64 lowering (TRU-03) are faithful, and the program is outside the stage2_x86_64 rejections. Evidence is the 0-mismatch differential run only.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
       "evidence": [
         {
           "kind": "run",
@@ -257,21 +262,21 @@
       "commands": [
         "bash scripts/build-mode-docker.sh 0.16.0 ReleaseSafe stage2_x86_64 /abs/out-dir"
       ],
-      "findings": [
-        "stage2-x86_64-float-mod-rounding",
-        "stage2-x86_64-f80-signed-zero-minmax",
-        "stage2-x86_64-narrow-int-extension"
-      ],
-      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
+      "findings": []
     },
     {
       "mode": "ReleaseFast",
       "backend": "stage2_x86_64",
-      "status": "unqualified",
-      "claim": "none",
-      "scope": "No claim. The differential examples ran natively with -OReleaseFast -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
-      "premise": "None stated: the backend divergences below are unresolved.",
-      "premises": [],
+      "status": "qualified",
+      "claim": "no-illegal-behaviour-transfer",
+      "scope": "Only the README claim, for the self-hosted backend: a proof that a function never throws on given inputs implies its ReleaseFast -fno-llvm build has no illegal behaviour on those inputs and returns the modelled value. Native x86_64-linux runs of the differential examples with -fno-llvm -mcpu=baseline, recorded in the linux/amd64 local-CI container (Rosetta; emulated: true). Each run tests the backend's own translation: scripts/stage2-translations.py exports every example with the patched compiler for the stage2_x86_64 profile and requires its translation to equal the committed one the run builds; floatops and layout are rejected on that profile (CheckCtx.checkStage2Backend: float @mod, signed packed-union fields narrower than a register) and examples/asm does not compile, so they are excluded_examples. 34343 cases, no mismatch. stage2_x86_64 AIR is still translated only with --allow-unqualified-build-mode (the translation default is ReleaseSafe/stage2_llvm). 4035 model-throwing inputs are ub_excluded.",
+      "premise": "ReleaseFast compiles the same source as the ReleaseSafe reference build and only removes safety checks, so it may diverge from the ReleaseSafe model only on executions with illegal behaviour, provided Sema/export/translation (TRU-02) and the self-hosted x86_64 lowering (TRU-03) are faithful. The run supports this on every tested input on which the model does not throw. Float @divExact is not exercised (floatops is rejected on this profile). The premise excludes code under @setRuntimeSafety(false), @setFloatMode(.optimized), different CPU features or error tracing, and any differing comptime branch on @import(\"builtin\").mode.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
       "evidence": [
         {
           "kind": "run",
@@ -284,13 +289,7 @@
       "commands": [
         "bash scripts/build-mode-docker.sh 0.16.0 ReleaseFast stage2_x86_64 /abs/out-dir"
       ],
-      "findings": [
-        "stage2-x86_64-float-mod-rounding",
-        "stage2-x86_64-f80-signed-zero-minmax",
-        "stage2-x86_64-narrow-int-extension",
-        "illegal-behaviour-not-detected-by-releasesafe"
-      ],
-      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
+      "findings": []
     },
     {
       "mode": "ReleaseSmall",
