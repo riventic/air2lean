@@ -28,16 +28,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "DispatchSpec",
-      "module": "ZigLean.Sep.DispatchTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "DispatchTemplate",
-      "module": "ZigLean.Sep.DispatchTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "EventSpec",
       "module": "ZigLean.Conc.Spec.Event",
       "status": "legacy-to-retire"
@@ -296,18 +286,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "dispatch_template",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.DispatchTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "dispatch_template?",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.DispatchTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "fma_case",
       "kind": "syntax",
       "module": "Proofs.Floatops.Proofs",
@@ -357,12 +335,6 @@
       "tactic": "loop_template?",
       "kind": "syntax",
       "module": "ZigLean.Sep.LoopTemplate",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "mach_step",
-      "kind": "syntax",
-      "module": "tests.roadmap.dispatch-templates.Template",
       "status": "legacy-to-retire"
     },
     {
@@ -498,12 +470,6 @@
       "module": "ZigLean.Sep.Full.Extent",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "word_step",
-      "kind": "syntax",
-      "module": "tests.roadmap.dispatch-templates.Template",
-      "status": "legacy-to-retire"
     }
   ],
   "legacy_users": [
@@ -512,9 +478,6 @@
     },
     {
       "path": "Proofs/Iogroup/Counter.lean"
-    },
-    {
-      "path": "Proofs/Layout/Mem.lean"
     },
     {
       "path": "Proofs/Lists/Append.lean"
@@ -530,9 +493,6 @@
     },
     {
       "path": "Proofs/Lists/Sep.lean"
-    },
-    {
-      "path": "Proofs/Pointers/Sep.lean"
     },
     {
       "path": "Proofs/Slices/Sep.lean"
@@ -643,9 +603,6 @@
       "path": "ZigLean/Sep/Discard.lean"
     },
     {
-      "path": "ZigLean/Sep/DispatchTemplate.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/AllocSpec.lean"
     },
     {
@@ -718,9 +675,6 @@
     },
     {
       "path": "ZigLean/Sep/Mmap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/OsMalloc.lean"
     },
     {
       "path": "ZigLean/Sep/Owned.lean"
@@ -808,9 +762,6 @@
       "path": "tests/roadmap/container-contracts/Clients.lean"
     },
     {
-      "path": "tests/roadmap/dispatch-templates/Template.lean"
-    },
-    {
       "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
     },
     {
@@ -818,9 +769,6 @@
     },
     {
       "path": "tests/roadmap/global-payload-pointers/Model.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/Queue.lean"
     },
     {
       "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
@@ -856,7 +804,13 @@
       "path": "tests/roadmap/spawn-failure/SpawnFailure/Pair.lean"
     },
     {
+      "path": "tests/roadmap/strength-log/ProofsLayout.lean"
+    },
+    {
       "path": "tests/roadmap/strength-log/ProofsLists.lean"
+    },
+    {
+      "path": "tests/roadmap/strength-log/ProofsPointers.lean"
     },
     {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Counters.lean"
