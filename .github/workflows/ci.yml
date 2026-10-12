@@ -162,6 +162,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED }}
         run: |
           python3 tests/roadmap/artifact-manifest/test_fixture.py
+          python3 tests/roadmap/attestation/test_attestation.py
           python3 scripts/provenance-evidence.py --fixture all check --strict
           python3 scripts/provenance-evidence.py --fixture all replay --strict
 
