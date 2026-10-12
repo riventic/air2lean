@@ -1,4 +1,5 @@
 import ZigLean.VC.Rules
+import ZigLean.VC.Total
 import Lean
 
 /-!
@@ -695,6 +696,19 @@ def programFor (app : Expr) : MetaM (Expr × Expr × Name) := do
   | .loops requests => throwError m!"{loopsMessage f requests}\n{reportLine (loopsJson f requests)}"
   | .refused reason => throwError m!"vc extraction for `{f}` refused: {reason}"
 
+/-- Close `AllTotal` of an extracted program by unfolding it. A memory call whose contract is
+only a partial `Triple` leaves a `TotalTriple` goal: the goal is refused (fail closed). -/
+def allTotal (f : Name) (g : MVarId) : MetaM Unit := do
+  let (vcName, _, _) := vcNames f
+  let names := if (← getEnv).contains vcName then #[``MemProgram.AllTotal, vcName]
+    else #[``MemProgram.AllTotal]
+  let ctx ← Simp.mkContext (simpTheorems := #[← names.foldlM (fun s n => s.addDeclToUnfold n) {},
+    ← getSimpTheorems])
+  let (r, _) ← simpGoal g ctx
+  if let some (_, g') := r then
+    throwError "vc_gen: a total or result-existence goal needs a total contract (`TotalTriple`) for \
+      every memory call of `{f}`; these calls have none:{indentExpr (← g'.getType)}"
+
 def runVcGen (report : Bool) : TacticM Unit := do
   let g ← getMainGoal
   g.withContext do
@@ -714,7 +728,22 @@ def runVcGen (report : Bool) : TacticM Unit := do
         | throwError "vc_gen: triple_intro"
       let (_, o) ← o.introN 2 [`heap, `pre]
       pure (f, [o])
-    else throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v` or `Triple pre (f xs) post`"
+    else if ty.isAppOfArity ``Zig.TotalTriple 4 || ty.isAppOfArity ``Zig.Returns 3 then do
+      -- Total correctness and result existence: the same VC, and every memory call total.
+      let total := ty.isAppOfArity ``Zig.TotalTriple 4
+      let (_, src, f) ← programFor (ty.getArg! 2)
+      let rule := if total then ``total_intro else ``returns_intro
+      let goals ← applyWith g rule src
+      let mut rest := #[]
+      for goal in goals do
+        if (← instantiateMVars (← goal.getType)).isAppOf ``MemProgram.AllTotal then
+          allTotal f goal
+        else rest := rest.push goal
+      let [o] := rest.toList | throwError "vc_gen: {rule}"
+      let (_, o) ← o.introN 2 [`heap, `pre]
+      pure (f, [o])
+    else throwError "vc_gen: expected `∃ v, f xs = pure v ∧ post v`, `Triple pre (f xs) post`, \
+      `TotalTriple pre (f xs) post` or `Returns pre (f xs)`"
   let mut obls := #[]
   let names ← IO.mkRef 0
   for gen in gens do
@@ -724,6 +753,12 @@ def runVcGen (report : Bool) : TacticM Unit := do
   let mut open_ := #[]
   let mut lines := #[]
   let mut items := #[]
+  -- A `True` goal (the postcondition of a result-existence goal) is closed at once.
+  obls ← obls.mapM fun o => do
+    if o.closedBy.isNone && (← instantiateMVars (← o.goal.getType)).isConstOf ``True then
+      o.goal.assign (mkConst ``True.intro)
+      return { o with closedBy := some "trivial" }
+    return o
   for o in obls do
     let k := o.kind.name
     let i := counts.getD k 0 + 1

@@ -216,6 +216,7 @@
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
+    "ZigLean.VC.Total": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.VC.Result": ["SEM-03"],
     "ZigLean.Os.Mmap": ["OSM-01"],
     "ZigLean.Os": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OST-03", "OSY-01", "OSK-01", "OSK-02", "OSG-01", "OSM-02"],

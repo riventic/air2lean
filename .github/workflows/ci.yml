@@ -2194,6 +2194,8 @@ jobs:
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          # P05: total and result-existence VCs; a partial callee refuses a total goal.
+          lake env lean tests/roadmap/vcs/Total.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Total.log"
 
       - name: Verification condition report regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
