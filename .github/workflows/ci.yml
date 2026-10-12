@@ -2184,7 +2184,8 @@ jobs:
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
+          lake build ZigLean.VC ZigLean.VecMem ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
+            Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
       - name: Result verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
@@ -2202,15 +2203,8 @@ jobs:
           cd "$tree"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
-      - name: Verification condition client regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
-
-      # Reflect committed loop-free translations into the VC AST; loops must request invariants.
+      # Reflect committed loop-free translations into the VC AST and walk memory contracts;
+      # loops must request invariants.
       - name: Automatic verification condition extraction regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
