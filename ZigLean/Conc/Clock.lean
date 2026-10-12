@@ -94,8 +94,8 @@ theorem Mem.OwnsC.frame (hs : StepIn hF m m') (ho : m.OwnsC c h) (hsub : ∀ l, 
 
 /-- **Revived bytes are owned by every clock**: after `Mem.forgetFrom b S` (an in-place growth),
 no recorded access to an offset `≥ S` of block `b` is concurrent with anything, so every clock
-owns those bytes (given the accesses to blocks that do not exist yet, which no reachable memory
-has). -/
+owns those bytes, given that it covers the recorded accesses to blocks that do not exist yet
+(`hnew`). -/
 theorem Mem.OwnsC.forgotten {b : BlockId} {S : Nat} (hfp : m'.footprint = (m.forgetFrom b S).footprint)
     (hh : ∀ l, h l ≠ none → l.1 = b ∧ S ≤ l.2)
     (hnew : ∀ e ∈ m'.footprint, m'.blocks.size ≤ e.block → VClock.le e.clock c = true) :

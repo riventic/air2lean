@@ -192,7 +192,9 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   rules come with S1: the step edits old entries, which `StepIn` (every entry of the result is
   an old one or a new one of the thread) does not allow, so they need S1's step relation (an
   entry may also be a narrowing of an old one) and a `ThreadLocal` clause for the revival of
-  history-free bytes.
+  history-free bytes. Open: the atomic locations (`Mem.atomics`, their messages) over offsets
+  that a shrink or unmap ends are kept, so an atomic read of a revived byte can still read a
+  message from before the unmap; retiring them is part of S1's atomic step relation.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
