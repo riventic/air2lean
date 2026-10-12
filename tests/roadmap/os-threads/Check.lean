@@ -1,4 +1,5 @@
 import ZigLean.Os
+import ZigLean.Os.Mmap
 import ZigLean.Conc.Sched
 
 /-! Runtime regressions of the trusted OS thread primitives (premises OSF-01, OSF-02, OST-01,
@@ -159,10 +160,18 @@ def wakeMain : ConcM Tgt (BitVec 64) := do
 
 /-! ## OST-01/02: Linux clone, CHILD_CLEARTID, the translated join loop -/
 
--- `instance`: block 0 = child_tid (i32, 1 at first), block 1 = data, block 2 = parent_tid.
+-- `instance`: block 0 = child_tid (i32, 1 at first), block 1 = data, block 2 = parent_tid,
+-- block 3 = the thread's mapping (two pages; `clone` gets its end as the stack top, MM-19).
 def ctid : Ptr := ⟨some 0, 0⟩
 def dataP : Ptr := ⟨some 1, 0⟩
 def ptidP : Ptr := ⟨some 2, 0⟩
+def mapP : Ptr := ⟨some 3, 0⟩
+
+/-- The thread's mapping, as std's `spawn` makes it: its end is the child's stack top. -/
+def stackTop : MemM (BitVec 64) := do
+  let .ok s ← mmap .linux none 8192 (Target.protReadWrite .linux) (Target.mapPrivateAnonymous .linux)
+      noFd 0 | throw .unspecified
+  pure (BitVec.ofInt 64 ((← ptrAddr s.ptr) + 8192))
 
 def cloneKid : Tgt → ConcM Tgt Unit := fun _ =>
   Linux.cloneThread (lift (store 8 dataP (42 : BitVec 64))) ctid
@@ -180,7 +189,8 @@ def cloneSetup (env : Os.Env) : ConcM Tgt (BitVec 64) := do
   let _ ← word 1
   let _ ← lift (do let d ← alloc .heap 8 8; store 8 d (0 : BitVec 64))
   let _ ← lift (alloc .heap 4 4)
-  Linux.clone env 0 0 Linux.stdCloneFlags (some ptidP) 0 (some ctid)
+  let top ← lift stackTop
+  Linux.clone env 0 top Linux.stdCloneFlags (some ptidP) 0 (some ctid)
 
 -- The join loop gets the join edge from the exit's release store: the child's plain write is
 -- read without a race, every completed schedule gives 42 (the rest run out of fuel).
@@ -223,6 +233,29 @@ def cloneSetup (env : Os.Env) : ConcM Tgt (BitVec 64) := do
 -- Other clone flags: outside the model.
 #guard outcomes cloneKid (Linux.clone env 0 0 0x100 (some ptidP) 0 (some ctid)) hex64 ==
   ["Zig.Error.unspecified"]
+-- A stack top that is not inside a live mapping: outside the model (MM-19).
+#guard outcomes cloneKid (do
+    let _ ← word 1
+    let _ ← lift (do let d ← alloc .heap 8 8; store 8 d (0 : BitVec 64))
+    let _ ← lift (alloc .heap 4 4)
+    Linux.clone env 0 0 Linux.stdCloneFlags (some ptidP) 0 (some ctid)) hex64 ==
+  ["Zig.Error.unspecified"]
+-- While the child runs, its stack (here the whole mapping) is not the mapping's: the parent's
+-- access to it is illegal (MM-19).
+#guard outcomes cloneKid (do
+    let _ ← cloneSetup env
+    lift (load (BitVec 64) 8 mapP)) hex64 (fuel := 30) == ["Zig.Error.illegal"]
+-- After the join loop the stack is the mapping's again (undefined bytes), and std's `munmap` of the
+-- whole mapping succeeds.
+#guard outcomes cloneKid (do
+    let _ ← cloneSetup env
+    joinLoop 6
+    lift (Os.munmap .linux ⟨mapP, 8192⟩)
+    pure (0 : BitVec 64)) hex64 (fuel := 30) == ["0", "Zig.Error.panic"]
+#guard outcomes cloneKid (do
+    let _ ← cloneSetup env
+    joinLoop 6
+    lift (load (BitVec 64) 8 mapP)) hex64 (fuel := 30) == ["Zig.Error.panic", "Zig.Error.unspecified"]
 
 /-! ## OST-01/02: macOS pthread_create/join/detach -/
 

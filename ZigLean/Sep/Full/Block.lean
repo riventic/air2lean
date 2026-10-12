@@ -320,8 +320,8 @@ never freed (`free` of one is illegal). -/
     obtain ⟨blk, hb, hl, hsz, hk, -⟩ := hh.bauth (sep_comm hp)
     have hK' : blk.kind ≠ .constGlobal := hk ▸ hK
     refine ⟨(), _, _, ?_, hh.free hp hpb hS h0 hb hK', ⟨rfl, rfl, rfl⟩,
-      ⟨⟨hs.1.single⟩, hs.2.1, LDMono.set (nb := { blk with live := false }) hb
-        (fun h => by cases h) rfl (Nat.le_refl _) rfl hs.2.2⟩⟩
+      ⟨⟨hs.1.single⟩, hs.2.1, (LDMono.set (nb := { blk with live := false }) hb
+        (fun h => by cases h) rfl (Nat.le_refl _) rfl) hs.2.2⟩⟩
     simp [Zig.free, hpb, hb, hl, h0, hsz, hK', freeRaces_of_singleThread hs.1.single, zig_unfold,
       set, StateT.set, MonadStateOf.set]
 

@@ -18,10 +18,13 @@ The lemmas here are the cases of the memory model's block updates: the blocks un
 
 namespace Zig
 
-/-- Live blocks occupy disjoint address ranges (module doc). -/
+/-- Live blocks occupy disjoint address ranges (module doc). A block occupies its live bytes
+`[addr + lo, addr + size)` (`Block.clearOf`, `BlockKind.mappedLo`): a thread's stack blocks may
+lie below an OS mapping's first live offset (MM-19). -/
 def Mem.LiveDisjoint (m : Mem) : Prop :=
   ∀ (b b' : BlockId) (blk blk' : Block), b ≠ b' → m.blocks[b]? = some blk →
-    m.blocks[b']? = some blk' → blk'.live → blk.clearOf blk'.addr blk'.bytes.size = true
+    m.blocks[b']? = some blk' → blk'.live →
+      blk.clearOf (blk'.addr + blk'.kind.mappedLo) (blk'.bytes.size - blk'.kind.mappedLo) = true
 
 namespace Full
 
@@ -53,24 +56,27 @@ theorem PDMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : PDMono m m' :
 
 theorem clearOf_iff {blk : Block} {A n : Nat} :
     blk.clearOf A n = true ↔
-      (blk.live = false ∨ n = 0 ∨ blk.bytes.size = 0 ∨ A + n ≤ blk.addr ∨
-        blk.addr + blk.bytes.size ≤ A) := by
+      (blk.live = false ∨ n = 0 ∨ blk.bytes.size ≤ blk.kind.mappedLo ∨
+        A + n ≤ blk.addr + blk.kind.mappedLo ∨ blk.addr + blk.bytes.size ≤ A) := by
   simp [Block.clearOf, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, or_assoc]
 
-/-- **Two live blocks share no byte address**: byte `x` of a live block `b` and byte `x'` of a
-live block `b' ≠ b` lie at different addresses (`Mem.LiveDisjoint`). -/
+/-- **Two live blocks share no byte address**: live byte `x` of a live block `b` (at or above its
+first live offset) and live byte `x'` of a live block `b' ≠ b` lie at different addresses
+(`Mem.LiveDisjoint`). -/
 theorem _root_.Zig.Mem.LiveDisjoint.addr_ne {m : Mem} (h : m.LiveDisjoint) {b b' : BlockId}
     {blk blk' : Block} (hbb : b ≠ b') (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk')
     (hl : blk.live = true) (hl' : blk'.live = true) {x x' : Nat} (hx : x < blk.bytes.size)
-    (hx' : x' < blk'.bytes.size) : blk.addr + x ≠ blk'.addr + x' := by
+    (hx' : x' < blk'.bytes.size) (hlo : blk.kind.mappedLo ≤ x := by simp)
+    (hlo' : blk'.kind.mappedLo ≤ x' := by simp) : blk.addr + x ≠ blk'.addr + x' := by
   have := clearOf_iff.mp (h b b' blk blk' hbb hb hb' hl')
   rcases this with h | h | h | h | h <;> simp_all <;> omega
 
-/-- A block that keeps its address, does not grow and does not come to life stays clear of a
-range inside the old one. -/
+/-- A block that keeps its address, does not grow (at either end) and does not come to life stays
+clear of a range inside the old one. -/
 theorem clearOf_shrink {blk blk' : Block} {A n A' n' : Nat} (h : blk.clearOf A n = true)
     (hl : blk'.live = true → blk.live = true) (ha : blk'.addr = blk.addr)
-    (hs : blk'.bytes.size ≤ blk.bytes.size) (hA : A ≤ A') (hn : A' + n' ≤ A + n) :
+    (hs : blk'.bytes.size ≤ blk.bytes.size) (hA : A ≤ A') (hn : A' + n' ≤ A + n)
+    (hlo : blk.kind.mappedLo ≤ blk'.kind.mappedLo := by simp) :
     blk'.clearOf A' n' = true := by
   rw [clearOf_iff] at h ⊢
   by_cases hl' : blk'.live = true
@@ -83,34 +89,46 @@ theorem clearOf_shrink {blk blk' : Block} {A n A' n' : Nat} (h : blk.clearOf A n
     · right; right; right; right; omega
   · left; simpa using hl'
 
-/-- Clearance between two live blocks is symmetric. -/
+/-- Clearance between the live bytes of two live blocks is symmetric. -/
 theorem clearOf_symm {blk blk' : Block} (hl : blk.live = true) (hl' : blk'.live = true)
-    (h : blk.clearOf blk'.addr blk'.bytes.size = true) :
-    blk'.clearOf blk.addr blk.bytes.size = true := by
+    (h : blk.clearOf (blk'.addr + blk'.kind.mappedLo) (blk'.bytes.size - blk'.kind.mappedLo) = true) :
+    blk'.clearOf (blk.addr + blk.kind.mappedLo) (blk.bytes.size - blk.kind.mappedLo) = true := by
   rw [clearOf_iff] at h ⊢
   rcases h with h | h | h | h | h
   · simp_all
-  · right; right; left; exact h
-  · right; left; exact h
-  · right; right; right; right; exact h
-  · right; right; right; left; exact h
+  all_goals right; omega
 
-/-- Each block of `m'` is the block of `m` with the same id, at the same address, no larger, and
-not newly live. -/
+/-- A block clear of a range is clear of the live bytes of a block in that range. -/
+theorem clearOf_live {o nb : Block} {A n : Nat} (h : o.clearOf A n = true) (hA : A ≤ nb.addr + nb.kind.mappedLo)
+    (hn : nb.addr + nb.bytes.size ≤ A + n) :
+    o.clearOf (nb.addr + nb.kind.mappedLo) (nb.bytes.size - nb.kind.mappedLo) = true := by
+  rw [clearOf_iff] at h ⊢
+  by_cases hs : nb.bytes.size ≤ nb.kind.mappedLo
+  · right; left; omega
+  rcases h with h | h | h | h | h
+  · left; exact h
+  all_goals right; omega
+
+/-- Each block of `m'` is the block of `m` with the same id, at the same address, no larger (at
+either end), and not newly live. -/
 theorem PDMono.shrink {m m' : Mem}
     (h : ∀ (b : BlockId) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk : Block, m.blocks[b]? = some blk ∧
       (blk'.live = true → blk.live = true) ∧ blk'.addr = blk.addr ∧
-      blk'.bytes.size ≤ blk.bytes.size) : PDMono m m' := by
+      blk'.bytes.size ≤ blk.bytes.size ∧ blk.kind.mappedLo ≤ blk'.kind.mappedLo) : PDMono m m' := by
   intro hd b b' blk₁' blk₂' hbb h1 h2 hl
-  obtain ⟨blk₁, e1, l1, a1, s1⟩ := h b blk₁' h1
-  obtain ⟨blk₂, e2, l2, a2, s2⟩ := h b' blk₂' h2
+  obtain ⟨blk₁, e1, l1, a1, s1, o1⟩ := h b blk₁' h1
+  obtain ⟨blk₂, e2, l2, a2, s2, o2⟩ := h b' blk₂' h2
   have := hd b b' blk₁ blk₂ hbb e1 e2 (l2 hl)
-  exact clearOf_shrink this l1 a1 s1 (by omega) (by omega)
+  by_cases hz : blk₂'.bytes.size ≤ blk₂'.kind.mappedLo
+  · rw [clearOf_iff]; right; left; omega
+  exact clearOf_shrink this l1 a1 s1 (by omega) (by omega) o1
 
-/-- Replacing block `b` by one at the same address, no larger and not newly live. -/
+/-- Replacing block `b` by one at the same address, no larger (at either end) and not newly
+live. -/
 theorem PDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (hl : nb.live = true → blk.live = true) (ha : nb.addr = blk.addr)
-    (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb) :
+    (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb)
+    (hlo : blk.kind.mappedLo ≤ nb.kind.mappedLo := by simp) :
     PDMono m m' := by
   refine PDMono.shrink fun b' blk' h' => ?_
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h'
@@ -119,33 +137,24 @@ theorem PDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]
     have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
     simp only [hlt, if_true, Option.some.injEq] at h'
     subst h'
-    exact ⟨blk, hb, hl, ha, hs⟩
+    exact ⟨blk, hb, hl, ha, hs, hlo⟩
   · simp only [e, if_false] at h'
-    exact ⟨blk', h', id, rfl, Nat.le_refl _⟩
+    exact ⟨blk', h', id, rfl, Nat.le_refl _, Nat.le_refl _⟩
 
-/-- Growing the live block `b` in place to at most `lo + len` bytes, where the added range
-`[addr + lo, addr + lo + len)` is clear of every other block (`Mem.mappingRoom`). -/
+/-- Growing the live block `b` in place to at most `lo + len` bytes, live from `lo` or above,
+where `[addr + lo, addr + lo + len)` is clear of every other block (`Mem.mappingRoom`). -/
 theorem PDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
-    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (ha : nb.addr = blk.addr)
-    (hlo : lo ≤ blk.bytes.size) (hsz : nb.bytes.size ≤ lo + len)
+    (hb : m.blocks[b]? = some blk) (_hl : blk.live = true) (ha : nb.addr = blk.addr)
+    (_hlo : lo ≤ blk.bytes.size) (hsz : nb.bytes.size ≤ lo + len)
     (hroom : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
       o.clearOf (blk.addr + lo) len = true)
-    (h : m'.blocks = m.blocks.set! b nb) : PDMono m m' := by
+    (h : m'.blocks = m.blocks.set! b nb) (hnlo : lo ≤ nb.kind.mappedLo) :
+    PDMono m m' := by
   intro hd
-  -- every other block is clear of the grown range
+  -- every other block is clear of the grown block's live bytes
   have hclear : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
-      o.clearOf nb.addr nb.bytes.size = true := by
-    intro j o hj ho
-    have h1 := clearOf_iff.mp (hd j b o blk hj ho hb hl)
-    have h2 := clearOf_iff.mp (hroom j o hj ho)
-    rw [clearOf_iff, ha]
-    by_cases hol : o.live = false
-    · left; exact hol
-    right
-    rcases h1 with h1 | h1 | h1 | h1 | h1
-    · exact absurd h1 hol
-    all_goals rcases h2 with h2 | h2 | h2 | h2 | h2
-    all_goals first | exact absurd h2 hol | omega
+      o.clearOf (nb.addr + nb.kind.mappedLo) (nb.bytes.size - nb.kind.mappedLo) = true :=
+    fun j o hj ho => clearOf_live (hroom j o hj ho) (by omega) (by omega)
   have hget : ∀ j, m'.blocks[j]? = if j = b then some nb else m.blocks[j]? := by
     intro j
     rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
@@ -175,13 +184,13 @@ theorem PDMono.push {m m' : Mem} {nb : Block}
   intro hd b b' blk blk' hbb h1 h2 hl
   rw [h, Array.getElem?_push] at h1 h2
   have hall : ∀ (j : Nat) (x : Block), m.blocks[j]? = some x → nb.live = true →
-      x.clearOf nb.addr nb.bytes.size = true := by
+      x.clearOf (nb.addr + nb.kind.mappedLo) (nb.bytes.size - nb.kind.mappedLo) = true := by
     intro j x hx hn
     have := hf hn
     unfold Mem.addrFree at this
     rw [Array.all_eq_true] at this
     obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hx
-    exact this j hi
+    exact clearOf_live (this j hi) (by omega) (by omega)
   by_cases e1 : b = m.blocks.size <;> by_cases e2 : b' = m.blocks.size
   · exact absurd (e1.trans e2.symm) hbb
   · simp only [e1, if_true, if_neg e2, Option.some.injEq] at h1 h2
@@ -313,15 +322,17 @@ theorem LDMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : LDMono m m' :
 theorem LDMono.shrink {m m' : Mem}
     (h : ∀ (b : BlockId) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk : Block, m.blocks[b]? = some blk ∧
       (blk'.live = true → blk.live = true) ∧ blk'.addr = blk.addr ∧
-      blk'.bytes.size ≤ blk.bytes.size) : LDMono m m' := fun hd => by
+      blk'.bytes.size ≤ blk.bytes.size ∧ blk.kind.mappedLo ≤ blk'.kind.mappedLo) :
+    LDMono m m' := fun hd => by
   refine ⟨PDMono.shrink h hd.1, fun b blk' hb hl => ?_⟩
-  obtain ⟨blk, e, l, a, sz⟩ := h b blk' hb
+  obtain ⟨blk, e, l, a, sz, -⟩ := h b blk' hb
   have := hd.2 b blk e (l hl)
   omega
 
 theorem LDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (hl : nb.live = true → blk.live = true) (ha : nb.addr = blk.addr)
-    (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb) :
+    (hs : nb.bytes.size ≤ blk.bytes.size) (h : m'.blocks = m.blocks.set! b nb)
+    (hlo : blk.kind.mappedLo ≤ nb.kind.mappedLo := by simp) :
     LDMono m m' := by
   refine LDMono.shrink fun b' blk' h' => ?_
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h'
@@ -330,9 +341,9 @@ theorem LDMono.set {m m' : Mem} {b : BlockId} {blk nb : Block} (hb : m.blocks[b]
     have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
     simp only [hlt, if_true, Option.some.injEq] at h'
     subst h'
-    exact ⟨blk, hb, hl, ha, hs⟩
+    exact ⟨blk, hb, hl, ha, hs, hlo⟩
   · simp only [e, if_false] at h'
-    exact ⟨blk', h', id, rfl, Nat.le_refl _⟩
+    exact ⟨blk', h', id, rfl, Nat.le_refl _, Nat.le_refl _⟩
 
 /-- Growing the live block `b` in place, inside the address space (`hbnd`). -/
 theorem LDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
@@ -341,8 +352,8 @@ theorem LDMono.grow {m m' : Mem} {b : BlockId} {blk nb : Block} {lo len : Nat}
     (hroom : ∀ (j : BlockId) (o : Block), j ≠ b → m.blocks[j]? = some o →
       o.clearOf (blk.addr + lo) len = true)
     (hbnd : blk.addr + lo + len ≤ 2 ^ 63)
-    (h : m'.blocks = m.blocks.set! b nb) : LDMono m m' := fun hd => by
-  refine ⟨PDMono.grow hb hl ha hlo hsz hroom h hd.1, fun j o hj hlj => ?_⟩
+    (h : m'.blocks = m.blocks.set! b nb) (hnlo : lo ≤ nb.kind.mappedLo) : LDMono m m' := fun hd => by
+  refine ⟨PDMono.grow hb hl ha hlo hsz hroom h hnlo hd.1, fun j o hj hlj => ?_⟩
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at hj
   by_cases e : b = j
   · subst e
