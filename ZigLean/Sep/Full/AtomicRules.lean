@@ -272,7 +272,7 @@ theorem FTriple.cmpxchgHitW (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrd
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode new)) hblocks, hwr, henc,
               hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-          (kmono_write hblk hblocks (by rw [henc]; omega))
+          (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
         refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode new) (by rw [henc, ← hsz]; exact hab'), ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
         unfold observeM
@@ -407,7 +407,7 @@ theorem FTriple.atomicRmwW (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bo
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode (op.apply signed v x)))
               hblocks, hwr, henc, hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-          (kmono_write hblk hblocks (by rw [henc]; omega))
+          (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
         refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode (op.apply signed v x))
           (by rw [henc, ← hsz]; exact hab'),
           ⟨⟨?_⟩, by rw [hshapes]; exact hwf, ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
@@ -617,7 +617,7 @@ theorem FTriple.atomicXchgPtrW {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.si
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode new)) hblocks, hwr, henc,
               hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-          (kmono_write hblk hblocks (by rw [henc]; omega))
+          (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
         refine ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
           by rw [← hsz]; exact hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
@@ -830,7 +830,7 @@ theorem FTriple.cmpxchgWeakPtrW {α : Type} [Enc α] [LawfulEnc α] [DecidableEq
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode new)) hblocks, hwr, henc,
               hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-          (kmono_write hblk hblocks (by rw [henc]; omega))
+          (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
         refine ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
           by rw [← hsz]; exact hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
           ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩

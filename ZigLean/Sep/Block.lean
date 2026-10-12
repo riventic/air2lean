@@ -155,11 +155,12 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
   exact Mem.newAddr_clear m size align hc
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned, its end races with no
-access: `Mem.freeRaces`) removes it from the heap. -/
+access: `Mem.freeRaces`, not a `const` global) removes it from the heap. -/
 theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
-    (hnr : ∀ b, p.block = some b → m.freeRaces b S = false) :
+    (hnr : ∀ b, p.block = some b → m.freeRaces b S = false)
+    (hK : K ≠ .constGlobal := by decide) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧
       m'.blocks.size = m.blocks.size ∧ m.SameThreads m' := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
@@ -167,10 +168,11 @@ theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKi
   obtain ⟨blk, hblk, hl, _, hc⟩ := Mem.heap_some c0
   simp only [Cell.mk.injEq] at hc
   have hsz : blk.bytes.size = S := hc.2.2.1.symm
+  have hk : blk.kind ≠ .constGlobal := by rw [← hc.2.2.2]; exact hK
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, by simp,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
-  · simp [free, hpb, hblk, hl, h0, hsz, hnr b hpb, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · simp [free, hpb, hblk, hl, h0, hsz, hk, hnr b hpb, zig_unfold, set, StateT.set, MonadStateOf.set]
   · funext ⟨x, y⟩
     have hmx := congrFun hm (x, y)
     simp only [Heap.union_apply, Heap.empty, Option.none_or] at hmx ⊢
@@ -197,11 +199,12 @@ theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKi
 
 theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq)
+    (hK : K ≠ .constGlobal := by decide) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size := by
   obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
-    fun b _ => freeRaces_of_singleThread hst.single b S
+    (fun b _ => freeRaces_of_singleThread hst.single b S) hK
   exact ⟨m', hr, hm', ⟨hs.singleThread hst.single⟩, hsz⟩
 
 theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
@@ -221,9 +224,10 @@ theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
 
 theorem Triple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0)
-    (hpos : 0 < S) : Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
+    (hpos : 0 < S) (hK : K ≠ .constGlobal := by decide) :
+    Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb hst => by
-    obtain ⟨m', hr, hm', hst', -⟩ := free_run hb hm hd hS h0 hpos hst
+    obtain ⟨m', hr, hm', hst', -⟩ := free_run hb hm hd hS h0 hpos hst hK
     exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
 
 end Zig

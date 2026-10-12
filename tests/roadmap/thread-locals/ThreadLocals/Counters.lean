@@ -340,7 +340,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     have hR₃ : ((m₃.threads[u]?).map (·.tls)).getD #[] = #[(0, b)] := by
       rw [ht₃]; exact hreg
     -- The thread end: its instance is freed.
-    refine WP.liftMem_ownedIn (TTripleIn.tlsExit_one (key := 0) hR₃ (enc_u32 9) (by decide))
+    refine WP.liftMem_ownedIn (TTripleIn.tlsExit_one (key := 0) (K := .global) hR₃ (enc_u32 9) (by decide))
       ho₃ hc₃ rfl (by rw [ht₃]; exact hut₂) (by rw [upd_self]; exact hq₃)
       fun _ m₄ h₄ _ ho₄ hq₄ hs₄ => ?_
     rw [upd_upd] at ho₄

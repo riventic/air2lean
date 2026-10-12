@@ -214,6 +214,7 @@
     "ZigLean.Sep.Full.AtomicRules": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
     "ZigLean.Sep.Full.Seq": ["THR-01", "SEM-03"],
     "ZigLean.Sep.Full.Conc": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
+    "ZigLean.Sep.Full.Const": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Dispatch": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Init": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Strength": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],

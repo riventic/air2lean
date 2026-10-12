@@ -75,9 +75,10 @@ liveness_witness Triple.alloc :=
   ⟨.heap, 1, 1, by decide, rfl, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
+    Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
 liveness_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide,
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
     Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness Triple.create := ⟨⟨⟩, 1, 1, by decide, by decide, Admit.emp⟩
