@@ -506,6 +506,21 @@ A manifest goal can declare the bound it relies on (`"bound": {"unit": …, "max
 `{"unit": …, "expr": "<printed bound>"}`); `scripts/claims.py` checks it against the bound the
 theorem's conclusion states ([claim-strength.md](claim-strength.md#bounds)).
 
+## Concurrent turn budgets (P05, P06)
+
+`ZigLean/Conc/Stops.lean`, `ZigLean/Conc/Returns.lean`, `ZigLean/Mem/Halts.lean`. A concurrent
+function's turn budget is `Stops R dispatch x Q m B`; `Proto.returnsWithin` turns `main`'s
+budget and a strict protocol proof into `ReturnsWithin B` (every oracle, see
+[progress-hints.md](progress-hints.md)).
+
+| Tactic | Effect |
+| --- | --- |
+| `stops` | Walks a concurrent function (`ConcM`, its `CM` body by `run`) with the `Stops` rules: binds, `get`/`set`/`modify`/`pure`, steps in `MemM` (side goal `MemM.Halts` by `halts`), one turn for a `pick` (each atomic op is unfolded to its pick and its `MemM` op) or `join`, `k + 2` for a `spawn` (the new thread's budget `k` from a local hypothesis about the target, `kid_budget`), branches (`split`). Budget side goals by `omega`. It leaves a loop (`Stops.loop` needs the module's invariant and measure) and any goal it cannot close. |
+| `halts` | Shows that a straight-line `MemM`/`MM`/`Result` composition has a result: binds, lifts, branches, the primitives (`load`, `store`, `alloc`, `free`, `ptrProject`, checks), the atomic ops and the scheduler's `fork`/`join`/`futexWake`; it unfolds generated (non-recursive, non-core) functions (`halts_unfold`). Extend with `halts_leaf` rules. |
+
+`disjoint_stops` and `publishRead_stops` are `unfold f; stops` with the spawned target's budget
+lemma in context. A futex wait or a deferred task has no budget (`Stops.not_wait`).
+
 ## Concrete runs of programs with loops (`unroll_sched`)
 
 `Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
