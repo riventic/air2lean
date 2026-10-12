@@ -23,7 +23,7 @@ closure of each program's roots (`closure.py`); `provenance.json` records their 
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
 `.illegal` arm. It then checks the proofs over the 0.17.0 translations (`fsym`, only the
-standard axioms):
+standard axioms and a registry model's assumed evidence, EXT-02, which it reports):
 
 - `ListsSpec.lean`: `create`, `push` and `destroy` of `lists` for every allocator, from
   `CAllocSpec` of the environment's allocator at the vtable (`CVTable.env`);
@@ -41,6 +41,8 @@ standard axioms):
   per-version registries) with the callback type `Visitor` opened:
   `evaluate` for every callback from the contract (`FnSpec` with `visitPre`/`visitPost`) of the
   function the call runs,
-  and `sumVisit`'s dispatch meeting it by its translated code.
+  `sumVisit`'s dispatch meeting it by its translated code, and the foreign `ext_visit`'s by
+  its registered model contract (`FTriple.of_contract`; `model_contract_weaker` shows that the
+  type's weaker callback contract would not do).
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

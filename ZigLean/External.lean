@@ -50,6 +50,36 @@ theorem Contract.success {Args Result : Type} (c : Contract Args Result)
   rw [run] at h
   exact h.1
 
+/-- **Weakening.** Evidence for a contract is evidence for every weaker one: a stronger
+precondition, more errors, and weaker post, frame, access, failure and divergence predicates
+(under the weaker contract's precondition), at the same termination and effects. -/
+theorem Contract.Holds.weaken {Args Result : Type} {c c' : Contract Args Result}
+    {termination : Termination} {errors errors' : List Error} {effects : Effects}
+    {implementation : Args → MemM Result}
+    (evidence : c.Holds termination errors effects implementation)
+    (hpre : ∀ args before, c'.pre args before → c.pre args before)
+    (herrors : ∀ e, e ∈ errors → e ∈ errors')
+    (hpost : ∀ args before r after, c'.pre args before → c.post args before r after →
+      c'.post args before r after)
+    (hframe : ∀ args before after, c'.pre args before → c.frame args before after →
+      c'.frame args before after)
+    (haccess : ∀ args before entry, c'.pre args before → c.access args before entry →
+      c'.access args before entry)
+    (hfailure : ∀ args before e, c'.pre args before → c.failure args before e →
+      c'.failure args before e)
+    (hdivergence : ∀ args before, c'.pre args before → c.divergence args before →
+      c'.divergence args before) :
+    c'.Holds termination errors' effects implementation := by
+  intro args before pre
+  have h := evidence args before (hpre args before pre)
+  revert h
+  rcases implementation args before with _ | e | ⟨r, after⟩
+  · exact fun ⟨ht, hd⟩ => ⟨ht, hdivergence args before pre hd⟩
+  · exact fun ⟨he, hf⟩ => ⟨herrors e he, hfailure args before e pre hf⟩
+  · rintro ⟨hp, hf, ⟨delta, hlog, hacc⟩, heff⟩
+    exact ⟨hpost args before r after pre hp, hframe args before after pre hf,
+      ⟨delta, hlog, fun entry mem => haccess args before entry pre (hacc entry mem)⟩, heff⟩
+
 /-- A total contract rules out divergence within its precondition. -/
 theorem Contract.terminates {Args Result : Type} (c : Contract Args Result)
     {errors : List Error} {effects : Effects} {implementation : Args → MemM Result}

@@ -51,12 +51,10 @@ theorem evaluate_eq (p ctx : Ptr) (x : BitVec 32) :
   simp [evaluate, dispatch, targets, h1, h3, StateT.run'_eq]
   rfl
 
-/-- The registry model meets the callback contract (its assumed evidence, EXT-02). -/
+/-- The registry model meets the callback contract (its assumed evidence, EXT-02, through
+`contract_weaker`). -/
 theorem model_holds : visitCallback.Holds (fun a => air2lean_model_0 a.1 a.2) :=
-  ⟨wellFormed, by
-    have h := air2lean_model_0_evidence.1
-    simpa [air2lean_model_0, air2lean_model_0_contract, contract, visitCallback, allErrors]
-      using h⟩
+  contract_weaker air2lean_model_0_evidence.1
 
 theorem sumVisit_eq (p : Ptr) (x : BitVec 32) :
     sumVisit p x =

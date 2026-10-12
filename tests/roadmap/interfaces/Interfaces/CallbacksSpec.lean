@@ -17,8 +17,9 @@ import ZigLean.Sep.Full.Witness
 model or `sumVisit` for their addresses, and the environment (`Ext.call0`, premise EXT-05) for
 any other pointer. `evaluate` is proved once, for every callback, from the callback contract
 (`∀ v, FnSpec (visitPre v) visitPost g`) of the function `g` the call runs (`Table.callOr`);
-`sumVisit` meets the contract by its translated code, and the dispatch at its address does so
-whatever the environment (`Table.contract_of_sel`).
+`sumVisit` meets the contract by its translated code, the foreign `ext_visit` by its registered
+model contract (`FTriple.of_contract`, assumed: EXT-02), and the dispatch at either address does
+so whatever the environment (`Table.contract_of_sel`).
 -/
 
 namespace Interfaces.CallbacksSpec
@@ -87,33 +88,55 @@ theorem sum_dispatch (e : EnvFn Tgt (Ptr × BitVec 32) Bool) (v : BitVec 32) :
 /-! ## The foreign `ext_visit` arm
 
 The arm at `ext_visit`'s address runs its registry model, `External.claim ctx .write *>
-CallbackModel.visit`, whose evidence is the `MemM` contract `CallbackModel.contract` (premise
-EXT-02). `FTriple.of_contract` reads such evidence as a triple (`idModel_spec`: a model whose
-contract returns its argument and keeps the memory). For `ext_visit` it cannot give the callback
-contract: the registered contract lets the callback fail with any error, and a full-state triple
-admits only a stack overflow. `model_contract_weaker` is the counterexample: an implementation
-that panics meets `CallbackModel.contract` but not `FnSpec (visitPre v) visitPost`. -/
+CallbackModel.visit`, whose evidence is the registered `MemM` contract `CallbackModel.contract`
+(assumed, premise EXT-02): given a context that holds a writable `u32`, a call fails only with a
+stack overflow and its memory is a `u32` store to the context, up to the access log.
+`FTriple.of_contract` reads that evidence as a full-state triple (`visit_spec`), so the arm meets
+the callback contract (`extVisit_visit`) and the dispatch at its address does so whatever the
+environment (`ext_dispatch`).
 
-/-- A model that returns its argument and keeps the memory. -/
-def idModel (x : BitVec 32) : MemM (BitVec 32) := pure x
+The callback contract that every target of the type meets, `CallbackModel.visitCallback`, is too
+weak for this: it lets a call fail with any error, and a full-state triple admits only a stack
+overflow. `model_contract_weaker` keeps that as a regression: an implementation that panics
+meets `visitCallback`'s contract but not `FnSpec (visitPre v) visitPost`. -/
 
-def idContract : External.Contract (BitVec 32) (BitVec 32) where
-  pre := fun _ _ => True
-  post := fun x before r after => r = x ∧ after = before
-  frame := fun _ before after => after = before
-  access := fun _ _ _ => False
-  failure := fun _ _ _ => False
-  divergence := fun _ _ => False
+/-- A `u32` at `ctx` is a writable context of the registered contract. -/
+theorem ctxOk_of_pts {ctx : Ptr} {v : BitVec 32} {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : up (pts ctx 4 v) r) (hs : m.FSeq) : CallbackModel.CtxOk ctx m := by
+  obtain ⟨_, m₁, _, hrun, -⟩ := (FTotalTriple.store (q := ctx) (by decide) 0).runs hh hp hs
+  exact ⟨m₁, hrun⟩
 
-theorem idModel_evidence : idContract.Holds .total [] .preserves idModel :=
-  fun x before _ => ⟨⟨rfl, rfl⟩, rfl, ⟨#[], by simp, by simp⟩, fun _ => rfl⟩
+/-- **`ext_visit`'s model meets the callback contract**, from its registered contract
+(`FTriple.of_contract`). -/
+theorem visit_spec (v : BitVec 32) (a : Ptr × BitVec 32) :
+    FTriple (visitPre v a) (CallbackModel.visit a) (visitPost a) := by
+  refine FTriple.of_contract air2lean_model_0_evidence.1 a (fun _ _ _ _ _ _ => trivial)
+    (fun m r rF e hh hp hs _ hf => ?_) (fun m r rF res m' hh hp hs hq hfr _ => ?_)
+  · rcases hf with he | ⟨-, hc⟩
+    · exact he
+    · exact absurd (ctxOk_of_pts hh hp hs) hc
+  · obtain ⟨w, m₁, hrun, hb, ha, hst⟩ := hfr.2 (ctxOk_of_pts hh hp hs)
+    obtain ⟨_, m₂, r', hrun', hh', hq', hs'⟩ :=
+      (FTotalTriple.store (q := a.1) (by decide) w).runs hh hp hs
+    rw [hrun] at hrun'
+    obtain rfl : m₁ = m₂ := by
+      have e : some (Except.ok ((), m₁)) = some (Except.ok ((), m₂)) := hrun'
+      simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at e
+      exact e.2
+    exact ⟨r', Holds.congrMem hb ha hh', sep_lift.2 ⟨hq, w, hq'⟩,
+      hs'.congrMem hb ha (hst hs.1.single)⟩
 
-/-- **The bridge at work**: the model's evidence gives its full-state triple. -/
-theorem idModel_spec (x : BitVec 32) (P : FAssn) :
-    FTriple P (idModel x) (fun v => ⟪v = x⟫ ⋆ P) :=
-  FTriple.of_contract idModel_evidence x (fun _ _ _ _ _ _ => trivial)
-    (fun _ _ _ _ _ _ _ he _ => nomatch he)
-    (fun _ r _ _ _ hh hp hs ⟨hv, hm⟩ _ _ => ⟨r, hm ▸ hh, sep_lift.2 ⟨hv, hp⟩, hm ▸ hs⟩)
+/-- The arm at `ext_visit`'s address: the access record, then the model. -/
+theorem extVisit_visit (v : BitVec 32) :
+    FnSpec (Tgt := Tgt) (visitPre v) visitPost
+      fun a => ConcM.liftMem (air2lean_model_0 a.1 a.2) :=
+  fun a => CTriple.liftMem (FTriple.bind (FTriple.claim a.1 .write _) fun _ => visit_spec v a)
+
+/-- **`runExternal`'s callback through `ext_ops`**: the dispatch at `ext_visit`'s address meets
+the contract by the registered contract, whatever the environment. -/
+theorem ext_dispatch (e : EnvFn Tgt (Ptr × BitVec 32) Bool) (v : BitVec 32) :
+    FnSpec (visitPre v) visitPost (Table.callOr targets e ⟨some 1, 0⟩) :=
+  Table.contract_of_sel (C := FnSpec (visitPre v) visitPost) (by rfl) e (extVisit_visit v)
 
 /-- The access record of a model call returns in a single-threaded memory. -/
 theorem claim_ok {β : Type} [External.Region β] (x : β) (k : AccessKind) {m : Mem}
@@ -128,16 +151,15 @@ theorem claim_ok {β : Type} [External.Region β] (x : β) (k : AccessKind) {m :
 /-- A foreign `ext_visit` that panics on every call. -/
 def panicVisit : Ptr × BitVec 32 → MemM Bool := fun _ => throw .panic
 
-/-- It meets the registered contract: the callback may fail with any error. -/
-theorem panicVisit_evidence :
-    CallbackModel.contract.Holds .«partial» CallbackModel.allErrors .tracked panicVisit :=
-  fun _ _ _ => ⟨CallbackModel.mem_allErrors _, trivial⟩
+/-- It meets the type's callback contract, which lets a call fail with any error. -/
+theorem panicVisit_evidence : CallbackModel.visitCallback.Holds panicVisit :=
+  ⟨CallbackModel.wellFormed, fun _ _ _ => ⟨CallbackModel.mem_allErrors _, trivial⟩⟩
 
-/-- **The registered contract of `ext_visit` does not give the callback contract**: some
-implementation that meets it, run as the model arm, violates `FnSpec (visitPre 0) visitPost`. -/
+/-- **The type's callback contract does not give the interface contract** (regression for a
+model registered with it): some implementation that meets it, run as the model arm, violates
+`FnSpec (visitPre 0) visitPost`. -/
 theorem model_contract_weaker :
-    ¬ ∀ impl : Ptr × BitVec 32 → MemM Bool,
-      CallbackModel.contract.Holds .«partial» CallbackModel.allErrors .tracked impl →
+    ¬ ∀ impl : Ptr × BitVec 32 → MemM Bool, CallbackModel.visitCallback.Holds impl →
       FnSpec (Tgt := Tgt) (visitPre 0) visitPost
         (fun a => ConcM.liftMem (External.claim a.1 .write *> impl a)) := by
   intro h

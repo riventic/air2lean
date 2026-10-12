@@ -108,10 +108,16 @@ lane `codex/alloc-param`).
   the model), whose evidence is a `MemM` contract (`External.Contract.Holds`).
   `FTriple.of_contract` reads that evidence as a full-state triple when the contract implies it
   (precondition, errors only `.stackOverflow`, success re-establishes the resources);
-  `FTriple.claim` is the access record. E02's `ext_visit` is not discharged this way: its
-  registered contract allows every error, and `CallbacksSpec.model_contract_weaker` is a
-  panicking implementation that meets it but not the callback contract. Its arm needs a model
-  contract that excludes those failures and fixes the context's bytes.
+  `FTriple.claim` is the access record. The registered contract must say what the foreign
+  function guarantees: which errors it raises in which states (`failure`, within the
+  registry's `errors`) and its effect on memory (`frame`). E02's `ext_visit` registers
+  `CallbackModel.contract` (assumed, EXT-02): given a writable `u32` context it fails only with
+  a stack overflow, and its memory is a `u32` store to the context up to the access log.
+  `CallbacksSpec.extVisit_visit` derives the callback contract from it, so `evaluate` through
+  `ext_visit` and through `sumVisit` needs no hypothesis (`ext_dispatch`, `sum_dispatch`). The
+  type's weaker callback contract (every error allowed) would not do:
+  `CallbacksSpec.model_contract_weaker` is a panicking implementation that meets it but not the
+  interface contract.
 
 ## Premise
 

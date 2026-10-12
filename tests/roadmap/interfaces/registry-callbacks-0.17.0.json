@@ -5,16 +5,7 @@
       "dependencies": [],
       "effects": "tracked",
       "errors": [
-        "overflow",
-        "outOfBounds",
-        "divByZero",
-        "unreachable",
-        "panic",
-        "unspecified",
         "illegal",
-        "deadlock",
-        "unsupportedTimer",
-        "trap",
         "stackOverflow"
       ],
       "extern": {

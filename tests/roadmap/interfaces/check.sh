@@ -73,8 +73,9 @@ for entry in "${programs[@]}"; do
   cmp "$work/Interfaces/$module.lean" "$here/Interfaces/$module.lean"
 done
 # The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
-# only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
-# using the environment's contract for a vtable of the program.
+# only the standard axioms and the assumed evidence of a registry model (premise EXT-02, the
+# axiom `air2lean_model_<i>_evidence` of a generated module); ClosureCX (after MixSpec, which it
+# imports) is the counterexample to using the environment's contract for a vtable of the program.
 for spec in ListsSpec MixSpec ClosureCX RndSpec CallbacksSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
@@ -88,7 +89,10 @@ text, n = open(sys.argv[1]).read(), int(sys.argv[2])
 groups = re.findall(r"depends on axioms: \[([^\]]*)\]|(does not depend on any axioms)", text)
 used = {a.strip() for g, _ in groups for a in g.split(",") if a.strip()}
 assert ": error" not in text and len(groups) == n, text
-assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
+assumed = {a for a in used if re.fullmatch(r"Interfaces\.\w+\.air2lean_model_\d+_evidence", a)}
+assert used - assumed <= {"propext", "Classical.choice", "Quot.sound"}, text
+for a in sorted(assumed):
+    print(f"assumed (EXT-02): {a}")
 PY
 done
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"

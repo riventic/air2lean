@@ -291,6 +291,15 @@ theorem FTriple.of_contract {Args R : Type} {c : External.Contract Args R}
   · rintro ⟨he, hf⟩; exact herr m r rF e hh hp hs he hf
   · rintro ⟨hq, hfr, hacc, -⟩; exact hpost m r rF v m' hh hp hs hq hfr hacc
 
+/-- A memory with the blocks and the atomic layout of a `Mem.FSeq` memory, single-threaded, is
+`Mem.FSeq` (a model's frame that fixes the memory up to its access log). -/
+theorem _root_.Zig.Mem.FSeq.congrMem {m m' : Mem} (hs : m.FSeq) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hst : m'.SingleThread) : m'.FSeq := by
+  obtain ⟨-, hw, ⟨hd, hbd⟩⟩ := hs
+  refine ⟨⟨hst⟩, by simpa only [shapes, ha] using hw, ⟨?_, ?_⟩⟩
+  · intro b b' blk blk' hne h h' hl; rw [hb] at h h'; exact hd b b' blk blk' hne h h' hl
+  · intro b blk h hl; rw [hb] at h; exact hbd b blk h hl
+
 /-- **The access record of a model call** (`External.claim`) keeps every resource. -/
 theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind) (P : FAssn) :
     FTriple P (External.claim x k) (fun _ => P) := by
