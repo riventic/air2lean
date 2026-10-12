@@ -794,9 +794,6 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/thread-locals/ThreadLocals/Counters.lean"
-    },
-    {
       "path": "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
     },
     {

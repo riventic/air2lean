@@ -1232,8 +1232,12 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/strength-log"
           # shellcheck disable=SC2046
-          lake build $(sed -n 's/^import \([A-Z][^ ]*\)$/\1/p' tests/roadmap/strength-log/*.lean | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
+          lake build $(grep -hE '^import (ZigLean|Proofs)\.' tests/roadmap/strength-log/*.lean | sed 's/^import //' | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
           for f in tests/roadmap/strength-log/*.lean; do
+            # A log that imports a fixture's own module is compiled by that fixture's check.sh.
+            imports=$(grep -c '^import ' "$f" || true)
+            lake_imports=$(grep -cE '^import (ZigLean|Proofs)\.' "$f" || true)
+            [ "$imports" = "$lake_imports" ] || continue
             lake env lean "$f" 2>&1 | tee "$RUNNER_TEMP/strength-log/strength-$(basename "$f" .lean).log"
           done
 
@@ -1620,7 +1624,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.TlsLemmas
+          lake build ZigLean.Conc.TlsLemmas ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
