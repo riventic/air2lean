@@ -5,6 +5,7 @@ Subcommands (docs/perf-budgets.md):
   record    run the workload suite serially and write a measurement JSON
   baseline  derive per-phase limits from a measurement into the budgets file
   gate      compare a measurement against the budgets; nonzero on a regression
+            (--portable: any platform, translator and elaboration; --normalized: also proofs)
 
 `record` starts the translator and Lake; run it once under scripts/build-guard.py so
 the whole suite holds the shared build lock with LEAN_NUM_THREADS=1. `baseline`
@@ -39,6 +40,13 @@ LEAN_PHASES = ("elaborate", "proof.cold", "proof.warm")
 EXIT_PENDING = 3
 # Phases a portable (any-platform) gate checks by default: everything that needs no cold Lake build.
 PORTABLE_PHASES = ("translate.cold", "translate.warm", *INTERNAL_PHASES, "elaborate")
+# The calibration workload (pure Lean, no imports) and the phases a normalized gate compares as
+# multiples of it: Lean time, unlike translator time, differs between machines by far more than
+# any fixed slack can absorb, and proofs take minutes.
+CALIBRATION = "tests/roadmap/perf-budgets/Calibration.lean"
+CALIBRATION_RUNS = 3
+NORMALIZED_PHASES = LEAN_PHASES
+HOTSPOT_SECONDS = 2.0
 
 
 def digest(path):
@@ -95,6 +103,20 @@ def validate_budgets(data, root=ROOT):
         elif isinstance(data.get("tolerance", {}).get(name), dict) and any(
                 portable[key] < data["tolerance"][name].get(key, 0) for key in portable):
             errors.append(f"portable_tolerance.{name} must be at least as loose as tolerance.{name}")
+    calibration = data.get("calibration")
+    if calibration is not None:
+        normalized = data.get("normalized_tolerance", {}).get("lean")
+        if not isinstance(normalized, dict) or not all(
+                isinstance(normalized.get(key), (int, float)) and normalized[key] >= 0 for key in
+                ("time_ratio", "time_slack_units", "module_slack_units")) or normalized.get("time_ratio", 0) < 1:
+            errors.append("normalized_tolerance.lean needs time_ratio >= 1 and nonnegative time_slack_units "
+                          "and module_slack_units")
+        if not (isinstance(calibration, dict) and calibration.get("file") == CALIBRATION
+                and isinstance(calibration.get("sha256"), str)
+                and isinstance(calibration.get("baseline_seconds"), (int, float)) and calibration["baseline_seconds"] > 0):
+            errors.append(f"calibration needs file {CALIBRATION}, its sha256 and a positive baseline_seconds")
+        elif (root / CALIBRATION).is_file() and digest(root / CALIBRATION) != calibration["sha256"]:
+            errors.append("calibration file changed since the baseline was recorded; rebaseline")
     seen = set()
     workloads = data.get("workloads")
     if not isinstance(workloads, list) or not workloads:
@@ -138,6 +160,12 @@ def validate_budgets(data, root=ROOT):
                 if key in limits and "portable_" + key not in limits:
                     errors.append(f"{ident}: phase {phase} has {key} but no portable_{key}; "
                                   "rebaseline it so the portable gate cannot skip it")
+            if calibration is not None and phase in NORMALIZED_PHASES and "max_ratio" not in limits:
+                errors.append(f"{ident}: phase {phase} has no max_ratio although the budgets are calibrated; "
+                              "rebaseline it so the normalized gate cannot skip it")
+        for module, limits in sorted((budget.get("modules") or {}).items()) if isinstance(budget.get("modules", {}), dict) else ():
+            if module not in workload.get("proof_modules", []) or not isinstance(limits.get("max_ratio"), (int, float)):
+                errors.append(f"{ident}: module budget {module} must name a proof module and carry max_ratio")
         output = budget.get("output", {})
         if not isinstance(output.get("sha256"), str):
             errors.append(f"{ident}: budget.output.sha256 is required")
@@ -151,11 +179,16 @@ def validate_budgets(data, root=ROOT):
 
 
 def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=False,
-         portable=False, only_phases=None):
+         portable=False, only_phases=None, normalized=False):
     """Compare one measurement with the budgets.
 
     `portable` checks the generous `portable_*` limits instead of the reference-platform
     ones, on any platform (CI runners), over `only_phases` (default PORTABLE_PHASES).
+
+    `normalized` is `portable` plus the Lean phases (elaboration and proofs) and the budgeted
+    hotspot proof modules, whose time is compared as a multiple of the calibration workload
+    measured in the same run (`max_ratio`), so a slower or faster machine cancels. The
+    measurement must carry the budgets' calibration file; memory uses the portable limits.
 
     Returns (exit_code, findings). Each finding is a dict with `kind`, `workload`,
     optional `phase` and a `message`. Every kind except `pending` is a failure.
@@ -176,7 +209,24 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             "measurement was not taken with LEAN_NUM_THREADS=1; record it under build-guard.py")
     reference = budgets.get("reference_platform")
     measured_platform = measurement.get("platform", {})
-    if portable:
+    portable = portable or normalized
+    unit = None
+    if normalized:
+        only_phases = set(only_phases or (*PORTABLE_PHASES, *NORMALIZED_PHASES))
+        expected = budgets.get("calibration")
+        calibration = measurement.get("calibration")
+        if not expected:
+            add("missing-calibration", None, "the budgets file has no calibration; record and rebaseline with it")
+        elif not isinstance(calibration, dict) or not isinstance(calibration.get("seconds"), (int, float)) \
+                or calibration["seconds"] <= 0:
+            add("missing-calibration", None, "the measurement has no calibration run (record it again)")
+        elif calibration.get("sha256") != expected["sha256"]:
+            add("missing-calibration", None, "the measurement ran another calibration file than the budgets")
+        else:
+            unit = calibration["seconds"]
+        if unit is None:
+            return 1, findings
+    elif portable:
         only_phases = set(only_phases or PORTABLE_PHASES)
     prefix = "portable_" if portable else ""
     time_key, rss_key = prefix + "max_seconds", prefix + "max_peak_rss_kib"
@@ -216,7 +266,18 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             if got is None:
                 add("missing-phase", ident, "budgeted phase is absent from the measurement", phase)
                 continue
-            if time_key in limits:
+            if normalized and phase in NORMALIZED_PHASES:
+                seconds = got.get("seconds")
+                if not isinstance(seconds, (int, float)):
+                    add("missing-phase", ident, "phase has no wall time", phase)
+                elif "max_ratio" not in limits:
+                    add("missing-phase", ident, "phase has no calibrated budget (rebaseline)", phase)
+                elif seconds / unit > limits["max_ratio"]:
+                    add("time-regression", ident,
+                        f"{seconds / unit:.2f} calibration units ({seconds:.2f}s) exceed budget "
+                        f"{limits['max_ratio']:.2f} (baseline {limits.get('baseline_ratio', 0):.2f}); "
+                        f"1 unit = {unit:.2f}s on this machine", phase)
+            elif time_key in limits:
                 seconds = got.get("seconds")
                 if not isinstance(seconds, (int, float)):
                     add("missing-phase", ident, "phase has no wall time", phase)
@@ -232,6 +293,20 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
                     add("memory-regression", ident,
                         f"peak RSS {rss} KiB exceeds budget {limits[rss_key]} KiB "
                         f"(baseline {limits.get('baseline_peak_rss_kib', 0)} KiB)", phase)
+        if normalized:
+            for module, limits in sorted((budget.get("modules") or {}).items()):
+                got = (result.get("modules") or {}).get(module)
+                if got is None:
+                    if result.get("modules") is not None:
+                        add("missing-phase", ident, f"hotspot module {module} is absent from the per-module timings")
+                    continue
+                seconds = got.get("seconds")
+                if not isinstance(seconds, (int, float)):
+                    add("missing-phase", ident, f"module {module} has no wall time")
+                elif seconds / unit > limits["max_ratio"]:
+                    add("time-regression", ident,
+                        f"module {module}: {seconds / unit:.2f} calibration units ({seconds:.2f}s) exceed "
+                        f"budget {limits['max_ratio']:.2f} (baseline {limits.get('baseline_ratio', 0):.2f})")
     failures = [item for item in findings if item["kind"] != "pending"]
     if failures:
         return 1, findings
@@ -276,6 +351,20 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
     unknown = selected - {workload["id"] for workload in updated["workloads"]}
     if unknown:
         raise ValueError(f"unknown workloads: {', '.join(sorted(unknown))}")
+    calibration = measurement.get("calibration")
+    unit = None
+    if calibration is not None:
+        if not isinstance(calibration.get("seconds"), (int, float)) or calibration["seconds"] <= 0 \
+                or calibration.get("sha256") != digest(ROOT / CALIBRATION):
+            raise ValueError("the measurement's calibration is invalid or ran another calibration file")
+        unit = calibration["seconds"]
+        updated["calibration"] = {"file": CALIBRATION, "sha256": calibration["sha256"],
+                                  "baseline_seconds": unit, "runs": calibration.get("runs")}
+        updated.setdefault("normalized_tolerance", {"lean": {"time_ratio": 2.0, "time_slack_units": 2.0,
+                                                             "module_slack_units": 1.0}})
+    elif updated.get("calibration") and only:
+        # A partial rebaseline keeps its unit: ratios of different units would not be comparable.
+        raise ValueError("a calibrated budgets file needs a measurement with a calibration run")
     recorded = {"revision": revision.get("head"), "recorded_at": measurement.get("recorded_at"),
                 "translator_sha256": measurement.get("translator", {}).get("sha256")}
     for workload in updated["workloads"]:
@@ -308,9 +397,23 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
                                                       tolerance["rss_slack_kib"]))
                 entry["portable_max_peak_rss_kib"] = int(limit(got["peak_rss_kib"], portable["rss_ratio"],
                                                                portable["rss_slack_kib"]))
+            if unit is not None and phase in NORMALIZED_PHASES and "baseline_seconds" in entry:
+                normalized = updated["normalized_tolerance"]["lean"]
+                entry["baseline_ratio"] = round(got["seconds"] / unit, 3)
+                entry["max_ratio"] = round(limit(got["seconds"] / unit, normalized["time_ratio"],
+                                                 normalized["time_slack_units"]), 3)
             if entry:
                 phases[phase] = entry
         workload["budget"] = {"recorded": recorded, "output": result["output"], "phases": phases}
+        # Hotspot proof modules (module-local cold builds, `record --per-module`) keep their own limit.
+        if unit is not None and result.get("modules"):
+            normalized = updated["normalized_tolerance"]["lean"]
+            workload["budget"]["modules"] = {
+                module: {"baseline_seconds": got["seconds"], "baseline_ratio": round(got["seconds"] / unit, 3),
+                         "max_ratio": round(limit(got["seconds"] / unit, normalized["time_ratio"],
+                                                  normalized["module_slack_units"]), 3)}
+                for module, got in sorted(result["modules"].items())
+                if isinstance(got.get("seconds"), (int, float)) and got["seconds"] >= HOTSPOT_SECONDS}
     updated["reference_platform"] = measurement.get("platform")
     if all(workload.get("budget") for workload in updated["workloads"]):
         updated["status"] = "recorded"
@@ -505,6 +608,17 @@ def run_workload(workload, args, work, log):
     return {"status": "ok", "phases": phases, "output": output}
 
 
+def run_calibration(args, log):
+    """Median wall time of a fixed pure-Lean elaboration (`CALIBRATION`): the unit of the normalized gate."""
+    file = ROOT / CALIBRATION
+    times = []
+    for _ in range(CALIBRATION_RUNS):
+        step = measure([args.lake, "env", "lean", file], ROOT, log, args.timeout)
+        require_success(step, "calibration run")
+        times.append(step["seconds"])
+    return {"file": CALIBRATION, "sha256": digest(file), "runs": times, "seconds": statistics.median(times)}
+
+
 def git(*args):
     try:
         return subprocess.run(["git", "-C", str(ROOT), *args], stdout=subprocess.PIPE,
@@ -545,6 +659,8 @@ def record(args):
             measurement["setup_build"] = step
             if step["exit_code"] != 0:
                 raise SystemExit(f"setup build failed (exit {step['exit_code']}); log: {log}")
+        if not args.skip_calibration and not args.skip_proof:
+            measurement["calibration"] = run_calibration(args, log)
         translator = Path(args.air2lean)
         measurement["translator"] = {"path": str(translator),
                                      "sha256": digest(translator) if translator.is_file() else None}
@@ -594,6 +710,8 @@ def main(argv=None):
     rec.add_argument("--no-build", action="store_true")
     rec.add_argument("--skip-elaborate", action="store_true")
     rec.add_argument("--skip-proof", action="store_true")
+    rec.add_argument("--skip-calibration", action="store_true",
+                     help="no calibration run (implied by --skip-proof); such a measurement cannot pass the normalized gate")
     rec.add_argument("--per-module", action="store_true",
                      help="also time each proof module's module-local cold build (informational)")
     rec.add_argument("--keep", action="store_true")
@@ -610,8 +728,11 @@ def main(argv=None):
     gat.add_argument("--allow-platform-mismatch", action="store_true")
     gat.add_argument("--portable", action="store_true",
                      help="check the generous platform-independent limits (CI runners)")
+    gat.add_argument("--normalized", action="store_true",
+                     help="like --portable, plus elaboration, proofs and hotspot modules as multiples of the "
+                          "calibration run of the same measurement (any machine; needs `record` with calibration)")
     gat.add_argument("--phase", action="append",
-                     help="with --portable: restrict to these phases (default: translator and elaborate)")
+                     help="with --portable/--normalized: restrict to these phases (default: translator and elaborate)")
     gat.add_argument("--json", type=Path, help="also write findings as JSON")
     val = sub.add_parser("validate", help="check the budgets file structure")
     val.add_argument("--budgets", type=Path, default=BUDGETS)
@@ -640,7 +761,7 @@ def main(argv=None):
         print(f"wrote {args.budgets} (status {updated['status']})")
         return 0
     code, findings = gate(budgets, measurement, args.allow_pending, args.allow_platform_mismatch,
-                          args.portable, args.phase)
+                          args.portable, args.phase, args.normalized)
     if args.json:
         write_json(args.json, {"exit_code": code, "findings": findings})
     print_findings(code, findings)
