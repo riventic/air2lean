@@ -1,0 +1,432 @@
+# Recorded compiler exports outside tests/golden (scripts/exporter-equivalence.py).
+#
+# Each [[export]] is one committed AIR directory and the patched-compiler command that made it:
+#
+#   ZIG_AIR_JSON_DIR=<fresh> ZIG_AIR_JSON_FILTER=<filter> <zig> build-obj -fno-emit-bin <args> <source>
+#
+#   id       unique name; `{version}` is substituted in `dir`
+#   versions the Zig versions with a committed directory
+#   dir      the committed directory (repository-relative)
+#   source   the root source file
+#   filter   ZIG_AIR_JSON_FILTER (empty or absent: every function); `filter_file` adds one
+#            prefix per line
+#   args     the compiler arguments between `build-obj -fno-emit-bin` and the source
+#            (default: the `default_args` below)
+#   compare  "exact": the fresh directory equals the committed one, file for file and byte for
+#            byte. "subset": every committed file is in the fresh directory with the same bytes
+#            (the fixture keeps a selection, e.g. a call closure, of what the filter exports).
+#
+# Every key of scripts/coverage.py COMPILER_FIXTURE_ROOTS is either an [[export]] here or an
+# [[excluded]] entry with its reason (test_exporter_equivalence.py checks it). The goldens
+# (tests/golden) need no entry: scripts/exporter-equivalence.py derives their commands from
+# examples/ exactly as scripts/check.sh does.
+
+default_args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+
+[[export]]
+id = "thread-tuples"
+versions = ["0.16.0"]
+dir = "tests/roadmap/thread-tuples/air/{version}"
+source = "tests/roadmap/thread-tuples/thread_tuples.zig"
+filter_file = "tests/roadmap/thread-tuples/filter"
+compare = "exact"
+
+[[export]]
+id = "try-pointers-fresh"
+versions = ["0.16.0"]
+dir = "tests/roadmap/try-pointers/air-fresh/{version}"
+source = "tests/roadmap/try-pointers/try_pointers.zig"
+filter = "try_pointers."
+compare = "exact"
+
+[[export]]
+id = "try-aliases-fresh"
+versions = ["0.16.0"]
+dir = "tests/roadmap/try-pointers/aliases/air-fresh/{version}"
+source = "tests/roadmap/try-pointers/try_aliases.zig"
+filter = "try_aliases."
+compare = "exact"
+
+[[export]]
+id = "idle-loops"
+versions = ["0.16.0"]
+dir = "tests/roadmap/idle-loops/air"
+source = "tests/roadmap/progress/progress.zig"
+filter = "progress.idle"
+compare = "subset"
+
+[[export]]
+id = "spawn-failure"
+versions = ["0.16.0"]
+dir = "tests/roadmap/spawn-failure/air/{version}"
+source = "tests/roadmap/spawn-failure/spawn_failure.zig"
+filter_file = "tests/roadmap/spawn-failure/filter"
+compare = "exact"
+
+[[export]]
+id = "thread-locals"
+versions = ["0.15.2", "0.16.0"]
+dir = "tests/roadmap/thread-locals/air/{version}"
+source = "tests/roadmap/thread-locals/thread_locals.zig"
+filter = "thread_locals."
+compare = "exact"
+
+[[export]]
+id = "futures"
+versions = ["0.16.0"]
+dir = "tests/roadmap/futures/air/{version}"
+source = "tests/roadmap/futures/futures.zig"
+filter = "futures."
+compare = "exact"
+
+[[export]]
+id = "pointer-width-x86_64"
+versions = ["0.16.0"]
+dir = "tests/roadmap/pointer-width/air/{version}/x86_64-linux"
+source = "tests/roadmap/pointer-width/pointer_width.zig"
+filter = "pointer_width."
+compare = "exact"
+
+[[export]]
+id = "pointer-width-wasm32"
+versions = ["0.16.0"]
+dir = "tests/roadmap/pointer-width/air/{version}/wasm32-freestanding"
+source = "tests/roadmap/pointer-width/pointer_width.zig"
+filter = "pointer_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "wasm32-freestanding"]
+compare = "exact"
+
+[[export]]
+id = "pointer-width-wasi"
+versions = ["0.16.0"]
+dir = "tests/roadmap/pointer-width/air/{version}/wasm32-wasi"
+source = "tests/roadmap/pointer-width/pointer_width.zig"
+filter = "pointer_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "wasm32-wasi"]
+compare = "exact"
+
+[[export]]
+id = "pointer-width-reject"
+versions = ["0.16.0"]
+dir = "tests/roadmap/pointer-width/air/{version}/wasm32-reject"
+source = "tests/roadmap/pointer-width/reject.zig"
+filter = "reject."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "wasm32-freestanding"]
+compare = "exact"
+
+[[export]]
+id = "const-bases-fresh"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/const-bases/air-fresh/{version}"
+source = "tests/roadmap/const-bases/const_bases.zig"
+filter = "const_bases."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-fno-llvm", "-fno-lld", "-target", "x86_64-linux-musl", "-mcpu=baseline"]
+compare = "exact"
+
+[[export]]
+id = "loop-tactics-nested"
+versions = ["0.16.0"]
+dir = "tests/roadmap/loop-tactics/nested/air"
+source = "tests/roadmap/loop-tactics/nested/nested.zig"
+filter = "nested.pairs"
+compare = "subset"
+
+[[export]]
+id = "vector-layouts"
+versions = ["0.15.2", "0.16.0"]
+dir = "tests/roadmap/vector-layouts/air/{version}"
+source = "tests/roadmap/vector-layouts/lanes.zig"
+filter = "lanes."
+compare = "exact"
+
+[[export]]
+id = "vector-layouts-reads"
+versions = ["0.15.2", "0.16.0"]
+dir = "tests/roadmap/vector-layouts/air-reads/{version}"
+source = "tests/roadmap/vector-layouts/lane_reads.zig"
+filter = "lane_reads."
+compare = "exact"
+
+[[export]]
+id = "const-locals"
+versions = ["0.16.0"]
+dir = "tests/roadmap/const-locals/air/{version}"
+source = "tests/roadmap/const-locals/const_locals.zig"
+filter = "const_locals."
+compare = "exact"
+
+[[export]]
+id = "const-locals-fuzz-s19"
+versions = ["0.16.0"]
+dir = "tests/roadmap/const-locals/air-fuzz_s19/{version}"
+source = "tests/roadmap/const-locals/fuzz_s19.zig"
+filter = "fuzz_s19."
+compare = "exact"
+
+[[export]]
+id = "bitops-native-shift-panic"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/bitops-native/shift-panic/air/{version}"
+source = "tests/roadmap/bitops-native/shift-panic/shift.zig"
+filter = "shift."
+compare = "exact"
+
+[[export]]
+id = "volatile-effects"
+versions = ["0.16.0"]
+dir = "tests/roadmap/volatile-effects/air/{version}"
+source = "tests/roadmap/volatile-effects/device_effects.zig"
+filter_file = "tests/roadmap/volatile-effects/device-filter"
+compare = "exact"
+
+[[export]]
+id = "volatile-effects-asm"
+versions = ["0.16.0"]
+dir = "tests/roadmap/volatile-effects/air-asm/{version}"
+source = "tests/roadmap/volatile-effects/device_asm.zig"
+filter = "device_asm."
+compare = "exact"
+
+[[export]]
+id = "big-endian-s390x"
+versions = ["0.16.0"]
+dir = "tests/roadmap/big-endian/air/{version}/s390x-linux"
+source = "tests/roadmap/big-endian/big_endian.zig"
+filter = "big_endian."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"]
+compare = "exact"
+
+[[export]]
+id = "big-endian-x86_64"
+versions = ["0.16.0"]
+dir = "tests/roadmap/big-endian/air/{version}/x86_64-linux"
+source = "tests/roadmap/big-endian/big_endian.zig"
+filter = "big_endian."
+compare = "exact"
+
+[[export]]
+id = "big-endian-reject"
+versions = ["0.16.0"]
+dir = "tests/roadmap/big-endian/air/{version}/s390x-reject"
+source = "tests/roadmap/big-endian/reject.zig"
+filter = "reject."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"]
+compare = "exact"
+
+[[export]]
+id = "env-boundaries-015"
+versions = ["0.15.2"]
+dir = "tests/roadmap/env-boundaries/air/{version}"
+source = "tests/roadmap/env-boundaries/std_io15.zig"
+filter = "std_io15.,fs.File.,posix.,os.linux."
+compare = "subset"
+
+[[export]]
+id = "env-boundaries-016"
+versions = ["0.16.0"]
+dir = "tests/roadmap/env-boundaries/air/{version}"
+source = "tests/roadmap/env-boundaries/std_io16.zig"
+filter = "std_io16.,posix.,os.linux.,Io.Threaded.closeFd,Io.Threaded.recoverableOsBugDetected"
+compare = "subset"
+
+[[export]]
+id = "zig017-divceil"
+versions = ["0.17.0"]
+dir = "tests/roadmap/zig017/divceil/air/{version}"
+source = "tests/roadmap/zig017/divceil/divceil.zig"
+filter = "divceil."
+compare = "exact"
+
+[[export]]
+id = "bitcast-017"
+versions = ["0.17.0"]
+dir = "tests/roadmap/bitcast-017/air/{version}"
+source = "tests/roadmap/bitcast-017/bitcast017.zig"
+filter = "bitcast017."
+compare = "exact"
+
+[[export]]
+id = "zig017-casts"
+versions = ["0.17.0"]
+dir = "tests/roadmap/zig017/casts/air/{version}"
+source = "tests/roadmap/zig017/casts/casts.zig"
+filter = "casts."
+compare = "exact"
+
+[[export]]
+id = "extern-calls"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/extern-calls/air/{version}"
+source = "tests/roadmap/extern-calls/extern_calls.zig"
+filter = "extern_calls.,libc_ref."
+compare = "exact"
+
+[[export]]
+id = "extern-calls-trusted"
+versions = ["0.16.0"]
+dir = "tests/roadmap/extern-calls/air/{version}-trusted"
+source = "tests/roadmap/extern-calls/trusted.zig"
+filter = "trusted."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "-lc"]
+compare = "exact"
+
+[[export]]
+id = "noreturn-variants"
+versions = ["0.15.2", "0.16.0"]
+dir = "tests/roadmap/noreturn-variants/air/{version}"
+source = "tests/roadmap/noreturn-variants/noreturn_variants.zig"
+filter = "noreturn_variants."
+compare = "exact"
+
+[[export]]
+id = "error-width-bits2"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits2"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "--error-limit", "3"]
+compare = "exact"
+
+[[export]]
+id = "error-width-bits8"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits8"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "--error-limit", "255"]
+compare = "exact"
+
+[[export]]
+id = "error-width-bits10"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits10"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "--error-limit", "1000"]
+compare = "exact"
+
+[[export]]
+id = "error-width-bits16"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits16"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+compare = "exact"
+
+[[export]]
+id = "error-width-bits17"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits17"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "--error-limit", "100000"]
+compare = "exact"
+
+[[export]]
+id = "error-width-bits32"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/error-width/air-fresh/{version}/bits32"
+source = "tests/roadmap/error-width/error_width.zig"
+filter = "error_width."
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline", "--error-limit", "4294967295"]
+compare = "exact"
+
+[[export]]
+id = "alloc-translated-page-linux"
+versions = ["0.16.0"]
+dir = "tests/roadmap/alloc-translated/air/{version}/page-linux"
+source = "tests/roadmap/alloc-translated/page.zig"
+filter = ""
+compare = "subset"
+
+[[export]]
+id = "alloc-translated-page-macos"
+versions = ["0.16.0"]
+dir = "tests/roadmap/alloc-translated/air/{version}/page-macos"
+source = "tests/roadmap/alloc-translated/page.zig"
+filter = ""
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"]
+compare = "subset"
+
+[[export]]
+id = "alloc-translated-fba-linux"
+versions = ["0.16.0"]
+dir = "tests/roadmap/alloc-translated/air/{version}/fba-linux"
+source = "tests/roadmap/alloc-translated/fba.zig"
+filter = ""
+compare = "subset"
+
+[[export]]
+id = "alloc-translated-fba-macos"
+versions = ["0.16.0"]
+dir = "tests/roadmap/alloc-translated/air/{version}/fba-macos"
+source = "tests/roadmap/alloc-translated/fba.zig"
+filter = ""
+args = ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"]
+compare = "subset"
+
+[[export]]
+id = "alloc-fba-client"
+versions = ["0.16.0"]
+dir = "tests/roadmap/alloc-fba/air/{version}/client-linux"
+source = "tests/roadmap/alloc-fba/client.zig"
+filter = ""
+compare = "subset"
+
+[[export]]
+id = "runtime-tags"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/runtime-tags/air/{version}"
+source = "tests/roadmap/runtime-tags/runtime_tags.zig"
+filter = "runtime_tags."
+compare = "exact"
+
+[[export]]
+id = "aggregate-casts"
+versions = ["0.14.1", "0.15.2", "0.16.0"]
+dir = "tests/roadmap/aggregate-casts/air/{version}"
+source = "tests/roadmap/aggregate-casts/aggregate_casts.zig"
+filter = "aggregate_casts."
+compare = "exact"
+
+[[export]]
+id = "lang-long-tail-error-params"
+versions = ["0.14.1", "0.15.2", "0.16.0", "0.17.0"]
+dir = "tests/roadmap/lang-long-tail/air/error_params/{version}"
+source = "tests/roadmap/lang-long-tail/error_params.zig"
+filter = "error_params."
+compare = "subset"
+
+[[export]]
+id = "lang-long-tail-vector-casts"
+versions = ["0.14.1", "0.15.2", "0.16.0", "0.17.0"]
+dir = "tests/roadmap/lang-long-tail/air/vector_casts/{version}"
+source = "tests/roadmap/lang-long-tail/vector_casts.zig"
+filter = "vector_casts."
+filter_file = "tests/roadmap/lang-long-tail/vector_casts.filter"
+compare = "subset"
+
+[[export]]
+id = "packed-fields-llvm"
+versions = ["0.16.0"]
+dir = "tests/roadmap/packed-fields/air-fresh/{version}/llvm"
+source = "tests/roadmap/packed-fields/packed_fields.zig"
+filter = "packed_fields."
+compare = "exact"
+
+[[export]]
+id = "packed-fields-x86_64"
+versions = ["0.16.0"]
+dir = "tests/roadmap/packed-fields/air-fresh/{version}/x86_64"
+source = "tests/roadmap/packed-fields/packed_fields.zig"
+filter = "packed_fields.hostAbi"
+args = ["-OReleaseSafe", "-fno-error-tracing", "-fno-llvm", "-fno-lld", "-target", "x86_64-linux", "-mcpu=baseline"]
+compare = "exact"
+
+[[excluded]]
+root = "tests/roadmap/try-pointers/air/{version}"
+reason = "schema-11 export retained for the --profile legacy-abi64-le path; air-fresh/ is the current export"
+
+[[excluded]]
+root = "tests/roadmap/bitops/qualified/{version}/air"
+reason = "schema-11 export retained with its qualification manifest; bitops/check.sh re-exports into a scratch tree"
