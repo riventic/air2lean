@@ -702,12 +702,15 @@ def StackEntry.liveIn (blocks : Array Block) (e : StackEntry) : Bool :=
 def StackState.held (s : StackState) (blocks : Array Block) : Array StackEntry :=
   s.entries.popWhile (!·.liveIn blocks)
 
-/-- The charge of the held entries: the end of the topmost one (each entry starts where the one
-below it ends, `Mem.pushEntry`). -/
-def StackState.depth (s : StackState) (blocks : Array Block) : Nat :=
-  match (s.held blocks).back? with
+/-- The charge of entries `h`: the end of the topmost one (each entry starts where the one below
+it ends, `Mem.pushEntry`). -/
+def stackEnd (h : Array StackEntry) : Nat :=
+  match h.back? with
   | some e => e.base + e.charge
   | none => 0
+
+/-- The charge of the held entries. -/
+def StackState.depth (s : StackState) (blocks : Array Block) : Nat := stackEnd (s.held blocks)
 
 /-- Thread `t`'s stack depth: the charge of its held entries. -/
 def Mem.stackDepth (m : Mem) (t : ThreadId) : Nat := (m.stackOf t).depth m.blocks
@@ -751,8 +754,8 @@ def Mem.allocOk (m : Mem) (kind : BlockKind) (size align : Nat) : Bool :=
 entries, at their depth. -/
 def Mem.pushEntry (m : Mem) (block : Option BlockId) (c : Nat) : Array StackState :=
   let s := m.stackOf m.current
-  setStackAt m.stacks m.current
-    { s with entries := (s.held m.blocks).push { block, base := s.depth m.blocks, charge := c } }
+  let h := s.held m.blocks
+  setStackAt m.stacks m.current { s with entries := h.push { block, base := stackEnd h, charge := c } }
 
 /-- The stacks after `alloc`: a stack block of a thread with a budget pushes its entry. -/
 def Mem.stacksAfterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Array StackState :=
@@ -838,11 +841,16 @@ def enterFrame : MemM Unit := do
     if S < m.stackDepth m.current + frameBase then throw .stackOverflow
     else set { m with stacks := m.pushEntry none frameBase }
 
-/-- `s` with its topmost open frame entry closed. -/
-def StackState.closeFrame (s : StackState) : StackState :=
-  match s.entries.reverse.findIdx? (fun e => e.block.isNone && !e.closed) with
-  | some j => { s with entries := s.entries.modify (s.entries.size - 1 - j) ({ · with closed := true }) }
-  | none => s
+/-- `s` with its topmost open frame entry below index `i` closed (a backward scan). -/
+def StackState.closeFrame (s : StackState) (i : Nat := s.entries.size) : StackState :=
+  match i with
+  | 0 => s
+  | i + 1 =>
+    match s.entries[i]? with
+    | some e =>
+      if e.block.isNone && !e.closed then { s with entries := s.entries.set! i { e with closed := true } }
+      else s.closeFrame i
+    | none => s
 
 /-- Release the frame that `enterFrame` charged: close the current thread's topmost open frame
 entry (it pops with the dead entries above it). -/
@@ -1165,6 +1173,8 @@ def Mem.ofGlobals (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) 
 /-- The start of a stack reserve of `S` bytes for thread `t` (MM-16): the placement's
 (`Placement.reserve`) if it is a valid place for it (`Mem.placeOk`, 16-aligned), else the first
 fit (`Mem.firstFit`) if that is valid; none if no place is found. -/
+-- The first fit walks past live blocks only; a fit that meets another thread's reserve is
+-- rejected (fail closed: no budget). Child reserves (MM-16 step 5) need a walk past reserves too.
 def Mem.reserveAt? (m : Mem) (t : ThreadId) (S : Nat) : Option Nat :=
   match m.place.reserve t with
   | some A => if m.placeOk A S 16 then some A else fit

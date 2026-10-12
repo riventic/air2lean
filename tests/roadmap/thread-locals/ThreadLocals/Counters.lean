@@ -751,10 +751,11 @@ theorem main_spec (d : Nat) :
   refine WP.pure' ?_
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
-  have F' := sep_left_comm (sep_assoc F₁₇)
-  refine WP.bind (WP.liftMem_upd (free_front (R := cnt 8 ∗ u32At s2 Ab .stack 9) (enc_u32 9) ha0
+  -- In reverse order of allocation (MM-16): `b`, then `a`.
+  have F' := sep_left_comm (sep_assoc (sep_comm (sep_left_comm (sep_assoc F₁₇))))
+  refine WP.bind (WP.liftMem_upd (free_front (R := cnt 8 ∗ u32At s0 Aa .stack 9) (enc_u32 9) hb0
     (by decide)) ho₁₇ hc₁₇ htl₁₇ F' fun _ m₁₈ h₁₈ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
-  refine WP.bind (WP.liftMem_upd ((free_front (R := cnt 8) (enc_u32 9) hb0 (by decide)).conseq
+  refine WP.bind (WP.liftMem_upd ((free_front (R := cnt 8) (enc_u32 9) ha0 (by decide)).conseq
     (fun _ h => sep_comm h) fun _ _ h => h) ho₁₈ hc₁₈ (by rw [ht₁₈]; exact htl₁₇) hq₁₈
     fun _ m₁₉ _ _ _ _ ht₁₉ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩

@@ -691,9 +691,7 @@ theorem run_throwMem {α : Type} (e : Zig.Error) (s : Zig.Mem) :
 theorem map_throw {α β : Type} (e : Zig.Error) (f : α → β) :
     f <$> (throw e : Result α) = throw e := rfl
 
-theorem free_nil : List.forM ([] : Frame) Zig.free = pure () := rfl
-
-theorem free_reverse_nil : List.forM ([] : Frame).reverse Zig.free = pure () := rfl
+theorem free_nil : List.forM ([] : Frame).reverse Zig.free = pure () := rfl
 
 theorem bind_ite {m : Type → Type} [Monad m] {α β : Type} (c : Prop) [Decidable c]
     (a b : m α) (f : α → m β) : (if c then a else b) >>= f = if c then a >>= f else b >>= f := by
@@ -709,7 +707,7 @@ theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a 
 
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
-  bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil free_reverse_nil
+  bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
   List.getElem_cons_zero StateT.run'_eq StateT.run_bind StateT.run_pure StateT.run_map
   StateT.run_lift StateT.run_monadLift StateT.run_get StateT.run_modify liftM monadLift

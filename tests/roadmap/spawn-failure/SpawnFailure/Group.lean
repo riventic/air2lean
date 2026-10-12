@@ -678,11 +678,11 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   subst r₁
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
-  -- The frees.
-  refine WP.bind (WP.liftMem_upd (free_front (R := bytesAt B.g B.ag 16 .stack bs) (enc_u32 v) hx0
-    (by decide)) ho₈ (hs₈.current.trans hc₇) (by rw [hs₈.threads]; exact htl) hF₈
-    fun _ m₉ h₉ ho₉ hq₉ hc₉ ht₉ => ?_)
-  refine WP.bind (WP.liftMem_upd (TTriple.free hbs hg0 (by decide)) ho₉ hc₉
+  -- The frees, in reverse order of allocation (MM-16): the group, then `x`.
+  refine WP.bind (WP.liftMem_upd ((free_front (R := bytesAt s2 Ax 4 .stack (Enc.encode v)) hbs hg0
+    (by decide)).conseq (fun _ h => sep_comm h) fun _ _ h => h) ho₈ (hs₈.current.trans hc₇)
+    (by rw [hs₈.threads]; exact htl) hF₈ fun _ m₉ h₉ ho₉ hq₉ hc₉ ht₉ => ?_)
+  refine WP.bind (WP.liftMem_upd (TTriple.free (enc_u32 v) hx0 (by decide)) ho₉ hc₉
     (by rw [ht₉, hs₈.threads]; exact htl) hq₉ fun _ m₁₀ _ _ _ _ ht₁₀ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hsp => hja r ?_ hsp⟩
   rwa [ht₁₀, ht₉, hs₈.threads] at hr
