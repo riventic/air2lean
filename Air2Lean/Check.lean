@@ -818,7 +818,10 @@ def CheckCtx.checkX87Precision (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op
     Except String Unit := do
   let some d := cx.dialect | return
   let some t := d.target? | return
-  unless t.x87ThreadPrecision && !d.x87Extended do return
+  unless t.x87ThreadPrecision do return
+  -- Without `winStartupX87Extended` the main thread starts at 53 bits too, and the AIR records no
+  -- libc (MinGW CRT) linkage: the admission holds on no thread for certain.
+  if d.x87Extended && d.version.winStartupX87Extended then return
   let operands := match op with
     | .arith _ _ a b | .div _ a b | .divFloat a b => #[a, b]
     | .floatRound _ a | .sqrt a | .libm _ a | .floatFromInt a | .intFromFloat _ a | .reduce _ a => #[a]
@@ -828,7 +831,12 @@ def CheckCtx.checkX87Precision (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op
   let f80 (id : TyId) := match cx.types[id]? with
     | some (.vector _ c) => cx.types[c]? == some (.float 80)
     | other => other == some (.float 80)
-  if f80 ty || operands.any fun v => (cx.valTy? v).any f80 then
+  if !(f80 ty || operands.any fun v => (cx.valTy? v).any f80) then return
+  if d.x87Extended then
+    cx.fail line s!"an f80 arithmetic or integer conversion op is outside the {t.arch}-{t.os} \
+      model for Zig {d.version}: --assume-x87-extended does not hold there, since its WinStartup \
+      leaves the main thread at 53 bits too ({t.doc} §x87 precision control)"
+  else
     cx.fail line s!"an f80 arithmetic or integer conversion op is outside the {t.arch}-{t.os} \
       model: its x87 result depends on the thread's precision control, which {t.os} starts at \
       53 bits on a thread that CreateThread makes; only the main thread's startup code (Zig's \

@@ -441,7 +441,7 @@ bufs_match() {
 # (`Windows-x86_64`); x86_64-windows has the reference float lowering, so it gets no host allowance.
 reference_host=0
 if [ "$host_id" = Linux-x86_64 ]; then reference_host=1; fi
-case "${AIR2LEAN_TARGET:-}" in x86_64-*) reference_host=1 ;; esac
+case "${AIR2LEAN_TARGET:-}" in x86_64-windows-*) reference_host=1 ;; esac
 
 echo "== comparing ==" >&2
 total_ok=0

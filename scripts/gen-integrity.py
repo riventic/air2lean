@@ -53,7 +53,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 # Host keys of the golden overlays (scripts/check.sh): `uname -s` in lower case, then
 # `<os>-<uname -m>` for a host whose AIR or translation differs from its OS's (aarch64-linux).
-OSES = ("linux", "darwin", "linux-aarch64")
+OSES = ("linux", "darwin", "linux-aarch64", "windows")
 PROFILE_PREFIX = b"-- air2lean-profile: "
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
@@ -255,7 +255,10 @@ def golden_cases():
                                 if g.is_file())
                 overlays = (base_dir, os_dir) if base_os != os_name else (os_dir,)
                 dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", *overlays) if d.is_dir()]
-                yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
+                # examples/<ex>/translate-<os>.args: that OS's extra arguments (scripts/check.sh).
+                os_args = ex_dir / f"translate-{base_os}.args"
+                case_args = args + (os_args.read_text().split() if os_args.is_file() else [])
+                yield Case(str(expected.relative_to(ROOT)), dirs, case_args, "golden",
                            f"{ex} {version} {os_name}", version)
 
 

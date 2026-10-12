@@ -107,6 +107,13 @@ def lanePtrEvidence : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => true
   | v0_17_0 => false
 
+/-- `std.start`'s `WinStartup` sets the main thread's x87 precision control to extended
+(`fninit`; T04 probe row `x87 main cw 037f`). 0.14.1 leaves it at Windows's 53 bits (`027f`), so
+`--assume-x87-extended` holds on no thread there (`docs/windows-target.md` §x87 precision control). -/
+def winStartupX87Extended : ZigVersion → Bool
+  | v0_14_1 => false
+  | v0_15_2 | v0_16_0 | v0_17_0 => true
+
 /-- The versions with `lanePtrEvidence`, newest first. -/
 def lanePtrVersions : List ZigVersion := all.filter (·.lanePtrEvidence)
 

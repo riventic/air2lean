@@ -369,6 +369,12 @@ pub const win = struct {
         hStdOutput: ?HANDLE = null,
         hStdError: ?HANDLE = null,
     };
+    /// The leading fields of `EXCEPTION_POINTERS` and `EXCEPTION_RECORD` that a handler reads.
+    pub const EXCEPTION_POINTERS = extern struct {
+        ExceptionRecord: *const extern struct { ExceptionCode: DWORD },
+        ContextRecord: *anyopaque,
+    };
+    pub const VectoredHandler = *const fn (*EXCEPTION_POINTERS) callconv(.winapi) i32;
     pub const PROCESS_INFORMATION = extern struct {
         hProcess: HANDLE,
         hThread: HANDLE,
@@ -391,6 +397,7 @@ pub const win = struct {
     pub extern "kernel32" fn Sleep(ms: DWORD) callconv(.winapi) void;
     pub extern "kernel32" fn GetTickCount64() callconv(.winapi) u64;
     pub extern "kernel32" fn ExitProcess(code: u32) callconv(.winapi) noreturn;
+    pub extern "kernel32" fn AddVectoredExceptionHandler(first: u32, handler: VectoredHandler) callconv(.winapi) ?*anyopaque;
 };
 
 /// The command-line flag that makes a harness a case child: `--air2lean-child <case> <line>`.
@@ -401,15 +408,38 @@ const child_flag = "--air2lean-child";
 pub const ChildCase = struct { name: []const u8, start: usize };
 
 var child_case_buf: [256]u8 = undefined;
+var child_case: ?ChildCase = null;
+var child_case_read = false;
 
+/// The case child's assignment, read once from the command line. A case child also ends at a CPU
+/// fault with the exception code as its exit code (`exitAtFault`), ahead of std's handler, which
+/// would print a trace and abort.
 pub fn childCase() ?ChildCase {
     if (!is_windows) return null;
+    if (!child_case_read) {
+        child_case_read = true;
+        child_case = readChildCase();
+        if (child_case != null) _ = win.AddVectoredExceptionHandler(1, exitAtFault);
+    }
+    return child_case;
+}
+
+fn exitAtFault(info: *win.EXCEPTION_POINTERS) callconv(.winapi) i32 {
+    const code = info.ExceptionRecord.ExceptionCode;
+    // The current-process pseudo handle (-1): ends the process at once with the fault's code.
+    if (windowsFault(code) != null) _ = win.TerminateProcess(@ptrFromInt(std.math.maxInt(usize)), code);
+    return 0; // EXCEPTION_CONTINUE_SEARCH
+}
+
+/// The longest command line that Windows passes (`CreateProcessW`), in UTF-16 units.
+var command_line_buf: [32768]u8 = undefined;
+
+fn readChildCase() ?ChildCase {
     const line = std.mem.span(win.GetCommandLineW());
     // The command line is ASCII from `WinChild.spawn`; anything else is not a child's.
-    var ascii: [512]u8 = undefined;
-    if (line.len > ascii.len) return null;
-    for (line, 0..) |c, i| ascii[i] = if (c < 0x80) @intCast(c) else '?';
-    const text = ascii[0..line.len];
+    if (line.len > command_line_buf.len) return null;
+    for (line, 0..) |c, i| command_line_buf[i] = if (c < 0x80) @intCast(c) else '?';
+    const text = command_line_buf[0..line.len];
     const at = std.mem.indexOf(u8, text, " " ++ child_flag ++ " ") orelse return null;
     var it = std.mem.tokenizeScalar(u8, text[at + child_flag.len + 2 ..], ' ');
     const name = it.next() orelse return null;
@@ -500,7 +530,7 @@ pub fn windowsFault(code: u32) ?[]const u8 {
     return switch (code) {
         0xC0000094, 0xC0000095 => "SIGFPE", // integer divide by zero, integer overflow (`div`)
         0xC000001D => "SIGILL", // illegal instruction (`ud2`)
-        0xC0000005 => "SIGSEGV", // access violation
+        0xC0000005, 0xC00000FD => "SIGSEGV", // access violation, stack overflow
         0x80000002 => "SIGBUS", // datatype misalignment
         else => null,
     };

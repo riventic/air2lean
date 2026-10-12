@@ -760,13 +760,14 @@ fn forEachValue(
     const in_path = "tests/diff/" ++ ex ++ "/inputs/" ++ name ++ ".jsonl";
     const out_path = "tests/diff/out/zig/" ++ ex ++ "/" ++ name ++ ".jsonl";
 
+    // A case child runs only its own function's inputs, from its start line on, and leaves the
+    // output files to the supervisor.
+    const child = compat.childCase();
+    if (child) |c| if (!std.mem.eql(u8, c.name, ex ++ "/" ++ name)) return;
     const content = try compat.readFileAlloc(gpa, in_path, 4 << 20);
     defer gpa.free(content);
     if (compat.is_windows) {
-        // A case child runs only its own function's inputs, from its start line on, and leaves
-        // the output files to the supervisor.
-        if (compat.childCase()) |child| {
-            if (!std.mem.eql(u8, child.name, ex ++ "/" ++ name)) return;
+        if (child) |c| {
             var discard: compat.Discard = .{};
             const sink = discard.writer();
             var child_lines = std.mem.splitScalar(u8, content, '\n');
@@ -774,7 +775,7 @@ fn forEachValue(
             while (child_lines.next()) |line| {
                 if (line.len == 0) continue;
                 line_no += 1;
-                if (line_no < child.start) continue;
+                if (line_no < c.start) continue;
                 var parsed = try std.json.parseFromSlice(std.json.Value, gpa, line, .{});
                 defer parsed.deinit();
                 try perValue(gpa, parsed.value, sink);
