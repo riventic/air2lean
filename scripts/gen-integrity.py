@@ -167,6 +167,11 @@ FIXTURES = [
         ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
     for v in versions
 ] + [
+    # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
+    (f"tests/roadmap/nan-bits/gen/{v}/NanBits.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
+     ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+] + [
     # L04 try-pointers/lifetimes/check.sh.
     (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
      ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")

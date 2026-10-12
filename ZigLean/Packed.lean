@@ -69,38 +69,11 @@ def Packed.toBits? {α : Type} {n : Nat} [Packed α n] (v : α) : Result (BitVec
 /-! ## Defined bits
 
 A bit-pointer access reads and writes the field's bits only. Each host byte is a defined-bit
-mask and a value (`Byte.defBits`): `.int` all, `.undef` none, `.part m` the low `m` bits,
+mask and a value (`Byte.defBits`, `ZigLean/Mem/Enc.lean`): `.int` all, `.undef` none, `.part m` the low `m` bits,
 `.mask d` the bits of `d`. A store sets the field's bits of each byte (`Byte.writeBits`) and
 keeps every other bit as it was, defined or not: an undefined neighbour field stays undefined
 bit by bit, and `undefined` stored to a field makes only the field's bits undefined. A load needs
 only the field's bits to be defined (`readBits`). -/
-
-/-- The low `m` bits of a byte. -/
-def lowMask8 (m : Nat) : BitVec 8 := BitVec.ofNat 8 (2 ^ m - 1)
-
-/-- A byte as its defined-bit mask and its value (0 in undefined bits); `none` for a pointer
-or error byte, which has no integer bits. -/
-def Byte.defBits : Byte → Option (BitVec 8 × BitVec 8)
-  | .undef => some (0, 0)
-  | .int x => some (BitVec.allOnes 8, x)
-  | .part m x => some (lowMask8 m, x &&& lowMask8 m)
-  | .mask d x => some (d, x &&& d)
-  | _ => none
-
-/-- The byte with the defined bits `d` and the values `x` there, in its canonical form:
-`.int`, `.undef`, `.part m` for the low `m` bits, else `.mask`. -/
-def Byte.ofDefBits (d x : BitVec 8) : Byte :=
-  if d = BitVec.allOnes 8 then .int x
-  else if d = 0 then .undef
-  else match [1, 2, 3, 4, 5, 6, 7].find? (lowMask8 · = d) with
-    | some m => .part m (x &&& d)
-    | none => .mask d (x &&& d)
-
-/-- The `(n + 7) / 8` value bytes of the `n`-bit integer `v`, little-endian, with only the bits
-of `m` defined (`Byte.ofDefBits`). -/
-def maskedBytes {n : Nat} (v m : BitVec n) : Array Byte :=
-  (Array.range ((n + 7) / 8)).map fun i =>
-    Byte.ofDefBits (BitVec.ofNat 8 (m.toNat >>> (8 * i))) (BitVec.ofNat 8 (v.toNat >>> (8 * i)))
 
 /-- The value bytes of `v` (`intBytes`), each bit defined where `Packed.mask` says. -/
 def Packed.bytes {α : Type} {n : Nat} [Packed α n] (v : α) : Array Byte :=

@@ -91,9 +91,12 @@ load of `uN`) and splits it into lanes. -/
 /-- `@Vector(n, uW)`/`@Vector(n, iW)` in memory: bit-packed `W`-bit lanes. -/
 instance (priority := high) {w n : Nat} : Enc (Vec (BitVec w) n) := Vec.packedEnc n w id id
 
-/-- `@Vector(n, fW)` in memory: bit-packed lanes of the float's bits (`f80`: 80-bit stride). -/
+/-- `@Vector(n, fW)` in memory: bit-packed lanes of the float's bits (`f80`: 80-bit stride). A
+NaN lane's bits are undefined (`Float.detMask`), as a scalar NaN's are. -/
 instance (priority := high) {fmt : FloatFmt} {n : Nat} : Enc (Vec (Float fmt) n) :=
-  Vec.packedEnc n fmt.width Float.bits Float.mk
+  { Vec.packedEnc n fmt.width Float.bits Float.mk with
+    encode v := padTo (packedVecLayout n fmt.width)
+      (maskedBytes (v.packBits fmt.width Float.bits) (v.packBits fmt.width Float.detMask)) }
 
 /-- The ABI size and alignment of `@Vector(n, bool)`: its lanes are bits, so `⌈n / 8⌉` bytes,
 rounded up to a power of 2 (`packedVecLayout n 1`, `Check.lean`'s `modelLayout`). -/
