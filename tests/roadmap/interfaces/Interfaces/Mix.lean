@@ -736,8 +736,8 @@ def withFba [Ext]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       let i13 ← Zig.load (BitVec 32) 4 v8
       let i14 ← pure ((.ok i13) : Except Zig.ErrName (BitVec 32))
       pure (.ret i14))) : Zig.CM Tgt withFbaLocals withFbaExit).run' { (default : withFbaLocals) with buf := s0, fba := s2 }
-  Zig.free s0
   Zig.free s2
+  Zig.free s0
   match e with
   | .ret v => pure v
 
