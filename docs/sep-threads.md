@@ -149,8 +149,8 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
   `load`, `store`); the bridge's `alloc'`/`free'` are the native rules. Next: `Arr`, `Typed`,
-  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`, which replace a block by a new
-  one: `NoRevive` holds).
+  `Region`, `Const` (`cload`), `Mmap` (`mmap`/`munmap`/`mremap`; their locality must show
+  `NoRevive`, i.e. that a remapping makes no byte of an old block alive).
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).

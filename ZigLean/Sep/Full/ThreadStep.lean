@@ -24,7 +24,8 @@ its locality, and its `@[fsym]` sequential rule is the thread rule read sequenti
 
 `ThreadLocal` frames (`ThreadLocal.frame`), and a step that leaves the memory as it is has a thread
 rule without the kernel (`FTTotalTriple.of_read`). The building blocks of the primitives' locality
-are below: owned accesses run as in `m.noFp` (`run_withFp_recordAt`, `StepIn.recordAt_owned`).
+are below: runs with a record in front (`RunFp`), and accesses to bytes that `P` owns
+(`OwnsPtr`, `ThreadLocal.loadBytes`/`load`/`storeBytes`/`store`), `alloc` and `free`.
 -/
 
 namespace Zig
@@ -334,6 +335,13 @@ theorem free {b : BlockId} (hpb : p.block = some b)
       · rfl
     · rfl
 
+/-- The run part of `ThreadLocal`: the run from `m` is the run from `m.noFp` with `m`'s record in
+front. -/
+theorem noFp {m : Mem} {c : MemM α} (h : RunFp m.footprint m.noFp c) :
+    (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint)) := by
+  unfold RunFp at h
+  rwa [Mem.noFp_withFp] at h
+
 end RunFp
 
 /-! ## New and ended blocks -/
@@ -382,9 +390,7 @@ variable {P : FAssn}
 theorem alloc (kind : BlockKind) (size align : Nat) : ThreadLocal P (Zig.alloc kind size align) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
-  · have := RunFp.alloc (F := m.footprint) (m₀ := m.noFp) kind size align
-    unfold RunFp at this
-    rwa [Mem.noFp_withFp] at this
+  · exact (RunFp.alloc kind size align).noFp
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok (m := m.noFp) e
     exact ⟨StepIn.afterAlloc _ _ _ _ _, Mem.NoRevive.afterAlloc _ _ _ _⟩
 
@@ -395,22 +401,16 @@ theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
     ThreadLocal P (Zig.free p) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
-  · have := RunFp.free (F := m.footprint) (m₀ := m.noFp) hpb fun blk hb => by
-      rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
-      refine freeRaces_of_clock fun e he heb hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
-      rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
-    unfold RunFp at this
-    rwa [Mem.noFp_withFp] at this
+  · refine (RunFp.free hpb fun blk hb => ?_).noFp
+    rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
+    refine freeRaces_of_clock fun e he heb hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
+    rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
   · obtain ⟨b', blk, -, -, rfl⟩ := Proto.free_ok (m := m.noFp) e
     exact ⟨StepIn.kill _ _ _ _, Mem.NoRevive.kill _ _ _⟩
 
 end ThreadLocal
 
 /-! ## Owned accesses -/
-
-theorem _root_.Zig.Mem.noFp_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
-    (m.noFp.recordAt b o n k).withFp m.footprint = m.recordAt b o n k := by
-  rw [← Mem.recordAt_withFp, Mem.noFp_withFp]
 
 /-- An access at `p` that succeeds is at `p`'s block and offset, in a block of the memory. -/
 theorem access_at {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
@@ -451,9 +451,6 @@ theorem sepR (h : OwnsAt P b o n) : OwnsAt (R ⋆ P) b o n := fun r hr =>
 
 theorem of_imp {P' : FAssn} (h : OwnsAt P b o n) (hp : ∀ r, P' r → P r) : OwnsAt P' b o n :=
   fun r hr => h r (hp r hr)
-
-theorem mono {o' n' : Nat} (h : OwnsAt P b o n) (h1 : o ≤ o') (h2 : o' + n' ≤ o + n) :
-    OwnsAt P b o' n' := fun r hr x hx hx' => h r hr x (by omega) (by omega)
 
 /-- The bytes of `bytesAt` at `p`. -/
 theorem bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hpb : p.block = some b) :
@@ -497,12 +494,9 @@ theorem loadBytes (hn : 0 < n) (hown : OwnsPtr P p n) :
     ThreadLocal P (Zig.loadBytes p n a k) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
-  · have := RunFp.loadBytes (F := m.footprint) (m₀ := m.noFp) (p := p) (n := n) (a := a) (k := k)
-      fun b blk o h => by
-        obtain ⟨hpb, rfl, -⟩ := access_at h
-        exact noRace_owned hc ho hn (hown b hpb r hp)
-    unfold RunFp at this
-    rwa [Mem.noFp_withFp] at this
+  · refine (RunFp.loadBytes fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
     exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
@@ -513,12 +507,9 @@ theorem load {T : Type} [Enc T] (hn : 0 < Enc.size T) (hown : OwnsPtr P p (Enc.s
     ThreadLocal P (Zig.load T a p) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
-  · have := RunFp.load (T := T) (F := m.footprint) (m₀ := m.noFp) (p := p) (a := a)
-      fun b blk o h => by
-        obtain ⟨hpb, rfl, -⟩ := access_at h
-        exact noRace_owned hc ho hn (hown b hpb r hp)
-    unfold RunFp at this
-    rwa [Mem.noFp_withFp] at this
+  · refine (RunFp.load (T := T) fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
     exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
@@ -529,12 +520,9 @@ theorem storeBytes {bs : Array Byte} (hn : 0 < bs.size) (hown : OwnsPtr P p bs.s
     ThreadLocal P (Zig.storeBytes p a bs k) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
-  · have := RunFp.storeBytes (F := m.footprint) (m₀ := m.noFp) (p := p) (a := a) (k := k)
-      (bs := bs) fun b blk o h => by
-        obtain ⟨hpb, rfl, -⟩ := access_at h
-        exact noRace_owned hc ho hn (hown b hpb r hp)
-    unfold RunFp at this
-    rwa [Mem.noFp_withFp] at this
+  · refine (RunFp.storeBytes fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.storeBytes_ok (m := m.noFp) e
     have hsz := (access_eq h).2.2.2.2.1
     have h0 := (access_eq h).2.2.2.1
