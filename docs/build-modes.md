@@ -24,10 +24,10 @@ release modes. It passes no backend flag.
 
 | Mode | `llvm` | `stage2_x86_64` |
 | --- | --- | --- |
-| ReleaseSafe | **qualified**: analyzed-AIR model (PRF-02, SEM-01, TRU-02, TRU-03), plus native runs | unqualified: backend divergences |
-| ReleaseFast | **qualified** (no illegal behaviour transfers), exception: float `@divExact` | unqualified: backend divergences and the exception |
+| ReleaseSafe | **qualified**: analyzed-AIR model (PRF-02, SEM-01, TRU-02, TRU-03), plus native runs | **qualified**: tested-input agreement of its own translation (x86_64-linux) |
+| ReleaseFast | **qualified** (no illegal behaviour transfers), exception: float `@divExact` | **qualified** (no illegal behaviour transfers, x86_64-linux) |
 | ReleaseSmall | **qualified** (as ReleaseFast), exception: float `@divExact` | unqualified: no completed run |
-| Debug | **qualified**: tested-input agreement | unqualified: backend divergences |
+| Debug | **qualified**: tested-input agreement | **qualified**: tested-input agreement (x86_64-linux) |
 
 **ReleaseSafe/llvm** is the reference build. Proofs concern its analyzed AIR. A golden
 export, the ABI-probe profiles and the export and harness commands are the evidence.
@@ -122,8 +122,8 @@ records on every run.
 | aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
-| x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
-| x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
+| x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 0 (34343 cases; `floatops`, `layout` rejected, `asm` not compiled) | 0 |
+| x86_64-linux | ReleaseFast | stage2_x86_64 | 0 (34343 cases) | 4035 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
 
 No run counts a `host_difference`: each host tests its own translation, whose float rules are
@@ -166,20 +166,59 @@ kills it after 20 seconds. A killed case is a fatal `native_harness_failure`
 (docs/outcome-accounting.md); none occurs in the recorded runs. With this, the four
 LLVM modes run on the hosted runner in about 16 minutes, Lean build excluded.
 
-**stage2_x86_64 findings.** The self-hosted backend disagrees with the LLVM backend and the
-model on legal inputs, in every optimize mode
-([`stage2-x86_64-divergences.zig`](../tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig)):
+**stage2_x86_64.** The self-hosted backend disagreed with the LLVM backend and the model on
+legal inputs in three places
+([`stage2-x86_64-divergences.zig`](../tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig)).
+Each is now outside the subset on a `stage2_x86_64` profile, or no longer a divergence:
 
-- float `@mod` with operands of opposite sign, 346 cases. LLVM computes
-  `frem(frem(a, b) + b, b)` and the model follows it; the backend rounds differently;
-- an `i4` read from a packed union and returned is not sign-extended, 173 cases;
-- f80 `@min` and `@max` of signed zeros, 2 cases. The language leaves the order open, so
-  this may be a model over-specification.
+- **float `@mod`** with a remainder of the other sign (346 cases): the backend computes
+  `r = fmod(a, b)` and adds `b` once when `r` and `b` differ in sign; the model is the LLVM
+  lowering `rem(rem(a, b) + b, b)`. They differ when `r + b` rounds to `b`. The translator
+  rejects a float `@mod` on a `stage2_x86_64` profile (`CheckCtx.checkStage2Backend`).
+- **a signed packed-union field** narrower than a register (173 cases): a native probe
+  (Zig 0.16.0 and 0.17.0; widths 1, 2, 3, 4, 7, 12, 20, 24, 33, 48 and 63 diverge, 8, 16, 32
+  and 64 do not) shows that the backend does not sign-extend a signed field of a
+  `packed union` whose width is not 8, 16, 32 or 64 bits (`i4` `-8` reads as `8`,
+  also through `@as(i64, ...)` and `< 0`), while packed struct fields and `@bitCast` are
+  correct. The translator rejects such a read (or a pointer to the field, or a signed enum
+  tag field) on a `stage2_x86_64` profile.
+- **f80 `@min`/`@max` of signed zeros** (2 cases): the model leaves the sign of the zero
+  unspecified on every target since [PR143](https://github.com/riventic/air2lean/pull/143).
 
-`examples/asm` does not compile with `-fno-llvm -mcpu=baseline` (the backend cannot encode
-the `lzcnt` and `popcnt` inline asm), so it is excluded from these runs. The ReleaseSmall
-`-fno-llvm` harness binaries die with SIGBUS at start under the emulated container. That
-cannot be told from an emulator problem, so the pair has no run.
+`tests/roadmap/build-modes/stage2-air/<version>/` holds the patched compilers' self-hosted
+exports of the reproducer's `modF16` and `setNib` (0.16.0, 0.17.0); `stage2_rules.py` checks
+that both are rejected under their profile and accepted when the profile names stage2_llvm.
+
+A stage2_x86_64 run tests the backend's own translation. `scripts/build-mode-docker.sh` first
+runs `scripts/stage2-translations.py`: each example is exported by the patched compiler with
+`-fno-llvm -target x86_64-linux-gnu -mcpu=baseline` and translated under that stage2_x86_64
+profile. An accepted translation must equal the committed one that the run's Lean side builds
+(compared after the profile header); a different one fails the run. A rejected example (0.16.0:
+`floatops`, `layout`) is left out with its diagnostics in the run record's `excluded_examples`,
+as is `examples/asm`, which the backend cannot compile at `-mcpu=baseline` (it cannot encode
+the `lzcnt` and `popcnt` inline asm). For every other example the stage2_x86_64 translation is
+the committed translation, so the runs compare the stage2 binary with its own model.
+
+### Fresh inputs
+
+The committed inputs (`tests/diff/<ex>/inputs/`) are fixed: edge values plus values from one PRNG
+seed (`tests/diff/input_seed.zig`). `scripts/fresh-inputs.sh SEED SUMMARY` tests other inputs: in
+a check tree it writes SEED to `input_seed.zig`, regenerates the inputs with
+`tests/diff/gen_inputs.zig`, and runs `scripts/diff.sh` on every example of this host whose inputs
+changed. The per-input exclusion pins name the committed inputs, so in this mode
+(`AIR2LEAN_DIFF_FRESH_INPUTS`, `diff-report.py --fresh-inputs`) a model `.illegal` or
+`.unspecified` result is an exclusion on any input, never a match, and no pin is checked; a
+value, returned-error or panic disagreement is a mismatch and fails the run. The summary records
+`fresh_input_seed`, so a failure reproduces from the seed. An example with per-input pins on the
+host (`unspecified.<host>.txt`, else `unspecified.txt`) is not re-tested: its pins stand for
+classes where the model and the native run do not agree by value (on x86_64-linux, x87 `f80`
+pseudo and invalid encodings in `floatops`; data races in `threads`), and a fresh input of such a
+class has no pin (on x86_64-linux in a `linux/amd64` container, seed `0xd477d9590eede18`
+gave `floatops.op80` mismatches in exactly those classes before this rule).
+
+CI runs it on every commit of the 0.16.0 full golden row with a seed taken from the commit hash
+(`Differential test on fresh inputs`), so each commit is tested on inputs no earlier commit
+saw. The claim stays bounded: agreement on the inputs that were run, never on all inputs.
 
 ## Changed semantics
 
@@ -217,5 +256,3 @@ In CI, the 0.16.0 full job runs Debug, ReleaseFast and ReleaseSmall on LLVM with
 `scripts/diff.sh` and `build-modes.py record --verify`, which compares the fresh run with
 the committed x86_64-linux record.
 
-To qualify a stage2_x86_64 pair, fix or model the findings, then rerun the pair on a
-native x86_64-linux host.

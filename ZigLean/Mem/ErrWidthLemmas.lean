@@ -717,6 +717,32 @@ theorem intFromErrorW_errorFromIntW {bits : Nat} (t : ErrorTable) (ht : t.fits b
     exact Nat.mod_eq_of_lt c.isLt
   · cases h
 
+/-! ### The translated casts (`intFromErrorIn`, `errorFromIntIn`, L10)
+
+A translation's `errorTable` is the exporter's numbering; the translator checked that it names
+each error once and fits the width, which a client discharges by `decide` on the concrete
+table. -/
+
+/-- The translated `@intFromError` of a numbered error is a valid code of that error: nonzero,
+at most the error count, and the code the unchecked `error_from_int` maps back to the error. -/
+theorem intFromErrorIn_spec {bits : Nat} (names : Array ErrName) (hnd : names.toList.Nodup)
+    (ht : names.size ≤ errCapacity bits) {e : ErrName} (he : e ∈ names) :
+    ∃ c : BitVec bits, intFromErrorIn bits names e = pure c ∧ 0 < c.toNat ∧
+      c.toNat ≤ names.size ∧ errorFromIntIn names c = pure e := by
+  obtain ⟨c, hc, h0, hle, hget⟩ := intFromErrorW_spec ⟨names, hnd⟩ ht he
+  simp only at hle hget
+  refine ⟨c, hc, h0, hle, ?_⟩
+  rw [Array.getElem?_eq_getElem (by omega)] at hget
+  simp only [errorFromIntIn, h0, hle, and_self, dite_true]
+  simp only [Option.some.injEq] at hget
+  rw [hget]
+
+/-- The unchecked `error_from_int` of a valid code is the error of that code. -/
+theorem errorFromIntIn_valid {bits : Nat} (names : Array ErrName) (c : BitVec bits)
+    (h0 : 0 < c.toNat) (hle : c.toNat ≤ names.size) :
+    errorFromIntIn names c = pure names[c.toNat - 1] := by
+  simp [errorFromIntIn, h0, hle]
+
 /-- The zero code is no error. -/
 theorem errorFromIntW_zero (bits : Nat) (t : ErrorTable) :
     errorFromIntW bits t 0 = throw .panic := by

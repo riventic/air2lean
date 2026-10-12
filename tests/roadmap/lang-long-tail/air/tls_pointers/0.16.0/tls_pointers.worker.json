@@ -1,0 +1,723 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "tls_pointers.worker",
+ "module": "root",
+ "src": {
+  "file": "tls_pointers.zig",
+  "module": "tls_pointers",
+  "decl_line": 22
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 3,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "ty": 3,
+     "val": "40"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 5
+    },
+    {
+     "ty": 5,
+     "null": true
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "mine"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 32
+  },
+  {
+   "id": 9,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 6,
+    "func": "tls_pointers.currentValue",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": []
+  },
+  {
+   "id": 10,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    }
+   ],
+   "name": "before"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 12,
+   "tag": "runtime_nav_ptr",
+   "ty": 4,
+   "global": 0
+  },
+  {
+   "id": 13,
+   "tag": "bitcast",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 20
+  },
+  {
+   "id": 16,
+   "tag": "mul_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "ty": 3,
+     "val": "1000"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 41
+  },
+  {
+   "id": 18,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 6,
+    "func": "tls_pointers.currentValue",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": []
+  },
+  {
+   "id": 19,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 27
+  },
+  {
+   "id": 20,
+   "tag": "add_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 16
+    },
+    {
+     "inst": 18
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "runtime_nav_ptr",
+   "ty": 7,
+   "global": 1
+  },
+  {
+   "id": 22,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 52
+  },
+  {
+   "id": 23,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 23
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 24
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 44
+  },
+  {
+   "id": 27,
+   "tag": "add_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 20
+    },
+    {
+     "inst": 25
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "tag": "runtime_nav_ptr",
+   "ty": 8,
+   "global": 2
+  },
+  {
+   "id": 29,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 79
+  },
+  {
+   "id": 30,
+   "tag": "ptr_slice_len_ptr",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 28
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "tag": "load",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 30
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 66
+  },
+  {
+   "id": 33,
+   "tag": "intcast_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 31
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 55
+  },
+  {
+   "id": 35,
+   "tag": "add_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 27
+    },
+    {
+     "inst": 33
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 35
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 5
+  },
+  {
+   "id": 38,
+   "tag": "runtime_nav_ptr",
+   "ty": 4,
+   "global": 0
+  },
+  {
+   "id": 39,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 38
+    },
+    {
+     "ty": 5,
+     "null": true
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "ret_safe",
+   "ty": 11,
+   "args": [
+    {
+     "ty": 1,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "tls_pointers.current",
+   "module": "root",
+   "ty": 5,
+   "const": false,
+   "threadlocal": true,
+   "extern": false,
+   "init": {
+    "ty": 5,
+    "null": true
+   }
+  },
+  {
+   "name": "tls_pointers.cursor",
+   "module": "root",
+   "ty": 2,
+   "const": false,
+   "threadlocal": true,
+   "extern": false,
+   "init": {
+    "ty": 2,
+    "ptr": {
+     "global": 3,
+     "off": 0
+    }
+   }
+  },
+  {
+   "name": "tls_pointers.name",
+   "module": "root",
+   "ty": 12,
+   "const": false,
+   "threadlocal": true,
+   "extern": false,
+   "init": {
+    "ty": 12,
+    "slice_ptr": {
+     "ty": 13,
+     "ptr": {
+      "global": 4,
+      "off": 0
+     }
+    },
+    "slice_len": {
+     "ty": 10,
+     "val": "4"
+    }
+   }
+  },
+  {
+   "name": "tls_pointers.shared",
+   "module": "root",
+   "ty": 14,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 14,
+    "elems": [
+     {
+      "ty": 3,
+      "val": "5"
+     },
+     {
+      "ty": 5,
+      "null": true
+     }
+    ]
+   }
+  },
+  {
+   "ty": 15,
+   "const": true,
+   "init": {
+    "ty": 15,
+    "elems": [
+     {
+      "ty": 16,
+      "val": "109"
+     },
+     {
+      "ty": 16,
+      "val": "97"
+     },
+     {
+      "ty": 16,
+      "val": "105"
+     },
+     {
+      "ty": 16,
+      "val": "110"
+     },
+     {
+      "ty": 16,
+      "val": "0"
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 2,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn () u32"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 16,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": true,
+   "child": 16,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "tls_pointers.Node",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "v",
+     "ty": 3,
+     "offset": 8
+    },
+    {
+     "name": "next",
+     "ty": 5,
+     "offset": 0
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 16,
+   "sentinel": true,
+   "abi_size": 5,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

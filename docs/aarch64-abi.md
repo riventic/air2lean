@@ -110,9 +110,6 @@ starts to match (the list is stale) or if an unlisted case diverges.
 | --- | --- | --- |
 | `isnan(f80 unnormal)` | `false`: compiler_rt soft f80 treats it as a number | `true` (x87 and `Float.classify`) |
 | `f80 pseudo-denormal + 0` | encoding kept (`0000_8000…`) | normalized (`0001_8000…`) |
-| `u24` cmpxchg, padding byte `ff` | **fails**, although the 24-bit values are equal | succeeds |
-| `u40` cmpxchg, padding bytes `ff` | **fails**, although the 40-bit values are equal | succeeds |
-| `i24` and `i40` `@atomicRmw` `Max`, negative cell and positive operand | **keeps the negative cell**: not the signed maximum | the signed maximum |
 
 The model allows `unnormal + 0` itself, because it classifies the returned unnormal as a NaN.
 The divergence shows up in `isnan`.
@@ -123,21 +120,34 @@ of `f80` and `f128` is correct to `f64` precision only (`sqrt(2)` = `3fff b504f3
 lists them for those versions only; otherwise the 0.15.2 and 0.14.1 files equal the 0.16.0
 files line for line (apart from `meta zig`).
 
-The signed `Max` row is an unsound corner of the model: the model's `RmwOp.apply` is the
-signed maximum, and the native result of a padded signed width (`i24`, `i40`) is not. `Min` and
-the unpadded widths (`i8`, `i64`, `i128`) agree. The translator rejects `.Max` and `.Min` on a
-padded width (`CheckCtx.checkPaddedAtomic`, diagnostic `PADDED_ATOMIC`).
+### Padded-width atomics: rejected, not declared
 
-The cmpxchg rows are a synchronization boundary. Zig widens a `u24`/`u40` atomic to its
-4-/8-byte ABI cell and compares the whole cell, padding included. A plain store writes only
-the value bytes. The model leaves padding undefined and compares only the value bits. So
-the model's strong cmpxchg claim is not valid for widths with whole padding bytes (`u24`,
-`u40`, `u48`, `u56`, `u65`…`u120`). The translator rejects a `cmpxchg` on them
-(`PADDED_ATOMIC`). The LLVM IR that Zig 0.16.0
-emits shows the mechanism: `store i40` for the plain store, and `cmpxchg ptr, i64, i64` for
-the atomic. The widening comes from Zig's frontend lowering, so other targets probably behave
-the same way. This has been observed only on aarch64. Widths without padding (`u8`,
-`u16`, `u32`, `u64`, `u128`) match on both profiles, with either padding.
+A `cmpxchg` or an `@atomicRmw` `.Max`/`.Min` on an integer representation with padding bits
+(bit width other than `8 * @sizeOf`: `u7`, `i12`, `u24`, `i40`, an `enum(u24)`, a packed struct
+backed by `u40`) is outside the subset on every target and version: the translator rejects it
+(`CheckCtx.checkPaddedAtomic`, diagnostic `PADDED_ATOMIC`,
+[upstream draft](upstream/padded-rmw-minmax.md)). Zig lowers these to an LLVM atomic on the whole
+ABI cell, so the padding bits take part: a `cmpxchg` fails on equal values when the padding is
+not what the compiler expects, and a signed `.Max`/`.Min` orders a negative cell as a large
+unsigned value. Loads, stores, `.Xchg` and the arithmetic and bitwise RMWs stay in the subset:
+their results are masked, and they only write the padding, which the model leaves undefined.
+
+`Model.lean` therefore does not declare these rows. A diverging result line is accepted, and
+printed as `rejected by the translator (PADDED_ATOMIC, not a match)`, only when it is a
+`cmpxchg` or `.Max`/`.Min` of a padded type (`rejectedByTranslator`); for an `atomic` row, only
+its `cmpxchg` may differ, and every later result must follow from the cell the failed
+`cmpxchg` left (`paddedAtomicCase`). Any other divergence of an atomic row fails the check. Up to
+0.16.0 the `atomic u24`/`u40` `padff` rows (cmpxchg with padding byte `ff`) and the
+`rmw i24`/`i40` `Max` rows (negative cell, positive operand) diverge on both profiles, and are
+classified this way.
+
+A wider native probe (Zig 0.14.1 to 0.17.0 on aarch64-macos) shows that the rule must cover every
+padded width, not only whole padding bytes: on 0.14.1 to 0.16.0 a signed `.Max` diverges for
+`i7`, `i12`, `i40`, `i48` and `i56` as well, an unsigned `.Min` for `u24`, `u48` and `u56`, a
+`cmpxchg` with `ff` padding for `u24` to `u56`, and on every version including 0.17.0 a
+`cmpxchg` after an `.Add` that carried into the padding fails for `u7`, `u12`, `u24`, `u40`,
+`u48` and `u56`. All of these are padded `cmpxchg`/`.Max`/`.Min` operations, which the translator
+rejects; widths without padding (`u8` to `u64`, `i8` to `i64`) agree with the model everywhere.
 
 ### Zig 0.17.0
 
@@ -148,8 +158,8 @@ The 0.17.0 files (recorded with the stock 0.17.0: natively on Apple silicon, and
 | --- | --- | --- |
 | `float f80` (and `float f128` on aarch64-macos-none, where it is not `c_longdouble`) | alignment 8 | 16 |
 | `vector f80x2` | alignment 8; the second lane's image is not `Vec.packedEnc`'s | 32, bit-packed |
-| `atomic u24`/`u40` `padff` | cmpxchg succeeds | succeeds (no longer a divergence) |
-| `rmw i24`/`i40` `Max` | the signed maximum | the signed maximum (no longer a divergence) |
+| `atomic u24`/`u40` `padff` | cmpxchg succeeds | succeeds (no padded-width row diverges) |
+| `rmw i24`/`i40` `Max` | the signed maximum | the signed maximum |
 
 `Model.lean` declares the layout rows as 0.17.0 divergences (`layoutDivergences017`): the file
 must record alignment 8 there and the model's table elsewhere, and the CI step compares the

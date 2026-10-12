@@ -1174,6 +1174,18 @@ theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat ×
   · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
     simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
 
+/-- External storage at program start (L12): after the program's globals `gs`, block
+`gs.length + i` is the external block `ext[i]`, live, with its bytes and alignment, read-only
+unless it is writable. -/
+theorem Mem.ofGlobals_extern (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (ext : List ExternBlock) (i : Nat) :
+    (Mem.ofGlobals σ (gs ++ ext.map ExternBlock.global)).blocks[gs.length + i]? = ext[i]?.map fun b =>
+      { bytes := b.bytes, align := b.align, kind := if b.writable then .global else .constGlobal,
+        live := true, addr := Mem.globalAddr σ (gs ++ ext.map ExternBlock.global) (gs.length + i) } := by
+  rw [Mem.ofGlobals_getElem?, List.getElem?_append_right (by omega)]
+  simp only [Nat.add_sub_cancel_left, List.getElem?_map, Option.map_map]
+  rfl
+
 /-- A block at program start is aligned: its address is a multiple of its alignment, under every
 placement. -/
 theorem Mem.ofGlobals_addr_mod {σ : Placement} {gs : List (Array Byte × Nat × BlockKind)} {j : Nat}

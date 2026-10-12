@@ -1,0 +1,4 @@
+perThread 4901
+mainOnly 3 19
+mainOnly 100 116
+perThread 4901

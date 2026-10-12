@@ -743,4 +743,25 @@ theorem Vec.load_storeLane_vec {α : Type} {n w : Nat} [Packed α w]
   exact @load_run (Vec α n) (Vec.packedEnc n w Packed.toBits Packed.ofBits) _ _ _ _ _ _ _ ha
     (Vec.packedEnc_decode _ _ hround _ hpre) hr
 
+/-! ## Runtime-index lane stores and float lanes (L09) -/
+
+/-- A runtime-index lane store (`vector_store_elem`, Zig 0.14.1/0.15.2) inside the vector is the
+store through the comptime lane pointer of that lane: the theorems on `storeLane` above
+(`Vec.storeLane_vec`, `Vec.load_storeLane_vec`) apply to it. -/
+theorem storeLaneAt_lt {α : Type} {w : Nat} [Packed α w] {lanes hostSize align : Nat} {p : Ptr}
+    {i : BitVec 64} (v : α) (h : i.toNat < lanes) :
+    storeLaneAt lanes hostSize align p i v = storeLane hostSize align (i.toNat * w) p v := by
+  simp [storeLaneAt, h]
+
+/-- An index past the lanes is illegal behaviour (a safe build panics before the store). -/
+theorem storeLaneAt_ge {α : Type} {w : Nat} [Packed α w] {lanes hostSize align : Nat} {p : Ptr}
+    {i : BitVec 64} (v : α) (h : lanes ≤ i.toNat) :
+    storeLaneAt lanes hostSize align p i v = throw .illegal := by
+  simp [storeLaneAt, Nat.not_lt.mpr h]
+
+/-- A float lane is its bits: decoding the bits of a float gives it back, the round trip that
+the lane theorems above take (`hround`). -/
+theorem Packed.float_round {fmt : FloatFmt} (y : Float fmt) :
+    (Packed.ofBits (Packed.toBits y) : Float fmt) = y := rfl
+
 end Zig

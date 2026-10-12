@@ -198,7 +198,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     -- A lane pointer's host is the vector's integer bytes (`Zig.loadLane`), of any count.
     if l.hostSize != 0 then
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
-      let some bits := packedBits types child
+      -- A lane pointer's lane may also be a float (its bits, `Zig.Packed (Float fmt)`, L09).
+      let some bits := packedBits types child <|>
+          (if l.laneBitPtr then (types[child]?).bind laneBits? else none)
         | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
             `bool`, a float, an enum, a packed struct, a packed union or a vector of these is \
             outside the subset"
@@ -615,6 +617,20 @@ structure CheckCtx where
   sentinelChecked : Array InstId := #[]
   /-- `Func.allocatorModel` (`--allocator-model`). -/
   allocatorModel : AllocatorModel := .std
+  /-- `Func.errorTable`: the compilation's error numbering, if the exporter wrote one. -/
+  errorTable : Option (Array String) := none
+
+/-- The compilation's error numbering is present and fits the `bits`-bit error integer: every
+integer/error cast and errors_len check needs it (L10, `docs/air-json.md` §Error table). -/
+def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Nat) (what : String) :
+    Except String Unit := do
+  let some names := table
+    | throw s!"{fnName}: {what} needs the compilation's error numbering, which the AIR export \
+        lacks (`error-table.air2lean`, written by the patched compiler after analysis; \
+        docs/air-json.md §Error table)"
+  unless names.size ≤ Zig.errCapacity bits do
+    throw s!"{fnName}: the error numbering has {names.size} errors, more than the \
+      {Zig.errCapacity bits} codes of the {bits}-bit error integer"
 
 /-- The profile's `error_set_bits` (`Dialect.errorSetBits`); 16 in a bare context. -/
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
@@ -813,6 +829,50 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
     cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
       (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
       width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+
+/-- The constructs whose native code under the self-hosted x86_64 backend (`stage2_x86_64`,
+Zig 0.16.0 and 0.17.0) differs from the model on legal inputs (`docs/build-modes.md`
+§stage2_x86_64, `tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig`); on a
+`stage2_x86_64` profile they are outside the subset. Every other backend is unaffected.
+
+* A read of a signed integer field (or a signed enum tag) of a `packed union` whose width is not a
+  register width (8, 16, 32, 64 bits), by `struct_field_val` or through a field pointer: the
+  backend does not sign-extend it (`i4` `-8` reads as `8`, also through `@as(i64, ...)` and
+  `< 0`). Packed struct fields and `@bitCast` are sign-extended correctly.
+* A float `@mod`: the backend computes `r = fmod(a, b)` and adds `b` once when `r` and `b` differ
+  in sign, where the model is the LLVM lowering `rem(rem(a, b) + b, b)`; they differ when
+  `r + b` rounds to `b` (`@mod(-2^-24, 1.0)` in `f16`: `1.0` against `0`). -/
+def CheckCtx.checkStage2Backend (cx : CheckCtx) (line : Nat) (op : Op) :
+    Except String Unit := do
+  unless (cx.dialect.map (·.backend)) == some "stage2_x86_64" do return
+  if let .div .mod a _ := op then
+    let isFloat := match (cx.valTy? a).bind (cx.types[·]?) with
+      | some (.float _) => true
+      | some (.vector _ lane) => match cx.types[lane]? with | some (.float _) => true | _ => false
+      | _ => false
+    if isFloat then
+      cx.fail line "a float `@mod` is outside the stage2_x86_64 profile: the self-hosted x86_64 \
+        backend adds the divisor once to a remainder of the other sign, where the model is the \
+        LLVM lowering `@rem(@rem(a, b) + b, b)`; they differ when that sum rounds to the divisor"
+  let (union?, idx) := match op with
+    | .structFieldVal s idx => (cx.valTy? s, idx)
+    | .fieldPtr b idx => ((cx.valTy? b).bind (ptrChild cx.types), idx)
+    | _ => (none, 0)
+  let some u := union? | return
+  let some (.union name "packed" _ fields) := cx.types[u]? | return
+  let some (field, fty) := fields[idx]? | return
+  let signedBits? : Option Nat := match cx.types[fty]? with
+    | some (.int true bits) => some bits
+    | some (.enum _ tag _ _) => match cx.types[tag]? with
+      | some (.int true bits) => some bits
+      | _ => none
+    | _ => none
+  if let some bits := signedBits? then
+    unless [8, 16, 32, 64].contains bits do
+      cx.fail line s!"a read of the signed {bits}-bit field '{field}' of packed union '{name}' is \
+        outside the stage2_x86_64 profile: the self-hosted x86_64 backend does not sign-extend it \
+        (it reads a negative value as a large positive one); use the LLVM backend or a field of \
+        8, 16, 32 or 64 bits"
 
 /-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
 (`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
@@ -1212,6 +1272,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkStage2Backend line op
   cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with
@@ -1278,7 +1339,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let sourceTy := cx.valTy? a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
-      cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
+      -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
+      -- compilation's numbering, which the exporter writes after analysis.
+      let intSide := if isError (cx.types[ty]?) then sourceTy.bind (cx.types[·]?) else cx.types[ty]?
+      unless intSide == some (.int false cx.errBits) do
+        cx.fail line s!"an integer/error cast to or from a type other than the error integer \
+          u{cx.errBits} is outside the subset"
+      checkErrorTable cx.fnName cx.errorTable cx.errBits "an integer/error cast"
+      return line
     if let some aty := sourceTy then
       let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
       -- Duplicate finite error-union IDs preserve the same symbolic decoder only
@@ -1822,6 +1890,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
       | _ => pure ()
     pure line
+  | .vectorStoreElem vptr idx v =>
+    -- Zig 0.14.1/0.15.2 `v[i] = x` with a runtime index (L09): the lane store at bit `i * w` of
+    -- the bit-packed vector (`Zig.storeLaneAt`), with the comptime lane pointers' evidence.
+    unless cx.dialect.any (·.lanePtrBitPtrs) do
+      cx.fail line s!"a runtime-index vector lane store is outside the subset, except into the \
+        bit-packed vector of a schema-12 profile of Zig \
+        {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
+    cx.memAccess line vptr
+    let pty ← cx.memPtrTy line vptr
+    let some (.vector _ e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+      | cx.fail line "`vector_store_elem` through a pointer that does not point to a vector"
+    unless (ptrChild cx.types pty).any fun vec => (cx.layouts[vec]?.map (·.packedLanes)).getD false do
+      cx.fail line "`vector_store_elem` into a vector without the bit-packed layout"
+    if ((cx.types[e]?).bind laneBits?).isNone then
+      cx.fail line "`vector_store_elem` into a vector of lanes other than integers, floats or `bool`"
+    unless (cx.valTy? idx).bind (cx.types[·]?) == some (.int false 64) do
+      cx.fail line "`vector_store_elem` with an index other than `usize`"
+    if v matches .undef _ then
+      cx.fail line "a store of `undefined` to a vector lane is outside the subset"
+    pure line
+  | .errorsLenLe a =>
+    unless (cx.valTy? a).bind (cx.types[·]?) == some (.int false cx.errBits) do
+      cx.fail line s!"the errors_len check of an operand other than the error integer u{cx.errBits}"
+    checkErrorTable fnName cx.errorTable cx.errBits "the `@errorFromInt` errors_len check"
+    pure line
   | .unionInit idx _ =>
     let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
     unless idx < fields.size do cx.fail line "`union_init` field index is out of range"
@@ -1919,10 +2013,15 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
       slice, vector or packed struct"
 
 /-- A shared budget proves absence of embedded pointer capabilities, including
-inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
-private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
+inactive optional payload types. Unknown types, cycles and exhausted work fail closed.
+`dataPtrs`: a pointer to data (not a function, whose value must be an address-taken function,
+M20) counts as a leaf, its bytes a `Zig.Ptr` (`extern` storage, `checkExternGlobal`). -/
+private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) (dataPtrs := false) :
+    Option Nat := do
   if fuel == 0 then none
   let ty ← f.types[root]?
+  if let .ptr _ _ child := ty then
+    return ← if dataPtrs && !(f.types[child]?.map isFnTy).getD true then some (fuel - 1) else none
   let count ← match ty with
     | .int .. | .float .. | .bool | .void | .errorSet (some _) => some 0
     | .array .. | .vector .. | .optional .. | .enum .. => some 1
@@ -1934,7 +2033,7 @@ private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Op
   if count > remaining then none
   let children := childTys ty
   for child in children do
-    remaining ← pointerFreeInitializerType f child remaining
+    remaining ← pointerFreeInitializerType f child remaining dataPtrs
   return remaining
 
 /-- Complete constructor values whose typed encoding contains no `errFrag`.
@@ -2279,12 +2378,7 @@ private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
   | .inst id => (insts.find? (·.id == id)).map (·.ty)
   | _ => v.constTy?
 
-private partial def carriesPointer (f : Func) (ty : TyId) (fuel : Nat := 256) : Bool :=
-  if fuel == 0 then true else
-  match f.types[ty]? with
-  | some (.ptr ..) => true
-  | some ty => (childTys ty).any fun child => carriesPointer f child (fuel - 1)
-  | none => true
+private def carriesPointer (f : Func) (ty : TyId) : Bool := tyHoldsPtr f.types ty
 
 /-- Bounded local expression dependencies, including block result branches and pointer
 initializers. This is not an interprocedural/general pointer provenance analysis. -/
@@ -2501,42 +2595,62 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     if pa > ga then throw (alignment pa ga)
 
 /-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
-field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
-error-free type whose bytes the model encodes qualifies. -/
+field of `ExternInit` (`docs/generated-code.md` §Globals). A named, error-free, union-free
+type whose bytes the model encodes qualifies. It may hold data pointers (L12): their initial
+values are `Zig.Ptr`s of `ext`, which can point into the external blocks `ext.storage` that
+`mem0` adds after the program's globals, into a program global, or nowhere. A function pointer
+is rejected (an indirect call dispatches on the address-taken functions of the program, M20),
+and so is a pointer-bearing `extern` in a program with error-bearing globals: the finite
+error-storage fragment tracks every pointer into those (`dependsOnErrorGlobal`). -/
 private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `extern` global {what}: {why}; external initial state is an explicit \
-      `ExternInit` parameter of `mem0` only for named, pointer-free, error-free storage"
+      `ExternInit` parameter of `mem0` only for named, error-free, union-free storage"
   if g.name.isNone then fail "it has no name"
   if g.init.isSome then fail "the AIR file gives it an initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  if (pointerFreeInitializerType f g.ty 1024 (dataPtrs := true)).isNone then
+    fail "its type can hold a function pointer, a union or an unresolved type"
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  if carriesPointer f g.ty && f.globals.any (fun g => hasErrorStorage f.types g.ty) then
+    fail "it holds a pointer, and the program has error-bearing globals"
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- A `threadlocal var` (`docs/generated-code.md` §Thread-local storage): one instance per
-thread, initialized from the global's initial value. Only a named, non-`extern` `var` with a
-resolved, wholly defined or wholly `undefined` initial value of a pointer-free, error-free type
-that the model encodes qualifies. -/
+thread, initialized from the global's initial value. A named, non-`extern` `var` with a
+resolved, wholly defined or wholly `undefined` initial value of an error-free type that the
+model encodes qualifies. Its type may hold pointers (`Io.Threaded`'s `Thread.current: ?*Thread`,
+L12): every thread's instance starts with the same initial bytes, so a pointer in the initial
+value must name storage that is the same in every thread, an ordinary global or a function, as
+for any global initializer (`checkGlobal`); a pointer into a `threadlocal` global is rejected
+by `checkNoThreadlocalConstant`. -/
 private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
   let fail (why : String) : Except String Unit :=
     throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
-      only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
-      storage"
+      only for a named, non-`extern` `var` with an initial value in error-free storage"
   if g.name.isNone then fail "it has no name"
   if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
   if g.isConst then fail "it is `const`"
   let some init := g.init | fail "the AIR file has no initial value"
   if init.hasNestedUndef then fail "a partly `undefined` initial value"
   if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
-  if (pointerFreeInitializerType f g.ty 1024).isNone then
-    fail "its type can hold a pointer, a union or an unresolved type"
+  -- The finite error-storage fragment tracks error-bearing storage per global block; a
+  -- thread-local instance is a block per thread.
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
   checkNullConstants f.name f.types f.layouts init
+  checkGlobalAliasConstants f init
+  checkLlvmPayloadConstants f init
+  -- As for an ordinary global (`checkGlobal`): the finite error-storage fragment tracks every
+  -- pointer into an error-bearing global (`dependsOnErrorGlobal`).
+  if f.globals.any (fun g => hasErrorStorage f.types g.ty) && carriesPointer f g.ty &&
+      dependsOnErrorGlobal f f.allInsts init then
+    fail "its initial value retains a pointer into an error-bearing global"
+  checkPointerPresence f init fun k =>
+    s!"{f.name}: `threadlocal` global {what}: a pointer constant without a global ({k}) is \
+      outside the subset"
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- The globals that the pointer constants of `v` point into, at any depth. -/
 partial def Val.ptrGlobals (v : Val) : Array Nat :=
@@ -2812,12 +2926,15 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
   -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
   -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
-  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
-  -- does not export the compilation's error count, so no code is known to stay below that bit.
-  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) then
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). The
+  -- export bounds the codes only with the compilation's error numbering
+  -- (`error-table.air2lean`, L10): every code is below that bit when the error count is.
+  let codesBelowSignBit := f.errorTable.any (·.size < 2 ^ (f.errorSetBits - 1))
+  if f.dialect.version.errorNameSignExtends && insts.any (·.op.isErrorName) && !codesBelowSignBit then
     throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
       error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
-      compilation's error codes; use Zig 0.15.2 or later"
+      compilation's error codes below it (no error-table.air2lean, or too many errors); use Zig \
+      0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2867,7 +2984,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
                          device, sentinelChecked := sentinelCheckedSlices insts,
-                         allocatorModel := f.allocatorModel }
+                         allocatorModel := f.allocatorModel, errorTable := f.errorTable }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -4250,7 +4367,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     localPaths := localPlacePaths f.types f.layouts insts
     device
     sentinelChecked := sentinelCheckedSlices insts
-    allocatorModel := f.allocatorModel }
+    allocatorModel := f.allocatorModel
+    errorTable := f.errorTable }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

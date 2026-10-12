@@ -323,6 +323,7 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      let errorTable ← readErrorTable a.airDir
       let models ← match a.modelRegistry with
         | none => pure #[]
         | some path =>
@@ -356,7 +357,7 @@ private def run (args : List String) : IO UInt32 := do
             let (normalized, normalizeNs) ← timed fun _ => (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              normalize raw : Except String Func)
+              withErrorTable (← normalize raw) errorTable : Except String Func)
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"

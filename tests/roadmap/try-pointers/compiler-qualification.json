@@ -10,7 +10,7 @@
   "exporter": {
     "compiler": "patched AIR-only Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (scripts/zig-air.sh, aarch64-macos host); the 0.16.0 export was first made with zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99 and is byte-identical with the current exporter",
     "zig_patch_json_zig": "zig-patch/air-json/json.zig of the soundness-wave-3 tree (rebuilt after merging main)",
-    "json_zig_sha256": "eb698912de78be2afd6412fbb0e5d5c58a95987f6d31a295bc148f7f0129d4e4",
+    "json_zig_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
     "install": "built by zig-patch/build.sh from that tree"
   },
   "export_command": "ZIG_AIR_JSON_FILTER=<try_pointers.|try_aliases.> zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",

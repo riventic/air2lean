@@ -72,10 +72,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"),
   (#["legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call"],
     "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
-  (#["vector_store_elem"],
-    "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"),
-  (#["cmp_lt_errors_len", "cmp_lte_errors_len"],
-    "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"),
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
@@ -357,6 +353,11 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy true a b
   | "tag_name" => let a ← arg1 fnName raw; return .tagName a
   | "error_name" => let a ← arg1 fnName raw; return .errorName a
+  | "cmp_lt_errors_len" | "cmp_lte_errors_len" => let a ← arg1 fnName raw; return .errorsLenLe a
+  | "vector_store_elem" =>
+    let [p, i, v] := raw.args.toList
+      | throw s!"{fnName}: inst {raw.id}: 'vector_store_elem' needs 3 args"
+    return .vectorStoreElem p i v
   | "struct_field_val" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -474,7 +475,8 @@ def decodedTags : Array String := #[
   "atomic_store_release", "atomic_store_seq_cst", "atomic_rmw", "cmpxchg_weak", "cmpxchg_strong",
   "slice_len", "slice_elem_val", "ptr_add", "ptr_sub", "ptr_elem_ptr", "slice_elem_ptr",
   "ptr_elem_val", "array_elem_val", "slice", "slice_ptr", "array_to_slice", "ptr_slice_len_ptr",
-  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name",
+  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name", "cmp_lt_errors_len", "cmp_lte_errors_len",
+  "vector_store_elem",
   "struct_field_val", "aggregate_init", "block", "dbg_inline_block", "loop", "br", "repeat",
   "cond_br", "switch_br", "loop_switch_br", "switch_dispatch", "try", "try_cold", "try_ptr",
   "try_ptr_cold", "ret", "ret_safe", "unreach", "trap", "dbg_stmt", "dbg_var_ptr", "dbg_var_val",
@@ -524,5 +526,23 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
+
+/-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any.
+Read by the translator and by `--diagnostics-json` alike. -/
+def readErrorTable (dir : System.FilePath) : IO (Option Raw.ErrorTableFile) := do
+  let path := dir / Raw.errorTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseErrorTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- `f` with the compilation's numbering, which must be of its Zig version and error width. -/
+def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
+  | none => pure f
+  | some t => do
+    unless t.zigVersion == toString f.dialect.version && t.errorSetBits == f.dialect.errorSetBits do
+      throw s!"{f.name}: {Raw.errorTableFileName} is of Zig {t.zigVersion} with {t.errorSetBits}-bit \
+        errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
+    pure { f with errorTable := some t.names }
 
 end Air2Lean

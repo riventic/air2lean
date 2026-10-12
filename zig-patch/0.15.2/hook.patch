@@ -48,3 +48,14 @@
  
  /// Given any single pointer, retrieve a pointer to the payload of any optional
  /// or error union pointed to, initializing these pointers along the way.
+--- zig-0.15.2-pristine/src/Compilation.zig
++++ zig-0.15.2/src/Compilation.zig
+@@ -3099,6 +3099,8 @@
+     if (comp.zcu) |zcu| {
+         const pt: Zcu.PerThread = .activate(zcu, .main);
+         defer pt.deactivate();
++        // air2lean (zig-patch): the error numbering is final once analysis ends.
++        @import("Air/json.zig").dumpErrorTable(pt);
+ 
+         assert(zcu.cur_analysis_timer == null);
+ 
