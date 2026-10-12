@@ -3845,33 +3845,9 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
     if f.externs.isEmpty && codeRefs.isEmpty then
       out := out.push f
       continue
-    let mut renames : Std.HashMap String String := {}
-    let mut seen : Std.HashSet String := {}
-    let mut seenRefs : Std.HashSet String := {}
-    for (callee, symbol) in codeRefs do
-      if seenRefs.contains callee then continue
-      seenRefs := seenRefs.insert callee
-      -- The AIR global records no library: only a declared `externs` entry fixes it.
-      let declared := f.externs.find? (·.name == symbol)
-      let e : ExternDecl := declared.getD
-        { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
-      let reject (why : String) := unbound.push (f.name, externUnbound f.name e
-        s!"(its address is taken) {why}")
-      let definitions := exports.getD symbol #[]
-      if definitions.size > 1 then
-        unbound := reject "is defined by several functions (CALLEE_AMBIGUOUS)"
-      else if let some m := models.find? (·.symbol == callee) then
-        if let some target := definitions[0]? then
-          unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
-        else if let some binding := m.externBinding then
-          unless declared.isNone || binding.library == e.library do
-            unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
-        else throw s!"{f.name}: model '{m.symbol}' has no extern binding"
-      else if let some target := definitions[0]? then
-        renames := renames.insert callee target.name
-      else
-        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
-          registry model '{callee}' (--model-registry, docs/external-models.md)"
+    -- Each extern callee once: its direct calls (each checked against the declaration), then
+    -- the addresses taken (`codeRefs`), which have a declaration only if a call has one.
+    let mut callees : Array (String × String × Option String) := #[]
     for i in f.allInsts do
       let .call (.func callee ..) args := i.op | continue
       let some symbol := externSymbol? callee | continue
@@ -3880,9 +3856,18 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       -- The declaration must describe each call (a variadic one is rejected below).
       unless e.varargs || (args.size == e.params.size && i.ty == e.ret) do
         throw s!"{f.name}: inst {i.id}: the call of extern '{symbol}' does not match its 'externs' entry"
-      if seen.contains callee then continue
-      seen := seen.insert callee
-      let reject (why : String) := unbound.push (f.name, externUnbound f.name e why)
+      unless callees.any (·.1 == callee) do callees := callees.push (callee, symbol, none)
+    for (callee, symbol) in codeRefs do
+      unless callees.any (·.1 == callee) do
+        callees := callees.push (callee, symbol, some "(its address is taken) ")
+    let mut renames : Std.HashMap String String := {}
+    for (callee, symbol, note) in callees do
+      -- The AIR global of an address records no library or convention: only a declared
+      -- `externs` entry fixes them.
+      let declared := f.externs.find? (·.name == symbol)
+      let e : ExternDecl := declared.getD
+        { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
+      let reject (why : String) := unbound.push (f.name, externUnbound f.name e (note.getD "" ++ why))
       let definitions := exports.getD symbol #[]
       let names := ", ".intercalate (definitions.map (·.name)).toList
       if e.varargs then
@@ -3895,11 +3880,11 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         -- The linker would resolve the symbol to the program's own definition, not the model's.
         if let some target := definitions[0]? then
           unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
-        else unless binding.library == e.library do
+        else unless declared.isNone || binding.library == e.library do
           unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
       else if let some target := definitions[0]? then
         let cc := (target.exportDecl.map (·.cc)).getD ""
-        if cc == e.cc then renames := renames.insert callee target.name
+        if declared.isNone || cc == e.cc then renames := renames.insert callee target.name
         else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
           definition '{target.name}' has '{cc}'")
       else
@@ -4051,13 +4036,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
   -- a program with `noalias` parameters admits none (fail closed).
   if funcs.any (!·.noalias.isEmpty) then
     for f in funcs do
-      if f.allInsts.any fun i =>
-          ((i.op.asmAllowEntry? f.dialect.arch).map (!·.regions.isEmpty)).getD false then
+      if f.allInsts.any fun i => (i.op.asmAllowEntry? f.dialect.arch).any (!·.regions.isEmpty) then
         issues := issues.push { kind := .memory, function := f.name, message :=
           s!"{f.name}: an asm memory region (A01) in a program with `noalias` parameters is \
             outside the subset: the noalias analysis does not see the region accesses" }
-  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
-  if funcs.any (!·.noalias.isEmpty) then
+    -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
     let conc := concFunctions funcs
     for f in funcs do
       if !f.noalias.isEmpty && conc.contains f.name then

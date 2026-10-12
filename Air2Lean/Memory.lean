@@ -364,9 +364,7 @@ def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
 /-- An allowlisted asm op that runs in `Zig.MemM` (A01): an environment read (`Zig.Asm.envWord`,
 ASM-05) or a memory-region contract (`Zig.Asm.readRegion`/`writeRegion`, ASM-06). -/
 def Op.isMemAsm (arch : String) (op : Op) : Bool :=
-  match op.asmAllowEntry? arch with
-  | some e => e.semantics == .envRead || !e.regions.isEmpty
-  | none => false
+  (op.asmAllowEntry? arch).any fun e => e.semantics == .envRead || !e.regions.isEmpty
 
 /-- An op that only a function that uses memory has (`Effects.memoryOnly`). A call's std model
 depends on `--allocator-model` (`modelledStdFn`). -/
