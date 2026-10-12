@@ -229,11 +229,18 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   `(CVTable.dispatch t fns).alloc …` to the generated chain): `CTriple.tableCall`'s reading;
   a loop is `CTriple.loop` with its invariant, whose body `∀ s, CTriple (inv s) (body.run s) …`
   is again `fsym`;
-* a generated indirect call `if f == c₁ then x₁ else … else throw .illegal` is folded into
-  `callIndirect f [(c₁, x₁), …]` at its `if`, before its tests are rewritten (`callIndirect_fold_one`/`cons`)
-  and its arms' common continuation is pulled out (`pullIndirect`), so it is one command; with no
-  rule for it, the arm that the facts select is walked (`C.callIndirect_pos`/`_neg`), else both
-  cases.
+* a generated indirect call `if f == c₁ then x₁ else … else d` (`d` is `throw .illegal`, or the
+  environment's call `callC (extCall …)` of an open interface, `docs/interfaces.md`) is folded
+  into `callIndirect f [(c₁, x₁), …] d` at its `if`, before its tests are rewritten
+  (`callIndirect_fold_one`/`_ext`/`_cons`) and its arms' common continuation is pulled out
+  (`pullIndirect`), so it is one command; with no rule for it, the arm that the facts select is
+  walked (`C.callIndirect_pos`/`_neg`), else both cases, and with no arm left the last arm
+  (`C.callIndirect_nil`);
+* a `CTriple` rule's command is unfolded to the program's head and its projections of structure
+  values are reduced (`(env e).alloc f (c, n, k, ra)` to the generated `Ext.call0 f c n …`), so
+  the program's literal arguments unify as written; a raw natural literal that unification
+  assigns (`BitVec.ofNat 6 ?k =?= 3`) is a numeral again in the rule's pre- and postcondition
+  (`normNatLits`).
 
 Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
 

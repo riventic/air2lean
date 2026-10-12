@@ -5,7 +5,8 @@ Lean models. The API admits acyclic, fully checked signatures and uses `Zig.MemM
 external model, including models that preserve memory. Unknown calls still fail. A binding may
 also be reached through a function pointer (`&ext_visit` in a vtable or passed as a callback)
 and from a concurrent program when it declares a footprint; both are described in "Callback
-contracts (E02)" below. Noreturn calls and comptime worker targets stay outside the API. Built-in allocator/thread/clock recognition is
+contracts (E02)" below. Calls through an interface value that the caller supplies are opened by
+the registry's `interfaces` array ("Open interfaces (EXT-05)" below). Noreturn calls and comptime worker targets stay outside the API. Built-in allocator/thread/clock recognition is
 one typed table, `stdModels` in `Air2Lean/StdModels.lean`: each row is a qualified std name,
 its typed model (or rejection reason), its Zig-version qualification and its semantic
 dependencies (the `ZigLean` declarations its emitted term may use). The checker, emitter,
@@ -287,6 +288,30 @@ Negative tests:
 - `unknown_call_fails`: a dispatch with no known target always fails.
 
 The model gate checks this file after the Fill model (`callback.log`).
+
+### Open interfaces (EXT-05)
+
+A binding names one foreign symbol. An interface value that the caller passes in
+(`std.mem.Allocator`, `std.Random`, a user vtable struct, a bare callback type) has no symbol:
+its implementation is whatever the caller supplies. The registry's optional `interfaces` array
+opens such calls ([interfaces.md](interfaces.md)):
+
+```json
+"interfaces": [{"interface": "std.mem.Allocator", "struct": "mem.Allocator.VTable",
+                "contract": "Zig.Full.CAllocSpec", "premise": "EXT-05"}]
+```
+
+`struct` opens the type of every function-pointer field of that struct; `function` (exactly one
+of the two) opens one function type. A call through a pointer of an open type keeps its arms
+for the closure's own functions and ends in the environment's call (`Zig.extCall (Ext.call<i> f
+args)`, a field of the generated `class Ext`) instead of `throw .illegal`; every type that no
+entry opens keeps the closed arm byte for byte. `contract` is a Lean identifier recorded in the
+`-- air2lean-interfaces:` header for the report; the theorem that uses the call takes it as a
+hypothesis, and the claim lists premise EXT-05 (the only accepted `premise`). An entry that
+opens no call of the program, a struct without function-pointer fields, a type opened twice and
+`--proof-api` with an open interface are rejected. `tests/roadmap/interfaces` translates
+`examples/lists/lists.zig` (every allocator), a program mixing a closure allocator with the
+environment, and a `std.Random` client on all four Zig versions.
 
 ## Contract assumption report
 
