@@ -44,23 +44,6 @@ theorem pts_iff_region {v : T} {h : Heap} :
   ⟨fun ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ => ⟨bs, hs, hv, A, S, K, ha, hK, hb⟩,
     fun ⟨bs, hs, hv, A, S, K, ha, hK, hb⟩ => ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩⟩
 
-/-- An aligned part: byte `o` of an `a`-aligned address is `b`-aligned if `b` divides `a` and `o`. -/
-theorem mod_add_dvd {A x : Nat} (ha : (A + x) % a = 0) (hb : b ∣ a) (ho : b ∣ o) :
-    (A + x + o) % b = 0 :=
-  Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hb (Nat.dvd_of_mod_eq_zero ha)) ho)
-
-/-- A load of a `U` at byte `o` of a region whose bytes there decode to `v`. -/
-theorem TotalTriple.region_load {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o)
-    (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
-    TotalTriple (region q a bs) (Zig.load U b (q.add o)) (fun x => ⌜x = v⌝ ∗ region q a bs) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, ha, -, hbs⟩ := id hp
-  obtain ⟨_, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := q.add o) (k := o) (n := Enc.size U)
-    (a := b) hbs hm rfl hn hfit (mod_add_dvd ha hb ho)
-  refine ⟨v, _, hP, load_run hacc (by rw [hx]; exact hv) (noRace_of_singleThread hst.single _ _ _ _),
-    hd, ?_, sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-
 end Bytes
 
 namespace Full
@@ -70,16 +53,6 @@ open FAssn
 section Bytes
 
 variable {T U : Type} [Enc T] [Enc U] {q : Ptr} {a b o : Nat} {bs : Array Byte}
-
-theorem SizeFree.region (p : Ptr) (a : Nat) (bs : Array Byte) :
-    SizeFree (fun _ => none) (Zig.region p a bs) := by
-  intro h h' hp hn hE hco
-  obtain ⟨A, S, K, hal, hK, hb⟩ := hp
-  obtain ⟨A', S', K', ⟨hal', hK'⟩, hb'⟩ := SizeFree.bytesAt_ex (p := p) (bs := bs)
-    (φ := fun A _ K => (A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal)
-    (fun A S K S' K' ⟨h1, h2⟩ hk => ⟨h1, fun e => h2 (by subst e; cases K <;> simp_all [BlockKind.norm])⟩)
-    h h' ⟨A, S, K, ⟨hal, hK⟩, hb⟩ hn hE hco
-  exact ⟨A', S', K', hal', hK', hb'⟩
 
 /-- **The bytes view** of an owned typed value. -/
 theorem up_pts_iff {v : T} {r : Res} :
@@ -105,16 +78,21 @@ theorem FTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) 
     (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
       (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
-  (FTotalTriple.ofTotal_up (TotalTriple.region_load hn hb ho hfit hv) (Tame.load U b _)
-    (SizeFree.region q a bs) (Keeps.load U b _)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+    ⟨_, _, FTotalTriple.load_bytesAt hn hfit (mod_add_dvd ha hb ho) hv, ⟨hbs, hk, hg⟩,
+      fun _ _ h => by
+        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
+        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
 
 /-- **Store** of a `U` at byte `o` of a region. -/
 theorem FTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
       (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
-  FTotalTriple.ofTotal_up (Region.storeItem w hn hfit hb ho) (Tame.store b _ w)
-    (SizeFree.region q a bs) (Keeps.store b _ w)
+  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+    ⟨_, _, FTotalTriple.store_bytesAt w (by rw [LawfulEnc.size_encode]; exact hn)
+        (by rw [LawfulEnc.size_encode]; exact hfit) (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
+      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
 
 /-- `region_loadAt` at the offset `k` of generated code (`p.add 2`: an `Int` literal). -/
 theorem FTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)

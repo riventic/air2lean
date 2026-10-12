@@ -2294,7 +2294,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     intro r hr; rw [hth₂] at hr; exact joined_final n hi₁' hg₁ hJ4 r hr
   obtain ⟨⟨f0, hf0, hl0, -, hkf0, -⟩, ⟨f1, hf1, hl1, -, hkf1, -⟩, ⟨f2, hf2, hl2, -, hkf2, -⟩, -⟩ := he₁'
   rw [← hbl₂] at hf0 hf1 hf2
-  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf0 hl0 (hcl₂.freeRaces _ _) (by rw [hkf0]; nofun) e h).elim) fun x m₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf2 hl2 (hcl₂.freeRaces _ _) (by rw [hkf2]; nofun) e h).elim) fun x m₃ hf => ?_)
   obtain ⟨b, blk, hb, hblk, rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
@@ -2305,9 +2305,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   obtain ⟨b, blk', hb, hblk', rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f2)
-    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf2]) hl2
-    (by exact hcl₂.freeRaces _ _) (by rw [hkf2]; nofun) e h).elim)
+  refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f0)
+    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf0]) hl0
+    (by exact hcl₂.freeRaces _ _) (by rw [hkf0]; nofun) e h).elim)
     fun x m₅ hf => ?_)
   obtain ⟨b, blk'', hb, hblk'', rfl⟩ := Proto.free_ok hf
   refine ⟨rfl, ?_⟩

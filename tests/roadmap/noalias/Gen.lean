@@ -56,8 +56,8 @@ def bumpOther (p0 : Bool) : Zig.MemM (BitVec 32) := do
       let i11 ← Zig.callM (bumpThenRead i1 v5)
       pure (.ret i11))
     | e => pure e) : Zig.MM bumpOtherLocals bumpOtherExit).run' { (default : bumpOtherLocals) with x := s1, y := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -159,8 +159,8 @@ def overflowAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
       let i11 ← Zig.callM (readThenOverflow i1 v5)
       pure (.ret i11))
     | e => pure e) : Zig.MM overflowAfterOverlapLocals overflowAfterOverlapExit).run' { (default : overflowAfterOverlapLocals) with x := s1, y := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -235,8 +235,8 @@ def panicAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
       let i11 ← Zig.callM (writeThenCall i1 v5)
       pure (.ret i11))
     | e => pure e) : Zig.MM panicAfterOverlapLocals panicAfterOverlapExit).run' { (default : panicAfterOverlapLocals) with x := s1, y := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -391,8 +391,8 @@ def swapSelf (p0 : Bool) : Zig.MemM (BitVec 32) := do
       let i13 ← Zig.add false i11 i12
       pure (.ret i13))
     | e => pure e) : Zig.MM swapSelfLocals swapSelfExit).run' { (default : swapSelfLocals) with x := s1, y := s3 }
-  Zig.free s1
   Zig.free s3
+  Zig.free s1
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -418,8 +418,8 @@ def twoBuffers (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
     let _i7 ← Zig.callM (copy i5 i6 p0)
     let i8 ← Zig.callM (Zig.load (BitVec 8) 1 (i3.elem 1 (3 : BitVec 64)))
     pure (.ret i8)) : Zig.MM twoBuffersLocals twoBuffersExit).run' { (default : twoBuffersLocals) with b := s3, a := s1 }
-  Zig.free s3
   Zig.free s1
+  Zig.free s3
   match e with
   | .ret v => pure v
 

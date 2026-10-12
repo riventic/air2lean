@@ -108,8 +108,8 @@ def awaitOwned (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
     let _i8 ← Zig.awaitC (α := Unit) p0 i4
     let i9 ← Zig.load (BitVec 32) 4 i2
     pure (.ret i9)) : Zig.CM Tgt awaitOwnedLocals awaitOwnedExit).run' { (default : awaitOwnedLocals) with out := s2, f := s4 }
-  Zig.free s2
   Zig.free s4
+  Zig.free s2
   match e with
   | .ret v => pure v
 

@@ -817,11 +817,12 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.pure' ?_
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8 ⋆ u32At s2 Ab .stack kb 9)
-    (v := 9) hab ha0).pre fun _ h => sep_lcomm (sep_assoc h))
+  -- In reverse order of allocation (MM-18): `b`, then `a`.
+  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
+    (v := 9) hbb hb0).pre fun _ h => sep_comm h)
     ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
   rw [upd_upd] at ho₁₈
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8) (v := 9) hbb hb0).pre
+  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8) (v := 9) hab ha0).pre
     fun _ h => sep_comm h) ho₁₈ hc₁₈ (by rw [ht₁₈]; exact htl₁₇) hq₁₈
     fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩

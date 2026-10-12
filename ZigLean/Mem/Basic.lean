@@ -400,6 +400,10 @@ structure Placement where
   /-- The end of the user address space (module doc). -/
   addrLimit : Nat := 2 ^ 47
   addrLimit_le : addrLimit ≤ 2 ^ 63 := by decide
+  /-- The start of thread `t`'s stack reserve (`Mem.withStack`, MM-18), if the placement picks
+  one; an invalid proposal falls back to the first fit. For a native run it is address space the
+  run never maps (premise STK-02). -/
+  reserve : ThreadId → Option Nat := fun _ => none
 
 /-- The placement that proposes nothing: every block at the next free address after every other
 block, from 4096, with a 1-byte gap. Only for running a program (`#eval`, the differential
@@ -423,6 +427,27 @@ structure OsState where
   errno : Array (ThreadId × BlockId) := #[]
   /-- The threads that `pthread_detach` released: they stay signalable while they run. -/
   detached : Array ThreadId := #[]
+  deriving Repr, Inhabited
+
+/-- One entry of a thread's stack accounting (MM-18, `docs/architecture-audit/memory-model.md`):
+a stack block (`some b`, live while the block is) or the frame charge of a recursive call
+(`none`, live until `leaveFrame` closes it). -/
+structure StackEntry where
+  block : Option BlockId
+  /-- The depth at its push: the end of the entry below it. -/
+  base : Nat
+  charge : Nat
+  closed : Bool := false
+  deriving Repr, Inhabited, DecidableEq
+
+/-- A thread's stack (MM-18). With a budget `S` the thread owns the reserve `[base, base + S)`,
+which no other block meets, and its stack blocks and frames are charged LIFO: `entries` in push
+order, popped lazily (`StackState.held`). Without a budget (`none`, the default) there is no
+accounting: a stack block is placed like any other block. -/
+structure StackState where
+  budget : Option Nat := none
+  base : Nat := 0
+  entries : Array StackEntry := #[]
   deriving Repr, Inhabited
 
 structure Mem where
@@ -473,13 +498,11 @@ structure Mem where
   /-- The installed environment of the bound OS primitives (`ZigLean/Env/Linux.lean`, E03). The
   default has no open handle, so a program that never calls one is unaffected. -/
   host : Env.Host := {}
-  /-- The stack budget in bytes (MM-5): a call whose frame (`Zig.enterFrame`) would take
-  `stackUsed` above it throws `.stackOverflow`. `none` (the default, and every generated
-  `mem0`) sets no budget: a statement about such a memory assumes that the native stack holds
-  every call chain it reaches (premise STK-01, `docs/premises.md`). -/
-  stackLimit : Option Nat := none
-  /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
-  stackUsed : Nat := 0
+  /-- `stacks[t]`: thread `t`'s stack budget, reserve and LIFO accounting (MM-5, MM-18;
+  `Mem.stackOf`). Empty (the default, and every generated `mem0`): no thread has a budget, and a
+  statement about such a memory assumes that the native stack holds every call chain it reaches
+  (premise STK-01, `docs/premises.md`). `Mem.withStack` gives the main thread one. -/
+  stacks : Array StackState := #[]
   /-- The running calls of functions with `noalias` parameters, innermost last
   (`ZigLean/Mem/Noalias.lean`). Empty in every program without one. -/
   noalias : Array NaScope := #[]
@@ -618,14 +641,30 @@ def Block.clearOf (blk : Block) (A n : Nat) : Bool :=
 def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
   m.blocks.all (·.clearOf A n)
 
-/-- `A` is a valid address for a new block of `size` bytes with alignment `align`: exactly what
-Zig guarantees about the address of an object. Not 0, a multiple of the alignment, the block
-inside the address space (`Placement.addrLimit`), and disjoint from every live block
-(`Mem.addrFree`). It may be the address of a dead block (reuse) and it may be adjacent to a live
-one. -/
-def Mem.placeOk (m : Mem) (A size align : Nat) : Bool :=
+/-- The reserve of `s` (`[base, base + S)` with a budget `S`, nothing without one) does not meet
+`[A, A + n)`. -/
+def StackState.reserveClear (s : StackState) (A n : Nat) : Bool :=
+  match s.budget with
+  | none => true
+  | some S => n == 0 || S == 0 || decide (A + n ≤ s.base) || decide (s.base + S ≤ A)
+
+/-- No thread's stack reserve meets `[A, A + n)` (MM-18). -/
+def Mem.reservesFree (m : Mem) (A n : Nat) : Bool :=
+  m.stacks.all (·.reserveClear A n)
+
+/-- `A` is an address for a new block of `size` bytes with alignment `align` that the live blocks
+allow: not 0, a multiple of the alignment, the block inside the address space
+(`Placement.addrLimit`), and disjoint from every live block (`Mem.addrFree`). -/
+def Mem.fitOk (m : Mem) (A size align : Nat) : Bool :=
   decide (0 < A) && decide (A % align = 0) && decide (A + size ≤ m.place.addrLimit) &&
     m.addrFree A size
+
+/-- `A` is a valid address for a new block of `size` bytes with alignment `align`: exactly what
+Zig guarantees about the address of an object (`Mem.fitOk`), outside every thread's stack reserve
+(`Mem.reservesFree`, MM-18: a native run never maps a reserve, premise STK-02). It may be the
+address of a dead block (reuse) and it may be adjacent to a live one. -/
+def Mem.placeOk (m : Mem) (A size align : Nat) : Bool :=
+  m.fitOk A size align && m.reservesFree A size
 
 /-- The placement's address for the next block, if it is valid (`Mem.placeOk`). -/
 def Mem.placed? (m : Mem) (size align : Nat) : Option Nat :=
@@ -633,10 +672,18 @@ def Mem.placed? (m : Mem) (size align : Nat) : Option Nat :=
   | some A => if m.placeOk A size align then some A else none
   | none => none
 
-/-- One past the end of every block, dead or live, plus a gap byte; at least 4096. The fallback
-address of a new block (`Mem.newAddr`) starts here, so it is clear of every block. -/
+/-- One past the end of a thread's stack reserve (0 without a budget). -/
+def StackState.reserveEnd (s : StackState) : Nat :=
+  match s.budget with
+  | some S => s.base + S + 1
+  | none => 0
+
+/-- One past the end of every block, dead or live, and of every stack reserve, plus a gap byte;
+at least 4096. The fallback address of a new block (`Mem.newAddr`) starts here, so it is clear of
+every block and every reserve. -/
 def Mem.top (m : Mem) : Nat :=
-  m.blocks.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) 4096
+  m.stacks.foldl (fun t s => Nat.max t s.reserveEnd)
+    (m.blocks.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) 4096)
 
 /-- The address of a new block: the placement's (`Mem.placed?`), or `Mem.top` rounded up to
 `align`. -/
@@ -650,24 +697,115 @@ address (`Mem.placeOk`), and for the fallback after `Mem.top` while that ends in
 def Mem.roomFor (m : Mem) (size align : Nat) : Bool :=
   decide (m.newAddr size align + size ≤ m.place.addrLimit)
 
+/-! ## Stack regions (MM-18, `docs/architecture-audit/memory-model.md`)
+
+A thread with a stack budget `S` owns the reserve `[base, base + S)`, which every other placement
+avoids (`Mem.placeOk`, `Mem.top`, `Mem.growFree`, `Mem.mappingRoom`). Its stack blocks
+(`alloc .stack`) and the frames of its recursive calls (`enterFrame`) are charged LIFO: a new entry
+charges `stackCharge size align` (`frameBase` for a frame) and overflows when the depth would pass
+`S`. The addresses stay the placement's (native code reorders and shares stack slots, MM-18 E1,
+E1', E2); a block that the placement does not place goes to the LIFO fallback inside the reserve,
+just below the held entries. An entry pops when it and every entry above it are dead (lazily,
+`StackState.held`), so a `free` of the top block gives its charge back and an out-of-order `free`
+gives it back late, never early. -/
+
+/-- Thread `t`'s stack state (none recorded: no budget). -/
+def Mem.stackOf (m : Mem) (t : ThreadId) : StackState := m.stacks.getD t default
+
+/-- `ss` with thread `t`'s stack state `s` (padded with states without a budget). -/
+def setStackAt (ss : Array StackState) (t : ThreadId) (s : StackState) : Array StackState :=
+  if t < ss.size then ss.set! t s else (ss ++ Array.replicate (t - ss.size) default).push s
+
+/-- The entry is live: its block is live, or its frame is not closed. -/
+def StackEntry.liveIn (blocks : Array Block) (e : StackEntry) : Bool :=
+  match e.block with
+  | some b => (blocks[b]?.map (·.live)).getD false
+  | none => !e.closed
+
+/-- The entries up to the topmost live one; the dead ones above it are popped. -/
+def StackState.held (s : StackState) (blocks : Array Block) : Array StackEntry :=
+  s.entries.popWhile (!·.liveIn blocks)
+
+/-- The charge of entries `h`: the end of the topmost one (each entry starts where the one below
+it ends, `Mem.pushEntry`). -/
+def stackEnd (h : Array StackEntry) : Nat :=
+  match h.back? with
+  | some e => e.base + e.charge
+  | none => 0
+
+/-- The charge of the held entries. -/
+def StackState.depth (s : StackState) (blocks : Array Block) : Nat := stackEnd (s.held blocks)
+
+/-- Thread `t`'s stack depth: the charge of its held entries. -/
+def Mem.stackDepth (m : Mem) (t : ThreadId) : Nat := (m.stackOf t).depth m.blocks
+
+/-- The charge of a stack block: its size plus its alignment (at least 1), which covers the
+padding of the LIFO fallback. Not a bound on the native frame (premise STK-01). -/
+def stackCharge (size align : Nat) : Nat := size + Nat.max align 1
+
+/-- `n` rounded down to a multiple of `a` (`a > 0`). -/
+def alignDown (n a : Nat) : Nat := n / a * a
+
+/-- The current thread's stack budget, for a block of kind `kind`: `none` unless it is a stack
+block of a thread with a budget. -/
+def Mem.stackBudget? (m : Mem) : BlockKind → Option Nat
+  | .stack => (m.stackOf m.current).budget
+  | _ => none
+
+/-- The LIFO fallback of a stack block in the current thread's reserve: the highest aligned
+address below the held entries' charge from the reserve's end. -/
+def Mem.stackFallback (m : Mem) (S size align : Nat) : Nat :=
+  alignDown ((m.stackOf m.current).base + S - m.stackDepth m.current - size) (Nat.max align 1)
+
+/-- The address of a new block of kind `kind`: the placement's (`Mem.placed?`); else a stack
+block of a thread with a budget gets the LIFO fallback in its reserve and every other block
+`Mem.top` rounded up (`Mem.newAddr`). -/
+def Mem.allocAddr (m : Mem) (kind : BlockKind) (size align : Nat) : Nat :=
+  match m.stackBudget? kind with
+  | none => m.newAddr size align
+  | some S => (m.placed? size align).getD (m.stackFallback S size align)
+
+/-- `alloc` can make the block: room in the address space (`Mem.roomFor`); for a stack block of a
+thread with a budget `S`, its charge fits (depth plus charge at most `S`) and its address is
+valid (`Mem.fitOk`; the fallback in the reserve always is in a memory that a run reaches). -/
+def Mem.allocOk (m : Mem) (kind : BlockKind) (size align : Nat) : Bool :=
+  match m.stackBudget? kind with
+  | none => m.roomFor size align
+  | some S => decide (m.stackDepth m.current + stackCharge size align ≤ S) &&
+      m.fitOk (m.allocAddr kind size align) size (Nat.max align 1)
+
+/-- The stacks after pushing an entry for `block` with charge `c` on the current thread's held
+entries, at their depth. -/
+def Mem.pushEntry (m : Mem) (block : Option BlockId) (c : Nat) : Array StackState :=
+  let s := m.stackOf m.current
+  let h := s.held m.blocks
+  setStackAt m.stacks m.current { s with entries := h.push { block, base := stackEnd h, charge := c } }
+
+/-- The stacks after `alloc`: a stack block of a thread with a budget pushes its entry. -/
+def Mem.stacksAfterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Array StackState :=
+  match m.stackBudget? kind with
+  | none => m.stacks
+  | some _ => m.pushEntry (some m.blocks.size) (stackCharge size align)
+
 /-- The memory after `alloc`: one more block, `m.blocks.size`, of `size` undefined bytes, at
-`Mem.newAddr`. -/
+`Mem.allocAddr`, and its stack entry (`Mem.stacksAfterAlloc`). -/
 def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
   { m with
     blocks := m.blocks.push
       { bytes := Array.replicate size .undef, align, kind, live := true,
-        addr := m.newAddr size align } }
+        addr := m.allocAddr kind size align }
+    stacks := m.stacksAfterAlloc kind size align }
 
 /-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`); its address is the
-placement's (`Mem.newAddr`). The block is never placed above `Placement.addrLimit` (O-H): without
-room (`Mem.roomFor`) the run throws `.stackOverflow`, the outcome of an exhausted stack budget
-(MM-5, premise STK-01). `alloc` makes the blocks that have no allocator of their own: stack
+placement's (`Mem.allocAddr`). The block is never placed above `Placement.addrLimit` (O-H): without
+room (`Mem.allocOk`) the run throws `.stackOverflow`, the outcome of an exhausted stack budget
+(MM-5, MM-18, premise STK-01). `alloc` makes the blocks that have no allocator of their own: stack
 locals (`allocStack`), thread-local instances and the runtime's cells; every allocator path
 checks room first and fails as out of memory (`rawAlloc` returns null, `mmap` fails with
 `ENOMEM`). -/
 def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   let m ← get
-  if m.roomFor size align then
+  if m.allocOk kind size align then
     set (m.afterAlloc kind size align)
     pure ⟨some m.blocks.size, 0⟩
   else throw .stackOverflow
@@ -705,32 +843,46 @@ def free (p : Ptr) : MemM Unit := do
 /-- The stack block of a local whose address escapes: made at function entry. -/
 @[inline] def allocStack (size align : Nat) : MemM Ptr := alloc .stack size align
 
-/-! ## Stack budget (MM-5)
+/-! ## Frames of recursive calls (MM-5, MM-18)
 
 A function of a recursive call group that uses memory charges its frame when it is entered
-(`enterFrame`) and releases it when it returns (`leaveFrame`). The frame is `frameBase` bytes
-plus the bytes of the function's escaping locals (each rounded up to its alignment), written by
-the translator. AIR has no frame size: native frames also hold spill slots, saved registers
-and locals that the model keeps as values, and inlining or tail calls can merge frames. So the
-figure is an estimate that ties a model overflow to the depth of the recursion; it is not a
-bound on the native frame (`docs/premises.md` STK-01). -/
+(`enterFrame`) and releases it when it returns (`leaveFrame`). The frame charge is `frameBase`;
+its escaping locals are charged by their own stack blocks (`alloc .stack`). AIR has no frame
+size: native frames also hold spill slots, saved registers and locals that the model keeps as
+values, and inlining or tail calls can merge frames. So the charge ties a model overflow to the
+depth of the recursion; it is not a bound on the native frame (`docs/premises.md` STK-01). -/
 
 /-- The fixed part of every charged frame: a return address and a saved frame pointer. -/
 def frameBase : Nat := 16
 
-/-- Charge a frame of `frameBase + bytes` bytes: `.stackOverflow` if it takes `stackUsed`
-above `stackLimit`. -/
-def enterFrame (bytes : Nat) : MemM Unit := do
+/-- Charge a frame of `frameBase` bytes to the current thread's stack: `.stackOverflow` if the
+depth would pass its budget. Without a budget nothing is charged. -/
+def enterFrame : MemM Unit := do
   let m ← get
-  let used := m.stackUsed + (frameBase + bytes)
-  match m.stackLimit with
-  | some limit => if limit < used then throw .stackOverflow
+  match (m.stackOf m.current).budget with
   | none => pure ()
-  set { m with stackUsed := used }
+  | some S =>
+    if S < m.stackDepth m.current + frameBase then throw .stackOverflow
+    else set { m with stacks := m.pushEntry none frameBase }
 
-/-- Release the frame that `enterFrame bytes` charged. -/
-def leaveFrame (bytes : Nat) : MemM Unit :=
-  modify fun m => { m with stackUsed := m.stackUsed - (frameBase + bytes) }
+/-- `s` with its topmost open frame entry below index `i` closed (a backward scan). -/
+def StackState.closeFrame (s : StackState) (i : Nat := s.entries.size) : StackState :=
+  match i with
+  | 0 => s
+  | i + 1 =>
+    match s.entries[i]? with
+    | some e =>
+      if e.block.isNone && !e.closed then { s with entries := s.entries.set! i { e with closed := true } }
+      else s.closeFrame i
+    | none => s
+
+/-- Release the frame that `enterFrame` charged: close the current thread's topmost open frame
+entry (it pops with the dead entries above it). -/
+def leaveFrame : MemM Unit :=
+  modify fun m =>
+    match (m.stackOf m.current).budget with
+    | none => m
+    | some _ => { m with stacks := setStackAt m.stacks m.current (m.stackOf m.current).closeFrame }
 
 /-! ## Typed access -/
 
@@ -1041,6 +1193,25 @@ def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) (kind : BlockKind
 initial bytes, alignment and kind, at the address that `σ` gives it. -/
 def Mem.ofGlobals (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) : Mem :=
   gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) { place := σ }
+
+/-- The start of a stack reserve of `S` bytes for thread `t` (MM-18): the placement's
+(`Placement.reserve`) if it is a valid place for it (`Mem.placeOk`, 16-aligned), else the first
+fit (`Mem.firstFit`) if that is valid; none if no place is found. -/
+-- The first fit walks past live blocks only; a fit that meets another thread's reserve is
+-- rejected (fail closed: no budget). Child reserves (MM-18 step 5) need a walk past reserves too.
+def Mem.reserveAt? (m : Mem) (t : ThreadId) (S : Nat) : Option Nat :=
+  match m.place.reserve t with
+  | some A => if m.placeOk A S 16 then some A else fit
+  | none => fit
+where
+  fit := let A := m.firstFit S 16; if m.placeOk A S 16 then some A else none
+
+/-- `m` where the main thread has the stack budget `S` (MM-18): its reserve is placed
+(`Mem.reserveAt?`) and its stack starts empty. Without a place for the reserve, `m` (no budget). -/
+def Mem.withStack (m : Mem) (S : Nat) : Mem :=
+  match m.reserveAt? 0 S with
+  | some base => { m with stacks := setStackAt m.stacks 0 { budget := some S, base } }
+  | none => m
 
 /-- A block of external storage (L12, `docs/generated-code.md` §Globals): static storage that
 another object defines, which the initial value of a pointer-bearing `extern` global can point
