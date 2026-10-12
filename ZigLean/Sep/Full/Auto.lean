@@ -300,6 +300,8 @@ structure RunCaches where
   fold : IO.Ref (Option Simp.Context)
   /-- The facts lemmas (`@[fsym_facts]`) with the head of their assertion (`headKey`). -/
   factLemmas : IO.Ref (Option (Array (Array Name × Name)))
+  /-- Failed case probes of split terms (`detProbe`): the fact sets they failed with. -/
+  detFail : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr)))
   /-- The simp context that turns Boolean tests into propositions (`boolFactCtx`). -/
   boolCtx : IO.Ref (Option Simp.Context)
 
@@ -307,7 +309,7 @@ def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
-           boolCtx := ← IO.mkRef none }
+           detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -345,6 +347,18 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | none => pure ()
   let r ← run
   (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr stamp))
+  return r
+
+/-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
+it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
+context (the facts are proofs: the same term is the same proposition). A skipped probe only
+leaves the term to `omega`'s case split. -/
+def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
+  let failed := ((← (← caches).detFail.get).get? key).getD #[]
+  if failed.any fun s => base.all s.contains then return none
+  let r ← probe key base.size run
+  if r.isNone then
+    (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
@@ -469,7 +483,7 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
     if let some a := m.get? x then return .done a
     let base := (← linRef.get) ++ defs
     let decide (prop : Expr) : MetaM (Option Expr) :=
-      probe (mkApp2 (mkConst `fsym.det) x prop) base.size (omegaRaw base prop)
+      detProbe (mkApp2 (mkConst `fsym.det) x prop) base (omegaRaw base prop)
     let args := x.getAppArgs
     let r : Option (Expr × Expr) ← do
       if x.isAppOfArity ``Int.toNat 1 then

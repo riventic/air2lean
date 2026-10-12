@@ -36,20 +36,22 @@ with its invariant).
 
 | Proof | heartbeats (default budget 200k) |
 | --- | --- |
-| FBA `alloc` | 64k |
-| FBA `resize` (refined) | 57k |
-| FBA `remap` | 70k |
-| FBA `free` | 21k |
-| page (linux) `free` / `resize` / `remap` | 13k / 78k / 85k |
-| page (macOS) `free` / `resize` / `remap` | 13k / 78k / 55k |
-| page `alloc` (concurrent, `CTriple`) | 141k |
+| FBA `alloc` | 61k |
+| FBA `resize` (refined) | 65k |
+| FBA `remap` | 80k |
+| FBA `free` | 22k |
+| page (linux) `free` / `resize` / `remap` | 9k / 72k / 89k |
+| page (macOS) `free` / `resize` / `remap` | 9k / 73k / 59k |
+| page `alloc` (concurrent, `CTriple`) | 89k |
 
 FBA `Full.lean` is 139 lines, of which the proofs are four `fsym` calls (the handwritten version
 was 1025 lines); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
 on a loaded machine (load average about 17): FBA 66 s, each page spec 17 s, one theorem at a time
-(`-j1`). The cost is `omega`: about 870 calls per page spec, a third of them case-split probes for
-truncated subtractions; failed probes are cheap (about 90 heartbeats each), the cost is spread over
-many successful calls with 20 to 30 facts.
+(`-j1`). The largest single cost is `omega` (`trace.fsym.prof`, 2026-10-12): the three linux page
+specs make 986 `omega` calls (80k of their 170k heartbeats), 235 of them fail (17k: probes of
+rules, providers and cases that do not apply, about 70 heartbeats each); FBA's four entries make
+788 calls (75k of 228k), 364 failed (13k). The rest of the cost is spread over many successful
+calls with 20 to 30 facts.
 
 ## Modules
 
@@ -226,13 +228,19 @@ Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
 ## The arithmetic solver
 
 Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, also the tactic
-`fsym_arith`):
+`fsym_arith`; its normal forms and lemmas are `ZigLean/Sep/Full/AutoArith.lean`):
 
 1. turns the hypotheses into **facts in normal form**, each once per run and each normalized with
    the facts before it: values of words and pointers as natural numbers, user definitions of
    values unfolded, overflow bits and shifts as values, low and high masks as remainders by
    `2 ^ x`; and **no wrap-around** where it cannot happen (`Zig.toNat_add_of_lt` and friends: the
-   side condition by the discharger);
+   side condition by the discharger). Every reading of a word goes through its unsigned value
+   `x.toNat`, for any width: a signed value `x.toInt` is `x.toNat - 2 ^ w * (2 * x.toNat / 2 ^ w)`
+   (`toInt_eq_div`; a division by a literal for a literal width, which `omega` reads without a
+   case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
+   (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
+   fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -241,7 +249,9 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `x ≤ c` (`mod_pow_of_le`: `omega` reads `z % L`, not `z % 2 ^ x`), and runs `omega` on the facts. `omega` case-splits on every truncated subtraction, `Int.toNat`,
    `min` and `max`; a term whose case the split-free (linear) facts decide becomes an opaque
    atom with a linear defining fact (`subAtom`, also a subtraction truncated to `0`, `toNatAtom`,
-   `minAtom`, `maxAtom`), so no split is explored for it;
+   `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
+   subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
+   allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
 5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
