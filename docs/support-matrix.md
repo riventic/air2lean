@@ -85,12 +85,12 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 89 requirements, 43 complete, 36 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 89 requirements, 44 complete, 35 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T02, T03, T04, T06 | — | T05 |
-| L: Language and representation | L01, L02, L06, L10, L11, L12, L13, L14 | L03, L04, L05, L07, L08, L09 | — | — |
+| L: Language and representation | L01, L02, L05, L06, L10, L11, L12, L13, L14 | L03, L04, L07, L08, L09 | — | — |
 | C: Concurrency | C02, C03, C04, C05, C06, C09, C11 | C01, C07, C08, C14 | — | C10, C12, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
