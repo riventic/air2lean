@@ -102,15 +102,17 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   value, `known`, an untagged share, an allocator's own state) on one of the parts of `P`, or
 * a **lemma about the whole precondition** (`@[fsym_provider]`, conclusion `K … P` of a variable
   `P`), whose hypotheses are goals again: `Within X P` (a part of `P` that unifies with `X`),
-  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`; `Live.share`: a
-  share whose tag is active (`Within (bshare b q k t) P`, `Active t P`); `Active.root`;
-  `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+  other providers (up to `providerDepth`), blocks, arithmetic. `Reaches.of_live`;
+  `Reaches.shareW`: a share whose tag is active (`Within (bshare b q k t) P`, `Active t P`);
+  `Active.root`; `Active.gauthP`: a ledger's authority at its epoch under an active parent.
+  `Live b l k` (live bytes from `l` to below `k`) comes only from owned bytes: a share bounds
+  no first live offset (MM-19).
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
-pointers into blocks that may differ (`ptrEqAddr_live`: both in bounds, or both past their
-blocks' starts) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
+past a live byte) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
