@@ -106,3 +106,15 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   Rosetta at near-native speed. aarch64-linux runs go in a native `linux/arm64` container, and
   aarch64-macos runs on the host. No platform needs CI just to get a result.
 - Agents keep a handoff file in `~/.cache/air2lean/handoffs/` and use private scratch directories.
+
+## Agent working style
+
+- **Edit code with the Edit and Write tools**, never with `python3 - <<EOF … open(p).write(…)`,
+  `sed -i` or heredocs. Read files with Read and search with Grep/Glob, not `cat`/`sed -n`/`grep`
+  in the shell.
+- **Inner loop: build only what you changed.** While working, build the touched module
+  (`scripts/build-guard.py … lake build <Module>`) or run the one check script of the fixture.
+  Run `scripts/regen.sh --pr`, `scripts/preflight.sh` and the native/Docker rows once, before
+  merging, not after every edit.
+- **No polling.** Do not loop on CI or on other agents; CI does not gate merges. Wait for a
+  background command with one `until` loop at most.
