@@ -35,10 +35,11 @@ def SafeNoLeak {α : Type} (c : MemM α) : Prop :=
   ∀ m : Mem, m.Seq → ∃ r m', c.run m = pure (r, m') ∧ m'.heap = m.heap
 
 /-- The next allocation of 16 bytes (`create(Node)`) succeeds under `m`'s policy: no legacy
-index, cap or listed failure, and neither the failure oracle nor the budget denies it. -/
+index, cap or listed failure, neither the failure oracle nor the budget denies it, and the
+address space has room for the block (`Mem.roomFor`, O-H). -/
 def Room (m : Mem) : Prop :=
   ¬(m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < 16 ∨ m.allocs ∈ m.allocPolicy.failures) ∧
-    m.oracleDenies 16 = false
+    m.oracleDenies 16 = false ∧ m.roomFor 16 8 = true
 
 /-! ## The wrong clients -/
 
@@ -65,9 +66,9 @@ def forgetFree (a : Allocator) (v : BitVec 32) : MemM (Except ErrName Unit) := d
 /-- With room for the allocation, `create(Node)` succeeds. -/
 theorem create_ok (a : Allocator) {m : Mem} (hc : Room m) :
     ∃ p m', (a.create 16 8).run m = pure (.ok p, m') := by
-  obtain ⟨hc, ho⟩ := hc
+  obtain ⟨hc, ho, hr⟩ := hc
   simp only [not_or] at hc
-  simp [Allocator.create, allocBytes, rawAlloc, alloc, zig_unfold, hc, ho, set, StateT.set,
+  simp [Allocator.create, allocBytes, rawAlloc, alloc, zig_unfold, hc, ho, hr, set, StateT.set,
     MonadStateOf.set, StateT.get]
   exact ⟨_, _, rfl⟩
 
@@ -190,14 +191,15 @@ theorem forgetFree_leaks (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) 
     simpa [Heap.union, hn] using hl
 
 /-- Address reuse (M05) does not hide either bug: with any placement and provenance mode, the
-stale pointer still throws `.illegal`. -/
-theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (σ : Placement) (pm : ProvenanceMode) :
+stale pointer still throws `.illegal`. The placement decides where the node goes, so the room is
+asked of the placed memory (O-H: a block that would end above the address space has no outcome). -/
+theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq)
+    (σ : Placement) (pm : ProvenanceMode) (hc : Room (m.withPlacement σ pm)) :
     (doubleFree a v).run (m.withPlacement σ pm) = throw .illegal :=
   doubleFree_illegal a v (hs.withPlacement σ pm) hc
 
-theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (σ : Placement) (pm : ProvenanceMode) :
+theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq)
+    (σ : Placement) (pm : ProvenanceMode) (hc : Room (m.withPlacement σ pm)) :
     (useAfterFree a v).run (m.withPlacement σ pm) = throw .illegal :=
   useAfterFree_illegal a v (hs.withPlacement σ pm) hc
 
