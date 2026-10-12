@@ -283,9 +283,11 @@ def OV.nodes (w : OV) : List NodeV :=
 
 /-- A grant lies in a block of one of the nodes `ns`, with that node's address label and a kind
 label of the same normal form (a node that its child grows in place may get another kind label,
-`FAllocInv.rresizePost`), at a nonnegative offset. -/
+`FAllocInv.rresizePost`), at a nonnegative offset past the node's header (so a byte of the
+grant's block below the grant, the node's `next` word, is the arena's: `free_mem`). -/
 def GrantOk (ns : List NodeV) : GRegion → Prop
-  | (p, _, _, A, K) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K.norm = nd.K.norm
+  | (p, _, _, A, K) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K.norm = nd.K.norm ∧
+      nd.N.off + 24 ≤ p.off
 
 /-- A grant's length does not matter to `GrantOk`. -/
 theorem GrantOk.len {ns : List NodeV} {p : Ptr} {n n' : Nat} {q : Frac} {A : Nat} {K : BlockKind}
@@ -685,7 +687,8 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Hold
       m.blocks[v.bN]? = some blkN ∧ blkN.addr = v.w.A ∧ v.N.off.toNat + v.w.sz ≤ blkN.bytes.size ∧
       m.blocks[v.bp]? = some blkP ∧ blkP.live = true ∧
       s.ptr.off.toNat + s.len.toNat ≤ blkP.bytes.size ∧
-      (v.bp ≠ v.bN → ∀ x x', x < blkN.bytes.size → x' < blkP.bytes.size → blkN.addr + x ≠ blkP.addr + x') ∧
+      (v.bp ≠ v.bN → ∀ x x', v.N.off.toNat + 16 ≤ x → x < blkN.bytes.size → s.ptr.off.toNat - 8 ≤ x' →
+        x' < blkP.bytes.size → blkN.addr + x ≠ blkP.addr + x') ∧
       (v.bp = v.bN → blkP = blkN) := by
   obtain ⟨-, -, hbc, hbN, hbp, -, hpos, -, -, -⟩ := hv
   have hbN' : (v.N.add 16).block = some v.bN := by simpa [Ptr.add] using hbN
@@ -704,16 +707,18 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Hold
     (CI.act_within (by within) hp)
   rw [e2] at e2'; cases e2'
   refine ⟨blkC, blkN, blkP, e1, a1, by omega, e2, a2, s2, e3, l3, s3,
-    fun hne x x' hx hx' => hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx', fun heq => ?_⟩
+    fun hne x x' _ hx _ hx' => hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx', fun heq => ?_⟩
   rw [heq, e2] at e3; cases e3; rfl
 
 /-- **O-F**: the comparison of the first node's `buf + end_index` with the slice's end by address
 is decided by the blocks and offsets: in one block by the offsets, across two live blocks never
-(`Mem.LiveDisjoint.addr_ne`, at the last byte before each end). -/
-theorem last_dec {blkN blkP : Block} {bN bp : BlockId} {P Q : Ptr} {xN xP : Nat}
-    (hP : P.off = (xN : Int)) (hQ : Q.off = (xP : Int)) (h0N : 0 < xN) (hN : xN ≤ blkN.bytes.size)
-    (h0P : 0 < xP) (hPs : xP ≤ blkP.bytes.size)
-    (hap : bp ≠ bN → ∀ x x', x < blkN.bytes.size → x' < blkP.bytes.size → blkN.addr + x ≠ blkP.addr + x')
+(`Mem.LiveDisjoint.addr_ne`, at the last byte before each end, which lies at or past the bounds
+`lN`, `lP` of bytes known to be live). -/
+theorem last_dec {blkN blkP : Block} {bN bp : BlockId} {P Q : Ptr} {xN xP lN lP : Nat}
+    (hP : P.off = (xN : Int)) (hQ : Q.off = (xP : Int)) (h0N : lN < xN) (hN : xN ≤ blkN.bytes.size)
+    (h0P : lP < xP) (hPs : xP ≤ blkP.bytes.size)
+    (hap : bp ≠ bN → ∀ x x', lN ≤ x → x < blkN.bytes.size → lP ≤ x' → x' < blkP.bytes.size →
+      blkN.addr + x ≠ blkP.addr + x')
     (hsame : bp = bN → blkP = blkN) :
     decide (((blkN.addr : Nat) : Int) + P.off = ((blkP.addr : Nat) : Int) + Q.off) =
       decide (bp = bN ∧ xP = xN) := by
@@ -721,7 +726,7 @@ theorem last_dec {blkN blkP : Block} {bN bp : BlockId} {P Q : Ptr} {xN xP : Nat}
   by_cases hb : bp = bN
   · rw [hsame hb]
     exact decide_eq_decide.mpr ⟨fun h => ⟨hb, by omega⟩, fun h => by omega⟩
-  · have := hap hb (xN - 1) (xP - 1) (by omega) (by omega)
+  · have := hap hb (xN - 1) (xP - 1) (by omega) (by omega) (by omega) (by omega)
     exact decide_eq_decide.mpr ⟨fun h => by omega, fun h => absurd h.1 hb⟩
 
 /-- **The labels of the first node's last grant**: a grant lies in a node of its block with that
