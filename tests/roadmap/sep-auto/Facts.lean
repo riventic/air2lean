@@ -89,4 +89,12 @@ example (w : Grants) (γ e : Nat) : True := by
       fsym
   trivial
 
+/-- The block of a pointer value (`⟨some b, o⟩`, a mapping's start) is its first component, by
+evaluation, also with no fact about it: the planner joins two regions of it. -/
+theorem block_of_value (b : BlockId) (A S : Nat) (K : BlockKind) (bs cs : Array Byte)
+    (hb : bs.size = 8) :
+    EUpd (up (regionIn ⟨some b, 0⟩ A S K 8 bs) ⋆ up (regionIn (Ptr.add ⟨some b, 0⟩ 8) A S K 8 cs))
+      (up (regionIn ⟨some b, 0⟩ A S K 8 (bs ++ cs))) := by
+  fsym_entail
+
 end SepAuto.Facts

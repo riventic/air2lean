@@ -203,6 +203,28 @@ struct's `Enc` encodes its bits (the generated `Enc` of a packed struct, definit
 
 end FTotalTriple
 
+/-! ## Atomic words as plain bytes (`@[fsym_view]`)
+
+A word given away as plain bytes (a node's header words, joined with the node's other bytes into
+the region the child allocator's `free` takes): the region of its bytes, with what it held. The
+view is one-way: the region does not say the bytes' tag, so it gives no atomic word back. -/
+
+/-- **An atomic value as a region** of its 8 bytes, which decode to it. -/
+@[fsym_view] theorem aptsE_view {v : α} :
+    EUpd (aptsE p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
+      ⟪bs.size = 8 ∧ Enc.decode bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
+  EUpd.of_imp fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ =>
+    have hb := up_of_abytesAt hab
+    ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hsz, hv⟩, ⟨ha, hK, hb.1⟩, hb.2⟩⟩
+
+/-- **An atomic word as a region** of its 8 bytes, which hold it. -/
+@[fsym_view] theorem apts_view {v : BitVec 64} :
+    EUpd (apts p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
+      ⟪bs.size = 8 ∧ intOfBytes 64 bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
+  EUpd.of_imp fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ =>
+    have hb := up_of_abytesAt hab
+    ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hsz, hv⟩, ⟨ha, hK, hb.1⟩, hb.2⟩⟩
+
 end Words
 
 end Zig.Full

@@ -61,7 +61,8 @@ calls with 20 to 30 facts.
   (arithmetic side goals); `@[fsym_plan]` registers a **range law**
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
-  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims).
+  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
+  `EUpd X Y` of one atom (§Views).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -168,12 +169,13 @@ part keeps its view and an atomic word its tag:
   live block and satisfy `D` in every memory that holds `P`; `AlignedAt q al P` that `q`'s
   address is aligned. The parts provide them for their bytes (`@[fsym_provider]`
   `ReadsAt.pts`/`.ptsField` (a field of a typed value, by its `EncField`)/`.aptsE`/`.apts`/
-  `.regionIn` (bytes that decode to a value), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
+  `.regionIn` (bytes that decode to a value), `.regionInEnc` (a region that holds a value's
+  encoding), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
   a struct that decodes its fields one after the other, `fsym` composes its bytes from its
   fields' (`readsStruct` in `Auto.lean`: each field a provider goal again, `ReadsAt.base` and a
   `Reaches` bound for the extent, `ReadsAt.field`, and the struct's decoding of the fields'
   values). `FTotalTriple.load_reads` loads the value; `fsym` tries it after every other rule, for
-  loads of structs only.
+  every load (a node's `next` pointer from a region that holds its encoding).
 * **Stores** write. `FTotalTriple.storeBytes_parts` executes a write by pieces (`Parts`,
   `storeParts`): one write and the writes of its pieces leave the same blocks and atomic layout
   (`storeBytes_two_run`; only the record of accesses differs, which no assertion reads). When no
@@ -185,6 +187,27 @@ part keeps its view and an atomic word its tag:
 
 Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
 stored by `reset`, a list header held as one atom per field).
+
+### Views
+
+An atom may stand for another assertion over the same bytes: a **view lemma** `EUpd X Y`
+(`@[fsym_view]`, one atom `X`) shows `X` as `Y`. Registered: an atomic word as the region of its 8
+bytes (`apts_view`, `aptsE_view`, `AtomicPlain.lean`; one way, the region does not keep the
+bytes' tag), a region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
+bytes with those facts as a region again (`regionIn_fold`, `AutoRules.lean`). The planner notes
+each atom it did not find in the state (a rule's precondition, a return's postcondition); when
+the step is stuck (no rule applies with more facts either; a return that neither the planner nor
+the caller's updates close), `fsym` views every state atom of that atom's block whose view
+provides its head (`viewStep`: `Y`'s atoms of the head unify with the wanted atom where they can,
+which fixes a fold's alignment; the lemma's hypotheses must all be proved), and tries the step
+again on the new state, whose facts and existentials open as usual. A view is kept only if the
+walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
+allocator: the node's header words become regions, two regions of one block get the same labels
+(`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
+the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
+a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
+atoms, a region viewed as bytes for a rule and folded back at the return).
 
 ## How it works
 
@@ -225,7 +248,10 @@ stored by `reset`, a list header held as one atom per field).
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
-  rules) whose command unifies. Commands of one head are unified argument by argument: a
+  rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
+  `have`s); their unknowns become leading binders (fresh at each use), and a local that the walk
+  replaced (a substitution reintroduces the hypotheses after the variable it eliminates) is the
+  current local of the same name and type, else a binder of the term (`refreshUser`). Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
   (from the context), providers (§Providers, with backtracking) and arithmetic; a side goal that
@@ -271,7 +297,11 @@ stored by `reset`, a list header held as one atom per field).
   **knowledge** `known b A` comes from the state's or from an owned region of the block
   (`known_of_region`); **range laws** (`@[fsym_plan]`, claims) are planned after the shares; atoms left over that a drop lemma (`@[fsym_drop]`) forgets are dropped (knowledge,
   claims); an assertion-level `if` of `Q` that
-  the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
+  the facts do not decide is split on, and one whose condition names an existential of `Q`
+  (`if bs.size = 0 then … else …` of an `∃ bs`) is tried branch by branch with its condition as a
+  fact of `Q`, proved once the planner has assigned the existential (`imp_ite_pos`/`_neg`); a
+  region of `Q` whose unknown bytes' size another atom of `Q` names (the token `tok p bs.size …`)
+  is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
@@ -420,13 +450,18 @@ parallel; a run is identified by the option `fsym.run`).
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
 `trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
-`trace.fsym.total` the total of the run. Every proof must stay under the default heartbeat budget. Lessons:
+`trace.fsym.total` the total of the run. A heartbeat or recursion limit hit while a rule or a
+caller's update is tried is reported with the rule and the command (`reportLimit`) and ends the
+run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * A failed definitional unification of two programs unfolds them: compare heads and arguments.
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
   `omegaFacts` turn determined split terms into atoms.
 * Normalize each hypothesis once; never re-simplify the whole context per call.
 * Never normalize the whole program per step (`lazyMethods`).
+* Never elaborate a step's proof against the goal: `refine C.ex_sep _ …` checks the expected type
+  `CTriple P prog Q`, whose `whnf` evaluates the program (6M heartbeats per step after a case
+  split); `normPre` builds `lift_sep`/`ex_sep` from the goal's parts (`mkAppM`).
 * A generated helper with heavy arithmetic (`alignForward` of masks modulo `2 ^ 64`) is inlined
   and its failing `omega` probes dominate (one problem can take 90k heartbeats; `omega` has no
   heartbeat checkpoints): prove a rule for the helper once and pass it as `fsym [rule]`.
