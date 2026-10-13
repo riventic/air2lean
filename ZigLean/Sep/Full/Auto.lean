@@ -1548,7 +1548,12 @@ where
       g.assign pf
       go rest
     else
-      let ok ← arith g
+      -- (an instance is synthesized, never searched by the arithmetic solver)
+      let ok ← if (← g.withContext (isClass? t)).isSome then
+          (do
+            let some i ← g.withContext (observing? (synthInstance t)) | pure false
+            g.assign i; pure true)
+        else arith g
       if depth > 0 && !ok then return none
       let some left ← go rest | return none
       return some (if ok then left else g :: left)
