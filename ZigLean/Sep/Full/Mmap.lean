@@ -1256,7 +1256,7 @@ theorem munmap (os : Os.Target) (s : Slice)
         x < Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size →
         r.heap.erase (b, x) ≠ none) :
     ThreadLocal P (Os.munmap os s) := by
-  intro m r rF hh hp hc ho
+  refine ThreadLocal.intro fun m r rF hh hp hc ho => ?_
   have hpos : ∀ (blk : Block) lo u, Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat
       s.len.toNat = some u → 0 < Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize)
         blk.bytes.size - s.ptr.off.toNat := fun blk lo u hu => by
@@ -1264,7 +1264,7 @@ theorem munmap (os : Os.Target) (s : Slice)
     have := le_alignUp s.len.toNat os.pageSize
     show 0 < Min.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat
     omega
-  refine ⟨(RunFp.munmap os s fun b blk lo u hpb hb _ hu => ?_).noFp, fun v m₀ e => ?_⟩
+  refine ⟨RunFp.munmap os s fun b blk lo u hpb hb _ hu => ?_, fun v m₀ e => ?_⟩
   · have := hpos blk lo u hu
     exact noRace_owned hc ho fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)
   · have e' : ((Os.munmap os s).run m.noFp).run = some (.ok (v, m₀)) := e
@@ -1308,8 +1308,8 @@ theorem munmap (os : Os.Target) (s : Slice)
 /-- **`mmap` is local** for every precondition: it reads no record and adds a block. -/
 theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
     (off : BitVec 64) : ThreadLocal P (Os.mmap os hint len prot flags fd off) := by
-  intro m r rF hh hp hc ho
-  refine ⟨(RunFp.mmap os hint len prot flags fd off).noFp, fun v m₀ e => ?_⟩
+  refine ThreadLocal.intro fun m r rF hh hp hc ho => ⟨RunFp.mmap os hint len prot flags fd off,
+    fun v m₀ e => ?_⟩
   have h : ((Os.mmap os hint len prot flags fd off).run m.noFp).run = some (.ok (v, m₀)) := e
   unfold Os.mmap at h
   simp only at h
@@ -1350,9 +1350,8 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
       blk.kind = .mapped lo → lo + newLen.toNat ≤ blk.bytes.size ∧
         ∀ x, lo + newLen.toNat ≤ x → x < blk.bytes.size → r.heap.erase (b, x) ≠ none) :
     ThreadLocal P (Os.mremap os (some p) oldLen newLen flags none) := by
-  intro m r rF hh hp hc ho
-  refine ⟨(RunFp.mremapShrink os p oldLen newLen flags fun b blk lo hpb hb hk => ?_).noFp,
-    fun v m₀ e => ?_⟩
+  refine ThreadLocal.intro fun m r rF hh hp hc ho =>
+    ⟨RunFp.mremapShrink os p oldLen newLen flags fun b blk lo hpb hb hk => ?_, fun v m₀ e => ?_⟩
   · obtain ⟨hlt, hin⟩ := hown m r rF hh hp b blk lo hpb hb hk
     exact ⟨by omega, noRace_owned hc ho fun x h1 h2 => hin x h1 (by omega)⟩
   · have h : ((Os.mremap os (some p) oldLen newLen flags none).run m.noFp).run =
