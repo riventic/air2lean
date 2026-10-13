@@ -293,10 +293,18 @@ theorem recordAccess_ok {m m' : Mem} {b o l : Nat} {k : AccessKind} {x : Unit}
   · rename_i hr
     exact ⟨hr, MemM.set_ok h₁⟩
 
+/-- A successful `recordAccessIn`: race-free unless the block is a `const` global (which records
+nothing), and the memory after it is `Mem.readAt`. -/
+theorem recordAccessIn_ok {m m' : Mem} {b : BlockId} {blk : Block} {o l : Nat} {k : AccessKind}
+    {x : Unit} (h : ((recordAccessIn b blk o l k).run m).run = some (.ok (x, m'))) :
+    (blk.kind ≠ .constGlobal → NoRace m b o l k) ∧ m' = m.readAt blk b o l k := by
+  cases x; exact recordAccessIn_inv h
+
 theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs : Array Byte}
     (h : ((loadBytes p n a kind).run m).run = some (.ok (bs, m'))) :
-    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧ NoRace m b o n kind ∧
-      bs = blk.bytes.extract o (o + n) ∧ m' = m.recordAt b o n kind := by
+    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧
+      (blk.kind ≠ .constGlobal → NoRace m b o n kind) ∧
+      bs = blk.bytes.extract o (o + n) ∧ m' = m.readAt blk b o n kind := by
   unfold loadBytes at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
@@ -305,22 +313,23 @@ theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs 
   obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
   dsimp only at h₂
   obtain ⟨_, m₃, hr, h₃⟩ := MemM.bind_ok h₂
-  obtain ⟨hnr, rfl⟩ := recordAccess_ok hr
+  obtain ⟨hnr, rfl⟩ := recordAccessIn_ok hr
   obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
   exact ⟨b, blk, o, access_pure ha, hnr, rfl, rfl⟩
 
 theorem load_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
     (h : ((load T a p).run m).run = some (.ok (v, m'))) :
-    ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧ NoRace m b o (Enc.size T) .read ∧
+    ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧
+      (blk.kind ≠ .constGlobal → NoRace m b o (Enc.size T) .read) ∧
       (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
-      m' = m.recordAt b o (Enc.size T) .read := by
+      m' = m.readAt blk b o (Enc.size T) .read := by
   unfold load at h
   obtain ⟨bs, m₁, hl, h₁⟩ := MemM.bind_ok h
   obtain ⟨b, blk, o, ha, hnr, rfl, rfl⟩ := loadBytes_ok hl
   obtain ⟨m₂, m₃, hg, h₂⟩ := MemM.bind_ok h₁
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
-  exact ⟨b, blk, o, ha, hnr, hd, rfl⟩
+  exact ⟨b, blk, o, ha, hnr, Mem.readAt_blocks ▸ hd, rfl⟩
 
 theorem accessW_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}
     (h : (m.accessW p n a).run = some (.ok r)) :
@@ -1922,6 +1931,10 @@ theorem _root_.Zig.Mem.ClocksLe.recordAt {m : Mem} (h : m.ClocksLe) (b o n : Nat
     · exact VClock.le_trans (h u hu) (VClock.le_bump _ _)
   · rw [if_neg (fun h' => hc h'.2), if_neg (fun h' => hc h'.2)]; exact h u hu
 
+theorem _root_.Zig.Mem.ClocksLe.readAt {m : Mem} (h : m.ClocksLe) (blk : Block) (b o n : Nat)
+    (k : AccessKind) : (m.readAt blk b o n k).ClocksLe :=
+  Mem.readAt_cases (P := Mem.ClocksLe) h (h.recordAt b o n k)
+
 /-- A join of `tid` by the current thread, whose clock was above every other thread's but
 `tid`'s: after it, every clock is below the current thread's. -/
 theorem _root_.Zig.Mem.ClocksLe.join {m m' : Mem} {tid : ThreadId}
@@ -2071,6 +2084,12 @@ theorem BlkAt.ptrProject_run {b size a o k : Nat} (hb : BlkAt m b size a) (hk : 
     (ptrProject ⟨some b, (o : Int)⟩ (·.add k)).run m = pure ((⟨some b, (o : Int)⟩ : Ptr).add k, m) := by
   obtain ⟨blk, hblk, -, hsz, -⟩ := hb
   exact ptrProject_block_run hblk rfl (by simp) (by simp; omega)
+
+/-- A `BlkAt` block is no `const` global: a read of it is recorded (`Mem.readAt_of_ne`). -/
+theorem BlkAt.kind_ne {b size a : Nat} {blk : Block} (h : BlkAt m b size a)
+    (hb : m.blocks[b]? = some blk) : blk.kind ≠ .constGlobal := by
+  obtain ⟨blk', hb', -, -, hk, -⟩ := h
+  rw [hb] at hb'; cases hb'; rw [hk]; decide
 
 theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
   unfold alignUp

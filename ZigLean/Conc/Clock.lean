@@ -229,6 +229,13 @@ theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h h
     (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) :=
   StepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb
 
+/-- A read by the current thread of bytes it owns: recorded (`StepIn.recordAt`), or nothing for a
+`const` global. -/
+theorem StepIn.readAt {blk : Block} (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
+    (hb : b < m.blocks.size) : StepIn hF m (m.readAt blk b off len kind) :=
+  Mem.readAt_cases (P := StepIn hF m) (StepIn.refl m hF) (StepIn.recordAt hc hd hin hb)
+
 /-- The current thread keeps what it owns over one of its recorded accesses. -/
 theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :
     (m.recordAt b off len kind).Owns (m.recordAt b off len kind).current h := by
@@ -239,6 +246,10 @@ theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.curren
   rcases he with he | rfl
   · exact VClock.le_trans (ho e he ht) (VClock.le_bump _ _)
   · exact VClock.le_refl _
+
+theorem Mem.Owns.readAt {blk : Block} (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :
+    (m.readAt blk b off len kind).Owns (m.readAt blk b off len kind).current h :=
+  Mem.readAt_cases (P := fun x => x.Owns x.current h) ho (Mem.Owns.recordAt hc ho)
 
 theorem Mem.Owns.write (ho : m.Owns m.current h) {b : BlockId} {blk : Block} {o : Nat}
     {bs : Array Byte} : (m.write b blk o bs).Owns (m.write b blk o bs).current h := by
@@ -779,6 +790,20 @@ theorem FStepIn.recordAt {h : Heap} {b : BlockId} {off len : Nat} {kind : Access
     (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) (hb : b < m.blocks.size)
     (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.recordAt b off len kind) :=
   FStepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
+
+/-- A read by the current thread that touches no byte of `hF`: recorded, or nothing for a
+`const` global. -/
+theorem FStepIn.readAt_of {blk : Block} {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
+    (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
+    FStepIn hF m (m.readAt blk b off len kind) :=
+  Mem.readAt_cases (P := FStepIn hF m) (FStepIn.refl m hF) (FStepIn.recordAt_of hc hnt hb hw)
+
+theorem FStepIn.readAt {h : Heap} {blk : Block} {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) (hb : b < m.blocks.size)
+    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.readAt blk b off len kind) :=
+  FStepIn.readAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
 
 theorem FStepIn.cur (hs : FStepIn hF m m') (hc : m.current < m.clocks.size) :
     m'.current < m'.clocks.size := by

@@ -368,7 +368,7 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
       (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hsz]) (by simpa [cPtr] using ha)
   have hk' : ∀ (W : Word 32 4), (W = S.WS ∨ W = S.WE) → W.Keep m (m.recordAt 0 0 16 .read) :=
     fun W hW => Word.keep_read m (.inr (.inl (by rcases hW with rfl | rfl <;> decide)))
-  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16)
+  refine ⟨load_run hacc rfl (by rw [hk]; decide) (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16)
       (Array.getElem?_eq_some_iff.mp hblk).1
       (fun u x _ hx => own_io hl hu u (by omega)) (fun hL hR x _ hx => R_io hR (by omega))
       (.inr (.inl (by decide))),
@@ -1428,15 +1428,15 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.pure' ?_
   -- the free of the `SemCounter`
   obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₈.2.2.blk
-  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
+  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀, Mem.readAt_blocks]; simp [hm₉]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
-      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
-        _ _ _ _).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).readAt
+        _ _ _ _ _).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
   -- every thread is joined
-  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀]; rfl
+  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀, Mem.readAt_threads]
   simp only [hth₁₀, hth₉] at hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   simp only [Array.size_set!] at hi'

@@ -2629,7 +2629,7 @@ theorem step_io (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).
   have hk' : ∀ {n nb : Nat} (W : Word n nb), 16 ≤ W.o → W.Keep m (m.recordAt 0 0 16 .read) :=
     fun _ h => Word.keep_read m (.inr (.inl h))
   have hcl := recordAt_le m 0 0 16 .read
-  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16) hb0
+  refine ⟨load_run hacc rfl (by rw [hk]; decide) (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16) hb0
       (fun u x _ hx => own_none ⟨hl, hu, he⟩ u (.inl (by omega)))
       (fun hL hR x _ hx => R_none hR (.inl (by omega))) (.inr (.inl (by simp [L, Lock.prod]))),
     U_keep hu (hk' WS (by decide)) (hk' WM (by decide)) rfl (fun w hw _ => hw) (fun e he' hb hl ho => ?_)

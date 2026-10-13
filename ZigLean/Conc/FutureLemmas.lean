@@ -121,7 +121,7 @@ theorem take_threads {slot : Ptr} {v : α} {m m' : Mem}
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₂
   obtain ⟨_, _, _, -, -, -, rfl⟩ := Conc.Proto.load_ok hl
   obtain ⟨_, _, -, -, rfl⟩ := Conc.Proto.free_ok hf
-  rfl
+  exact Mem.readAt_threads
 
 theorem requestCancel_eq {tid : ThreadId} {m m' : Mem} {x : Unit}
     (h : ((requestCancel tid).run m).run = some (.ok (x, m'))) :
@@ -379,7 +379,7 @@ variable {σ : Type}
 theorem load_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem}
     (h : ((load β a q).run m).run = some (.ok (v, m'))) : m'.threads = m.threads := by
   obtain ⟨_, _, _, -, -, -, rfl⟩ := Proto.load_ok h
-  rfl
+  exact Mem.readAt_threads
 
 theorem store_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem} {x : Unit}
     (h : ((store a q v).run m).run = some (.ok (x, m'))) : m'.threads = m.threads := by

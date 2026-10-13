@@ -532,7 +532,7 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
   have hacc : m.access bPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
     access_of (p := bPtr) rfl hblk hl (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [bPtr, hs]) (by simpa [bPtr] using ha)
-  refine ⟨load_run hacc rfl (noRace_io hi.2.io ht), ?_, ?_⟩
+  refine ⟨load_run hacc rfl (by rw [hk]; decide) (noRace_io hi.2.io ht), ?_, ?_⟩
   · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1
       (fun u x _ hx => own_none hi u (by omega))
       (fun hL hR x _ hx => R_none (X := fun u => (G u).2) hR (by omega))

@@ -1,24 +1,31 @@
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.Thread
 import ZigLean.Sep.Full.Strength
+import ZigLean.External
 
 /-!
-# A `const` read records an access on the frame's bytes: no thread `cload` (S1 task 4)
+# A `const` read records nothing: the thread `cload` rule (MM-20)
 
-`FTotalTriple.cload` reads a `const` global from knowledge alone (`cpts`, owns nothing). The
-bytes it reads may belong to the frame: `cbytesAt_intro` hands out the knowledge and keeps the
-bytes, and the frame of a thread step is any resource the memory holds. `Zig.load` records a
-`.read` footprint entry on the bytes it reads, and `FStepIn` (the step relation of `FTTriple`)
-allows a new entry only if it touches no byte of the frame. So the thread version of `cload`
-is false as stated, whatever the postcondition, and an invariant about `const` blocks in
-`FConc`/`FOwned` alone does not repair it: the step relation itself rejects the read.
+Before MM-20 a load of a `const` global recorded a `.read` footprint entry like any load. The
+bytes it reads may belong to the frame (`cbytesAt_intro` hands out the knowledge and keeps the
+bytes), and `FStepIn` (the step relation of `FTTriple`) allows a new entry only if it touches no
+byte of the frame, so no thread version of `cload` held: for the memory below, every thread
+triple with precondition `cpts p 1 0` for the load was false (kernel-checked counterexample
+`cload_no_thread_rule`, `codex/csl-s1-const` 08f34cd8e).
 
-Block 0 is a live 1-byte `const` global (address 4096). One thread, empty footprint. The thread
-holds `cpts p 1 0` (knowledge only); the frame owns the byte.
+MM-20 changes the model, not the logic: no step ever records a write to a `const` global (a
+write access to one throws `.illegal` before recording), so a read of one races with nothing, and
+it records nothing (`recordAccessIn`). The same memory and resources now give:
 
-* `holds`, `fconc`, `owns`: every premise of `FTTriple` holds at `m`.
-* `run_records`: the load returns `0` and records an entry on byte `(0, 0)`.
-* `cload_no_thread_rule`: no thread triple with precondition `cpts p 1 0` holds for the load.
+* `run_unchanged`: the load returns `0` and leaves the memory exactly as it was;
+* `cload_thread`: the thread rule `FTTotalTriple.cload` holds, here at the old counterexample's
+  memory, resource and frame (every premise of `FTTriple` holds there: `holds`, `fconc`,
+  `owns`), with the frame's step relation `FStepIn` met;
+* `write_claim_illegal`, `read_claim_records_nothingB`, `write_kind_load_illegal`: the other
+  recording paths that reach a `const` global keep "no write is ever recorded on one" (an
+  external model's write claim, a `loadBytes` with a write kind) or record nothing (a read claim).
+
+Block 0 is a live 1-byte `const` global (address 4096). One thread, empty footprint.
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound` at most.
 -/
@@ -81,45 +88,47 @@ theorem fconc : m.FConc := by
 
 theorem owns : m.Owns m.current rC.heap.erase := fun e he => by simp [m] at he
 
-theorem run_recordsB :
+/-- The run, computed by the kernel: the value `0`, no footprint entry, the clock unchanged. -/
+theorem run_unchangedB :
     (match ((Zig.load (BitVec 8) 1 p).run m).run with
-      | some (.ok (v, m')) =>
-        v == 0 && m'.footprint.any fun e => e.block == 0 && e.off == 0 && e.len == 1
+      | some (.ok (v, m')) => v == 0 && m'.footprint.isEmpty && m'.clocks == m.clocks
       | _ => false) = true := by
   decide +kernel
 
-/-- **The load succeeds and records an access on the `const` byte.** -/
-theorem run_records : ∃ m', ((Zig.load (BitVec 8) 1 p).run m).run = some (.ok (0, m')) ∧
-    ∃ e ∈ m'.footprint, e.block = 0 ∧ e.off = 0 ∧ e.len = 1 := by
-  have h := run_recordsB
-  revert h
-  generalize ((Zig.load (BitVec 8) 1 p).run m).run = res
-  rcases res with _ | (e | ⟨v, m'⟩)
-  · simp
-  · simp
-  · intro h
-    simp only [Bool.and_eq_true, beq_iff_eq, Array.any_eq_true] at h
-    obtain ⟨hv, i, hi, ⟨hb, ho⟩, hl⟩ := h
-    subst hv
-    exact ⟨m', rfl, _, Array.getElem_mem hi, hb, ho, hl⟩
+/-- **A `const` load changes nothing** (`Zig.load_const`). -/
+theorem run_unchanged : (Zig.load (BitVec 8) 1 p).run m = pure (0, m) :=
+  Zig.load_const (b := 0) (blk := blk) (o := 0) (by decide +kernel) (by decide +kernel) rfl
 
-/-- **No thread rule for a `const` read from knowledge**: whatever the postcondition, the thread
-triple of the load from `cpts p 1 0` is false (the frame owns the byte the load records). -/
-theorem cload_no_thread_rule (Q : BitVec 8 → FAssn) :
-    ¬ FTTriple (cpts p 1 (0 : BitVec 8)) (Zig.load (BitVec 8) 1 p) Q := by
-  intro h
-  have ht := h m rC rF holds hc fconc owns
-  obtain ⟨m', hrun, e, he, hb, ho, hl⟩ := run_records
-  rw [hrun] at ht
-  obtain ⟨-, -, -, -, -, hst⟩ := ht
-  rcases hst.fp e he with ⟨e₀, he₀, -⟩ | ⟨-, hT, -⟩
-  · simp [m] at he₀
-  · apply hT
-    refine ⟨0, by omega, by omega, ?_⟩
-    simp only [rF, FHeap.ofHeap_erase, hb]
-    decide
+/-- **The thread rule for a `const` read from knowledge**, at the old counterexample: the load
+succeeds with `0`, the knowledge stays, and the step is an `FStepIn` of the frame that owns the
+byte. -/
+theorem cload_thread :
+    match ((Zig.load (BitVec 8) 1 p).run m).run with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ (⟪v = 0⟫ ⋆ cpts p 1 (0 : BitVec 8)) r' ∧
+        m'.FConc ∧ m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m' :=
+  (FTTotalTriple.cload (p := p) (a := 1) (v := (0 : BitVec 8)) (by decide)).1 m rC rF holds hc
+    fconc owns
+
+/-- An external model's write claim of a `const` global throws `.illegal` before recording. -/
+theorem write_claim_illegal : ((External.claim p .write).run m).run = some (.error .illegal) := by
+  decide +kernel
+
+/-- A read claim of a `const` global records nothing. -/
+theorem read_claim_records_nothingB :
+    (match ((External.claim p .read).run m).run with
+      | some (.ok ((), m')) => m'.footprint.isEmpty && m'.clocks == m.clocks
+      | _ => false) = true := by
+  decide +kernel
+
+/-- A `loadBytes` with a write kind on a `const` global throws `.illegal` before recording. -/
+theorem write_kind_load_illegal :
+    ((Zig.loadBytes p 1 1 .write).run m).run = some (.error .illegal) := by
+  decide +kernel
 
 end Zig.ConstReadCX
 
-#print axioms Zig.ConstReadCX.run_records
-#print axioms Zig.ConstReadCX.cload_no_thread_rule
+#print axioms Zig.ConstReadCX.run_unchanged
+#print axioms Zig.ConstReadCX.cload_thread
+#print axioms Zig.ConstReadCX.write_claim_illegal

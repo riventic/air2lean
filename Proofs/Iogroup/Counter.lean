@@ -604,7 +604,7 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
   have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
     access_of (p := cPtr) rfl hblk hl (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hs]) (by simpa [cPtr] using ha)
-  refine ⟨load_run hacc rfl (noRace_io hi.2.io ht), ?_, ?_⟩
+  refine ⟨load_run hacc rfl (by rw [hk]; decide) (noRace_io hi.2.io ht), ?_, ?_⟩
   · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1
       (fun u x _ hx => own_none hi u (.inl ⟨rfl, by omega⟩))
       (fun hL hR x _ hx => pts_none hR (.inl ⟨rfl, by omega⟩)) (.inr (.inl (by decide)))
@@ -1623,10 +1623,11 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the frees
   obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hbk
   obtain ⟨blk₁, hblk₁, hl₁, -, -, hkc₁⟩ := hb1
-  have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]; rfl
+  have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂, Mem.readAt_blocks]
   -- every task is joined: the ends of the blocks race with no access
   have hcl : m₁₂.ClocksLe := by
-    rw [hm₁₂]; exact (Mem.ClocksLe.of_threads ho.csize (by rw [hc₁₁]; exact hall)).recordAt _ _ _ _
+    rw [hm₁₂]
+    exact (Mem.ClocksLe.of_threads ho.csize (by rw [hc₁₁]; exact hall)).readAt _ _ _ _ _
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₁) hl₁
     (hcl.freeRaces _ _) (by rw [hkc₁]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
@@ -1640,13 +1641,13 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   obtain ⟨b'', blk'', hb'', hblk'', rfl⟩ := free_ok hfr'
   cases hb''
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk'' with live := false }, ?_, rfl⟩, ?_⟩⟩
-  · have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂]; rfl
+  · have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂, Mem.readAt_threads]
     exact hja r (by simpa [hth] using hr) hsp
   · simp only [Array.set!_eq_setIfInBounds]
     exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk'').1
   · show RegionOwned IoR m₁₂ (m₁₂.clocks[0]!)
     rw [hm₁₂]
-    exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; exact Nat.succ_pos _) b o 4 .read
+    exact hio.readAt hc₁₁ (by rw [ho.csize, hsz]; exact Nat.succ_pos _) blk b o 4 .read
 
 /-! ## The results -/
 

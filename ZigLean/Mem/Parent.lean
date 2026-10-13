@@ -81,7 +81,7 @@ theorem parent_store_visible {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {fiel
           b o (Enc.size α) .read) := by
   rw [Ptr.field_parent]
   exact ⟨store_run v h hK hnw,
-    load_store_same v (access_recordAt.trans h) (access_recordAt.trans h') hnr⟩
+    load_store_same v (access_recordAt.trans h) (access_recordAt.trans h') hK hnr⟩
 
 /-- Conversely, a write through the original field pointer is visible through the recovered
 parent's field. -/
@@ -100,6 +100,6 @@ theorem field_store_visible {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {field
         b o (Enc.size α) .read) := by
   rw [Ptr.field_parent]
   exact ⟨store_run v h hK hnw,
-    load_store_same v (access_recordAt.trans h) (access_recordAt.trans h') hnr⟩
+    load_store_same v (access_recordAt.trans h) (access_recordAt.trans h') hK hnr⟩
 
 end Zig

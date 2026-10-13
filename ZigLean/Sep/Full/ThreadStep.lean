@@ -390,6 +390,17 @@ theorem recordAccess {b o n : Nat} {k : AccessKind} (h₀ : NoRace m₀ b o n k)
   rw [recordAccess_run h, recordAccess_run h₀]
   exact congrArg (fun x => some (Except.ok ((), x))) (Mem.recordAt_withFp m₀ F b o n k)
 
+/-- `recordAccessIn` (nothing for a read of a `const` global), when the access races in neither
+memory. -/
+theorem recordAccessIn {b o n : Nat} {blk : Block} {k : AccessKind} (h₀ : NoRace m₀ b o n k)
+    (h : NoRace (m₀.withFp F) b o n k) : RunFp F m₀ (Zig.recordAccessIn b blk o n k) := by
+  unfold Zig.recordAccessIn
+  split
+  · split
+    · rfl
+    · exact pure _
+  · exact recordAccess h₀ h
+
 variable {p : Ptr} {n a : Nat} {k : AccessKind}
 
 /-- `loadBytes`, when its access races in neither memory. -/
@@ -402,7 +413,7 @@ theorem loadBytes
   obtain ⟨b, blk, o⟩ := x
   obtain ⟨ha, rfl⟩ := Proto.MemM.lift_ok h
   obtain ⟨h1, h2⟩ := hnr b blk o (Proto.access_pure ha)
-  exact bind (recordAccess h1 h2) fun _ _ _ => pure _
+  exact bind (recordAccessIn h1 h2) fun _ _ _ => pure _
 
 /-- `storeBytes`, when its access races in neither memory. -/
 theorem storeBytes {bs : Array Byte}
@@ -718,9 +729,9 @@ theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
     exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
+    exact ⟨FStepIn.readAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
         (fun hw => absurd hw (by simp [hk])),
-      fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
+      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
 /-- **An owned typed load** is local. -/
 theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
@@ -731,9 +742,9 @@ theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
     exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
+    exact ⟨FStepIn.readAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
         (fun hw => absurd hw (by decide)),
-      fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
+      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
 /-- **An owned write of bytes** (`storeBytes`) is local. -/
 theorem storeBytes {bs : Array Byte} (hown : OwnsPtr P p bs.size) :
@@ -875,6 +886,16 @@ theorem readBind {g : Mem → Result γ} {f : γ → MemM α} (hg : ∀ m F, g (
     obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok e1
     exact ⟨r, hh, hp, hs⟩
 
+/-- The memory after a read (`Mem.readAt`: recorded, or nothing for a `const` global) holds what
+the memory held. -/
+theorem _root_.Zig.Full.Holds.readAt {m : Mem} {r rF : Res} (hh : Holds m r rF) (blk : Block)
+    (b : BlockId) (o n : Nat) (kd : AccessKind) : Holds (m.readAt blk b o n kd) r rF :=
+  Mem.readAt_cases (P := fun x => Holds x r rF) hh ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+
+theorem _root_.Zig.Mem.FSeq.readAt {m : Mem} (hs : m.FSeq) (blk : Block) (b : BlockId)
+    (o n : Nat) (kd : AccessKind) : (m.readAt blk b o n kd).FSeq :=
+  Mem.readAt_cases (P := Mem.FSeq) hs ⟨hs.1.recordAt _ _ _ _, hs.2.1, hs.2.2⟩
+
 /-- A successful read of `n` bytes keeps the resources and the memory invariant; it reads `n`
 bytes. -/
 theorem loadBytes_post {p : Ptr} {n a : Nat} {k : AccessKind} :
@@ -884,8 +905,7 @@ theorem loadBytes_post {p : Ptr} {n a : Nat} {k : AccessKind} :
   intro m r rF hh hp hs v m₁ e
   obtain ⟨b, blk, o, ha, -, rfl, rfl⟩ := Proto.loadBytes_ok e
   obtain ⟨-, -, -, h0, hsz, -, rfl⟩ := access_eq ha
-  refine ⟨r, ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩, sep_lift.mpr ⟨?_, hp⟩,
-    ⟨hs.1.recordAt _ _ _ _, hs.2.1, hs.2.2⟩⟩
+  refine ⟨r, hh.readAt _ _ _ _ _, sep_lift.mpr ⟨?_, hp⟩, hs.readAt _ _ _ _ _⟩
   simp only [Array.size_extract]; omega
 
 /-- **`@memmove`** of `n` items of `size` bytes between owned bytes. -/

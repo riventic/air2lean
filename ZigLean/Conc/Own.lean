@@ -193,9 +193,9 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     have hin : ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + Enc.size T → hP (b, x) ≠ none :=
       fun x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-    refine ⟨v, _, hP, load_run hacc hv' (ho.noRace hin), hd, ?_, sep_lift.mpr ⟨rfl, hb⟩,
-      Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hin hbs⟩
-    funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+    refine ⟨v, _, hP, load_read hacc hv' (ho.noRace hin), hd, ?_, sep_lift.mpr ⟨rfl, hb⟩,
+      Mem.Owns.readAt hc ho, StepIn.readAt hc hd hin hbs⟩
+    funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- Forming a pointer `k` bytes into owned bytes (one past the end included; `ptrProject`,
 MM-3): no access, the memory does not change. -/

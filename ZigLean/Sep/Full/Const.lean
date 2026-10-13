@@ -258,13 +258,14 @@ theorem ConstAt.reaches {b : BlockId} {n : Nat} (hpb : p.block = some b) (h : Co
 
 end Providers
 
-/-- The run of a load from `const` bytes that a provider gives: the value, and the same
-resources in the memory after it (only the footprint and the clock change). -/
+/-- The run of a load from `const` bytes that a provider gives: the value, and **the same
+memory** (a read of a `const` global records nothing, `recordAccessIn`), in every memory: no
+race-freedom or single-thread premise. -/
 theorem load_const_step {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} {φ : Nat → Array Byte → Prop}
     {P : FAssn} (h : ConstAt p φ P)
     (hφ : ∀ A bs, φ A bs → (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v)
-    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hst : m.FSeq) :
-    ∃ m', (Zig.load T a p).run m = pure (v, m') ∧ Holds m' r rF ∧ m'.FSeq := by
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) :
+    (Zig.load T a p).run m = pure (v, m) := by
   obtain ⟨b, blk, bs, hpb, hblk, hk, hl, h0, hpos, h7, hx⟩ := h m r rF hh hp
   obtain ⟨ha, hs, hv⟩ := hφ _ _ h7
   obtain ⟨hlt, -⟩ := Array.getElem?_eq_some_iff.mp (hx (bs.size - 1) (by omega))
@@ -276,8 +277,16 @@ theorem load_const_step {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} {φ : Nat
     · intro i h1 h2
       obtain ⟨_, he⟩ := Array.getElem?_eq_some_iff.mp (hx i h2)
       simp only [Array.getElem_extract]; exact he
-  exact ⟨_, load_run hacc (by rw [hext]; exact hv) (noRace_of_singleThread hst.1.single _ _ _ _),
-    ⟨hh.1, hh.2, hh.3, hh.4, hh.5⟩, ⟨hst.1.recordAt _ _ _ _, hst.2.1, hst.2.2⟩⟩
+  exact Zig.load_const hacc (by rw [hext]; exact hv) hk
+
+/-- **Load from a `const` global in a thread** (provider form): the bytes come from the
+knowledge, nothing is owned or consumed, and the memory does not change (`FTTotalTriple.of_read`),
+so the step keeps every frame. The sequential rule is this one's `toFTotalTriple`. -/
+theorem FTTotalTriple.load_const {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
+    {φ : Nat → Array Byte → Prop} {P : FAssn} (h : ConstAt p φ P)
+    (hφ : ∀ A bs, φ A bs → (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v) :
+    FTTotalTriple P (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ P) :=
+  FTTotalTriple.of_read fun _ _ _ hh hp _ => load_const_step h hφ hh hp
 
 /-- **Load from a `const` global** (provider form): the bytes come from the knowledge, nothing is
 owned or consumed. -/
@@ -285,15 +294,19 @@ theorem FTotalTriple.load_const {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
     {φ : Nat → Array Byte → Prop} {P : FAssn} (h : ConstAt p φ P)
     (hφ : ∀ A bs, φ A bs → (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v) :
     FTotalTriple P (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ P) :=
-  FTotalTriple.of_run fun _ r _ hh hp hst => by
-    obtain ⟨m', hr, hh', hst'⟩ := load_const_step h hφ hh hp hst
-    exact ⟨v, m', r, hr, hh', sep_lift.mpr ⟨rfl, hp⟩, hst'⟩
+  (FTTotalTriple.load_const h hφ).toFTotalTriple
+
+/-- **Load of a read-only typed value in a thread**: the knowledge stays. -/
+theorem FTTotalTriple.cload {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
+    (hn : 0 < Enc.size T) :
+    FTTotalTriple (cpts p a v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ cpts p a v) :=
+  FTTotalTriple.load_const (ConstAt.cpts hn) fun _ _ h => h
 
 /-- **Load of a read-only typed value** (`@[fsym]`): the knowledge stays. -/
 @[fsym] theorem FTotalTriple.cload {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
     (hn : 0 < Enc.size T) :
     FTotalTriple (cpts p a v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ cpts p a v) :=
-  FTotalTriple.load_const (ConstAt.cpts hn) fun _ _ h => h
+  (FTTotalTriple.cload hn).toFTotalTriple
 
 /-! ## Providers for `fsym` -/
 

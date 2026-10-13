@@ -837,15 +837,15 @@ theorem main_spec (σ : Placement) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the `Counter`
-  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
+  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀, Mem.readAt_blocks]; simp [hm₉]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
-      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
-        _ _ _ _).freeRaces _ _) (by rw [hk₀]; nofun) e he).elim)
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).readAt
+        _ _ _ _ _).freeRaces _ _) (by rw [hk₀]; nofun) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
   -- every thread is joined
-  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀]; rfl
+  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀, Mem.readAt_threads]
   simp only [hth₁₀, hth₉] at hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   simp only [Array.size_set!] at hi'

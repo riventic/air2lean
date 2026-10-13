@@ -667,16 +667,27 @@ def Mem.retire (m : Mem) (b : BlockId) (o len : Nat) : Mem :=
     seen := m.seen.filterMap fun (t, j, id) =>
       ((m.retireIdx b o len).idxOf? j).map fun j' => (t, j', id) }
 
+/-- Record an access of `n` bytes at offset `o` of block `b`, whose state `blk` `Mem.access` just
+returned. **A `const` global records nothing**: no step ever records a write to one (a write
+access to it throws `.illegal` before recording: `Mem.accessW`, the atomic writes, the claims of
+`ZigLean/External.lean`, and this function for a write kind), so a read of one races with
+nothing, and nothing else reads its record (`docs/architecture-audit/memory-model.md`, MM-20).
+A const read thus changes no state at all, as natively a load of read-only memory does not. -/
+def recordAccessIn (b : BlockId) (blk : Block) (o n : Nat) (kind : AccessKind) : MemM Unit :=
+  if blk.kind = .constGlobal then
+    if kind.isWrite then throw .illegal else pure ()
+  else recordAccess b o n kind
+
 def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Array Byte) := do
   let (b, blk, o) ← (← get).access p n align
-  recordAccess b o n kind
+  recordAccessIn b blk o n kind
   pure (blk.bytes.extract o (o + n))
 
 /-- A genuinely unused AIR load still reads its entire byte range, checking provenance,
 bounds, alignment and races. Its bytes are not decoded into an unused typed value. -/
 def loadDiscardBytes (n align : Nat) (p : Ptr) : MemM Unit := do
-  let (b, _, o) ← (← get).access p n align
-  recordAccess b o n .read
+  let (b, blk, o) ← (← get).access p n align
+  recordAccessIn b blk o n .read
   pure ()
 
 def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) : MemM Unit := do

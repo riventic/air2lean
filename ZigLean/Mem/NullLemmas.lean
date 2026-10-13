@@ -97,10 +97,11 @@ theorem nullablePtrEnc_decode_zero :
 returns address zero. The access premises concern the storage location only. -/
 theorem load_store_null {m : Mem} {p : Ptr} {a a' : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p 8 a = pure (b, blk, o)) (h' : m.access p 8 a' = pure (b, blk, o))
+    (hK : blk.kind ≠ .constGlobal)
     (hnr : NoRace (m.write b blk o (nullablePtrEnc.encode Ptr.null)) b o 8 .read) :
     (@load Ptr nullablePtrEnc a' p).run (m.write b blk o (nullablePtrEnc.encode Ptr.null)) =
       pure (Ptr.null, (m.write b blk o (nullablePtrEnc.encode Ptr.null)).recordAt b o 8 .read) :=
-  @load_store_same Ptr nullablePtrEnc nullablePtrEnc_lawful m p a a' b blk o Ptr.null h h' hnr
+  @load_store_same Ptr nullablePtrEnc nullablePtrEnc_lawful m p a a' b blk o Ptr.null h h' hK hnr
 
 /-- A pointer whose address is nonzero is not null; memory is unchanged. -/
 theorem ptrIsNull_nonzero {m : Mem} {p : Ptr} {addr : Int}

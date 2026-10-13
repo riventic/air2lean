@@ -382,8 +382,9 @@ theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
       (fun x => ⟪x = bs.extract k (k + n)⟫ ⋆ up (bytesAt q A S K bs)) :=
   of_run fun m r rF hh hp hs => by
     obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨_, _, r, loadBytes_run hacc (noRace_of_singleThread hs.1.single _ _ _ _),
-      hh.recordAt _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.recordAt' _ _ _ _⟩
+    exact ⟨_, _, r, loadBytes_read hacc (fun _ => rfl)
+      (noRace_of_singleThread hs.1.single _ _ _ _),
+      hh.readAt _ _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.readAt _ _ _ _ _⟩
 
 /-- **Load of a `T`** at byte `k` of owned bytes that decode to `v` there. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
@@ -393,9 +394,9 @@ theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K bs)) :=
   of_run fun m r rF hh hp hs => by
     obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨v, _, r, load_run hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.recordAt _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.recordAt' _ _ _ _⟩
+    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
+      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
+      hs.readAt _ _ _ _ _⟩
 
 /-- **Store of the bytes `bs'`** at byte `k` of owned bytes, not of a `const` global: the bytes
 become `writeBytes bs k bs'`. -/

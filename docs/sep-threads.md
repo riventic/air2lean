@@ -240,30 +240,28 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   lost that premise), and a zero-length access of the current thread is a `StepIn` for every
   frame.
 
-  **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
-  check passes only if no recorded write to the global is concurrent with the reader. Every
-  write that is recorded went through `Mem.accessW` (or a mapping's kind check), which rejects a
-  `const` global, so no reachable memory has one; but `Mem.FConc` does not say so, and a thread
-  rule must hold in every `FConc` memory. Counterexample to `FTTotalTriple.cload` as stated: a
-  memory whose footprint has a write by thread 1 to a live `const` block, concurrent with thread
-  0, where thread 0 holds `cpts` of it (knowledge only: `Mem.kn` reads the blocks); the load
-  throws `.illegal`. A thread rule needs a memory invariant "no recorded write to a `const`
-  block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts.
-  Decided (coordinator): the invariant goes into `FConc`, proved preserved by every step.
-
-  **Second obstruction (S1 task 4): the invariant is not enough.** `cpts` is knowledge, and the
-  bytes it describes may belong to the frame (`cbytesAt_intro` hands out the knowledge and keeps
-  the bytes; the frame of a thread step is any resource). `Zig.load` records a `.read` entry on
-  the bytes it reads, and `FStepIn.fp` allows a new entry only if it touches no byte of the
-  frame. So the thread `cload` fails in a memory with no recorded write at all, whatever its
-  postcondition. Kernel-checked: `tests/roadmap/sep-full/ConstReadCX.lean`
-  (`cload_no_thread_rule`: one thread, empty footprint, a 1-byte `const` global owned by the
-  frame). A thread `cload` needs a model or logic change as well as the invariant. One option is
-  that a read of a `const` global records no access: it cannot race, because every write to one
-  is `.illegal` before it is recorded. Then the load leaves the memory unchanged and the
-  invariant is not needed. The other option is that `FStepIn.fp` admits new reads of `const`
-  bytes on the frame and `OwnsC` ignores them, with the `FConc` invariant. Pending a
-  coordinator decision.
+  **Done: `Const` (`cload`, `cfield_*`), by a model change (MM-20).** Two obstructions stood in
+  the way. (1) A read of a `const` global owns no bytes, so its race check passes only if no
+  recorded write to the global is concurrent with the reader; every recorded write went through
+  `Mem.accessW` (or a mapping's kind check), but `Mem.FConc` does not say so. (2) `cpts` is
+  knowledge, and the bytes it describes may belong to the frame (`cbytesAt_intro` hands out the
+  knowledge and keeps the bytes); a load recorded a `.read` entry on them, and `FStepIn.fp`
+  allows a new entry only if it touches no byte of the frame. So the thread `cload` failed even
+  in a memory with no recorded write at all (kernel-checked, `cload_no_thread_rule` on
+  `codex/csl-s1-const` 08f34cd8e). Coordinator ruling (2026-10-13): option A, the model. **A read
+  of a `const` global records nothing** (`recordAccessIn`, used by `loadBytes`,
+  `loadDiscardBytes` and `External.claim`): no step ever records a write to one (a write access
+  to one throws `.illegal` before recording, now also an external model's write claim and a
+  `loadBytes` with a write kind), so the read races with nothing, and nothing else reads its
+  record (the consumer audit is MM-20 in `docs/architecture-audit/memory-model.md`). A `const`
+  load then leaves the memory unchanged (`Zig.load_const`, `Full.load_const_step`), the thread
+  rule is a read step (`FTTotalTriple.of_read`): `FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`, and the sequential rules are their `toFTotalTriple`. No
+  `FConc` invariant is needed; the `ConstRO` plan is dropped. Regression
+  `tests/roadmap/sep-full/ConstReadCX.lean`: the old counterexample's memory, resource and frame
+  now satisfy the thread rule. Atomic reads of a `const` global still record an `.atomicRead`
+  entry (it races with nothing either; no rule reads such an entry, and the atomic thread rules
+  take non-`const` words).
 
   **`mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
   `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a

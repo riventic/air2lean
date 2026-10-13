@@ -144,6 +144,11 @@ theorem recordAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.cu
   · rw [recordAt_clock ht]
     exact VClock.le_refl _
 
+theorem readAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.current = t)
+    (ht : t < m.clocks.size) (blk : Block) (b o len : Nat) (k : AccessKind) :
+    RegionOwned R (m.readAt blk b o len k) ((m.readAt blk b o len k).clocks[t]!) :=
+  Mem.readAt_cases (P := fun x => RegionOwned R x (x.clocks[t]!)) ho (ho.recordAt hc ht b o len k)
+
 /-- Full ownership: no access of any kind to a covered range races, including a write, such as
 `std`'s poison write before `free`. -/
 theorem noRace (ho : RegionOwned R m (m.clocks[m.current]!)) {b o len : Nat}

@@ -372,6 +372,68 @@ def Mem.recordAt (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind)
       { tid := m.current, clock := VClock.bump (m.clocks[m.current]!) m.current,
         block, off, len, kind } }
 
+/-- The memory after a successful `recordAccessIn` for the block `blk`: unchanged for a `const`
+global (a read of one records nothing), `recordAt` otherwise. -/
+def Mem.readAt (m : Mem) (blk : Block) (block : BlockId) (off len : Nat) (kind : AccessKind) :
+    Mem :=
+  if blk.kind = .constGlobal then m else m.recordAt block off len kind
+
+@[simp] theorem Mem.readAt_of_ne {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} (hK : blk.kind ≠ .constGlobal) :
+    m.readAt blk block off len kind = m.recordAt block off len kind := by
+  simp [Mem.readAt, hK]
+
+@[simp] theorem Mem.readAt_const {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} (hK : blk.kind = .constGlobal) :
+    m.readAt blk block off len kind = m := by
+  simp [Mem.readAt, hK]
+
+/-- `Mem.readAt` is `m` or `m.recordAt`: a property of both is one of `readAt`. -/
+theorem Mem.readAt_cases {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} {P : Mem → Prop} (h0 : P m) (h1 : P (m.recordAt block off len kind)) :
+    P (m.readAt blk block off len kind) := by
+  unfold Mem.readAt; split
+  · exact h0
+  · exact h1
+
+@[simp] theorem Mem.readAt_blocks {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).blocks = m.blocks :=
+  Mem.readAt_cases (P := fun x => x.blocks = m.blocks) rfl rfl
+
+@[simp] theorem Mem.readAt_threads {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).threads = m.threads :=
+  Mem.readAt_cases (P := fun x => x.threads = m.threads) rfl rfl
+
+@[simp] theorem Mem.readAt_current {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).current = m.current :=
+  Mem.readAt_cases (P := fun x => x.current = m.current) rfl rfl
+
+@[simp] theorem Mem.readAt_atomics {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).atomics = m.atomics :=
+  Mem.readAt_cases (P := fun x => x.atomics = m.atomics) rfl rfl
+
+@[simp] theorem Mem.readAt_host {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).host = m.host :=
+  Mem.readAt_cases (P := fun x => x.host = m.host) rfl rfl
+
+/-- `recordAccessIn` of a block that is not a `const` global is `recordAccess`. -/
+theorem recordAccessIn_of_ne {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
+    (hK : blk.kind ≠ .constGlobal) : recordAccessIn b blk o n kind = recordAccess b o n kind := by
+  simp [recordAccessIn, hK]
+
+/-- **A read of a `const` global records nothing.** -/
+theorem recordAccessIn_const {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
+    (hK : blk.kind = .constGlobal) (hk : kind.isWrite = false) :
+    recordAccessIn b blk o n kind = pure () := by
+  simp [recordAccessIn, hK, hk]
+
+theorem recordAccessIn_run {m : Mem} {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
+    (hk : blk.kind = .constGlobal → kind.isWrite = false) (hnr : NoRace m b o n kind) :
+    (recordAccessIn b blk o n kind).run m = pure ((), m.readAt blk b o n kind) := by
+  by_cases hK : blk.kind = .constGlobal
+  · rw [recordAccessIn_const hK (hk hK), Mem.readAt_const hK]; rfl
+  · rw [recordAccessIn_of_ne hK, Mem.readAt_of_ne hK, recordAccess_run hnr]; rfl
+
 /-! ## Single-thread executions
 
 A per-call-site `NoRace` hypothesis is the general obligation (`NoRace`'s own doc comment), but a
@@ -619,6 +681,10 @@ theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Na
       rw [hbump]
       exact VClock.le_refl _
 
+theorem singleThread_readAt {m : Mem} (h : m.SingleThread) (blk : Block) (block off len : Nat)
+    (kind : AccessKind) : (m.readAt blk block off len kind).SingleThread :=
+  Mem.readAt_cases (P := Mem.SingleThread) h (singleThread_recordAt h block off len kind)
+
 /-! ### Forgetting the history of dead offsets (`Mem.forgetFrom`) -/
 
 theorem FootprintEntry.forgetFrom_tid (b : BlockId) (S : Nat) (e : FootprintEntry) :
@@ -662,15 +728,36 @@ theorem Mem.SingleThread.forgetFrom {m : Mem} (h : m.SingleThread) (b : BlockId)
   obtain ⟨ht, hle⟩ := h.2 e₀ he₀
   exact ⟨(FootprintEntry.forgetFrom_tid b S e₀).trans ht, FootprintEntry.forgetFrom_le hle⟩
 
+/-- A read of `n` bytes, from any block: it records the access unless the block is a `const`
+global (`recordAccessIn`). -/
+theorem loadBytes_read {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    {kind : AccessKind} (h : m.access p n a = pure (b, blk, o))
+    (hk : blk.kind = .constGlobal → kind.isWrite = false) (hnr : NoRace m b o n kind) :
+    (loadBytes p n a kind).run m =
+      pure (blk.bytes.extract o (o + n), m.readAt blk b o n kind) := by
+  have hr := recordAccessIn_run (blk := blk) hk hnr
+  unfold loadBytes
+  simp only [h, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, pure, StateT.pure,
+    StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.pure, ExceptT.mk,
+    ExceptT.bind, ExceptT.bindCont, Option.bind_some] at hr ⊢
+  rw [hr]; rfl
+
 theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
-    {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n kind) :
+    {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
+    (hnr : NoRace m b o n kind) :
     (loadBytes p n a kind).run m =
       pure (blk.bytes.extract o (o + n), m.recordAt b o n kind) := by
-  unfold loadBytes recordAccess NoRace at *
-  simp only [h, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set, StateT.set,
-    MonadStateOf.set, pure, StateT.pure, StateT.run, liftM, monadLift, MonadLift.monadLift,
-    StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some, hnr,
-    Mem.recordAt]
+  rw [loadBytes_read h (fun e => absurd e hK) hnr, Mem.readAt_of_ne hK]
+
+/-- **A read of a `const` global changes nothing** and needs no race-freedom. -/
+theorem loadBytes_const {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hK : blk.kind = .constGlobal)
+    (hk : kind.isWrite = false := by decide) :
+    (loadBytes p n a kind).run m = pure (blk.bytes.extract o (o + n), m) := by
+  unfold loadBytes
+  simp only [h, recordAccessIn_const hK hk, get, getThe, MonadStateOf.get, StateT.get, bind,
+    StateT.bind, pure, StateT.pure, StateT.run, liftM, monadLift, MonadLift.monadLift,
+    StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some]
 
 /-- Direct discarded access is equivalent for every state to the former full read and
 unused result, including access errors, race errors, clock changes and read footprints. -/
@@ -678,14 +765,21 @@ theorem loadDiscardBytes_eq (n a : Nat) (p : Ptr) :
     loadDiscardBytes n a p = (do let _ ← loadBytes p n a; pure ()) := by
   simp only [loadDiscardBytes, loadBytes, bind_assoc, pure_bind]
 
-/-- A discarded load validates and records the full raw read without extracting bytes. -/
-theorem loadDiscardBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
-    (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n .read) :
-    (loadDiscardBytes n a p).run m = pure ((), m.recordAt b o n .read) := by
+/-- A discarded load validates and records the full raw read without extracting bytes (nothing
+for a `const` global). -/
+theorem loadDiscardBytes_read {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n .read) :
+    (loadDiscardBytes n a p).run m = pure ((), m.readAt blk b o n .read) := by
   rw [loadDiscardBytes_eq]
-  simp only [StateT.run_bind, loadBytes_run h hnr]
+  simp only [StateT.run_bind, loadBytes_read h (fun _ => rfl) hnr]
   simp [StateT.run, pure, StateT.pure, bind, ExceptT.pure, ExceptT.mk, ExceptT.bind,
     ExceptT.bindCont]
+
+theorem loadDiscardBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
+    (hnr : NoRace m b o n .read) :
+    (loadDiscardBytes n a p).run m = pure ((), m.recordAt b o n .read) := by
+  rw [loadDiscardBytes_read h hnr, Mem.readAt_of_ne hK]
 
 /-- The memory after writing `bs` at offset `o` of block `b` (`storeBytes`). -/
 def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) : Mem :=
@@ -701,6 +795,10 @@ race-free `recordAccess` (`Mem.recordAt`) never changes what a further access se
 theorem access_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} {q : Ptr}
     {n' a' : Nat} : (m.recordAt block off len kind).access q n' a' = m.access q n' a' := by
   simp [Mem.access, Mem.recordAt]
+
+theorem access_readAt {m : Mem} {blk : Block} {block off len : Nat} {kind : AccessKind} {q : Ptr}
+    {n' a' : Nat} : (m.readAt blk block off len kind).access q n' a' = m.access q n' a' :=
+  Mem.readAt_cases (P := fun x => x.access q n' a' = m.access q n' a') rfl access_recordAt
 
 theorem storeBytes_run {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b : BlockId}
     {blk : Block} {o : Nat} {kind : AccessKind} (h : m.access p bs.size a = pure (b, blk, o))
@@ -753,12 +851,31 @@ theorem noRace_write {m : Mem} {b' : BlockId} {blk' : Block} {o' : Nat} {bs : Ar
     {block : BlockId} {off len : Nat} {kind : AccessKind} :
     NoRace (m.write b' blk' o' bs) block off len kind ↔ NoRace m block off len kind := Iff.rfl
 
-theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId} {blk : Block}
+/-- A load from any block: it records the read unless the block is a `const` global. -/
+theorem load_read {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId} {blk : Block}
     {o : Nat} {v : α} (h : m.access p (Enc.size α) a = pure (b, blk, o))
     (hv : Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v)
     (hnr : NoRace m b o (Enc.size α) .read) :
+    (load α a p).run m = pure (v, m.readAt blk b o (Enc.size α) .read) := by
+  simp only [load, StateT.run_bind, loadBytes_read h (fun _ => rfl) hnr]
+  unfold Mem.readAt; split <;>
+  simp [decodeLoad_of_decode hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind,
+    ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, get, getThe,
+    MonadStateOf.get, StateT.get]
+
+theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} {v : α} (h : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hv : Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v)
+    (hK : blk.kind ≠ .constGlobal) (hnr : NoRace m b o (Enc.size α) .read) :
     (load α a p).run m = pure (v, m.recordAt b o (Enc.size α) .read) := by
-  simp only [load, StateT.run_bind, loadBytes_run h hnr]
+  rw [load_read h hv hnr, Mem.readAt_of_ne hK]
+
+/-- **A load of a `const` global changes nothing** and needs no race-freedom. -/
+theorem load_const {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} {v : α} (h : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hv : Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v)
+    (hK : blk.kind = .constGlobal) : (load α a p).run m = pure (v, m) := by
+  simp only [load, StateT.run_bind, loadBytes_const (kind := .read) h hK]
   simp [decodeLoad_of_decode hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind,
     ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, get, getThe,
     MonadStateOf.get, StateT.get]
@@ -809,7 +926,7 @@ it, `NoRace`; the store's own race-freedom, if any, is the caller's `store_run`)
 theorem load_store_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a a' : Nat}
     {b : BlockId} {blk : Block} {o : Nat} (v : α)
     (h : m.access p (Enc.size α) a = pure (b, blk, o))
-    (h' : m.access p (Enc.size α) a' = pure (b, blk, o))
+    (h' : m.access p (Enc.size α) a' = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hnr : NoRace (m.write b blk o (Enc.encode v)) b o (Enc.size α) .read) :
     (load α a' p).run (m.write b blk o (Enc.encode v)) =
       pure (v, (m.write b blk o (Enc.encode v)).recordAt b o (Enc.size α) .read) := by
@@ -820,7 +937,7 @@ theorem load_store_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} 
   have ho := (access_eq h).2.2.2.2.2.2
   have hx := extract_writeBytes blk.bytes o (Enc.encode v) (by rw [LawfulEnc.size_encode v]; omega)
   rw [LawfulEnc.size_encode v] at hx
-  exact load_run (access_write_same hw h') (by simp only [hx, LawfulEnc.decode_encode]) hnr
+  exact load_run (access_write_same hw h') (by simp only [hx, LawfulEnc.decode_encode]) hK hnr
 
 /-- A store at `p` does not change a load at `q` in another block, or at a range of the same
 block that does not overlap. `hnr`: the load does not race (as in `load_store_same`). -/
@@ -830,6 +947,7 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
     (hq : m.access q (Enc.size β) a' = pure (c, blk', o'))
     (hd : b ≠ c ∨ o + Enc.size α ≤ o' ∨ o' + Enc.size β ≤ o)
     (hw : Enc.decode (blk'.bytes.extract o' (o' + Enc.size β)) = pure w)
+    (hK : blk'.kind ≠ .constGlobal)
     (hnr : NoRace (m.write b blk o (Enc.encode v)) c o' (Enc.size β) .read) :
     (load β a' q).run (m.write b blk o (Enc.encode v)) =
       pure (w, (m.write b blk o (Enc.encode v)).recordAt c o' (Enc.size β) .read) := by
@@ -841,7 +959,7 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
     subst hblk
     have hpw := hp
     rw [← LawfulEnc.size_encode v] at hpw
-    apply load_run (access_write_same hpw hq) _ hnr
+    apply load_run (access_write_same hpw hq) _ hK hnr
     have h0 := (access_eq hp).2.2.2.1
     have h0' := (access_eq hq).2.2.2.1
     have hn := (access_eq hp).2.2.2.2.1
@@ -851,7 +969,7 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
     rw [extract_writeBytes_disjoint _ _ _ _ _ (by rw [LawfulEnc.size_encode v]; omega) (by omega)
       (by rw [LawfulEnc.size_encode v]; omega)]
     exact hw
-  · exact load_run (access_write_other hq hbc) hw hnr
+  · exact load_run (access_write_other hq hbc) hw hK hnr
 
 /-! ## Pointer-level form -/
 
@@ -860,50 +978,42 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
 -- (`Proofs/Pointers/Proofs.lean`) compose `load_run`/`store_run`/`load_store_same`/
 -- `load_store_other` directly, threading each step's own `NoRace` hypothesis and output memory.
 
-/-- Inverts a successful `load`: the access succeeds, the decode gives `v`, and the resulting
-memory is the input with the read recorded (`Mem.recordAt`). -/
-theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
-    (h : (load α a p).run m = pure (v, m')) :
-    ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
-      decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
-      m' = m.recordAt b o (Enc.size α) .read := by
-  simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
-    MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
-    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set,
-    MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
-  generalize hacc : m.access p (Enc.size α) a = r at h
-  match r, hacc, h with
-  | none, _, h => simp at h
-  | some (.error _), _, h =>
-    simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
-  | some (.ok (b, blk, o)), hacc, h =>
-    simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o
-      (Enc.size α) .read = r at h
+/-- Inverts a successful `recordAccessIn`: race-free unless the block is a `const` global (which
+records nothing), and the memory after it is `Mem.readAt`. -/
+theorem recordAccessIn_inv {m m' : Mem} {b : BlockId} {blk : Block} {o n : Nat}
+    {kind : AccessKind} (h : (recordAccessIn b blk o n kind).run m = pure ((), m')) :
+    (blk.kind ≠ .constGlobal → NoRace m b o n kind) ∧ m' = m.readAt blk b o n kind := by
+  by_cases hK : blk.kind = .constGlobal
+  · refine ⟨fun h' => absurd hK h', ?_⟩
+    simp only [recordAccessIn, hK, ↓reduceIte] at h
+    rw [Mem.readAt_const hK]
+    split at h
+    · cases h
+    · cases h; rfl
+  · rw [recordAccessIn_of_ne hK] at h
+    rw [Mem.readAt_of_ne hK]
+    simp only [recordAccess, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+      StateT.get, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont,
+      set, MonadStateOf.set, throw, throwThe, MonadExceptOf.throw] at h
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
     match r, hr, h with
-    | some _, _, h =>
-      cases h
+    | some _, _, h => cases h
     | none, hr, h =>
-      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk] at h
-      generalize hd2 : (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
-      match d, hd2, h with
-      | none, _, h => simp at h
-      | some (.error _), _, h =>
-        simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
-      | some (.ok w), hd2, h =>
-        simp only [ExceptT.bindCont, Option.bind_some] at h
-        obtain ⟨rfl, rfl⟩ := h
-        exact ⟨b, blk, o, rfl, hd2, rfl⟩
+      simp only [Option.bind_some] at h
+      obtain ⟨-, rfl⟩ := h
+      exact ⟨fun _ => hr, rfl⟩
 
-/-- Inverts a successful `loadBytes`: the access succeeds and only the read is recorded. -/
+/-- Inverts a successful `loadBytes`: the access succeeds, races with nothing, and only the read
+is recorded (nothing for a `const` global). -/
 theorem loadBytes_inv {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs : Array Byte}
     (h : (loadBytes p n a kind).run m = pure (bs, m')) :
-    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧ bs = blk.bytes.extract o (o + n) ∧
-      m' = m.recordAt b o n kind := by
-  simp only [loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
+    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧
+      (blk.kind ≠ .constGlobal → NoRace m b o n kind) ∧ bs = blk.bytes.extract o (o + n) ∧
+      m' = m.readAt blk b o n kind := by
+  simp only [loadBytes, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
-    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set,
-    MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
+    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont,
+    Function.comp] at h
   generalize hacc : m.access p n a = r at h
   match r, hacc, h with
   | none, _, h => simp at h
@@ -911,14 +1021,42 @@ theorem loadBytes_inv {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs
     simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
   | some (.ok (b, blk, o)), hacc, h =>
     simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
+    generalize hr : recordAccessIn b blk o n kind m = r at h
     match r, hr, h with
-    | some _, _, h => cases h
-    | none, hr, h =>
-      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure,
-        ExceptT.mk] at h
+    | none, _, h => simp at h
+    | some (.error _), _, h => cases h
+    | some (.ok ((), m₁)), hr, h =>
+      simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.pure, ExceptT.mk] at h
       obtain ⟨rfl, rfl⟩ := h
-      exact ⟨b, blk, o, rfl, rfl, rfl⟩
+      obtain ⟨hnr, rfl⟩ := recordAccessIn_inv hr
+      exact ⟨b, blk, o, rfl, hnr, rfl, rfl⟩
+
+/-- Inverts a successful `load`: the access succeeds, the decode gives `v`, and the resulting
+memory is the input with the read recorded (`Mem.readAt`: nothing for a `const` global). -/
+theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
+    (h : (load α a p).run m = pure (v, m')) :
+    ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
+      decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
+      m' = m.readAt blk b o (Enc.size α) .read := by
+  simp only [load, StateT.run_bind] at h
+  generalize hl : (loadBytes p (Enc.size α) a).run m = r at h
+  match r, hl, h with
+  | none, _, h => cases h
+  | some (.error _), _, h => cases h
+  | some (.ok (bs, m₁)), hl, h =>
+    obtain ⟨b, blk, o, hacc, -, rfl, rfl⟩ := loadBytes_inv hl
+    simp only [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, Option.bind_some, StateT.run,
+      get, getThe, MonadStateOf.get, StateT.get, liftM, monadLift,
+      MonadLift.monadLift, StateT.lift, pure, ExceptT.pure, Mem.readAt_blocks] at h
+    generalize hd2 : (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) : Result α) = d
+      at h
+    match d, hd2, h with
+    | none, _, h => simp at h
+    | some (.error _), _, h => cases h
+    | some (.ok w), hd2, h =>
+      simp only [ExceptT.bindCont, Option.bind_some, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨b, blk, o, hacc, hd2, rfl⟩
 
 /-- A load of the bytes of a value of a lawful encoding decodes the value. -/
 @[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
