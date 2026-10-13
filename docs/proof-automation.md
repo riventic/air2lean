@@ -66,7 +66,8 @@ calls with 20 to 30 facts.
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
-  rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
+  rules (loads, stores, pointer operations, checked `+ - % /`), the fields of typed values
+  (`EncField`, §Fields),
   providers (`AddrOf`, `Reaches`, `Live`, `Active`; §Providers), pointer `==` across live blocks
   (`ptrEqAddr_live`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
@@ -74,6 +75,10 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
+  tag (§Atomic words).
+* `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
+  (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
@@ -106,15 +111,77 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   `Reaches.shareW`: a share whose tag is active (`Within (bshare b q k t) P`, `Active t P`);
   `Active.root`; `Active.gauthP`: a ledger's authority at its epoch under an active parent.
   `Live b l k` (live bytes from `l` to below `k`) comes only from owned bytes: a share bounds
-  no first live offset (MM-19).
+  no first live offset (MM-19). A rule that needs a live block up to a bound takes `Live b l k₀`
+  and `Reaches b k` apart (`Live.reach`, not a provider: with `Reaches.of_live` it would cycle),
+  so the first live offset comes from owned bytes and the bound from any part (a node's share).
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
 pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+past a live byte; one past a full node is past its header and within its share) gives
+`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
+
+### Fields
+
+A struct of generated code is one typed value `up (pts p a s)`, read and written whole (the
+`pts` rules) and by field: `EncField T U o get set` (`AutoRules.lean`) says that the bytes
+`[o, o + size U)` of every encoding of `s : T` decode to `get s`, and that bytes decoding to `v`
+written there make an encoding of `set s v`. The `@[fsym]` rules `FTotalTriple.encField_load`/
+`_store` (`Typed.lean`, also at byte 0) load `get s` and store into `set s w`; their side goal
+`EncField T U o ?get ?set` is solved by `encFieldOf?` (`Auto.lean`): it reads the fields off the
+struct's decoding (`do pure { f := ← Enc.decodeAt bs o, … }`, as the translator writes it and as
+`Slice` decodes), finds the field that holds byte `o`, proves its `EncField` from the decoding
+(`result_bind_eq_pure`, `decode_write_*`) and descends into a field of a field by
+`EncField.comp` (a slice's `len` in a list header: `get := fun s => s.items.len`). A decoding of
+another shape, or an access that straddles fields, gives no field: the rules do not apply.
+Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
+proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
+`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
+
+### Atomic words
+
+A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
+`(p.off, 8)`) is also read and written by plain loads and stores: the arena's `reset` stores
+its list heads, `allocatedSliceUnsafe` loads a node's packed size word. A plain access checks no
+tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules of
+`ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag and the atomic ops still apply afterwards:
+`aptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to one),
+`apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
+word, whose generated `Enc` is its bits' encoding). They are the byte rules
+`load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+
+### Parts
+
+A struct whose bytes several parts of the precondition own (the arena's header: its child
+allocator's bytes as a region, its list heads as atomic words; a list header as one atom per
+field) is loaded and stored whole by the parts' own rules (`ZigLean/Sep/Full/Parts.lean`), so each
+part keeps its view and an atomic word its tag:
+
+* **Loads** read. The provider kind `ReadsAt q n D P` says that the `n` bytes at `q` are in a
+  live block and satisfy `D` in every memory that holds `P`; `AlignedAt q al P` that `q`'s
+  address is aligned. The parts provide them for their bytes (`@[fsym_provider]`
+  `ReadsAt.pts`/`.ptsField` (a field of a typed value, by its `EncField`)/`.aptsE`/`.apts`/
+  `.regionIn` (bytes that decode to a value), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
+  a struct that decodes its fields one after the other, `fsym` composes its bytes from its
+  fields' (`readsStruct` in `Auto.lean`: each field a provider goal again, `ReadsAt.base` and a
+  `Reaches` bound for the extent, `ReadsAt.field`, and the struct's decoding of the fields'
+  values). `FTotalTriple.load_reads` loads the value; `fsym` tries it after every other rule, for
+  loads of structs only.
+* **Stores** write. `FTotalTriple.storeBytes_parts` executes a write by pieces (`Parts`,
+  `storeParts`): one write and the writes of its pieces leave the same blocks and atomic layout
+  (`storeBytes_two_run`; only the record of accesses differs, which no assertion reads). When no
+  rule stores a struct, `fsym` cuts its encoding (`Enc.fields N [(o, Enc.encode x), …]`, as the
+  translator writes a struct's `Enc`) at its fields (`fields_extract`, sizes by `LawfulEnc` or a
+  struct's layout, `LayoutOk` checked on numbers), stores each field as a typed value by the rule
+  of the part that owns it (a struct-valued field again by its pieces) and the padding as bytes
+  (`storeSplitRule?`).
+
+Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
+stored by `reset`, a list header held as one atom per field).
 
 ## How it works
 
@@ -135,7 +202,9 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   continuation is normalized once it is the head, so a step costs the same on a 900-line
   generated body as on a small one (normalizing the whole body pushes every continuation into
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
-  projection is reduced.
+  projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
+  as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs

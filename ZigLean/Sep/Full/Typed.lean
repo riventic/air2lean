@@ -18,10 +18,11 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
 * **Fields** of a typed value, from the byte rules: `FTotalTriple.field_load` reads `v` at byte
   `o` of `pts q a s` if every byte string of `s` has `v` there; `FTotalTriple.field_store`
   writes `w` there and gives `pts q a s'` if every byte string of `s` with `w` written there
-  decodes to `s'`. The field value is not determined by the program, so these are rules for
-  `fsym [FTotalTriple.field_load (v := …) …]`, not `@[fsym]`. A write that leaves the value
-  undecodable in between (a tag and a payload written one after the other) goes through the
-  bytes view: `up_pts_iff`, the byte rules, `up_pts_of_region`.
+  decodes to `s'`. With the field's `EncField` (`AutoRules.lean`) the value is determined:
+  `FTotalTriple.encField_load`/`_store` (`@[fsym]`) read `get s` and write `set s w`, and `fsym`
+  derives the `EncField` of the structs of generated code (`docs/proof-automation.md` §Fields).
+  A write that leaves the value undecodable in between (a tag and a payload written one after
+  the other) goes through the bytes view: `up_pts_iff`, the byte rules, `up_pts_of_region`.
 * **Payloads** (`@[fsym]`): the payload of an error union holding `.ok x`
   (`errPayload_load`/`errPayload_store` through `errPayloadPtr`).
 * **Read-only fields** of a `const` global (`cpts`, `Full/Const.lean`): `FTotalTriple.cfield_load`
@@ -191,6 +192,42 @@ theorem FTotalTriple.field_store0 [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < Enc
     FTotalTriple (up (pts q a s)) (Zig.store b q w) (fun _ => up (pts q a s')) := by
   have t := FTotalTriple.field_storeAt (T := T) (q := q) (o := 0) w hn hb (Nat.dvd_zero b) (by omega) hw
   simpa only [Int.natCast_zero, Ptr.add_zero] using t
+
+/-! ### Fields by `EncField` (`@[fsym]`)
+
+The field rules with the field's value from its `EncField` (`AutoRules.lean`): a read gives
+`get s`, a write `set s w`. `fsym` derives the `EncField` of the structs of generated code (and
+of `Slice`), a field of a field included, so a stored struct is read and written whole and by
+field alike. -/
+
+/-- **Load of a field** `get s`. -/
+@[fsym] theorem FTotalTriple.encField_load {k : Int} {s : T} {get : T → U} {set : T → U → T}
+    (hf : EncField T U k.toNat get set) (hn : 0 < Enc.size U) (hb : b ∣ a) (h0 : 0 ≤ k)
+    (ho : b ∣ k.toNat) :
+    FTotalTriple (up (pts q a s)) (Zig.load U b (q.add k)) (fun x => ⟪x = get s⟫ ⋆ up (pts q a s)) :=
+  FTotalTriple.field_load hn hb h0 ho hf.fit fun _ hs hd => hf.get_dec hs hd
+
+/-- **Store of a field**: the value becomes `set s w`. -/
+@[fsym] theorem FTotalTriple.encField_store [LawfulEnc U] {k : Int} {s : T} {get : T → U}
+    {set : T → U → T} (w : U) (hf : EncField T U k.toNat get set) (hn : 0 < Enc.size U)
+    (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat) :
+    FTotalTriple (up (pts q a s)) (Zig.store b (q.add k) w) (fun _ => up (pts q a (set s w))) :=
+  FTotalTriple.field_store w hn hb h0 ho hf.fit fun _ hs hd =>
+    hf.set_dec hs hd (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
+
+/-- `encField_load` at byte 0. -/
+@[fsym] theorem FTotalTriple.encField_load0 {s : T} {get : T → U} {set : T → U → T}
+    (hf : EncField T U 0 get set) (hn : 0 < Enc.size U) (hb : b ∣ a) :
+    FTotalTriple (up (pts q a s)) (Zig.load U b q) (fun x => ⟪x = get s⟫ ⋆ up (pts q a s)) :=
+  FTotalTriple.field_load0 hn hb (by have := hf.fit; omega) fun _ hs hd => by
+    simpa using hf.get_dec hs hd
+
+/-- `encField_store` at byte 0. -/
+@[fsym] theorem FTotalTriple.encField_store0 [LawfulEnc U] {s : T} {get : T → U}
+    {set : T → U → T} (w : U) (hf : EncField T U 0 get set) (hn : 0 < Enc.size U) (hb : b ∣ a) :
+    FTotalTriple (up (pts q a s)) (Zig.store b q w) (fun _ => up (pts q a (set s w))) :=
+  FTotalTriple.field_store0 w hn hb (by have := hf.fit; omega) fun _ hs hd =>
+    hf.set_dec hs hd (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
 
 end Bytes
 
