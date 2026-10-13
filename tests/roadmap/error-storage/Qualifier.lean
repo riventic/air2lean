@@ -7,10 +7,6 @@ private def get (out : Except String α) : IO α := match out with
   | .error message => throw (IO.userError message)
 private def require (test : Bool) (why : String) : IO Unit :=
   unless test do throw (IO.userError why)
-private def reject (f : Func) : IO Unit :=
-  match check f with
-  | .ok _ => throw (IO.userError "accepted a representation-changing recursive cast")
-  | .error _ => pure ()
 
 def main : IO Unit := do
   -- Exact retained schema-11 list client; neither AIR nor historical Gen is rewritten.
@@ -37,16 +33,6 @@ def main : IO Unit := do
   require (wrapCx.valTy? (.inst 18) == some 14) "retained canonical wrapper source type drift"
   discard (get <| checkOp wrapCx 4 wrapInst.ty wrapInst.op)
   IO.println "retained exact optional wrapper positive passed"
-  let rejectWrap (cx : CheckCtx) : IO Unit := do
-    match checkOp cx 4 wrapInst.ty wrapInst.op with
-    | .ok _ => throw (IO.userError "accepted a representation-changing optional wrap")
-    | .error _ => pure ()
-  let wrapLayout := f.layouts[5]!
-  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with ptrAlign := some 4}}
-  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with sentinel := true}}
-  rejectWrap {wrapCx with types := f.types.set! 5 (.optional 26)}
-  rejectWrap {wrapCx with types := f.types.set! 14 (.ptr "many" false 25)}
-  IO.println "retained four optional wrapper negatives passed"
   let sourceType : Option Ty := f.types[5]?
   let some (Ty.optional sourcePointer) := sourceType
     | throw (IO.userError "retained list source optional shape drift")
@@ -55,20 +41,68 @@ def main : IO Unit := do
     | throw (IO.userError "retained list target optional shape drift")
   require (f.types[sourcePointer]? == some (.ptr "one" false 25) &&
     f.types[targetPointer]? == some (.ptr "one" true 25)) "retained list qualifier type shape drift"
+  require (f.types[25]? == some (.struct "lists.Node" "auto" #[("val", 11), ("next", 5)]) &&
+    f.types[11]? == some (.int false 32) && f.types[15]? == some (.errorSet (some #["OutOfMemory"])) &&
+    f.types[19]? == some (.ptr "one" false 11)) "retained list node shape drift"
   discard (get <| check f)
   IO.println "retained full list checker passed"
-  -- Full callee-closure generation/proofs are checked by ROOT affected gates;
-  -- this exact retained client control checks every per-function instruction.
-  -- The exception requires identical complete layouts, including pointer alignment.
+  let some qualInst := insts.find? (fun i => i.ty == 21 && i.op matches .bitcast _)
+    | throw (IO.userError "retained canonical qualifier instruction missing")
+  discard (get <| checkOp wrapCx 5 qualInst.ty qualInst.op)
+  -- The capability walk follows cycles (`Check.lean`'s `errorCapabilityScan`, `cycles`): a cycle
+  -- neither hides nor adds error storage. Every pointer-metadata mutation of the two retained
+  -- casts gets the verdict it gets when `Node.next` is an acyclic error-free pointer (`*u32`):
+  -- one rule for recursive and acyclic pointees, no recursion-only exception or rejection.
+  let wrapLayout := f.layouts[5]!
   let original := f.layouts[targetPointer]!
-  reject {f with layouts := f.layouts.set! targetPointer {original with ptrAlign := some 4}}
-  reject {f with layouts := f.layouts.set! targetPointer {original with sentinel := true}}
-  reject {f with layouts := f.layouts.set! targetPointer {original with hostSize := 8, bitOffset := 1}}
-  -- Same child alone is insufficient: a one/many conversion is not const-only.
-  reject {f with types := f.types.set! targetPointer (.ptr "many" true 25)}
-  -- No blanket identical-child exception: unchanged constness still requires the scan.
-  reject {f with types := f.types.set! targetPointer (.ptr "one" false 25)}
-  IO.println "retained recursive list qualifier controls passed"
+  let wrapMutants : List CheckCtx := [
+    {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with ptrAlign := some 4}},
+    {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with sentinel := true}},
+    {wrapCx with types := f.types.set! 5 (.optional 26)},
+    {wrapCx with types := f.types.set! 14 (.ptr "many" false 25)}]
+  let qualMutants : List CheckCtx := [
+    {wrapCx with layouts := f.layouts.set! targetPointer {original with ptrAlign := some 4}},
+    {wrapCx with layouts := f.layouts.set! targetPointer {original with sentinel := true}},
+    {wrapCx with layouts := f.layouts.set! targetPointer {original with hostSize := 8, bitOffset := 1}},
+    {wrapCx with types := f.types.set! targetPointer (.ptr "many" true 25)},
+    {wrapCx with types := f.types.set! targetPointer (.ptr "one" false 25)}]
+  let verdict (cx : CheckCtx) (i : Inst) : Bool := (checkOp cx 4 i.ty i.op).toBool
+  let acyclic (cx : CheckCtx) : CheckCtx :=
+    {cx with types := cx.types.set! 25 (.struct "lists.Node" "auto" #[("val", 11), ("next", 19)])}
+  for (cx, i) in wrapMutants.map (·, wrapInst) ++ qualMutants.map (·, qualInst) do
+    require (verdict cx i == verdict (acyclic cx) i) "a cycle changed a pointer-cast verdict"
+  IO.println "retained recursive/acyclic verdict agreement passed (9 mutants)"
+  -- Error storage reachable through the cycle: `Node.val` becomes the finite error set. Casts
+  -- that keep the decoder pass; a cast whose recursive pointee has another error domain, also
+  -- one reached only through `next`, exposes symbolic storage and is rejected.
+  let n := f.types.size
+  let errTypes := f.types.set! 25 (.struct "lists.Node" "auto" #[("val", 15), ("next", 5)]) ++ #[
+    .errorSet (some #["Other"]),                                     -- n: another domain
+    .struct "lists.Node" "auto" #[("val", n), ("next", n + 3)],      -- n+1: Node over `Other`
+    .ptr "one" false (n + 1), .optional (n + 2),                     -- n+2, n+3
+    .struct "lists.Node" "auto" #[("val", 15), ("next", n + 3)],     -- n+4: `Other` past `next`
+    .ptr "one" false (n + 4), .optional (n + 5)]                     -- n+5, n+6
+  let errLayouts := f.layouts ++ #[f.layouts[15]!, f.layouts[25]!, f.layouts[14]!, f.layouts[5]!,
+    f.layouts[25]!, f.layouts[14]!, f.layouts[5]!]
+  let errCx : CheckCtx := {wrapCx with types := errTypes, layouts := errLayouts}
+  discard (get <| checkOp errCx 4 wrapInst.ty wrapInst.op)
+  discard (get <| checkOp errCx 5 qualInst.ty qualInst.op)
+  IO.println "error-bearing recursive wrap and qualifier positives passed"
+  let rejectExposing (cx : CheckCtx) (ty : TyId) (op : Op) (message : String) : IO Unit :=
+    match checkOp cx 4 ty op with
+    | .ok _ => throw (IO.userError "accepted an error-domain-changing recursive pointer cast")
+    | .error e => require ((e.splitOn message).length > 1) s!"wrong recursive cast rejection: {e}"
+  let exposing := "a pointer cast exposing symbolic error storage"
+  rejectExposing errCx (n + 3) wrapInst.op exposing
+  rejectExposing errCx (n + 6) wrapInst.op exposing
+  rejectExposing errCx 19 wrapInst.op exposing
+  rejectExposing {errCx with types := errTypes.set! targetPointer (.ptr "one" true (n + 1))}
+    qualInst.ty qualInst.op exposing
+  rejectExposing {errCx with types := errTypes.set! targetPointer (.ptr "one" true (n + 4))}
+    qualInst.ty qualInst.op exposing
+  rejectExposing {errCx with instTys := #[(0, 7)]} 14 (.bitcast (.inst 0))
+    "recovering a symbolic error pointer"
+  IO.println "error-bearing recursive cast negatives passed (6)"
   -- Exact observed 0.15 dupe shape: distinct e![]u8 IDs, identical finite domain/payload.
   let duplicateTypes : Array Ty := #[.int false 8, .errorSet (some #["OutOfMemory"]), .errorSet (some #["OutOfMemory"]), .ptr "slice" false 0, .errorUnion 1 3, .errorUnion 2 3]
   let duplicateLayouts : Array Layout := #[{size := some 1, align := some 1}, {size := some 2, align := some 2}, {size := some 2, align := some 2}, {size := some 16, align := some 8, ptrAlign := some 1}, {size := some 24, align := some 8}, {size := some 24, align := some 8}]

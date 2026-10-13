@@ -5,11 +5,16 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from compat import default_version  # noqa: E402
+# The default Zig version (compatibility.json): the one the first-use scripts pick.
+ZIG = default_version(ROOT)
 SHELL = os.environ.get('AIR2LEAN_TEST_BASH', 'bash')
 
 FAKE = r'''#!/usr/bin/env python3
@@ -45,7 +50,7 @@ if kind == 'elan':
             if mode == 'lean-fail': sys.exit(1)
 elif kind in ('zig', 'stock-zig'):
     if args == ['version']:
-        print('0.15.2' if mode == 'wrong-version' and kind == 'zig' else '0.16.0')
+        print('0.15.2' if mode == 'wrong-version' and kind == 'zig' else os.environ['MOCK_ZIG_VERSION'])
     else:
         assert kind == 'zig'
         assert args[:7] == ['build-obj', '-fno-emit-bin', '-OReleaseSafe', '-fno-error-tracing', '-target', 'x86_64-linux', '-mcpu=baseline'], args
@@ -72,7 +77,8 @@ class Workflow(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.repo = self.base / 'repo with spaces'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('translate.sh', 'doctor.sh', 'doctor.py', 'compat.py', 'workflow-common.sh', 'safe-output.py'):
+        for name in ('translate.sh', 'doctor.sh', 'doctor.py', 'compat.py', 'workflow-common.sh', 'zig-default.sh',
+                     'safe-output.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
         shutil.copy2(ROOT / 'lean-toolchain', self.repo / 'lean-toolchain')
         shutil.copy2(ROOT / 'compatibility.json', self.repo / 'compatibility.json')
@@ -80,7 +86,7 @@ class Workflow(unittest.TestCase):
         self.bin.mkdir()
         self.write_tool(self.bin / 'elan')
         self.write_tool(self.bin / 'stock-zig')
-        self.patch = self.repo / 'zig-air-0.16.0/bin/zig'
+        self.patch = self.repo / f'zig-air-{ZIG}/bin/zig'
         self.write_tool(self.patch)
         self.caller = self.base / 'caller with spaces'
         self.caller.mkdir()
@@ -90,6 +96,7 @@ class Workflow(unittest.TestCase):
         self.output.write_text('previous checked output\n')
         self.log = self.base / 'calls.jsonl'
         self.env = os.environ.copy()
+        self.env['MOCK_ZIG_VERSION'] = ZIG
         for key in ('AIR2LEAN_ZIG_VERSION', 'AIR2LEAN_ZIG_AIR', 'AIR2LEAN_ZIG'):
             self.env.pop(key, None)
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env['PATH'],
@@ -236,7 +243,7 @@ class Workflow(unittest.TestCase):
         self.patch.unlink()
         result = self.run_script('doctor.sh', [], expected=1)
         self.assertIn('Ready for committed proofs', result)
-        self.assertIn('zig-patch/build.sh 0.16.0', result)
+        self.assertIn(f'zig-patch/build.sh {ZIG}', result)
 
     def test_concurrent_pipeline_fails_without_stealing_lock(self):
         gate = self.base / 'release-gate'
