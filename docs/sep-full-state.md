@@ -293,7 +293,7 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
   The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
-  too; its helper `EUpd.drop` (`Full/Logic.lean`) stays.
+  too; its helper `EUpd.drop` (now `Full/Extent.lean`) stays.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -594,7 +594,7 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   life in every later memory.
 * **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`) and
   `.cbyte b o c`, true in `m` when block `b` is a live `const` global whose byte `o` is `c`
-  (`Mem.kn`). `KMono` (every primitive's `Tame`/`Keeps` step) keeps both: `KMono.set` takes
+  (`Mem.kn`). `KMono` (every primitive's `Tame` step) keeps both: `KMono.set` takes
   `blk.kind ≠ .constGlobal`, which each primitive gets from the model's guards above.
 * **Assertions** (`ZigLean/Sep/Full/Const.lean`): `cbytesAt p A bs` (the live `const` global at
   `p`, block address `A`, holds `bs`) and the typed `cpts p a v` (`ptsR` as knowledge). Both are
@@ -1004,7 +1004,8 @@ also what a `deinit` that requires every grant back needs.
 ## Migration impact on existing Sep proofs
 
 1. **Nothing breaks now.** The prototype is new modules; no existing statement changes.
-2. **Legacy rules lift unchanged** through `FTriple.ofTriple` and `Tame`. Every generated
+2. **Legacy rules lifted unchanged** (until the bridge was deleted, §The bridge from the legacy
+   layer) through `FTriple.ofTriple` and `Tame`. Every generated
    plain-memory primitive is `Tame`, and `Tame` is closed under `bind`. Loops need a `Tame` for the
    fixpoint, by `loop` induction like `loop_spec_mm`. That is mechanical, but not done here.
 3. **Staging** (status on `codex/alloc-p4b-page`):
