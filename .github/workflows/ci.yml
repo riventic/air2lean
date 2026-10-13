@@ -2585,6 +2585,16 @@ jobs:
           cd .lake/check-tree/0.15.2-linux-aarch64
           lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex
 
+      # 0.17.0 translates `Io.Event` to the same code and names as 0.16.0 (tests/golden/0.17.0/
+      # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too.
+      - name: Build sync event proofs (0.17.0 translation)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.0' }}
+        run: |
+          python3 scripts/check-tree.py create .lake/check-tree/0.17.0-sync \
+            --replace Proofs/Sync/Gen.lean=tests/golden/0.17.0/sync/Gen.lean
+          cd .lake/check-tree/0.17.0-sync
+          lake build Proofs.Sync.Event
+
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}
         env:
