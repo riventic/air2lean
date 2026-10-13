@@ -159,6 +159,10 @@ def Rest (rX : Res) (m : Mem) : Prop :=
   ∃ rIO, IoRest Lo rIO ∧ (∀ l, Lo.BoxW l → rIO.heap l = none) ∧
     rX = rsum (cellsAt Lo.BoxW m) rIO
 
+/-- Block 0 is the live `Box`, `size` bytes on the stack. -/
+def BlkOk (m : Mem) : Prop :=
+  ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧ blk.kind = .stack
+
 /-- The threads: `main` alone before its spawn; then `main` and the producer, which `main`
 spawned and did not join yet. -/
 def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
@@ -172,6 +176,7 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (fun u => (G u).2) m
   io : ReadShared (IoR Lo) m
   rest : Rest Lo rX m
+  blk : BlkOk Lo m
   ws : Lo.WS.Ok m
   we : Lo.WE.Ok m
   wv : Lo.WV.Ok m
@@ -206,9 +211,9 @@ variable {Tgt : Type}
 def proto (prodOf : Tgt → Option Ptr) : Proto Tgt Gh where
   inv G m := ∃ rX, (L Lo).Inv G rX m ∧ U Lo G rX m
   init tgt g := prodOf tgt = some bPtr ∧ g = (⟨.out, rnil, rnil⟩, { ph := .lk })
-  fin g := g.1.ph = .gone ∧ g.2.ph = .fin
+  fin g := g.1.ph = .gone ∧ g.2 = { ph := .fin }
   strict := true
-  joins g := g.1.ph = .out ∧ g.2.ph = .joins
+  joins g := g.1.ph = .out ∧ g.2 = { ph := .joins }
 
 /-- `main`'s post: the result. -/
 def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Prop :=
@@ -302,12 +307,12 @@ theorem heap_blk {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : bl
 
 /-- **A step that keeps the rest keeps the shared words' cells**: the lock's invariant after it
 has them up to `Cell.norm`, and the extent in the rest pins the block. -/
-theorem cells_same {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hi : (L Lo).Inv G rX m)
+theorem cells_same {G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hbk : BlkOk Lo m)
     (hi' : (L Lo).Inv G' rX m') (hr : Rest Lo rX m) : ∀ l, Lo.BoxW l → m'.heap l = m.heap l := by
   rintro ⟨b, x⟩ hl
   obtain ⟨h0, h1, h2⟩ := hl
   simp only at h0 h1 h2; subst h0
-  obtain ⟨blk, hb, hlv, hs, hk⟩ := blk_of hi hr
+  obtain ⟨blk, hb, hlv, hs, hk⟩ := hbk
   obtain ⟨blk', hb', hlv', hs', hk'⟩ := blk_of hi' hr
   have hx : x < Lo.size := by have := Lo.ok; omega
   have e := heap_blk hb hlv hk (by omega : x < blk.bytes.size)
@@ -338,6 +343,21 @@ theorem box_notL {l : Zig.Loc} (h : Lo.BoxW l) : ¬ (L Lo).In l := fun ⟨_, h2,
 theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun ⟨_, h2⟩ => by
   have := Lo.ok; simp [L, FLock.prod] at h; omega
 
+/-- A step of the lock's code keeps the `Box`: it writes at most the mutex's bytes. -/
+theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).Step t m m') :
+    BlkOk Lo m' := by
+  obtain ⟨blk, hb, hl, hsz, hk⟩ := hb
+  rcases hs.blocks with e | ⟨blk', bs, h1, -, h3, h4, h5⟩
+  · exact ⟨blk, by rw [e]; exact hb, hl, hsz, hk⟩
+  · have h1' : m.blocks[0]? = some blk' := h1
+    rw [hb] at h1'; cases h1'
+    refine ⟨{ blk with bytes := writeBytes blk.bytes Lo.mo bs }, ?_, hl, ?_, hk⟩
+    · rw [h5]; show (m.blocks.set! 0 _)[0]? = _
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+        (Array.getElem?_eq_some_iff.mp hb).1]; rfl
+    · show (writeBytes blk.bytes Lo.mo bs).size = Lo.size
+      rw [writeBytes_size _ _ _ (by rw [h3]; exact h4), hsz]
+
 /-- **A step of the lock's code keeps `U`** (`FLock.FitsOn.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
@@ -348,6 +368,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   have hhE := Word.hist_keep hu.we (Word.keep_lockWordStep hs apE)
   have hhV := Word.hist_keep hu.wv (Word.keep_lockWordStep hs apV)
   refine ⟨?_, fun e he hr => ?_, hu.rest.congr fun l hl => hs.heap (box_notL hl),
+    hu.blk.lstep hs,
     hu.ws.keep (Word.keep_lockWordStep hs apS), hu.we.keep (Word.keep_lockWordStep hs apE),
     hu.wv.keep (Word.keep_lockWordStep hs apV),
     hu.cinv.lstep hu.ws hu.we apS apE hok.1 (fun _ _ _ => rfl) hs,
@@ -395,7 +416,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U Lo G rX m) :
     U Lo G rX { m with current := t } :=
   have hk := fun (W : Word 32 4) => W.keep_same m t m.seen m.nextMsg m.waiters m.woken m.groups
-  ⟨hu.shape, hu.io, hu.rest, hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _),
+  ⟨hu.shape, hu.io, hu.rest, hu.blk, hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _),
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id,
     hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q⟩
@@ -433,7 +454,7 @@ theorem before_atomics {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock}
 /-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
 ghost value `g` at the same places (a new part or held resource). -/
 theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    (hu : U Lo G rX m) (hi : (L Lo).Inv G rX m) (hc : m.current = t)
+    (hu : U Lo G rX m) (hc : m.current = t)
     (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv (upd G t g) rX m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
   have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
@@ -444,7 +465,7 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
-  have hcs := cells_same hi hi' hu.rest
+  have hcs := cells_same hu.blk hi' hu.rest
   have hk : ∀ W : Word 32 4, (∀ l, W.In l → Lo.BoxW l) → W.KeepK m m' := fun W hW =>
     Word.keepK_stepIn hs (fun l hl => rest_box hu.rest (fun l' => box_live hu) (hW l hl))
       (fun l hl => by rw [hcs l (hW l hl)])
@@ -454,7 +475,7 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
   have hhS := Word.hist_keepK hu.ws kS
   have hhE := Word.hist_keepK hu.we kE
   have hhV := Word.hist_keepK hu.wv kV
-  refine ⟨?_, fun e he hr => ?_, hu.rest.congr hcs, hu.ws.keepK kS, hu.we.keepK kE,
+  refine ⟨?_, fun e he hr => ?_, hu.rest.congr hcs, blk_of hi' hu.rest, hu.ws.keepK kS, hu.we.keepK kE,
     hu.wv.keepK kV,
     hu.cinv.frame (t := t) (g' := g) (congrArg (·.c) hX) hph
       (fun h => by show g.2.ph.isProd; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
