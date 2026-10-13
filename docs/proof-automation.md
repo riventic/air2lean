@@ -75,6 +75,8 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
+  tag (§Atomic words).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
@@ -136,6 +138,19 @@ another shape, or an access that straddles fields, gives no field: the rules do 
 Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
 proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
 `p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
+
+### Atomic words
+
+A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
+`(p.off, 8)`) is also read and written by plain loads and stores: the arena's `reset` stores
+its list heads, `allocatedSliceUnsafe` loads a node's packed size word. A plain access checks no
+tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules of
+`ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag and the atomic ops still apply afterwards:
+`aptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to one),
+`apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
+word, whose generated `Enc` is its bits' encoding). They are the byte rules
+`load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
 
 ## How it works
 

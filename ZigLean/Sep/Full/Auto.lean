@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.AtomicPlain
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
@@ -899,7 +900,8 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
     unless ← arithCore m.mvarId! (quick := true) do return none
     return some (← instantiateMVars m)
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fx.constName! == fy.constName! && x.getAppNumArgs == y.getAppNumArgs do return none
+  unless fx.isConst && fy.isConst && fx.constName! == fy.constName! &&
+      x.getAppNumArgs == y.getAppNumArgs do return none
   unless ← isDefEq fx fy do return none
   let s ← saveState
   try
