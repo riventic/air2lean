@@ -106,4 +106,23 @@ theorem post_again (p : Ptr) (v : BitVec 64) (X : FAssn) :
       (fun r => if again r.1 then up (pts p 8 r.2) else X) := by
   fsym
 
+/-- A callee that returns an exit and a value. -/
+def callee : MemM (Exit × Nat) := pure (.brk, 4)
+
+/-- Its rule fixes the exit by a projection of the result. -/
+theorem callee_spec {P : FAssn} : FTotalTriple P callee (fun r => ⟪r.1 = .brk ∧ r.2 = 4⟫ ⋆ P) := by
+  unfold callee; fsym
+
+/-- **A `match` on a projection of a callee's result** (ledger #39) that the callee's post fixes
+(`r.1 = .brk`): the result by its fields, so the `match` reduces (no unreachable branch left). -/
+theorem match_proj (p : Ptr) (v : BitVec 64) :
+    FTotalTriple (up (pts p 8 v))
+      (do
+        let r ← callee
+        match r.1 with
+        | .brk => pure r.2
+        | .rep => throw .panic)
+      (fun x => ⟪x = 4⟫ ⋆ up (pts p 8 v)) := by
+  fsym [callee_spec]
+
 end SepAuto.Walk

@@ -1730,6 +1730,50 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
     trace[fsym] "substCtor {t}: {ex.toMessageData}"
     s.restore; return none
 
+/-- A fact `x.f = C …` about a field of a local `x` of a structure type (a callee's result
+`r.1 = .br18`, which `substCtor` does not substitute: `Prod.fst` is the library's): `x` by its
+fields (`cases`, structure eta), the projections of the new value reduced in the facts, which are
+split again (the field's equation is then a local's, substituted), so a `match x.f` reduces. -/
+partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.withContext do
+  let local? (e : Expr) : MetaM (Option FVarId) := do
+    let e := e.consumeMData
+    let s? ← match e with
+      | .proj _ _ s => pure (some s)
+      | _ => do
+        let .const c _ := e.getAppFn | return none
+        let some info ← getProjectionFnInfo? c | return none
+        if info.fromClass then return none
+        pure (e.getAppArgs[info.numParams]?)
+    let some (.fvar x) := s? | return none
+    let ty ← whnfR (← instantiateMVars (← x.getType))
+    let .const sn _ := ty.getAppFn | return none
+    unless isStructure (← getEnv) sn do return none
+    if (← isProp ty) || (← isClass? ty).isSome then return none
+    return some x
+  let x? ← if ← isSubstValue r then local? l else if ← isSubstValue l then local? r else pure none
+  let some x := x? | return none
+  let s ← saveState
+  try
+    let gs ← g.cases x
+    let some sg := gs[0]? | return none
+    (← caches).substs.modify fun m => sg.subst.map.foldl (fun m k v => m.insert k v) m
+    let mut g := sg.mvarId
+    let mut changed := #[]
+    for d in ← g.withContext getLCtx do
+      if d.isImplementationDetail then continue
+      unless ← g.withContext (isProp d.type) do continue
+      let ty ← g.withContext do instantiateMVars d.type
+      let ty' ← g.withContext (reduceProjs ty)
+      if ty' != ty then
+        g ← g.replaceLocalDeclDefEq d.fvarId ty'
+        changed := changed.push d.fvarId
+    for f in changed do
+      if (← g.withContext f.findDecl?).isSome then g ← destruct g f
+    return some g
+  catch ex =>
+    trace[fsym] "etaProj: {ex.toMessageData}"
+    s.restore; return none
+
 /-- Split, unfold and substitute a fact in the context. -/
 partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext do
   let ty ← whnfR (← instantiateMVars (← h.getType))
@@ -1766,6 +1810,7 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
         return g'
     if let some g' ← substCtor g h l r then return g'
+    if let some g' ← etaProj g l r then return g'
     return g
   -- a fact of a user structure (`NodeFacts N A sz`): its fields next to it (the fact stays, as
   -- the hypothesis of a lemma), each once
@@ -3943,6 +3988,21 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
     trace[fsym] "post inference: {ex.toMessageData}"
     s.restore; return none
 
+/-- A rule's side goals left that show it does not apply (ledger #42): an instance that is not
+synthesized (`LawfulEnc T` of a type without one: no case split proves it), or a goal without
+unknowns whose negation the facts prove (a region rule whose extent is past the region's size). -/
+def refutedSide (left : List MVarId) : TacticM Bool :=
+  left.anyM fun m => m.withContext do
+    let φ ← instantiateMVars (← m.getType)
+    if (← isClass? φ).isSome then
+      return (← observing? (synthInstance φ)).isNone
+    if φ.hasExprMVar || φ.hasSyntheticSorry then return false
+    let hn ← mkFreshExprMVar (mkNot φ)
+    let s ← saveState
+    let r ← arith hn.mvarId! (quick := true)
+    s.restore
+    return r
+
 mutual
 /-- An indirect call `callIndirect f ((p, y) :: arms) d` that no rule covers: `y` if the facts
 show `f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is the last arm `d`:
@@ -4170,7 +4230,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
         trace[fsym.prof] "rule {((← IO.getNumHeartbeats)-h2)/1000} {r}"
         return ← walk k user extra (fuel - 1)
       trace[fsym] "rule {r}: side goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
-      if partial?.isNone then partial? := some (← saveState, k, left)
+      if partial?.isNone && !(← refutedSide left) then partial? := some (← saveState, k, left)
       s.restore
   -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
   if partial?.isNone then
@@ -4193,7 +4253,9 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     s.restore
     let φs ← left.mapM fun m => do instantiateMVars (← m.getType)
     s1.restore
-    if let some φ := φs.find? fun φ => !φ.hasExprMVar && !φ.hasSyntheticSorry then
+    -- (never an instance: it is synthesized or not, `refutedSide`)
+    if let some φ ← φs.findM? fun φ => return !φ.hasExprMVar && !φ.hasSyntheticSorry &&
+        (← isClass? φ).isNone then
       let hn ← mkFreshExprMVar (mkNot φ)
       unless ← arith hn.mvarId! (quick := true) do
         trace[fsym] "split on the side condition {φ}"
