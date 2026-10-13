@@ -1772,9 +1772,12 @@ turns.
   mutex again (after it took a signal). It enters only when every other thread is out of the
   condition's code and after every epoch write (`hone`, `hhb`: the scope of the module doc), the
   client's rest allows its entry (`hent`), and the client shows that its sleep at a condition
-  that is not signalled is not a deadlock (`hlive`). The waiter is the current thread
-  (`m.current = t`): `Thread.Condition.wait` (0.15.2) allocates its deadline block, a memory
-  step with no stop before it, first.
+  that is not signalled is not a deadlock (`hlive`). The waiter is the running thread
+  (`m.current = t`), the same premise and reason as `MutexImpl.unlock_wp`: the waiter holds the
+  mutex, which only the running thread can (Zig's `Thread.mutexOwnerCheck`), and every client has
+  the fact from its previous step (the lock's post). `Thread.Condition.wait` (0.15.2) needs it:
+  it allocates its deadline block, a memory step with no stop before it, first. So the premise is
+  the contract of every Zig condition, not a restriction of this one.
 - `signal_wp`: a thread out of the condition's and the lock's code that may signal, whose stops
   come after every registration (`hseen`), returns out of the condition's code; a registered
   waiter is then signalled. -/
