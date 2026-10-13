@@ -540,12 +540,20 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
         FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
         (L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r) →
         (L.ph g = .holds → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
-      Q a G m' n) :
+      Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp)
-    fun a m' r' hr ho' hq hs => h a m' r' hr hq (hs.weaken fun l hl => ?_) (hs.current.trans hc)
-      fun g hph hr' hpd hidle hRk hres => ?_
+    (fun a m' r' hr ho' hq hs => h a m' r' hr hq (hs.weaken fun l hl => ?_) (hs.current.trans hc)
+      fun g hph hr' hpd hidle hRk hres => ?_) hret
   · simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
       Option.or_eq_none_iff, not_and] at hl ⊢
     intro _ _; exact hl

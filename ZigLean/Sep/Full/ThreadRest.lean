@@ -289,12 +289,20 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn rO.heap.erase m m' → Q a G m' n) :
+      Qa a r' → StepIn rO.heap.erase m m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩
   have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
-  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
@@ -302,6 +310,8 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
       (hs.weaken fun l hl => ?_)⟩
     simp only [FHeap.erase, FHeap.erase_union, Heap.union_apply, Option.map_eq_none_iff] at hl ⊢
     cases e : rR.heap l <;> simp_all
+  · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+    rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
 end Proto
 end Conc

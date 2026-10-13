@@ -13,7 +13,8 @@ target) with the two rules that a client uses:
 - `unlock_wp`: the holder that runs `unlock` is out of the lock's code afterwards; the resource is
   back in the protocol's rest.
 
-Both hold for **every protocol that has the lock** (`FLock.FitsOn`): its invariant is
+Both hold for **every protocol that has the lock** (`FLock.FitsOn`) and counts no turns
+(`P.cost = none`, as `Proofs/Sync`'s `MutexContract`: a futex wait has no turn charge): its invariant is
 `FLock.Inv` and a rest `U` that every step of the lock's code (`LockWord.Step`, a futex-word lock's
 step: only the word's bytes, atomic accesses to them, the futex queue) keeps. The places of a
 thread inside the lock's code (`spin`, `wait`, `wake`) are the implementation's; a client sees
@@ -38,13 +39,13 @@ structure MutexImpl (Tgt : Type) where
   /-- The word's value while a thread can wait (`LockWord.c`). -/
   c : Nat
   lock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    {ok : γ → Prop}, L.FitsOn P U ok → ∀ {p : Ptr}, p = L.ptr → L.c = c →
+    {ok : γ → Prop}, L.FitsOn P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d
   unlock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    {ok : γ → Prop}, L.FitsOn P U ok → ∀ {p : Ptr}, p = L.ptr → L.c = c →
+    {ok : γ → Prop}, L.FitsOn P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), L.ph g = .holds → ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
