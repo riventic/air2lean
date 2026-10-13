@@ -8,7 +8,7 @@ import ZigLean.Witness
 `Condition.wait` and `ResetEvent.waitUntilSet` (0.15.2) store a `Deadline` in a 48-byte block on
 the waiter's stack. With `timeout = null` the block holds `dl0`: `Deadline.wait` reads `none` and
 does one futex wait. `DLb` and `DL` are the facts on the block that a waiter keeps in its own part
-(`Proofs/Threadsync/WaitGroup.lean`, `Proofs/Threadsync/Handoff.lean`).
+(`Proofs/Threadsync/WaitGroup.lean`, `Proofs/Threadsync/Cond.lean`, `Proofs/Threadsync/Event.lean`).
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Assn

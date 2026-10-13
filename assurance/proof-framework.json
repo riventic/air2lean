@@ -480,9 +480,6 @@
       "path": "Proofs/Lists/Sep.lean"
     },
     {
-      "path": "Proofs/Sync/Handoff.lean"
-    },
-    {
       "path": "Proofs/Sync/Mailbox.lean"
     },
     {
@@ -505,9 +502,6 @@
     },
     {
       "path": "Proofs/Sync/SnapshotCache.lean"
-    },
-    {
-      "path": "Proofs/Threadsync/Handoff.lean"
     },
     {
       "path": "Proofs/Threadsync/Mutex.lean"
