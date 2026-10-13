@@ -149,19 +149,28 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
   `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
   `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
-  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `region_add`,
-  `regionIn_add`, `regionIn_start`.
+  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `pts_add`, and for
+  `fsym` (`Full/AutoThread.lean`) `OwnsPtr.bytesAt_in`, `regionIn_in`, `region_in`, `pts_in`,
+  `arr_in`, `errPayload`.
 
-  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
-  (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
-  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
-  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
-  `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
-  `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
-  `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
-  its locality, statements unchanged; the pointer order and bounds checks read no byte, so their
-  thread rules are the proofs and the sequential rules are read from them. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
+  **`fsym` makes the thread rules of owned accesses** (`Full/AutoThread.lean`,
+  `docs/proof-automation.md` §Threads): in a thread goal it applies a sequential `@[fsym]` rule
+  through `FTTotalTriple.ofSeq` (`FTTriple.ofSeq` for a partial rule), with the `ThreadLocal`
+  side goal proved by the locality providers (`ThreadLocal.load`, `store`, `loadBytes`,
+  `storeBytes`, `memset_of`, `memmove`, `memcpy`, `alloc`, `pure`, `throw`, `liftR`; ownership
+  by `OwnsPtr`). So the owned accesses of `Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`
+  have no hand-written thread copy (their statements are the regressions of
+  `tests/roadmap/sep-auto/Threads.lean`). A command that no provider shows local gets no thread
+  rule from its sequential one (fail closed): the atomic ops keep their own thread rules (step 5
+  below) and the `const` reads have none (Open, below).
+
+  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`: hand-written, their
+  callers are term proofs), `Full/Ops` (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
+  `ptrProject_of`, `ptrProject_elem_of`; `load_bytesAt` and `storeBytes_bytesAt` stay for the
+  callers of `Full/Local`); the bridge's `alloc'`/`free'` are the native rules. `Full/Region`
+  (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`, `checkSentinelIndex_of`): the pointer order and
+  bounds checks read no byte, so their thread rules are the proofs and the sequential rules are
+  read from them; these native rules are `@[fsym]` in thread goals. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
   `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
   an old block alive).
 

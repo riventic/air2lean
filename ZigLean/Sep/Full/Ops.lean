@@ -574,8 +574,9 @@ end FTotalTriple
 
 Each rule below holds in a thread (`FTTotalTriple`, `ZigLean/Sep/Full/ThreadStep.lean`): a read
 that leaves the memory as it is (`FTTotalTriple.of_read`), or a sequential triple of an owned
-access (`FTTotalTriple.ofSeq`, `ThreadLocal.load`/`store`). The sequential pointer rules (next
-section) are these rules read sequentially (`FTTotalTriple.toFTotalTriple`). -/
+access (`FTTotalTriple.ofSeq`, `ThreadLocal.load`/`store`; `fsym` makes these from the
+sequential rules itself, `Full/AutoThread.lean`). The sequential pointer rules (next section) are
+these rules read sequentially (`FTTotalTriple.toFTotalTriple`). -/
 
 /-- The bytes of `pts` at `q`. -/
 theorem OwnsPtr.pts {T : Type} [Enc T] {q : Ptr} {a : Nat} {v : T} :
@@ -634,28 +635,15 @@ theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
   rw [e, Ptr.elem_eq]
   exact ptrProject_of hqb h h0 (by omega) (by omega) hk
 
-/-- **Load** of a typed value (`pts`) in a thread. -/
-theorem load {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    FTTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
-  ofSeq (FTotalTriple.load hn) (ThreadLocal.load hn OwnsPtr.pts)
-
-/-- **Store** of a typed value (`pts`) in a thread. -/
-theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
-    FTTotalTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
-  ofSeq (FTotalTriple.store hn w)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))
+/- The owned accesses in a thread (`load`, `store`, byte reads and writes, `@memset`,
+`@memmove`) are their sequential rules with the locality of the access: `fsym` applies each
+sequential rule in a thread goal (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), so they have no
+copy here. The two below stay for term-level callers: the thread byte rules of `Full/Local` on
+the fold lane (`codex/fold`); delete them when those go through `fsym`. -/
 
 section OwnedBytes
 
 variable {S k al : Nat} {K' : BlockKind} {bs : Array Byte}
-
-/-- `FTotalTriple.loadBytes_bytesAt` in a thread. -/
-theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
-    (ha : (A + q.off.toNat + k) % al = 0) :
-    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.loadBytes (q.add k) n al)
-      (fun x => ⟪x = bs.extract k (k + n)⟫ ⋆ up (bytesAt q A S K' bs)) :=
-  ofSeq (FTotalTriple.loadBytes_bytesAt hn hk ha) (ThreadLocal.loadBytes hn (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.load_bytesAt` in a thread. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
@@ -672,41 +660,6 @@ theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.
       (fun _ => up (bytesAt q A S K' (writeBytes bs k bs'))) :=
   ofSeq (FTotalTriple.storeBytes_bytesAt hn hk ha hK)
     (ThreadLocal.storeBytes hn (OwnsPtr.bytesAt_add hk))
-
-/-- `FTotalTriple.store_bytesAt` in a thread. -/
-theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
-    (hk : k + (Enc.encode w).size ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
-    (hK : K' ≠ .constGlobal) :
-    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.store al (q.add k) w)
-      (fun _ => up (bytesAt q A S K' (writeBytes bs k (Enc.encode w)))) :=
-  storeBytes_bytesAt hn hk ha hK
-
-/-- `FTotalTriple.memset_bytesAt` in a thread. -/
-theorem memset_bytesAt {α : Type} [Enc α] {n : BitVec 64} {v : Option α}
-    (hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size α)
-    (hk : k + n.toNat * Enc.size α ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
-    (hK : K' ≠ .constGlobal) :
-    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.memset al (q.add k) n v)
-      (fun _ => up (bytesAt q A S K' (writeBytes bs k (memsetBytes n.toNat v)))) := by
-  refine ofSeq (FTotalTriple.memset_bytesAt hsz hk ha hK) ?_
-  unfold Zig.memset
-  refine ThreadLocal.ite (fun _ => ThreadLocal.pure _) fun h =>
-    ThreadLocal.readBind (fun _ _ => rfl) fun _ => ?_
-  have hpos : 0 < n.toNat * Enc.size α := Nat.mul_pos (by omega) (by omega)
-  cases v <;> simp only [memsetBytes] at hsz <;>
-    exact ThreadLocal.storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact OwnsPtr.bytesAt_add hk)
-
-/-- `FTotalTriple.memmove_bytesAt` in a thread. -/
-theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
-    {bd bsrc : Array Byte} {n : BitVec 64} (hkd : k + n.toNat * sz ≤ bd.size)
-    (hjs : j + n.toNat * sz ≤ bsrc.size) (had : (A + d.off.toNat + k) % da = 0)
-    (has : (A' + s.off.toNat + j) % sa = 0) (hK : K' ≠ .constGlobal) :
-    FTTotalTriple (up (bytesAt d A S K' bd) ⋆ up (bytesAt s A' S' K'' bsrc))
-      (Zig.memmove sz da sa (d.add k) (s.add j) n)
-      (fun _ => up (bytesAt d A S K' (writeBytes bd k (bsrc.extract j (j + n.toNat * sz)))) ⋆
-        up (bytesAt s A' S' K'' bsrc)) :=
-  ofSeq (FTotalTriple.memmove_bytesAt hkd hjs had has hK)
-    (ThreadLocal.memmove (OwnsPtr.bytesAt_add hkd).sepL (OwnsPtr.bytesAt_add hjs).sepR)
 
 end OwnedBytes
 
