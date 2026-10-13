@@ -52,7 +52,9 @@
 #
 # Usage: diff.sh | diff.sh --build-only DIR
 # Env:
-#   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
+#   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH). Its version
+#                       must be the one whose translations the tree holds (scripts/check-tree.py
+#                       check-models); scripts/check.sh with AIR2LEAN_ZIG_VERSION=V needs a Zig V.
 #   AIR2LEAN_DIFF_OPTIMIZE  Optimize mode of the native harness: Debug, ReleaseSafe (default),
 #                       ReleaseFast or ReleaseSmall (docs/build-modes.md). The shipping build is
 #                       `build-exe -OReleaseSafe -mcpu=baseline`. ReleaseFast and ReleaseSmall remove
@@ -293,6 +295,13 @@ echo "== building + running lean side ==" >&2
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
 (cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
+# Fail closed: the Lean side must be the translation for the stock Zig's version on this host
+# (scripts/check-tree.py check-models). Checked only before the comparison, so that a
+# cache-warming run (.github/workflows/ci-cache.yml) still builds the harnesses and tests/diff.
+diff_phase=check_models
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/check-tree.py check-models "$zig_version" $examples
+diff_phase=run_model
 # Diff.lean runs only the examples this script compares.
 AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 
