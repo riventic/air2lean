@@ -627,6 +627,13 @@ theorem imp_trans (h₁ : ∀ r, X r → Y r) (h₂ : ∀ r, Y r → P r) : ∀ 
 
 theorem imp_eq (e : X = Y) : ∀ r, X r → Y r := fun _ h => e ▸ h
 
+/-- A branch of an assertion-level `if`, with its condition as a fact. -/
+theorem imp_ite_pos {c : Prop} [Decidable c] : ∀ r, (⟪c⟫ ⋆ X) r → (if c then X else Y) r :=
+  fun _ h => by obtain ⟨hc, hx⟩ := sep_lift.mp h; rw [if_pos hc]; exact hx
+
+theorem imp_ite_neg {c : Prop} [Decidable c] : ∀ r, (⟪¬c⟫ ⋆ Y) r → (if c then X else Y) r :=
+  fun _ h => by obtain ⟨hc, hy⟩ := sep_lift.mp h; rw [if_neg hc]; exact hy
+
 theorem imp_lift {φ : Prop} (hφ : φ) (h : ∀ r, X r → Y r) : ∀ r, X r → (⟪φ⟫ ⋆ Y) r :=
   fun r hx => sep_lift.mpr ⟨hφ, h r hx⟩
 

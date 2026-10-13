@@ -1869,7 +1869,8 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
   if a.isAppOfArity liftN 1 then
     let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow a.appArg! (mkT L α R c Q))
     g.assign (← mkAppM (L.nm ``lift_sep) #[L.L, k])
-    let (h, g') ← k.mvarId!.intro `h
+    -- (an inaccessible name: the caller's `h` stays the caller's)
+    let (h, g') ← k.mvarId!.intro1
     normPre (← destruct g' h) (fuel - 1)
   else
     let F := a.appArg!
@@ -2784,6 +2785,37 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
       let t ← instantiateMVars d.type
       return t == c || t == mkNot c
     if known then trace[fsym] "postcondition if undecided with its condition known: {c}"
+    -- a condition on an existential of the postcondition (`if bs.size = 0 then … else …` of an
+    -- `∃ bs`): each branch, with its condition as a fact that the planner proves once it has
+    -- instantiated the existential (`imp_ite_pos`/`_neg`)
+    if c.hasExprMVar && !known then
+      for pos in [true, false] do
+        let s1 ← saveState
+        try
+          let (Qi, pQ) ← instQ (← reduceProjs Q)
+          let some a := (atoms Qi).find? (·.isAppOfArity ``ite 5) | throwError "no if"
+          let args := a.getAppArgs
+          let (c, inst, t, e) := (args[1]!, args[2]!, args[3]!, args[4]!)
+          let cond := if pos then c else mkNot c
+          let br := mkSep (mkApp (mkConst liftN) cond) (if pos then t else e)
+          let R := sepOf ((atoms Qi).erase a)
+          let hbr ← mkAppOptM (if pos then ``imp_ite_pos else ``imp_ite_neg) #[t, e, c, inst]
+          let h1 ← mkAppM ``imp_sep #[hbr, ← mkAppOptM ``imp_refl #[R]]
+          let h2 ← mkAppM ``imp_eq #[← acEq (mkSep a R) Qi]
+          let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[h1, h2], pQ]
+          let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep br R])
+          g.assign (← mkAppM ``EUpd.trans #[g2, ← mkAppM ``EUpd.of_imp #[pf]])
+          trace[fsym] "postcondition if on an existential: the {if pos then "then" else "else"} branch"
+          let left ← closeEntail g2.mvarId!
+          let condI ← instantiateMVars cond
+          if ← left.anyM fun m => do
+              let ty ← instantiateMVars (← m.getType)
+              return ty.isAppOfArity ``EUpd 2 || ty == condI then
+            throwError "branch not closed"
+          return left
+        catch ex =>
+          trace[fsym] "postcondition if: {ex.toMessageData}"
+          s1.restore
     if !c.hasExprMVar && !known then
       trace[fsym] "postcondition if: split on {c}"
       let (sp, sn) ← g.byCases c `hc
