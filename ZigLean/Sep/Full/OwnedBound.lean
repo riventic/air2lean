@@ -10,9 +10,9 @@ ends below `2 ^ 63` (`Mem.LiveBounded`). So the bytes it owns have pairwise diff
 below `2 ^ 63`, and **at most `2 ^ 63` bytes are owned** (`Holds.owned_length_le`).
 
 A client sums sizes of separately owned objects with an overflow-checked addition (the arena's
-`countListCapacity` over its nodes): the sum of the sizes of objects whose bytes it owns is at most
-`2 ^ 63` (`Holds.owned_sum_le`), so the checked `+` of 64-bit words does not overflow. No premise:
-the bound follows from the memory invariant.
+`countListCapacity` over its nodes): the objects' bytes, as a list of owned bytes (`OwnsList`,
+composed over `⋆`), are at most `2 ^ 63`, so the checked `+` of 64-bit words does not overflow. No
+premise: the bound follows from the memory invariant.
 -/
 
 namespace Zig.Full
@@ -71,33 +71,6 @@ theorem mem_locRange {b lo n : Nat} {l : Loc} : l ∈ locRange b lo n ↔ l.1 = 
   constructor
   · rintro ⟨i, hi, rfl, rfl⟩; exact ⟨rfl, by omega, by omega⟩
   · rintro ⟨rfl, h1, h2⟩; exact ⟨x - lo, by omega, rfl, by omega⟩
-
-/-- **The sizes of objects whose bytes a resource owns sum to at most `2 ^ 63`**: objects
-`os` (block, first byte, size), pairwise apart, whose every byte the resource owns. -/
-theorem Holds.owned_sum_le {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
-    (os : List (Nat × Nat × Nat))
-    (hap : os.Pairwise fun o o' => o.1 = o'.1 → o.2.1 + o.2.2 ≤ o'.2.1 ∨ o'.2.1 + o'.2.2 ≤ o.2.1)
-    (hown : ∀ o ∈ os, ∀ i, i < o.2.2 → r.heap (o.1, o.2.1 + i) ≠ none) :
-    (os.map fun o => o.2.2).sum ≤ 2 ^ 63 := by
-  let L := os.flatMap fun o => locRange o.1 o.2.1 o.2.2
-  have hlen : L.length = (os.map fun o => o.2.2).sum := by
-    simp only [L, List.length_flatMap, locRange, List.length_map, List.length_range]
-  have hnd : L.Nodup := by
-    refine List.pairwise_flatMap.mpr ⟨fun o _ => locRange_nodup _ _ _, hap.imp fun {o o'} h => ?_⟩
-    intro l hl l' hl' he
-    subst he
-    obtain ⟨e1, a1, b1⟩ := mem_locRange.mp hl
-    obtain ⟨e2, a2, b2⟩ := mem_locRange.mp hl'
-    rcases h (e1.symm.trans e2) with h | h <;> omega
-  rw [← hlen]
-  refine hh.owned_length_le hs hnd fun l hl => ?_
-  obtain ⟨o, ho, hl⟩ := List.mem_flatMap.mp hl
-  obtain ⟨e1, a1, b1⟩ := mem_locRange.mp hl
-  obtain ⟨b, x⟩ := l
-  simp only at e1 a1 b1
-  subst e1
-  have := hown o ho (x - o.2.1) (by omega)
-  rwa [show o.2.1 + (x - o.2.1) = x by omega] at this
 
 /-! ## Lists of owned bytes
 
