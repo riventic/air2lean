@@ -904,6 +904,37 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   if e' != e && (e.find? (· == e')).isSome then return .done e'
   return .continue
 
+open Lean Meta Simp in
+/-- **A generated function evaluated to a constructor** (ledger #37, #40): an application of a
+user definition whose value is a constructor of an inductive type that is not a structure (an
+enumeration, a union's tag, a loop's `again` test of an exit: `ResetMode.tag .free_all` is
+`.free_all`, `again19 .rep19` is `true`). The definition is evaluated (`whnf`) and the result is
+kept only if it is a constructor application, so a `match` on it reduces (in a program, in an
+assertion's `if`). Definitional: no proof. -/
+dsimproc [fsym_norm, fsym_arith] evalUserCtor (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  if e.getAppNumArgs == 0 || e.hasLooseBVars then return .continue
+  let env ← getEnv
+  if let some idx := env.getModuleIdxFor? c then
+    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
+      return .continue
+  let some (.defnInfo _) := env.find? c | return .continue
+  if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
+  if (← isInstance c) then return .continue
+  -- the result's type, as stated: an inductive type with several constructors, not a number
+  -- (arithmetic, `unfoldUserValue`), not a structure (a record's fields stay folded) and not a
+  -- definition over one (`Zig.Result`: a program's value stays `pure v`)
+  let ty ← instantiateMVars (← inferType e)
+  let .const tn _ := ty.getAppFn | return .continue
+  if tn == ``Nat || tn == ``Int then return .continue
+  let some (.inductInfo ii) := env.find? tn | return .continue
+  if ii.ctors.length < 2 || isStructure env tn then return .continue
+  if ← isProp ty then return .continue
+  let v ← withTransparency .default (whnf e)
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo _) := env.find? vc | return .continue
+  return .done v
+
 /-! ## Facts about byte arrays (`keepsPrefix` of `resizePost`/`remapPost`) -/
 
 theorem kp_refl (bs : Array Byte) : keepsPrefix bs bs := rfl

@@ -67,4 +67,43 @@ theorem vindex_item (a : Vector (BitVec 64) 2) :
       (fun r => ⟪r = a[1]⟫) := by
   fsym
 
+/-- A union and its tag, as the translator writes them (`ResetMode.tag`): functions by `match`. -/
+inductive Mode where
+  | free_all
+  | retain (n : Nat)
+
+inductive ModeTag where
+  | free_all
+  | retain
+
+def Mode.tag : Mode → ModeTag
+  | .free_all => .free_all
+  | .retain _ => .retain
+
+/-- A loop's exits and its test (`again19`). -/
+inductive Exit where
+  | rep
+  | brk
+
+def again : Exit → Bool
+  | .rep => true
+  | .brk => false
+
+/-- **A `match` on a generated function of a constructor** (ledger #40), in a body over its
+locals (`(match … : StateT σ MemM α).run s`): the function's value, so the `match` reduces. -/
+theorem match_tag (p : Ptr) (n : Nat) (v : BitVec 64) (s : Nat) :
+    FTotalTriple (up (pts p 8 v))
+      (StateT.run (match Mode.tag (.retain n) with
+        | .free_all => throw .panic
+        | .retain => StateT.lift (Zig.load (BitVec 64) 8 p) : StateT Nat MemM (BitVec 64)) s)
+      (fun r => ⟪r.1 = v⟫ ⋆ up (pts p 8 v)) := by
+  fsym
+
+/-- **A post's `if` on a generated function of a constructor** (ledger #37: a loop step's post
+`if again r.1 then inv r.2 else post r.2`): decided at the return. -/
+theorem post_again (p : Ptr) (v : BitVec 64) (X : FAssn) :
+    FTotalTriple (up (pts p 8 v)) (pure (Exit.rep, v) : MemM (Exit × BitVec 64))
+      (fun r => if again r.1 then up (pts p 8 r.2) else X) := by
+  fsym
+
 end SepAuto.Walk
