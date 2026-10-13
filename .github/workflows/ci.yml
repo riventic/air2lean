@@ -1242,6 +1242,15 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 3, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # A non-solo op (spawn, join, wait, ...) has no in-thread reading: CTriple fails closed there.
+          lake env lean tests/roadmap/sep-full/SoloSpawnCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/solo-spawn-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/solo-spawn-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
 
       - name: Generic sync specifications (futex, mutex, event, wait group, condition)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -2421,13 +2430,15 @@ jobs:
           LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
-      # with its expected error. `lake build Proofs` above built the imported modules. This and
+      # with its expected error. The step builds the modules the tutorials import (not all are in
+      # `Proofs`: a restored olean of a library module would otherwise be used unchecked). This and
       # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
+          lake build $(python3 -B scripts/tutorials.py modules)
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial

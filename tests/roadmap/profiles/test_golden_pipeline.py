@@ -461,5 +461,49 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         self.assert_checkout_unchanged()
 
 
+class ModelVersionTests(unittest.TestCase):
+    """scripts/diff.sh's gate (check-tree.py check-models): the Lean side is the translation for
+    the stock Zig's version on this host (docs/architecture-audit/soft-float-darwin.md)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="air2lean-check-models-")
+        self.checkout = Path(self.temp.name) / "checkout"
+        self.module = self.checkout / "Proofs/Basic/Gen.lean"
+        self.module.parent.mkdir(parents=True)
+        self.module.write_bytes(BODY)
+        self.other = BODY.replace(b"42", b"17")
+        golden = self.checkout / "tests/golden/0.17.0/basic/Gen.lean"
+        golden.parent.mkdir(parents=True)
+        golden.write_bytes(self.other)
+        self.check = runpy.run_path(str(ROOT / "scripts/check-tree.py"))["check_models"]
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def assert_model(self, root, version, ok):
+        if ok:
+            self.check(version, ["basic"], root, "Linux", "x86_64")
+        else:
+            with self.assertRaisesRegex(ValueError, "translation of Zig"):
+                self.check(version, ["basic"], root, "Linux", "x86_64")
+
+    def test_checkout_holds_the_reference_translation_only(self):
+        self.assert_model(self.checkout, "0.16.0", True)
+        self.assert_model(self.checkout, "0.17.0", False)  # 0.17.0 has its own translation
+
+    def test_check_tree_with_another_versions_committed_translation(self):
+        tree = Path(self.temp.name) / "tree"
+        shutil.copytree(self.checkout, tree)
+        (tree / ".air2lean-check-tree.json").write_text(json.dumps({"checkout": str(self.checkout)}))
+        (tree / "Proofs/Basic/Gen.lean").write_bytes(self.other)
+        self.assert_model(tree, "0.17.0", True)
+        self.assert_model(tree, "0.16.0", False)  # not the checkout's translation
+
+    def test_fresh_translation_names_its_version(self):
+        self.module.write_bytes(generated(CURRENT, self.other))  # a 0.16.0 profile record
+        self.assert_model(self.checkout, "0.16.0", True)
+        self.assert_model(self.checkout, "0.17.0", False)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,7 @@ zig_bin=${AIR2LEAN_ZIG:-zig}
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-floatprobe.XXXXXX")
 trap 'rm -rf "$build_dir"' EXIT
 
-"$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/probe" \
+"$zig_bin" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/probe" \
   --dep compat -Mroot=tests/floatprobe/probe.zig -Mcompat=tests/diff/compat.zig
 "$build_dir/probe" > "$build_dir/probe.out"
 

@@ -25,7 +25,11 @@ theorem soloTree_le {Tgt α : Type} : ∀ {n : Nat} {x y : CoN Tgt (α × Mem) n
   induction h with
   | bot => intro r hr; cases hr
   | leaf => intro r hr; exact hr
-  | sync op m₀ k₁ k₂ _ ih => intro r hr; exact ih _ _ hr
+  | sync op m₀ k₁ k₂ _ ih =>
+    intro r hr
+    cases hρ : soloResp op with
+    | none => rw [soloTree_none hρ] at hr ⊢; exact hr
+    | some ρ => rw [soloTree_some hρ] at hr ⊢; exact ih _ _ hr
 
 /-- **Any observation of an in-thread reading with a result is the program's** (`apply_le` for
 `soloRun`). -/

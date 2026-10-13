@@ -54,7 +54,7 @@ if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep
 fi
 bash "$here/mutant.sh"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
-  "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
+  "$AIR2LEAN_NATIVE_ZIG" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
     --global-cache-dir "$work/cache" -femit-bin="$work/native"
   "$work/native" 2> "$work/native.txt"
   diff "$here/expected.txt" "$work/native.txt"

@@ -94,6 +94,15 @@ Today `CTriple P x Q := ∀ n, FTriple P (Sched.soloRun n x) Q` (`Full/Conc.lean
 statement about a `ConcM` body read in the caller's thread (oracle choice `0`, no other thread
 between its stops). Its clients are `PageAlloc`'s `alloc`, the arena and `sep-auto/Conc`.
 
+**Non-solo stops fail closed (done ahead of R2; audit `structure-2026-10-13.md` #1).** The
+in-thread reading answers only solo ops (`yield`, a `choose`, a `pick`): `Sched.soloResp` is
+`none` for every other op, and a stop at a spawn, join, futex wait or wake, gate or async choice
+reads as `.illegal` (`soloTree`, and `seqTree` alike). Before, it answered a spawn with `.ok 0`
+and a join or a wait at once, so `CTriple emp (sync (.spawn t)) (fun r => ⟪r = .ok 0⟫)` was
+provable. Now no `CTriple` with an admissible precondition holds across such a stop
+(`tests/roadmap/sep-full/SoloSpawnCX.lean`: `no_triple`, `no_spawn_triple`). No existing proof
+relied on the old answers: none of the clients spawns, joins or waits.
+
 **Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
 thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
 *any* `c < count m₁` (`Conc/Logic.lean`, `Safe`/`Step`). A thread triple of the uninterrupted

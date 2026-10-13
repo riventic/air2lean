@@ -3597,13 +3597,18 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     | some (.optional p) => pageBytes (some p) "many" false
     | _ => false
   let isSize (k : Nat) := argTy k == some (.int false 64)
-  -- TODO(module identity, codex/fix-module-identity): bind on std's `posix` module, not on the
-  -- module-less fqn. Until then, guard: the flag structs must be std's own OS types, which a
-  -- user module named `posix` does not produce.
+  -- The flag structs must be std's own OS types: of module `std` by the type's module identity
+  -- (`Air2Lean/Air/Identity.lean`, B1), so a user `os.zig` in the root module, whose type
+  -- `os.linux.MAP` keeps its bare name as key, does not pass. A legacy export without module
+  -- identity has only the name.
   let stdFlags : List String := if f.targetOs == "linux" then ["os.linux."] else ["macho.", "c."]
+  let stdModule (name : String) : Bool :=
+    match (f.identities.find? (·.key == name)).map (·.module) with
+    | some (some m) => m == "std"
+    | _ => f.identities.all (·.module.isNone)
   let packed32 (k : Nat) : Bool := match argId k, argTy k with
     | some t, some (.struct name "packed" _) =>
-      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·)
+      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·) && stdModule name
     | _, _ => false
   let mapping : Bool := match f.types[ret]? with
     | some (.errorUnion set p) =>
