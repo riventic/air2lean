@@ -23,6 +23,23 @@ class Scan(unittest.TestCase):
                                           "def applyTemplate : Nat := 0\n-- def NotTriple := 0\n")
         self.assertEqual(js, {"FooTriple", "BarTemplate"})
 
+    def test_structural_judgments(self):
+        js, _, _ = pf.scan_file("A.lean", (
+            # suffix-less judgments: a program with a postcondition, a contract, a step relation
+            "def Holds {α : Type} (x : ConcM Tgt α) (Q : α → Mem → Prop) : Prop :=\n  True\n"
+            "def Post (c : MemM α) (P : FAssn) (Q : α → FAssn) : Prop := True\n"
+            "structure LockImpl (Tgt : Type) where\n  lock : Ptr → ConcM Tgt Unit\n"
+            "  lock_ok : ∀ P : Nat → Prop, True\n"
+            "structure Ledger2 (I : Nat) where\n  B : Nat → FAssn\n"
+            "structure Moves (m m' : Mem) : Prop where\n  same : m'.current = m.current\n"
+            # plain lemmas and data: not judgments
+            "theorem t (c : MemM α) (Q : α → Prop) : True := trivial\n"
+            "def size (c : MemM α) : Nat := 0\n"
+            "def Pure (n : Nat) (Q : Nat → Prop) : Prop := Q n\n"
+            "def Same (m m' : Mem) : Prop := m = m'\n"
+            "structure Config where\n  n : Nat\n  run : Nat → MemM Nat\n"))
+        self.assertEqual(js, {"Holds", "Post", "LockImpl", "Ledger2", "Moves"})
+
     def test_tactics(self):
         _, ts, _ = pf.scan_file("A.lean", 'syntax (name := s) "my_step"\n  term : tactic\n'
                                           'macro "my_norm" : tactic => `(tactic| simp)\n'
@@ -66,6 +83,15 @@ class Ratchet(unittest.TestCase):
     def test_new_judgment_fails(self):
         (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
         self.assertEqual(self.check(), 1)
+
+    def test_new_suffixless_judgment_fails(self):
+        (self.repo / "New.lean").write_text("def Holds (x : ConcM Tgt α) (Q : α → Prop) : Prop := True\n")
+        self.assertEqual(self.check(), 1)
+
+    def test_new_lemma_passes(self):
+        (self.repo / "New.lean").write_text("theorem l (x : MemM α) (Q : α → Prop) : True := trivial\n"
+                                            "def helper (x : MemM α) : Nat := 0\n")
+        self.assertEqual(self.check(), 0)
 
     def test_new_tactic_fails(self):
         (self.repo / "New.lean").write_text('macro "my_tac" : tactic => `(tactic| rfl)\n')

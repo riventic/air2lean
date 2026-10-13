@@ -23,8 +23,11 @@ framework").
 `assurance/proof-framework.json`:
 
 * `judgments`: every definition of a program judgment in a tracked Lean file (a name ending in
-  `Triple`, `TripleIn`, `Returns`, `Within`, `Stk`, `Stops`, `Turns`, `Halts`, `Template`, `Spec`, …),
-  with its module and status;
+  `Triple`, `TripleIn`, `Returns`, `Within`, `Stk`, `Stops`, `Turns`, `Halts`, `Template`, `Spec`,
+  `WP`, …, or, whatever its name, a structural candidate: a Prop-valued `def`/`structure` over a
+  program (`Result`, `MemM`, `ConcM`, `CoN`, `StateT`, `Proto`) and an assertion or postcondition;
+  a structure with program and assertion fields (the `*Impl` contracts, `ResetLedger`); a
+  Prop-valued structure relating two memories (`FStepIn`)), with its module and status;
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab … : tactic`) and every extension of a
   tactic declared in another module (`macro_rules`), with module and status;
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
