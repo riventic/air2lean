@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "status": "pass",
- "theorem_count": 51,
+ "theorem_count": 54,
  "theorems": [
   {
    "conclusion": {
@@ -2448,6 +2448,121 @@
   },
   {
    "conclusion": {
+    "head": "Not"
+   },
+   "conclusion_dependencies": [
+    "Not",
+    "Unit",
+    "ClaimFixture.diverge",
+    "Zig.Full.FTotalTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fdiverge_not_total",
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "Unit"
+       },
+       {
+        "bvar": 0
+       },
+       {
+        "closed": "ClaimFixture.diverge"
+       },
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0,
+        1
+       ],
+       "open": "Zig.Full.FTotalTriple"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FTotalTriple",
+      "fn_module": "ZigLean.Sep.Full.Logic",
+      "params": [
+       "implicit",
+       "default",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [
+       "Unit",
+       "Zig.Full.FAssn"
+      ],
+      "name": "Q",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Witness.FAdmit"
+      ],
+      "name": "h",
+      "prop": true,
+      "uses": [
+       0
+      ]
+     }
+    ],
+    "head": {
+     "fingerprint": "1d9820f975500d1f9e6b550c0f4a3425",
+     "kind": "definition",
+     "module": "Init.Prelude",
+     "name": "Not"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "absent",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
     "head": "Zig.Full.FTriple"
    },
    "conclusion_dependencies": [
@@ -2713,6 +2828,145 @@
      },
      "nonvacuity": {
       "status": "absent",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "And"
+   },
+   "conclusion_dependencies": [
+    "And",
+    "Nat",
+    "ClaimFixture.ret",
+    "Zig.Full.FReturns",
+    "Zig.Full.FTriple"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fpartial_and_returns",
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "Nat"
+       },
+       {
+        "bvar": 0
+       },
+       {
+        "bvars": [
+         1
+        ],
+        "open": "ClaimFixture.ret"
+       },
+       {
+        "bvars": [
+         0
+        ],
+        "open": null
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0,
+        1
+       ],
+       "open": "Zig.Full.FTriple"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FTriple",
+      "fn_module": "ZigLean.Sep.Full.Triple",
+      "params": [
+       "implicit",
+       "default",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Nat"
+       },
+       {
+        "bvar": 0
+       },
+       {
+        "bvars": [
+         1
+        ],
+        "open": "ClaimFixture.ret"
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0,
+        1
+       ],
+       "open": "Zig.Full.FReturns"
+      },
+      "extra": [],
+      "fn": "Zig.Full.FReturns",
+      "fn_module": "ZigLean.Sep.Full.Logic",
+      "params": [
+       "implicit",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "cb55f574a51c159595e1137d32f46d38",
+     "kind": "inductive",
+     "module": "Init.Prelude",
+     "name": "And"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
       "theorem": null
      }
     }
@@ -3221,6 +3475,102 @@
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "ClaimFixture.FWrapped"
+   },
+   "conclusion_dependencies": [
+    "ClaimFixture.FWrapped",
+    "ClaimFixture.ret"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.fwrapped_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "ClaimFixture.ret"
+      },
+      "extra": [],
+      "fn": "ClaimFixture.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "Zig.Full.FAssn"
+      ],
+      "name": "P",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "4ec2e06293f3a412bc7ef0288b029cfc",
+     "kind": "definition",
+     "module": "tests.roadmap.claims.Fixture",
+     "name": "ClaimFixture.FWrapped"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
    "allowed": true
@@ -6762,6 +7112,11 @@
  ],
  "nodes": [
   {
+   "name": "ClaimFixture.FWrapped",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "definition"
+  },
+  {
    "name": "ClaimFixture.Wrapped",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
@@ -6857,6 +7212,11 @@
    "kind": "theorem"
   },
   {
+   "name": "ClaimFixture.fdiverge_not_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.fdiverge_partial",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
@@ -6868,6 +7228,11 @@
   },
   {
    "name": "ClaimFixture.ffalse_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fpartial_and_returns",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },
@@ -6893,6 +7258,11 @@
   },
   {
    "name": "ClaimFixture.fret_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.fwrapped_total",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },

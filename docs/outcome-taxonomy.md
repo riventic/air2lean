@@ -49,9 +49,10 @@ it rejects the goal. An observed panic is a refusal even if the theorem's precon
 excludes that input: domains are not machine-checked.
 
 `tests/roadmap/outcome-taxonomy/Taxonomy.lean` shows that the contract types already
-keep error returns and model failures apart. A partial triple holds for an `Except ErrName`
-error return and fails for `.panic`, `.illegal`, `.unspecified`, `.unsupportedTimer`,
-`.deadlock` and `.trap`; divergence satisfies it vacuously. `.unsupportedTimer` is its own `Zig.Error`
+keep error returns and model failures apart. A partial triple (`FTriple`) holds for an
+`Except ErrName` error return and fails, on every admissible input, for `.panic`, `.illegal`,
+`.unspecified`, `.unsupportedTimer`, `.deadlock` and `.trap`; divergence and a stack overflow
+(`.stackOverflow`, STK-01) satisfy it vacuously. `.unsupportedTimer` is its own `Zig.Error`
 constructor: generated `time.Timer.start`/`.read`/`Thread.Futex.timedWait` calls and the
 timed scheduler's no-clock, wrong-clock and unselected-timeout paths throw it instead of
 `.unspecified`.
@@ -86,7 +87,7 @@ native agreement.
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py'
-lake build ZigLean.Sep.Triple && lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
+lake build ZigLean.Sep.Full.Witness && lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
 ```
 
 The Python tests include a drift guard: every `Kind` and model `Status` of

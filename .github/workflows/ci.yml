@@ -1116,7 +1116,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Conc.Returns 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1185,13 +1185,14 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 6, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
-          # Credits are not mintable: no EUpd/Upd creates a credit next to the authority ●N.
+          # Credits and epoch tokens are not mintable: no EUpd/Upd creates a credit next to the
+          # authority ●N, nor an epoch token next to its ledger.
           lake env lean tests/roadmap/sep-full/CreditsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/credits-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/credits-cx.log" <<'EOF'
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert ': error' not in text and text.count('depends on axioms') == 4, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # Zero-length accesses race with nothing (raceAt, freeRaces).
@@ -1314,7 +1315,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep
+          lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Init ZigLean.Sep.Full.Strength
           bash tests/roadmap/global-init/check.sh
 
       # Q01 fuzz seeds 18/19/39: comptime-resolved locals (dead address-0 placeholders dropped,
@@ -2013,7 +2014,7 @@ jobs:
           AIR2LEAN_ZIG_BACKEND: stage2_x86_64
         run: |
           set -euo pipefail
-          lake build ZigLean Air2Lean air2lean
+          lake build ZigLean Air2Lean air2lean ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Strength
           lake env lean tests/roadmap/global-payload-pointers/ExceptEq.lean
           python3 -m unittest discover -s tests/roadmap/global-payload-pointers -v
           export AIR2LEAN_LEAN=$(lake env which lean)
@@ -2043,7 +2044,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.Try ZigLean.Sep.Discard
+          lake build ZigLean.Sep.Full.Try
           python3 -m unittest discover -s tests/roadmap/try-pointers -v
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/check.sh --check-qualification
@@ -2067,7 +2068,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.TryAlias
+          lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
           bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/aliases/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")
@@ -2327,7 +2328,7 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness
+          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
 
       # Same premise tables over the kernel dependency graph of the audited translation.
@@ -2381,11 +2382,17 @@ jobs:
         run: tests/roadmap/claims/check.sh
 
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
+      # Then its strength log (tests/roadmap/strength-log) against the compiled fixture.
       - name: Outcome taxonomy Lean fixture
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
+        run: |
+          lake build ZigLean.Sep.Full.Witness
+          out="$RUNNER_TEMP/outcome-taxonomy"
+          mkdir -p "$out"
+          lake env lean -R tests/roadmap/outcome-taxonomy -o "$out/Taxonomy.olean" tests/roadmap/outcome-taxonomy/Taxonomy.lean
+          LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
       # with its expected error. `lake build Proofs` above built the imported modules. This and
