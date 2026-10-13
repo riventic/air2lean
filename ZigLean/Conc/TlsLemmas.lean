@@ -556,7 +556,14 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTripleIn t R Pa x Qa) (ho : Owned own m)
     (hc : m.current = t) (hR : m.threads = R) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
-      StepIn (m.heap.diff (own t)) m m' → Q a G m' n) :
+      StepIn (m.heap.diff (own t)) m m' → Q a G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
@@ -572,12 +579,12 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
 theorem WP.liftM_tlsPtr {key b : BlockId} {s : σ} {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hk : m.tlsInstance m.current key = some b) (h : Q (⟨some b, 0⟩, s) G m n) :
     P.WP t ((_root_.liftM (tlsPtr key) : CM Tgt σ Ptr).run s) Q G m n :=
-  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) fun a m' hr => by
+  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) (fun a m' hr => by
     rw [tlsPtr_run hk] at hr
     simp only [pure, StateT.pure, ExceptT.run, ExceptT.pure, ExceptT.mk, Option.some.injEq,
       Except.ok.injEq, Prod.mk.injEq] at hr
     obtain ⟨rfl, rfl⟩ := hr
-    exact ⟨rfl, h⟩
+    exact ⟨rfl, h⟩) fun hn => by rw [tlsPtr_run hk] at hn; cases hn
 
 /-- The registration of a thread start keeps the threads' parts. -/
 theorem _root_.Zig.Owned.setTls {u : ThreadId} {ids : Array (BlockId × BlockId)} (ho : Owned own m) :
@@ -598,10 +605,10 @@ theorem _root_.Zig.Conc.joinedB_setTls (m : Mem) (u : ThreadId) (ids : Array (Bl
 theorem WP.liftMem_setTls {ids : Array (BlockId × BlockId)}
     {Q : PUnit → (ThreadId → γ) → Mem → Nat → Prop} (h : Q () G (m.setTls m.current ids) n) :
     P.WP t (ConcM.liftMem (modify fun m : Mem => m.setTls m.current ids) : ConcM Tgt PUnit) Q G m n := by
-  refine WP.liftMem (fun e he => ?_) fun a m' hr => ?_
-  · have : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
-        some (.ok ((), m.setTls m.current ids)) := rfl
-    rw [this] at he; cases he
+  have hrun : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
+      some (.ok ((), m.setTls m.current ids)) := rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m' hr => ?_) fun hn => by rw [hrun] at hn; cases hn
+  · rw [hrun] at he; cases he
   · have e := modify_ok hr
     subst e
     exact ⟨by simp, h⟩
