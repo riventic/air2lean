@@ -2410,8 +2410,8 @@ macro "arena_loadBuf" : tactic => `(tactic| (
   unfold heap_ArenaAllocator_Node_loadBuf
   simp only [atomicLoadAsC]
   conc_norm
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
+  refine CTriple.pickStep (CTriple.pick_load N (BitVec.ofNat 64 sz) _) rfl ?_
+  refine CTriple.readStep (FTTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
     (BitVec.ofNat 64 sz) _ rfl) rfl ?_
   rw [toInt_ofBits _ (by rw [hsz64]; exact heven)]
   conc_norm
@@ -2469,8 +2469,8 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   refine CTriple.pureStep (v := ctx.add 16) (fun m r rF hh hp hs => ?_) ?_
   · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
     exact ptrProject_add_run' hbc e1 hc0 (by decide) (by omega)
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoadPtr (ctx.add 16) (some v.N) _) rfl ?_
+  refine CTriple.pickStep (CTriple.pick_loadE (ctx.add 16) (some v.N) _) rfl ?_
+  refine CTriple.readStep (FTTriple.atomicLoadPtr (ctx.add 16) (some v.N) _) rfl ?_
   simp only [Option.isSome_some, ↓reduceIte, optPayload]
   conc_norm
   have hei64 : (BitVec.ofNat 64 v.w.ei).toNat = v.w.ei := by
@@ -2484,8 +2484,9 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
     have := hnf.off0
     exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
+  refine CTriple.pickStep (CTriple.pick_load (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
+    (sep_left_comm_eq _ _ _) ?_
+  refine CTriple.readStep (FTTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
     (sep_left_comm_eq _ _ _) ?_))
 
 /-- The bounds check of the patched `free` and `resize` (`docs/upstream/arena-oob-gep.md`):
@@ -2562,11 +2563,11 @@ macro "arena_free_tail" : tactic => `(tactic| (
     · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
       have := hnf.off0
       exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-    refine CTriple.pick_bind ?_
     -- the strong `cmpxchg` finds `end_index` and moves it back
     refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
       (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-    refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+    refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+    refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
       (BitVec.ofNat 64 v.w.ei - s.len) _ _).frame)) fun _ => ?_
     have hnew : BitVec.ofNat 64 v.w.ei - s.len = BitVec.ofNat 64 (v.w.ei - s.len.toNat) := by
       apply BitVec.eq_of_toNat_eq; rw [hd, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
@@ -2647,10 +2648,10 @@ macro "arena_resize_tail" : tactic => `(tactic| (
       refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
       · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
         exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-      refine CTriple.pick_bind ?_
       refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
         (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-      refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+      refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+      refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
         (BitVec.ofNat 64 v.w.ei - (s.len - n)) _ _).frame)) fun _ => ?_
       have hnew : BitVec.ofNat 64 v.w.ei - (s.len - n) =
           BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n.toNat)) := by
@@ -2703,10 +2704,10 @@ macro "arena_resize_tail" : tactic => `(tactic| (
         refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
         · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
           exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-        refine CTriple.pick_bind ?_
         refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
           (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-        refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+        refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+        refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
           (BitVec.ofNat 64 v.w.ei + (n - s.len)) _ _).frame)) fun res => ?_
         refine CTriple.pre (CTriple.lift (P := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei + (n - s.len)) ⋆
           (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) fun hres => ?_) (fun r h => sep_assoc h)

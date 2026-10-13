@@ -199,7 +199,7 @@ with any frame: the client's triple (`client_ct`) would rule out its run's `.ill
 theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0)
     (h4096 : I.fits 4096 0) : ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
   rintro ⟨r, rF, hh, ho⟩
-  have ht := client_ct I h h8 h4096 1000 mInit r rF hh ho mInit_fseq
+  have ht := (client_ct I h h8 h4096).toSolo 1000 mInit r rF hh ho mInit_fseq
   rw [Witness.errOf_eq_some.mp client_illegal] at ht
   cases ht
 
@@ -303,7 +303,7 @@ theorem not_reset_own (I I' : FAllocInv) (h : CAllocSpec vt arena I)
     (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own)) :
     ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
   rintro ⟨r, rF, hh, ho⟩
-  have ht := reset_client_ct I I' h h' h8 h8' hres 1000 mInit r rF hh ho mInit_fseq
+  have ht := (reset_client_ct I I' h h' h8 h8' hres).toSolo 1000 mInit r rF hh ho mInit_fseq
   have hrun := reset_client_run
   revert ht
   cases e : ((Sched.soloRun 1000 resetClient).run mInit).run with
