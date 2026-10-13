@@ -1797,6 +1797,1265 @@
       "requires_evidence": false
     }
   ],
-  "results": {},
+  "results": {
+    "translation:atomics": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "atomics"
+      },
+      "log": "0.17.0.d/logs/translation_atomics.log",
+      "log_sha256": "7a54430d40c96d4222131e5e707f0e21038a6f5d11bbcc2b53f182aaede21252",
+      "recorded_at": "2026-10-10T16:07:32+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:basic": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "basic"
+      },
+      "log": "0.17.0.d/logs/translation_basic.log",
+      "log_sha256": "a1c4096494617b32ca71995acfc948d795127645803d1f3e05224de2ad47b692",
+      "recorded_at": "2026-10-10T16:07:54+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:errors": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "errors"
+      },
+      "log": "0.17.0.d/logs/translation_errors.log",
+      "log_sha256": "7cbba8ebb3274c30a51eb1e6bf59939b110d0379eff45ce932bb8623ee6084a5",
+      "recorded_at": "2026-10-10T16:08:12+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:floatconv": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "floatconv"
+      },
+      "log": "0.17.0.d/logs/translation_floatconv.log",
+      "log_sha256": "febadc30360cad05a3089449b0619a9f390472c0c909264b6b6bbb0c8619ed47",
+      "recorded_at": "2026-10-10T16:08:43+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:floatops": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "floatops"
+      },
+      "log": "0.17.0.d/logs/translation_floatops.log",
+      "log_sha256": "18408c40ca38578b5ad9cb40fa35aeff8508ae3d513bae86789b2a6e8845e404",
+      "recorded_at": "2026-10-10T16:09:43+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:floats": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "floats"
+      },
+      "log": "0.17.0.d/logs/translation_floats.log",
+      "log_sha256": "00f34952f7b637064cbd171faa3e6b8564ba788e680c334ae337776a9cc0a97c",
+      "recorded_at": "2026-10-10T16:10:04+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:iogroup": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "iogroup"
+      },
+      "log": "0.17.0.d/logs/translation_iogroup.log",
+      "log_sha256": "778e39b7a2b35a3e8bd13156f307df4679505480501a5ae03c9419c8a0b7b0aa",
+      "recorded_at": "2026-10-10T16:10:24+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:layout": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "layout"
+      },
+      "log": "0.17.0.d/logs/translation_layout.log",
+      "log_sha256": "532cc78ec3005f3294f508e60ff116d7ad38001a48ac2d27778cb139f3004eda",
+      "recorded_at": "2026-10-10T16:11:04+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:lists": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "lists"
+      },
+      "log": "0.17.0.d/logs/translation_lists.log",
+      "log_sha256": "63ad975c3794e7ef22deb375c75ef4ac79cad41cfd464116909b74b28a3ffbea",
+      "recorded_at": "2026-10-10T16:11:31+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:options": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "options"
+      },
+      "log": "0.17.0.d/logs/translation_options.log",
+      "log_sha256": "ca46763d2396ce0ccc85b52c1e78f849cc6869998e7ebfa3ebd545f9a60ac0ce",
+      "recorded_at": "2026-10-10T16:11:50+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:pointers": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "pointers"
+      },
+      "log": "0.17.0.d/logs/translation_pointers.log",
+      "log_sha256": "0e44e07e846df9ea85e7f7c98f225bb1463154f8e8816031728d0f42fe99457e",
+      "recorded_at": "2026-10-10T16:12:15+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:recursion": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "recursion"
+      },
+      "log": "0.17.0.d/logs/translation_recursion.log",
+      "log_sha256": "1cdbcce97c389d6a0d50ecd0188cdcc9c01d97188cd13ff32c9a6272dc569ceb",
+      "recorded_at": "2026-10-10T16:12:33+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:slices": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "slices"
+      },
+      "log": "0.17.0.d/logs/translation_slices.log",
+      "log_sha256": "d83cddf84b858a25e113293d1fe830bc4a320304e8b2dcfb27ea3a66e8e084b2",
+      "recorded_at": "2026-10-10T16:13:01+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:sync": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "sync"
+      },
+      "log": "0.17.0.d/logs/translation_sync.log",
+      "log_sha256": "b2e0fed0d6b82a024548e6e0efe8b6654d532db9a26d8770c1b5e01a6f2d93d8",
+      "recorded_at": "2026-10-10T16:13:29+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:threads": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "threads"
+      },
+      "log": "0.17.0.d/logs/translation_threads.log",
+      "log_sha256": "18f2710f083f927c0664773dbd827c21dd6850d86ecc0447943faef30d837b08",
+      "recorded_at": "2026-10-10T16:13:52+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:variants": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "variants"
+      },
+      "log": "0.17.0.d/logs/translation_variants.log",
+      "log_sha256": "3492d2b50f0055298331082104f11dfe6408b694d3d130699d1bf99d3bc0fa29",
+      "recorded_at": "2026-10-10T16:14:18+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:vectors": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "scripts/check.sh"
+      ],
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "0.17.0",
+        "AIR2LEAN_EXAMPLES": "vectors"
+      },
+      "log": "0.17.0.d/logs/translation_vectors.log",
+      "log_sha256": "5fb0f73ee0abc9b9f55a88b72152aa71d5ce9eaa632c6162e8a57ccabf9a164d",
+      "recorded_at": "2026-10-10T16:14:54+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:aarch64-macos-none-ReleaseFast": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/abi-probe.py",
+        "observe",
+        "--zig",
+        "/Users/konstantinrr/.cache/air2lean/host-0.17.0/zig",
+        "--profile",
+        "tests/roadmap/abi-probes/aarch64-macos-none-ReleaseFast.json",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseFast.json"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/probe_layout_aarch64-macos-none-ReleaseFast.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recorded_at": "2026-10-10T16:15:00+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:aarch64-macos-none-ReleaseSafe": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/abi-probe.py",
+        "observe",
+        "--zig",
+        "/Users/konstantinrr/.cache/air2lean/host-0.17.0/zig",
+        "--profile",
+        "tests/roadmap/abi-probes/aarch64-macos-none-ReleaseSafe.json",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/abi/aarch64-macos-none-ReleaseSafe.json"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/probe_layout_aarch64-macos-none-ReleaseSafe.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recorded_at": "2026-10-10T16:15:05+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:asm": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/asm.json",
+        "--module",
+        "Proofs.Asm.Effects",
+        "--module",
+        "Proofs.Asm.Gen",
+        "--module",
+        "Proofs.Asm.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_asm.log",
+      "log_sha256": "be10e942b9f715539507ee5fd310316c7321dc47f0a592802b669147fc64efe8",
+      "recorded_at": "2026-10-10T16:15:12+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:atomics": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/atomics.json",
+        "--module",
+        "Proofs.Atomics.Gen",
+        "--module",
+        "Proofs.Atomics.MessagePassing",
+        "--module",
+        "Proofs.Atomics.Proofs",
+        "--module",
+        "Proofs.Atomics.PtrPublish",
+        "--module",
+        "Proofs.Atomics.Relaxed",
+        "--module",
+        "Proofs.Atomics.Stack"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_atomics.log",
+      "log_sha256": "24664db2ccbe663c627cfbded561ac039708a46c0ad2a2cb675c2a411948c5e2",
+      "recorded_at": "2026-10-10T16:15:39+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:basic": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/basic.json",
+        "--module",
+        "Proofs.Basic.AirCert",
+        "--module",
+        "Proofs.Basic.Arith",
+        "--module",
+        "Proofs.Basic.Common",
+        "--module",
+        "Proofs.Basic.Gen",
+        "--module",
+        "Proofs.Basic.Proofs",
+        "--module",
+        "Proofs.Basic.Twt"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_basic.log",
+      "log_sha256": "0f2e6b8cf556664239fb5803bddd2de07c5e0af3030c3feed0f60f31d1f99882",
+      "recorded_at": "2026-10-10T16:15:53+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:cancel": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/cancel.json",
+        "--module",
+        "Proofs.Cancel.Client",
+        "--module",
+        "Proofs.Cancel.Group",
+        "--module",
+        "Proofs.Cancel.Spurious"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_cancel.log",
+      "log_sha256": "6dcbfbcbdd96b12d1c0e3edaa36cc7c4b01b08c64045b6445742d743aae27287",
+      "recorded_at": "2026-10-10T16:16:03+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:detach": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/detach.json",
+        "--module",
+        "Proofs.Detach.Transfer",
+        "--module",
+        "Proofs.Detach.Worker"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_detach.log",
+      "log_sha256": "3813f808c95237e200ccda66b5b2bc515f103821e5054f50ab61148f06feb2c3",
+      "recorded_at": "2026-10-10T16:16:12+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:errors": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/errors.json",
+        "--module",
+        "Proofs.Errors.Gen",
+        "--module",
+        "Proofs.Errors.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_errors.log",
+      "log_sha256": "edcb3b36227b2f91fc5f9e818f00336a6be6d496f528e941a40c8f380e74dda5",
+      "recorded_at": "2026-10-10T16:16:20+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:floatconv": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/floatconv.json",
+        "--module",
+        "Proofs.Floatconv.Gen",
+        "--module",
+        "Proofs.Floatconv.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_floatconv.log",
+      "log_sha256": "da5585e1bc839f8f1a1fc8b48cae5e7aac8f64199acd397d79c2ddd489db5731",
+      "recorded_at": "2026-10-10T16:16:28+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:floatops": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/floatops.json",
+        "--module",
+        "Proofs.Floatops.Gen",
+        "--module",
+        "Proofs.Floatops.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_floatops.log",
+      "log_sha256": "35f6b502786c42926835c00dc11c08b2385cc85ba49e3eed2b70cdf20dc909ac",
+      "recorded_at": "2026-10-10T16:16:39+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:floats": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/floats.json",
+        "--module",
+        "Proofs.Floats.Dot",
+        "--module",
+        "Proofs.Floats.Fitness",
+        "--module",
+        "Proofs.Floats.Gen",
+        "--module",
+        "Proofs.Floats.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_floats.log",
+      "log_sha256": "ec29b3d1000fb4f06ea273133946f251c80eb6d130446c37691ddb0ce3e147f0",
+      "recorded_at": "2026-10-10T16:16:53+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:iogroup": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/iogroup.json",
+        "--module",
+        "Proofs.Iogroup.Counter",
+        "--module",
+        "Proofs.Iogroup.Gen"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_iogroup.log",
+      "log_sha256": "7625b215ecf9053567ce09961652c7638428b2bcbc8e0068a217312657af6452",
+      "recorded_at": "2026-10-10T16:17:08+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:layout": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/layout.json",
+        "--module",
+        "Proofs.Layout.Gen",
+        "--module",
+        "Proofs.Layout.Mem",
+        "--module",
+        "Proofs.Layout.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_layout.log",
+      "log_sha256": "f390dd1486190ab4308e3d2b974ffb4345161c5d3815ea339dca4e5d9f98c866",
+      "recorded_at": "2026-10-10T16:17:19+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:lists": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/lists.json",
+        "--module",
+        "Proofs.Lists.Append",
+        "--module",
+        "Proofs.Lists.Bounded",
+        "--module",
+        "Proofs.Lists.Container",
+        "--module",
+        "Proofs.Lists.Cost",
+        "--module",
+        "Proofs.Lists.Gen",
+        "--module",
+        "Proofs.Lists.Policy",
+        "--module",
+        "Proofs.Lists.Sep"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_lists.log",
+      "log_sha256": "f89b157f7c19567ed86e35a064c84908e0749ef1c06476a866c4cc5eaadf16aa",
+      "recorded_at": "2026-10-10T16:17:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:options": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/options.json",
+        "--module",
+        "Proofs.Options.Gen",
+        "--module",
+        "Proofs.Options.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_options.log",
+      "log_sha256": "831b1ad344acdb00a140c27418cf84be7d5e4c352527e43f75e31ad36f6905ad",
+      "recorded_at": "2026-10-10T16:17:49+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:pointers": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/pointers.json",
+        "--module",
+        "Proofs.Pointers.Gen",
+        "--module",
+        "Proofs.Pointers.Proofs",
+        "--module",
+        "Proofs.Pointers.Sep"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_pointers.log",
+      "log_sha256": "5451784a346580999995a4abe1b6198ee7ce482a8d3b4596ad082ccb3117c064",
+      "recorded_at": "2026-10-10T16:18:01+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:provenance": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/provenance.json",
+        "--module",
+        "Proofs.Provenance.Gen",
+        "--module",
+        "Proofs.Provenance.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_provenance.log",
+      "log_sha256": "14dfd08ca0b5156b5ae2c35c4bf5325570b498ba242e1e4360d0ca1c296cd059",
+      "recorded_at": "2026-10-10T16:18:06+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:recursion": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/recursion.json",
+        "--module",
+        "Proofs.Recursion.AirCert",
+        "--module",
+        "Proofs.Recursion.Gen",
+        "--module",
+        "Proofs.Recursion.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_recursion.log",
+      "log_sha256": "5587a251e9d8955c57942ebbef72a8b3c66ecd75f6c165caa0e767b0ddb1e688",
+      "recorded_at": "2026-10-10T16:18:21+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:slices": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/slices.json",
+        "--module",
+        "Proofs.Slices.Gen",
+        "--module",
+        "Proofs.Slices.Proofs",
+        "--module",
+        "Proofs.Slices.Sep"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_slices.log",
+      "log_sha256": "0b7892a585cf0527853ea46efaeec0dfec0615600673a52906cfdcfdcd1c0e63",
+      "recorded_at": "2026-10-10T16:18:36+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:sync": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/sync.json",
+        "--module",
+        "Proofs.Sync.Contracts",
+        "--module",
+        "Proofs.Sync.Gen",
+        "--module",
+        "Proofs.Sync.Handoff",
+        "--module",
+        "Proofs.Sync.Lock",
+        "--module",
+        "Proofs.Sync.Mailbox",
+        "--module",
+        "Proofs.Sync.Mutex",
+        "--module",
+        "Proofs.Sync.Proofs",
+        "--module",
+        "Proofs.Sync.RwLock",
+        "--module",
+        "Proofs.Sync.RwLockContract",
+        "--module",
+        "Proofs.Sync.RwLockSnapshotPair",
+        "--module",
+        "Proofs.Sync.SemCounter",
+        "--module",
+        "Proofs.Sync.Semaphore",
+        "--module",
+        "Proofs.Sync.SnapshotCache"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_sync.log",
+      "log_sha256": "f4a4e15a94b6dd8dcd10868185dd7fd750007a55125259d927d7f26e483abcea",
+      "recorded_at": "2026-10-10T16:20:10+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:threads": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/threads.json",
+        "--module",
+        "Proofs.Threads.Counter",
+        "--module",
+        "Proofs.Threads.Disjoint",
+        "--module",
+        "Proofs.Threads.Gen",
+        "--module",
+        "Proofs.Threads.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_threads.log",
+      "log_sha256": "c710380db2cd91f85bbbeba39fb36a101d818664a53412207a0af976c785b21e",
+      "recorded_at": "2026-10-10T16:20:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:variants": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/variants.json",
+        "--module",
+        "Proofs.Variants.Gen",
+        "--module",
+        "Proofs.Variants.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_variants.log",
+      "log_sha256": "c36a018d674763020efcf2a8ae2effb961f8b8871c5cb51a62cb1d9f195ae053",
+      "recorded_at": "2026-10-10T16:20:50+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:vectors": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/assumptions.py",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/agent-a53a7bdc3da439cf9/qualification/0.17.0.d/assumptions/vectors.json",
+        "--module",
+        "Proofs.Vectors.CheckedAdd",
+        "--module",
+        "Proofs.Vectors.Gen",
+        "--module",
+        "Proofs.Vectors.Proofs"
+      ],
+      "env": {},
+      "log": "0.17.0.d/logs/proofs_vectors.log",
+      "log_sha256": "b2b1e87ff705051bf80fbdeb25843df0bbfafcbca9e0391f05103fae876381d1",
+      "recorded_at": "2026-10-10T16:21:01+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "universe:air_tags": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "16 added / 6 removed tags have dispositions: renames and the bitcast split map onto the 0.16.0 paths (Normalize/Canon/Check, tests/roadmap/zig017), div_ceil is a new op, union_from_enum/array_to_vector/spirv_runtime_array_len/div_ceil_optimized stay rejected; bool_and/bool_or become bit_and/bit_or on bool.",
+      "recorded_at": "2026-10-10T16:22:40+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "universe:intern_keys": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "spirv_type: only made by @SpirvType, which Sema rejects unless the target is SPIR-V (fixture in TAGS.md); an export would be a k=other type entry, rejected.",
+      "recorded_at": "2026-10-10T16:22:40+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "universe:types": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "zig-patch/0.17.0/TAGS.md",
+        "docs/zig-0.17-delta.md"
+      ],
+      "note": "std.lang.Type.spirv: unreachable on supported targets (same fixture); exported as other and rejected.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "evidence:tags": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "tests/golden/0.17.0",
+        "tests/roadmap/zig017",
+        "tests/roadmap/bitcast-017",
+        "tests/roadmap/zig017/overflow",
+        "qualification/0.17.0.d/logs",
+        "qualification/0.17.0.d/logs/review_zig017_tags.log",
+        "qualification/0.17.0.d/logs/review_zig017_cli.log",
+        "qualification/0.17.0.d/logs/review_bitcast017.log",
+        "qualification/0.17.0.d/logs/review_coverage_check.log"
+      ],
+      "note": "Refreshed on codex/soundness-batch b97ef8cc (batches 7-9 and the soundness batch): the tag rows changed since the first record are xor, unwrap_errunion_payload_ptr, is_non_null_ptr, optional_payload_ptr, runtime_nav_ptr, memset_safe, mul_with_overflow, array_to_slice (re-reviewed through the same evidence; none is a 0.17.0-only tag). Seven differ from 0.16.0 only in their recorded fixture/test paths; mul_with_overflow is emitted-unqualified on 0.16.0 (fixture tests/roadmap/pointer-width/air/0.16.0) and now also on 0.17.0 through the new compiler fixture tests/roadmap/zig017/overflow (patched 0.17.0 export of @mulWithOverflow, provenance.json pins the compiler and exporter hashes; the translation of both functions elaborates), so the 0.17.0 row is no longer a narrowing; no semantic contract is claimed beyond the shared 0.16.0 path. Exporter rows: tests/golden/0.17.0/*/air from the patched 0.17.0 compiler; normalizer/checker rows: tests/roadmap/zig017 (synthetic tag table, renames, rejections) and bitcast-017 (exported AIR); every selected example's translation and differential test passed on aarch64-macos (translation:* logs).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "compiler-sources": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "docs/zig-0.17-delta.md",
+        "docs/bitcast-semantics.md",
+        "docs/std-models.md"
+      ],
+      "note": "Release diff of Air/InternPool/Sema/Type/Value/llvm and the modelled std files reviewed in docs/zig-0.17-delta.md (a)-(f); @bitCast's logical-order change is modelled version-keyed (docs/bitcast-semantics.md).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:constants:spirv_type": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "Not a support expansion in practice: InternPool.getReifiedSpirvType has one caller, Sema.zirReifySpirvType, which fails first unless the target is SPIR-V (compiler fixture with the patched 0.17.0 compiler for x86_64-linux and aarch64-macos in TAGS.md); the translator rejects the k=other entry it would produce.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "model-boundary": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "docs/std-models.md",
+        "docs/zig-0.17-delta.md",
+        "Proofs/Sync/Semaphore.lean",
+        "Proofs/Lists/Append.lean",
+        "qualification/0.17.0.d/logs/translation_sync.log",
+        "qualification/0.17.0.d/logs/translation_lists.log"
+      ],
+      "note": "Allocator/Thread/Io/time sources compared with 0.16.0 (docs/std-models.md); model rows list 0.17.0 only where re-qualified. Io.Condition.waitUncancelable (inlined loops) and ArrayListUnmanaged's pointer_stability are proved through their 0.17.0 translations; sync and lists translations and differential tests pass.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseSafe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/aarch64-linux-gnu-ReleaseSafe.json",
+        "qualification/0.17.0.d/logs/probe_layout_aarch64-linux-gnu-ReleaseSafe.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseFast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/aarch64-linux-gnu-ReleaseFast.json",
+        "qualification/0.17.0.d/logs/probe_layout_aarch64-linux-gnu-ReleaseFast.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:x86_64-linux-gnu-ReleaseSafe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/x86_64-linux-gnu-ReleaseSafe.json",
+        "qualification/0.17.0.d/logs/probe_layout_x86_64-linux-gnu-ReleaseSafe.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:layout:x86_64-linux-gnu-ReleaseFast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/x86_64-linux-gnu-ReleaseFast.json",
+        "qualification/0.17.0.d/logs/probe_layout_x86_64-linux-gnu-ReleaseFast.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "probe:float": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/logs/probe_float.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh",
+        "tests/floatprobe/expected.0.17.0.txt"
+      ],
+      "note": "scripts/floatprobe.sh with stock Zig 0.17.0 x86_64-linux (-mcpu=baseline) in docker linux/amd64; exit 0 with tests/floatprobe/expected.0.17.0.txt, whose two f128 sqrt lines come from this run's output and equal 0.16.0's override.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:div_ceil": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "tests/roadmap/zig017/divceil/provenance.json",
+        "tests/roadmap/zig017/divceil/air/0.17.0",
+        "tests/roadmap/zig017/divceil/check.sh",
+        "qualification/0.17.0.d/logs/support_div_ceil_aarch64-macos.log",
+        "qualification/0.17.0.d/logs/support_div_ceil_linux-containers.log",
+        "qualification/0.17.0.d/logs/support_div_ceil_container.sh",
+        "tests/roadmap/zig017/reject"
+      ],
+      "note": "Compiler fixture: divceil.zig's AIR exported by the patched 0.17.0 compiler (ReleaseSafe, x86_64-linux), with Sema's minInt/-1 and divide-by-zero checks before div_ceil. Differential: the translation run on 1652 inputs (edge pairs and seeded random, i8/u8/i13/i32/u32/i64/u64) equals stock Zig 0.17.0 on aarch64-macos, aarch64-linux and x86_64-linux: 1562 values, and 90 inputs where both panic with the same check (division by zero / integer overflow). Rejections: div_ceil on a 0.16.0 file and div_ceil_optimized (tests/roadmap/zig017/reject). Contract: Zig.divCeil (ZigLean/Basic.lean). CI reruns check.sh on the 0.17.0 row.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:threadsync": {
+      "status": "not-applicable",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": null,
+      "evidence": [
+        "examples/threadsync/zig-versions",
+        "docs/std-models.md",
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "proofs:threadsync": {
+      "status": "not-applicable",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": null,
+      "evidence": [
+        "examples/threadsync/zig-versions",
+        "docs/std-models.md",
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:bit_cast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps bit_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:bit_cast_safe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps bit_cast_safe onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:41+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:ptr_cast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps ptr_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:ptr_from_int": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps ptr_from_int onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:int_from_ptr": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_from_ptr onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:error_cast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps error_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:int_cast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_cast onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:int_cast_safe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps int_cast_safe onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:agg_field_val": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/golden/0.17.0",
+        "qualification/0.17.0.d/logs/translation_basic.log",
+        "qualification/0.17.0.d/logs/translation_layout.log"
+      ],
+      "note": "A 0.17.0 rename/split of a 0.16.0 tag: Canon.versionTags maps agg_field_val onto the canonical 0.16.0 tag, so it reaches the same Check.lean rules and Emit.lean code as the qualified 0.16.0 path (bit_cast_safe adds only the exhaustive-enum check, which the enum bitcast emission performs). Compiler fixtures: the patched 0.17.0 exports in tests/golden/0.17.0 (coverage/0.17.0.json lists them); every selected example's translation and differential test pass on 0.17.0 (translation:* logs, CI 0.17.0 row); tests/roadmap/zig017 checks the mapping and the version gate (a 0.17.0 tag in a 0.16.0 file is rejected).",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:error_from_int": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/roadmap/zig017/casts/provenance.json",
+        "tests/roadmap/zig017/casts/air/0.17.0"
+      ],
+      "note": "Canon.versionTags maps error_from_int onto 0.16.0's bitcast; the compiler fixture tests/roadmap/zig017/casts (patched 0.17.0 export of @intFromError/@errorFromInt) shows the exporter writes it, and Check.lean rejects it exactly as 0.16.0's raw error representation cast (finalized error ordinals are outside the error-storage fragment). No new semantics is claimed: the accepted expansion is the export and the shared rejection.",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "support:tags:int_from_error": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Sonnet 5.5 (0.17.0 qualification refresh agent)",
+      "decision": "accepted",
+      "evidence": [
+        "Air2Lean/Air/Canon.lean",
+        "tests/roadmap/zig017/test_cli.py",
+        "tests/roadmap/zig017/Tags.lean",
+        "docs/zig-0.17-delta.md",
+        "zig-patch/0.17.0/TAGS.md",
+        "tests/roadmap/zig017/casts/provenance.json",
+        "tests/roadmap/zig017/casts/air/0.17.0"
+      ],
+      "note": "Canon.versionTags maps int_from_error onto 0.16.0's bitcast; the compiler fixture tests/roadmap/zig017/casts (patched 0.17.0 export of @intFromError/@errorFromInt) shows the exporter writes it, and Check.lean rejects it exactly as 0.16.0's raw error representation cast (finalized error ordinals are outside the error-storage fragment). No new semantics is claimed: the accepted expansion is the export and the shared rejection.",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    },
+    "translation:asm": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "https://github.com/riventic/air2lean/actions/runs/37981222110/job/113991942788",
+        "qualification/0.17.0.d/logs/translation_asm_ci-x86_64-linux.log"
+      ],
+      "note": "asm is x86_64-linux only. CI run 37981222110 on main efd353ed, job test (0.17.0, true, false), conclusion success: scripts/check.sh over all examples incl. asm (AIR dump, translation, golden diff vs tests/golden/0.17.0/asm/air-linux) and the differential test asm: ok=1200 fail_match=0 mismatch=0; Proofs/Asm/Gen.lean matches the 0.17.0 translation.",
+      "recorded_at": "2026-10-10T16:22:42+00:00",
+      "git_head": "e78329591c4622e7a94453eabad1819277ad8099"
+    }
+  },
   "plan_sha256": "9e927523c65aa1a2c89c9dc309c8c2eb697484d58e708cb335eaf6377d24fc45"
 }
