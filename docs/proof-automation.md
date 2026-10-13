@@ -335,7 +335,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are. A
+  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
+  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`,
+  `mremapShrink_at`; the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
@@ -348,7 +351,7 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   (`docs/sep-threads.md` step 5).
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
-`Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
+`Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
 thread logics; `const` reads; the rejected store to unowned bytes).
 
 ## The arithmetic solver

@@ -234,9 +234,12 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   order and bounds checks read no byte, so their thread rules are the proofs and the sequential
   rules are read from them; these native rules are `@[fsym]` in thread goals. `Full/Mmap`
   (`mmap'`, `mmapC`, `munmapTail'`, `munmapPrefix'`, `munmapWhole'`, `munmapTailR`,
-  `mremapShrink'`, `mremapShrinkR`): `ThreadLocal.mmap` (every precondition: no record read, a
-  new block), `ThreadLocal.munmap` and `ThreadLocal.mremapShrink` (the removed bytes are the
-  precondition's; `Mem.NoRevive.setBlock`: a block keeps or loses live bytes, never gains one).
+  `mremapShrink'`, `mremapShrinkR`; no hand-written copies, the regressions are in
+  `tests/roadmap/sep-auto/Threads.lean`): the locality providers `ThreadLocal.mmap` (every
+  precondition: no record read, a new block), `ThreadLocal.munmap_of` and `mremapShrink_of`/`_at`
+  (the removed bytes are the precondition's, `OwnsPtr`; the block's size and kind from its
+  extent, `BlockIs`; over `ThreadLocal.munmap`/`mremapShrink`; `Mem.NoRevive.setBlock`: a block
+  keeps or loses live bytes, never gains one).
   An empty cut records a zero-length write at the mapping's end. A zero-length access touches no
   byte and races with nothing (`raceAt`, `Mem.freeRaces`; model fix, coordinator ruling;
   `noRace_zero`, regression `tests/roadmap/sep-full/ZeroLenCX.lean`). Before the fix it raced
