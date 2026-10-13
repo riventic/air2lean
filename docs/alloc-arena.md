@@ -149,6 +149,13 @@ make O-E unreachable (above), and `docs/premises.md` lists none.
 (`prev_size`, the bumped `end_index`), not only on the request, at alignment `@alignOf(Node) = 8`.
 A child specification covers only requests within `CI.fits`; with the patch, a request outside
 the child's `fits` must be one that the arena's own `alloc` contract allows to fail.
+`reset`'s retaining modes ask for a node of up to the sum of a list's buffer sizes, at most
+`2 ^ 63` bytes (`chain_sizes_le`), so their contract takes the hypothesis
+`CI.FitsUpTo (2 ^ 63) 3` (`FAllocInv.FitsUpTo I n k`: `I.fits m k` for every `m ≤ n`, in
+`ZigLean/Sep/Full/AllocSpec.lean`). It is a hypothesis on the child parameter, not an environment
+premise: the page allocator has it (`PageTok.pinv_fitsUpTo`: `n + 2 ^ k + P ≤ 2 ^ 64`), a
+`FixedBufferAllocator` has it when its capacity is at most `2 ^ 63 - 8` (`FBA.finv_fitsUpTo`:
+`cap + 2 ^ k + n ≤ 2 ^ 64`).
 
 **O-G: in-place growth of a node with outstanding grants.** The patched `alloc` grows its first
 node in place through the child (`child_allocator.rawResize(node, …)`) while clients hold grants

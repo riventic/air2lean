@@ -162,7 +162,9 @@ word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. A word in m
 allocator granted as a plain region (an arena node's header) is a `wpts p v`, with whatever tag
 constraint its bytes carry (`tests/roadmap/alloc-arena/HeaderTagCX.lean`: `apts` can be false
 there); `ZigLean/Sep/Full/WordPlain.lean` has the same rules for it (`wpts_load`/`_store`/
-`_loadPacked`/`_storePacked`, `wpts_view`, `facts_wpts`), and the atomic rules take a `wpts`.
+`_loadPacked`/`_storePacked`, `wpts_view`, `facts_wpts`), and the atomic rules take a `wpts`
+(`FTriple.atomicLoadW`, `cmpxchgHitW`, … are `@[fsym]` there; the `apts` they leave is a `wpts`
+again by the view `apts_wpts_view`).
 
 ### Parts
 

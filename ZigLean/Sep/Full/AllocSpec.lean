@@ -93,6 +93,18 @@ theorem fee_join (I : FAllocInv) {φ ψ : Frac} (hφ : 0 < φ.val) (hψ : 0 < ψ
   rw [I.fee_add _ _ hφ hψ]
   exact ⟨h, by simp only [Frac.add]; grind⟩
 
+/-- **`I` takes every request up to `n` bytes** at alignment `2 ^ k` (`fits`): a property of a
+child allocator that an allocator of allocators asks for (the arena's `reset` reallocates a node
+of any size up to the sum of its lists' sizes, at most `2 ^ 63` bytes; `docs/alloc-arena.md`).
+It is a hypothesis on the child parameter, not an environment premise: the page allocator has it
+for every `n` with `n + 2 ^ k + P ≤ 2 ^ 64` (`PageTok.pinv_fitsUpTo`), a fixed buffer for every
+`n` with `cap + 2 ^ k + n ≤ 2 ^ 64` (`AllocFba.FBA.finv_fitsUpTo`). -/
+def FitsUpTo (I : FAllocInv) (n k : Nat) : Prop := ∀ m, m ≤ n → I.fits m k
+
+theorem FitsUpTo.fits {I : FAllocInv} {n k m : Nat} (h : I.FitsUpTo n k) (hm : m ≤ n) :
+    I.fits m k :=
+  h m hm
+
 variable (I : FAllocInv)
 
 /-- A region that `I`'s allocator granted for the fee `φ` (`Zig.granted`): its bytes, the token,
