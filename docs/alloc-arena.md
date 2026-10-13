@@ -243,8 +243,11 @@ free list) is not attempted.
   and the free list as `next`-linked chains (each with its token and kept share), the child's
   `own`, the junk as an exact heap `JunkAt jh` (bytes that frees of earlier allocations, shrinks
   and `alloc`'s padding leaked back), one receipt per grant together with the grant's fee
-  (`Rcpts`, `rcptOf`; the receipt at any bound) and the pool of shares that frees gave back
-  (`Pool`). The fee is `fee γ e φ = epTok γ e φ ⋆ ⟪0 < φ⟫`, a nonzero part of the epoch token
+  (`LedgerRcpts`, `ledgerRcpt`; the receipt at any bound) and the pool of shares that frees gave back
+  (`Pool`). The ledger, its receipts and the fee are the generic reset ledger
+  (`ZigLean/Sep/Full/ResetLedger.lean`, [sep-full-state.md](sep-full-state.md) §The fee of a
+  grant); the arena is an instance of it (`Core.ledger`). The fee is
+  `epFee γ e φ = epTok γ e φ ⋆ ⟪0 < φ⟫`, a nonzero part of the epoch token
   ([sep-full-state.md](sep-full-state.md) §The fee of a grant). The token of a
   grant names it with its fraction, its cells' labels and its fee: `∃ i, gfrag γ e i (p, n, q, A, K, φ)`;
   every grant lies in the block of a used node with that node's labels (`GrantOk`; the used nodes
@@ -265,7 +268,7 @@ free list) is not attempted.
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
     (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
     against its receipt into the pool (`EUpd.returnTw`: weakened to the receipt's bound first),
-    the grant is retired (`Upd.retire`) and its fee goes back to the client: `free_ghost`.
+    the grant is retired (`Upd.retire`) and its fee goes back to the client: `ledger_return`.
   * `grant_return`: the same as a `free` of a grant that is not the last one, as a ghost update
     (no code runs): the grant's bytes become junk and the client gets the fee back. With every
     grant back, the client holds the whole epoch token `epTok γ e 1` again, and next to it the
@@ -279,10 +282,10 @@ free list) is not attempted.
     `FTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the size:
     `toInt_ofBits`), handing the client the new bytes. A successful resize re-points the grant at
     the new length (`Upd.reassign`); a shrink weakens the bound of the client's part of the share
-    (`shrink_ghost`); a growth takes back the part `q'` the client gives against a split of the
+    (`ledger_shrink`); a growth takes back the part `q'` the client gives against a split of the
     grant's receipt, joins it into the node's kept share, lends it again at the new end and joins
-    the receipts at the lower bound (`rcpt_regrow`: `brcpt_split`, `EUpd.returnTw`,
-    `EUpd.lendT`, `EUpd.rjoin`; `grow_ghost`). The arena needs no `q' = q` for a shrink (it never
+    the receipts at the lower bound (`ledger_regrow_rcpt`: `brcpt_split`, `EUpd.returnTw`,
+    `EUpd.lendT`, `EUpd.rjoin`; `ledger_regrow`). The arena needs no `q' = q` for a shrink (it never
     shrinks a block itself). `remap` is the whole-region `resize` (`resize_granted_ct`,
     `FAllocInv.resize_granted_of`) and returns `memory.ptr`.
   * **Coverage of the nodes' buffers** (for `reset`, which must give each node's whole region to

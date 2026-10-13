@@ -32,8 +32,8 @@ allocator's `munmap`) knows that `free` returns exactly what it lent.
 The default fee is `emp`: for an allocator that charges none (the `FixedBufferAllocator`, the
 page allocator) the contract is the one without a fee. The fee is for an allocator that revokes
 its grants: an arena charges a fraction of its epoch token, so that the client's whole epoch
-token, which `reset` takes, shows that no grant is outstanding (`AllocArena.Core.fee`,
-`own_epTok_empty` in `tests/roadmap/alloc-arena`).
+token, which `reset` takes, shows that no grant is outstanding (`epFee`, `ResetLedger` in
+`ZigLean/Sep/Full/ResetLedger.lean`; the arena of `tests/roadmap/alloc-arena` is an instance).
 
 A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
 cells of an `up` assertion no longer pin their block's size.
@@ -62,7 +62,13 @@ grants, `some (γ, e)` for one whose grants die with epoch `e` of its ledger `γ
 (§Nested tags): whoever holds `own` holds the ledgers of the tag's whole chain. It is automatic
 for an untagged allocator (`Act.root`). An allocator that holds another one's grants (an arena's
 nodes) reads the bound of their shares from it (`Holds.bshare`), so the obligation composes: an
-arena over a child proves `act` from its own ledger and the child's `act`. -/
+arena over a child proves `act` from its own ledger and the child's `act`.
+
+`fee_add` is the allocator's obligation that **its fees are fractional**: two nonzero fees are
+the fee of their sum (coordinator decision 2026-10-13). An allocator of allocators (an arena)
+pays its child's fee for each node and keeps a reservoir of it, which it halves for a node and
+joins refunds back into (`FAllocInv.fee_half`, `fee_join`). It is automatic for the default fee
+`emp`. -/
 structure FAllocInv where
   own : FAssn
   tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → Frac → FAssn
@@ -70,8 +76,22 @@ structure FAllocInv where
   fits : Nat → Nat → Prop := fun _ _ => True
   tag : Option (Nat × Nat) := none
   act : ∀ r, own r → Act r.gh.ls tag := by intro _ _; exact Act.root
+  fee_add : ∀ a b : Frac, 0 < a.val → 0 < b.val → fee (a.add b) = (fee a ⋆ fee b) := by
+    intro _ _ _ _; funext _; exact propext Zig.Full.sep_emp.symm
 
 namespace FAllocInv
+
+/-- **Halve a fee** (`fee_add`): an allocator of allocators keeps a reservoir of its child's fee
+and pays a node's fee out of it. -/
+theorem fee_half (I : FAllocInv) {φ : Frac} (h : 0 < φ.val) :
+    I.fee φ = (I.fee φ.half ⋆ I.fee φ.half) := by
+  rw [← I.fee_add _ _ (Frac.half_pos h) (Frac.half_pos h), Frac.half_add_half]
+
+/-- **Join a refund back** into a reservoir (`fee_add`): the result is again a nonzero fee. -/
+theorem fee_join (I : FAllocInv) {φ ψ : Frac} (hφ : 0 < φ.val) (hψ : 0 < ψ.val) {r : Res}
+    (h : (I.fee φ ⋆ I.fee ψ) r) : I.fee (φ.add ψ) r ∧ 0 < (φ.add ψ).val := by
+  rw [I.fee_add _ _ hφ hψ]
+  exact ⟨h, by simp only [Frac.add]; grind⟩
 
 variable (I : FAllocInv)
 

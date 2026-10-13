@@ -221,7 +221,7 @@ So a sound `reset` precondition must hand back every outstanding grant's bytes. 
 the kernel run of that client needs more than the build's memory cap.)
 
 **The sound form** (`docs/sep-full-state.md` §The fee of a grant): the arena's fee is a nonzero
-part of its epoch token (`AllocArena.Core.fee`, kept by the state with each grant's receipt), and
+part of its epoch token (`Zig.Full.epFee`, kept by the state with each grant's receipt), and
 `reset` takes the whole token: `{own e ⋆ epTok γ e 1} reset {own (e + 1) ⋆ epTok γ (e + 1) 1}`.
 The theorem below does not refute it: its precondition is not `I.own` alone. Next to the whole
 token the state has no grant (`Core.own_epTok_empty`), and a client that still holds a grant

@@ -25,7 +25,8 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
   shares, the free nodes with their whole buffers;
 * the child's state `CI.own`, the junk `JunkAt jh` (bytes that frees which were not the last
   allocation, shrinks and padding leaked back; the arena never touches them until `reset`), one
-  receipt per grant together with the grant's fee (`Rcpts`, `rcptOf`) and the shares that frees
+  receipt per grant together with the grant's fee (`LedgerRcpts`, `ledgerRcpt`: the reset ledger,
+  `ZigLean/Sep/Full/ResetLedger.lean`, of which the arena is an instance, `Core.ledger`) and the shares that frees
   gave back (`Pool`).
 
 With no first node, `M` is empty. Every byte of a used node's buffer is in the junk's heap `jh`,
@@ -46,7 +47,7 @@ their extent shares (`Holds.pshareW`), and two live blocks share no byte address
 (`Mem.LiveDisjoint.addr_ne`); a slice of the node's block that ends at `buf + end_index` carries
 the node's labels (`last_labels`) and lies past the header, which the arena owns (`lo_of`). On a match the slice's bytes rejoin the tail; otherwise (a grant that is not the last
 one) they become junk. Either way the grant's share goes back against its receipt into the pool
-and the grant is retired (`free_ghost`).
+and the grant is retired (`ledger_return`).
 
 **`resize`** meets the refined contract (`FAllocSpec.resize`, `docs/sep-full-state.md`
 §`FAllocSpec` refined): the client gives the token, a part `q'` of the grant's share and only the
@@ -55,12 +56,12 @@ shrinks (the released bytes become junk); the last one moves `end_index` back (a
 released bytes rejoin the tail) or forward into the tail when it has room (`Node.loadBuf` reads
 the `size` word: `FTriple.atomicLoadAs`, `toInt_ofBits`): the client gets the new bytes with its
 labels, and its part of the share is re-lent at the new end against a split receipt
-(`rcpt_regrow`: `brcpt_split`, `EUpd.returnTw`, `EUpd.lendT`, `EUpd.rjoin`). A successful
-resize re-points the grant at the new length (`Upd.reassign`; `shrink_ghost`, `grow_ghost`).
+(`ledger_regrow_rcpt`: `brcpt_split`, `EUpd.returnTw`, `EUpd.lendT`, `EUpd.rjoin`). A successful
+resize re-points the grant at the new length (`Upd.reassign`; `ledger_shrink`, `ledger_regrow`).
 **`remap`** is `resize` (the whole-region form, `FAllocInv.resize_granted_of`) and returns
 `memory.ptr`.
 
-**The fee** (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee of a grant) is `fee γ e φ`, a
+**The fee** (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee of a grant) is `epFee γ e φ`, a
 nonzero part `φ` of the epoch token `epTok γ e`. `alloc` takes it, the state keeps it with the
 grant's receipt, and `free` (and the ghost `grant_return`, which gives a grant back without
 running code) gives it back. So a client that holds the whole token `epTok γ e 1` next to `own`
