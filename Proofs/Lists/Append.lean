@@ -189,7 +189,7 @@ def ensured (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : 
         (up (pts p 8 (hdrVal ptr' len g)) ⋆ I.granted ptr' 2 bs')
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (pts p 8 (hdrVal ptr len cap)) ⋆ buf I ptr bs)
 
-set_option maxHeartbeats 7850000 in
+set_option maxHeartbeats 400000 in
 /-- `ensureTotalCapacityPrecise` of a granted buffer to `g > cap` items: `remap`, else
 `alignedAlloc`, `@memcpy` and `free`. -/
 theorem precise_pos (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : Array Byte)
@@ -243,7 +243,7 @@ def growTo (n : Nat) : Nat := Min.min (n + (n / 2 + 32)) (2 ^ 64 - 1)
 
 attribute [local fsym_arith] List.length_append List.length_singleton List.length_cons List.length_nil
 
-set_option maxHeartbeats 1400000 in
+set_option maxHeartbeats 1100000 in
 /-- `append` to a list with a granted buffer. -/
 theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (bs : Array Byte) (xs : List (BitVec 32))
     (v : BitVec 32) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)
@@ -261,7 +261,7 @@ theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (bs : Array Byte) (xs : L
 
 -- the store of `v` at item `0` of a new buffer (not a default rule, `Full/Region.lean`)
 attribute [local fsym] FTotalTriple.regionStore0 in
-set_option maxHeartbeats 1300000 in
+set_option maxHeartbeats 1000000 in
 /-- `append` to a list without a buffer. -/
 theorem append_zero (p ptr : Ptr) (len cap : BitVec 64) (xs : List (BitVec 32)) (v : BitVec 32)
     (hcap : cap.toNat = 0) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)

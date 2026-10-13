@@ -174,7 +174,6 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
 
-set_option maxHeartbeats 300000 in
 theorem create_spec (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_48603a336c43 ⟨ctx, vtp⟩)

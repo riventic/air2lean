@@ -13,28 +13,22 @@
   ],
   "budgets": [
     {
-      "file": "Proofs/Lists/Alloc.lean",
-      "declaration": "create_spec",
-      "measured": 213572,
-      "budget": 300000
-    },
-    {
       "file": "Proofs/Lists/Append.lean",
       "declaration": "append_pos",
-      "measured": 1117590,
-      "budget": 1400000
+      "measured": 861337,
+      "budget": 1100000
     },
     {
       "file": "Proofs/Lists/Append.lean",
       "declaration": "append_zero",
-      "measured": 1037762,
-      "budget": 1300000
+      "measured": 793526,
+      "budget": 1000000
     },
     {
       "file": "Proofs/Lists/Append.lean",
       "declaration": "precise_pos",
-      "measured": 6276824,
-      "budget": 7850000
+      "measured": 283991,
+      "budget": 400000
     }
   ]
 }
