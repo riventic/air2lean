@@ -1730,10 +1730,10 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
     trace[fsym] "substCtor {t}: {ex.toMessageData}"
     s.restore; return none
 
-/-- A fact `x.f = C …` about a field of a local `x` of a structure type (a callee's result
-`r.1 = .br18`, which `substCtor` does not substitute: `Prod.fst` is the library's): `x` by its
-fields (`cases`, structure eta), the projections of the new value reduced in the facts, which are
-split again (the field's equation is then a local's, substituted), so a `match x.f` reduces. -/
+/-- A fact `x.1 = C …` about a component of a local pair `x` (a callee's result `r.1 = .br18`,
+which `substCtor` does not substitute: `Prod.fst` is the library's): `x` by its components
+(`cases`), the projections of the new pair reduced in the facts, which are split again (the
+component's equation is then a local's, substituted), so a `match x.1` reduces. -/
 partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.withContext do
   let local? (e : Expr) : MetaM (Option FVarId) := do
     let e := e.consumeMData
@@ -1745,10 +1745,10 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
         if info.fromClass then return none
         pure (e.getAppArgs[info.numParams]?)
     let some (.fvar x) := s? | return none
+    -- (a pair: a generated body's result; a user structure's field goes through `substCtor`,
+    -- and the library's other structures keep their facts, `p.block = some b`)
     let ty ← whnfR (← instantiateMVars (← x.getType))
-    let .const sn _ := ty.getAppFn | return none
-    unless isStructure (← getEnv) sn do return none
-    if (← isProp ty) || (← isClass? ty).isSome then return none
+    unless ty.isAppOfArity ``Prod 2 do return none
     return some x
   let x? ← if ← isSubstValue r then local? l else if ← isSubstValue l then local? r else pure none
   let some x := x? | return none
@@ -3990,7 +3990,9 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
 
 /-- A rule's side goals left that show it does not apply (ledger #42): an instance that is not
 synthesized (`LawfulEnc T` of a type without one: no case split proves it), or a goal without
-unknowns whose negation the facts prove (a region rule whose extent is past the region's size). -/
+unknowns whose negation the facts prove (a region rule whose extent is past the region's size).
+Such a rule is taken only if no other way applies (a store piece by piece, `storeSplitRule?`,
+first; after a split on the side condition its negative case is refuted by the split's fact). -/
 def refutedSide (left : List MVarId) : TacticM Bool :=
   left.anyM fun m => m.withContext do
     let φ ← instantiateMVars (← m.getType)
@@ -4219,6 +4221,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   let h2 ← IO.getNumHeartbeats
   -- the first rule whose side goals are all proved; else the first that applies
   let mut partial? : Option (Tactic.SavedState × MVarId × List MVarId) := none
+  let mut refuted? : Option (Tactic.SavedState × MVarId × List MVarId) := none
   for r in ← rules user x do
     let h3 ← IO.getNumHeartbeats
     let s ← saveState
@@ -4230,7 +4233,11 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
         trace[fsym.prof] "rule {((← IO.getNumHeartbeats)-h2)/1000} {r}"
         return ← walk k user extra (fuel - 1)
       trace[fsym] "rule {r}: side goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
-      if partial?.isNone && !(← refutedSide left) then partial? := some (← saveState, k, left)
+      if partial?.isNone || refuted?.isNone then
+        -- (a rule whose side goal is refuted is the last choice: `refutedSide`)
+        if ← refutedSide left then
+          if refuted?.isNone then refuted? := some (← saveState, k, left)
+        else if partial?.isNone then partial? := some (← saveState, k, left)
       s.restore
   -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
   if partial?.isNone then
@@ -4239,6 +4246,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if let some (k, left) ← tryRule g rule x f then
         return left ++ (← walk k user extra (fuel - 1))
     s.restore
+    partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
   -- (a rule whose command unified but whose precondition the planner did not find: with more
