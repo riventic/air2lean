@@ -23,7 +23,7 @@ variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
 
 /-- `FutexImpl.set` by a thread out of the event's and the lock's code. -/
 theorem futexSet_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
-    (t : ThreadId) (g : γ) (hgx : E.ph g = .out) (hgo : L.ph g = .out)
+    (t : ThreadId) (g : γ) (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_set E.W.ptr) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
@@ -39,7 +39,7 @@ theorem futexSet_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost =
     exact WP.pure' (WP.pure' ⟨by omega, hc₁, hb2 rfl, hi₁⟩)
   simp only [show (b == 2) = false from beq_false_of_ne hb, Bool.false_eq_true, ↓reduceIte,
     StateT.run_pure, pure_bind, StateT.run_bind]
-  refine WP.bind (FEvent.wp_xchg hE hP rfl hgx hgo hi₁
+  refine WP.bind (FEvent.wp_xchg hE hP rfl hgx hgo hsx hi₁
     fun k₂ hk₂ G₂ m₂ o hc₂ hs₂ hcase => ?_)
   rcases hcase with ⟨rfl, hi₂⟩ | ⟨ho, hi₂⟩
   · simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind,
@@ -64,7 +64,7 @@ theorem futexSet_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost =
 /-- `ResetEvent.set` by a thread out of the event's and the lock's code. -/
 theorem resetEvent_set_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgo : L.ph g = .out) (hsx : E.sx g) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
@@ -75,7 +75,7 @@ theorem resetEvent_set_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G' m' d' h => ?_)
-    (futexSet_wp hE hP hcost t g hgx hgo G m d hi)))
+    (futexSet_wp hE hP hcost t g hgx hgo hsx G m d hi)))
   exact WP.pure' (WP.pure' h)
 
 /-- A waiter's ghost value: `g` at the event's place `p`, with the part `r` (its deadline

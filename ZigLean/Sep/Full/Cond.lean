@@ -237,12 +237,13 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     C.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m'
   /-- A step of the condition's code keeps the rest, with the stepping thread's transition
-  (`CPh.Next`), its lock place (the same, or `out`/`away` around a futex wait), and the epoch's
-  writes (they change only at a signaller's `epoch += 1`), given the condition's invariant after
-  it. -/
+  (`CPh.Next`), its lock place (the same, or `out`/`away` around a futex wait: only a waiter goes
+  `away`), and the epoch's writes (they change only at a signaller's `epoch += 1`), given the
+  condition's invariant after it. -/
   step : ∀ G rY m m' t p q h (W : Word 32 4), (W = C.S ∨ W = C.Ep) → CPh.Next (C.ph (G t)) p →
     ((q = L.ph (G t) ∧ h = L.held (G t)) ∨
-      ((L.ph (G t) = .out ∨ L.ph (G t) = .away) ∧ (q = .out ∨ q = .away) ∧ h = rnil)) →
+      ((L.ph (G t) = .out ∨ L.ph (G t) = .away) ∧ (q = .out ∨ (q = .away ∧ p.waits = true)) ∧
+        h = rnil)) →
     U G (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) → C.MStep t m m' →
     (C.Ep.hist m' = C.Ep.hist m ∨ C.ph (G t) = .inc) →
     C.Inv L (upd G t (L.set (C.set (G t) p) q h)) m' →
@@ -1283,7 +1284,7 @@ theorem wp_waitEp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {ε : Type} {w :
       hmv (hC.inv _ _ _ hU) (upd_self G t g) hga rfl rfl rfl (fun _ _ h' => h')
         (fun _ => VClock.le_refl _)
     have := hC.step (upd G t g) rY m m t (C.ph g) .away rnil C.Ep (.inr rfl)
-      (by rw [upd_self]; exact hnx) (.inr ⟨.inl (by rw [upd_self]; exact hgo), .inr rfl, rfl⟩)
+      (by rw [upd_self]; exact hnx) (.inr ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, hw⟩, rfl⟩)
       hU hY .same (.inl rfl) (by rw [upd_self, C.set_self]; exact hI')
     rwa [upd_self, C.set_self, upd_upd] at this
   · -- no deadlock

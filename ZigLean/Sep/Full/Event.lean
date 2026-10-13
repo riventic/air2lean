@@ -23,7 +23,11 @@ event's code (`MStep`, with the place change of the stepping thread).
 **Roles.** `FEvent.wx` are the ghost values of the threads that may wait (the protocol says which
 threads those are); the invariant keeps that each waiter and the writer of each `waiting` write
 may wait (`Inv.wx`, `Inv.wby`), so a client with one such thread discharges `hone` and `hhb`
-from the invariant. **Lock steps.** A thread in the event's code runs no lock code: a client's
+from the invariant. `FEvent.sx` are the ghost values of the threads that may set it: a setter at
+`sw` has one (`Inv.sx`), so a client can tell which threads are in the setter's code. A step of
+the event's code changes the stepping thread's lock place only for a waiter's sleep (`w1`,
+`away`), so the event's steps keep the places of the other components of a protocol.
+**Lock steps.** A thread in the event's code runs no lock code: a client's
 `FLock.FitsOn` `ok` excludes it, and then a lock step keeps the event's invariant
 (`Inv.lstep`).
 
@@ -35,6 +39,8 @@ full-state frame (`Word.Keep`, `FStepIn`) does not keep `Mem.seen`; so a waiter 
 read another waiter's `waiting` without a happens-before edge could not exclude that its next
 load reads `unset` (the code's `unreachable`). With one waiter, the waiter's own `waiting`
 write (or one that happened before it) is in its floor. Several waiters are a follow-up.
+Likewise only the threads with the setter role set the event (`EventImpl.set_wp` takes `E.sx`);
+lifting both limits is the same follow-up.
 -/
 
 namespace Zig
@@ -67,6 +73,9 @@ structure FEvent (γ : Type) where
   /-- The ghost values of the threads that may wait at the event (the protocol's roles). -/
   wx : γ → Prop
   wx_set : ∀ g p, wx (set g p) ↔ wx g
+  /-- The ghost values of the threads that may set the event (the protocol's roles). -/
+  sx : γ → Prop
+  sx_set : ∀ g p, sx (set g p) ↔ sx g
 
 namespace FEvent
 
@@ -109,6 +118,8 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- Each `waiting` write happened before a thread that may wait (it wrote it). -/
   wby : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
     ∃ u, E.wx (G u) ∧ VClock.le (E.W.hist m)[j]!.clock (m.clocks[u]!) = true
+  /-- A setter at `sw` has a ghost value that may set. -/
+  sx : ∀ u, E.ph (G u) = .sw → E.sx (G u)
 
 /-- A step of thread `t` in the event's code, as the protocol's rest sees it: no change, an op
 at the word (a read, or an RMW of the newest write), the futex wait's sleep, the return of a
@@ -145,6 +156,8 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   set_part : ∀ g p r, E.set (L.setPart g r) p = L.setPart (E.set g p) r
   wx_l : ∀ g q h, E.wx (L.set g q h) ↔ E.wx g
   wx_part : ∀ g r, E.wx (L.setPart g r) ↔ E.wx g
+  sx_l : ∀ g q h, E.sx (L.set g q h) ↔ E.sx g
+  sx_part : ∀ g r, E.sx (L.setPart g r) ↔ E.sx g
   /-- A step of a thread out of the lock's code on its own part (the stack blocks of an event's
   code: `wp_liftPart`) keeps the rest, with the thread's new part `r`, given the lock's and the
   event's invariants after it. -/
@@ -155,10 +168,10 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     E.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m'
   /-- A step of the event's code keeps the rest, with the new place `p` of the stepping thread
-  (and its lock place `q`: a waiter goes `away` while it sleeps), given the event's invariant
-  after it. -/
+  (and its lock place `q`: only a waiter at `w1` goes `away`, while it sleeps), given the event's
+  invariant after it. -/
   step : ∀ G rY m m' t p q, (L.ph (G t) = .out ∨ L.ph (G t) = .away) →
-    (q = .out ∨ q = .away) → U G (rsum (E.W.cellsR m) rY) m →
+    (q = .out ∨ (q = .away ∧ p = .w1)) → U G (rsum (E.W.cellsR m) rY) m →
     (∀ l, E.W.In l → rY.heap l = none) → E.MStep t m m' →
     E.Inv L (upd G t (L.set (E.set (G t) p) q rnil)) m' →
     U (upd G t (L.set (E.set (G t) p) q rnil)) (rsum (E.W.cellsR m') rY) m'
@@ -244,6 +257,11 @@ theorem wx_upd_set {G : ThreadId → γ} {t : ThreadId} {g : γ} {p : EPh} (hg :
     E.wx (G t) → E.wx (upd G t (E.set g p) t) := fun h => by
   rw [upd_self, E.wx_set, ← hg]; exact h
 
+/-- `t` at a new place of the event's code may set as before. -/
+theorem sx_upd_set {G : ThreadId → γ} {t : ThreadId} {g : γ} {p : EPh} (hg : G t = g) :
+    E.sx (G t) → E.sx (upd G t (E.set g p) t) := fun h => by
+  rw [upd_self, E.sx_set, ← hg]; exact h
+
 /-- `wby` after a step that keeps the writes and moves the clocks forward. -/
 theorem Inv.wby_of {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
     (hG : ∀ u, u ≠ t → G' u = G u) (h : E.wx (G t) → E.wx (G' t))
@@ -273,7 +291,9 @@ theorem Inv.enter {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
     fun w hw hp => ?_, fun w hw hp => ?_, fun u hu => ?_,
     fun u hu => if e : u = t then by subst e; exact hwt (by rw [upd_self]; exact hwx)
       else absurd hu (hnw u e),
-    fun j hj hv => hI.wby_of hG hwt (fun _ => VClock.le_refl _) hj hv⟩
+    fun j hj hv => hI.wby_of hG hwt (fun _ => VClock.le_refl _) hj hv,
+    fun u hu => if e : u = t then by subst e; rw [hph] at hu; cases hu
+      else by rw [hG u e] at hu ⊢; exact hI.sx u hu⟩
   rotate_right
   · by_cases eu : u = t
     · subst eu; rw [hph] at hu; cases hu
@@ -320,7 +340,7 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
       L.ph (G' t) = .out ∨ (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
     (htq : ∀ w ∈ m.waiters, w.1 = t →
       (E.ph (G' t) = .w1 → w.2 = E.W.ptr ∨ w.2 = L.ptr) ∧ (w.2 = E.W.ptr → E.ph (G' t) = .w1))
-    (hwxt : E.wx (G t) → E.wx (G' t)) :
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : E.sx (G t) → E.sx (G' t)) :
     E.Inv L G' m' := by
   have key : ∀ x, (E.ph (G' x)).Waiting → (E.ph (G x)).Waiting := fun x hx => by
     by_cases e : x = t
@@ -330,7 +350,9 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
     fun u v hu hv => hI.one u v (key u hu) (key v hv), fun u hu j hj hv => ?_, fun u hu => ?_,
     fun u hu => ?_, fun w hw hp => ?_, fun w hw hp => ?_, fun u hu => ?_,
     fun u hu => wx_of hG hwxt (hI.wx u (key u hu)),
-    fun j hj hv => by rw [hh] at hj hv ⊢; exact hI.wby_of hG hwxt hclk hj hv⟩
+    fun j hj hv => by rw [hh] at hj hv ⊢; exact hI.wby_of hG hwxt hclk hj hv,
+    fun u hu => if e : u = t then by subst e; exact hsxt (hI.sx u (hsw.mpr hu))
+      else by rw [hG u e] at hu ⊢; exact hI.sx u hu⟩
   rotate_right
   · unfold FEvent.newest; rw [hh]
     by_cases e : u = t
@@ -394,7 +416,9 @@ theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : At
     fun u hu => ?_, fun u hu => ?_, fun u hu => ?_, fun w hw hp => ?_, fun w hw hp => ?_,
     fun u hu => ?_,
     fun u hu => if e : u = t then e ▸ hwx else absurd hu (key u e),
-    fun j hj hv => ?_⟩
+    fun j hj hv => ?_,
+    fun u hu => if e : u = t then by subst e; rw [ht1] at hu; cases hu
+      else by rw [hG u e] at hu ⊢; exact hI.sx u hu⟩
   rotate_right
   · -- the `waiting` writes: the new one is `t`'s
     rw [hsz] at hj
@@ -454,7 +478,8 @@ theorem Inv.xchg {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : Ato
     (hsw : (E.newest m).Val (1 : BitVec 32) → E.ph (G' t) = .sw) (hlpt : L.ph (G' t) = .out)
     (hh : E.W.hist m' = (E.W.hist m).push (Word.rmwEnt m' t ord (E.newest m) (2 : BitVec 32)))
     (hwt : m'.waiters = m.waiters) (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hnq : ∀ w ∈ m.waiters, w.1 ≠ t) (hwxt : E.wx (G t) → E.wx (G' t)) :
+    (hnq : ∀ w ∈ m.waiters, w.1 ≠ t) (hwxt : E.wx (G t) → E.wx (G' t))
+    (hsx : E.ph (G' t) = .sw → E.sx (G' t)) :
     E.Inv L G' m' := by
   have hsz : (E.W.hist m').size = (E.W.hist m).size + 1 := by rw [hh]; simp
   have hold : ∀ j, j < (E.W.hist m).size → (E.W.hist m')[j]! = (E.W.hist m)[j]! := fun j hj => by
@@ -469,7 +494,9 @@ theorem Inv.xchg {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : Ato
     · rw [hG x e] at hx; exact ⟨hx, e⟩
   refine ⟨fun j hj => ?_, fun i j a b hij hj ha hb => ?_, fun u v hu hv => ?_,
     fun u hu j hj hv => ?_, fun u hu => ?_, fun u hu => ?_, fun w hw hp => ?_, fun w hw hp => ?_,
-    fun _ _ => ?_, fun u hu => wx_of hG hwxt (hI.wx u (key u hu).1), fun j hj hv => ?_⟩
+    fun _ _ => ?_, fun u hu => wx_of hG hwxt (hI.wx u (key u hu).1), fun j hj hv => ?_,
+    fun u hu => if e : u = t then by subst e; exact hsx hu
+      else by rw [hG u e] at hu ⊢; exact hI.sx u hu⟩
   rotate_right
   · rw [hsz] at hj
     rcases (by omega : j < (E.W.hist m).size ∨ j = (E.W.hist m).size) with hj' | rfl
@@ -529,7 +556,8 @@ theorem Inv.sleep {G : ThreadId → γ} {m M : Mem} {t : ThreadId} (hI : E.Inv L
   refine ⟨by rw [hh']; exact hI.vals, by rw [hh']; exact hI.mono, hI.one,
     fun u hu j hj hv => ?_, fun u hu => ?_, hI.lp, fun w hw hp => ?_, fun w hw hp => ?_,
     fun u hu => by unfold FEvent.newest; rw [hh']; exact hI.swset u hu, hI.wx,
-    fun j hj hv => by rw [hh'] at hj hv ⊢; exact hI.wby_of (t := t) (fun _ _ => rfl) id hclk hj hv⟩
+    fun j hj hv => by rw [hh'] at hj hv ⊢; exact hI.wby_of (t := t) (fun _ _ => rfl) id hclk hj hv,
+    hI.sx⟩
   · rw [hh'] at hj hv ⊢; exact VClock.le_trans (hI.hb u hu j hj hv) (hclk u)
   · rw [hh']
     obtain ⟨i, hi, hv, hc⟩ := hI.seen u hu
@@ -575,7 +603,9 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} {c :
     fun w hw hp => ?_, fun u hu => ?_,
     fun u hu => by have := hnw u hu; rw [upd_ne _ _ this.2]; exact hI.wx u this.1,
     fun j hj hv => hI.wby_of (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact hwxg)
-      (fun _ => VClock.le_refl _) hj hv⟩
+      (fun _ => VClock.le_refl _) hj hv,
+    fun u hu => if e : u = t then by subst e; rw [upd_self, hg] at hu; cases hu
+      else by rw [upd_ne _ _ e] at hu ⊢; exact hI.sx u hu⟩
   · have := hnw u (.inl hu); rw [upd_ne _ _ this.2] at hu; exact hI.hb u hu j hj hv
   · have := hnw u (.inr hu); rw [upd_ne _ _ this.2] at hu; exact hI.seen u hu
   · by_cases e : u = t
@@ -599,12 +629,12 @@ theorem Inv.relabel {G G' : ThreadId → γ} {m : Mem} {t : ThreadId} (hI : E.In
     (hG : ∀ u, u ≠ t → G' u = G u) (hph : E.ph (G' t) = E.ph (G t))
     (hlpt : E.ph (G' t) ≠ .out →
       L.ph (G' t) = .out ∨ (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
-    (hwxt : E.wx (G t) → E.wx (G' t)) :
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : E.sx (G t) → E.sx (G' t)) :
     E.Inv L G' m :=
   hI.move hG rfl rfl (fun _ => VClock.le_refl _) (by rw [hph]; exact id)
     (by rw [hph]; exact id) (fun h => hI.seen t (by rw [← hph]; exact h)) (by rw [hph])
     hlpt (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h),
-      fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt
+      fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt hsxt
 
 /-- A step that keeps the writes and the futex queue and only moves the clocks forward (a step of
 a thread on its own part), with a change of `t`'s ghost value that keeps its places. -/
@@ -613,14 +643,14 @@ theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
     (hlph : L.ph (G' t) = L.ph (G t)) (hh : E.W.hist m' = E.W.hist m)
     (hwt : m'.waiters = m.waiters)
     (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hwxt : E.wx (G t) → E.wx (G' t)) :
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : E.sx (G t) → E.sx (G' t)) :
     E.Inv L G' m' :=
   hI.move hG hh hwt hclk (by rw [hph]; exact id) (by rw [hph]; exact id)
     (fun h => let ⟨i, hi, hv, hc⟩ := hI.seen t (by rw [← hph]; exact h)
       ⟨i, hi, hv, VClock.le_trans hc (hclk t)⟩) (by rw [hph])
     (fun h => by rw [hph] at h ⊢; rw [hlph]; exact hI.lp t h)
     (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h),
-      fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt
+      fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt hsxt
 
 /-- **A lock step of a thread out of the event's code** keeps the event's invariant: the word's
 writes and the futex queue at it stay (for a client's `FLock.FitsOn.stable`, whose `ok` excludes
@@ -628,7 +658,8 @@ the threads in the event's code; module doc). -/
 theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h : Res}
     (hI : E.Inv L G m) (hw : E.W.Ok m) (hap : E.W.ApartL L.toLockWord)
     (hout : E.ph (G t) = .out) (hph : ∀ g q h, E.ph (L.set g q h) = E.ph g)
-    (hwx : ∀ g q h, E.wx (L.set g q h) ↔ E.wx g) (hs : L.Step t m m') :
+    (hwx : ∀ g q h, E.wx (L.set g q h) ↔ E.wx g) (hsx : ∀ g q h, E.sx (L.set g q h) ↔ E.sx g)
+    (hs : L.Step t m m') :
     E.Inv L (upd G t (L.set (G t) p h)) m' := by
   have hh : E.W.hist m' = E.W.hist m := Word.hist_keep hw (Word.keep_lockWordStep hs hap)
   have hp : ∀ u, E.ph (upd G t (L.set (G t) p h) u) = E.ph (G u) := fun u => by
@@ -649,7 +680,12 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
     fun u v hu hv => hI.one u v (by rw [← hp]; exact hu) (by rw [← hp]; exact hv),
     fun u hu j hj hv => ?_, fun u hu => ?_, fun u hu => ?_, fun w hw' hq => ?_,
     fun w hw' hq => ?_, fun u hu => ?_, fun u hu => (hx u).mpr (hI.wx u (by rw [← hp]; exact hu)),
-    fun j hj hv => ?_⟩
+    fun j hj hv => ?_, fun u hu => ?_⟩
+  rotate_right
+  · rw [hp] at hu
+    by_cases e : u = t
+    · subst e; rw [upd_self, hsx]; exact hI.sx u hu
+    · rw [upd_ne _ _ e]; exact hI.sx u hu
   · rw [hp] at hu; rw [hh] at hj hv ⊢; exact VClock.le_trans (hI.hb u hu j hj hv) (hclk u)
   · rw [hp] at hu; rw [hh]
     obtain ⟨i, hi, hv, hc⟩ := hI.seen u hu
@@ -776,6 +812,7 @@ theorem Fits.afterRead (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {G₁ : Thread
         refine ⟨fun h => ?_, fun h => absurd h hps⟩
         rcases hgw with e | e <;> rw [e] at h <;> cases h)
       (fun _ => .inl (hlo p)) (fun w hw e => absurd e (hnq w hw)) (wx_upd_set hg₁)
+      (sx_upd_set hg₁)
   rcases hI.val3 hj hv with rfl | rfl | rfl
   · -- `unset`: only at `w0`
     have hw0 : E.ph g = .w0 := by
@@ -817,7 +854,7 @@ theorem Fits.afterPeek (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {G₁ : Thread
       (by rw [upd_self, E.ph_set, hgt]; exact id) (by rw [upd_self, E.ph_set]; intro h; cases h)
       (by rw [upd_self, E.ph_set]; intro h; cases h) (by rw [hgt, upd_self, E.ph_set])
       (by rw [upd_self, E.ph_set]; intro h; exact absurd rfl h) (fun w hw e => absurd e (hnq w hw))
-      (wx_upd_set hg₁)
+      (wx_upd_set hg₁) (sx_upd_set hg₁)
   have := hE.back hP hg₁ hgo hU hY hs hL hI'
   rw [set_of hgx] at this
   refine ⟨this, fun hb => ?_⟩
@@ -844,7 +881,7 @@ theorem Fits.afterCasOk (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {G₁ : Threa
 is set, and the setter is at `sw` if it read `waiting` (it must wake), else out. -/
 theorem Fits.afterXchg (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {ord : AtomicOrder} (hg₁ : G₁ t = g)
-    (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hc₁ : m₁.current = t)
+    (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hop : E.W.Op t m₁ m') (hw' : E.W.Ok m') (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m')
     {o : BitVec 32} (hv : (E.newest m₁).Val o)
@@ -862,7 +899,7 @@ theorem Fits.afterXchg (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {G₁ : Thread
       E.Inv L (upd G₁ t (E.set g p)) m' := fun p hp h1 =>
     hI.xchg (fun u hu => upd_ne _ _ hu) hgt (by rw [upd_self, E.ph_set]; exact hp)
       (by rw [upd_self, E.ph_set]; exact h1) (by rw [upd_self, hE.lph]; exact hgo) hh hop.waiters
-      hop.clocks hnq (wx_upd_set hg₁)
+      hop.clocks hnq (wx_upd_set hg₁) (fun _ => by rw [upd_self, E.sx_set]; exact hsx)
   refine ⟨hset, ?_⟩
   by_cases ho : o = 1
   · subst ho
@@ -1012,7 +1049,7 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : E.Fits L P U) (hP : L.FitsOn 
     {ord : AtomicOrder} {v : α} (hv2 : Packed.toBits v = (2 : BitVec 32))
     (hdec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 2) →
       ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
-    (hg : E.ph g = .out) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g) (hi : P.inv (upd G t g) m)
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o r, m'.current = t → (o = 0 ∨ o = 1 ∨ o = 2) →
       (Packed.ofBits? (α := α) o).run = some (.ok r) → E.IsSet m' →
@@ -1027,14 +1064,14 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : E.Fits L P U) (hP : L.FitsOn 
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hP hg₁ hg hgo hc₁ hU hY hop hw' hL hv hh'
+      obtain ⟨hs, h1⟩ := hE.afterXchg hP hg₁ hg hgo hsx hc₁ hU hY hop hw' hL hv hh'
       exact h k hk G₁ m' o r hop.current ((hE.inv _ _ _ hU).val3
         (by have := hist_pos (hE.rest _ _ _ hU).1; omega) hv) hd hs h1
 
 /-- A setter's `xchg(2)` on bits (`atomicRmwC`, `Thread.ResetEvent`). -/
 theorem wp_xchg (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {signed : Bool}
     {ord : AtomicOrder} {v : BitVec 32} (hv2 : v = 2)
-    (hg : E.ph g = .out) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o, m'.current = t → E.IsSet m' →
       (o = 1 ∧ P.inv (upd G₁ t (E.set g .sw)) m') ∨
@@ -1046,7 +1083,7 @@ theorem wp_xchg (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {signed : Bool}
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hP hg₁ hg hgo hc₁ hU hY hop hw' hL hv hh'
+      obtain ⟨hs, h1⟩ := hE.afterXchg hP hg₁ hg hgo hsx hc₁ hU hY hop hw' hL hv hh'
       exact h k hk G₁ m' o hop.current hs h1
 
 /-- The setter's wake at the word (`futexWakeC`, at least one waiter) at `sw`: it leaves. -/
@@ -1088,12 +1125,13 @@ theorem wp_wait (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {ε : Type} {w : Nat}
     obtain ⟨-, rY, rfl, hY⟩ := hE.rest _ _ _ hU
     have hI := hE.inv _ _ _ hU
     have := hE.step (upd G t g) rY m m t .w1 .away
-      (.inl (by rw [upd_self]; exact hgo)) (.inr rfl) hU hY .same
+      (.inl (by rw [upd_self]; exact hgo)) (.inr ⟨rfl, rfl⟩) hU hY .same
     rw [upd_self, upd_upd, set_of hg] at this
     exact this (hI.relabel (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
       (by rw [upd_self, upd_self, hE.ph_l])
       (fun _ => .inr ⟨by rw [upd_self, hE.ph_l]; exact hg, by rw [upd_self, L.ph_set]⟩)
-      (fun h => by rw [upd_self] at h ⊢; exact (hE.wx_l _ _ _).mpr h))
+      (fun h => by rw [upd_self] at h ⊢; exact (hE.wx_l _ _ _).mpr h)
+      (fun h => by rw [upd_self] at h ⊢; exact (hE.sx_l _ _ _).mpr h))
   · -- no deadlock
     by_cases hs : E.IsSet m₁
     · obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi₁
@@ -1104,7 +1142,7 @@ theorem wp_wait (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {ε : Type} {w : Nat}
     have hw₁ := (hE.rest _ _ _ hU).1
     have hv : (E.newest m₁).Val (1 : BitVec 32) := by rw [he] at hU32; exact hw₁.holds_last.mp hU32
     have hst := hE.step G₁ rY m₁ _ t .w1 .away
-      (.inr (by rw [hg₁, L.ph_set])) (.inr rfl) hU hY (.sleep hop hh hok₂ hbl)
+      (.inr (by rw [hg₁, L.ph_set])) (.inr ⟨rfl, rfl⟩) hU hY (.sleep hop hh hok₂ hbl)
     rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
       ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
     exact hst (hI.sleep (by rw [hg₁]; exact hga) hop hh hv)
@@ -1125,7 +1163,8 @@ theorem wp_wait (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {ε : Type} {w : Nat}
         (fun _ => .inl (by rw [upd_self]; exact hgo))
         (fun w hw e => ⟨fun _ => hI.qw w hw (by rw [e, hg₁]; exact hga),
           fun hp => by rw [upd_self]; exact hg⟩)
-        (fun h => by rw [upd_self]; rw [hg₁] at h; exact (hE.wx_l _ _ _).mp h))
+        (fun h => by rw [upd_self]; rw [hg₁] at h; exact (hE.wx_l _ _ _).mp h)
+        (fun h => by rw [upd_self]; rw [hg₁] at h; exact (hE.sx_l _ _ _).mp h))
       · rcases hM with rfl | rfl | ⟨-, hh, -⟩
         · rfl
         · rfl
@@ -1175,6 +1214,7 @@ theorem wp_liftPart (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {α : Type} {x : 
           (by rw [upd_self, upd_self, hE.ph_part]) (by rw [upd_self, upd_self, L.ph_setPart])
           hh hs.waiters hs.clock
           (fun h => by rw [upd_self] at h ⊢; exact (hE.wx_part _ _).mpr h)
+          (fun h => by rw [upd_self] at h ⊢; exact (hE.sx_part _ _).mpr h)
       have hU' := hE.own (upd G t g) rY m m' t r' (by rw [upd_self]; exact hgo) hU hY hc hs hk
         (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
       rw [upd_self, upd_upd] at hU'
@@ -1210,8 +1250,8 @@ client uses, for every protocol that has the event next to a lock (`FEvent.Fits`
   (`FEvent.wx`), that waits returns when the event is set. It enters only as the only waiter,
   after every `waiting` write (`hone`, `hhb`; the scope of the module doc), and the client shows
   that its sleep at an event that is not set is not a deadlock (`hlive`).
-- `set_wp`: a thread out of the event's and the lock's code that sets it returns with the event
-  set. -/
+- `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
+  (`FEvent.sx`), that sets it returns with the event set. -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
   set : Ptr → Io → ConcM Tgt Unit
@@ -1230,7 +1270,7 @@ structure EventImpl (Tgt : Type) where
   set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, E.Fits L P U → L.FitsOn P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
-    L.ph g = .out → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
+    L.ph g = .out → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d

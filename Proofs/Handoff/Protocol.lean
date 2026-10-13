@@ -129,7 +129,7 @@ def C : FCond Gh where
   sx g := g.2.ph = .sg
   sx_set _ _ := Iff.rfl
 
-/-- The event: its place is `X.e`; `main` waits. -/
+/-- The event: its place is `X.e`; `main` waits (from its event wait on), the producer sets. -/
 def E : FEvent Gh where
   W := Lo.WV
   ph g := g.2.e
@@ -137,8 +137,10 @@ def E : FEvent Gh where
   ph_set _ _ := rfl
   set_set _ _ _ := rfl
   set_self _ := rfl
-  wx g := g.2.ph.isMain
+  wx g := g.2.ph = .ev ∨ g.2.ph = .joins
   wx_set _ _ := Iff.rfl
+  sx g := g.2.ph = .st
+  sx_set _ _ := Iff.rfl
 
 /-- The threads that run the lock's code: out of the condition's busy code and of the event's
 code, and not the producer while it holds the mutex (`Full/Cond.lean`, `CPh.busy`). -/
@@ -205,6 +207,8 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   fin : (G 1).2.ph = .fin → (E Lo).IsSet m
   /-- A thread waits only at the mutex, the epoch or the event. -/
   q : ∀ w ∈ m.waiters, w.2 = (L Lo).ptr ∨ w.2 = Lo.WE.ptr ∨ w.2 = Lo.WV.ptr
+  /-- A thread in the condition's code is `main` in its loop or the producer in `signal`. -/
+  xc : ∀ u, (G u).2.c ≠ .out → (G u).2.ph = .run ∨ (G u).2.ph = .sg
 
 variable {Tgt : Type}
 
@@ -373,9 +377,11 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     hu.ws.keep (Word.keep_lockWordStep hs apS), hu.we.keep (Word.keep_lockWordStep hs apE),
     hu.wv.keep (Word.keep_lockWordStep hs apV),
     hu.cinv.lstep hu.ws hu.we apS apE hok.1 (fun _ _ _ => rfl) hs,
-    hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl) hs,
+    hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
+      (fun _ _ _ => Iff.rfl) hs,
     by rw [hX]; exact hu.places, fun h1 => ?_, ?_, fun h0 => ?_, fun h1 => ?_,
-    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_⟩
+    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_,
+    fun u hu' => by rw [hX] at hu' ⊢; exact hu.xc u hu'⟩
   · have : (fun u => (upd G t ((L Lo).set (G t) p h) u).2) = fun u => (G u).2 := funext hX
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · rcases hs.fp e he with h' | ⟨-, ho', -⟩
@@ -419,8 +425,8 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
   have hk := fun (W : Word 32 4) => W.keep_same m t m.seen m.nextMsg m.waiters m.woken m.groups
   ⟨hu.shape, hu.io, hu.rest, hu.blk, hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _),
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id,
-    hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q⟩
+    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id,
+    hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q, hu.xc⟩
 
 /-- The rest has the bytes of `io`. -/
 theorem rest_io {rX : Res} {m : Mem} (hr : Rest Lo rX m) {x : Nat} (hx : x < Lo.io) :
@@ -477,9 +483,11 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
-      (fun h => by rw [upd_self]; show g.2.ph.isMain; rw [hX]; exact h),
+      (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
+      (fun h => by rw [upd_self]; show g.2.ph = .st; rw [hX]; exact h),
     by rw [hX']; exact hu.places, fun h1 => ?_, ?_, fun h0 => ?_, fun h1 => ?_,
-    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_⟩
+    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_,
+    fun u hu' => by rw [hX'] at hu' ⊢; exact hu.xc u hu'⟩
   · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · rcases hs.fp e he with h' | ⟨-, hnt, -⟩

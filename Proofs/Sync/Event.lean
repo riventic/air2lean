@@ -39,7 +39,7 @@ variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
 /-- `Io.Event.set` by a thread out of the event's and the lock's code. -/
 theorem ioEvent_set_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgo : L.ph g = .out) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d := by
@@ -49,7 +49,7 @@ theorem ioEvent_set_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cos
   rw [StateT.run'_eq]
   refine WP.map ?_
   rw [StateT.run_bind]
-  refine WP.bind (FEvent.wp_xchgAs hE hP rfl ioEvent_dec hgx hgo hi
+  refine WP.bind (FEvent.wp_xchgAs hE hP rfl ioEvent_dec hgx hgo hsx hi
     fun k hk G₁ m₁ o r hc₁ ho3 hd hs hcase => ?_)
   rcases hcase with ⟨rfl, hi₁⟩ | ⟨ho, hi₁⟩
   · obtain rfl := ioEvent_of1 hd
