@@ -2419,8 +2419,12 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
           if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
-        if (← proveArith (← mkEq n sz) (quick := true)).isNone then
+        -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
+        -- `sz ≤ n` by the full one: no empty rest)
+        let hk? ← if (← proveArith (← mkEq n sz) (quick := true)).isSome then pure none else do
           let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) | throwError "n"
+          pure (if (← proveArith (← mkAppM ``LE.le #[sz, n])).isSome then none else some hk)
+        if let some hk := hk? then
           let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
             ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))
             | throwError "align1"
