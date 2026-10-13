@@ -11,6 +11,7 @@ import ZigLean.Sep.Full.ResetLedger
 import ZigLean.Sep.Full.Parts
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.OwnedBound
+import ZigLean.Sep.Full.WordPlain
 import ZigLean.Range
 
 /-!
@@ -158,12 +159,14 @@ structure NodeV where
 
 /-- The header of a node, the child's token for it (the child lent the fraction `qn` with it)
 and the part `qh` of the node's extent share that the arena keeps (the rest is lent to the
-node's grants, or back in the pool): the `size` word (atomic; even, so its `resizing` bit is
-clear), the `end_index` word (atomic) and the `next` pointer. The share is tagged like the
-child's grants (`CI.tag`). -/
+node's grants, or back in the pool): the `size` word (even, so its `resizing` bit is clear), the
+`end_index` word and the `next` pointer. The two words are accessed atomically, but they are
+`wpts` (any atomic tag constraint), not `apts`: the child grants the node as a plain region, over
+which an older atomic location of another size may lie (`HeaderTagCX.lean`). The share is tagged
+like the child's grants (`CI.tag`). -/
 def Header (CI : Child) (N : Ptr) (A S : Nat) (K : BlockKind) (sz : Nat) (ei : BitVec 64)
     (nxt : Option Ptr) (qn qh : Frac) : FAssn :=
-  apts N (BitVec.ofNat 64 sz) ⋆ apts (N.add 8) ei ⋆
+  wpts N (BitVec.ofNat 64 sz) ⋆ wpts (N.add 8) ei ⋆
     up (regionIn (N.add 16) A S K 8 (Enc.encode nxt)) ⋆
     (CI.ntok N sz 3 A S K qn ⋆ pshare N qh (N.off.toNat + sz) CI.tag)
 
@@ -588,7 +591,7 @@ def FV.Facts (v : FV) : Prop :=
 def FV.gA (v : FV) : FAssn := gauthP γ e v.w.M CI.tag
 def FV.gT (v : FV) : FAssn := gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ)
 def FV.uW (v : FV) : FAssn := aptsE (ctx.add 16) (some v.N)
-def FV.eW (v : FV) (ei : Nat) : FAssn := apts (v.N.add 8) (BitVec.ofNat 64 ei)
+def FV.eW (v : FV) (ei : Nat) : FAssn := wpts (v.N.add 8) (BitVec.ofNat 64 ei)
 def FV.nR (v : FV) : FAssn := up (regionIn (v.N.add 16) v.w.A v.w.S v.w.K 8 (Enc.encode v.w.nxt))
 def FV.cR (v : FV) : FAssn := up (regionIn ctx v.w.Ac v.w.Sc v.w.Kc 8 CI.bytes)
 def FV.tR (v : FV) (ei : Nat) (tail : Array Byte) : FAssn :=
@@ -598,7 +601,7 @@ def FV.nS (v : FV) : FAssn :=
   CI.ntok v.N v.w.sz 3 v.w.A v.w.S v.w.K v.w.qn ⋆ pshare v.N v.w.qh (v.N.off.toNat + v.w.sz) CI.tag
 /-- What the entries do not touch. -/
 def FV.F (v : FV) : FAssn :=
-  apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.nS CI ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆
+  wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.nS CI ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆
     UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl
 /-- The claims of the used nodes: the first node's (`NodeCl`, `TailCl`) and the others'. -/
 def FV.cl (v : FV) (ei : Nat) : FAssn :=
@@ -894,7 +897,7 @@ def FV.Lsz (v : FV) : FAssn :=
     UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl) ⋆ v.xs CI γ e s
 
 theorem FV.L_eq (v : FV) :
-    v.L CI γ e ctx s G = (apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) := by
+    v.L CI γ e ctx s G = (wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) := by
   simp only [FV.L, FV.R0, FV.F, FV.Lsz]; ac_rfl
 
 end Lsz
@@ -1101,7 +1104,7 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
     (hK : v.K'.norm = v.w.K.norm) {k : Nat} {bs : Array Byte} (hlen : s.len.toNat = bs.size)
     (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
     (hlo : v.N.off.toNat + 24 ≤ s.ptr.off.toNat) (hw : wv = BitVec.ofNat 64 (v.w.ei - s.len.toNat)) :
-    EUpd ((⟪ψ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs)))
+    EUpd ((⟪ψ⟫ ⋆ wpts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs)))
       ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
   obtain ⟨hq, rfl⟩ := hq
   subst hw
@@ -1112,14 +1115,14 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
       (Pool CI.tag v.w.pn v.w.pf ⋆ (up (regionIn s.ptr v.A' v.S' v.K' (2 ^ k) bs) ⋆
-        (apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆
+        (wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆
         v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆ v.cl CI γ e (v.w.ei - s.len.toNat)))))
     fun _ h => of_eq (by
         simp only [FV.R0, FV.xs, FV.gA, FV.gT, rgn, hq, FV.cl]
         rw [← tailCl_join (p := s.ptr) (lo := s.ptr.off.toNat) (hi := s.ptr.off.toNat + bs.size)
           (ei' := v.w.ei - s.len.toNat) (ei := v.w.ei) hpN (by omega) (by omega) (by omega) hei]
         ac_rfl)
-      (sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)))
+      (sep_mono_left (Q := wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)))
         (fun _ x => (sep_lift.mp x).2) h)) ?_
   refine EUpd.trans (EUpd.frame ledger_return) ?_
   refine EUpd.trans (EUpd.frameL (EUpd.frameL (EUpd.frame (EUpd.relabel (S' := v.w.S) hK.symm)))) ?_
@@ -1148,7 +1151,7 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
   have h' := of_eq (Q := (up (regionIn s.ptr v.A' v.w.S v.w.K (2 ^ k) bs) ⋆ v.tR v.w.ei v.w.tail) ⋆
     (gauthP γ e (v.w.M.set v.i none) CI.tag ⋆ LedgerRcpts γ e (v.w.M.set v.i none) ⋆
       Pool CI.tag (v.w.pn + 1) (poolPush v.w.pn v.w.pf (b, v.q, k')) ⋆
-      apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ JunkAt v.w.jh ⋆
+      wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ JunkAt v.w.jh ⋆
       v.F CI ctx ⋆ v.cl CI γ e (v.w.ei - s.len.toNat))) (by ac_rfl) h
   have h'' := sep_mono_left (Q := up (regionIn (v.N.add (24 + ((v.w.ei - s.len.toNat : Nat) : Int)))
     v.w.A v.w.S v.w.K 1 (bs ++ v.w.tail))) hjoin h'
@@ -1216,7 +1219,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     {k n : Nat} {tl : Array Byte} (hle : n ≤ s.len.toNat)
     (hcf : n < s.len.toNat → tl.size = s.len.toNat - n ∧ v.N.off.toNat + 24 ≤ s.ptr.off.toNat + n)
     (hw : wv = BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) :
-    EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
+    EUpd ((⟪φ⟫ ⋆ wpts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl true) := by
   subst hw
   by_cases hsame : n = s.len.toNat
@@ -1224,7 +1227,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     have hn : s.len.toNat - n = 0 := by omega
     rw [hn, Nat.sub_zero]
     exact EUpd.trans (EUpd.of_imp fun _ h => of_eq (by simp only [FV.L, FV.eW]; ac_rfl)
-      (sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei)) (fun _ x => (sep_lift.mp x).2) h))
+      (sep_mono_left (Q := wpts (v.N.add 8) (BitVec.ofNat 64 v.w.ei)) (fun _ x => (sep_lift.mp x).2) h))
       (resize_other_upd hv hfirst hnf hei htail hle)
   have hcut : n < s.len.toNat := by omega
   obtain ⟨htl, hlo⟩ := hcf hcut
@@ -1234,20 +1237,20 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
       (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
-        apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
+        wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆
         v.cl CI γ e (v.w.ei - (s.len.toNat - n)))))
     fun _ h => ?_) ?_
   · -- the released bytes' claim joins the tail's (`tailCl_join`)
     have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
-    have h := sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))))
+    have h := sep_mono_left (Q := wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))))
       (fun _ x => (sep_lift.mp x).2) h
     simp only [FV.R0, FV.xs, FV.gA, FV.gT, relB, FAllocInv.relBytes, if_pos hcut, inv_tag, FV.cl] at h
     exact (sep_lift.mp (of_eq (Q := ⟪tl.size = s.len.toNat - n⟫ ⋆ ((gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
       (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
-        apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
+        wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆
         v.cl CI γ e (v.w.ei - (s.len.toNat - n)))))) (by
           simp only [FV.cl]
@@ -1278,7 +1281,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     (gauthP γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K', v.φ))) CI.tag ⋆
       (gfrag γ e v.i (s.ptr, n, v.q, v.A', v.K', v.φ) ⋆ (pshare s.ptr v.q' (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         LedgerRcpts γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.K', v.φ))))) ⋆
-      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆ v.cl CI γ e (v.w.ei - (s.len.toNat - n)))))
     (by ac_rfl) h
   have h := sep_mono_left (Q := up (regionIn (v.N.add (24 + ((v.w.ei - (s.len.toNat - n) : Nat) : Int)))
@@ -1315,7 +1318,7 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     {k n : Nat} {tl : Array Byte} (hq : v.q'.val ≤ v.q.val) (hlt : s.len.toNat < n)
     (hfit : n - s.len.toNat ≤ v.w.sz - 24 - v.w.ei)
     (hw : wv = BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) :
-    EUpd (apts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
+    EUpd (wpts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl true) := by
   subst hw
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
@@ -1325,8 +1328,8 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ (LedgerRcpts γ e v.w.M ⋆
         pshare v.N v.w.qh (v.N.off.toNat + v.w.sz) CI.tag)))) ⋆
-      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
-        v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ apts v.N (BitVec.ofNat 64 v.w.sz) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
+        v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆
         CI.ntok v.N v.w.sz 3 v.w.A v.w.S v.w.K v.w.qn ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆
         UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl ⋆ pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         v.cl CI γ e (v.w.ei + (n - s.len.toNat))))
@@ -1353,8 +1356,8 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
       (gfrag γ e v.i (s.ptr, n, v.q, v.A', v.w.K, v.φ) ⋆ (pshare s.ptr v.q' (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         (LedgerRcpts γ e (v.w.M.set v.i (some (s.ptr, n, v.q, v.A', v.w.K, v.φ))) ⋆
           pshare v.N v.w.qh (v.N.off.toNat + v.w.sz) CI.tag))) ⋆
-      (Pool CI.tag v.w.pn v.w.pf ⋆ apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
-        v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ JunkAt v.w.jh ⋆ apts v.N (BitVec.ofNat 64 v.w.sz) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ wpts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) ⋆
+        v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ JunkAt v.w.jh ⋆ wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆
         CI.ntok v.N v.w.sz 3 v.w.A v.w.S v.w.K v.w.qn ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆
         UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl ⋆ pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n) (some (γ, e)) ⋆
         v.cl CI γ e (v.w.ei + (n - s.len.toNat))))) (by ac_rfl) h
@@ -1477,13 +1480,13 @@ node first (`push_node`). -/
 def OV.bodyE (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
   up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
     gauthP γ e w.M CI.tag ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt w.jh ⋆ LedgerRcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
-    apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    wpts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
     (CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
     up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
 
 theorem OV.body_split {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
     (hfirst : w.first = some N) :
-    w.body CI γ e ctx = ((apts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e) := by
+    w.body CI γ e ctx = ((wpts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e) := by
   simp only [OV.body, OV.bodyE, FirstPart, hfirst, Header]; ac_rfl
 
 /-- `GrantOk` reads only the nodes' pointers and labels. -/
@@ -1569,7 +1572,7 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
     (hw : w.Facts) (hfirst : w.first = some N) (hbN : N.block = some bN) {n k ai : Nat} {φ : Frac}
     (hn : 0 < n) (hlo : w.ei ≤ ai) (hhi : 24 + ai + n ≤ w.sz)
     (hal : (w.A + N.off.toNat + 24 + ai) % 2 ^ k = 0) :
-    EUpd (((apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e) ⋆
+    EUpd (((wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e) ⋆
         (inv CI γ e ctx).fee φ)
       ((inv CI γ e ctx).allocPost n k φ (some (N.add (24 + ai)))) := by
   obtain ⟨hfin, hff, hgr, hacct, hqq, hcv⟩ := hw
@@ -1603,33 +1606,33 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
     have hal' : (w.A + (N.add (24 + ai)).off.toNat) % 2 ^ k = 0 := by
       rw [hp0, ← Nat.add_assoc, ← Nat.add_assoc]; exact hal
     exact sep_mono_right (fun _ x => sep_mono_left (fun _ y => up_realign hal' y) x) h1
-  let R : Heap → FAssn := fun jh => apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
+  let R : Heap → FAssn := fun jh => wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
     up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆
     aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt jh ⋆
     Pool CI.tag w.pn w.pf ⋆
-    apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    wpts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
     CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2) ⋆
     UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
   let G0 : FAssn := gauthP γ e w.M CI.tag ⋆ (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ LedgerRcpts γ e w.M)
   -- the padding joins the junk
-  have himp : ∀ r, (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) r →
+  have himp : ∀ r, (wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) r →
       (FAssn.ex fun jh => ⟪JunkGrew N (24 + w.ei) (24 + ai) w.jh jh⟫ ⋆
         (G0 ⋆ (up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆ R jh))) r := by
     intro r h
     simp only [OV.bodyE] at h
     have h := of_eq (Q := up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆
-      (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ (JunkAt w.jh ⋆ (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
+      (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ (JunkAt w.jh ⋆ (wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
       up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
       gauthP γ e w.M CI.tag ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ LedgerRcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
-      apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      wpts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
       CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl)))) (by ac_rfl) h
     have h := sep_mono_left (fun r x => htsplit r x) h
     have h := of_eq (Q := (up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 (w.tail.extract 0 (ai - w.ei))) ⋆
       JunkAt w.jh) ⋆ (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆ (up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆
-      up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2) ⋆ (apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
+      up (regionIn (N.add (24 + ((ai + n : Nat) : Int))) w.A w.S w.K 1 t2) ⋆ (wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆
       up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
       gauthP γ e w.M CI.tag ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ LedgerRcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
-      apts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+      wpts N (BitVec.ofNat 64 w.sz) ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
       CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl)))) (by ac_rfl) h
     obtain ⟨jh, hg, h⟩ := junk_grew (p := N) (q := N.add (24 + w.ei)) (lo := 24 + w.ei) h0 rfl
       (by simp [Ptr.add]) h
@@ -1641,7 +1644,7 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
   let CL : FAssn := NodeCl CI γ e N w.sz ⋆ TailCl γ e N (ai + n) w.sz ⋆ RestCl CI γ e w.rest
   let GC : FAssn := pclaim (N.add (24 + ai)) (N.add (24 + ai)).off.toNat ((N.add (24 + ai)).off.toNat + n)
     (some (γ, e))
-  refine EUpd.trans (EUpd.of_imp (P' := ((apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆
+  refine EUpd.trans (EUpd.of_imp (P' := ((wpts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆
       ((CL ⋆ GC) ⋆ epFee γ e φ)) ⋆ pclaim N (N.off.toNat + 24 + w.ei) (N.off.toNat + 24 + ai) (some (γ, e)))
     fun _ h => of_eq (by
       simp only [OV.cls, FirstCl, hfirst, CL, GC, inv_fee]
@@ -1781,12 +1784,12 @@ theorem facts_push {w : OV} (hw : w.Facts) {nd : NodeV} (hnf : NodeFacts nd.N nd
 /-- A new first node, without claims (`push_node_upd`). -/
 theorem push_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {nd : NodeV}
     (hnf : NodeFacts nd.N nd.A nd.sz) {buf : Array Byte} {ew : BitVec 64} :
-    EUpd ((aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+    EUpd ((aptsE (ctx.add 16) (some nd.N) ⋆ (wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ew ⋆
         up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))) ⋆
         w.bodyU CI γ e ctx)
-      (FAssn.ex fun jh => ⟪JunkTook w jh⟫ ⋆ (apts (nd.N.add 8) ew ⋆ (w.push nd buf jh).bodyE CI γ e ctx nd.N)) := by
+      (FAssn.ex fun jh => ⟪JunkTook w jh⟫ ⋆ (wpts (nd.N.add 8) ew ⋆ (w.push nd buf jh).bodyE CI γ e ctx nd.N)) := by
   have hff := hw.2.1
   refine EUpd.of_imp fun r h => ?_
   -- the old first node (if any) joins the used nodes; its tail leaks to junk
@@ -1807,7 +1810,7 @@ theorem push_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
         rw [encode_nxt_size]; simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
       have h := of_eq (Q := (up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ JunkAt w.jh) ⋆
         (up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
-          (apts N (BitVec.ofNat 64 w.sz) ⋆ apts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆
+          (wpts N (BitVec.ofNat 64 w.sz) ⋆ wpts (N.add 8) (BitVec.ofNat 64 w.ei) ⋆
             (CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
             Chain CI false w.rest w.nxt))) (by ac_rfl) h
       obtain ⟨jh, hg, h⟩ := junk_grew (p := N) (q := N.add (24 + w.ei)) (lo := 24 + w.ei) hnfN.off0 rfl
@@ -1833,7 +1836,7 @@ theorem push_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
       exact of_eq (by ac_rfl) h
   simp only [OV.bodyU] at h
   have h := of_eq (Q := (FirstPart CI w ⋆ (UsedRest CI w.rest w.nxt ⋆ JunkAt w.jh)) ⋆
-      (aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+      (aptsE (ctx.add 16) (some nd.N) ⋆ (wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ew ⋆
         up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
@@ -1885,15 +1888,15 @@ at it. The old first node and its tail join the used nodes after it (`push_node_
 claims move as in `push_cls`. -/
 theorem push_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {nd : NodeV}
     (hnf : NodeFacts nd.N nd.A nd.sz) {buf : Array Byte} {ew : BitVec 64} :
-    EUpd (((aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+    EUpd (((aptsE (ctx.add 16) (some nd.N) ⋆ (wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ew ⋆
         up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))) ⋆
         w.bodyU CI γ e ctx) ⋆
         (pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag ⋆ w.cls CI γ e))
       (FAssn.ex fun jh => ⟪JunkTook w jh⟫ ⋆
-        ((apts (nd.N.add 8) ew ⋆ (w.push nd buf jh).bodyE CI γ e ctx nd.N) ⋆ (w.push nd buf jh).cls CI γ e)) := by
-  let X : FAssn := aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ew ⋆
+        ((wpts (nd.N.add 8) ew ⋆ (w.push nd buf jh).bodyE CI γ e ctx nd.N) ⋆ (w.push nd buf jh).cls CI γ e)) := by
+  let X : FAssn := aptsE (ctx.add 16) (some nd.N) ⋆ (wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ew ⋆
     up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
     up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
     (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
@@ -1903,8 +1906,8 @@ theorem push_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fac
       (pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag ⋆ w.cls CI γ e)) ⋆ X)
     fun _ h => of_eq (by simp only [OV.bodyU, X]; ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (push_cls (buf := buf) (jh := w.jh) hw hnf)) ?_
-  refine EUpd.trans (EUpd.of_imp (P' := ((aptsE (ctx.add 16) (some nd.N) ⋆ (apts nd.N (BitVec.ofNat 64 nd.sz) ⋆
-        apts (nd.N.add 8) ew ⋆ up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
+  refine EUpd.trans (EUpd.of_imp (P' := ((aptsE (ctx.add 16) (some nd.N) ⋆ (wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆
+        wpts (nd.N.add 8) ew ⋆ up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode w.first)) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))) ⋆
         w.bodyU CI γ e ctx) ⋆ (w.push nd buf w.jh).cls CI γ e)
@@ -1931,7 +1934,7 @@ def OV.restE (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
     UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl
 
 theorem OV.bodyE_eq {CI : Child} {γ e : Nat} {ctx : Ptr} (w : OV) (N : Ptr) :
-    w.bodyE CI γ e ctx N = ((apts N (BitVec.ofNat 64 w.sz) ⋆
+    w.bodyE CI γ e ctx N = ((wpts N (BitVec.ofNat 64 w.sz) ⋆
       up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
       (CI.ntok N w.sz 3 w.A w.S w.K w.qn ⋆ pshare N w.qh (N.off.toNat + w.sz) CI.tag) ⋆
       up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail)) ⋆ w.restE CI γ e ctx N) := by
@@ -1946,7 +1949,7 @@ def OV.grow (w : OV) (sz' S' : Nat) (K' : BlockKind) (t : Array Byte) : OV :=
 theorem grow_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {N : Ptr}
     (hfirst : w.first = some N) {sz' S' : Nat} {K' : BlockKind} (hK : K'.norm = w.K.norm)
     (hnf' : NodeFacts N w.A sz') (hlt : w.sz < sz') {t : Array Byte} (ht : t.size = sz' - w.sz) :
-    EUpd ((apts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    EUpd ((wpts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
         (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
         up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆
         w.restE CI γ e ctx N)
@@ -1988,7 +1991,7 @@ theorem grow_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
       · exact hqq (w.node N) (by rw [hnodes0]; exact List.mem_cons_self ..)
       · exact hqq nd (by rw [hnodes0]; exact List.mem_cons_of_mem _ hnd)
   refine EUpd.trans (EUpd.of_imp (P' := (up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
-      up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail)) ⋆ (apts N (BitVec.ofNat 64 sz') ⋆
+      up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail)) ⋆ (wpts N (BitVec.ofNat 64 sz') ⋆
       (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
       up (regionIn (N.add w.sz) w.A S' K' 1 t) ⋆ w.restE CI γ e ctx N)) fun _ h => of_eq (by ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (EUpd.trans (EUpd.frame (EUpd.relabel (S' := S') hK))
@@ -1999,7 +2002,7 @@ theorem grow_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
     simp only [Ptr.add, Ptr.mk.injEq, true_and, htail]; omega
   have h := of_eq (Q := (up (regionIn (N.add (24 + w.ei)) w.A S' K' 1 w.tail) ⋆
       up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆ (up (regionIn (N.add 16) w.A S' K' 8 (Enc.encode w.nxt)) ⋆
-      apts N (BitVec.ofNat 64 sz') ⋆ (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
+      wpts N (BitVec.ofNat 64 sz') ⋆ (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
       w.restE CI γ e ctx N)) (by ac_rfl) h
   have h := sep_mono_left (Q := up (regionIn (N.add (24 + w.ei)) w.A S' K' 1 (w.tail ++ t)))
     (fun _ x => up_region_join hend.symm x) h
@@ -2033,7 +2036,7 @@ The child gives the claim on the new bytes with them (`FAllocInv.newBytes`); it 
 theorem grow_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {N : Ptr}
     (hfirst : w.first = some N) {sz' S' : Nat} {K' : BlockKind} (hK : K'.norm = w.K.norm)
     (hnf' : NodeFacts N w.A sz') (hlt : w.sz < sz') {t : Array Byte} (ht : t.size = sz' - w.sz) :
-    EUpd (((apts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+    EUpd (((wpts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
         (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
         up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆
         w.restE CI γ e ctx N) ⋆
@@ -2042,7 +2045,7 @@ theorem grow_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fac
         (w.grow sz' S' K' t).cls CI γ e) := by
   have hei : 24 + w.ei ≤ w.sz := by
     have hff := hw.2.1; simp only [OV.FirstFacts, hfirst] at hff; exact hff.2.1
-  let X : FAssn := (apts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
+  let X : FAssn := (wpts N (BitVec.ofNat 64 sz') ⋆ up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
     (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
     up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆
     up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) (some N) ⋆ aptsE (ctx.add 24) w.fl ⋆
@@ -2051,7 +2054,7 @@ theorem grow_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fac
       (pclaim N (N.off.toNat + w.sz) (N.off.toNat + sz') CI.tag ⋆ w.cls CI γ e)) ⋆ X)
     fun _ h => of_eq (by simp only [OV.restE, X]; ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (grow_cls (S' := S') (K' := K') (t := t) hfirst hei (Nat.le_of_lt hlt))) ?_
-  refine EUpd.trans (EUpd.of_imp (P' := ((apts N (BitVec.ofNat 64 sz') ⋆
+  refine EUpd.trans (EUpd.of_imp (P' := ((wpts N (BitVec.ofNat 64 sz') ⋆
       up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt)) ⋆
       (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
       up (regionIn (N.add (24 + w.ei)) w.A w.S w.K 1 w.tail) ⋆ up (regionIn (N.add w.sz) w.A S' K' 1 t)) ⋆
@@ -2271,8 +2274,8 @@ macro "arena_loadBuf" : tactic => `(tactic| (
   simp only [atomicLoadAsC]
   conc_norm
   refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
-    (BitVec.ofNat 64 sz) _ rfl) rfl ?_
+  refine CTriple.readStep ((FTriple.atomicLoadAsW (α := heap_ArenaAllocator_Node_Size) N
+    (BitVec.ofNat 64 sz) _ rfl).post fun _ _ => sep_mono_right fun _ => apts_wpts) rfl ?_
   rw [toInt_ofBits _ (by rw [hsz64]; exact heven)]
   conc_norm
   refine CTriple.pureStep (v := N.add 24) (fun m r rF hh hp hs => ?_) ?_
@@ -2345,13 +2348,13 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
     have := hnf.off0
     exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
   refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
-    (sep_left_comm_eq _ _ _) ?_))
+  refine CTriple.readStep ((FTriple.atomicLoadW (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _).post
+    fun _ _ => sep_mono_right fun _ => apts_wpts) (sep_left_comm_eq _ _ _) ?_))
 
 /-- The bounds check of the patched `free` and `resize` (`docs/upstream/arena-oob-gep.md`):
 `end_index` is within the buffer that `loadBuf` reads, so they go on. -/
 macro "arena_bounds" : tactic => `(tactic| (
-  refine CTriple.pre (P := apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
+  refine CTriple.pre (P := wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
     (fun r h => of_eq (FV.L_eq CI γ e ctx s G v) h)
   refine CTriple.bind (loadBuf_ct (R := v.Lsz CI γ e ctx s G) hbN hnf.off0 hnf.hdr hnf.even
     (by have := hnf.small; omega) (fun m r rF hh hp hs => ?_))
@@ -2426,8 +2429,9 @@ macro "arena_free_tail" : tactic => `(tactic| (
     -- the strong `cmpxchg` finds `end_index` and moves it back
     refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
       (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-    refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-      (BitVec.ofNat 64 v.w.ei - s.len) _ _).frame)) fun _ => ?_
+    refine CTriple.bind (CTriple.liftMem (((FTriple.cmpxchgHitW (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+      (BitVec.ofNat 64 v.w.ei - s.len) _ _).post fun _ _ => sep_mono_right fun _ => apts_wpts).frame))
+      fun _ => ?_
     have hnew : BitVec.ofNat 64 v.w.ei - s.len = BitVec.ofNat 64 (v.w.ei - s.len.toNat) := by
       apply BitVec.eq_of_toNat_eq; rw [hd, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
       have := hnf.small; omega
@@ -2510,8 +2514,9 @@ macro "arena_resize_tail" : tactic => `(tactic| (
       refine CTriple.pick_bind ?_
       refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
         (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-      refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-        (BitVec.ofNat 64 v.w.ei - (s.len - n)) _ _).frame)) fun _ => ?_
+      refine CTriple.bind (CTriple.liftMem (((FTriple.cmpxchgHitW (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+        (BitVec.ofNat 64 v.w.ei - (s.len - n)) _ _).post fun _ _ => sep_mono_right fun _ => apts_wpts).frame))
+        fun _ => ?_
       have hnew : BitVec.ofNat 64 v.w.ei - (s.len - n) =
           BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n.toNat)) := by
         apply BitVec.eq_of_toNat_eq; rw [hd2, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]; omega
@@ -2521,7 +2526,7 @@ macro "arena_resize_tail" : tactic => `(tactic| (
       simp only [hle, decide_false, Bool.false_eq_true, ↓reduceIte]
       have hlt : s.len.toNat ≤ n.toNat := by omega
       have hd : (n - s.len).toNat = n.toNat - s.len.toNat := BitVec.toNat_sub_of_le hlt
-      refine CTriple.pre (P := apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
+      refine CTriple.pre (P := wpts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
         (fun r h => of_eq (FV.L_eq CI γ e ctx s G v) h)
       refine CTriple.bind (loadBuf_ct (R := v.Lsz CI γ e ctx s G) hbN hnf.off0 hnf.hdr hnf.even
         (by have := hnf.small; omega) (fun m r rF hh hp hs => ?_)) fun sl => CTriple.lift fun hsl => ?_
@@ -2566,9 +2571,10 @@ macro "arena_resize_tail" : tactic => `(tactic| (
         refine CTriple.pick_bind ?_
         refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
           (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-        refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-          (BitVec.ofNat 64 v.w.ei + (n - s.len)) _ _).frame)) fun res => ?_
-        refine CTriple.pre (CTriple.lift (P := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei + (n - s.len)) ⋆
+        refine CTriple.bind (CTriple.liftMem (((FTriple.cmpxchgHitW (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+          (BitVec.ofNat 64 v.w.ei + (n - s.len)) _ _).post
+          fun _ _ => sep_mono_right fun _ => apts_wpts).frame)) fun res => ?_
+        refine CTriple.pre (CTriple.lift (P := wpts (v.N.add 8) (BitVec.ofNat 64 v.w.ei + (n - s.len)) ⋆
           (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) fun hres => ?_) (fun r h => sep_assoc h)
         subst hres
         simp only [Option.isNone_none]
@@ -2642,10 +2648,10 @@ theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
 header, `sz - 24` bytes. -/
 theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
     (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz < 2 ^ 63)
-    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FSeq →
+    (hmem : ∀ m r rF, Holds m r rF → (wpts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FSeq →
       ∃ blk, m.blocks[b]? = some blk ∧ N.off.toNat + sz ≤ blk.bytes.size) :
-    CTriple (Tgt := Tgt) (apts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
-      (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (apts N (BitVec.ofNat 64 sz) ⋆ R)) := by
+    CTriple (Tgt := Tgt) (wpts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
+      (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (wpts N (BitVec.ofNat 64 sz) ⋆ R)) := by
   arena_loadBuf)),
     (← `(command|
 /-- `free`'s run, case by case (module doc). -/

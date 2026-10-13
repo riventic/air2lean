@@ -81,6 +81,8 @@ calls with 20 to 30 facts.
   rules as `@[fsym]` rules (§Threads).
 * `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
   tag (§Atomic words).
+* `ZigLean/Sep/Full/WordPlain.lean`: the same for owned words with any tag constraint (`wpts`),
+  their view as a region and back (`wpts_of_region`) (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
   (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
@@ -156,7 +158,11 @@ tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules 
 `apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
 word, whose generated `Enc` is its bits' encoding). They are the byte rules
 `load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. A word in memory that an
+allocator granted as a plain region (an arena node's header) is a `wpts p v`, with whatever tag
+constraint its bytes carry (`tests/roadmap/alloc-arena/HeaderTagCX.lean`: `apts` can be false
+there); `ZigLean/Sep/Full/WordPlain.lean` has the same rules for it (`wpts_load`/`_store`/
+`_loadPacked`/`_storePacked`, `wpts_view`, `facts_wpts`), and the atomic rules take a `wpts`.
 
 ### Parts
 

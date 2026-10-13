@@ -30,7 +30,7 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn
 /-- A node's header without its share: the `size` and `end_index` words, the `next` pointer and
 the child's token. -/
 def HeadH (CI : Child) (nd : NodeV) (ei : BitVec 64) (nxt : Option Ptr) : FAssn :=
-  apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ei ⋆
+  wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ei ⋆
     up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nxt)) ⋆
     CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn
 
@@ -572,8 +572,8 @@ theorem chain_ownsList (CI : Child) :
     simp only [ite_true] at hbuf
     obtain ⟨b, hb⟩ : ∃ b, nd.N.block = some b := by
       obtain ⟨_, _, -, -, h1, -⟩ := h
-      obtain ⟨_, _, -, -, ⟨_, _, _, _, -, -, -, -, -, -, b, hb, -⟩, -⟩ := h1
-      exact ⟨b, hb⟩
+      obtain ⟨_, _, -, -, hw, -⟩ := h1
+      exact (facts_wpts _ hw).1
     have h0 := hnf.off0
     have hsz := hnf.hdr
     have e8 : (nd.N.add 8).off.toNat = nd.N.off.toNat + 8 := by simp only [Ptr.add]; omega
@@ -581,11 +581,11 @@ theorem chain_ownsList (CI : Child) :
     have e24 : (nd.N.add 24).off.toNat = nd.N.off.toNat + 8 + 8 + 8 := by simp only [Ptr.add]; omega
     have hbk : ∀ k : Int, (nd.N.add k).block = some b := fun _ => by simpa [Ptr.add] using hb
     have hnode : OwnsList (nd.locs ++ ns.flatMap NodeV.locs)
-        ((apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ei ⋆
+        ((wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ei ⋆
           up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nx)) ⋆
           (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
           up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆ Chain CI true ns nx) := by
-      refine OwnsList.of_eq ((((OwnsList.apts hb).sep ((OwnsList.apts (hbk 8)).sep
+      refine OwnsList.of_eq ((((OwnsList.wpts hb).sep ((OwnsList.wpts (hbk 8)).sep
         ((OwnsList.region (hbk 16)).sep (OwnsList.nil (P := CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆
           pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))))).sep
         ((OwnsList.region (hbk 24)).sep (chain_ownsList CI ns nx)))) ?_

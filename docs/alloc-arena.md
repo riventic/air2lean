@@ -404,13 +404,20 @@ Not proved yet, in order:
   The retaining modes sum each list's buffer sizes with an overflow-checked `+`; a list owns every
   byte of its nodes, so the sizes sum to at most `2 ^ 63` (`chain_sizes_le`, from the library's
   `Holds.owned_length_le`: owned bytes have different addresses below `2 ^ 63`, from
-  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise). Open: the retaining modes' walk. Their
-  branch where the child's `resize` of the kept node fails allocates a new node from the child
-  (`alloc` from the reservoir's half) and initializes its header by plain stores; `own` keeps a
-  first node's `size` and `end_index` as atomic words (`apts`: atomic layout constraint
-  `(p.off, 8)`), and a region the child grants has no layout constraint (`up`), so a plain store
-  cannot establish `apts` (only `wpts`; the atomic rules take `wpts` and leave `apts`). The same
-  holds for `alloc`'s new nodes. Resolution needs a decision on the invariant's header words.
+  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise).
+  **A node's header words are `wpts`** (coordinator ruling 2026-10-13): owned 8-aligned words
+  holding the size and `end_index`, with any atomic tag constraint. A node is memory the child
+  granted as a plain region, with no constraint on the atomic layout over it: an older atomic
+  location of another size may lie over the header bytes, and the header's plain stores
+  (`reset`'s new node, `alloc`'s new nodes) keep it. Then `apts` (constraint `(p.off, 8)`) is
+  false of that memory: kernel-checked, `HeaderTagCX.lean` (`no_header_apts_triple`: a fresh
+  node over a stale 16-byte location, after the header stores, has no `apts` size word;
+  `header_wpts`: `wpts` holds). So the old `apts` header was not a weaker statement to keep but a
+  false one. The atomic rules take a `wpts` and leave an `apts`, which is a `wpts` again
+  (`apts_wpts`); plain accesses keep the word's constraint (`ZigLean/Sep/Full/WordPlain.lean`:
+  `wpts_load`/`_store`/`_loadPacked`/`_storePacked`, `wpts_view`), and a granted 8-byte region
+  becomes a `wpts` by dropping its constraints (`wpts_of_region`, `Holds.untag`). The list heads
+  in the arena struct stay `aptsE`. Open: the retaining modes' walk.
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is

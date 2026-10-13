@@ -21,7 +21,8 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
 * the ghost authority `gauthP γ e M CI.tag`: the grant map `M` of epoch `e`, grant id ↦ region
   and lent fraction (`docs/sep-full-state.md` §Ghost state), under the child's tag;
 * the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`
-  atomic, `next` plain), the unused tail of its buffer (from `end_index` on), the child's token
+  owned words with any atomic tag constraint, `wpts`: the child grants the node as a plain
+  region, `HeaderTagCX.lean`; `next` plain), the unused tail of its buffer (from `end_index` on), the child's token
   for the node and the part of the node's extent share that the arena keeps; the other used nodes
   (`rest`, a list of node records `NodeV`) and the free list (`Chain`): headers, tokens and
   shares, the free nodes with their whole buffers;
