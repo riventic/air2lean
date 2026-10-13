@@ -1,4 +1,5 @@
 import ZigLean.Conc.Own
+import ZigLean.Conc.LockBase
 
 /-!
 # Concurrent separation logic
@@ -441,50 +442,6 @@ theorem join {u : ThreadId} (ho : Owned own m) (ht : t < m.threads.size) (hut : 
     exact ho.outside w hw
 
 end Owned
-
-/-! ## Threads: joined, forked -/
-
-namespace Conc
-
-/-- Thread `u` was joined (`main` never is). -/
-def joinedB (m : Mem) (u : ThreadId) : Bool :=
-  u != 0 && ((m.threads[u]?).map (·.joined)).getD false
-
-theorem joinedB_fork {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    joinedB m' = joinedB m := by
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨-, rfl⟩ := hf
-  funext u
-  unfold joinedB
-  simp only [Array.getElem?_push]
-  split
-  · rename_i h; subst h; simp
-  · rfl
-
-theorem fork_threads {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false, gated := gt } := by
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl⟩
-
-theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
-    (hr : m.threads[u]? = some rec)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
-    m'.current = t ∧ m'.threads = m.threads.setIfInBounds u { rec with joined := true } := by
-  obtain ⟨rec', hr', -, rfl⟩ := Proto.join_eq hj
-  simp only at hr'
-  rw [hr] at hr'; cases hr'
-  exact ⟨rfl, Array.set!_eq_setIfInBounds⟩
-
-theorem upd_comm {β : Type} (f : ThreadId → β) {t u : ThreadId} (x y : β) (h : t ≠ u) :
-    upd (upd f t x) u y = upd (upd f u y) t x := by
-  funext w; unfold upd; by_cases h1 : w = t <;> by_cases h2 : w = u <;> simp_all
-
-end Conc
 
 /-! ## In a thread -/
 

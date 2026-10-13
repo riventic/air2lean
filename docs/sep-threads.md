@@ -241,12 +241,17 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 
 ### Locks, transfer, spawn/join/detach, TLS
 
-* **Locks** (`Lock.lean`, `LockRules.lean`): `Lock.R : (ThreadId → X) → FAssn`. While the lock is
-  free, `rO` contains a resource with `R` whose bytes every thread's clock (or the release clock of
-  the word's newest message) owns (`Lock.Owns`, unchanged in substance, over `r.heap.erase`); the
-  mutex word is an `apts`-like part of `rO` with the constraint `(o, 4)`, which states today's
-  `LocOk` ("no other location overlaps the word") as a resource: the frame rule then keeps it.
-  `lock` is `FOwned.take`, `unlock` is `FOwned.give`.
+* **Locks** (done as T5's library: `Full/LockWord.lean`, `Full/ThreadRest.lean`, `Full/Lock.lean`,
+  `Full/LockRules.lean`, `Full/Mutex.lean`). The word's reasoning has no heap assertion
+  (`LockWord.WInv P m` over the threads' places `P`; a lock step `LockWord.Step`; the clock transfer
+  of an acquire `Acq` and a release `Rel`). `FLock γ` adds `R : (ThreadId → γ) → FAssn` and the
+  parts: `FLock.Inv G rX m` is the word's invariant and `FOwned` whose rest is the word's cells
+  (`cellsAt`, no tag constraint; `LocOk` stays a memory fact), the free lock's resource `rL` (with
+  `R` and `LockWord.Owns`) and the protocol's own rest `rX`. A lock step is a `RestStep` at the
+  word's bytes (`FOwned.restStep`); `lock` is `FOwned.take`, `unlock` is `FOwned.give`. A
+  protocol fits the lock if its invariant is `∃ rX, Inv G rX m ∧ U G rX m` with `U` stable under
+  lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
+  (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
 * **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
   `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
   `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
@@ -359,7 +364,7 @@ theorems (`## Strength` at the end of the file).
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
-| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
+| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`); clients next |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |
