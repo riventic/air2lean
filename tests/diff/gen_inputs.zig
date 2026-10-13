@@ -1800,6 +1800,13 @@ fn genLists(rng: std.Random) !void {
             try writer.writeAll("]}\n");
         }
     }
+    // allocatorWord(): no argument after the allocator; no random draw, so the inputs after it
+    // stay the same.
+    {
+        var file = try openLists("allocatorWord");
+        defer file.close();
+        try file.writer().writeAll("{\"bufs\":[],\"args\":[null]}\n");
+    }
 }
 
 // --- examples/asm ------------------------------------------------------------------------

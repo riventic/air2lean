@@ -3734,6 +3734,12 @@
         "ieee"
       ],
       "correspondence": "model"
+    },
+    "tests/roadmap/enc-exactness/Rows.lean": {
+      "labels": [
+        "abstract-spec"
+      ],
+      "correspondence": "model"
     }
   }
 }

@@ -1,0 +1,9 @@
+i10ZeroPad: 0xfe00
+u24SetPad: 0x5
+i24ZeroPad: 0xff800000
+e24SetPad: 0x5
+i10StoreBytes: 0x3ff
+u24StoreBytes: 0xff000005
+i24RoundTrip: 0xfffffffe
+boolByte: 0x1
+allocatorWordIsZero: 0x0

@@ -25,13 +25,14 @@ class Compatibility(unittest.TestCase):
         self.report = self.root / "report.json"
         self.docs = {}
         for name in sorted(CHECK["NAMES"]):
-            doc = dict(schema=11, zig_version="0.16.0", target_endian="little",
+            # The committed AIR is the qualified schema-12 export itself.
+            doc = dict(schema=12, zig_version="0.16.0", target_endian="little",
+                       profile=copy.deepcopy(CHECK["PROFILE"]),
                        name=name.removesuffix(".json"), params=[0], ret=0,
                        types=[dict(k="int", bits=32, signed=False, abi_size=4, abi_align=4)],
                        body=[dict(id=1, tag="ret", ty=0, args=[dict(ty=0, val="7")])])
             self.write(self.old / name, doc)
-            doc.update(schema=12, profile=copy.deepcopy(CHECK["PROFILE"]))
-            self.docs[name] = doc
+            self.docs[name] = copy.deepcopy(doc)
         self.publish()
 
     @staticmethod
@@ -49,12 +50,16 @@ class Compatibility(unittest.TestCase):
         CHECK["compare"](self.old, self.air, self.gen, self.report)
         HELPER["compare"](self.baseline, self.gen, self.report)
 
-    def test_valid_profile_transition_and_full_body(self):
+    def test_valid_profile_and_full_body(self):
         CHECK["compare"](self.old, self.air, validate_fresh=True)
         self.check()
         self.assertTrue(self.gen.read_bytes().startswith(HELPER["PREFIX"]))
+        CHECK["compare"](self.old, self.air)  # The committed and fresh exports are equal.
+        name = sorted(self.docs)[0]
+        changed = copy.deepcopy(self.docs[name]); changed["body"][0]["args"][0]["val"] = "8"
+        self.write(self.air / name, changed)
         with self.assertRaisesRegex(ValueError, "Flow AIR changed"):
-            CHECK["compare"](self.old, self.air)  # No receipt means no schema normalization.
+            CHECK["compare"](self.old, self.air)
 
     def test_each_profile_fact_is_required_before_comparison(self):
         name = sorted(self.docs)[0]
@@ -122,7 +127,7 @@ class Compatibility(unittest.TestCase):
         self.publish()
         with self.assertRaisesRegex(ValueError, "Flow AIR changed"): self.check()
 
-    def test_schema_and_historic_envelope_cannot_be_relabelled(self):
+    def test_schema_and_committed_profile_cannot_be_relabelled(self):
         name = sorted(self.docs)[0]
         for version in (11, 13, True):
             self.docs[name]["schema"] = version
@@ -130,16 +135,23 @@ class Compatibility(unittest.TestCase):
             with self.assertRaises(ValueError):
                 CHECK["compare"](self.old, self.air, validate_fresh=True)
         self.docs[name]["schema"] = 12; self.publish()
-        historic = json.loads((self.old / name).read_text()); historic["schema"] = 10
-        self.write(self.old / name, historic)
-        with self.assertRaisesRegex(ValueError, "historical AIR envelope"):
-            self.check()
+        # The committed AIR must be the qualified export too, not a legacy (profile-less) file.
+        committed = json.loads((self.old / name).read_text())
+        legacy = {key: value for key, value in committed.items() if key != "profile"}
+        for relabelled in (dict(committed, schema=10), dict(legacy, schema=11)):
+            self.write(self.old / name, relabelled)
+            with self.subTest(schema=relabelled["schema"]), self.assertRaisesRegex(
+                    ValueError, "unqualified profile|requires AIR schema 12"):
+                self.check()
 
     def test_raw_air_and_receipt_tampering(self):
         name = sorted(self.docs)[0]
         self.docs[name]["body"][0]["args"][0]["val"] = "8"
         self.write(self.air / name, self.docs[name])
+        self.write(self.old / name, self.docs[name])  # Equal to the committed AIR, not to the receipt.
         with self.assertRaisesRegex(ValueError, "raw AIR does not match"): self.check()
+        self.docs[name]["body"][0]["args"][0]["val"] = "7"
+        self.write(self.old / name, self.docs[name])
         for key, value in [("generated_sha256", "0" * 64), ("body_sha256", "0" * 64),
                            ("air", []), ("air", [dict(file=name, sha256="0" * 64)] * 2)]:
             self.docs[name]["body"][0]["args"][0]["val"] = "7"; self.publish()

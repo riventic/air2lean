@@ -114,12 +114,14 @@ pointers) are not translated: the std code calls the futex through `Io.futexWait
 structure Io where
   deriving DecidableEq, Repr, Inhabited
 
-/-- 16 bytes, the size of `std.Io` (two pointers). -/
+/-- 16 bytes, the size of `std.Io` (two pointers), held as the model handle `.io`
+(`Byte.handle`): no other type reads them. -/
 instance : Enc Io where
   size := 16
   align := 8
-  encode _ := Array.replicate 16 (.int 0)
-  decode _ := pure ⟨⟩
+  encode _ := handleBytes .io 16
+  decode bs := do
+    if (← handleOfBytes 16 bs) = .io then pure ⟨⟩ else throw .unspecified
 
 /-- `Io.futexWaitUncancelable(T, ptr, expected)`: the `u32` bits of `expected`. -/
 def futexWaitC {α : Type} {n : Nat} [Packed α n] (_ : Io) (p : Ptr) (expected : α) : CM Tgt σ Unit :=

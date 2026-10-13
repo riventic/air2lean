@@ -130,8 +130,9 @@ def SliceOf.toSlice (s : SliceOf 64) : Slice := ⟨s.ptr, s.len⟩
 @[instance_reducible] def allocatorEnc (w : PtrWidth) : Enc Allocator where
   size := 2 * w.bytes
   align := w.bytes
-  encode _ := Array.replicate (2 * w.bytes) (.int 0)
-  decode _ := pure ⟨⟩
+  encode _ := handleBytes .allocator (2 * w.bytes)
+  decode bs := do
+    if (← handleOfBytes (2 * w.bytes) bs) = .allocator then pure ⟨⟩ else throw .unspecified
 
 instance instEncSlice32 : Enc Slice32 := sliceEnc .w32
 instance (priority := high) instEncOptionSlice32 : Enc (Option Slice32) := optSliceEnc .w32

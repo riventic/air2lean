@@ -32,11 +32,13 @@ TARGET = function("target", [VOID, integer(), NORETURN], [1], 1, [
     inst(0, "arg", 1, param=0), inst(1, "ret", 2, [dict(inst=0)])])
 
 
-def invoke(binary, air, output, error=None, timeout=10):
+def invoke(binary, air, output, error=None, timeout=10, legacy=True):
     output.write_text("sentinel\n")
-    # Every fixture here is schema-11 AIR: translating it needs the explicit legacy profile.
+    # The hand-written fixtures here are schema-11 AIR: translating them needs the explicit legacy
+    # profile. Compiler exports (the layout goldens) carry their own schema-12 profile.
+    profile = ["--profile", "legacy-abi64-le"] if legacy else []
     result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation",
-                             "--profile", "legacy-abi64-le"],
+                             *profile],
                             text=True, capture_output=True, check=False, timeout=timeout)
     if error is not None:
         assert result.returncode == 1, (error, result.returncode, result.stderr)
@@ -56,7 +58,8 @@ def run(binary, documents, error=None):
         for k, document in enumerate(documents):
             text = document if isinstance(document, str) else json.dumps(document, ensure_ascii=False)
             (air / f"{k}.json").write_text(text)
-        return invoke(binary, air, directory / "Gen.lean", error)
+        legacy = not any(isinstance(document, dict) and "profile" in document for document in documents)
+        return invoke(binary, air, directory / "Gen.lean", error, legacy=legacy)
 
 
 def run_sparse(binary, size=1 << 40):
@@ -158,16 +161,22 @@ def lane_pointers(binary):
     # pointer, also as a parameter or loaded value.
     checks += run(binary, [param(None)])
     checks += run(binary, [loaded(None)])
-    # Exact retained packed-struct goldens (no `vector_index`): their bit-pointers are all made by
-    # `struct_field_ptr` of a packed struct, and stay accepted.
+    # Exact retained packed-struct goldens (the layout exports: `vector_index: null`; the legacy
+    # sync golden: no `vector_index`): their bit-pointers are all made by `struct_field_ptr` of a
+    # packed struct, and stay accepted.
     root = Path(__file__).resolve().parents[3]
-    for name in ("layout/air/layout.bumpPair.json", "0.15.2/layout/air/layout.bumpPair.json",
+    for name in ("0.16.0/layout/air/layout.bumpPair.json", "0.15.2/layout/air/layout.bumpPair.json",
                  "0.14.1/layout/air/layout.isOk.json", "0.16.0/sync/air/Io.Condition.signal.json"):
         golden = json.loads((root / "tests/golden" / name).read_text())
-        assert any(t.get("host_size", 0) and "vector_index" not in t for t in golden["types"]), name
+        assert any(t.get("host_size", 0) and t.get("vector_index") is None for t in golden["types"]), name
         checks += run(binary, [golden])
-    # The same golden function: a bit-pointer it did not make by `struct_field_ptr` is rejected.
-    golden = json.loads((root / "tests/golden/layout/air/layout.bumpPair.json").read_text())
+    # The same golden function as a legacy export (schema 11, no `vector_index`): a bit-pointer it
+    # did not make by `struct_field_ptr` is rejected.
+    golden = json.loads((root / "tests/golden/0.16.0/layout/air/layout.bumpPair.json").read_text())
+    del golden["profile"]
+    golden["schema"] = 11
+    for t in golden["types"]:
+        t.pop("vector_index", None)
     bit_types = [k for k, t in enumerate(golden["types"]) if t.get("host_size", 0)]
     projection = next(i for i in golden["body"] if i["ty"] in bit_types)
     projection["tag"], projection["args"] = "bitcast", [dict(inst=0)]
@@ -314,7 +323,7 @@ def main():
         checks += run(binary, [allocation], "error set admitting OutOfMemory")
     # The existing qualified ret_ptr/ret_load example stays valid, while changing only
     # its declared return to u32 must fail before producing an ill-typed Gen.lean.
-    golden = Path(__file__).resolve().parents[3] / "tests/golden/layout/air/layout.wordOf.json"
+    golden = Path(__file__).resolve().parents[3] / "tests/golden/0.16.0/layout/air/layout.wordOf.json"
     loaded = json.loads(golden.read_text())
     checks += run(binary, [loaded])
     loaded["ret"] = 0
