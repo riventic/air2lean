@@ -112,7 +112,7 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
       · simp at hb; subst hb; exact hap a ha
   · rcases hs.fp e he with h | ⟨h1, h2, h3, -, -⟩
     · exact .inl h
-    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by rcases hx2 with h | h <;> omega⟩, by rw [h1]; exact hbl⟩
+    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by omega⟩, by rw [h1]; exact hbl⟩
 
 end LockWord
 
@@ -958,19 +958,15 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     have := (hLX (b, x)).resolve_right (hX x h1 h2)
     simp [FHeap.erase, this]
   have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
-  refine ⟨hi.w.readK hk hn hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
+  refine ⟨hi.w.readK hk hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
     hi.idle, hi.res⟩
   · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
     rw [this]
     have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
     rw [e]
-    refine ho.recordRest hc ht hb fun u hu x h1 h2 => ?_
-    refine ho.part_off hu (hrest x h1 ?_)
-    rcases h2 with h2 | rfl
-    · exact h2
-    · omega
+    exact ho.recordRest hc ht hb fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2)
   · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2) hn⟩
+    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
 
 end FLock
 
