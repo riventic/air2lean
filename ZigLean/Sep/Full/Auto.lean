@@ -4244,6 +4244,12 @@ def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) 
     let mut thms := thms
     for n in thms.toUnfold.toList do
       if ← isConc n then thms := thms.eraseCore (.decl n)
+    -- a step of a concurrent body (`(callMC x).run s`, `liftM`, `callC`, `callRC`) stays a
+    -- command: the `WP` rules are about the steps (`WP.callC`, a protocol's `liftM` rule), not
+    -- about the `ConcM` program the `CTriple` backend reads them as (`AutoConc`'s `fsym_norm`)
+    for n in [``Zig.CNorm.run_callC, ``Zig.CNorm.run_callMC, ``Zig.CNorm.run_callRC,
+        ``Zig.CNorm.run_liftR] do
+      thms := thms.eraseCore (.decl n)
     arr := arr.push thms
   let mut thms : SimpTheorems := {}
   for n in [``Zig.CNorm.run_ite, ``Zig.CNorm.run_throw, ``Zig.CNorm.throw_bind,
@@ -4301,7 +4307,8 @@ def fieldEqs : MetaM (Array Expr) := do
 
 /-- `g` by a hypothesis, up to reducible unfolding (unknowns of `g` may be fixed). -/
 def wpAssumption (g : MVarId) : MetaM Bool := g.withContext do
-  let t ← instantiateMVars (← g.getType)
+  -- (projections of structure values reduced, as in the context: `evalFsym`)
+  let t ← reduceProjs (← instantiateMVars (← g.getType))
   let ds := (← getLCtx).foldl (init := #[]) fun acc d => if d.isImplementationDetail then acc else acc.push d
   for d in ds.reverse do
     let s ← saveState
@@ -4334,17 +4341,18 @@ mutual
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
 the rest by `destruct` (equations substituted, user definitions unfolded). The equation of a
 step's run (`(x.run m).run = …`) stays. -/
-partial def wpSplit (g : MVarId) (h : FVarId) : TacticM (List MVarId) := g.withContext do
+partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MVarId) :=
+  g.withContext do
   let ty0 ← instantiateMVars (← h.getType)
   let ty ← whnfR ty0
   if hasRun ty then return [g]
-  -- a definition of a conjunction or an existential (a protocol's invariant `P.inv G m`, also a
-  -- reducible one): the parts of a copy, the fact stays folded (the hypothesis of the protocol's
-  -- lemmas)
-  if ty0.getAppFn.isConst && !ty0.isAppOf ``And && !ty0.isAppOf ``Exists && !ty0.isAppOf ``Or then
+  -- (`keep`: a hypothesis of the context or of a stop, a protocol's invariant `P.inv G m`: the
+  -- parts of a copy, the fact stays whole, the hypothesis of the protocol's lemmas)
+  if keep then
     let ty' ← if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some ty)
-      else if ← isLibrary ty0.getAppFn.constName! then pure none
-      else pure (← unfold1 ty0)
+      else if let .const c _ := ty0.getAppFn then
+        (if ← isLibrary c then pure none else unfold1 ty0)
+      else pure none
     if let some ty' := ty' then
       if (← whnfR ty').isAppOfArity ``And 2 || (← whnfR ty').isAppOfArity ``Exists 2 then
         let (h', g') ← (← g.assert `hu ty' (mkFVar h)).intro1
@@ -4377,9 +4385,9 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let ty ← instantiateMVars (← h.getType)
   if hasRun ty then return [g]
   let (r, _) ← simp ty (← wpHypCtx extra)
-  if r.expr == ty then return ← wpSplit g h
+  if r.expr == ty then return ← wpSplit g h (keep := true)
   let some (h', g') ← applySimpResultToLocalDecl g h r false | return []
-  wpSplit g' h'
+  wpSplit g' h' (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
@@ -4470,7 +4478,8 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
   | [] => return some []
   | sg :: rest =>
     if ← sg.isAssigned then return ← wpSides rest strict budget user extra fuel
-    let t ← instantiateMVars (← sg.getType)
+    -- (projections of structure values reduced, as in the context: `evalFsym`)
+    let t ← reduceProjs (← instantiateMVars (← sg.getType))
     let solve : TacticM (Option (List MVarId)) := do
       let l ← wpGoal sg user extra fuel
       if strict && !l.isEmpty then return none
@@ -4667,7 +4676,7 @@ def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (L
     if d.isImplementationDetail then continue
     unless ← g.withContext (isProp d.type) do continue
     gs ← gs.flatMapM fun g => g.withContext do
-      if (← getLCtx).contains d.fvarId then wpSplit g d.fvarId else pure [g]
+      if (← getLCtx).contains d.fvarId then wpSplit g d.fvarId (keep := true) else pure [g]
   gs.flatMapM (wpWalk · user extra 400)
 
 /-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with

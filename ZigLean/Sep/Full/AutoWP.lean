@@ -68,6 +68,21 @@ theorem WP.liftMem_pure {x : MemM α} {v : α} {m' : Mem}
   · rw [hr] at he; cases he; exact ⟨hsz, h⟩
   · rw [hr] at hn; cases hn
 
+/-- `WP.liftMem_pure` for a step of a concurrent body (`callMC x`, `liftM x`). -/
+theorem WP.callMC_pure {x : MemM α} {v : α} {m' : Mem} {s : σ}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hx : x.run m = pure (v, m'))
+    (hsz : m'.threads.size = m.threads.size) (h : Q (v, s) G m' n) :
+    P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n := by
+  have hr : (x.run m).run = some (.ok (v, m')) := by rw [hx]; rfl
+  refine WP.callMC (fun e he => ?_) (fun a m'' he => ?_) fun hn => ?_
+  · rw [hr] at he; cases he
+  · rw [hr] at he; cases he; exact ⟨hsz, h⟩
+  · rw [hr] at hn; cases hn
+
+-- the steps of a concurrent body that need no protocol: a call of a concurrent function, a
+-- pure step
+attribute [fsym] WP.callC WP.callRC
+
 -- the total forms first: the rules are tried last-registered first, so a partial protocol
 -- takes the partial triple (no termination needed) and a turn-counting one the total triple
 attribute [fsym] WP.liftMem_fownedT WP.liftM_fownedT WP.callMC_fownedT
