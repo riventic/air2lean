@@ -2586,14 +2586,16 @@ jobs:
           lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event
 
       # 0.17.0 translates `Io.Event` to the same code and names as 0.16.0 (tests/golden/0.17.0/
-      # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too.
-      - name: Build sync event proofs (0.17.0 translation)
+      # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
+      # `Io.Condition.waitInner` into `waitUncancelable`: `Sync.ioCond : CondImpl` walks it in its
+      # 0.17.0 block (`when_defined`), which only this translation elaborates.
+      - name: Build sync event and condition proofs (0.17.0 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.0-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.0/sync/Gen.lean
           cd .lake/check-tree/0.17.0-sync
-          lake build Proofs.Sync.Event
+          lake build Proofs.Sync.Event Proofs.Sync.Cond
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}
