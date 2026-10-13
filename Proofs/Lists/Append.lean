@@ -254,7 +254,8 @@ theorem alloc_slice_run (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hst 
       | .ok s => s.len = g ∧ s.ptr.off = 0 ∧ 4 * g.toNat < 2 ^ 64 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧
           m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ ∃ A, A % 4 = 0 ∧
           bytesAt s.ptr A (4 * g.toNat) .heap (Array.replicate (4 * g.toNat) .undef) h' ∧
-          ∀ l c, m.heap l = some c → c.addr + c.size ≤ A ∨ A + 4 * g.toNat ≤ c.addr := by
+          ∀ l c, m.heap l = some c →
+            c.addr + c.size ≤ A ∨ A + 4 * g.toNat ≤ c.addr + c.kind.mappedLo := by
   by_cases hbig : 2 ^ 64 ≤ 4 * g.toNat
   · refine ⟨.error "OutOfMemory", m, ?_, hst, Nat.le_refl _, rfl, hm⟩
     simp [Allocator.alloc, hbig, zig_unfold]
@@ -665,7 +666,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         have hH0 : hH (bO, 0) = none := (dHB (bO, 0)).resolve_right (by rw [hB0]; simp)
         rw [hm₂', Heap.union_apply, Heap.union_apply, hH0, hB0]; rfl
       have hlt := hclear _ _ hcell
-      simp only at hlt
+      simp only [BlockKind.mappedLo_heap, Nat.add_zero] at hlt
       have aO1 : (ptrAddr (ptr.elem 4 len)).run m₅ =
           pure ((blkO.addr : Int) + (ptr.elem 4 len).off, m₅) := ptrAddr_run hpO hblkO
       have aO0 : (ptrAddr ptr).run m₅ = pure ((blkO.addr : Int) + ptr.off, m₅) :=

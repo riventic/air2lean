@@ -858,8 +858,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
-  satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+  satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
+  (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
+  starting credits, uniformly in the oracle and without a fairness premise; its result is
+  `main`'s value or a stack overflow (STK-01).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -1081,7 +1084,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `addrLimit` and are clear of every other live block, by a move to a new mapping at the placement's address
   under `MAYMOVE` (oracle `mremapMoves`, or no room) whose pages end at or below `addrLimit`,
   or fails with `error.OutOfMemory`;
-  grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
+  grown bytes up to the old page end are undefined, the rest zero, and a growth in place
+  forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`: they are new pages, so
+  an access from before an earlier unmap of them races with nothing). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
 - Derived from: `ZigLean.Os.Mmap`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`; implies SEM-02.

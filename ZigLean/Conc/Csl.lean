@@ -501,7 +501,14 @@ theorem WP.liftMem_owned {x : MemM α} {Pa : Assn} {Qa : α → Assn}
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
       StepIn (m.heap.diff (own t)) m m' → m'.heap = hQ ∪ m.heap.diff (own t) →
-      Heap.Disjoint hQ (m.heap.diff (own t)) → Q a G m' n) :
+      Heap.Disjoint hQ (m.heap.diff (own t)) → Q a G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
@@ -520,7 +527,14 @@ theorem WP.liftM_owned {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn}
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
       StepIn (m.heap.diff (own t)) m m' → m'.heap = hQ ∪ m.heap.diff (own t) →
-      Heap.Disjoint hQ (m.heap.diff (own t)) → Q (a, s) G m' n) :
+      Heap.Disjoint hQ (m.heap.diff (own t)) → Q (a, s) G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
   exact WP.bind (WP.liftMem_owned ht ho hc htl hp fun a m' hQ hr ho' hq hs hm' hd =>
@@ -531,7 +545,14 @@ theorem WP.liftMem_upd {x : MemM α} {Pa : Assn} {Qa : α → Assn} {h : Heap}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa) (ho : Owned (upd own t h) m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
-      m'.threads = m.threads → Q a G m' n) :
+      m'.threads = m.threads → Q a G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   WP.liftMem_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' _ ho' hq hs _ _ =>
     k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads
@@ -541,7 +562,14 @@ theorem WP.liftM_upd {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn} {h : 
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa)
     (ho : Owned (upd own t h) m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
-      m'.threads = m.threads → Q (a, s) G m' n) :
+      m'.threads = m.threads → Q (a, s) G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
   WP.liftM_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' _ ho' hq hs _ _ =>
     k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads

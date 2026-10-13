@@ -22,13 +22,15 @@ private def observedBeforeJoin : ConcM Unit Nat := do
   let _ ← ConcM.sync (.join tid)
   pure observed
 
--- Kernel-checkable safety contracts for the source model operations, for any protocol.
+-- Kernel-checkable safety contracts for the source model operations, for any protocol that does
+-- not count turns (a protocol with a turn cost pays for the stop, `Proto.WP.syncC`).
 example {Tgt γ : Type} {P : Conc.Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ}
     {m : Mem} {n : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (Conc.upd G t g) m ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → Q () G₁ { m₁ with current := t } k) :
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → Q () G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none) :
     P.WP t (spinLoopHint : ConcM Tgt Unit) Q G m n :=
-  Conc.Proto.WP.spinLoopHint h
+  Conc.Proto.WP.spinLoopHint h hcost
 
 example : threadYieldResult 0 = .ok () := rfl
 example : threadYieldResult 1 = .error "SystemCannotYield" := rfl
@@ -60,9 +62,7 @@ theorem spin_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : 
     exact hintProtocol_joined h
   · rfl
   · intro n
-    apply Conc.Proto.WP.spinLoopHint
-    intro k hk
-    exact ⟨(), rfl, fun G₁ m₁ hg hi => hi⟩
+    exact Conc.Proto.WP.spinLoopHint fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi => hi⟩
 
 /-- An ordinary source error returned by yield is allowed; no oracle produces a model panic. -/
 theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
@@ -76,9 +76,7 @@ theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e :
     exact hintProtocol_joined h
   · rfl
   · intro n
-    apply Conc.Proto.WP.threadYield
-    intro k hk
-    exact ⟨(), rfl, fun G₁ m₁ hg hi c hc => hi⟩
+    exact Conc.Proto.WP.threadYield fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi c hc => hi⟩
 
 -- Mutants that make hints pure, force success, or force handoff fail these assertions.
 def main : IO Unit := do

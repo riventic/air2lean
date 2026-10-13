@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # L12: explicit external initial state and absent-initializer rejection. Needs a built
-# translator and `lake build ZigLean.Sep`; runs no compiler.
+# translator and `lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Init ZigLean.Sep.Full.Strength`;
+# runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -17,5 +18,8 @@ export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
   --namespace GlobalInit --prefix global_init.
 cmp "$work/GlobalInit/Gen.lean" tests/roadmap/global-init/GlobalInit/Gen.lean
 "${lean_cmd[@]}" -R "$work" -o "$work/GlobalInit/Gen.olean" "$work/GlobalInit/Gen.lean"
-"${lean_cmd[@]}" -R tests/roadmap/global-init tests/roadmap/global-init/GlobalInit/Proofs.lean
+"${lean_cmd[@]}" -R tests/roadmap/global-init -o "$work/GlobalInit/Proofs.olean" \
+  tests/roadmap/global-init/GlobalInit/Proofs.lean
+# The strength log of the migrated triple (tests/roadmap/strength-log).
+"${lean_cmd[@]}" tests/roadmap/strength-log/GlobalInit.lean
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/global-init/test_cli.py "$translator"

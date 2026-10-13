@@ -58,7 +58,10 @@ place when the grown pages are clear of every other live block and end inside th
 moves to a new mapping at the placement's address under `MAYMOVE`; without `MAYMOVE` and with no
 room it returns `error.OutOfMemory`, and so does a move whose pages would end above
 `Os.Target.addrLimit`. A moved mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
-undefined (the kernel keeps the stale tail of the last page), the rest are zero.
+undefined (the kernel keeps the stale tail of the last page), the rest are zero. A growth in place
+forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`): they start with no access
+history, as the bytes of a new mapping do, so an access of a thread that unmapped them earlier
+does not race with their new owner.
 
 **Page size.** Fixed per target (`Os.Target.pageSize`), comptime in Zig 0.16.0's
 `page_allocator` for both modelled targets: 4 KiB on `x86_64-linux`, 16 KiB on `aarch64-macos`.
@@ -241,9 +244,10 @@ def munmap (os : Target) (memory : Slice) : MemM Unit := do
 def _root_.Zig.Mem.mremapShrunk (m : Mem) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
   { m with blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
 
-/-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes. -/
+/-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes:
+the grown offsets start with no access history (`Mem.forgetFrom`). -/
 def _root_.Zig.Mem.mremapGrown (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
-  { m with
+  { m.forgetFrom b blk.bytes.size with
     blocks := m.blocks.set! b { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n } }
 
 /-- The memory after moving mapping block `b` (live from `lo`) to a new block of `n` live bytes:

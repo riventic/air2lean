@@ -29,7 +29,13 @@ through the shipped tools (no mocked classifier input):
 `root x = Zig.add false x 1` panics at `x = 255`, and `spin` never returns
 (`tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean`).
 
-Reproduce: `lake build ZigLean ZigLean.Sep.Total AssuranceTools Proofs.Asm.Gen` (through
+The audit was run on the legacy heads (`Triple`, `TotalTriple`, `TotalTripleWithin`). The fixtures
+now use the full-state heads of the one proof framework (`docs/proof-framework.md`), with the
+same shape and the same pinned verdicts: `total_false_pre`, `root_in_post` and `spin_partial` are
+`FTotalTriple`/`FTriple` claims, `Shadow.lean` redefines `Zig.Full.FTotalTriple` and
+`ShadowWithin.lean` the head of another defining module, `Zig.Full.FTTotalTriple`.
+
+Reproduce: `lake build ZigLean ZigLean.Sep.Full.Witness AssuranceTools Proofs.Asm.Gen` (through
 `scripts/build-guard.py`), then `tests/roadmap/architecture-audit/claims/check.sh`. That script
 compiles the fixtures into `.lake/architecture-audit` (not `.lake/build/lib/lean`, where proof
 receipts reject untracked oleans) and runs `scripts/assumptions.py --module`, as

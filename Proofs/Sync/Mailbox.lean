@@ -734,7 +734,7 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : Heap)
   -- `post`
   have hm₂ : Msg 2 h₂ := by have := hi₂.2.2.parts 1; simp only [XG, upd_self] at this; exact this
   exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
-    (C.post fits 1 Heap.empty h₂ (.pr 2) .pd ⟨⟩ trivial trivial (hmv_p hm₂) (hU_p h₂)
+    (C.post fits rfl 1 Heap.empty h₂ (.pr 2) .pd ⟨⟩ trivial trivial (hmv_p hm₂) (hU_p h₂)
       (fun _ => .inl rfl) G m₂ d (by rw [Heap.empty_union]; exact hi₂)))
 
 /-- The producer spawned no thread. -/
@@ -1076,7 +1076,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
         · rw [hGo u (by unfold ThreadId at *; omega)] at hu ⊢; exact hu₅.wx u hu
   simp only [StateT.run_bind, StateT.run_pure]
   -- `wait`: `main` takes the permit and the message
-  refine WP.bind (WP.callC (WP.mono ?_ (C.wait fits 0 Heap.empty .wt .got (Msg 2) io hone_w rfl
+  refine WP.bind (WP.callC (WP.mono ?_ (C.wait fits rfl 0 Heap.empty .wt .got (Msg 2) io hone_w rfl
     trivial trivial hmv_w hU_w _ _ k hi₆)))
   rintro _ G₂ m₇ d₂ ⟨hd₂, hc₇, h₃, hm₃, hi₇⟩
   have hi₇' : proto.inv (upd G₂ 0 (gK (Heap.empty ∪ h₃) .got)) m₇ := hi₇

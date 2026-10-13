@@ -72,7 +72,7 @@ build for each fixed finding below.
 | MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
 | MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
 | MM-18 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
-| MM-19 | open | `clone` hands the child the stack part of the mapping (§MM-18, step 2) |
+| MM-19 | fixed | `clone` hands the child the stack part of the mapping; blocks occupy their live bytes (§MM-19, `tests/roadmap/stack-region/ThreadStack.lean`) |
 
 ## Measurements
 
@@ -565,7 +565,7 @@ form): the native stack of `t` holds every call chain whose model charge stays w
 4. Heap-kind runtime cells without an out-of-memory path (`Future.slotAlloc`: `alloc .heap`)
    keep today's `.stackOverflow` without address room: partial only, listed as follow-up (not a
    stack object; native `Io` implementations have their own fallback).
-5. MM-19 below stays open until step 2.
+5. MM-19 below was open until step 2 (fixed).
 
 #### MM-19. A child's locals cannot lie in its thread mapping
 
@@ -583,6 +583,47 @@ releases it. Approved (coordinator, 2026-10-12): a soundness bug, fixed as step 
 minimal general `Mem.LiveDisjoint` exception for a reserve nested in its mapping and the
 `@intFromPtr` counterexample as a regression; Linux and macOS thread stacks are instances of one
 per-thread reserve contract.
+
+**Fixed (step 2, `codex/stack-region-mm19`).** The implementation needs no `LiveDisjoint`
+exception; it changes what a block occupies instead:
+
+* **A block occupies its live bytes** `[addr + lo, addr + size)`, `lo` its first live offset
+  (`BlockKind.mappedLo`: 0 but for an OS mapping). `Block.clearOf` (so `Mem.addrFree`,
+  `Mem.LiveDisjoint`) uses it. A prefix that `munmap` released is free address space again, as it
+  is natively (`Os.unmapCase_prefix_ge`).
+* **`clone` cuts the child's stack off the mapping.** `Os.Linux.clone` reads the stack top `top`:
+  it must lie in a live mapping with `addr + lo < top ≤ addr + size`, else the spawn is
+  `.unspecified`. Before the spawn the parent's write of the stack part is recorded (the
+  hand-over edge); after it, `giveStack` re-checks the mapping (`.illegal` if it changed), moves
+  the mapping's `lo` up to the stack top and records the range as the child's
+  `StackState.native` (`NativeStack {host, lo, hi, start}`). Nobody reaches those bytes through
+  the mapping while the child runs: a parent access is `.illegal` (conservative; natively it is a
+  race on the child's stack at best).
+* **The child's stack blocks may lie there, nothing else may.** `Mem.homeOk` accepts a `.stack`
+  proposal of the current thread inside its own native stack (clear of every live block and of
+  every other reserve); `Mem.placedFor?` is `homeOk || placeOk` and `allocAddr`/`allocOk` use it
+  (for every other kind it is `placed?`, by `rfl`). `StackState.reserveClear` includes the native
+  stack, so every other placement (`placeOk`, `growFree`, `mappingRoom`, `top`) avoids it.
+* **Thread end gives it back.** `cloneExit` first runs `releaseStack`: it frees the child's live
+  stack blocks in the native stack (as `free`), restores the mapping's `lo` with undefined bytes
+  (a write by the child, so a later access by the joiner is ordered after it) and clears
+  `native`. `munmap` after the join then succeeds as natively.
+* **The native stack and the budget reserve are two ranges.** The child's own proposals must be
+  valid anywhere in its native stack (E1); the LIFO fallback of a budget (MM-18) lives in a
+  reserve that is never mapped natively (STK-02). Step 5 gives a child a budget reserve like the
+  main thread's.
+
+Statements that were false natively and changed with the model (each listed in the PR):
+`Holds.apart`/`FTriple.apart` (byte `x` of `b` before an owned byte `y'` of `b'` or the
+converse; the old "before the other block's start" is refuted by `ThreadStack.old_apart_false`,
+two live bytes of two live blocks of a reachable memory); `Mem.addrFree_cell`,
+`Mem.newAddr_clear`, `alloc_run`, `rawAlloc_run`, `alloc_slice_run` (`A + n ≤ c.addr +
+c.kind.mappedLo`); `LiveDisjoint.addr_ne` takes the two bytes' `lo` bounds (default `by simp`);
+`Owns.block` exports the owned byte's `lo` bound. Regressions:
+`tests/roadmap/stack-region/ThreadStack.lean` (kernel: `child_local_in_mapping`,
+`heap_not_in_stack`, `parent_stack_not_in_child_stack`, `parent_access_illegal`,
+`old_apart_false`) and `tests/roadmap/os-threads/Check.lean` (clone with a real mapping, a stack
+outside a mapping, munmap after join, restored bytes undefined).
 
 #### Impact
 
@@ -641,7 +682,7 @@ per-thread reserve contract.
 #### Steps (phase 2, one small PR each, on `codex/stack-region`)
 
 1. Model + emitters + lemmas + regressions (done, above).
-2. MM-19: `Os.clone` hands the child the stack part of its mapping (below).
+2. MM-19: `Os.clone` hands the child the stack part of its mapping (done, §MM-19).
 3. Logic: the `sp` resource, Holds conjunct, total rules (`docs/sep-full-state.md`), as one
    instance of the generic authoritative-counter pattern shared with the credits.
 4. Full/Init gives the main thread `sp 0 S k₀` under `Mem.withStack S`; replaces interim (C) and

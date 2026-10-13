@@ -224,8 +224,8 @@ rules (`FTriple.alloc'`, `free'`, `allocC`) moved to `Full/Block`, and `apts_lay
   dangling pointer stay unconstrained. This is sound and matches the native behaviour.
 * `placeOk`/`addrFree` keep live blocks pairwise disjoint (`Mem.LiveDisjoint`, in the sense of
   `Block.clearOf`, so a block of size 0 constrains nothing). `FSeq := Seq ∧ ShapesWF ∧
-  LiveDisjoint` (stage 3, done). `Holds.apart` turns ownership of a byte in each of two blocks
-  into `A + S ≤ A' ∨ A' + S' ≤ A`, and the rule
+  LiveDisjoint` (stage 3, done). `Holds.apart` turns ownership of bytes in each of two blocks
+  into the order of their owned ranges (below), and the rule
   `FTriple.apart : FTriple (⟪disjoint⟫ ⋆ P) c Q → FTriple P c Q` (side condition shaped as
   `know_intro`'s) adds that fact to a precondition. This replaces per-client placement premises
   (the generated `@memcpy` overlap checks, the arena's foreign-slice comparison O-F).
@@ -260,8 +260,12 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   ownership: `Holds.block` (an owned byte `x` gives a live block of more than `x` bytes, with
   `mappedLo ≤ x`). Rules that need exact cells read them off `Res.fix m` (`FTriple.of_fix`,
   `Holds.fix`, `Holds.congrF`).
-* `Holds.apart` / `FTriple.apart`: owned byte `x` of `b` and `x'` of `b'` give
-  `A + x < A' ∨ A' + x' < A` (no cell sizes).
+* `Holds.apart` / `FTriple.apart`: owned bytes `x`, `y` of `b` and `x'`, `y'` of `b'` give
+  `A + x < A' + y' ∨ A' + x' < A + y` (no cell sizes; the first and last owned bytes give the
+  owned ranges). A block occupies only its live bytes (`Block.clearOf` from `mappedLo` on), so a
+  block may lie below an OS mapping's first live offset (a thread's stack, MM-19); the earlier
+  form `A + x < A' ∨ A' + x' < A` (byte before the other block's start) is false there
+  (`tests/roadmap/stack-region/ThreadStack.lean`, `old_apart_false`).
 * **The bridge** is one theorem, `FTriple.ofTriple` (`FTotalTriple.ofTotal`): precondition
   `upE P E` (the legacy `P` with the full extents `E`), `P`'s bytes in blocks `B`, `P` size-free
   outside `E` (`SizeFree E P`), `E`-cells recording `E`, and either every block of `B` pinned by `E`
