@@ -195,27 +195,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "tactic": "arena_free",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_free_checked",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_free_tail",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "tactic": "arena_loadBuf",
       "kind": "syntax",
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
