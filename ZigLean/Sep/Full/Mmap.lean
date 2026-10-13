@@ -1393,6 +1393,75 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
     exact Mem.NoRevive.setBlock (m := m) hb rfl (fun h => h)
       (by simp only [Array.size_extract]; omega) (Nat.le_refl _)
 
+/-- The memory after a growth in place (`Mem.mremapGrown`) is a step of the thread that revives
+only bytes the thread owns: the grown offsets of block `b` have no access history. -/
+theorem _root_.Zig.Mem.mremapGrown_step {m : Mem} {hF : Heap} {P : Nat} {b : BlockId} {blk : Block}
+    {lo n : Nat} (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hK : blk.kind = .mapped lo) :
+    FStepIn hF m (m.mremapGrown P b blk lo n) ∧ m.RevivesOwned (m.mremapGrown P b blk lo n) := by
+  refine ⟨(FStepIn.forgetFrom b blk.bytes.size).trans
+    (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) fun h => ⟨blk, hb, h⟩),
+    fun b' x hb' hl' hd e he heb h1 h2 => ?_⟩
+  have hget := blocks_set_get (m := m) (m' := m.mremapGrown P b blk lo n) hb rfl
+  by_cases e' : b' = b
+  · rw [e'] at hl' hd heb
+    have hb₂ : (m.mremapGrown P b blk lo n).blocks[b]? =
+        some { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n } := by
+      rw [hget]; simp
+    have h₁ := (heap_mapped hb₂ hl hK x).mp hl'
+    have hge : blk.bytes.size ≤ x :=
+      Nat.le_of_not_lt fun hlt => (heap_mapped hb hl hK x).mpr ⟨h₁.1, hlt⟩ hd
+    rcases Mem.forgetFrom_entry (m := m) (b := b) (S := blk.bytes.size) (by exact he) heb with
+      hc | ⟨-, hend⟩
+    · rw [hc]; exact VClock.le_default _
+    · omega
+  · exfalso; apply hl'
+    have e2 : (m.mremapGrown P b blk lo n).heap (b', x) = m.heap (b', x) := by
+      unfold Mem.heap; dsimp only; rw [hget, if_neg e']
+    rw [e2]; exact hd
+
+/-- **A growth in place without `MAYMOVE` is local** under the mapping's authority: it reads no
+record (`Os.mremapLive_grow0`) and revives only the grown offsets, whose history it forgets. -/
+theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {S lo : Nat}
+    {q : Frac} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    ThreadLocal (bauth b S (.mapped lo) q) (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none) := by
+  intro m r rF hh hp hc ho
+  obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_emp.mpr hp)
+  subst hsz
+  have hrun : ∀ m₀ : Mem, m₀.blocks[b]? = some blk →
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none).run m₀ =
+        if m₀.mapDenied newLen.toNat then
+          Pure.pure (Except.error "OutOfMemory", { m₀ with allocs := m₀.allocs + 1 })
+        else if m₀.mappingRoom os.addrLimit b blk lo (alignUp newLen.toNat os.pageSize) = false then
+          Pure.pure (Except.error "OutOfMemory", { m₀ with allocs := m₀.allocs + 1 })
+        else Pure.pure (Except.ok ⟨⟨some b, (lo : Int)⟩, newLen⟩,
+          ({ m₀ with allocs := m₀.allocs + 1 } : Mem).mremapGrown os.pageSize b blk lo newLen.toNat) :=
+    fun m₀ hb₀ => (Os.mremap_eq (m := m₀) os hhas (.inl rfl) hb₀ hl hK (by omega) hold).trans
+      (Os.mremapLive_grow0 os _ b blk lo newLen (by omega))
+  have e1 : m.noFp.mapDenied newLen.toNat = m.mapDenied newLen.toNat := rfl
+  have e2 : m.noFp.mappingRoom os.addrLimit b blk lo (alignUp newLen.toNat os.pageSize) =
+      m.mappingRoom os.addrLimit b blk lo (alignUp newLen.toNat os.pageSize) := rfl
+  refine ⟨?_, fun v m' e => ?_⟩
+  · rw [hrun m hb, hrun m.noFp hb, e1, e2]
+    split <;> (try split) <;> rfl
+  · have hb₁ : ({ m with allocs := m.allocs + 1 } : Mem).blocks[b]? = some blk := hb
+    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } :=
+      .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+        Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
+        (fun _ he hn => absurd he hn)
+    rw [hrun m hb] at e
+    split at e
+    · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+    split at e
+    · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+    · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+      obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.heap.erase) (P := os.pageSize)
+        (n := newLen.toNat) hb₁ hl hK
+      exact ⟨hst₁.trans hst₂, hrev₂⟩
+
 end ThreadLocal
 
 namespace FTTotalTriple

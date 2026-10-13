@@ -188,4 +188,28 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (b
         MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
         StateT.modifyGet]
 
+/-- A growth without `MAYMOVE` reads no recorded access, in every memory: it fails, or it grows in
+place. -/
+theorem Os.mremapLive_grow0 {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (hn : blk.bytes.size - lo < newLen.toNat) :
+    let n := newLen.toNat
+    let m₁ : Mem := { m with allocs := m.allocs + 1 }
+    (Os.mremapLive os p b blk lo newLen 0).run m =
+      if m.mapDenied n then pure (.error "OutOfMemory", m₁)
+      else if m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false then
+        pure (.error "OutOfMemory", m₁)
+      else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
+  intro n m₁
+  have hn0 : newLen.toNat ≠ 0 := by omega
+  have hn' : ¬ newLen.toNat ≤ blk.bytes.size - lo := by omega
+  have hf : ¬ (0 : BitVec 32) = Os.mremapMayMove := by decide
+  by_cases hd : m.mapDenied n
+  · simp [Os.mremapLive, hn0, hn', hd, zig_unfold, n, m₁, set, StateT.set, MonadStateOf.set]
+  by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
+  · simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+      MonadStateOf.set, ExceptT.bindCont, Os.mremapMayMove]
+  · simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+      MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
+      StateT.modifyGet, Os.mremapMayMove]
+
 end Zig

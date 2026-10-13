@@ -334,6 +334,16 @@ theorem FootprintEntry.Narrows.trans {e e₁ e₂ : FootprintEntry} (h₁ : e.Na
 theorem FootprintEntry.Narrows.clock {e e₀ : FootprintEntry} (hn : e.Narrows e₀) :
     VClock.le e.clock e₀.clock = true := hn.2.2.2.2.2
 
+/-- Forgetting the accesses past an offset (`Mem.forgetFrom`) narrows an entry. -/
+theorem FootprintEntry.forgetFrom_narrows (b : BlockId) (S : Nat) (e : FootprintEntry) :
+    (e.forgetFrom b S).Narrows e := by
+  unfold FootprintEntry.forgetFrom
+  split
+  · exact ⟨rfl, rfl, rfl, Nat.le_refl _, Nat.le_refl _, VClock.le_default _⟩
+  · split
+    · exact ⟨rfl, rfl, rfl, Nat.le_refl _, by simp only; omega, VClock.le_refl _⟩
+    · exact .refl e
+
 /-- A narrowing of a plain write to bytes is one of the entry. -/
 theorem FootprintEntry.Narrows.plainHit {e e₀ : FootprintEntry} {b o len : Nat} (hn : e.Narrows e₀)
     (h : Zig.plainHit b o len e = true) : Zig.plainHit b o len e₀ = true := by
@@ -576,6 +586,29 @@ theorem AMap.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b
     simp only [Mem.retire, Array.filter_filterMap, Array.filterMap_filter]
     congr 1; funext p
     cases h : p.1 != m.current <;> cases (m.retireIdx b o len).idxOf? p.2.1 <;> simp_all
+
+/-- **Forgetting the accesses past an offset** (`Mem.forgetFrom`, a revival) is a step of the
+thread for every frame: it only narrows entries. -/
+theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat) :
+    FStepIn hF m (m.forgetFrom b' S) where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := by
+    obtain ⟨e₀, he₀, rfl⟩ := Array.mem_map.mp he
+    exact .inl ⟨e₀, he₀, FootprintEntry.forgetFrom_narrows _ _ _⟩
+  fpc e he := by
+    obtain ⟨e₀, he₀, rfl⟩ := Array.mem_map.mp he
+    exact .inl ⟨e₀, he₀, FootprintEntry.forgetFrom_narrows _ _ _⟩
+  const _ _ h := h
 
 /-- Retiring the locations over bytes that the frame does not have is a step of the thread. -/
 theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :

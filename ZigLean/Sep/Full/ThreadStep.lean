@@ -461,6 +461,11 @@ end RunFp
 theorem _root_.Zig.Mem.withFp_noFp (m : Mem) (F : Array FootprintEntry) : (m.withFp F).noFp = m.noFp := by
   cases m; rfl
 
+theorem _root_.Zig.Result.pure_inj {β : Type} {x y : β} (h : (Pure.pure x : Result β) = Pure.pure y) :
+    x = y := by
+  have := congrArg ExceptT.run h
+  simpa [Pure.pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
+
 theorem RunFp.of_noFp {α : Type} {m : Mem} {c : MemM α}
     (h : (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint))) :
     RunFp m.footprint m.noFp c := by
