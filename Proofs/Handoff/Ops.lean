@@ -170,6 +170,96 @@ theorem start (σ : Placement) :
   have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl).current 0
   rwa [hf] at this
 
+/-! ## `main`'s start -/
+
+/-- A field pointer of the `Box` from `main`'s part before its spawn (the `Box`'s extent). -/
+theorem projO {own : ThreadId → Res} {rO : Res} {m : Mem} (ho : FOwned own rO m)
+    (ht : 0 < m.threads.size) {A S : Nat} {bs : Array Byte}
+    (h : (up (bytesAt bPtr A S .stack bs) ⋆ bext 0 S .stack) (own 0)) {k : Nat} (hk : k ≤ S) :
+    (ptrProject bPtr (·.add k)).run m = pure (bPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := ho.blkOf ht (Full.sep_comm h)
+  exact ptrProject_block_run hb rfl (by decide) (by simp [bPtr, hsz]; omega)
+
+/-- The bytes `a .. c` of `bs` at `a` are the bytes `a .. b` and `b .. c`. -/
+theorem split_at {bs : Array Byte} {A S a b c : Nat} {r : Res}
+    (h : up (bytesAt (bPtr.add a) A S .stack (bs.extract a c)) r) (hab : a ≤ b) (hbc : b ≤ c)
+    (hc : c ≤ bs.size) :
+    (up (bytesAt (bPtr.add a) A S .stack (bs.extract a b)) ⋆
+      up (bytesAt (bPtr.add b) A S .stack (bs.extract b c))) r := by
+  have hsz : (bs.extract a c).size = c - a := by simp; omega
+  have := up_sep ⟨bytesAt_split h.1 (k := b - a) (by omega), h.2⟩
+  have e1 : (bs.extract a c).extract 0 (b - a) = bs.extract a b := by
+    rw [Array.extract_extract]; congr 1 <;> omega
+  have e2 : (bs.extract a c).extract (b - a) (bs.extract a c).size = bs.extract b c := by
+    rw [Array.extract_extract, hsz]; congr 1 <;> omega
+  have e3 : (bPtr.add (a : Int)).add ((b - a : Nat) : Int) = bPtr.add (b : Int) := by
+    rw [Ptr.add_add]; congr 1; omega
+  rwa [e1, e2, e3] at this
+
+/-- **The `Box`'s bytes after `main`'s stores**, in the pieces of `inv_start` (a layout whose
+parts follow each other: `io`, the mutex, the three words, `v`, `ready`, the padding). -/
+theorem box_split {r : Res} {A : Nat} {bs : Array Byte} (hs : bs.size = Lo.size)
+    (hc : Lo.io = Lo.mo ∧ Lo.mo + 4 = Lo.so ∧ Lo.so + 12 = Lo.xo ∧ Lo.xo + 4 = Lo.ro)
+    (h : up (bytesAt bPtr A Lo.size .stack bs) r) :
+    (up (bytesAt bPtr A Lo.size .stack (bs.extract 0 Lo.io)) ⋆
+      (up (bytesAt (bPtr.add Lo.mo) A Lo.size .stack (bs.extract Lo.mo (Lo.mo + 4))) ⋆
+      (up (bytesAt (bPtr.add Lo.so) A Lo.size .stack (bs.extract Lo.so (Lo.so + 12))) ⋆
+      (up (bytesAt (bPtr.add Lo.xo) A Lo.size .stack (bs.extract Lo.xo (Lo.xo + 4))) ⋆
+      (up (bytesAt (bPtr.add Lo.ro) A Lo.size .stack (bs.extract Lo.ro (Lo.ro + 1))) ⋆
+       up (bytesAt (bPtr.add (Lo.ro + 1)) A Lo.size .stack
+        (bs.extract (Lo.ro + 1) Lo.size))))))) r := by
+  obtain ⟨h1, h2, h3, h4⟩ := hc
+  have hok := Lo.ok
+  have h0 := up_sep ⟨bytesAt_split h.1 (k := Lo.io) (by omega), h.2⟩
+  rw [hs] at h0
+  refine sep_mono_right (fun _ hr => ?_) h0
+  rw [h1] at hr
+  refine sep_mono_right (fun _ hr => ?_) (split_at hr (b := Lo.mo + 4) (by omega) (by omega)
+    (by omega))
+  rw [h2] at hr
+  refine sep_mono_right (fun _ hr => ?_) (split_at hr (b := Lo.so + 12) (by omega) (by omega)
+    (by omega))
+  rw [h3] at hr
+  refine sep_mono_right (fun _ hr => ?_) (split_at hr (b := Lo.xo + 4) (by omega) (by omega)
+    (by omega))
+  rw [h4] at hr
+  exact split_at hr (b := Lo.ro + 1) (by omega) (by omega) (by omega)
+
+theorem sep_box {I W B V Rd P b : FAssn} {r : Res} (h : ((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) r) :
+    ((P ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) r := by
+  have e : ((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) = ((P ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) := by
+    ac_rfl
+  rw [e] at h; exact h
+
+/-- **Before the spawn**: `main` owns the `Box` after its stores (the bytes `bs`, whose mutex,
+three words, `v` and `ready` are 0 and `false`), with its extent. The protocol's invariant holds
+with `main`'s part the padding. -/
+theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
+    (ho : FOwned (upd (fun _ => rnil) 0 r) rnil m)
+    (hF : (up (bytesAt bPtr A Lo.size .stack bs) ⋆ bext 0 Lo.size .stack) r)
+    (hs : bs.size = Lo.size)
+    (hc : Lo.io = Lo.mo ∧ Lo.mo + 4 = Lo.so ∧ Lo.so + 12 = Lo.xo ∧ Lo.xo + 4 = Lo.ro)
+    (hW : bs.extract Lo.mo (Lo.mo + 4) = Enc.encode (0 : BitVec 32))
+    (hS : bs.extract Lo.so (Lo.so + 4) = Enc.encode (0 : BitVec 32))
+    (hE : bs.extract (Lo.so + 4) (Lo.so + 8) = Enc.encode (0 : BitVec 32))
+    (hV' : bs.extract (Lo.so + 8) (Lo.so + 12) = Enc.encode (0 : BitVec 32))
+    (hV : bs.extract Lo.xo (Lo.xo + 4) = Enc.encode (0 : BitVec 32))
+    (hR : bs.extract Lo.ro (Lo.ro + 1) = Enc.encode false)
+    (hA : A % Lo.align = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
+    (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
+    ∃ rM, (proto Lo prodOf).inv (upd G0 0 (gO rM { ph := .pre })) m := by
+  have hok := Lo.ok
+  obtain ⟨_, _, hd, rfl, ⟨rM, _, hdM, rfl, -, ⟨_, rW, hdRW, rfl, ⟨rV, rRd, hdVR, rfl, hV₁, hR₁⟩,
+    hW₁⟩⟩, ⟨rB, rIO, hdB, rfl, hB₁, hIO⟩⟩ := sep_box (sep_mono_left (fun _ h => box_split hs hc h) hF)
+  rw [hW] at hW₁; rw [hV] at hV₁; rw [hR] at hR₁
+  have hsz : (bs.extract Lo.so (Lo.so + 12)).size = 12 := by simp; omega
+  have hx : ∀ k, k ≤ 8 → (bs.extract Lo.so (Lo.so + 12)).extract k (k + 4) =
+      bs.extract (Lo.so + k) (Lo.so + k + 4) := fun k hk => by
+    rw [Array.extract_extract]; congr 1 <;> omega
+  exact ⟨rM, inv_start (own := fun _ => rnil) ho (fun _ _ => rfl) hd hdM hdRW hdVR hdB
+    ⟨A, _, hA, by simp; omega, hIO⟩ hW₁ hB₁ hV₁ hR₁ hsz (by rw [hx 0 (by omega)]; exact hS)
+    (by rw [hx 4 (by omega)]; exact hE) (by rw [hx 8 (by omega)]; exact hV') hA hth hat hq⟩
+
 /-! ## The sync objects -/
 
 section Sync
@@ -330,9 +420,9 @@ theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
 /-! ## The producer's end and `main`'s join -/
 
 /-- **The producer's end** (`QKid`): it is `gone` at `fin` and spawned no thread. -/
-theorem qkid {G : ThreadId → Gh} {m : Mem}
+theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (hi : (proto Lo prodOf).inv (upd G 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m) :
-    (proto Lo prodOf).QKid 1 () G m 0 := by
+    (proto Lo prodOf).QKid 1 () G m d := by
   refine ⟨_, hi, ⟨rfl, rfl⟩, fun _ => ?_⟩
   obtain ⟨rX, -, hu⟩ := hi
   exact joinedAll_of_main (spawners hu.shape) (by decide)
