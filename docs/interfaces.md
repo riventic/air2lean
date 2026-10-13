@@ -93,8 +93,18 @@ lane `codex/alloc-param`).
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
   call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there
-  is no per-interface judgment. `CAllocSpec` (the allocator's four entries, `FAllocSpec` at
-  every depth) predates it and stays the allocator's bundled contract.
+  is no per-interface judgment. `CAllocSpec` is the allocator's four entries as four `FnSpec`s
+  (`allocFn`, `resizeFn`, `remapFn`, `freeFn`; an entry's side conditions are pure facts of its
+  precondition), with the accessors `CAllocSpec.alloc`/`resize`/`remap`/`free`/`resize_granted`;
+  the one-thread reading `FAllocSpec` at every depth is derived (`CAllocSpec.solo`, back:
+  `CAllocSpec.of_solo`).
+* **A proved allocator behind the open interface** (`ZigLean/Sep/Full/AllocBridge.lean`): a
+  translated allocator's `FAllocSpec L vt ctx I` (proved once, for its `MemM` entries) gives
+  `CAllocSpec (CVTable.ofRaw vt)` (`CAllocSpec.ofRaw`), so an environment whose functions at
+  `fns` run that code (`CVTable.env e fns = CVTable.ofRaw vt`) meets the contract a client
+  assumes (`CAllocSpec.env_ofRaw`): EXT-05 discharged for that environment, for every allocator.
+  `tests/roadmap/lists-fba` uses it to meet the premises of `append_spec` and `push_spec` with the
+  translated `FixedBufferAllocator` at program start (their non-vacuity witnesses).
 * Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own `FnSpec`:
   `std.Random`'s `fillFn` is the second instance: `∀ A S K bs, FnSpec (randomFillPre ctx R A S K
   bs) (randomFillPost R A S K) fill` (with the generator's state `R`, it fills the slice with

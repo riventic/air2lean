@@ -96,6 +96,19 @@ must not import the witness commands. A premise about an `opaque` function (the 
 theorems of `Proofs/Asm/Proofs.lean`) has no companion: the kernel cannot evaluate it, so those
 theorems stay at `safety`.
 
+A precondition over an allocator's invariant holds ghost state (extent shares, byte-range claims,
+the vtable's knowledge) that only updates create. `ZigLean/Sep/Full/WitnessStart.lean` shows it
+admissible in the memory at program start: `FAdmit.init_claims` (the globals with the claim on
+every global's bytes), carried by updates that keep the memory (`FAdmit.eupd`), with leftovers in
+the frame (`FAdmit.frame`). A theorem whose premise is an allocator contract (`CAllocSpec` of
+the environment) gets its companion from a proved allocator through
+`CAllocSpec.env_ofRaw` (`docs/interfaces.md`). `tests/roadmap/lists-fba` does both for
+`Lists.Append.append_spec` and `Lists.Alloc.push_spec` with the translated
+`FixedBufferAllocator`; the companions live in that fixture (the allocator's translation is a
+test fixture), so its `check.sh` runs the extractor over the proof modules and the fixture and
+requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
+`--module`) does not load the fixture and reports those companions `absent`.
+
 The strength after caps (`derived_strength`) is the type-derived strength, reduced to `safety`
 when a partial or total claim has no non-vacuity witness, or a partial claim has no liveness
 witness; `caps` lists why.
