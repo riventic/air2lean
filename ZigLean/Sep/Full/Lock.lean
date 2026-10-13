@@ -566,6 +566,40 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
       have := (hholds u).mp hu; rw [e] at this; exact hnh this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
 
+/-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
+lock (a step of `t` in another sync object's code, also while it holds the lock). -/
+theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t)) (hpart : L.part g = L.part (G t))
+    (hheld : L.held g = L.held (G t)) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+    L.Inv (upd G t g) rX m := by
+  have hphu : ∀ u, L.ph (upd G t g u) = L.ph (G u) := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, hph]
+    · rw [upd_ne _ _ e]
+  have hpl : L.pl (upd G t g) = L.pl G := funext hphu
+  have hown : L.own (upd G t g) m = L.own G m := by
+    funext u; unfold FLock.own
+    by_cases e : u = t
+    · subst e; rw [upd_self, hpart, hheld]
+    · rw [upd_ne _ _ e]
+  have hfree : L.Free (upd G t g) ↔ L.Free G := by unfold FLock.Free; rw [hpl]
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine ⟨by rw [hpl]; exact hi.w, ⟨rL, by rw [hown]; exact ho, hLoff, hLX, fun hF' => ?_,
+    fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
+    fun u hu => ?_⟩
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF'); exact ⟨hRk rL h1, by rw [hpl]; exact h2⟩
+  · by_cases e : u = t
+    · subst e; rw [upd_self, hpart, hheld]; exact hi.pdisj _
+    · rw [upd_ne _ _ e]; exact hi.pdisj u
+  · rw [hphu] at hu
+    by_cases e : u = t
+    · subst e; rw [upd_self, hheld]; exact hi.idle _ hu
+    · rw [upd_ne _ _ e]; exact hi.idle u hu
+  · rw [hphu] at hu
+    by_cases e : u = t
+    · subst e; rw [upd_self, hheld]; exact hRk _ (hi.res _ hu)
+    · rw [upd_ne _ _ e]; exact hRk _ (hi.res u hu)
+
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
 the invariant; the step keeps the protocol's rest `rX` (`StepIn`). A `MemM` step does not stop,
