@@ -296,7 +296,9 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   route that turned legacy total triples of an allocator whose token pins its grant's block into
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
-  `CTriple.step_bext` (legacy steps on a pinned block) stays.
+  The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
+  too; its helpers `EUpd.drop`, `EUpd.upPost_up` (`Full/Logic.lean`), `ext1`,
+  `bytesAt_of_cell` (`Full/Res.lean`) stay.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -351,7 +353,8 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
-  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
+  growth that may move) needs every byte and uses the block steps `Holds.push` and `Holds.free`
+  (`Full/Block`); no mapping rule lifts a legacy triple.
 * Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound

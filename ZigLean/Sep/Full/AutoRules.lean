@@ -354,59 +354,23 @@ OS mapping's first live offset may be another block's (MM-19). -/
 
 /-! ## The fields of a stored slice -/
 
-theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
-    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
-  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
-      ∃ a, y = some (.ok a) ∧ f a = pure b := by
-    intro y hy
-    rcases y with _ | e | a
-    · cases hy
-    · cases hy
-    · exact ⟨a, rfl, hy⟩
-  obtain ⟨a, ha, hf⟩ := this x h
-  exact ⟨a, ha, hf⟩
-
-theorem pts_slice_parts {q : Ptr} {s : Slice} {h : Heap} (hp : Zig.pts q 8 s h) :
-    ∃ A S K bs, (A + q.off.toNat) % 8 = 0 ∧ bs.size = 16 ∧
-      Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) ∧
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) ∧ bytesAt q A S K bs h := by
-  obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := hp
-  change (do pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩ : Result Slice) =
-    pure s at hv
-  obtain ⟨p, h1, hv⟩ := result_bind_eq_pure hv
-  obtain ⟨l, h2, hv⟩ := result_bind_eq_pure hv
-  have : (⟨p, l⟩ : Slice) = s := by
-    have := congrArg (fun r : Result Slice => r.run) hv
-    simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
-  subst this
-  exact ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩
-
-theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
-    (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
-    (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
-      Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    TotalTriple (Zig.pts q 8 s) (load T 8 (q.add o)) (fun r => ⌜r = v⌝ ∗ Zig.pts q 8 s) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩ := pts_slice_parts hp
-  have hao : (A + q.off.toNat + o) % 8 = 0 := by rcases ho with rfl | rfl <;> omega
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
-    bytesAt_access (q := q.add o) (k := o) (n := Enc.size T) (a := 8) hb hm rfl
-      (by omega) (by rcases ho with rfl | rfl <;> omega) hao
-  have hv' : Enc.decode (blk.bytes.extract (q.off.toNat + o) (q.off.toNat + o + Enc.size T)) =
-      pure v := by rw [hx, hsz]; exact hv bs h1 h2
-  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    Zig.sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-
+/-- **A load of a field of a stored slice**: the owned bytes' rule `load_bytesAt` at the field's
+offset `o`. -/
 theorem slice_field {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
     (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
     (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
       Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
       Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    FTotalTriple (up (Zig.pts q 8 s)) (load T 8 (q.add o)) (fun r => ⟪r = v⟫ ⋆ up (Zig.pts q 8 s)) :=
-  (FTotalTriple.ofTotal_up (pts_slice_field_load hsz ho hv) (Tame.load T 8 _) (SizeFree.pts q 8 s)
-    (Keeps.load T 8 _)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
+    FTotalTriple (up (Zig.pts q 8 s)) (load T 8 (q.add o)) (fun r => ⟪r = v⟫ ⋆ up (Zig.pts q 8 s)) := by
+  refine FTotalTriple.of_cases fun r hp => ?_
+  obtain ⟨A, S, K, bs, ⟨ha, hs, hdec, hK⟩, hb⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hp
+  obtain ⟨h1, h2⟩ := Slice.decode_fields hdec
+  have hs' : bs.size = 16 := hs
+  refine ⟨_, _, FTotalTriple.load_bytesAt (k := o) (al := 8) (v := v) (by omega)
+    (by rcases ho with rfl | rfl <;> omega) (by rcases ho with rfl | rfl <;> omega)
+    (by rw [hsz]; exact hv bs h1 h2), hb, fun x r' h => ?_⟩
+  obtain ⟨hx, hb'⟩ := sep_lift.mp h
+  exact sep_lift.mpr ⟨hx, FTotalTriple.up_pts_iff_bytesAt.mpr ⟨A, S, K, bs, ⟨ha, hs, hdec, hK⟩, hb'⟩⟩
 
 /-- **The pointer field** of a stored slice. -/
 @[fsym] theorem load_slice_ptr {q : Ptr} {s : Slice} :

@@ -328,9 +328,8 @@ joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
-* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are lifted
-  inside the library from the legacy rules with the pinned bridge (`FTotalTriple.ofTotal`);
-  partial-mapping steps are native.
+* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are native
+  like the partial-mapping steps: they are the block steps `Holds.push` and `Holds.free`.
 * Time: the `fsym` proofs are slower than the handwritten ones; the largest cost is `omega`
   (results are cached per run: a proof where its variables are in scope, a failure in the same
   context).
