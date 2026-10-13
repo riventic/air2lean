@@ -871,12 +871,13 @@ theorem apts_own {p : Ptr} {v : BitVec 64} {r : Res} (h : apts p v r) :
 
 /-- The step of an atomic op on an owned word: the access to it records the current thread's
 access to its bytes, which are not the frame's. -/
-theorem fstep_record {m : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+theorem fstep_record {m : Mem} {r rF : Res} (hd : FHeap.Disjoint r.heap rF.heap)
+    (hc : m.current < m.clocks.size)
     {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
     (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
     {blk : Block} (hblk : m.blocks[b]? = some blk) (hKb : blk.kind = K) (hK : K ≠ .constGlobal)
     (k : AccessKind) : FStepIn rF.heap.erase m (m.recordAt b p.off.toNat 8 k) :=
-  FStepIn.recordAt hc (FHeap.erase_disjoint hh.disj)
+  FStepIn.recordAt hc (FHeap.erase_disjoint hd)
     (fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; exact h2))
     (Array.getElem?_eq_some_iff.mp hblk).1 fun _ ⟨blk', e1, e2⟩ => by
       rw [show (m.blocks[b]? : Option Block) = some blk from hblk] at e1
@@ -979,7 +980,7 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
-      have hs0 := fstep_record hh hc hab hsz hpb hblk hKb hK .atomicRead
+      have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, by rw [hshapes]; exact hwf,
         LDMono.of_blocks hblocks hld,
@@ -1023,6 +1024,53 @@ theorem loc_not_in {m₁ : Mem} {hF : Heap} {li b o : Nat} (hw : ShapesWF (shape
   have := hin (m₁.atomics[li]!).off (Nat.le_refl _) (by omega)
   rw [hb, ho] at this
   exact this hoff
+
+/-- **A write of the newest message of an owned word** (a store, an RMW, a successful `cmpxchg`
+after its location step `m₀`, and for an RMW an acquire: `M₂`): the memory holds the word with
+the message's bytes, under its own location, and the frame as it was; the step is one of the
+thread outside the frame and revives no byte. -/
+theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs.size = 8) (hK : K ≠ .constGlobal) {b : BlockId} {blk : Block}
+    (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hlive : blk.live = true)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat) (hfit : p.off.toNat + 8 ≤ blk.bytes.size)
+    (hA : blk.addr = A) (hS : blk.bytes.size = S) (hKb : blk.kind = K)
+    {li : Nat} (hli : li < m₀.atomics.size) (hb : (m₀.atomics[li]!).block = b)
+    (ho : (m₀.atomics[li]!).off = p.off.toNat) (hwf : ShapesWF (shapes m₀))
+    (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
+      else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
+    (hld : m.LiveLayout) (hat : M₂.atomics = m₀.atomics) (hbl : M₂.blocks = m.blocks)
+    (hs₂ : FStepIn rF.heap.erase m M₂) (msg : Msg) (hmb : msg.bytes.size = 8) :
+    ∃ r', Holds (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) r' rF ∧
+      abytesAt p A S K msg.bytes (some (p.off.toNat, 8)) r' ∧
+      ShapesWF (shapes (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg)) ∧
+      (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg).LiveLayout ∧
+      FStepIn rF.heap.erase m (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) ∧
+      m.NoRevive (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) := by
+  have hb₂ : M₂.blocks[(M₂.atomics[li]!).block]? = some blk := by rw [hat, hb, hbl]; exact hblk
+  have hins := insertM_last (li := li) (msg := msg) hb₂
+  have hblocks : (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg).blocks =
+      m.blocks.set! b { blk with bytes := writeBytes blk.bytes p.off.toNat msg.bytes } := by
+    unfold observeM; rw [hins, hat, hb, ho, hbl]
+  have hshapes : shapes (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) =
+      shapes m₀ := by
+    show shapes (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) = _
+    rw [shapes_insertM_last hb₂ (by rw [hat]; exact hli)]
+    simp [shapes, hat]
+  have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := msg.bytes)
+    (by rw [hmb]; omega) hlo
+  obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := msg.bytes) (by rw [hmb, hsz]) hpb
+    (fun l => by
+      rw [heap_of_blocks (m := m.write b blk p.off.toNat msg.bytes) hblocks, hwr, hmb, hsz, hA, hS,
+        hKb])
+    (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
+    (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK))
+  have hnot := loc_not_in (hF := rF.heap.erase) hwf hli hb ho
+    (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
+  refine ⟨r', hh', by rw [hsz] at hab'; exact hab', by rw [hshapes]; exact hwf,
+    ld_write hblk (by rw [hmb]; omega) hblocks hld,
+    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot)).trans (FStepIn.observe _ _)),
+    Mem.NoRevive.write hblk (by rw [hmb]; omega) hblocks⟩
 
 /-- **The run of an atomic store** to an owned word (choice 0: the write goes at the end);
 afterwards the word is an `apts` of the new value. -/
@@ -1078,31 +1126,14 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
       have hb₁ : m₁.blocks[(m₁.atomics[li]!).block]? = some blk := by
         rw [hb, hm₁]; exact hblk
       subst hm'
-      have hins := insertM_last (li := li) (msg := storeMsg m₁ ord w) hb₁
-      have hblocks : (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w).blocks =
-          m.blocks.set! b { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) } := by
-        unfold storeM observeM
-        rw [hins, hb, ho, hm₁]; rfl
-      have hshapes : shapes (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w) = shapes m₁ := by
-        unfold storeM observeM
-        exact shapes_insertM_last hb₁ hli
-      have henc : (Enc.encode w).size = 8 := LawfulEnc.size_encode w
-      have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := Enc.encode w)
-        (by rw [henc]; omega) hlo
-      obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode w) (by rw [henc, hsz]) hpb
-        (fun l => by
-          rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode w)) hblocks, hwr, henc,
-            hsz, hA, hS, hKb])
-        (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-        (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
-      have hs0 := fstep_record hh hc hab hsz hpb hblk hKb hK .atomicWrite
+      have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (by rw [intSize_64] at hl; exact hl)
-      have hnot := loc_not_in hwf hli hb ho (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
-      refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode w) (by rw [henc, ← hsz]; exact hab'),
-        by rw [hshapes]; exact hwf, ld_write hblk (by rw [henc]; omega) hblocks hld,
-        hs0.trans (hs1.trans (FStepIn.storeM ord w hb₁ hnot)),
-        Mem.NoRevive.write hblk (by rw [henc]; omega) hblocks⟩
+      obtain ⟨r', hh', hab', hw', hl', hst, hnv⟩ := write_newest (M₂ := m₁) hh hab hsz hK hpb hblk
+        hlive hlo (by omega) hA hS hKb hli hb ho hwf htag hld rfl (by rw [hm₁]; rfl) (hs0.trans hs1)
+        (storeMsg m₁ ord w) (LawfulEnc.size_encode w)
+      exact ⟨r', hh', apts_of hal hK (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
+        (by rw [LawfulEnc.size_encode w]; exact hab'), hw', hl', hst, hnv⟩
 
 /-- **Atomic store** to an owned word, whatever its layout (sequential: the write goes at the
 end). -/
