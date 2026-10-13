@@ -773,15 +773,6 @@
     },
     {
       "path": "tutorials/memory-safety/Controls.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Main.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Negative.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Solution.lean"
     }
   ]
 }

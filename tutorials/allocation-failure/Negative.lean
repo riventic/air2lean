@@ -1,21 +1,29 @@
-import Proofs.Lists.Sep
+import Proofs.Lists.Alloc
 
 /-! Negative control: Lean must reject this file. `push` can fail, so no proof shows that
-every run returns a node; the failure branch of `push_spec` has no pointer to offer. -/
+every run returns a node; the failure branch of `push_spec` has no pointer to offer, only the
+fact that the error is `OutOfMemory`. -/
 -- expect-error: Type mismatch
 
 namespace AllocationFailure
 
-open Lists Zig Assn
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
 
-theorem push_never_fails (a : Allocator) (q : Option Ptr) (v : BitVec 32)
-    (m m' : Mem) (hst : m.Seq) (e : ErrName)
-    (run : ((push a q v).run m).run = some (.ok (.error e, m'))) :
+variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+  (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I)
+
+include hfit h
+
+theorem push_never_fails (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ vtR vtp fns.toList) r) (hs : m.FSeq)
+    (err : ErrName)
+    (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.error err, m'))) :
     False := by
-  have h := push_spec a q v m Heap.empty m.heap (Heap.disjoint_empty m.heap).symm
-    (Heap.empty_union m.heap).symm rfl hst
-  rw [run] at h
-  obtain ⟨hQ, -, heap, ⟨oom, rfl⟩, -⟩ := h
+  have t := push_spec ctx vtp fns I e q v hfit h n m r rF hh hr hs
+  rw [run] at t
+  obtain ⟨r', hh', hq, -⟩ := t
+  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hq
+  obtain ⟨oom, -⟩ := Full.sep_lift.mp h2
   exact oom
 
 end AllocationFailure
