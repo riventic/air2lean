@@ -753,6 +753,8 @@ def byteStr : Zig.Byte → String
   | .ptrFrag .. => "pp"
   -- The compiler numbers the errors per compilation: the model keeps the name (a wildcard).
   | .errFrag .. => "??"
+  -- A model handle's bytes are the target's data that the model does not have: a wildcard.
+  | .handle .. => "??"
   -- Only the low `m` bits are defined: `?` for the high hex digit, and for the low one if `m < 4`.
   | .part m x => if 4 ≤ m then "?" ++ natToHex (x.toNat % 16) 1 else "??"
   -- Only the bits of `d` are defined: a hex digit only where all four of its bits are.
@@ -1029,6 +1031,8 @@ def runLists : IO Unit := do
     (items 4) (heap := true)
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
+  processMem ex m0 "allocatorWord" (fun _ x => do withFailAt x[0]! (Lists.allocatorWord a))
+    (fun _ v => natStr v true) (heap := true)
 
 /-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
 def scheduleFuel : Nat := 100000

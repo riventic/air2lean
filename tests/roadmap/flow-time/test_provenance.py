@@ -90,8 +90,14 @@ class ProvenanceGuards(unittest.TestCase):
                                       capture_output=True, text=True)
             self.assertEqual(compare().returncode, 0)
             source = directory / "flow_time.timestamp32.json"
-            source.write_text(source.read_text().replace('"target_endian": "little"',
-                                                        '"target_endian": "big"'))
+            original = source.read_text()
+            # A changed profile fact fails the profile guard, any other change the comparison.
+            source.write_text(original.replace('"target_endian": "little"', '"target_endian": "big"'))
+            changed = compare()
+            self.assertNotEqual(changed.returncode, 0)
+            self.assertIn("target_endian", changed.stderr)
+            doc = json.loads(original); doc["ret"] += 1
+            source.write_text(json.dumps(doc))
             changed = compare()
             self.assertNotEqual(changed.returncode, 0)
             self.assertIn("Flow AIR changed", changed.stderr)

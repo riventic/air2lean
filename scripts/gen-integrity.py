@@ -64,9 +64,9 @@ GEN_NAME = re.compile(r"Gen(-[a-z]+(-[a-z0-9_]+)?)?\.lean")
 FIXTURES = [
     ("tests/roadmap/aggregate-casts/AggregateCasts/Gen.lean", "tests/roadmap/aggregate-casts/air/0.16.0",
      ["--namespace", "AggregateCasts", "--prefix", "aggregate_casts."], "exact"),
-    # Retained qualification artifact (its manifest.json pins the hash); schema-11 AIR.
+    # Retained qualification artifact (its manifest.json pins the hash).
     ("tests/roadmap/bitops/qualified/0.16.0/Gen.lean", "tests/roadmap/bitops/qualified/0.16.0/air",
-     ["--namespace", "Bitops", "--prefix", "bitops."], "body"),
+     ["--namespace", "Bitops", "--prefix", "bitops."], "exact"),
     ("tests/roadmap/global-init/GlobalInit/Gen.lean", "tests/roadmap/global-init/air/0.16.0",
      ["--namespace", "GlobalInit", "--prefix", "global_init."], "exact"),
     ("tests/roadmap/idle-loops/IdleLoop/Gen.lean", "tests/roadmap/idle-loops/air",
@@ -90,10 +90,10 @@ FIXTURES = [
      ["--namespace", "UndefLocals", "--prefix", "undef_locals."], "exact"),
     ("tests/roadmap/undef-operands/UndefOperands/Gen.lean", "tests/roadmap/undef-operands/air/0.16.0",
      ["--namespace", "UndefOperands", "--prefix", "undef_operands."], "exact"),
-    # scripts/flow-time.sh pins `--profile abi64-le-v1` on its fresh export; the committed
-    # (normalized, schema-11) AIR carries no profile.
+    # scripts/flow-time.sh: the committed AIR is its schema-12 export.
     ("case-studies/flow-time/FlowTime/Gen.lean", "case-studies/flow-time/air",
-     ["--namespace", "FlowTime", "--prefix", "flow_time.", "--float-semantics", "ieee"], "body"),
+     ["--namespace", "FlowTime", "--prefix", "flow_time.", "--profile", "abi64-le-v1",
+      "--float-semantics", "ieee"], "exact"),
     ("tests/roadmap/bitcast-017/BitCastReal/Gen.lean", "tests/roadmap/bitcast-017/air/0.17.0",
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
     ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.0",
@@ -202,6 +202,13 @@ FIXTURES = [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/gen/{v}/NanBits.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
      ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+] + [
+    # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
+    (f"tests/roadmap/enc-exactness/gen/{v}/{out}.lean", f"tests/roadmap/enc-exactness/air/{v}/{src}",
+     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    for src, out, ns in (("enc_exactness", "EncExactness", "EncExactness"),
+                         ("opaque_bytes", "Opaque", "EncExactness.Opaque"))
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     # L04 try-pointers/lifetimes/check.sh.
@@ -358,14 +365,17 @@ def compose(dirs, destination, version):
         chosen.update(layer)
     # A non-Linux host's own export (`air-<os>`) that replaces every function keeps its
     # schema-12 profile: its translation depends on the target (aarch64 floats, fix-target-floats),
-    # as check.sh's does on that host.
+    # as check.sh's does on that host. So does a set that is one export of this version (one
+    # profile; `layout`): its translation depends on the backend (integers with padding bits,
+    # which a profile without a backend rejects; docs/architecture-audit/enc-exactness.md).
     docs = [doc for entries in chosen.values() for _, doc in entries]
     last = dirs[-1].name if dirs else ""
-    if (last.startswith("air-") and last != "air-linux" and docs
-            and all(doc.get("schema") == 12 for doc in docs)
-            and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1
-            and set(chosen) =={IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
-                                for p in dirs[-1].glob("*.json")}):
+    uniform = (docs and all(doc.get("schema") == 12 for doc in docs)
+               and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1)
+    own_os = (last.startswith("air-") and last != "air-linux"
+              and set(chosen) == {IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
+                                  for p in dirs[-1].glob("*.json")})
+    if uniform and (own_os or docs[0]["profile"].get("zig_version") == version):
         for entries in chosen.values():
             for name, doc in entries:
                 (destination / name).write_text(json.dumps(doc), encoding="utf-8")

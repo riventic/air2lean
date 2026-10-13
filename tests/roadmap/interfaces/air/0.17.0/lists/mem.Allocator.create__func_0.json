@@ -235,7 +235,7 @@
      "ty": 9,
      "callee": {
       "ty": 10,
-      "func": "mem.Allocator.allocBytesAligned__func_2",
+      "func": "mem.Allocator.allocBytesAligned__func_1",
       "module": "std",
       "instance_key": "caf344927cea8f682166cc4f7ce81e8741e950f04051830370d38ce2f7824f76",
       "noreturn": false

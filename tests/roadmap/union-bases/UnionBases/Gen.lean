@@ -174,9 +174,9 @@ instance : Zig.Packed BareTag 1 where
 instance : Zig.Enc BareTag where
   size := 1
   align := 1
-  encode v := Zig.Enc.encode v.toBits
+  encode v := (Zig.intEncExt .little false 1).encode v.toBits
   decode bs := do
-    let b : BitVec 1 ← Zig.Enc.decode bs
+    let b : BitVec 1 ← (Zig.intEncExt .little false 1).decode bs
     match BareTag.ofInt? (Zig.val false b) with
     | some v => pure v
     | none => throw .illegal
@@ -423,9 +423,9 @@ instance : Zig.Packed LowTag 1 where
 instance : Zig.Enc LowTag where
   size := 1
   align := 1
-  encode v := Zig.Enc.encode v.toBits
+  encode v := (Zig.intEncExt .little false 1).encode v.toBits
   decode bs := do
-    let b : BitVec 1 ← Zig.Enc.decode bs
+    let b : BitVec 1 ← (Zig.intEncExt .little false 1).decode bs
     match LowTag.ofInt? (Zig.val false b) with
     | some v => pure v
     | none => throw .illegal
