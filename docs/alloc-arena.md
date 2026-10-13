@@ -426,7 +426,11 @@ Not proved yet, in order:
   (`apts_wpts`); plain accesses keep the word's constraint (`ZigLean/Sep/Full/WordPlain.lean`:
   `wpts_load`/`_store`/`_loadPacked`/`_storePacked`, `wpts_view`), and a granted 8-byte region
   becomes a `wpts` by dropping its constraints (`wpts_of_region`, `Holds.untag`). The list heads
-  in the arena struct stay `aptsE`. Open: the retaining modes' walk.
+  in the arena struct stay `aptsE`. The retaining modes' `countListCapacity` is done in each
+  specification file (`count_spec`: the sum `capOf` of a list's buffer sizes; its loop by
+  induction on the list, `count_loop`; the checked `+` cannot overflow, `chain_capOf_lt`). Open:
+  the retaining modes' walk (`loop66`/`loop78`, the kept node's resize or reallocation, the kept
+  nodes as `own (e + 1)`).
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is

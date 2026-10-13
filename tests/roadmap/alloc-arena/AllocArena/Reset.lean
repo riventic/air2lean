@@ -601,6 +601,24 @@ theorem chain_sizes_le {CI : Child} {ns : List NodeV} {x : Option Ptr} {m : Mem}
   have := (chain_ownsList CI ns x).length_le hh hp hs
   simpa [NodeV.locs, locRange, List.length_flatMap] using this
 
+/-- The buffer sizes of a list's nodes (what `countListCapacity` sums). -/
+def capOf (ns : List NodeV) : Nat := (ns.map fun nd => nd.sz - 24).sum
+
+@[simp, fsym_arith] theorem capOf_nil : capOf [] = 0 := rfl
+
+@[simp, fsym_arith] theorem capOf_cons (nd : NodeV) (ns : List NodeV) :
+    capOf (nd :: ns) = (nd.sz - 24) + capOf ns := by
+  simp [capOf]
+
+theorem capOf_le : ∀ ns : List NodeV, capOf ns ≤ (ns.map NodeV.sz).sum
+  | [] => Nat.le_refl _
+  | nd :: ns => by simp only [capOf_cons, List.map_cons, List.sum_cons]; have := capOf_le ns; omega
+
+/-- **The buffer sizes of a list of whole nodes fit in a word** (`chain_sizes_le`). -/
+theorem chain_capOf_lt (CI : Child) (ns : List NodeV) (x : Option Ptr) :
+    MemFacts (Chain CI true ns x) (capOf ns < 2 ^ 64) := fun _ _ _ hh hp hs => by
+  have := chain_sizes_le hh hp hs; have := capOf_le ns; omega
+
 /-- **An arena with no node** at epoch `e`: its struct with empty lists, the ledger with no grant,
 the child with the reservoir and its vtable, and junk (what `reset`'s `free_all` leaves). -/
 theorem own_empty (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : BlockKind} {jh : Heap} :

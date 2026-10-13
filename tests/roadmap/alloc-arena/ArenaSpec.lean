@@ -127,6 +127,45 @@ theorem reset_heads (ctx : Ptr) (a b : Option Ptr) :
       (fun _ => aptsE (ctx.add 16) (none : Option Ptr) ⋆ aptsE (ctx.add 24) (none : Option Ptr)) := by
   fsym
 
+set_option maxHeartbeats 2000000 in
+/-- `countListCapacity`'s loop over a list from `it`, by induction on the list (the loop unfolded
+once, `Full.loop_run`). Workaround (fsym-engine ledger row #54): the statement is generic over
+the loop's `MonoBind` instance, a proof that `fsym`'s keyed unification compares by its head
+(the generated function's `_proof_1` against this statement's own). -/
+theorem count_loop (CI : Child) (free : Bool)
+    [hm : Lean.Order.MonoBind (MM heap_ArenaAllocator_countListCapacityLocals)] :
+    ∀ (ns : List NodeV) (it : Option Ptr) (c : BitVec 64),
+      FTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ Chain CI free ns it)
+        ((@Zig.loop _ _ _ hm _ heap_ArenaAllocator_countListCapacity.loop6
+          heap_ArenaAllocator_countListCapacity.again6).run ⟨c, it⟩)
+        (fun r => FAssn.ex fun c' : BitVec 64 =>
+          ⟪r = (.br5, ⟨c', none⟩) ∧ c'.toNat = c.toNat + capOf ns⟫ ⋆ Chain CI free ns it)
+  | [], none, c => by
+    rw [Full.loop_run]
+    conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
+      rw [heap_ArenaAllocator_countListCapacity.loop6]
+    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def]
+  | nd :: ns, some N, c => by
+    rw [Full.loop_run]
+    conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
+      rw [heap_ArenaAllocator_countListCapacity.loop6]
+    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def, toInt_step, @count_loop CI free]
+  | [], some _, _ | _ :: _, none, _ => by
+    rw [Full.loop_run]
+    conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
+      rw [heap_ArenaAllocator_countListCapacity.loop6]
+    fsym
+    all_goals contradiction
+
+/-- **`countListCapacity`** of a list of whole nodes: the sum of their buffer sizes, which fits in
+a word because the list owns its bytes (`chain_capOf_lt`), so the checked `+` never overflows. -/
+theorem count_spec (CI : Child) (ns : List NodeV) (x : Option Ptr) :
+    FTotalTriple (Chain CI true ns x) (heap_ArenaAllocator_countListCapacity x)
+      (fun c => ⟪c.toNat = capOf ns⟫ ⋆ Chain CI true ns x) :=
+  MemFacts.pre FLogic.total (chain_capOf_lt CI ns x) fun _ => by
+    unfold heap_ArenaAllocator_countListCapacity
+    fsym [@count_loop CI true]
+
 section Deinit
 
 variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
@@ -250,3 +289,4 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.Core.chain_sizes_le
 #print axioms AllocArena.ArenaSpec.deinit_ct
 #print axioms AllocArena.ArenaSpec.reset_free_all_spec
+#print axioms AllocArena.ArenaSpec.count_spec
