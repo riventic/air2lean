@@ -48,6 +48,11 @@ def ApartL (L : LockWord) : Prop := L.b ≠ W.b ∨ L.o + 4 ≤ W.o ∨ W.o + nb
 
 variable {W}
 
+/-- The word's cells depend only on the blocks. -/
+theorem cellsR_congr {m m' : Mem} (h : m'.blocks = m.blocks) : W.cellsR m' = W.cellsR m := by
+  have : m'.heap = m.heap := by funext ⟨b, x⟩; simp only [Mem.heap, h]
+  simp only [cellsR, cellsAt, this]
+
 /-- A word apart from the lock's is at another place. -/
 theorem ApartL.ne {L : LockWord} (hap : W.ApartL L) : L.b ≠ W.b ∨ L.o ≠ W.o := by
   have := W.sz_pos

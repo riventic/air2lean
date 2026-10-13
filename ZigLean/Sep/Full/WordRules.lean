@@ -17,7 +17,7 @@ rest has the word's new cells (`FLock.Inv.wordOp`). The client shows its `U` aft
 |---|---|
 | `wp_wordLoad`, `wp_wordLoadAs` | atomic load (bits, or decoded) |
 | `wp_wordRmw`, `wp_wordRmwAs` | atomic RMW (bits, or decoded) |
-| `wp_wordCasAs` | strong `cmpxchg` (decoded) |
+| `wp_wordCas`, `wp_wordCasAs` | strong `cmpxchg` (bits, or decoded) |
 | `wp_wordWeakCas`, `wp_wordWeakCasAs` | weak `cmpxchg` (bits, or decoded) |
 | `wp_wordWake` | futex wake at the word |
 | `wp_wordWait` | futex wait at the word, by a thread out of the lock's code (`away` while it waits) |
@@ -220,6 +220,41 @@ theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.I
       exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop
         (hiL.wordOp hY hw hw' hop hap)).2 j b v hne hd hj hv hfl hacq hh⟩
 
+/-- A strong `cmpxchg` of a `u32` at the word (`cmpxchgC`), by thread `t` (`g`): on success an
+RMW of the newest write, which holds `exp`; on failure a read of write `j`, whose value is not
+`exp`. -/
+theorem wp_wordCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
+    {succ fail : AtomicOrder} {exp new : BitVec 32} (hok : ok g) (hgone : L.ph g ≠ .gone)
+    (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
+      W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      ((W.hist m₁)[(W.hist m₁).size - 1]!.Val exp → W.Holds m' new →
+        W.hist m' = (W.hist m₁).push
+          (Word.rmwEnt m' t succ (W.hist m₁)[(W.hist m₁).size - 1]! new) →
+        (succ.isAcq = true →
+          VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j b, b ≠ exp → j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
+        Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+        W.hist m' = W.hist m₁ → Q (some b, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((cmpxchgC (n := 32) succ fail 4 W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
+  unfold cmpxchgC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+  refine WP.callMC (fun e he => (hw.cas_noErr (fail := fail) (new := new) ht hcs hcr e he).elim)
+    fun r m' hr => ?_
+  obtain ⟨hw', hop, hcase⟩ := hw.cas rfl ht hcs hr
+  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop (hiL.wordOp hY hw hw' hop hap)
+  refine ⟨by rw [hop.threads], ?_⟩
+  rcases hcase with ⟨rfl, hv, hH, hh, hacq⟩ | ⟨j, b, rfl, hne, hj, hv, hfl, hacq, hh⟩
+  · exact hk.1 hv hH hh hacq
+  · exact hk.2 j b hne hj hv hfl hacq hh
+
 /-- A weak `cmpxchg` of a `u32` at the word (`cmpxchgWeakC`), by thread `t` (`g`): on success an
 RMW of the newest write, which holds `exp`; on failure (spurious ones too) a read of write `j`. -/
 theorem wp_wordWeakCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
@@ -324,12 +359,13 @@ theorem wp_wordWait (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      W.Op t { m₁ with current := t } M → W.hist M = W.hist m₁ → W.Ok M →
+      (∀ l, W.In l → rY.heap l = none) → W.Op t { m₁ with current := t } M → W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks →
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
-        (W.Op t { m₁ with current := t } M ∧ W.hist M = W.hist m₁ ∧ W.Ok M)) →
+      (∀ l, W.In l → rY.heap l = none) → (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+        (W.Op t { m₁ with current := t } M ∧ W.hist M = W.hist m₁ ∧ W.Ok M ∧
+          M.blocks = m₁.blocks)) →
       U (upd G₁ t g) (rsum (W.cellsR m₁) rY) M)
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q ((), s) G₁ m' k)
@@ -369,21 +405,21 @@ theorem wp_wordWait (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
   refine ⟨fun _ => hlive G₁ m₁ hg₁ hi₁, fun hq => ⟨fun _ => hw₀.futexWait_run ht0, fun b m' hr => ?_⟩⟩
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
   rcases hw₀.futexWait rfl ht0 hiL.w.csize hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok₂, hop, hh, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok₂, hop, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     rw [hback] at hl'
-    exact h k hk G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU (.inl rfl)⟩)
+    exact h k hk G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY (.inl rfl)⟩)
   · simp only [↓reduceIte] at hl ⊢
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
-    exact ⟨(hP.inv _ _).mpr ⟨_, hl, hUs G₁ rY m₁ M hg₁ hU hop hh hok₂ hU32⟩,
-      h k hk G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs, hUo G₁ rY m₁ _ hg₁ hU (.inr (.inl rfl))⟩)⟩
+    exact ⟨(hP.inv _ _).mpr ⟨_, hl, hUs G₁ rY m₁ M hg₁ hU hY hop hh hok₂ hbl hU32⟩,
+      h k hk G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs, hUo G₁ rY m₁ _ hg₁ hU hY (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨hc, hl'⟩ := hl
     rw [hback] at hl'
     exact h k hk G₁ _ hc
-      ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU (.inr (.inr ⟨hop, hh, hok₂⟩))⟩)
+      ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY (.inr (.inr ⟨hop, hh, hok₂, hbl⟩))⟩)
 
 end FLock
 

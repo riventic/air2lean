@@ -1324,14 +1324,15 @@ section futex
 variable {W : Word 32 4}
 
 /-- A futex wait at the word by the current thread `t`: a woken thread goes on; else the
-kernel's read of the word is an op `M` that keeps the word's writes, and the thread sleeps (it
-joins `waiters`) only if the word holds `e`. -/
+kernel's read of the word is an op `M` that keeps the word's writes and the blocks (a read),
+and the thread sleeps (it joins `waiters`) only if the word holds `e`. -/
 theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
     (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ M, W.Ok M ∧ W.Op t m M ∧ W.hist M = W.hist m ∧
+      M.blocks = m.blocks ∧
       ((W.Holds m e ∧ b = true ∧ m' = { M with waiters := M.waiters.push (t, W.ptr) }) ∨
        (b = false ∧ m' = M))) := by
   rcases futexWait_eq h with hwk | ⟨hwk, bid, blk, o, v, ha, -, hv, hcase⟩
@@ -1340,7 +1341,7 @@ theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw 
   rw [ha₀] at ha
   cases ha
   obtain ⟨hok, hop, hh⟩ := hw.record (k := .atomicRead) hc ht hcs rfl
-  refine .inr ⟨hwk, _, hok, hop, hh, ?_⟩
+  refine .inr ⟨hwk, _, hok, hop, hh, rfl, ?_⟩
   rcases hcase with ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
   · subst hc; exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, rfl⟩
   · exact .inr ⟨rfl, rfl⟩
