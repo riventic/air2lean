@@ -266,6 +266,8 @@ partial def unifyKeyed (a b : Expr) (anyGround := false) : MetaM Bool := do
     -- values (words, numbers, flags) of different heads may still be equal by unfolding
     -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
     -- ground values only: a pattern with metavariables must not be matched by unfolding
+    -- proofs are irrelevant (a generated `_proof_1` against the rule's proof argument)
+    if ← isProof a then return ← isDefEq a b
     if (← instantiateMVars a).hasExprMVar || (← instantiateMVars b).hasExprMVar then return false
     -- (a `WP` rule's command is a sync op of values of any type: a lock's states `S.unl`)
     unless anyGround do
@@ -4513,7 +4515,10 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
   let prep ← try
       let (args, _, concl) ← forallMetaTelescope (← inferType r)
       let some ca := wpArgs? (← instantiateMVars concl) | throwError "not a WP rule"
-      unless ← unifyKeyed ca[5]! x (anyGround := true) do throwError "command"
+      -- (a projection of a structure value: `impl.lock p io` of a contract, the program's
+      -- function)
+      unless ← unifyKeyed (← reduceProjs (← instantiateMVars ca[5]!)) x (anyGround := true) do
+        throwError "command"
       trace[fsym] "WP rule {r}: command unified"
       for i in [2, 4, 7, 8, 9] do
         unless ← isDefEq ca[i]! a[i]! do throwError "argument {i} of the WP"
