@@ -1,44 +1,57 @@
-# Soundness finding: soft-float `f80`/`f128` results on aarch64-macos differ from the model
+# Finding: `f80`/`f128` mismatches on aarch64-macos (harness misreport, closed)
 
-Class: SOUNDNESS. Status: open (found while landing the arena branch; `main` at `c90d825b` has
-the same 266 mismatches for Zig 0.17.0 and 0.16.0, so it is not caused by the arena branch).
+Class: SOUNDNESS (reported), resolved as a differential-harness misreport. Status: closed by the
+`check_models` gate of `scripts/diff.sh`. The model is correct; no premise and no upstream report
+are needed.
 
-## Finding
+## Report
 
-On aarch64-macos, `f80` and `f128` arithmetic is soft-float (compiler-rt). For some inputs the
-native result is not the IEEE result that the model computes (`ZigLean/Float`, `ieee` float
-semantics):
+While landing the arena branch, `AIR2LEAN_ZIG_VERSION=0.17.0 AIR2LEAN_CI=1
+AIR2LEAN_EXAMPLES=floatops scripts/check.sh` on an aarch64 Mac reported 266 typed mismatches for
+Zig 0.17.0 and 0.16.0 and none for 0.15.2: `op80` `@sqrt` 117, `op128` `@sqrt` 130, `/` 11,
+`@divFloor` 8. The native `f80` `@sqrt` had about 53 significant bits, and native `f128` `/`,
+`@divFloor` and `@sqrt` flushed subnormal operands or results to zero.
 
-- `@sqrt` of an `f80` is not correctly rounded: the native result has only about 53 significant
-  bits (its low bits are zero), the model's is rounded to the 64-bit significand.
-- `f128` subnormals: `/`, `@divFloor` and `@sqrt` of a subnormal `f128` operand give the result of
-  a zero operand natively (the subnormal is flushed), the model computes with the subnormal.
+## Root cause
 
-The model's statements about such a value therefore hold for a value the compiled program does not
-produce on this target. The differential test catches it: `scripts/check.sh` (macOS CI job,
-`examples/floatops`) reports 266 typed mismatches for Zig 0.17.0 and 0.16.0, none for 0.15.2:
-`op80` `@sqrt` 117, `op128` `@sqrt` 130, `/` 11, `@divFloor` 8.
+The command did not set `AIR2LEAN_ZIG`, so `scripts/diff.sh` built the native harness with the
+`zig` on `PATH`, a stock Zig 0.15.2, while the Lean side was the Zig 0.17.0 (0.16.0) translation.
+The "native" results were Zig 0.15.2's compiler-rt; the "model" results were the 0.17.0 model,
+which is what Zig 0.17.0 compiles.
 
-## Counterexample
+Counterexample (`examples/floatops/floatops.zig`, aarch64-macos, ReleaseSafe; bit patterns), a
+probe that calls the fixture's functions, built with each stock Zig:
 
-`examples/floatops/floatops.zig`, `op80(9, a, _, _) = @sqrt(a)` and `op128(sel, a, b, _)`,
-aarch64-macos, ReleaseSafe (input, native result, model result; bit patterns):
-
-| function | input | native | model |
+| function, input | Zig 0.15.2 native | Zig 0.16.0 and 0.17.0 native | 0.17.0 model |
 |---|---|---|---|
-| `op80` `@sqrt` | `0x4007a7e990f603341000` | `0x4003929aaafd3a805000` | `0x4003929aaafd3a804e6b` |
-| `op128` `/` | `0x0000ffffffffffffffffffffffffffff` / `1.0` | `0x00000000000000000000000000000000` | `0x0000fffffffffffffffffffffffffffe` |
-| `op128` `@divFloor` | `0x8000ffffffffffffffffffffffffffff` / `1.0` | `0x80000000000000000000000000000000` | `0xbfff0000000000000000000000000000` |
-| `op128` `@sqrt` | `0x00000000000000000000000000000001` | `0x00000000000000000000000000000000` | `0x1fc80000000000000000000000000000` |
+| `op80(9, ·)` `@sqrt` `0x4007a7e990f603341000` | `0x4003929aaafd3a805000` | `0x4003929aaafd3a804e6b` | `0x4003929aaafd3a804e6b` |
+| `op128(3, ·, 1.0)` `/` `0x0000ffffffffffffffffffffffffffff` | `0x00000000000000000000000000000000` | `0x0000fffffffffffffffffffffffffffe` | `0x0000fffffffffffffffffffffffffffe` |
+| `op128(6, ·, 1.0)` `@divFloor` `0x8000ffffffffffffffffffffffffffff` | `0x80000000000000000000000000000000` | `0xbfff0000000000000000000000000000` | `0xbfff0000000000000000000000000000` |
+| `op128(9, ·)` `@sqrt` `0x00000000000000000000000000000001` | `0x00000000000000000000000000000000` | `0x1fc80000000000000000000000000000` | `0x1fc80000000000000000000000000000` |
 
-Reproduce: `AIR2LEAN_ZIG_VERSION=0.17.0 AIR2LEAN_CI=1 AIR2LEAN_EXAMPLES=floatops scripts/check.sh`
-on an aarch64 Mac (the `MISMATCH (typed)` lines).
+The Zig 0.15.2 column is that version's compiler-rt: `__sqrtx`/`sqrtq` compute
+`sqrt(@floatCast(x))` in `f64` (`lib/compiler_rt/sqrt.zig`, "TODO: more correct
+implementation"), and its `__divtf3` flushes a subnormal quotient. The Zig 0.15.2 translation
+models both (`Float.sqrtF80ViaF64`, `Float.divRt`, `docs/float-semantics.md`), hence no mismatch
+for 0.15.2. Zig 0.16.0 replaced both helpers (bit-exact `__sqrtx`/`sqrtq`, the `divtf3.zig` that
+`Float.divRt016` ports, including its `…fffe` quotient for a subnormal dividend), and the 0.16.0
+and 0.17.0 translations model that. These are fixed upstream behaviours, so nothing is drafted in
+`docs/upstream/`.
 
-## Fix direction
+With the matching stock Zig, the differential is clean on aarch64-macos:
+`AIR2LEAN_ZIG=<stock 0.17.0>` and `<stock 0.16.0>` each give `TOTAL floatops: ok=38063
+fail_match=23 unspecified=1539 capped=0 mismatch=0`.
 
-Fail closed per target, not per input: where the target's `f80`/`f128` arithmetic is not IEEE
-(soft-float on aarch64-macos), these operations are `.unspecified` in the model (the target's
-float semantics label, `docs/float-semantics.md`), or the model follows compiler-rt's algorithm
-for that target; the native results are then pinned as unspecified differential cases. Whether
-the flushing and the precision loss are compiler-rt bugs is drafted in `docs/upstream/` before
-any upstream report (CLAUDE.md, Trusted base).
+## Fix
+
+The harness no longer compares a model with native code of another Zig version. Before the Lean
+side runs, `scripts/diff.sh` runs `scripts/check-tree.py check-models <stock Zig version>
+<examples>`: a module with a profile record must name that version, and a committed body must
+equal the translation `scripts/check.sh` compares for that version on this host
+(`docs/generated-code.md`, check trees). Otherwise the run fails in phase `check_models` with a
+diagnostic that names both versions; the report from the original command is now:
+
+    error: Proofs/Floatops/Gen.lean is the translation of Zig 0.17.0, the native harness is built
+    with Zig 0.15.2: set AIR2LEAN_ZIG to a Zig 0.17.0
+
+Regression: `tests/roadmap/profiles/test_golden_pipeline.py` (`ModelVersionTests`).
