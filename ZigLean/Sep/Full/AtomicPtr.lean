@@ -119,6 +119,39 @@ theorem unorderedPrep_noErr {size align : Nat} {p : Ptr} {m : Mem} {b o : Nat} {
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   exact MemM.pure_err h5
 
+/-- `write_newest_apts` for a pointer-valued word: an `aptsE` of the written value. -/
+theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) {m m₀ : Mem}
+    {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8)
+    (hal : (A + p.off.toNat) % 8 = 0) (hK : K ≠ .constGlobal) {b : BlockId} {blk : Block}
+    (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hlive : blk.live = true)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat) (hfit : p.off.toNat + 8 ≤ blk.bytes.size)
+    (hA : blk.addr = A) (hS : blk.bytes.size = S) (hKb : blk.kind = K)
+    {li : Nat} (hli : li < m₀.atomics.size) (hb : (m₀.atomics[li]!).block = b)
+    (ho : (m₀.atomics[li]!).off = p.off.toNat) (hwf : ShapesWF (shapes m₀))
+    (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
+      else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
+    (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : α) :
+    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → FStepIn rF.heap.erase m M₂ →
+      ∀ msg : Msg, msg.bytes = Enc.encode new →
+      ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+          M₂.nextMsg) r' rF ∧ aptsE p new r' ∧
+        ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+          M₂.nextMsg)) ∧
+        (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg).LiveLayout ∧
+        FStepIn rF.heap.erase m
+          (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
+        m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
+  intro M₂ hat hbl hs₂ msg hmb
+  have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
+    rw [hat]; omega
+  rw [hn1]
+  have henc : (Enc.encode new).size = 8 := by rw [LawfulEnc.size_encode, hα]
+  obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
+    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc])
+  exact ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
+    by rw [← hmb]; exact hab'⟩, h3⟩
+
 /-- An `aptsE` word: its bytes, with their own location as the tag constraint. -/
 theorem aptsE_own {α : Type} [Enc α] {p : Ptr} {v : α} {r : Res} (h : aptsE p v r) :
     ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r :=
@@ -447,27 +480,8 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
       have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
-      have key : ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks →
-          FStepIn rF.heap.erase m M₂ → ∀ msg : Msg, msg.bytes = Enc.encode new →
-          ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
-              M₂.nextMsg) r' rF ∧ aptsE p new r' ∧
-            ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
-              M₂.nextMsg)) ∧
-            (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
-              M₂.nextMsg).LiveLayout ∧
-            FStepIn rF.heap.erase m (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
-              M₂.nextMsg) ∧
-            m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
-              M₂.nextMsg) := by
-        intro M₂ hat hbl hs₂ msg hmb
-        have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
-          rw [hat]; omega
-        rw [hn1]
-        have henc : (Enc.encode new).size = 8 := by rw [LawfulEnc.size_encode, hα]
-        obtain ⟨r', hh', hab', h3, h4, h5, h6⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo
-          (by omega) hA hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc])
-        exact ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc,
-          LawfulEnc.decode_encode new, by rw [← hmb]; exact hab'⟩, h3, h4, h5, h6⟩
+      have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
+        hli hb ho hwf htag hld hpos new
       unfold rmwBM
       dsimp only
       simp only [intSize_64]

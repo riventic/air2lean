@@ -571,30 +571,6 @@ theorem wpts_of_up {p : Ptr} {v : BitVec 64} {A S : Nat} {K : BlockKind} {bs : A
     (hv : intOfBytes 64 bs = pure v) (h : up (bytesAt p A S K bs) r) : wpts p v r.untag :=
   ⟨A, S, K, bs, none, hal, hK, hsz, hv, abytesAt_untag h⟩
 
-theorem singleThread_acqM {m : Mem} (h : m.SingleThread) (c : VClock) : (acqM m c).SingleThread := by
-  refine ⟨by simpa [acqM] using h.1, fun e he => ?_⟩
-  obtain ⟨h1, h2⟩ := h.2 e he
-  refine ⟨h1, ?_⟩
-  show VClock.le e.clock ((m.clocks.set! m.current
-    (VClock.merge (m.clocks[m.current]!) c))[m.current]!) = true
-  rw [Array.getElem!_set!_self _ _ _ h.1]
-  exact VClock.le_trans h2 (VClock.le_merge_left _ _)
-
-theorem singleThread_loadM {m : Mem} (h : m.SingleThread) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
-    (loadM m li ord msg).SingleThread := by
-  unfold loadM
-  split
-  · exact singleThread_acqM h _
-  · exact h
-
-theorem singleThread_insertM {m : Mem} (h : m.SingleThread) (li p : Nat) (msg : Msg) :
-    (insertM m li p msg).SingleThread := by
-  unfold insertM
-  dsimp only
-  split
-  · split <;> exact h
-  · exact h
-
 /-- A write inside a block keeps live blocks apart. -/
 theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hb : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size)
@@ -1071,6 +1047,41 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     ld_write hblk (by rw [hmb]; omega) hblocks hld,
     hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot)).trans (FStepIn.observe _ _)),
     Mem.NoRevive.write hblk (by rw [hmb]; omega) hblocks⟩
+
+/-- `write_newest` after an RMW or a successful `cmpxchg` that read the newest message (`pos + 1`
+is the end): the word is an `apts` of the written value (`write_newest_aptsE` for pointer
+words). -/
+theorem write_newest_apts {m m₀ : Mem}
+    {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8)
+    (hal : (A + p.off.toNat) % 8 = 0) (hK : K ≠ .constGlobal) {b : BlockId} {blk : Block}
+    (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hlive : blk.live = true)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat) (hfit : p.off.toNat + 8 ≤ blk.bytes.size)
+    (hA : blk.addr = A) (hS : blk.bytes.size = S) (hKb : blk.kind = K)
+    {li : Nat} (hli : li < m₀.atomics.size) (hb : (m₀.atomics[li]!).block = b)
+    (ho : (m₀.atomics[li]!).off = p.off.toNat) (hwf : ShapesWF (shapes m₀))
+    (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
+      else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
+    (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : BitVec 64) :
+    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → FStepIn rF.heap.erase m M₂ →
+      ∀ msg : Msg, msg.bytes = Enc.encode new →
+      ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+          M₂.nextMsg) r' rF ∧ apts p new r' ∧
+        ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
+          M₂.nextMsg)) ∧
+        (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg).LiveLayout ∧
+        FStepIn rF.heap.erase m
+          (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
+        m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
+  intro M₂ hat hbl hs₂ msg hmb
+  have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
+    rw [hat]; omega
+  rw [hn1]
+  have henc : (Enc.encode new).size = 8 := LawfulEnc.size_encode new
+  obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
+    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc])
+  exact ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode new)
+    (by rw [henc, ← hmb]; exact hab'), h3⟩
 
 /-- **The run of an atomic store** to an owned word (choice 0: the write goes at the end);
 afterwards the word is an `apts` of the new value. -/
