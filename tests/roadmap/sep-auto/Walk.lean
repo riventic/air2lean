@@ -5,8 +5,10 @@ import ZigLean.Sep.Full.AutoPrim
 # `fsym` on small programs (`docs/proof-automation.md`)
 
 A walk through loads, checked arithmetic and stores; an assertion-level `if` decided by the
-facts; returns that carve a region and raise a share's bound. The programs are written by hand
-in the shape the translator generates.
+facts; returns that carve a region and raise a share's bound; generated functions of
+constructors evaluated (a union's tag, a loop's test), a callee's result by its components, a
+caller's rule about a generated loop. The programs are written by hand in the shape the
+translator generates.
 -/
 
 namespace SepAuto.Walk
@@ -124,5 +126,28 @@ theorem match_proj (p : Ptr) (v : BitVec 64) :
         | .rep => throw .panic)
       (fun x => ⟪x = 4⟫ ⋆ up (pts p 8 v)) := by
   fsym [callee_spec]
+
+/-- A generated loop over its locals: its `MonoBind` instance is the definition's own proof
+(`cnt._proof_1`). -/
+def cnt.loop6 : MM Nat Bool := do
+  let s ← get
+  if s == 0 then pure false else
+    set (s - 1)
+    pure true
+
+def cnt (n : Nat) : MemM Nat := do
+  let r ← (Zig.loop cnt.loop6 (fun b : Bool => b)).run n
+  pure r.2
+
+/-- **A caller's rule about a generated loop** (ledger #54): its statement elaborates the loop's
+instance anew, a different proof than the definition's; proofs are equal for matching. The rule
+is a local of the proof (`have`). -/
+theorem loop_rule (n : Nat)
+    (hl : ∀ k, FTotalTriple emp ((Zig.loop cnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫)) :
+    FTotalTriple emp (cnt n) (fun r => ⟪r = 0⟫) := by
+  have hl' := hl
+  clear hl
+  unfold cnt
+  fsym [hl']
 
 end SepAuto.Walk
