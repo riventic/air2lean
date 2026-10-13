@@ -607,10 +607,16 @@ def source_hashes(root):
         result[str(path.relative_to(root))]=digest.hexdigest()
     return result
 
+def counter_line(label, counts, of=None):
+    """A counter line of the run log: the legacy buckets, `mismatch` being every typed mismatch."""
+    line=f'{label}: '+' '.join(f'{k}={counts[k]}' for k in ('ok','fail_match','unspecified','capped','mismatch'))
+    line+=''.join(f' {k}={counts[k]}' for k in ('host','ub_excluded') if counts[k])
+    return line+(f' (of {of})' if of is not None else '')
+
 def compare(root, examples, version, host, summary, schedule_receipts=(), build=None, fresh_seed=None):
     return compare_summary(root,examples,version,host,summary,schedule_receipts,build,fresh_seed)[0]
 
-def compare_summary(root, examples, version, host, summary, schedule_receipts=(), build=None, fresh_seed=None):
+def compare_summary(root, examples, version, host, summary, schedule_receipts=(), build=None, fresh_seed=None, log=None):
     """Write the summary and return (exit code, summary dict).
 
     `build` is the (optimize mode, backend) of the native side when it is not the default
@@ -621,7 +627,10 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
     per-input exclusion pins, which name the committed inputs, do not apply: a model
     `.illegal`/`.unspecified` result is an exclusion on any input (never a match), no pin
     violation is computed, and the summary records the seed. Every other status is unchanged: a
-    value or panic disagreement is a mismatch."""
+    value or panic disagreement is a mismatch.
+
+    `log`: the stream for the counter lines (`counter_line`) of the run log, or None."""
+    say=(lambda line:print(line,file=log)) if log else (lambda line:None)
     exclude_ub=bool(build) and build[0] in ('ReleaseFast','ReleaseSmall')
     if not examples or len(set(examples))!=len(examples) or any(not IDENT.fullmatch(ex) for ex in examples):
         raise Invalid('invalid selected examples')
@@ -652,6 +661,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
             allowances=host_allowances(root/'tests/diff'/ex/'host.txt')
             allowed_host=allowances if host!='Linux-x86_64' else {}
             fn_pins={bucket:pins(pin_file(root/'tests/diff'/ex,bucket,host)) for bucket in ('unspecified','capped')}
+            example_counts=Counter()
             files=sorted(inputs.glob('*.jsonl'))
             if not files: raise Invalid('no function inputs')
             for infile in files:
@@ -673,11 +683,15 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                     host_kinds=None if values_match else host_difference(native,model,allowed_host.get(fn))
                     status=classify(native,model,nkind,mkind,search,host_kinds is not None,values_match,exclude_ub,
                                     fresh_seed is not None or input_sha in excluded)
-                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search,exclude_ub)
+                    observed=legacy_bucket(native,model,host_kinds is not None,values_match,search,exclude_ub)
+                    # The counters follow the typed status: a typed mismatch is never an agreement,
+                    # exclusion or host difference there (docs/architecture-audit/float-selection.md).
+                    # The pins still count the observed exclusions.
+                    bucket='mismatch' if status==Status.MISMATCH else observed
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
-                    if bucket in per_input:per_input[bucket][input_sha]+=1
+                    if observed in per_input:per_input[observed][input_sha]+=1
                     eligible+=status==Status.MISMATCH
                     exploration.case(ex,fn,count,status,search)
                     row={'schema':SCHEMA,'example':ex,'function':fn,'input_index':count,
@@ -701,6 +715,12 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                         print(f'EXCLUSION PIN {ex}.{fn} {bucket} input {sha}: {actual}, expected {lo}-{hi} ({pin_file(Path("tests/diff")/ex,bucket,host)})',file=sys.stderr)
                         # Search-cap changes are budget evidence, not semantic mutation detections.
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
+                say(counter_line(f'{ex}.{fn}',local,count));example_counts+=local
+            say(counter_line(f'TOTAL {ex}',example_counts))
+    say(counter_line('TOTAL',legacy_totals))
+    if log and legacy_totals['host']:
+        print(f'note: {legacy_totals["host"]} host-dependent float results differ from the x86_64-linux model'
+              ' (tests/diff/<ex>/host.txt); CI checks them',file=sys.stderr)
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]
     result={'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host,**({'optimize':build[0],'backend':build[1]} if build else {})},
                          'case_count':case_count,'skipped_examples':len(skipped),'skipped_functions':sum(len(row['functions']) for row in skipped),
@@ -770,7 +790,7 @@ def main():
             value=result.get('mutation_eligible')
             if type(value) is not int or value<0:raise Invalid('invalid mutation accounting')
             print(value);return 0
-        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split(),(args.optimize,args.backend or 'llvm') if args.optimize else None,args.fresh_inputs or None)
+        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split(),(args.optimize,args.backend or 'llvm') if args.optimize else None,args.fresh_inputs or None,sys.stdout)
         print(headline(result));return code
     except (Invalid,OSError,UnicodeError,RecursionError) as exc:
         if args.action!='eligible':summary_failure(args.summary,args.phase,str(exc),Failure.UNSUPPORTED if isinstance(exc,Unsupported) else Failure.SETUP)

@@ -3,43 +3,36 @@
 # and the Lean side (tests/diff/Diff.lean), then compare their output line by line against the
 # same inputs (tests/diff/<ex>/inputs/*.jsonl, from tests/diff/gen_inputs.zig).
 #
-# A line counts as a match if both sides say "ok" with the same value, or both say "fail" with
-# matching kinds: the harness's panic-kind name (e.g. "outOfBounds") maps, via the fixed table in
-# expected_ctor_for_zig_kind() below, to the `Zig.Error` constructor Diff.lean is expected to
-# throw for the same check (e.g. "outOfBounds"; docs/generated-code.md §Panics). "ok" values
-# follow docs/generated-code.md's diff protocol: a plain int (bare or quoted decimal), an
-# optional (`null` or the inner value), or an error union (`{"err":"<Name>"}` or the inner
-# value) — classify_line() below folds all three into one comparable $val, so the match check
-# itself doesn't need to know which shape it's looking at. Anything else — a value mismatch, a
-# kind mismatch, a Zig kind with no table entry (including "unknown" — the child died without
-# reporting a kind), one side ok and the other fail, or the legacy Lean "diverge" wire shape (a model no-result; bounded scheduler
-# evaluation does not establish divergence) — is a mismatch: printed immediately, and
-# makes the whole run exit 1.
+# scripts/diff-report.py compares the two sides; it is the only classifier. A case matches if both
+# sides return the same value (with the same buffers and live allocation count), or both fail with
+# matching kinds: the harness's panic-kind name (e.g. "outOfBounds") maps, via
+# scripts/panic-policy.tsv, to the `Zig.Error` constructor Diff.lean is expected to throw for the
+# same check (docs/generated-code.md §Panics). Anything else — a value mismatch, a kind mismatch, a
+# Zig kind with no table entry (including "unknown": the child died without reporting a kind), one
+# side ok and the other fail, a model no-result — is a mismatch: printed as "MISMATCH (typed)",
+# counted as `mismatch` in the counter lines, and makes the whole run exit 1.
 #
 # A Lean `Zig.Error.unspecified` or `illegal` (Zig leaves the result open; docs/generated-code.md
-# §Panics), or `.unsupportedTimer` (a clock the model lacks; typed as `unspecified_timer`), is projected into the legacy "unspecified" counter, distinct from an exact match in the
-# typed report. tests/diff/<ex>/unspecified.txt pins each such case by input
+# §Panics), or `.unsupportedTimer` (a clock the model lacks), is an exclusion, counted as
+# "unspecified", only on an input pinned for it in tests/diff/<ex>/unspecified.txt
 # ("<fn> <input_sha256> <count>|<min>-<max> <reason>" lines; a range for an input whose result
 # depends on the timing of the compiled threads, a race that the hardware shows on some runs
-# only). scripts/diff-report.py checks the pins per input and makes a model exclusion on an
-# unpinned input a mismatch (F3); this loop checks only each function's total against the sum of
-# its pins.
+# only); on any other input it is a mismatch (F3), and a pinned count that differs fails the run.
 #
 # A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
 # `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
-# `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
-# legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
+# `Zig.Error.capped` (the search stopped at its cap without Zig's line) is an exclusion counted
+# as "capped" against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
 # The float model follows the translation's target profile (docs/floats.md §Targets): on
 # aarch64-macos run that host's translation (scripts/check.sh), whose exclusion pins are
-# tests/diff/<ex>/unspecified.<uname -s>-<uname -m>.txt (`pin_file` below). The compiled Zig can
-# still give other bits for some float results (NaN bits, the sign of a zero). tests/diff/<ex>/host.txt
-# lists the functions whose results depend on the target, each with the kinds of difference it
-# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a
-# host that is not x86_64-linux, and only when both sides returned a value, a disagreement of such
-# a function counts as "host" here; scripts/diff-report.py then checks each differing float
-# against the listed kinds and fails the run on any other difference (F3). A panic, error or
-# exclusion against a value is never a host difference. CI (x86_64-linux) is the reference.
+# tests/diff/<ex>/unspecified.<uname -s>-<uname -m>.txt. The compiled Zig can still give other
+# bits for some float results (NaN bits, the sign of a zero). tests/diff/<ex>/host.txt lists the
+# functions whose results depend on the target, each with the kinds of difference it may show
+# ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a host that is not
+# x86_64-linux, and only when both sides returned a value and every differing float has a listed
+# kind, a disagreement counts as "host"; any other difference is a mismatch (F3). A panic, error
+# or exclusion against a value is never a host difference. CI (x86_64-linux) is the reference.
 #
 # The native side (each example's harness, the libm archive and its self-check, the asm archive)
 # is built and the harnesses run in parallel, one job per example (scripts/par.py: AIR2LEAN_JOBS
@@ -116,8 +109,7 @@ case "${AIR2LEAN_DIFF_BACKEND:-}" in
   *) echo "error: invalid AIR2LEAN_DIFF_BACKEND: $AIR2LEAN_DIFF_BACKEND" >&2; exit 1 ;;
 esac
 case "$optimize" in
-  Debug|ReleaseSafe) exclude_ub=0 ;;
-  ReleaseFast|ReleaseSmall) exclude_ub=1 ;;
+  Debug|ReleaseSafe|ReleaseFast|ReleaseSmall) ;;
   *) echo "error: invalid AIR2LEAN_DIFF_OPTIMIZE: $optimize" >&2; exit 1 ;;
 esac
 zig_version=$("$zig_bin" version)
@@ -141,11 +133,6 @@ done
 [ -n "$build_only" ] ||
   python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
 diff_phase=build_native
-
-# The names of an example's functions are the names of its input files (layout convention).
-functions_of() {
-  (cd "tests/diff/$1/inputs" && for f in *.jsonl; do printf '%s ' "${f%.jsonl}"; done)
-}
 
 # A stock-Zig build, from the shared cache when AIR2LEAN_CAS_DIR is set (docs/build-cache.md).
 stock_zig() {
@@ -290,9 +277,8 @@ echo "== libm self-check ==" >&2
 
 diff_phase=run_model
 echo "== building + running lean side ==" >&2
-# Lake does not track tests/diff/out/libm/air2lean_libm.a (linked in via lakefile.toml's
-# moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
-rm -f tests/diff/.lake/build/bin/difftest
+# The archives are traced inputs of difftest (tests/diff/lakefile.toml `moreLinkObjs`): a changed
+# archive relinks it, and Lake's artifact cache never restores one linked against another archive.
 (cd tests/diff && lake build difftest)
 (cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
 # Fail closed: the Lean side must be the translation for the stock Zig's version on this host
@@ -305,286 +291,15 @@ diff_phase=run_model
 # Diff.lean runs only the examples this script compares.
 AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 
-# Classifies one JSONL output line into $kind (ok|fail|diverge) and $val. For ok: `null` as the
-# literal string "null"; an error union's `{"err":"Name"}` as "err:Name"; otherwise the decimal
-# string (quotes stripped, if any) — docs/generated-code.md's diff protocol. For fail: the raw
-# kind string — the harness's panic-name (e.g. "outOfBounds") or Diff.lean's fully-qualified
-# constructor (e.g. "Zig.Error.overflow"), still with its "Zig.Error." prefix at this point. Both
-# sides only ever emit these shapes (common.zig / Diff.lean). Order matters: the more specific
-# "ok" patterns (null, err-object) must be checked before the generic bare-value one, since a
-# `case` glob like '{"ok":'*'}' also matches them.
-classify_line() {
-  local line=$1
-  # A function that takes an allocator also writes the number of live allocations after the
-  # call: split it off.
-  live=
-  case "$line" in
-    '{"ok":'*',"live":'*'}')
-      live=${line##*,\"live\":}
-      live=${live%\}}
-      line="${line%,\"live\":*}}"
-      ;;
-  esac
-  # A function that uses memory also writes the input buffers after the call: split them off.
-  bufs=
-  case "$line" in
-    '{"ok":'*',"bufs":['*']}')
-      bufs=${line##*,\"bufs\":}
-      bufs=${bufs%\}}
-      line="${line%,\"bufs\":*}}"
-      ;;
-  esac
-  case "$line" in
-    '{"ok":null}')
-      kind=ok
-      val=null
-      ;;
-    '{"ok":{"err":"'*'"}}')
-      kind=ok
-      val=${line#'{"ok":{"err":"'}
-      val="err:${val%'"}}'}"
-      ;;
-    '{"ok":"'*'"}')
-      kind=ok
-      val=${line#'{"ok":"'}
-      val=${val%'"}'}
-      ;;
-    '{"ok":'*'}')
-      kind=ok
-      val=${line#'{"ok":'}
-      val=${val%'}'}
-      ;;
-    '{"fail":"'*'"}')
-      kind=fail
-      val=${line#'{"fail":"'}
-      val=${val%'"}'}
-      ;;
-    '{"diverge":true}')
-      kind=diverge
-      ;;
-    *)
-      echo "error: unrecognized output line: $line" >&2
-      exit 1
-      ;;
-  esac
-}
-
-# Load the shared native-panic/model-constructor policy once. Bash 3.2 indexed
-# arrays avoid associative-array dependencies; each lookup uses only shell builtins.
-panic_kinds=()
-panic_ctors=()
-while IFS=$'\t' read -r panic_kind panic_ctor; do
-  [ -n "$panic_kind" ] || continue
-  panic_kinds+=("$panic_kind")
-  panic_ctors+=("$panic_ctor")
-done <"$repo_root/scripts/panic-policy.tsv"
-expected_ctor_for_zig_kind() {
-  local i
-  expected_ctor=""
-  for ((i=0; i<${#panic_kinds[@]}; i++)); do
-    if [ "${panic_kinds[$i]}" = "$1" ]; then
-      expected_ctor=${panic_ctors[$i]}
-      return 0
-    fi
-  done
-}
-
-# The total pin of function `$1` in the per-input pin file `$2`: "<min>-<max>", the sums of its
-# inputs' pins; not listed: "0-0".
-pin_of() {
-  [ -f "$2" ] || { echo 0-0; return; }
-  awk -v f="$1" '{ sub(/#.*/, "") } $1 == f { n = split($3, r, "-"); lo += r[1]; hi += r[n] }
-    END { printf "%d-%d\n", lo, hi }' "$2"
-}
-
-# The pin file of bucket `$2` (unspecified, capped) of example `$1`: `<bucket>.<host>.txt` on that
-# host if present (host: `uname -s`-`uname -m`; scripts/diff-report.py's pin_file), else
-# `<bucket>.txt`.
-pin_file() {
-  local own="tests/diff/$1/$2.$(uname -s)-$(uname -m).txt"
-  if [ -f "$own" ]; then echo "$own"; else echo "tests/diff/$1/$2.txt"; fi
-}
-
-# The pin of function `$1` in the pin file `$2` allows the count `$3`.
-pin_ok() {
-  local spec lo hi
-  spec=$(pin_of "$1" "$2")
-  lo=${spec%-*}; hi=${spec#*-}
-  [ "$3" -ge "$lo" ] && [ "$3" -le "$hi" ]
-}
-
-# The buffers after the call: a Lean `??` (an undefined byte, docs/generated-code.md §Memory)
-# matches any two Zig hex digits. `[` and `]` are glob characters, so both sides replace them.
-bufs_match() {
-  local z=${1//[\[\]]/_} l=${2//[\[\]]/_}
-  [[ $z == $l ]]
-}
-
-# The reference host of the float model (docs/floats.md).
-reference_host=0
-if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then reference_host=1; fi
-
+# Compare: scripts/diff-report.py is the one classifier. It types every case, prints a "MISMATCH
+# (typed)" line per mismatch, the per-function, per-example and "TOTAL:" counter lines (every typed
+# mismatch counts as `mismatch`, never as `host`), checks the exclusion pins and exits non-zero on
+# any mismatch, pin violation or setup failure.
 echo "== comparing ==" >&2
-total_ok=0
-total_fail_match=0
-total_unspecified=0
-total_capped=0
-total_mismatch=0
-total_host=0
-total_ub=0
-mismatch_found=0
-
-for ex in $examples; do
-  ex_ok=0
-  ex_fail_match=0
-  ex_unspecified=0
-  ex_capped=0
-  ex_mismatch=0
-  ex_host=0
-  ex_ub=0
-
-  for fn in $(functions_of "$ex"); do
-    in_file="tests/diff/$ex/inputs/${fn}.jsonl"
-    zig_file="tests/diff/out/zig/$ex/${fn}.jsonl"
-    lean_file="tests/diff/out/lean/$ex/${fn}.jsonl"
-
-    # Line counts first, then one tab-joined line per input (JSON lines have no raw tabs).
-    # No `readarray`: it needs bash 4, and macOS ships bash 3.2.
-    n=$(wc -l <"$in_file" | tr -d ' ')
-    [ "$n" -gt 0 ] || { echo "error: $in_file has no inputs" >&2; exit 1; }
-    for f in "$zig_file" "$lean_file"; do
-      m=$(wc -l <"$f" | tr -d ' ')
-      [ "$m" -eq "$n" ] || { echo "error: $f has $m lines, expected $n" >&2; exit 1; }
-    done
-
-    fn_ok=0
-    fn_ub=0
-    fn_fail_match=0
-    fn_unspecified=0
-    fn_capped=0
-    fn_mismatch=0
-    fn_host=0
-    host_dependent=0
-    if [ "$reference_host" -eq 0 ] && [ -f "tests/diff/$ex/host.txt" ] &&
-      awk -v f="$fn" '$1 == f { found = 1 } END { exit !found }' "tests/diff/$ex/host.txt"; then
-      host_dependent=1
-    fi
-    # A process substitution hides the producer's exit status from set -e/pipefail.
-    # Materialize the joined rows first so a failed or truncated paste cannot pass.
-    joined_file="$build_dir/compare.tsv"
-    paste "$in_file" "$zig_file" "$lean_file" >"$joined_file"
-    i=0
-    while IFS=$'\t' read -r in_line zig_line lean_line; do
-      i=$((i + 1))
-      classify_line "$zig_line"
-      zkind=$kind
-      zval=${val:-}
-      zbufs=$bufs
-      zlive=$live
-      classify_line "$lean_line"
-      lkind=$kind
-      lval=${val:-}
-      lbufs=$bufs
-      llive=$live
-
-      if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
-        bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
-        fn_ok=$((fn_ok + 1))
-      elif [ "${exclude_ub:-0}" -eq 1 ] && [ "$lkind" = fail ] &&
-        [ "$lval" != Zig.Error.unspecified ] && [ "$lval" != Zig.Error.illegal ] &&
-        [ "$lval" != Zig.Error.unsupportedTimer ] &&
-        [ "$lval" != Zig.Error.capped ] && [ "$lval" != Zig.Error.deadlock ] &&
-        [ "$lval" != Zig.Error.trap ]; then
-        # The model throws a safety panic: illegal behavior in a build without safety checks (a
-        # hardware trap is not; it faults in every build mode).
-        fn_ub=$((fn_ub + 1))
-      elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ] ||
-        [ "$lval" = Zig.Error.unsupportedTimer ]; }; then
-        fn_unspecified=$((fn_unspecified + 1))
-      elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
-        fn_capped=$((fn_capped + 1))
-      elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
-        expected_ctor_for_zig_kind "$zval" &&
-        [ -n "$expected_ctor" ] &&
-        [ "$expected_ctor" = "${lval#'Zig.Error.'}" ]; then
-        fn_fail_match=$((fn_fail_match + 1))
-      elif [ "$host_dependent" -eq 1 ] && [ "$zkind" = ok ] && [ "$lkind" = ok ]; then
-        fn_host=$((fn_host + 1))
-      else
-        fn_mismatch=$((fn_mismatch + 1))
-        mismatch_found=1
-        echo "MISMATCH $ex.$fn input#$i: $in_line" >&2
-        echo "  zig:  $zig_line" >&2
-        echo "  lean: $lean_line" >&2
-      fi
-    done <"$joined_file"
-    [ "$i" -eq "$n" ] || {
-      echo "error: compared $i rows of $in_file, expected $n" >&2
-      exit 1
-    }
-
-    unspecified_pins=$(pin_file "$ex" unspecified)
-    if [ -n "${AIR2LEAN_DIFF_FRESH_INPUTS:-}" ]; then
-      :  # Fresh inputs: the pins name the committed inputs (scripts/diff-report.py --fresh-inputs).
-    elif ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
-      mismatch_found=1
-      echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
-        "$(pin_of "$fn" "$unspecified_pins") ($unspecified_pins)" >&2
-    fi
-
-    capped_pins=$(pin_file "$ex" capped)
-    if [ -n "${AIR2LEAN_DIFF_FRESH_INPUTS:-}" ]; then
-      :
-    elif ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
-      mismatch_found=1
-      echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
-        "$(pin_of "$fn" "$capped_pins") ($capped_pins)" >&2
-    fi
-
-    host_str=""
-    if [ "$fn_host" -gt 0 ]; then host_str=" host=$fn_host"; fi
-    if [ "$fn_ub" -gt 0 ]; then host_str="$host_str ub_excluded=$fn_ub"; fi
-    echo "$ex.$fn: ok=$fn_ok fail_match=$fn_fail_match unspecified=$fn_unspecified" \
-      "capped=$fn_capped mismatch=$fn_mismatch$host_str (of $n)"
-    ex_ok=$((ex_ok + fn_ok))
-    ex_fail_match=$((ex_fail_match + fn_fail_match))
-    ex_unspecified=$((ex_unspecified + fn_unspecified))
-    ex_capped=$((ex_capped + fn_capped))
-    ex_mismatch=$((ex_mismatch + fn_mismatch))
-    ex_host=$((ex_host + fn_host))
-    ex_ub=$((ex_ub + fn_ub))
-  done
-
-  host_str=""
-  if [ "$ex_host" -gt 0 ]; then host_str=" host=$ex_host"; fi
-  if [ "$ex_ub" -gt 0 ]; then host_str="$host_str ub_excluded=$ex_ub"; fi
-  echo "TOTAL $ex: ok=$ex_ok fail_match=$ex_fail_match unspecified=$ex_unspecified" \
-    "capped=$ex_capped mismatch=$ex_mismatch$host_str"
-  total_ok=$((total_ok + ex_ok))
-  total_fail_match=$((total_fail_match + ex_fail_match))
-  total_unspecified=$((total_unspecified + ex_unspecified))
-  total_capped=$((total_capped + ex_capped))
-  total_mismatch=$((total_mismatch + ex_mismatch))
-  total_host=$((total_host + ex_host))
-  total_ub=$((total_ub + ex_ub))
-done
-
-host_str=""
-if [ "$total_host" -gt 0 ]; then host_str=" host=$total_host"; fi
-if [ "$total_ub" -gt 0 ]; then host_str="$host_str ub_excluded=$total_ub"; fi
-echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspecified" \
-  "capped=$total_capped mismatch=$total_mismatch$host_str"
-if [ "$total_host" -gt 0 ]; then
-  echo "note: $total_host host-dependent float results differ from the x86_64-linux model" \
-    "(tests/diff/<ex>/host.txt); CI checks them" >&2
-fi
-if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
-  diff_phase=compare
-  python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
-    --root "$repo_root" --examples "$examples" --version "$zig_version" \
-    --host "$(uname -s)-$(uname -m)" \
-    ${AIR2LEAN_DIFF_OPTIMIZE:+--optimize "$AIR2LEAN_DIFF_OPTIMIZE" --backend "${AIR2LEAN_DIFF_BACKEND:-llvm}"} \
-    --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" \
-    ${AIR2LEAN_DIFF_FRESH_INPUTS:+--fresh-inputs "$AIR2LEAN_DIFF_FRESH_INPUTS"} || mismatch_found=1
-fi
-[ "$mismatch_found" -eq 0 ]
+diff_phase=compare
+python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
+  --root "$repo_root" --examples "$examples" --version "$zig_version" \
+  --host "$(uname -s)-$(uname -m)" \
+  ${AIR2LEAN_DIFF_OPTIMIZE:+--optimize "$AIR2LEAN_DIFF_OPTIMIZE" --backend "${AIR2LEAN_DIFF_BACKEND:-llvm}"} \
+  --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" \
+  ${AIR2LEAN_DIFF_FRESH_INPUTS:+--fresh-inputs "$AIR2LEAN_DIFF_FRESH_INPUTS"}
