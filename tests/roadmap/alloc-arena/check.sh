@@ -61,12 +61,16 @@ EOF
 # The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
 cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Core.olean" "$work/AllocArena/Core.lean"
+# `reset`'s ghost part (module-independent, over Core).
+cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Reset.olean" "$work/AllocArena/Reset.lean"
 # `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant, stated for each
 # module and proved by the shared tactics, which are elaborated against that module's code: the stock
 # arena on both targets and the patched one (whose `free` and `resize` add a bounds check). Each file
 # prints the axioms of `free_spec`, `resize_spec` and `remap_spec`; ArenaSpec.lean also those of the
-# module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`).
-for pair in "ArenaSpec 6" "ArenaSpecMacos 3" "ArenaSpecFixed 3"; do
+# module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`)
+# and `reset`'s ghost part (`reset_release`, AllocArena/Reset.lean).
+for pair in "ArenaSpec 7" "ArenaSpecMacos 3" "ArenaSpecFixed 3"; do
   spec=${pair% *}
   "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'

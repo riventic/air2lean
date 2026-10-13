@@ -1,5 +1,6 @@
 import AllocArena.ArenaLinux
 import AllocArena.Core
+import AllocArena.Reset
 
 /-!
 # The translated `ArenaAllocator`'s `free`, `resize` and `remap` against `FAllocSpec`
@@ -69,6 +70,10 @@ has no outstanding grant (`own_epTok_empty`; `granted_epTok_false`): what a `res
 the nodes back to the child needs (`ArenaObstruction.not_reset_own`: a `reset` from `own` alone
 is unsound).
 
+**`reset`'s ghost part** (`AllocArena/Reset.lean`, `reset_release`): from `own` and the whole epoch
+token, the ledger at epoch `e + 1` with that epoch's whole token and both lists as lists of whole
+nodes (`Released`), which the code gives back to the child or keeps.
+
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
 node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
 states this specification covers end at the first failed `alloc`.
@@ -88,3 +93,4 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.Core.grant_return
 #print axioms AllocArena.Core.own_epTok_empty
 #print axioms AllocArena.Core.granted_epTok_false
+#print axioms AllocArena.Core.reset_release
