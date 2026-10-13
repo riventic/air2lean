@@ -24,6 +24,11 @@ full-state lock (`FLock`, `ZigLean/Sep/Full/Lock.lean`):
 
 A rest that has the word's cells of an older memory, the same up to `Cell.norm`, is the rest with
 the word's cells of the new memory (`FLock.Inv.congrX`).
+
+From `ZigLean/Conc/Word.lean` this file uses only facts of the memory model (`Word.Ok`, `Op`,
+`Keep`, `KeepK`, `hist`, the op facts); it uses none of the legacy concurrent logic there or in
+its imports (`Conc.Lock`, `Lock.Inv`, `Word.Apart`, `keep_lockStep`, `Lock.Inv.wordOp`,
+`offWord`), which the full-state lock replaces.
 -/
 
 namespace Zig

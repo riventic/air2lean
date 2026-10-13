@@ -22,6 +22,10 @@ rest has the word's new cells (`FLock.Inv.wordOp`). The client shows its `U` aft
 | `wp_wordWake` | futex wake at the word |
 | `wp_wordWait` | futex wait at the word, by a thread out of the lock's code (`away` while it waits) |
 | `wp_liftPartW` | a step of a thread on its own part (a stack block of the sync object's code) |
+
+From `ZigLean/Conc/Word.lean` and `ZigLean/Conc/WeakWord.lean` (`Ok.weakCas`) this file uses only
+facts of the memory model; it uses none of the legacy concurrent logic there (`Conc.Lock`,
+`Lock.Inv`, `Lock.Inv.wordOp`, `offWord`).
 -/
 
 namespace Zig
