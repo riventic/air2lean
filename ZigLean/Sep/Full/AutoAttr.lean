@@ -27,6 +27,10 @@ import Lean
   the attribute is added), not code `fsym` evaluates. A head with a law is an atom (never unfolded).
 * `@[fsym_drop]` marks a **drop lemma** `EUpd (X ⋆ R) R`: an atom `X` of the state that the
   postcondition does not use is forgotten (knowledge, claims).
+* `@[fsym_view]` marks a **view lemma** `EUpd X Y`: the atom `X` seen as `Y` (an atomic word
+  as a region of plain bytes; bytes with their facts as a typed view). When the planner does
+  not find an atom of the head that `Y` provides (a rule's precondition, a return's
+  postcondition), `fsym` applies the view to the state atoms of that block and walks on.
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -151,6 +155,27 @@ initialize registerBuiltinAttribute {
   name := `fsym_drop
   descr := "a drop lemma `EUpd (X ⋆ R) R` of the full-state symbolic executor `fsym`"
   add := fun decl _ kind => fsymDropExt.add decl kind
+}
+
+/-- The view lemmas (`@[fsym_view]`: `EUpd X Y` of one atom `X`), in declaration order. -/
+initialize fsymViewExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_view
+  descr := "a view lemma `EUpd X Y` (one atom `X` seen as `Y`) of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => do
+    let ty := (← getConstInfo decl).type
+    let ok : Bool ← Meta.MetaM.run' (Meta.forallTelescope ty fun _ concl => do
+      unless concl.isAppOfArity `Zig.Full.EUpd 2 do return false
+      let X := concl.appFn!.appArg!
+      return !(X.isAppOfArity `Zig.Full.FAssn.sep 2 || X.isConstOf `Zig.Full.FAssn.emp))
+    unless ok do
+      throwError "@[fsym_view] {decl}: expected a view lemma `EUpd X Y` of one atom `X`"
+    fsymViewExt.add decl kind
 }
 
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/

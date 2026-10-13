@@ -674,6 +674,18 @@ theorem up_region_weaken (hd : a' ∣ a) :
     EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a' bs)) :=
   EUpd.of_imp fun _ h => ⟨Region.regionIn_weaken h.1 hd, h.2⟩
 
+/-- **A region as owned bytes** with its alignment and kind (`@[fsym_view]`: a rule about the
+bytes, `Ops.lean`'s `…_bytesAt`). -/
+@[fsym_view] theorem regionIn_view :
+    EUpd (up (regionIn p A S K a bs))
+      (⟪(A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal⟫ ⋆ up (bytesAt p A S K bs)) :=
+  EUpd.of_imp fun _ h => sep_lift.mpr ⟨⟨h.1.1, h.1.2.1⟩, h.1.2.2, h.2⟩
+
+/-- **Owned bytes as a region** again (`@[fsym_view]`: the view a postcondition names). -/
+@[fsym_view] theorem regionIn_fold (ha : (A + p.off.toNat) % a = 0) (hK : K ≠ .constGlobal) :
+    EUpd (up (bytesAt p A S K bs)) (up (regionIn p A S K a bs)) :=
+  EUpd.of_imp fun _ h => ⟨⟨ha, hK, h.1⟩, h.2⟩
+
 variable {b : BlockId} {q : Frac} {k k' : Nat} {t : STag}
 
 theorem share_halves : EUpd (bshare b q k t) (bshare b q.half k t ⋆ bshare b q.half k t) :=

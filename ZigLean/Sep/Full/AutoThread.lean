@@ -227,6 +227,9 @@ theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → L.T (
     L.T (X ⋆ R) c Q :=
   L.eupd hX.sepL.eupd (L.lift t)
 
+/-- An update of the precondition (a view of an atom, `@[fsym_view]`). -/
+theorem pre_eupd (h : EUpd P P') (t : L.T P' c Q) : L.T P c Q := L.eupd h t
+
 namespace P
 
 /- `Th.step`/`stepAll` for a partial thread rule (`FTTriple`) in `TLogic.partial` (whose `T` is
