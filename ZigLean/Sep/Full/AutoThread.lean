@@ -124,6 +124,20 @@ theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
 theorem allocStack (size align : Nat) : ThreadLocal P (Zig.allocStack size align) :=
   alloc .stack size align
 
+/-- **`free` of a whole block** is local to the thread that owns its bytes and its full extent
+(two parts of `P`, first: they fix the block and the bytes): no access to the block races with
+its end. -/
+theorem free_of {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hx : Within (up (Zig.bytesAt p A S K bs)) P) (he : Within (bext b S K) P)
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) :
+    ThreadLocal P (Zig.free p) :=
+  free hpb fun m r _ hh hp blk hb x hlt => by
+    obtain ⟨R₁, h1⟩ := he r hp
+    obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth h1
+    rw [hb] at hb'; cases hb'
+    obtain ⟨R₂, h2⟩ := hx r hp
+    exact (OwnsAt.bytesAt hpb).sepL r h2 x (by simp [h0]) (by simp [h0]; omega)
+
 /-- **`@returnAddress()`** is local: it reads the oracle's words, not the record or a byte. -/
 theorem returnAddress : ThreadLocal P Zig.returnAddress :=
   intro fun m _ _ _ _ _ _ => ⟨rfl, fun _ m₀ e => by
@@ -180,7 +194,7 @@ end OwnsPtr
 attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
   ThreadLocal.store ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
-  ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR OwnsPtr.pts_in OwnsPtr.bytesAt_in
+  ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR OwnsPtr.pts_in OwnsPtr.bytesAt_in
 
 /-! ## Native thread rules -/
 
