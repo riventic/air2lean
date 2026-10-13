@@ -18,6 +18,18 @@ import sys
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
 PREFIX = "packed_fields."
+# Schema 12 with the profile of the LLVM export of the same source (air-fresh/0.16.0/llvm): a
+# hand-written file names the backend whose memory encoding it assumes. A profile without a
+# backend (legacy schema 11) is rejected for these integers with padding bits in memory
+# (`Reg` is a `u24` in 4 bytes; docs/architecture-audit/enc-exactness.md).
+PROFILE = {
+    "name": "abi64-le-v1", "target_triple": "x86_64-linux.5.10...6.19-musl", "pointer_bits": 64,
+    "endian": "little", "abi": "musl", "zig_version": "0.16.0", "backend": "stage2_llvm", "cpu": "x86_64",
+    "features": ["64bit", "cmov", "cx8", "fxsr", "idivq_to_divl", "macrofusion", "mmx", "nopl",
+                 "slow_3ops_lea", "slow_incdec", "sse", "sse2", "vzeroupper", "x87"],
+    "build_mode": "ReleaseSafe", "float_mode": "per-instruction", "error_set_bits": 16,
+    "error_layout": "type-table", "error_tracing": False, "export_stage": "analyzed-air",
+}
 
 
 def integer(bits, signed=False, size=1, align=1):
@@ -26,7 +38,8 @@ def integer(bits, signed=False, size=1, align=1):
 
 def ptr(child, align, host=0, bit=None):
     t = dict(k="ptr", size="one", const=False, child=child, ptr_align=align, volatile=False,
-             allowzero=False, sentinel=False, host_size=host, abi_size=8, abi_align=8)
+             allowzero=False, address_space="generic", sentinel=False, host_size=host,
+             vector_index=None, abi_size=8, abi_align=8)
     if host:
         t["bit_offset"] = bit
     return t
@@ -42,14 +55,14 @@ TYPES = [
     integer(4), integer(8), integer(5, signed=True), dict(k="bool", abi_size=1, abi_align=1),
     integer(2),
     # const Mode = enum(u2) { off, low, high };
-    dict(k="enum", name="packed_fields.Mode", tag=U2, exhaustive=True,
+    dict(k="enum", name="packed_fields.Mode", module="root", tag=U2, exhaustive=True,
          fields=[dict(name="off", value="0"), dict(name="low", value="1"), dict(name="high", value="2")],
          abi_size=1, abi_align=1),
     # const Inner = packed struct(u12) { b: u4, c: u8 };
-    dict(k="struct", name="packed_fields.Inner", layout="packed",
+    dict(k="struct", name="packed_fields.Inner", module="root", layout="packed",
          fields=[dict(name="b", ty=U4), dict(name="c", ty=U8)], abi_size=2, abi_align=2),
     # const Reg = packed struct(u24) { a: u4, inner: Inner, s: i5, on: bool, mode: Mode };
-    dict(k="struct", name="packed_fields.Reg", layout="packed",
+    dict(k="struct", name="packed_fields.Reg", module="root", layout="packed",
          fields=[dict(name="a", ty=U4), dict(name="inner", ty=INNER), dict(name="s", ty=I5),
                  dict(name="on", ty=BOOL), dict(name="mode", ty=MODE)], abi_size=4, abi_align=4),
     ptr(REG, 4),                 # *Reg
@@ -62,7 +75,7 @@ TYPES = [
     ptr(MODE, 4, 3, 22),         # &reg.mode
     integer(24, size=4, align=4),
     # const Word = packed union { reg: Reg, raw: u24 };
-    dict(k="union", name="packed_fields.Word", layout="packed",
+    dict(k="union", name="packed_fields.Word", module="root", layout="packed",
          fields=[dict(name="reg", ty=REG), dict(name="raw", ty=U24)], abi_size=4, abi_align=4),
     ptr(WORD, 4),                # *Word
     ptr(U24, 4),                 # &word.raw
@@ -71,8 +84,10 @@ TYPES = [
 ]
 GLOBALS = [
     # var reg: Reg = undefined; var word: Word = undefined;
-    dict(name="packed_fields.reg", ty=REG, const=False, threadlocal=False, extern=False, init=dict(ty=REG, undef=True)),
-    dict(name="packed_fields.word", ty=WORD, const=False, threadlocal=False, extern=False, init=dict(ty=WORD, undef=True)),
+    dict(name="packed_fields.reg", module="root", ty=REG, const=False, threadlocal=False, extern=False,
+         init=dict(ty=REG, undef=True)),
+    dict(name="packed_fields.word", module="root", ty=WORD, const=False, threadlocal=False, extern=False,
+         init=dict(ty=WORD, undef=True)),
 ]
 
 
@@ -94,7 +109,8 @@ def undef(ty):
 
 def body(*ops):
     """`ops`: (tag, ty, args, extra) without ids; ids are the positions."""
-    return [dict(id=i, tag=tag, ty=ty, args=list(args), **extra) for i, (tag, ty, args, extra) in enumerate(ops)]
+    return [dict(id=i, tag=tag, ty=ty, **(dict(args=list(args)) if args else {}), **extra)
+            for i, (tag, ty, args, extra) in enumerate(ops)]
 
 
 def op(tag, ty, *args, **extra):
@@ -168,7 +184,8 @@ FUNCTIONS = {
 
 
 def document(name, ret_ty, insts):
-    return dict(schema=11, zig_version="0.16.0", target_endian="little", name=PREFIX + name, params=[],
+    return dict(schema=12, zig_version="0.16.0", target_endian="little", unchecked_ib=[],
+                profile=copy.deepcopy(PROFILE), name=PREFIX + name, module="root", params=[], noalias=[],
                 ret=ret_ty, body=copy.deepcopy(insts), globals=copy.deepcopy(GLOBALS),
                 types=copy.deepcopy(TYPES))
 

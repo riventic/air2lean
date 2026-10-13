@@ -199,7 +199,7 @@
    "ty": 2,
    "callee": {
     "ty": 10,
-    "func": "mem.Allocator.free__anon_735",
+    "func": "mem.Allocator.free__anon_739",
     "module": "std",
     "instance_key": "10fd68fdc68d8b81a413f20dbd1cba275510ac1696ca4428ce2b7b597a7103aa",
     "noreturn": false

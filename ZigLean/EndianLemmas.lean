@@ -47,6 +47,48 @@ theorem intEncOf_lawful (o : ByteOrder) (n : Nat) : @LawfulEnc (BitVec n) (intEn
   have := intBytes_le_intSize n
   omega
 
+/-- An integer with padding bits stored and loaded as Zig 0.17.0 does (`intEncExt`) reads back as
+stored, at both orders and both signednesses. -/
+theorem intEncExt_decode_encode (o : ByteOrder) (signed : Bool) {n : Nat} (v : BitVec n) :
+    (intEncExt o signed n).decode ((intEncExt o signed n).encode v) = pure v := by
+  have hle : n ≤ 8 * intSize n := by
+    have := intBytes_le_intSize n; omega
+  have hv : (intExtend signed (8 * intSize n) v).setWidth n = v := by
+    cases signed
+    · simp [intExtend, BitVec.setWidth_setWidth_of_le _ hle]
+    · apply BitVec.eq_of_getElem_eq
+      intro i hi
+      simp only [intExtend, if_true, BitVec.getElem_setWidth]
+      rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_signExtend]
+      simp [hi, Nat.lt_of_lt_of_le hi hle]
+  have hd := (intEncOf_lawful o (8 * intSize n)).decode_encode (intExtend signed (8 * intSize n) v)
+  show (do
+      let x ← (intEncOf o (8 * intSize n)).decode
+        ((intEncOf o (8 * intSize n)).encode (intExtend signed (8 * intSize n) v))
+      if intExtend signed (8 * intSize n) (x.setWidth n) = x then pure (x.setWidth n)
+      else throw .unspecified : Result (BitVec n)) = pure v
+  rw [hd]
+  simp [hv]
+
+/-- A padding bit that is not the extension of the value is `.unspecified` (`trunc nuw`/`trunc nsw`
+poison): the bytes of the `u16` `0x0200` are no `i10` (native 0.17.0 ReleaseSafe reads 512, no
+`i10` at all), and those of the `u32` `0x01000005` no `u24`. -/
+theorem intEncExt_i10_zero_padding :
+    ((intEncExt .little true 10).decode (Enc.encode (0x0200 : BitVec 16))).run =
+      some (.error .unspecified) := by
+  decide +kernel
+
+theorem intEncExt_u24_set_padding :
+    ((intEncExt .little false 24).decode (Enc.encode (0x01000005 : BitVec 32))).run =
+      some (.error .unspecified) := by
+  decide +kernel
+
+/-- The plain (≤0.16) decoder accepts both: up to 0.16.0 a load ignores the padding
+(`loadTruncate`), so these are the native values there. -/
+theorem intEncOf_i10_zero_padding :
+    (Enc.decode (Enc.encode (0x0200 : BitVec 16)) : Result (BitVec 10)).run = some (.ok 0x200) := by
+  decide +kernel
+
 /-- A float's encoding has the size of the format's integer, at both orders. -/
 theorem floatEncOf_size_encode (o : ByteOrder) (fmt : FloatFmt) (v : Float fmt) :
     ((floatEncOf o fmt).encode v).size = intSize fmt.width := by

@@ -1496,16 +1496,17 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
           bash tests/roadmap/packed-fields/compiler.sh --check
-      # Batch D (L07/L08, L04, T03) and NaN bits through memory: committed exports of every
-      # version, their translations, kernel-checked results against the retained native outputs,
-      # and the rejections.
-      - name: Packed casts, NaN bits, pointer-try lifetimes, big-endian concurrency
+      # Batch D (L07/L08, L04, T03), NaN bits through memory and encode/decode exactness:
+      # committed exports of every version, their translations, kernel-checked results against
+      # the retained native outputs, and the rejections.
+      - name: Packed casts, NaN bits, encode/decode exactness, pointer-try lifetimes, big-endian concurrency
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean Air2Lean air2lean
           bash tests/roadmap/packed-casts/check.sh
           bash tests/roadmap/nan-bits/check.sh
+          bash tests/roadmap/enc-exactness/check.sh
           bash tests/roadmap/try-pointers/lifetimes/check.sh
           bash tests/roadmap/big-endian/concurrency.sh
       # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
@@ -1541,9 +1542,9 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
 
       # Batch D: this row's Zig version natively on x86_64-linux (s390x and mips64 under
-      # qemu-user): packed casts and their compile errors, NaN bits through memory (aarch64 under
-      # qemu-user too), the packed-field tests, the pointer-try tests, and the big-endian
-      # concurrency program (0.15.2, 0.17.0).
+      # qemu-user): packed casts and their compile errors, NaN bits through memory and
+      # encode/decode exactness (aarch64 under qemu-user too), the packed-field tests, the
+      # pointer-try tests, and the big-endian concurrency program (0.15.2, 0.17.0).
       - name: Packed casts, pointer try and big-endian concurrency, natively
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
@@ -1557,6 +1558,7 @@ jobs:
           bash tests/roadmap/packed-casts/check.sh --native '${{ matrix.zig }}'
           bash tests/roadmap/packed-casts/check.sh --compile-errors '${{ matrix.zig }}'
           bash tests/roadmap/nan-bits/check.sh --native '${{ matrix.zig }}'
+          bash tests/roadmap/enc-exactness/check.sh --native '${{ matrix.zig }}'
           bash tests/roadmap/packed-fields/compiler.sh --native-linux
           bash tests/roadmap/try-pointers/lifetimes/check.sh --native '${{ matrix.zig }}'
           case '${{ matrix.zig }}' in

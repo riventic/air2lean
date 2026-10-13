@@ -10,11 +10,14 @@ Usage: test_cli.py BINARY [--elaborate]
    leaves the output file untouched.
 3. Upgrade: the committed 0.16.0 golden AIR of every example, rewritten to 0.17.0 spelling (tag
    renames, the `bitcast` split, `bool_and`/`bool_or` as `bit_and`/`bit_or`, the `safe` build
-   mode), translates to the same Lean as the 0.16.0 AIR, apart from the profile's version.
+   mode), translates to the same Lean as the 0.16.0 AIR, apart from the profile's version and the
+   intended 0.17.0 semantic changes (integers with padding bits stored extended, the f80
+   `@trunc` routine).
 """
 import copy
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -209,6 +212,23 @@ def as_version(doc, version):
     return doc
 
 
+EXT_LET = re.compile(r"\(letI : Zig\.Enc \(BitVec (\d+)\) := Zig\.intEncExt \.(?:little|big) (?:true|false) \1; ")
+EXT_ENC = re.compile(r"\(Zig\.intEncExt \.(?:little|big) (?:true|false) \d+\)\.(encode|decode)\b")
+
+
+def without_int_ext(text):
+    """`text` with 0.17.0's extended encoding of integers with padding bits (`Zig.intEncExt`,
+    `Dialect.intPadding`) replaced by the default instance, as a 0.16.0 translation spells it."""
+    text = EXT_ENC.sub(r"Zig.Enc.\1", text)
+    while m := EXT_LET.search(text):
+        depth, i = 1, m.end()
+        while depth:
+            depth += {"(": 1, ")": -1}.get(text[i], 0)
+            i += 1
+        text = text[:m.start()] + text[m.end():i - 1] + text[i:]
+    return text
+
+
 def selectable(example, version):
     """`scripts/example-selection.sh`'s version rule (no `zig-versions` file: every version)."""
     versions = ROOT / "examples" / example / "zig-versions"
@@ -254,8 +274,12 @@ def upgrades(binary):
             old_head, _, old_body = old.partition("\n")
             new_head, _, new_body = new.partition("\n")
             assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.0"'), example
-            # The one intended 0.17.0 semantic change in these goldens: compiler-rt f80 `@trunc`
-            # (docs/floats.md group I, `Zig.Float.truncRt017Chk`). Anything else is a spelling bug.
+            # The intended 0.17.0 semantic changes in these goldens: LLVM stores integers with
+            # padding bits extended (`Dialect.intPadding`, docs/architecture-audit/enc-exactness.md)
+            # and compiler-rt f80 `@trunc` (docs/floats.md group I, `Zig.Float.truncRt017Chk`).
+            # Anything else is a spelling bug.
+            assert "Zig.intEncExt" not in old_body, example
+            new_body = without_int_ext(new_body)
             if "--float-semantics" in extra:
                 assert old_body.count("Zig.Float.truncChk") >= new_body.count("Zig.Float.truncRt017Chk"), example
                 new_body = new_body.replace("Zig.Float.truncRt017Chk", "Zig.Float.truncChk")

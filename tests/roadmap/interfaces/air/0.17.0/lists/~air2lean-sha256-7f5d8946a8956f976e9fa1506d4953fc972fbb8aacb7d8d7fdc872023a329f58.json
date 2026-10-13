@@ -522,7 +522,7 @@
   },
   {
    "k": "enum",
-   "name": "debug.SafetyLock.State__enum_1",
+   "name": "debug.SafetyLock.State__enum_2",
    "module": "std",
    "tag": 18,
    "exhaustive": false,

@@ -7,7 +7,9 @@ each exporter pointer to a packed struct field with the layout that the model co
 a mismatch with `PACKED_LAYOUT` (`docs/generated-code.md` §Casts, layout and function pointers).
 
 The first fixture is hand-written AIR in the exporter's schema (`air/0.16.0`, written by
-`fixtures.py --write`; pointer types follow the compiler's `Type.packedStructFieldPtrInfo`) for:
+`fixtures.py --write`; pointer types follow the compiler's `Type.packedStructFieldPtrInfo`). It is
+schema 12 with the profile of the LLVM export below: the translator needs the backend to encode
+`Reg`, a `u24` in 4 bytes (docs/architecture-audit/enc-exactness.md). It covers:
 
 ```zig
 const Mode = enum(u2) { off, low, high };

@@ -204,7 +204,7 @@ theorem reclaim_joined_wp {G : ThreadId → Gh S} {m : Mem} {d : Nat} {x : Ph}
         · have := hj _ (Array.mem_of_getElem? h1) (by rfl)
           exact .inr ⟨_, h1, hc.symm ▸ rfl, this, rfl⟩
         · exact .inr ⟨_, h1, hc.symm ▸ rfl, rfl, rfl⟩
-  refine WP.liftMem (fun e he => (free_noErr hb hl hnr (by rw [hk]; nofun) e he).elim) ?_
+  refine WP.liftMem (fun e he => (free_noErr hb hl hnr (by rw [hk.1]; nofun) e he).elim) ?_
   intro _ m' hf
   obtain ⟨_, _, _, _, rfl⟩ := free_ok hf
   exact ⟨rfl, rfl, hj⟩
