@@ -1,6 +1,7 @@
 import Proofs.Handoff.Layout
 import ZigLean.Sep.Full.Cond
 import ZigLean.Sep.Full.Mutex
+import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Conc.Share
 
 /-!
@@ -277,6 +278,52 @@ theorem Rest.congr {rX : Res} {m m' : Mem} (h : Rest Lo rX m)
   · rw [cellsAt_of hb, cellsAt_of hb, hm l hb]
   · rw [cellsAt_none hb, cellsAt_none hb]
 
+/-- **The `Box` is block 0**: live, `size` bytes on the stack (the extent in the rest). -/
+theorem blk_of {G : ThreadId → Gh} {rX : Res} {m m₀ : Mem} (hi : (L Lo).Inv G rX m)
+    (hr : Rest Lo rX m₀) : ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧
+      blk.bytes.size = Lo.size ∧ blk.kind = .stack := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  obtain ⟨rT, -, hh⟩ := ho.holds
+  have he := hh.swap.extTrue
+  obtain ⟨rIO, ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩, -, rfl⟩ := hr
+  simp only [rsum] at he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [bauth_eq h2] at he
+  obtain ⟨blk, h1, h2, h3, h4, -⟩ := (he 0).1 Lo.size .stack (by simp [Ghost.atExt, ECell.auth1])
+  exact ⟨blk, h1, h2, h3, h4⟩
+
+theorem heap_blk {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
+    (hk : blk.kind = .stack) {x : Nat} (hx : x < blk.bytes.size) :
+    m.heap (0, x) = some ⟨blk.bytes[x], blk.addr, blk.bytes.size, blk.kind⟩ := by
+  simp [Mem.heap, hb, hl, hx, hk, BlockKind.mappedLo]
+
+/-- **A step that keeps the rest keeps the shared words' cells**: the lock's invariant after it
+has them up to `Cell.norm`, and the extent in the rest pins the block. -/
+theorem cells_same {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hi : (L Lo).Inv G rX m)
+    (hi' : (L Lo).Inv G' rX m') (hr : Rest Lo rX m) : ∀ l, Lo.BoxW l → m'.heap l = m.heap l := by
+  rintro ⟨b, x⟩ hl
+  obtain ⟨h0, h1, h2⟩ := hl
+  simp only at h0 h1 h2; subst h0
+  obtain ⟨blk, hb, hlv, hs, hk⟩ := blk_of hi hr
+  obtain ⟨blk', hb', hlv', hs', hk'⟩ := blk_of hi' hr
+  have hx : x < Lo.size := by have := Lo.ok; omega
+  have e := heap_blk hb hlv hk (by omega : x < blk.bytes.size)
+  have e' := heap_blk hb' hlv' hk' (by omega : x < blk'.bytes.size)
+  have hrc := hi'.restCell (l := (0, x)) (fc := ⟨⟨blk.bytes[x], blk.addr, blk.bytes.size, blk.kind⟩, none⟩) (by
+    obtain ⟨rIO, -, hIO, rfl⟩ := hr
+    have hB : Lo.BoxW (0, x) := ⟨rfl, h1, h2⟩
+    simp only [FHeap.union_apply, cellsAt_of hB, e, hIO (0, x) hB]
+    rfl)
+  rw [e', e]
+  rw [e'] at hrc
+  simp only [Option.map_some, Option.some.injEq, Cell.norm, Cell.mk.injEq] at hrc
+  obtain ⟨hby, had, -⟩ := hrc
+  simp only [Option.some.injEq, Cell.mk.injEq]
+  exact ⟨hby, had, by omega, by rw [hk, hk']⟩
+
 /-! ## The protocol has the lock -/
 
 theorem apS : Lo.WS.ApartL (L Lo).toLockWord := .inr (.inl (by have := Lo.ok; simp [Layout.WS, L, FLock.prod]; omega))
@@ -352,6 +399,96 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id,
     hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q⟩
+
+/-- The rest has the bytes of `io`. -/
+theorem rest_io {rX : Res} {m : Mem} (hr : Rest Lo rX m) {x : Nat} (hx : x < Lo.io) :
+    rX.heap (0, x) ≠ none := by
+  obtain ⟨rIO, ⟨A, bs, -, hbs, r₁, r₂, -, rfl, h1, -⟩, -, rfl⟩ := hr
+  have := (up_bytesAt_some h1 rfl (0, x)).mpr ⟨rfl, by simp [bPtr], by simp [bPtr, hbs]; omega⟩
+  simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+  intro _ h; exact absurd h this
+
+/-- The rest has the cells of the three words. -/
+theorem rest_box {rX : Res} {m : Mem} (hr : Rest Lo rX m) (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none)
+    {l : Zig.Loc} (hl : Lo.BoxW l) : rX.heap.erase l ≠ none := by
+  obtain ⟨rIO, -, -, rfl⟩ := hr
+  have := cellsAt_some hl (hw l hl) (m := m)
+  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff, Option.or_eq_none_iff,
+    not_and]
+  intro h; exact absurd h this
+
+/-- The words' cells are live. -/
+theorem box_live {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) {l : Zig.Loc}
+    (hl : Lo.BoxW l) : m.heap l ≠ none := by
+  rcases Lo.box_cases hl with h | h | h
+  · exact hu.ws.cellIn h
+  · exact hu.we.cellIn h
+  · exact hu.wv.cellIn h
+
+theorem before_atomics {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock}
+    (h : (L Lo).Before m c) : (L Lo).Before m' c := by
+  obtain ⟨i, l, ⟨h1, h2⟩, h3⟩ := h
+  exact ⟨i, l, ⟨by rw [ha]; exact h1, by rw [ha]; exact h2⟩, h3⟩
+
+/-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
+ghost value `g` at the same places (a new part or held resource). -/
+theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    (hu : U Lo G rX m) (hi : (L Lo).Inv G rX m) (hc : m.current = t)
+    (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv (upd G t g) rX m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
+  have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, hX]
+    · rw [upd_ne _ _ e]
+  have hP' : ∀ u, (upd G t g u).1.ph = (G u).1.ph := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, hph]
+    · rw [upd_ne _ _ e]
+  have hcs := cells_same hi hi' hu.rest
+  have hk : ∀ W : Word 32 4, (∀ l, W.In l → Lo.BoxW l) → W.KeepK m m' := fun W hW =>
+    Word.keepK_stepIn hs (fun l hl => rest_box hu.rest (fun l' => box_live hu) (hW l hl))
+      (fun l hl => by rw [hcs l (hW l hl)])
+  have kS := hk _ (fun _ => Lo.ws_box)
+  have kE := hk _ (fun _ => Lo.we_box)
+  have kV := hk _ (fun _ => Lo.wv_box)
+  have hhS := Word.hist_keepK hu.ws kS
+  have hhE := Word.hist_keepK hu.we kE
+  have hhV := Word.hist_keepK hu.wv kV
+  refine ⟨?_, fun e he hr => ?_, hu.rest.congr hcs, hu.ws.keepK kS, hu.we.keepK kE,
+    hu.wv.keepK kV,
+    hu.cinv.frame (t := t) (g' := g) (congrArg (·.c) hX) hph
+      (fun h => by show g.2.ph.isProd; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
+    hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
+      (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
+      (fun h => by rw [upd_self]; show g.2.ph.isMain; rw [hX]; exact h),
+    by rw [hX']; exact hu.places, fun h1 => ?_, ?_, fun h0 => ?_, fun h1 => ?_,
+    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_⟩
+  · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
+    rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
+  · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
+    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
+      · exact .inl ⟨hk, LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) h''⟩
+      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) h'')
+    · refine absurd ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩ hnt
+      have := rest_io hu.rest hr.2
+      rw [hr.1]
+      simpa [FHeap.erase] using this
+  · rw [hX'] at h1; rw [hhE]; exact hu.ep1 h1
+  · rw [hhE]; exact VClock.le_trans hu.ep0 (hs.clock 0)
+  · rw [hX'] at h0; rw [hX']; exact hu.ent h0
+  · rw [hX'] at h1; rw [hP']; exact hu.hold h1
+  · rw [hX'] at hr; rw [hX', hhS, hP']
+    rcases hu.reg i jr sn e hr with h' | ⟨hlk, h'⟩
+    · exact .inl (VClock.le_trans h' (hs.clock 1))
+    · refine .inr ⟨hlk, ?_⟩
+      rcases h' with ⟨hh, hle⟩ | hb
+      · exact .inl ⟨hh, VClock.le_trans hle (hs.clock 0)⟩
+      · exact .inr (before_atomics hs.atomics hb)
+  · rw [hX'] at h0 h1
+    show ((Lo.WS.hist m')[(Lo.WS.hist m').size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
+  · rw [hX'] at h1
+    show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
+  · rw [hs.waiters] at hw; exact hu.q w hw
 
 variable {prodOf : Tgt → Option Ptr}
 
