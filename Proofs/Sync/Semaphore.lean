@@ -2367,7 +2367,7 @@ def post45 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_wait
     ((r.1 = .br44 ∧ r.2.epoch = e ∧ P.inv (upd G t (gw pa x i jr e false)) m) ∨
       (r.1 = .ret ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m))
 
-theorem loop45_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem)
+theorem loop45_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem)
     (d : Nat) (h : inv45 (P := P) t pa x i jr e D s G m d) :
     P.WP t ((Io_Condition_waitUncancelable.loop45 (S.ptr.add 12) io (S.ptr.add 8)).run s) (fun r G' m' d' =>
       if Io_Condition_waitUncancelable.again45 r.1 then inv45 (P := P) t pa x i jr e D r.2 G' m' d' ∧
@@ -2470,7 +2470,7 @@ def post22 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_wait
     (G : ThreadId → SGh X) (m : Mem) (d : Nat) : Prop :=
   d < D ∧ r.1 = .ret ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m
 
-theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
+theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat) (h : inv22 (P := P) t pa x i jr e D s G m d) :
     P.WP t ((Io_Condition_waitUncancelable.loop22 (S.ptr.add 12) io (S.ptr.add 8)).run s)
       (fun r G' m' d' =>
@@ -2536,7 +2536,7 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   simp only [StateT.run_bind, StateT.run_modify]
   simp only [pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv45 (P := P) t pa x i jr e d) (fun _ => 0)
-    (post45 (P := P) t pa x i jr e d) (loop45_body t pa x io i jr e hP hinS d) _ G₃ m₅ k₃
+    (post45 (P := P) t pa x i jr e d) (loop45_body t pa x io i jr e hP hinS hcost d) _ G₃ m₅ k₃
     ⟨by omega, hop₅.current, sn, b, hr, sv_of hs₄ hj' hv', hvsn, hsb,
       by rw [← hg₃, upd_same]; exact hi₅⟩))
   rintro ⟨e', s'⟩ G₄ m₆ d₄ ⟨hd₄, hc₆, ⟨rfl, hep, hi₆⟩ | ⟨rfl, hL₆, hi₆⟩⟩
@@ -2593,7 +2593,7 @@ theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
     (⟨.holds, pa, hL⟩, .reg i jr false ev, x) rfl ⟨rfl, hinS⟩ io G₂ m₂ k₂ hi₂)))
   rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₃⟩
   refine WP.mono ?_ (WP.loop _ _ (inv22 (P := P) t pa x i jr ev d) (fun _ => 0)
-    (post22 (P := P) t pa x d) (loop22_body t pa x io i jr ev hP hinS d) _ G₃ m₃ d₃
+    (post22 (P := P) t pa x d) (loop22_body t pa x io i jr ev hP hinS hcost d) _ G₃ m₃ d₃
     ⟨by omega, hc₃, rfl, hi₃⟩)
   rintro ⟨e', s'⟩ G₄ m₄ d₄ ⟨hd₄, rfl, hc₄, hL₄, hi₄⟩
   exact WP.pure' ⟨hd₄, hc₄, hL₄, hi₄⟩
