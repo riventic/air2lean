@@ -361,16 +361,13 @@ theorem slice_field {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
     (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
       Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
       Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    FTotalTriple (up (Zig.pts q 8 s)) (load T 8 (q.add o)) (fun r => ⟪r = v⟫ ⋆ up (Zig.pts q 8 s)) := by
-  refine FTotalTriple.of_cases fun r hp => ?_
-  obtain ⟨A, S, K, bs, ⟨ha, hs, hdec, hK⟩, hb⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hp
-  obtain ⟨h1, h2⟩ := Slice.decode_fields hdec
-  have hs' : bs.size = 16 := hs
-  refine ⟨_, _, FTotalTriple.load_bytesAt (k := o) (al := 8) (v := v) (by omega)
-    (by rcases ho with rfl | rfl <;> omega) (by rcases ho with rfl | rfl <;> omega)
-    (by rw [hsz]; exact hv bs h1 h2), hb, fun x r' h => ?_⟩
-  obtain ⟨hx, hb'⟩ := sep_lift.mp h
-  exact sep_lift.mpr ⟨hx, FTotalTriple.up_pts_iff_bytesAt.mpr ⟨A, S, K, bs, ⟨ha, hs, hdec, hK⟩, hb'⟩⟩
+    FTotalTriple (up (Zig.pts q 8 s)) (load T 8 (q.add o)) (fun r => ⟪r = v⟫ ⋆ up (Zig.pts q 8 s)) :=
+  FTotalTriple.up_view fun _ ⟨A, S, K, bs, ha, hs, hdec, hb, hK⟩ => by
+    obtain ⟨h1, h2⟩ := Slice.decode_fields hdec
+    have hs' : bs.size = 16 := hs
+    exact ⟨_, _, FTotalTriple.load_bytesAt (k := o) (al := 8) (v := v) (by omega)
+      (by rcases ho with rfl | rfl <;> omega) (by rcases ho with rfl | rfl <;> omega)
+      (by rw [hsz]; exact hv bs h1 h2), hb, fun _ _ hb' => ⟨A, S, K, bs, ha, hs, hdec, hb', hK⟩⟩
 
 /-- **The pointer field** of a stored slice. -/
 @[fsym] theorem load_slice_ptr {q : Ptr} {s : Slice} :

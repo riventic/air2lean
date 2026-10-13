@@ -268,20 +268,18 @@ theorem FTotalTriple.region_loadBytes (hn : 0 < n) (hb : al ∣ a) (ho : al ∣ 
     (hfit : o + n ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.loadBytes (q.add o) n al)
       (fun x => ⟪x = bs.extract o (o + n)⟫ ⋆ up (Zig.region q a bs)) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.loadBytes_bytesAt hn hfit (mod_add_dvd ha hb ho), ⟨hbs, hk, hg⟩,
-      fun _ _ h => by
-        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
-        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.loadBytes_bytesAt hn hfit (mod_add_dvd ha hb ho), hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Write of bytes** at byte `o` of a region. -/
 theorem FTotalTriple.region_storeBytes {bs' : Array Byte} (hn : 0 < bs'.size) (hb : al ∣ a)
     (ho : al ∣ o) (hfit : o + bs'.size ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.storeBytes (q.add o) al bs')
       (fun _ => up (Zig.region q a (writeBytes bs o bs'))) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.storeBytes_bytesAt hn hfit (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
-      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view' fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.storeBytes_bytesAt hn hfit (mod_add_dvd ha hb ho) hK, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of a nonempty region, up to
 one past its end. -/

@@ -289,6 +289,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
+  A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
+  the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
+  `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.

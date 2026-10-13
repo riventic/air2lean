@@ -55,13 +55,13 @@ variable {p : Ptr} {a al : Nat} {bs bs' : Array Byte}
 @[fsym] theorem storeBytes_region (hn : 0 < bs'.size) (hk : bs'.size ≤ bs.size) (hal : a % al = 0) :
     FTotalTriple (up (Zig.region p a bs)) (Zig.storeBytes p al bs')
       (fun _ => up (Zig.region p a (writeBytes bs 0 bs'))) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, hA, hK, hbs⟩, hkn, hg⟩ => by
+  FTotalTriple.up_view' fun _ ⟨A, S, K, hA, hK, hbs⟩ => by
     have ha : (A + p.off.toNat + 0) % al = 0 :=
       Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.dvd_of_mod_eq_zero hal) (Nat.dvd_of_mod_eq_zero hA))
     have t := FTotalTriple.storeBytes_bytesAt (q := p) (k := 0) (S := S) (bs := bs) hn
       (by omega) ha hK
     simp only [Int.natCast_zero, Ptr.add_zero] at t
-    exact ⟨_, _, t, ⟨hbs, hkn, hg⟩, fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, hA, hK, hb'⟩, hk', hg'⟩⟩
+    exact ⟨_, _, t, hbs, fun _ _ hb' => ⟨A, S, K, hA, hK, hb'⟩⟩
 
 /-- **A store of a value of any encoding** at the start of an owned region: its bytes
 (`Enc.encode`), whatever they are (a NaN lane's are undefined). No `LawfulEnc` is needed: the

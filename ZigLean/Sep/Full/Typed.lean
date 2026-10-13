@@ -80,21 +80,19 @@ theorem FTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) 
     (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
       (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.load_bytesAt hn hfit (mod_add_dvd ha hb ho) hv, ⟨hbs, hk, hg⟩,
-      fun _ _ h => by
-        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
-        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.load_bytesAt hn hfit (mod_add_dvd ha hb ho) hv, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Store** of a `U` at byte `o` of a region. -/
 theorem FTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
       (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+  FTotalTriple.up_view' fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
     ⟨_, _, FTotalTriple.store_bytesAt w (by rw [LawfulEnc.size_encode]; exact hn)
-        (by rw [LawfulEnc.size_encode]; exact hfit) (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
-      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+        (by rw [LawfulEnc.size_encode]; exact hfit) (mod_add_dvd ha hb ho) hK, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- `region_loadAt` at the offset `k` of generated code (`p.add 2`: an `Int` literal). -/
 theorem FTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
