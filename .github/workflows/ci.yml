@@ -2575,6 +2575,16 @@ jobs:
           grep -q 'NegativeMacos.lean:[0-9]*:[0-9]*: error: Application type mismatch' "$RUNNER_TEMP/negative-macos.log" \
             || { cat "$RUNNER_TEMP/negative-macos.log" >&2; exit 1; }
 
+      # 0.15.2 on aarch64-linux: `Thread.Mutex.tryLock` is a weak `cmpxchg` (tests/golden/0.15.2/
+      # threadsync/Gen-linux-aarch64.lean), the other branch of `ThreadMutex.tryLock_wp`.
+      - name: Build threadsync proofs (aarch64-linux translation)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' }}
+        run: |
+          python3 scripts/check-tree.py create .lake/check-tree/0.15.2-linux-aarch64 \
+            --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean
+          cd .lake/check-tree/0.15.2-linux-aarch64
+          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex
+
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}
         env:

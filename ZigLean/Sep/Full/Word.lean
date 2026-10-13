@@ -48,6 +48,21 @@ def ApartL (L : LockWord) : Prop := L.b ≠ W.b ∨ L.o + 4 ≤ W.o ∨ W.o + nb
 
 variable {W}
 
+/-- A word apart from the lock's is at another place. -/
+theorem ApartL.ne {L : LockWord} (hap : W.ApartL L) : L.b ≠ W.b ∨ L.o ≠ W.o := by
+  have := W.sz_pos
+  rcases hap with h | h | h
+  · exact .inl h
+  · exact .inr (by omega)
+  · exact .inr (by omega)
+
+/-- A 32-bit word apart from the lock's has another pointer. -/
+theorem ApartL.ptr_ne {W : Word 32 4} {L : LockWord} (hap : W.ApartL L) : W.ptr ≠ L.ptr := fun e => by
+  simp only [Word.ptr, LockWord.ptr, Ptr.mk.injEq, Option.some.injEq, Int.natCast_inj] at e
+  rcases hap.ne with h | h
+  · exact h e.1.symm
+  · exact h e.2.symm
+
 theorem cellKey_norm (c : Cell) : cellKey c.norm = cellKey c := by
   obtain ⟨b, a, s, k⟩ := c
   cases k <;> rfl
@@ -127,12 +142,7 @@ theorem keep_lockWordStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hs : L.Ste
     · exact h hb.symm
     · omega
     · omega
-  · have hne : W.b ≠ L.b ∨ W.o ≠ L.o := by
-      rcases hap with h | h | h
-      · exact .inl (Ne.symm h)
-      · exact .inr (by omega)
-      · exact .inr (by omega)
-    exact hs.locs.same W.b W.o hne i l
+  · exact hs.locs.same W.b W.o (hap.ne.imp Ne.symm Ne.symm) i l
   · rcases hs.locs.new l hl with h | ⟨hb, ho, hlen⟩
     · exact .inl h
     · rcases hap with h | h | h
@@ -228,12 +238,7 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     fun x h1 h2 => hop.cells _ (hnw _ ⟨rfl, h1, h2⟩)
   obtain ⟨hblk', hcur⟩ := LockWord.word_congr hLcells hi.w.blk
   have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold LockWord.U32; rw [hcur]
-  have hne : L.b ≠ W.b ∨ L.o ≠ W.o := by
-    rcases hap with h | h | h
-    · exact .inl h
-    · exact .inr (by omega)
-    · exact .inr (by omega)
-  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => hop.locs.same L.b L.o hne i l
+  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => hop.locs.same L.b L.o hap.ne i l
   have hWb : W.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hw.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
   have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true :=
@@ -357,6 +362,29 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
     exact ⟨(hR _).mp h1, (h2.weaken hg).mono rfl rfl rfl (fun _ => VClock.le_refl _)
       fun e he => .inl he⟩
 
+/-- Thread `t`, which does not hold the lock, goes to `out` at a stop (`current := t`) where the
+word's invariant holds with `t` at `out`. -/
+theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
+    (hc : m.current = t) (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone)
+    (hw : L.WInv (upd (L.pl G) t .out) m) :
+    L.Inv (upd G t (L.set (G t) .out rnil)) rX m := by
+  have hupd : ∀ u, L.ph (upd G t (L.set (G t) .out rnil) u) = if u = t then .out else L.ph (G u) :=
+    fun u => by unfold upd; split <;> simp [L.ph_set]
+  have := hi.requeue m.current m.waiters m.woken (G' := upd G t (L.set (G t) .out rnil))
+    (by rw [pl_upd_set]; exact hw)
+    (fun u => by
+      unfold upd; split
+      · rename_i e; subst e; rw [L.part_set]
+      · rfl)
+    (fun u => by
+      unfold upd; split
+      · rename_i e; subst e; rw [L.held_set, hi.idle _ hnh]
+      · rfl)
+    (fun u => by rw [hupd]; split <;> simp_all)
+    (fun u hu => by rw [hupd] at hu; split at hu <;> simp_all)
+    (fun r => by rw [L.R_set])
+  exact this
+
 /-- A futex wait of thread `t` (`away`, not in the queue) at a shared word `W` (its bytes in the
 protocol's rest, apart from the lock's word). If it sleeps, the lock's invariant holds with `t` in
 the queue; else `t` goes to `out`. -/
@@ -372,12 +400,6 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
   obtain ⟨ht, -⟩ := hi.ht hng
   obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
   have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
-  have hpL : W.ptr ≠ L.ptr := fun e => by
-    simp only [Word.ptr, LockWord.ptr, Ptr.mk.injEq, Option.some.injEq, Int.natCast_inj] at e
-    rcases hap with h | h | h
-    · exact h e.1.symm
-    · omega
-    · omega
   have hoff : ∀ bid blk o, m.access W.ptr 4 4 = pure (bid, blk, o) →
       bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o := fun bid blk o ha => by
     rw [ha₀] at ha; cases ha
@@ -385,28 +407,11 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     · exact .inl (Ne.symm h)
     · exact .inr (.inr h)
     · exact .inr (.inl h)
-  have hw := hi.w.waitOff (t := t) (by exact hph) hpL hoff hq h
-  have hupd : ∀ u, L.ph (upd G t (L.set (G t) .out rnil) u) = if u = t then .out else L.ph (G u) :=
-    fun u => by unfold upd; split <;> simp [L.ph_set]
-  have hpl : L.pl (upd G t (L.set (G t) .out rnil)) = upd (L.pl G) t .out := pl_upd_set G t _ _
+  have hw := hi.w.waitOff (t := t) (by exact hph) hap.ptr_ne hoff hq h
   -- the relabel of `t` from `away` to `out`, at a memory with the same parts
   have hrel : ∀ M : Mem, L.Inv G rX M → M.current = t →
-      L.WInv (upd (L.pl G) t .out) M → L.Inv (upd G t (L.set (G t) .out rnil)) rX M := by
-    intro M hiM hc hwM
-    have := hiM.requeue M.current M.waiters M.woken (G' := upd G t (L.set (G t) .out rnil))
-      (by rw [hpl]; exact hwM)
-      (fun u => by
-        unfold upd; split
-        · rename_i e; subst e; rw [L.part_set]
-        · rfl)
-      (fun u => by
-        unfold upd; split
-        · rename_i e; subst e; rw [L.held_set, hi.idle _ hnh]
-        · rfl)
-      (fun u => by rw [hupd]; split <;> simp_all)
-      (fun u hu => by rw [hupd] at hu; split at hu <;> simp_all)
-      (fun r => by rw [L.R_set])
-    exact this
+      L.WInv (upd (L.pl G) t .out) M → L.Inv (upd G t (L.set (G t) .out rnil)) rX M :=
+    fun _ hiM hc hwM => hiM.toOut hc hnh hng hwM
   rcases futexWait_eq h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, -, -, hc⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hw ⊢
     exact ⟨by first | rfl | trivial, hrel _ (hi.requeue t m.waiters _ (hi.w.same t m.seen m.nextMsg _ |>.groups m.groups)
@@ -427,24 +432,8 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
 `t` goes to `out` with the memory before the wait. -/
 theorem Inv.spuriousOff {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId}
     (hi : L.Inv G rX m) (hph : L.ph (G t) = .away) (hq : m.waiters.any (·.1 == t) = false) :
-    L.Inv (upd G t (L.set (G t) .out rnil)) rX { m with current := t } := by
-  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
-  have hupd : ∀ u, L.ph (upd G t (L.set (G t) .out rnil) u) = if u = t then .out else L.ph (G u) :=
-    fun u => by unfold upd; split <;> simp [L.ph_set]
-  have := hi.requeue t m.waiters m.woken (G' := upd G t (L.set (G t) .out rnil))
-    (by rw [pl_upd_set]; exact (hi.w.spuriousOff (t := t) (by exact hph) hq).2)
-    (fun u => by
-        unfold upd; split
-        · rename_i e; subst e; rw [L.part_set]
-        · rfl)
-    (fun u => by
-      unfold upd; split
-      · rename_i e; subst e; rw [L.held_set, hi.idle _ hnh]
-      · rfl)
-    (fun u => by rw [hupd]; split <;> simp_all)
-    (fun u hu => by rw [hupd] at hu; split at hu <;> simp_all)
-    (fun r => by rw [L.R_set])
-  exact this
+    L.Inv (upd G t (L.set (G t) .out rnil)) rX { m with current := t } :=
+  (hi.cur t).toOut rfl (by rw [hph]; decide) (by rw [hph]; decide) (hi.w.spuriousOff (t := t) (by exact hph) hq).2
 
 /-- A futex wake by thread `t` at a shared word apart from the lock's: the lock's invariant
 holds. -/
@@ -452,13 +441,7 @@ theorem Inv.wakeOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     {k : Nat} {cs : List Nat} (hi : L.Inv G rX m) (hap : W.ApartL L.toLockWord)
     (h : ((Thread.futexWake W.ptr k cs).run { m with current := t }).run = some (.ok ((), m'))) :
     L.Inv G rX m' := by
-  have hpL : W.ptr ≠ L.ptr := fun e => by
-    simp only [Word.ptr, LockWord.ptr, Ptr.mk.injEq, Option.some.injEq, Int.natCast_inj] at e
-    rcases hap with h | h | h
-    · exact h e.1.symm
-    · omega
-    · omega
-  have hw := hi.w.wakeOff hpL h
+  have hw := hi.w.wakeOff hap.ptr_ne h
   have hm' := Proto.modify_ok h
   subst hm'
   exact hi.requeue t _ _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl) (fun _ h => h)
