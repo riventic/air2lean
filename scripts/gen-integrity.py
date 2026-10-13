@@ -136,6 +136,9 @@ FIXTURES = [
     ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.0/rnd",
      ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Callbacks.lean", "tests/roadmap/callbacks/air/0.17.0",
+     ["--namespace", "Interfaces.Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-callbacks-0.17.0.json"], "exact"),
     # E02 callback contracts and A01 environment/region asm: fresh 0.17.0 translations.
     ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.0",
      ["--namespace", "Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",

@@ -16,9 +16,9 @@ SNAPSHOT = HERE / 'exposure-report.json'
 FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'conclusion_dependencies',
           'opaque_dependencies', 'runtime_modules', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed',
           'statement')
-# The Shadow contracts redefine Zig.TotalTriple and Zig.TotalTripleWithin; the audit
+# The Shadow contracts redefine Zig.Full.FTotalTriple and Zig.Full.FTTotalTriple; the audit
 # environment imports the registered ones.
-CLASH = "environment already contains 'Zig.TotalTriple"
+CLASH = "environment already contains 'Zig.Full.F"
 
 
 def extract():

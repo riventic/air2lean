@@ -11,6 +11,12 @@ case "${1:-}" in
     "$AIR2LEAN_LEAN" --run tests/roadmap/global-payload-pointers/Model.lean
     work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/payload-mutants.XXXXXX")
     trap 'rm -rf "$work"' EXIT
+    # The strength log of the model's triples (tests/roadmap/strength-log).
+    mkdir -p "$work/lean"
+    "$AIR2LEAN_LEAN" -R tests/roadmap/global-payload-pointers -o "$work/lean/Model.olean" \
+      tests/roadmap/global-payload-pointers/Model.lean
+    LEAN_PATH="$work/lean${LEAN_PATH:+:$LEAN_PATH}" "$AIR2LEAN_LEAN" \
+      tests/roadmap/strength-log/GlobalPayloadPointers.lean
     for name in forget-parent forget-payload wrap-offset unbounded; do
       python3 tests/roadmap/global-payload-pointers/mutations.py create "$name" \
         zig-patch/air-json/pointer-offset.zig "$work/$name.zig"
