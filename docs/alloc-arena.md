@@ -385,6 +385,24 @@ Not proved yet, in order:
   enters as `CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv`
   (`Full/Dispatch.lean`), for the child `CI : Core.Child` that the invariant names.
 * `reset` (stock and patched): `{own e ⋆ epTok γ e 1} reset {own (e + 1) ⋆ epTok γ (e + 1) 1}`.
+  **Ghost part done** (`AllocArena/Reset.lean`, `reset_release`): from `own e ⋆ epTok γ e 1` to
+  `Released`: the ledger at epoch `e + 1` with no grant and that epoch's whole token, the child
+  with the reservoir, junk, and both lists as lists of whole nodes (`FreeList`: header, whole
+  buffer, the child's token, the whole share `qn` and the whole claim). The used nodes are
+  pairwise disjoint because the arena holds each one's whole claim after `cls_revoke`
+  (`freeCl_pairwise`), which the junk conversion of each buffer needs (`chainH_junk`). Open: the
+  walk of the code. It does plain loads and stores of words the invariant owns as atomic words
+  (`end_index = 0`, the list heads, `arena.state = .init`) and a typed load and store across the
+  struct's region and its two atomic words. These need library rules that keep a word's atomic
+  layout constraint under a plain access (the model's `Res.writeAt`/`Holds.write` keep it); the
+  rules are in the engine lane's queue.
+  **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
+  node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
+  creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is
+  half of the reservoir (`FAllocInv.fee_half`, from the obligation `FAllocInv.fee_add` that every
+  allocator's fee is fractional), and the child's `free` of a node refunds into it
+  (`FAllocInv.fee_join`). This matters for the retaining modes, which call the child's `alloc`
+  before they free the old node. For a child without a fee the reservoir is `emp`.
   The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
   every node is junk or the first node's tail (`OV.Cov`) and turns back into a region
   (`EUpd.junkRegion`); `Upd.bump` mints the next epoch's token (the old one is dropped,

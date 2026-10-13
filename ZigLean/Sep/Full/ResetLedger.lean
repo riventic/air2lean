@@ -1,5 +1,4 @@
 import ZigLean.Sep.Full.Ghost
-import ZigLean.Sep.Full.Pinned
 import ZigLean.Sep.Full.Reclaim
 
 /-!

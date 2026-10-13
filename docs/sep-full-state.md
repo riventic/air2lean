@@ -760,7 +760,16 @@ whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
-`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
+`own_epTok_empty` and `granted_epTok_false`, and `reset`'s ghost part (`reset_release`). The
+arena's `reset` code proof is next.
+
+**Fees are fractional** (`FAllocInv.fee_add`, coordinator decision 2026-10-13): every allocator
+proves `0 < a → 0 < b → fee (a + b) = fee a ⋆ fee b`. The default fee `emp` proves it
+automatically, and `epFee` proves it by `epTok_add`. An allocator of allocators (an arena)
+pays its child's fee for each node out of a reservoir it keeps (`FAllocInv.fee_half`) and joins the
+refunds back (`fee_join`). This is an obligation on implementations, so no client's statement gets
+weaker. Without it, an arena could not call its child's `alloc` before it frees a node (`reset`'s
+retaining modes).
 
 ### Credits and room: non-mintable resources (2026-10-12)
 
