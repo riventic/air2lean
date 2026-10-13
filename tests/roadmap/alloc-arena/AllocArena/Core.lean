@@ -193,14 +193,25 @@ theorem chain_owns {CI : Child} {free : Bool} {b : BlockId} {nd : NodeV}
         (by within) r hr
     · exact Owns.within (X := Chain CI free ns nx) (chain_owns hb hm) (by within) r hr
 
-/-- The receipt the arena keeps for a grant `(p, n, q, A, K, φ)` of epoch `e` (`EUpd.lendT`): the
-fraction `q` of the extent of `p`'s block, at some bound (a share given back against it is
-weakened to that bound first, `EUpd.returnTw`). -/
+/-- **The arena's fee** for a grant (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee of a
+grant): a nonzero part `φ` of the epoch token of epoch `e` of its ledger `γ`. -/
+def fee (γ e : Nat) (φ : Frac) : FAssn := epTok γ e φ ⋆ ⟪0 < φ.val⟫
+
+/-- A fee owns no bytes and no knowledge. -/
+theorem fee_ghost {γ e : Nat} {φ : Frac} {r : Res} (h : fee γ e φ r) :
+    r.heap = FHeap.empty ∧ r.know = Know.none := by
+  obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h); exact ⟨h.1, h.2.1⟩
+
+/-- What the arena keeps for a grant `(p, n, q, A, K, φ)` of epoch `e`: the receipt for its share
+(`EUpd.lendT`: the fraction `q` of the extent of `p`'s block, at some bound; a share given back
+against it is weakened to that bound first, `EUpd.returnTw`) and the fee `φ` the client paid
+(`free` gives it back). -/
 def rcptOf (γ e : Nat) : Option GRegion → FAssn
   | none => FAssn.emp
-  | some (p, _, q, _, _, _) => FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆ brcpt b q k γ e
+  | some (p, _, q, _, _, φ) =>
+    (FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆ brcpt b q k γ e) ⋆ fee γ e φ
 
-/-- One receipt per grant of the map (decision 1 of step 4, `docs/alloc-arena.md`). -/
+/-- One receipt and fee per grant of the map (decision 1 of step 4, `docs/alloc-arena.md`). -/
 def Rcpts (γ e : Nat) (M : GMap) : FAssn :=
   FAssn.ex fun N => ⟪∀ i, N ≤ i → M i = none⟫ ⋆ sepN N (fun i => rcptOf γ e (M i))
 
@@ -519,14 +530,17 @@ def own (CI : Child) (γ e : Nat) (ctx : Ptr) : FAssn :=
   FAssn.ex fun w : OV => ⟪w.Facts⟫ ⋆ w.body CI γ e ctx
 
 /-- The arena's invariant at epoch `e`: the token of a region is a ghost token of epoch `e` that
-names it with the lent fraction, its cells' address and kind labels and its fee (the arena
-charges none yet: `fee` is `emp`, and the ledger only records the fraction); the grants' shares are
+names it with the lent fraction, its cells' address and kind labels and its fee `φ`; the fee is a
+nonzero part `φ` of the epoch token (`fee`), which the state keeps with the grant's receipt
+(`rcptOf`) until `free` gives it back, so the whole epoch token shows that no grant is outstanding
+(`own_epTok_empty`). The grants' shares are
 tagged with the epoch, lent off the nodes' shares (tagged like the child's grants: the ledger's
 parent is `CI.tag`). The arena's state holds its ledger and the child's state, so it witnesses
 its tag (`act`). -/
 def inv (CI : Child) (γ e : Nat) (ctx : Ptr) : FAllocInv where
   own := own CI γ e ctx
   tok p n _ A _ K q φ := FAssn.ex fun i => gfrag γ e i (p, n, q, A, K, φ)
+  fee := fee γ e
   tag := some (γ, e)
   act r h := by
     obtain ⟨w, h⟩ := h
@@ -534,6 +548,9 @@ def inv (CI : Child) (γ e : Nat) (ctx : Ptr) : FAllocInv where
     exact act_gauthP (by within) h (CI.act_within (by within) h)
 
 @[simp] theorem inv_tag (CI : Child) (γ e : Nat) (ctx : Ptr) : (inv CI γ e ctx).tag = some (γ, e) := rfl
+
+@[simp] theorem inv_fee (CI : Child) (γ e : Nat) (ctx : Ptr) (φ : Frac) :
+    (inv CI γ e ctx).fee φ = fee γ e φ := rfl
 
 /-! ## The precondition of `free` and `resize`
 
@@ -681,7 +698,8 @@ theorem pre_of {k A S : Nat} {K : BlockKind} {q q' φ : Frac} {m : Mem} {r rF : 
 theorem free_pre {k : Nat} {φ : Frac} {bs : Array Byte} {m : Mem} {r rF : Res} (hh : Holds m r rF)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
     (hp : ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs) r) :
-    (FAssn.ex fun v : FV => ⟪v.Facts ctx s ∧ v.q' = v.q⟫ ⋆ v.L CI γ e ctx s (rgn γ e s k bs)) r := by
+    (FAssn.ex fun v : FV => ⟪v.Facts ctx s ∧ v.q' = v.q ∧ v.φ = φ⟫ ⋆
+      v.L CI γ e ctx s (rgn γ e s k bs)) r := by
   obtain ⟨A, hp⟩ := sep_exR hp
   obtain ⟨S, hp⟩ := sep_exR hp
   obtain ⟨K, hp⟩ := sep_exR hp
@@ -690,8 +708,8 @@ theorem free_pre {k : Nat} {φ : Frac} {bs : Array Byte} {m : Mem} {r rF : Res} 
       rgn γ e s k bs A S K)) r := by
     rw [hlen]; exact of_eq (by simp only [FAllocInv.held, rgn, inv_tag]; ac_rfl) hp
   obtain ⟨v, hv⟩ := pre_of (G := rgn γ e s k bs) hh (by omega) hp'
-  obtain ⟨⟨hf, hq, hq', -⟩, hL⟩ := sep_lift.mp hv
-  exact ⟨v, sep_lift.mpr ⟨⟨hf, hq'.trans hq.symm⟩, hL⟩⟩
+  obtain ⟨⟨hf, hq, hq', -, -, -, hφ⟩, hL⟩ := sep_lift.mp hv
+  exact ⟨v, sep_lift.mpr ⟨⟨hf, hq'.trans hq.symm, hφ⟩, hL⟩⟩
 
 /-- What the memory says about the blocks of the precondition: the struct's from owned bytes,
 the node's and the slice's from their extent shares (whose tags the arena's state witnesses as
@@ -922,24 +940,25 @@ theorem rcpts_repoint {γ e i : Nat} {M : GMap} {p : Ptr} {n n' : Nat} {q φ : F
       (fun _ x => x) (rcpts_pick hM h))
   rwa [GMap.set_set] at this
 
-/-- The receipt of a grant, opened: its block and bound. -/
+/-- The receipt of a grant, opened: its block and bound, and the grant's fee. -/
 theorem open_rcpt {γ e i : Nat} {M : GMap} {p : Ptr} {n : Nat} {q q' φ : Frac} {A : Nat} {K : BlockKind}
     {k₀ : Nat} {t : STag} {X : FAssn} {r : Res} (hM : M i = some (p, n, q, A, K, φ))
     (h : (pshare p q' k₀ t ⋆ (Rcpts γ e M ⋆ X)) r) :
     ∃ b k, p.block = some b ∧
-      ((bshare b q' k₀ t ⋆ brcpt b q k γ e) ⋆ (Rcpts γ e (M.set i none) ⋆ X)) r := by
+      (((bshare b q' k₀ t ⋆ brcpt b q k γ e) ⋆ (Rcpts γ e (M.set i none) ⋆ X)) ⋆ fee γ e φ) r := by
   have h1 := sep_mono_right (R := (rcptOf γ e (some (p, n, q, A, K, φ)) ⋆ Rcpts γ e (M.set i none)) ⋆ X)
     (fun _ x => sep_mono_left (Q := rcptOf γ e (some (p, n, q, A, K, φ)) ⋆ Rcpts γ e (M.set i none))
       (fun _ y => rcpts_pick hM y) x) h
-  have h2 := of_eq (Q := pshare p q' k₀ t ⋆ (rcptOf γ e (some (p, n, q, A, K, φ)) ⋆
-    (Rcpts γ e (M.set i none) ⋆ X))) (by ac_rfl) h1
+  have h2 := of_eq (Q := (pshare p q' k₀ t ⋆ ((FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+    brcpt b q k γ e) ⋆ (Rcpts γ e (M.set i none) ⋆ X))) ⋆ fee γ e φ) (by simp only [rcptOf]; ac_rfl) h1
+  obtain ⟨r₁, r₂, hd, rfl, h2, hf⟩ := h2
   obtain ⟨b, h3⟩ := sep_ex.mp h2
   obtain ⟨hb, h3⟩ := sep_lift.mp (sep_assoc h3)
   obtain ⟨b', h4⟩ := sep_ex.mp (of_eq (sep_left_comm_eq _ _ _) h3)
   obtain ⟨k, h4⟩ := sep_ex.mp h4
   obtain ⟨hb', h4⟩ := sep_lift.mp (sep_assoc h4)
   rw [hb] at hb'; cases hb'
-  exact ⟨b, k, hb, of_eq (by ac_rfl) h4⟩
+  exact ⟨b, k, hb, ⟨r₁, r₂, hd, rfl, of_eq (by ac_rfl) h4, hf⟩⟩
 
 /-- The grant's token names a grant of the map. -/
 theorem grant_fact {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} {X : FAssn} :
@@ -949,22 +968,22 @@ theorem grant_fact {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} {X : FAssn
     exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
 
 /-- **`free`'s ghost part**: the share goes back against its receipt (at the receipt's bound `k`,
-on the grant's block `b`), the grant is retired. -/
+on the grant's block `b`), the grant is retired, and its fee comes back. -/
 theorem free_ghost {γ e i : Nat} {M : GMap} {t : STag} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat}
     {K : BlockKind} :
     EUpd (gauthP γ e M t ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ (pshare p q (p.off.toNat + n) (some (γ, e)) ⋆
       Rcpts γ e M)))
-      (FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
-        (gauthP γ e (M.set i none) t ⋆ (Rcpts γ e (M.set i none) ⋆ bshare b q k t))) := by
+      ((FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+        (gauthP γ e (M.set i none) t ⋆ (Rcpts γ e (M.set i none) ⋆ bshare b q k t))) ⋆ fee γ e φ) := by
   refine EUpd.withFact grant_fact fun hM => ?_
-  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
+  refine EUpd.trans (EUpd.of_imp (P' := (FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
       ((gauthP γ e M t ⋆ (bshare b q (p.off.toNat + n) (some (γ, e)) ⋆ brcpt b q k γ e)) ⋆
-        (gfrag γ e i (p, n, q, A, K, φ) ⋆ Rcpts γ e (M.set i none))))
-      fun r h => ?_) (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_)
+        (gfrag γ e i (p, n, q, A, K, φ) ⋆ Rcpts γ e (M.set i none)))) ⋆ fee γ e φ)
+      fun r h => ?_) (EUpd.frame (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_))
   · obtain ⟨b, k, hb, h⟩ := open_rcpt (X := gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ)) hM
       (of_eq (Q := pshare p q (p.off.toNat + n) (some (γ, e)) ⋆ (Rcpts γ e M ⋆
         (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ)))) (by ac_rfl) h)
-    exact ⟨b, k, sep_lift.mpr ⟨hb, of_eq (by ac_rfl) h⟩⟩
+    exact sep_mono_left (fun _ x => ⟨b, k, sep_lift.mpr ⟨hb, of_eq (by ac_rfl) x⟩⟩) h
   refine EUpd.trans (EUpd.frame EUpd.returnTw) ?_
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ)) ⋆
     (bshare b q k t ⋆ Rcpts γ e (M.set i none))) fun _ h => of_eq (by ac_rfl) h) ?_
@@ -1067,13 +1086,14 @@ theorem grow_ghost {γ e i : Nat} {M : GMap} {t : STag} {p N : Ptr} {n n' kN : N
   have hM' : (M.set i none) i = none := GMap.set_same M i none
   refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
       ((gauthP γ e M t ⋆ ((bshare b q' (p.off.toNat + n) (some (γ, e)) ⋆ brcpt b q k γ e) ⋆
-        bshare b qh kN t)) ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ Rcpts γ e (M.set i none))))
+        bshare b qh kN t)) ⋆ (gfrag γ e i (p, n, q, A, K, φ) ⋆ (Rcpts γ e (M.set i none) ⋆ fee γ e φ))))
       fun r h => ?_) (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_)
   · obtain ⟨b, k, hb, h⟩ := open_rcpt (X := gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ) ⋆
       pshare N qh kN t) hM (of_eq (by ac_rfl) h)
     have hbN : N.block = some b := hpN ▸ hb
     have h := of_eq (Q := pshare N qh kN t ⋆ ((bshare b q' (p.off.toNat + n) (some (γ, e)) ⋆
-      brcpt b q k γ e) ⋆ (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ) ⋆ Rcpts γ e (M.set i none))))
+      brcpt b q k γ e) ⋆ (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ) ⋆
+        (Rcpts γ e (M.set i none) ⋆ fee γ e φ))))
       (by ac_rfl) h
     exact ⟨b, k, sep_lift.mpr ⟨hb, of_eq (by ac_rfl) (sep_mono_left (Q := bshare b qh kN t)
       (fun _ x => (pshare_iff hbN).mp x) h)⟩⟩
@@ -1082,12 +1102,13 @@ theorem grow_ghost {γ e i : Nat} {M : GMap} {t : STag} {p N : Ptr} {n n' kN : N
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ gfrag γ e i (p, n, q, A, K, φ)) ⋆
       (bshare b q' (p.off.toNat + n') (some (γ, e)) ⋆ (rcptOf γ e (some (p, n', q, A, K', φ)) ⋆
         (Rcpts γ e (M.set i none) ⋆ bshare b qh kN t)))) fun _ h => ?_) ?_
-  · have h := of_eq (Q := (FAssn.ex fun k₁ => brcpt b q k₁ γ e) ⋆ ((gauthP γ e M t ⋆
+  · have h := of_eq (Q := (FAssn.ex fun k₁ => brcpt b q k₁ γ e) ⋆ (fee γ e φ ⋆ ((gauthP γ e M t ⋆
       gfrag γ e i (p, n, q, A, K, φ)) ⋆ (bshare b q' (p.off.toNat + n') (some (γ, e)) ⋆
-        (Rcpts γ e (M.set i none) ⋆ bshare b qh kN t)))) (by ac_rfl) h
+        (Rcpts γ e (M.set i none) ⋆ bshare b qh kN t))))) (by ac_rfl) h
     obtain ⟨k₁, h⟩ := sep_ex.mp h
     have h := sep_mono_left (Q := rcptOf γ e (some (p, n', q, A, K', φ)))
-      (fun _ x => ⟨b, k₁, sep_lift.mpr ⟨hb, x⟩⟩) h
+      (fun _ x => sep_mono_left (Q := FAssn.ex fun b' => FAssn.ex fun k' => ⟪p.block = some b'⟫ ⋆
+        brcpt b' q k' γ e) (fun _ y => ⟨b, k₁, sep_lift.mpr ⟨hb, y⟩⟩) x) (sep_assoc' h)
     exact of_eq (by ac_rfl) h
   refine EUpd.trans (EUpd.frame (EUpd.of_upd (Upd.reassign (p, n', q, A, K', φ)))) ?_
   refine EUpd.of_imp fun _ h => ?_
@@ -1233,12 +1254,13 @@ theorem resize_false_of {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some
   ac_rfl
 
 /-- `free` of a slice that is not the first node's last allocation: its bytes leak to junk, its
-share goes back into the pool, the grant is retired. -/
-theorem free_other_upd {v : FV} (hv : v.Facts ctx s) (hq : v.q' = v.q)
+share goes back into the pool, the grant is retired, its fee comes back. -/
+theorem free_other_upd {v : FV} {φ : Frac} (hv : v.Facts ctx s) (hq : v.q' = v.q ∧ v.φ = φ)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k : Nat} {bs : Array Byte}
     (hlen : s.len.toNat = bs.size) :
-    EUpd (v.L CI γ e ctx s (rgn γ e s k bs)) (inv CI γ e ctx).own := by
+    EUpd (v.L CI γ e ctx s (rgn γ e s k bs)) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
+  obtain ⟨hq, rfl⟩ := hq
   obtain ⟨hw, -, -, -, -, -, -, -, hp0, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := ((gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
@@ -1251,7 +1273,10 @@ theorem free_other_upd {v : FV} (hv : v.Facts ctx s) (hq : v.q' = v.q)
   -- the grant's claim is forgotten
   refine EUpd.trans (EUpd.drop fun _ h => pclaim_ghost h) ?_
   refine EUpd.trans (EUpd.frame free_ghost) ?_
-  refine EUpd.of_imp fun r h => ?_
+  -- the fee goes back to the client
+  rw [inv_fee]
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc' (sep_mono_right (fun _ x => sep_comm x)
+    (sep_assoc h))) (EUpd.frame (EUpd.of_imp fun r h => ?_))
   obtain ⟨b, k', hb, h⟩ := pool_of_free h
   -- the slice's bytes join the junk
   obtain ⟨jh', hg, h⟩ := junk_grew (p := s.ptr) (lo := 0) hp0 rfl (by simp) (of_eq (sep_left_comm_eq _ _ _) h)
@@ -1269,15 +1294,17 @@ theorem free_other_upd {v : FV} (hv : v.Facts ctx s) (hq : v.q' = v.q)
 
 /-- `free` of the first node's last allocation: `end_index` moved back; the slice's bytes (relabeled
 as the node's, `EUpd.relabel`) rejoin the tail, its share goes back into the pool, the grant is
-retired. -/
-theorem free_last_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s) (hq : v.q' = v.q)
+retired, its fee comes back. -/
+theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.Facts ctx s)
+    (hq : v.q' = v.q ∧ v.φ = φ)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
     (hK : v.K'.norm = v.w.K.norm) {k : Nat} {bs : Array Byte} (hlen : s.len.toNat = bs.size)
     (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
     (hlo : v.N.off.toNat + 24 ≤ s.ptr.off.toNat) (hw : wv = BitVec.ofNat 64 (v.w.ei - s.len.toNat)) :
-    EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs)))
-      (inv CI γ e ctx).own := by
+    EUpd ((⟪ψ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs)))
+      ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
+  obtain ⟨hq, rfl⟩ := hq
   subst hw
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
   have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
@@ -1297,7 +1324,10 @@ theorem free_last_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
         (fun _ x => (sep_lift.mp x).2) h)) ?_
   refine EUpd.trans (EUpd.frame free_ghost) ?_
   refine EUpd.trans (EUpd.frameL (EUpd.frameL (EUpd.frame (EUpd.relabel (S' := v.w.S) hK.symm)))) ?_
-  refine EUpd.of_imp fun r h => ?_
+  -- the fee goes back to the client
+  rw [inv_fee]
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc' (sep_mono_right (fun _ x => sep_comm x)
+    (sep_assoc h))) (EUpd.frame (EUpd.of_imp fun r h => ?_))
   obtain ⟨b, k', hb', h⟩ := pool_of_free h
   have hpq : s.ptr = v.N.add (24 + ((v.w.ei - s.len.toNat : Nat) : Int)) := by
     have hb' : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
@@ -1564,6 +1594,107 @@ theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
 
 end Ends
 
+/-! ## Returning grants, and the whole epoch token
+
+A client of the arena typically never frees: it hands every grant back to the arena by
+`grant_return`, a ghost update that does what `free` of a grant that is not the last one does
+(its bytes become junk, its share goes back against its receipt, the grant is retired, the fee
+comes back) without running code. Once every grant is back, the client holds the whole epoch token
+again, and that shows the arena that no grant is outstanding (`own_epTok_empty`): what `reset`
+needs, since a `reset` that revokes outstanding grants is unsound (`ArenaObstruction.not_reset_own`). -/
+
+/-- **Give a grant back** without freeing it (section doc): from the arena's state and the grant
+to the state and the grant's fee. -/
+theorem grant_return (CI : Child) (γ e : Nat) (ctx : Ptr) (s : Slice) (k : Nat) (φ : Frac)
+    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    EUpd ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := fun m r rF hh hp hs => by
+  obtain ⟨v, hv⟩ := free_pre hh hlen hpos hp
+  obtain ⟨⟨hf, hx⟩, hL⟩ := sep_lift.mp hv
+  have hff := hf.1.2.1
+  unfold OV.FirstFacts at hff
+  rw [hf.2.1] at hff
+  obtain ⟨hnf, hei, htail⟩ := hff
+  exact free_other_upd hf hx hf.2.1 hnf hei htail hlen m r rF hh hL hs
+
+/-- **The whole epoch token shows that no grant is outstanding** (`gauth_epTok_whole`): the arena
+keeps each grant's fee, a nonzero part of the epoch token, with its receipt. -/
+theorem rcpts_epTok_empty {γ e : Nat} {M : GMap} {t : STag} {X : FAssn} :
+    ∀ m r rF, Holds m r rF → (((gauthP γ e M t ⋆ Rcpts γ e M) ⋆ epTok γ e Frac.one) ⋆ X) r →
+      m.FSeq → M = GMap.empty := by
+  intro m r rF hh hp _
+  funext i
+  cases hM : M i with
+  | none => rfl
+  | some g =>
+    exfalso
+    obtain ⟨p, n, q, A, K, φ⟩ := g
+    have h1 : (((gauthP γ e M t ⋆ (rcptOf γ e (some (p, n, q, A, K, φ)) ⋆ Rcpts γ e (M.set i none))) ⋆
+        epTok γ e Frac.one) ⋆ X) r :=
+      sep_mono_left (fun _ x => sep_mono_left (fun _ y => sep_mono_right
+        (fun _ z => rcpts_pick hM z) y) x) hp
+    have h2 := of_eq (Q := ⟪0 < φ.val⟫ ⋆ ((gauthP γ e M t ⋆ (epTok γ e Frac.one ⋆ epTok γ e φ)) ⋆
+      (((FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆ brcpt b q k γ e) ⋆
+        Rcpts γ e (M.set i none)) ⋆ X))) (by simp only [rcptOf, fee]; ac_rfl) h1
+    obtain ⟨hφ, h2⟩ := sep_lift.mp h2
+    obtain ⟨r₁, r₂, -, rfl, h3, -⟩ := h2
+    have h0 := gauth_epTok_whole h3 (Ghost.Ok.assoc.mp hh.ghost.1)
+    rw [h0] at hφ
+    simp at hφ
+
+/-- The arena's resources besides the ledger's authority and the receipts. -/
+def OV.bodyG (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) : FAssn :=
+  up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
+    CI.own ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt w.jh ⋆ Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆
+    UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl ⋆ w.cls CI γ e
+
+theorem OV.body_gauth {CI : Child} {γ e : Nat} {ctx : Ptr} (w : OV) :
+    w.body CI γ e ctx = ((gauthP γ e w.M CI.tag ⋆ Rcpts γ e w.M) ⋆ w.bodyG CI γ e ctx) := by
+  simp only [OV.body, OV.bodyG]; ac_rfl
+
+/-- **The arena's state next to the whole epoch token has no grant** (`rcpts_epTok_empty`): the
+precondition of a `reset` that gives every node back to the child. -/
+theorem own_epTok_empty (CI : Child) (γ e : Nat) (ctx : Ptr) :
+    EUpd ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
+      ((FAssn.ex fun w : OV => ⟪w.Facts ∧ w.M = GMap.empty⟫ ⋆ w.body CI γ e ctx) ⋆
+        epTok γ e Frac.one) := by
+  show EUpd ((FAssn.ex fun w : OV => ⟪w.Facts⟫ ⋆ w.body CI γ e ctx) ⋆ epTok γ e Frac.one) _
+  refine EUpd.ex fun w => EUpd.withFact (φ := w.M = GMap.empty) (fun m r rF hh hp hs => ?_)
+    fun hM => EUpd.of_imp fun r h => ?_
+  · obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+    rw [OV.body_gauth] at hp
+    exact rcpts_epTok_empty (t := CI.tag) (X := w.bodyG CI γ e ctx) m r rF hh (of_eq (by ac_rfl) hp) hs
+  · obtain ⟨hf, h⟩ := sep_lift.mp (sep_assoc h)
+    exact sep_mono_left (fun _ x => ⟨w, sep_lift.mpr ⟨⟨hf, hM⟩, x⟩⟩) h
+
+/-- **A client with an outstanding grant does not hold the whole epoch token** (`own_epTok_empty`):
+the grant's token names a grant of the map (`gfrag_mem`), which the whole token excludes. So the
+client of `ArenaObstruction.not_reset_own`, which calls `reset` with its first grant still out,
+has no precondition for the arena's `reset` (`own ⋆ epTok γ e 1`). -/
+theorem granted_epTok_false (CI : Child) (γ e : Nat) (ctx : Ptr) {p : Ptr} {k : Nat} {φ : Frac}
+    {bs : Array Byte} {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
+    (h : (((inv CI γ e ctx).own ⋆ epTok γ e Frac.one) ⋆ (inv CI γ e ctx).granted p k φ bs) r) :
+    False := by
+  obtain ⟨r', hh', h'⟩ := EUpd.frame (own_epTok_empty CI γ e ctx) m r rF hh h hs
+  obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h'
+  obtain ⟨w, h1⟩ := sep_ex.mp h1
+  obtain ⟨⟨-, hM⟩, h1⟩ := sep_lift.mp (sep_assoc h1)
+  obtain ⟨A, S, K, q, h2⟩ := h2
+  obtain ⟨i, h2⟩ := sep_ex.mp (of_eq (sep_left_comm_eq _ _ _) h2)
+  have h3 : ((w.body CI γ e ctx ⋆ epTok γ e Frac.one) ⋆
+      (gfrag γ e i (p, bs.size, q, A, K, φ) ⋆ (up (regionIn p A S K (2 ^ k) bs) ⋆
+        (pshare p q (p.off.toNat + bs.size) (some (γ, e)) ⋆
+          pclaim p p.off.toNat (p.off.toNat + bs.size) (some (γ, e)))))) _ :=
+    ⟨r1, r2, hd, rfl, h1, h2⟩
+  rw [OV.body_gauth] at h3
+  have hi := grant_fact (M := w.M) (t := CI.tag) (i := i) (g := (p, bs.size, q, A, K, φ))
+    (X := (Rcpts γ e w.M ⋆ w.bodyG CI γ e ctx ⋆ epTok γ e Frac.one) ⋆
+      (up (regionIn p A S K (2 ^ k) bs) ⋆ (pshare p q (p.off.toNat + bs.size) (some (γ, e)) ⋆
+        pclaim p p.off.toNat (p.off.toNat + bs.size) (some (γ, e)))))
+    m _ rF hh' (of_eq (by ac_rfl) h3) hs
+  rw [hM] at hi
+  cases hi
+
 /-! ## The ends of `alloc`
 
 A successful `alloc` carves the grant out of the first node's tail (the padding before it leaks to
@@ -1596,15 +1727,16 @@ theorem GrantOk.mono {ns ns' : List NodeV}
     by rw [e1]; exact hoff⟩
 
 /-- **A grant's ghost part**: half of the node's kept share `qh` (at the node's end `kN`) is lent at
-the grant's end against a receipt, and the grant is issued under the unused id `i`. -/
+the grant's end against a receipt, the grant is issued under the unused id `i`, and its fee `φ` is
+kept with the receipt. -/
 theorem carve_ghost {γ e i : Nat} {M : GMap} {t : STag} {N : Ptr} {bN : BlockId} {qh : Frac}
     {kN : Nat} {p : Ptr} {n A : Nat} {K : BlockKind} {φ : Frac} (hi : M i = none) (hN : N.block = some bN)
     (hp : p.block = some bN) (hk : p.off.toNat + n ≤ kN) :
-    EUpd (gauthP γ e M t ⋆ (pshare N qh kN t ⋆ Rcpts γ e M))
+    EUpd (gauthP γ e M t ⋆ (pshare N qh kN t ⋆ (Rcpts γ e M ⋆ fee γ e φ)))
       (gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆ (gfrag γ e i (p, n, qh.half, A, K, φ) ⋆
         (pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
           (pshare N qh.half kN t ⋆ Rcpts γ e (M.set i (some (p, n, qh.half, A, K, φ))))))) := by
-  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ (bshare bN qh kN t ⋆ Rcpts γ e M))
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ (bshare bN qh kN t ⋆ (Rcpts γ e M ⋆ fee γ e φ)))
     fun _ h => sep_mono_right (fun _ x => sep_mono_left (Q := bshare bN qh kN t)
       (fun _ y => (pshare_iff hN).mp y) x) h) ?_
   refine EUpd.withFact (φ := 0 < qh.val) (fun _ r _ _ h _ => ?_) fun hq => ?_
@@ -1612,22 +1744,25 @@ theorem carve_ghost {γ e i : Nat} {M : GMap} {t : STag} {N : Ptr} {bN : BlockId
     exact h1.1
   have hh := Frac.half_pos hq
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ bshare bN qh.half kN t) ⋆
-      (bshare bN qh.half kN t ⋆ Rcpts γ e M)) fun r h => ?_) ?_
+      (bshare bN qh.half kN t ⋆ (Rcpts γ e M ⋆ fee γ e φ))) fun r h => ?_) ?_
   · rw [← Frac.half_add_half qh] at h
-    have h := sep_mono_right (R := (bshare bN qh.half kN t ⋆ bshare bN qh.half kN t) ⋆ Rcpts γ e M)
+    have h := sep_mono_right (R := (bshare bN qh.half kN t ⋆ bshare bN qh.half kN t) ⋆
+      (Rcpts γ e M ⋆ fee γ e φ))
       (fun _ x => sep_mono_left (Q := bshare bN qh.half kN t ⋆ bshare bN qh.half kN t)
       (fun _ y => (bshare_split hh hh).mp y) x) h
     exact of_eq (by ac_rfl) h
   refine EUpd.trans (EUpd.frame (EUpd.lendT hk)) ?_
   refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ ((bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆
-      brcpt bN qh.half kN γ e) ⋆ (bshare bN qh.half kN t ⋆ Rcpts γ e M))) fun _ h => sep_assoc h) ?_
+      brcpt bN qh.half kN γ e) ⋆ (bshare bN qh.half kN t ⋆ (Rcpts γ e M ⋆ fee γ e φ))))
+    fun _ h => sep_assoc h) ?_
   refine EUpd.trans (EUpd.frame (EUpd.of_upd (Upd.issue (p, n, qh.half, A, K, φ) hi))) ?_
   refine EUpd.of_imp fun r h => ?_
-  have h := of_eq (Q := brcpt bN qh.half kN γ e ⋆ (Rcpts γ e M ⋆
+  have h := of_eq (Q := (brcpt bN qh.half kN γ e ⋆ fee γ e φ) ⋆ (Rcpts γ e M ⋆
       ((gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆ gfrag γ e i (p, n, qh.half, A, K, φ)) ⋆
         (bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆ bshare bN qh.half kN t)))) (by ac_rfl) h
   have h := sep_mono_left (Q := rcptOf γ e (some (p, n, qh.half, A, K, φ)))
-    (fun _ z => ⟨bN, kN, sep_lift.mpr ⟨hp, z⟩⟩) h
+    (fun _ z => sep_mono_left (Q := FAssn.ex fun b' => FAssn.ex fun k' => ⟪p.block = some b'⟫ ⋆
+      brcpt b' qh.half k' γ e) (fun _ y => ⟨bN, kN, sep_lift.mpr ⟨hp, y⟩⟩) z) h
   have h := sep_mono_left (Q := Rcpts γ e (M.set i (some (p, n, qh.half, A, K, φ))))
     (fun _ z => rcpts_put hi z) (sep_assoc' h)
   have h := sep_mono_right (R := (gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆
@@ -1659,12 +1794,13 @@ theorem ndLent_qh {w : OV} {N : Ptr} (hfirst : w.first = some N) (q' : Frac) (b 
 /-- **`alloc` from the first node's tail**: the grant of `n` bytes at index `ai` (from `end_index`
 on, alignment `2 ^ k`) with `end_index` moved to `ai + n` (the code's `cmpxchg`). The padding
 leaks to junk, half the node's kept share is lent to the grant (`carve_ghost`), the grant gets
-the fresh id `mN`. -/
+the fresh id `mN`, and the arena keeps the client's fee `φ` with it. -/
 theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr} {bN : BlockId}
     (hw : w.Facts) (hfirst : w.first = some N) (hbN : N.block = some bN) {n k ai : Nat} {φ : Frac}
     (hn : 0 < n) (hlo : w.ei ≤ ai) (hhi : 24 + ai + n ≤ w.sz)
     (hal : (w.A + N.off.toNat + 24 + ai) % 2 ^ k = 0) :
-    EUpd ((apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e)
+    EUpd (((apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆ w.cls CI γ e) ⋆
+        (inv CI γ e ctx).fee φ)
       ((inv CI γ e ctx).allocPost n k φ (some (N.add (24 + ai)))) := by
   obtain ⟨hfin, hff, hgr, hacct, hqq, hcv⟩ := hw
   have hff' := hff
@@ -1736,9 +1872,9 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
   let GC : FAssn := pclaim (N.add (24 + ai)) (N.add (24 + ai)).off.toNat ((N.add (24 + ai)).off.toNat + n)
     (some (γ, e))
   refine EUpd.trans (EUpd.of_imp (P' := ((apts (N.add 8) (BitVec.ofNat 64 (ai + n)) ⋆ w.bodyE CI γ e ctx N) ⋆
-      (CL ⋆ GC)) ⋆ pclaim N (N.off.toNat + 24 + w.ei) (N.off.toNat + 24 + ai) (some (γ, e)))
+      ((CL ⋆ GC) ⋆ fee γ e φ)) ⋆ pclaim N (N.off.toNat + 24 + w.ei) (N.off.toNat + 24 + ai) (some (γ, e)))
     fun _ h => of_eq (by
-      simp only [OV.cls, FirstCl, hfirst, CL, GC]
+      simp only [OV.cls, FirstCl, hfirst, CL, GC, inv_fee]
       rw [← tailCl_join (p := N) (lo := N.off.toNat + 24 + w.ei) (hi := N.off.toNat + 24 + ai) (ei' := w.ei)
           (ei := ai) rfl rfl rfl hlo (by omega),
         ← tailCl_join (p := N.add (24 + ai)) (lo := (N.add (24 + ai)).off.toNat)
@@ -1746,12 +1882,15 @@ theorem alloc_carve_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} {N : Ptr}
           (by omega) (by omega) (by omega)]
       ac_rfl) h) ?_
   refine EUpd.trans (EUpd.drop fun _ h => pclaim_ghost h) ?_
+  -- the fee joins the ledger's part, for `carve_ghost`
+  let G0f : FAssn := gauthP γ e w.M CI.tag ⋆ (pshare N w.qh (N.off.toNat + w.sz) CI.tag ⋆
+    (Rcpts γ e w.M ⋆ fee γ e φ))
   refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun jh => ⟪JunkGrew N (24 + w.ei) (24 + ai) w.jh jh⟫ ⋆
-      (G0 ⋆ ((up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆ GC) ⋆ (R jh ⋆ CL))))
+      (G0f ⋆ ((up (regionIn (N.add (24 + ai)) w.A w.S w.K (2 ^ k) bs) ⋆ GC) ⋆ (R jh ⋆ CL))))
     fun _ h => by
       obtain ⟨jh, h⟩ := sep_ex.mp (sep_mono_left himp h)
       obtain ⟨hg, h⟩ := sep_lift.mp (sep_assoc h)
-      exact ⟨jh, sep_lift.mpr ⟨hg, of_eq (by ac_rfl) h⟩⟩) ?_
+      exact ⟨jh, sep_lift.mpr ⟨hg, of_eq (by simp only [G0, G0f]; ac_rfl) h⟩⟩) ?_
   refine EUpd.exAll fun jh => EUpd.lift fun hg => ?_
   refine EUpd.trans (EUpd.frame (carve_ghost (i := w.mN) (A := w.A) (K := w.K) (φ := φ) (qh := w.qh)
     (kN := N.off.toNat + w.sz) (n := n) (t := CI.tag) (hfin _ (Nat.le_refl _)) hbN hpb
@@ -2176,6 +2315,8 @@ theorem revoke_all {γ e e' : Nat} {M M' : GMap} {t : STag} (he : e < e') :
       | some g =>
         obtain ⟨p, n, q, A, K, φ⟩ := g
         simp only [rcptOf, revoked]
+        -- the fee of a past epoch is dropped
+        refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc' h) (EUpd.trans (EUpd.drop fun _ h => fee_ghost h) ?_)
         refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun b => FAssn.ex fun k => ⟪p.block = some b⟫ ⋆
           (gauthP γ e' M' t ⋆ brcpt b q k γ e)) fun _ h => ?_)
           (EUpd.exAll fun b => EUpd.exAll fun k => EUpd.lift fun hb => ?_)
@@ -2314,10 +2455,20 @@ theorem sumOn_poolL (b : BlockId) (f : Nat → Piece) : ∀ n, sumOn b (poolL f 
     simp only [poolL, sumOn, poolOn, esum, ih]
     grind
 
-/-- The receipts of a grant map as a list of pieces, with the grants' fractions per block. -/
+/-- Resources that own no bytes and no knowledge (the fees of `rcptsL`'s grants). -/
+def GhostOnly : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none
+
+theorem ghostOnly_sep {r : Res} (h : (GhostOnly ⋆ GhostOnly) r) : GhostOnly r := by
+  obtain ⟨r1, r2, -, rfl, ⟨h1, k1⟩, ⟨h2, k2⟩⟩ := h
+  show FHeap.union r1.heap r2.heap = FHeap.empty ∧ r1.know.union r2.know = Know.none
+  rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _⟩
+
+/-- The receipts of a grant map as a list of pieces, with the grants' fractions per block, and
+their fees. -/
 theorem rcpts_list {γ e : Nat} {M : GMap} : ∀ N {r : Res}, sepN N (fun i => rcptOf γ e (M i)) r →
-    ∃ l, (∀ b, sumOn b l = esum (fun i => grantOn b (M i)) N) ∧ rcptsL γ e l r
-  | 0, _, h => ⟨[], fun b => by simp [sumOn, esum], h⟩
+    ∃ l, (∀ b, sumOn b l = esum (fun i => grantOn b (M i)) N) ∧ (rcptsL γ e l ⋆ GhostOnly) r
+  | 0, _, h => ⟨[], fun b => by simp [sumOn, esum],
+    sep_mono_right (fun _ x => ⟨x.1, x.2.1⟩) (sep_emp.mpr h)⟩
   | N + 1, _, h => by
     obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
     obtain ⟨l, hl, h2⟩ := rcpts_list N h2
@@ -2329,9 +2480,15 @@ theorem rcpts_list {γ e : Nat} {M : GMap} : ∀ N {r : Res}, sepN N (fun i => r
     | some g =>
       obtain ⟨p, n, q, A, K, φ⟩ := g
       simp only [hM, rcptOf] at h1
-      obtain ⟨b', k, h1⟩ := h1
-      obtain ⟨hb', h1⟩ := sep_lift.mp h1
-      refine ⟨(b', q, k) :: l, fun b => ?_, ⟨r1, r2, hd, rfl, h1, h2⟩⟩
+      obtain ⟨b', h1⟩ := sep_ex.mp h1
+      obtain ⟨k, h1⟩ := sep_ex.mp h1
+      obtain ⟨hb', h1⟩ := sep_lift.mp (sep_assoc h1)
+      have h3 : ((brcpt b' q k γ e ⋆ fee γ e φ) ⋆ (rcptsL γ e l ⋆ GhostOnly)) _ :=
+        ⟨r1, r2, hd, rfl, h1, h2⟩
+      have h3 := of_eq (Q := (brcpt b' q k γ e ⋆ rcptsL γ e l) ⋆ (fee γ e φ ⋆ GhostOnly))
+        (by ac_rfl) h3
+      refine ⟨(b', q, k) :: l, fun b => ?_,
+        sep_mono_right (fun _ x => ghostOnly_sep (sep_mono_left (fun _ y => fee_ghost y) x)) h3⟩
       simp only [sumOn, esum, hM, grantOn, hb', hl b, Option.some.injEq]
       grind
 
@@ -2361,7 +2518,8 @@ theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf 
       (gauthP γ e' M' t ⋆ NodeShares t NodeV.qn ns) := by
   let src := nodePieces NodeV.qh ns ++ poolL pf pn
   refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun l : List Piece =>
-      ⟪∀ b, sumOn b l = grantsOn b M mN⟫ ⋆ ((gauthP γ e' M' t ⋆ rcptsL γ e l) ⋆ sharesL t src))
+      ⟪∀ b, sumOn b l = grantsOn b M mN⟫ ⋆
+        (((gauthP γ e' M' t ⋆ rcptsL γ e l) ⋆ sharesL t src) ⋆ GhostOnly))
     fun r h => ?_) ?_
   · have h := of_eq (Q := Rcpts γ e M ⋆ (gauthP γ e' M' t ⋆ sharesL t src))
       (by simp only [src]; rw [sharesL_append, ← pool_eq, ← nodeShares_eq hb]; ac_rfl) h
@@ -2369,10 +2527,13 @@ theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf 
     obtain ⟨hN, h⟩ := sep_lift.mp (sep_assoc h)
     obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
     obtain ⟨l, hl, h1⟩ := rcpts_list N h1
-    have h' : (rcptsL γ e l ⋆ (gauthP γ e' M' t ⋆ sharesL t src)) _ := ⟨r1, r2, hd, rfl, h1, h2⟩
+    have h' : ((rcptsL γ e l ⋆ GhostOnly) ⋆ (gauthP γ e' M' t ⋆ sharesL t src)) _ :=
+      ⟨r1, r2, hd, rfl, h1, h2⟩
     exact ⟨l, sep_lift.mpr ⟨fun b => by rw [hl b]; exact grantsOn_bound hN hfin b,
       of_eq (by ac_rfl) h'⟩⟩
   refine EUpd.exAll fun l => EUpd.lift fun hl => ?_
+  -- the grants' fees (of the past epoch) are dropped
+  refine EUpd.trans (EUpd.drop fun _ h => h) ?_
   refine EUpd.trans (EUpd.frame (EUpd.revokeL he l)) ?_
   refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e' M' t ⋆ sharesL t (src ++ l))
     fun _ h => of_eq (by rw [sharesL_append src l]; ac_rfl) h) ?_
@@ -2803,8 +2964,6 @@ theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64)
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
       (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
-  -- the arena charges no fee (`fee φ = emp`)
-  refine CTriple.post (Q := fun _ => (inv CI γ e ctx).own) ?_ fun _ _ h => sep_emp.mpr h
   $freeT:tactic)),
     (← `(command|
 /-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every

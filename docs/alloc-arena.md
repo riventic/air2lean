@@ -242,8 +242,10 @@ free list) is not attempted.
   node's extent share that the arena keeps; the unused tail of its buffer), the other used nodes
   and the free list as `next`-linked chains (each with its token and kept share), the child's
   `own`, the junk as an exact heap `JunkAt jh` (bytes that frees of earlier allocations, shrinks
-  and `alloc`'s padding leaked back), one receipt per grant
-  (`Rcpts`, at any bound) and the pool of shares that frees gave back (`Pool`). The token of a
+  and `alloc`'s padding leaked back), one receipt per grant together with the grant's fee
+  (`Rcpts`, `rcptOf`; the receipt at any bound) and the pool of shares that frees gave back
+  (`Pool`). The fee is `fee γ e φ = epTok γ e φ ⋆ ⟪0 < φ⟫`, a nonzero part of the epoch token
+  ([sep-full-state.md](sep-full-state.md) §The fee of a grant). The token of a
   grant names it with its fraction, its cells' labels and its fee: `∃ i, gfrag γ e i (p, n, q, A, K, φ)`;
   every grant lies in the block of a used node with that node's labels (`GrantOk`; the used nodes
   after the first are an explicit list of node records, `NodeV`); the grant's share is tagged with
@@ -262,8 +264,14 @@ free list) is not attempted.
     its kind counts up to `BlockKind.norm`), and the new bytes of a growth carry the grant's.
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
     (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
-    against its receipt into the pool (`EUpd.returnTw`: weakened to the receipt's bound first) and
-    the grant is retired (`Upd.retire`): `free_ghost`.
+    against its receipt into the pool (`EUpd.returnTw`: weakened to the receipt's bound first),
+    the grant is retired (`Upd.retire`) and its fee goes back to the client: `free_ghost`.
+  * `grant_return`: the same as a `free` of a grant that is not the last one, as a ghost update
+    (no code runs): the grant's bytes become junk and the client gets the fee back. With every
+    grant back, the client holds the whole epoch token `epTok γ e 1` again, and next to it the
+    arena's state has no grant (`own_epTok_empty`, from `gauth_epTok_whole`: each grant's fee is a
+    nonzero part of that token). A client with an outstanding grant cannot hold it
+    (`granted_epTok_false`).
   * `resize` meets the refined field (`FAllocSpec.resize`: the token, a part `q'` of the grant's
     share, and only the bytes `[n, len)` a shrink releases): a slice that is not the first node's
     last one only shrinks (released bytes to junk); the last one moves `end_index` back (released
@@ -373,14 +381,19 @@ Not proved yet, in order:
   `Upd.issue` under a fresh id for each grant, `defer pushFreeList`. The child's specification
   enters as `CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv`
   (`Full/Dispatch.lean`), for the child `CI : Core.Child` that the invariant names.
-* `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
-  `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
-  calls the child's `free`/`resize`/`alloc`. The bytes cannot be left out: revocation withdraws
-  only ghost state, and **no** `{I.own} reset(.free_all) {I'.own}` holds next to `FAllocSpec`s
-  `I`, `I'` with `I.own` true after `init` (kernel-checked, `ArenaObstruction.not_reset_own`: an
-  `alloc(8)`, `reset`, `alloc(8)` client would hold two separate grants that the run puts at one
-  byte of the child's buffer). How a client gives the grants back without tracking the grant map
-  is open (epoch-token fractions, coordinator design 2026-10-12).
+* `reset` (stock and patched): `{own e ⋆ epTok γ e 1} reset {own (e + 1) ⋆ epTok γ (e + 1) 1}`.
+  The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
+  every node is junk or the first node's tail (`OV.Cov`) and turns back into a region
+  (`EUpd.junkRegion`); `Upd.bump` mints the next epoch's token (the old one is dropped,
+  `EUpd.dropEp`), the receipts and claims revert to the nodes (`reset_shares`, `cls_revoke`). It
+  walks both lists (`Zig.loop`, `CTriple.loop`) and calls the child's `free`/`resize`/`alloc`. The
+  bytes cannot be left out: revocation withdraws only ghost state, and **no**
+  `{I.own} reset(.free_all) {I'.own ⋆ I'.fee φ}` holds next to `FAllocSpec`s `I`, `I'` with `I.own`
+  true after `init` (kernel-checked, `ArenaObstruction.not_reset_own`: an `alloc(8)`, `reset`,
+  `alloc(8)` client would hold two separate grants that the run puts at one byte of the child's
+  buffer). The client gives its grants back without tracking the grant map: by `free` or by the
+  ghost `grant_return`, each of which refunds the grant's fee; a client that keeps a grant cannot
+  call `reset` (`granted_epTok_false`), and a leaked grant blocks `reset` for good.
 
 ## Legacy models
 

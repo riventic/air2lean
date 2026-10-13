@@ -713,10 +713,11 @@ back (`allocPost … none = own ⋆ fee φ`), `free` gives it back (`fun _ => ow
 `owned k φ p bs` is the unspent fee for zero bytes (the wrapper does not call the allocator), and
 `allocResult`, `sliceResult`, `bytesResult` give the fee back with `error.OutOfMemory`.
 
-An arena charges a fraction of its epoch token (§Ghost state; `epTok γ e φ ⋆ ⟪0 < φ⟫`, the
-arena lane's next step), keeps the outstanding grants' fees in its state, and its `reset` takes
-the whole epoch token next to `own`: holding fraction `1` while the state holds the fees of the
-grants of `M` forces `M = ∅`.
+An arena charges a fraction of its epoch token (§Epoch tokens; `fee γ e φ = epTok γ e φ ⋆
+⟪0 < φ⟫`, `AllocArena.Core.fee`), keeps each outstanding grant's fee next to its receipt
+(`rcptOf`), and its `reset` takes the whole epoch token next to `own`: holding fraction `1` while
+the state holds the fees of the grants of `M` forces `M = ∅` (`gauth_epTok_whole`,
+`Core.own_epTok_empty`).
 
 **The allocator records the fee.** `free` must refund exactly the fee that was paid. A token that
 ignores `φ` would let a client claim any `φ` back (for an arena: mint epoch-token fractions). So
@@ -734,16 +735,21 @@ before, with an unused `φ`, and a client picks any `φ`.
 
 **What it asks of a client.** To call `alloc` it holds a fee: nothing for a fee-free allocator; a
 fraction of the epoch token for an arena (`init` gives the whole token next to `own`). To call an
-arena's `reset` it gives back every outstanding grant (`free`, or a `grant_return` that hands the
-bytes back without the code freeing them) and so reassembles the whole token. A leaked grant
-blocks `reset` for good; that is inherent (`not_reset_own`), not a cost of this design. Like `own`,
+arena's `reset` it gives back every outstanding grant (`free`, or `Core.grant_return`, a ghost
+update that hands the bytes back without the code freeing them and refunds the fee) and so
+reassembles the whole token. A client that keeps a grant cannot hold the whole token
+(`Core.granted_epTok_false`), so the client of `not_reset_own` (`alloc`, `reset` with the grant
+still out) has no precondition for the arena's `reset`. A leaked grant blocks `reset` for good;
+that is inherent (`not_reset_own`), not a cost of this design. Like `own`,
 a fee that never holds makes `alloc` vacuous, so the non-vacuity checks quantify over invariants
 whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 `ArenaObstruction.not_fallocSpec_arena`).
 
 **Status.** The library, the wrapper contracts, the `FixedBufferAllocator`, the page allocator and
-the arena carry the fee; every allocator's fee is still `emp`, and the arena's ledger records it.
-The arena's fee becomes the epoch-token fraction together with its `reset`.
+the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
+arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
+`tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
+`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
 
 ### Credits and room: non-mintable resources (2026-10-12)
 
@@ -961,8 +967,8 @@ What it is for: an allocator that **takes a part of the token with each grant an
 with the grant** learns from the whole token that it has no outstanding grant. The arena's
 `reset` needs exactly that (`docs/alloc-arena.md`, reset: every node goes back to the child,
 whose `free` takes the node's whole region, so no client may still own bytes in one). The part
-travels as the allocator's fee (`FAllocInv.fee`, the next step of the arena's reset; not yet in
-`FAllocSpec`). A counted or
+travels as the allocator's fee (`FAllocInv.fee`, §The fee of a grant). Next to the authority, the
+whole token and any other part of it leave that part empty (`gauth_epTok_whole`). A counted or
 non-fractional token would not do: a whole token held by the allocator for each grant is
 vacuous (the client cannot produce `epTok e 1` at reset while the allocator holds a part), and a
 part the client can detach from its grant lets a client drop a grant and still show the whole

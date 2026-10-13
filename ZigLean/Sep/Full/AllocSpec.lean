@@ -31,9 +31,9 @@ allocator's `munmap`) knows that `free` returns exactly what it lent.
 (`FAllocInv.tok`'s last argument), and `free` gives `I.fee φ` back, as does a failed `alloc`.
 The default fee is `emp`: for an allocator that charges none (the `FixedBufferAllocator`, the
 page allocator) the contract is the one without a fee. The fee is for an allocator that revokes
-its grants: an arena is to charge a fraction of its epoch token, so that the client's whole epoch
-token, which `reset` takes, shows that no grant is outstanding (until then every allocator's
-fee, the arena's included, is `emp`).
+its grants: an arena charges a fraction of its epoch token, so that the client's whole epoch
+token, which `reset` takes, shows that no grant is outstanding (`AllocArena.Core.fee`,
+`own_epTok_empty` in `tests/roadmap/alloc-arena`).
 
 A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
 cells of an `up` assertion no longer pin their block's size.

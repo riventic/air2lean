@@ -219,6 +219,15 @@ grants, while the kernel computes both to be byte 24 of the `FixedBufferAllocato
 So a sound `reset` precondition must hand back every outstanding grant's bytes. (Over
 `page_allocator` the reset `munmap`s the node and a later store to the old grant is `.illegal`;
 the kernel run of that client needs more than the build's memory cap.)
+
+**The sound form** (`docs/sep-full-state.md` §The fee of a grant): the arena's fee is a nonzero
+part of its epoch token (`AllocArena.Core.fee`, kept by the state with each grant's receipt), and
+`reset` takes the whole token: `{own e ⋆ epTok γ e 1} reset {own (e + 1) ⋆ epTok γ (e + 1) 1}`.
+The theorem below does not refute it: its precondition is not `I.own` alone. Next to the whole
+token the state has no grant (`Core.own_epTok_empty`), and a client that still holds a grant
+cannot hold the whole token (`Core.granted_epTok_false`, kernel-checked): the client here, which
+calls `reset` with its first grant out, has no precondition for it. It must give the grant back
+first, by `free` or by the ghost `Core.grant_return`, and then no longer owns its bytes.
 -/
 
 /-- `alloc` of 8 bytes, `reset(.free_all)`, `alloc` of 8 bytes. -/
@@ -301,7 +310,8 @@ arena of which `I` and a fee hold after `init`: the client's triple (`reset_clie
 with two separate grants that the run (`reset_client_run`) puts at one byte. Revocation (the
 epoch bump) cannot withdraw a grant's bytes, and no fee changes that: a `reset` must take every
 outstanding grant back (with the fee of `docs/sep-full-state.md` §The fee of a grant, an arena's
-`reset` takes the whole epoch token, which a client with an outstanding grant does not have). -/
+`reset` takes the whole epoch token, which a client with an outstanding grant does not have:
+`AllocArena.Core.granted_epTok_false`; section doc). -/
 theorem not_reset_own (I I' : FAllocInv) (h : CAllocSpec vt arena I)
     (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0) (φ₁ φ₂ : Frac)
     (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own ⋆ I'.fee φ₂)) :

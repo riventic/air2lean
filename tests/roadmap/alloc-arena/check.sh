@@ -61,14 +61,16 @@ cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
 # `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant, stated for each
 # module and proved by the shared tactics, which are elaborated against that module's code: the stock
 # arena on both targets and the patched one (whose `free` and `resize` add a bounds check). Each file
-# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`.
-for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
+# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`; ArenaSpec.lean also those of the
+# module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`).
+for pair in "ArenaSpec 6" "ArenaSpecMacos 3" "ArenaSpecFixed 3"; do
+  spec=${pair% *}
   "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
-  python3 - "$work/spec.txt" <<'EOF'
+  python3 - "$work/spec.txt" "${pair#* }" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert 'sorryAx' not in text and text.count('depends on axioms') == 3, text
+assert 'sorryAx' not in text and text.count('depends on axioms') == int(sys.argv[2]), text
 assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 done

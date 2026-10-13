@@ -25,15 +25,15 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
   shares, the free nodes with their whole buffers;
 * the child's state `CI.own`, the junk `JunkAt jh` (bytes that frees which were not the last
   allocation, shrinks and padding leaked back; the arena never touches them until `reset`), one
-  receipt per grant (`Rcpts`) and the shares that frees gave back (`Pool`).
+  receipt per grant together with the grant's fee (`Rcpts`, `rcptOf`) and the shares that frees
+  gave back (`Pool`).
 
 With no first node, `M` is empty. Every byte of a used node's buffer is in the junk's heap `jh`,
 in a grant, or in the first node's unused tail (`OV.Cov`), which `reset` needs to give each node
 back whole. Every grant lies in the block of a used node, with that node's
 address and kind labels, at a nonnegative offset past that node's header (`GrantOk`). A token for the slice `(p, n)` with
 cell labels `A`, `K` is `gfrag γ e i (p, n, q, A, K, φ)` for some grant id `i`, with the fraction `q`
-of the grant's extent share (tagged `(γ, e)`) and the fee `φ` (`FAllocInv.fee`; the arena charges
-none yet): it names exactly that region, so a token of the
+of the grant's extent share (tagged `(γ, e)`) and the fee `φ`: it names exactly that region, so a token of the
 current epoch shows `M i = some (p, n, q, A, K, φ)` (`gfrag_mem`), hence a first node: **O-A is excluded by ghost state**, not by a premise, and a `free` of a slice
 that this arena did not grant has no token: a permission violation. A token of an older epoch
 (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose `own` needs the authority
@@ -60,6 +60,14 @@ resize re-points the grant at the new length (`Upd.reassign`; `shrink_ghost`, `g
 **`remap`** is `resize` (the whole-region form, `FAllocInv.resize_granted_of`) and returns
 `memory.ptr`.
 
+**The fee** (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee of a grant) is `fee γ e φ`, a
+nonzero part `φ` of the epoch token `epTok γ e`. `alloc` takes it, the state keeps it with the
+grant's receipt, and `free` (and the ghost `grant_return`, which gives a grant back without
+running code) gives it back. So a client that holds the whole token `epTok γ e 1` next to `own`
+has no outstanding grant (`own_epTok_empty`; `granted_epTok_false`): what a `reset` that gives
+the nodes back to the child needs (`ArenaObstruction.not_reset_own`: a `reset` from `own` alone
+is unsound).
+
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
 node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
 states this specification covers end at the first failed `alloc`.
@@ -76,3 +84,6 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.ArenaSpec.free_spec
 #print axioms AllocArena.ArenaSpec.resize_spec
 #print axioms AllocArena.ArenaSpec.remap_spec
+#print axioms AllocArena.Core.grant_return
+#print axioms AllocArena.Core.own_epTok_empty
+#print axioms AllocArena.Core.granted_epTok_false
