@@ -1304,9 +1304,10 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
   let get ← withLocalDeclD `s T fun s => do mkLambdaFVars #[s] (← mkAppM f.proj #[s])
   let set ← withLocalDeclD `s T fun s => withLocalDeclD `v f.ty fun v => do
     let parts ← fs.mapIdxM fun i g => if i == j then pure v else mkAppM g.proj #[s]
-    let .const sn us := (← whnfR T).getAppFn | throwError "fsym: not a structure"
+    let Tw ← whnfR T
+    let .const sn us := Tw.getAppFn | throwError "fsym: not a structure"
     let ctor := getStructureCtor (← getEnv) sn
-    mkLambdaFVars #[s, v] (mkAppN (mkAppN (mkConst ctor.name us) (← whnfR T).getAppArgs) parts)
+    mkLambdaFVars #[s, v] (mkAppN (mkAppN (mkConst ctor.name us) Tw.getAppArgs) parts)
   let ty ← mkAppM ``Zig.Full.EncField #[T, f.ty, mkNatLit f.lo, get, set]
   let pf ← mkFreshExprMVar ty
   let some [gFit, gGet, gSet] ← observing? (evalTacticAt (← `(tactic| refine ⟨?_, ?_, ?_⟩)) pf.mvarId!)
@@ -1349,20 +1350,22 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
 proof, through fields of fields; cached per run. -/
 partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
     TacticM (Option (Expr × Expr × Expr)) := do
+  -- a value is not a field of itself (a load of the whole value is the `pts` rule's); no
+  -- result is cached when the nesting budget ran out
+  if fuel == 0 || T == U then return none
   let key := (T, U, o)
   if let some r := (← (← caches).fields.get).get? key then return r
   let r ← go
   (← caches).fields.modify (·.insert key r)
   return r
 where go : TacticM (Option (Expr × Expr × Expr)) := do
-  -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
-  if fuel == 0 || T == U then return none
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
   let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
   let f := fs[j]!
   if o == f.lo && (← withNewMCtxDepth (isDefEq f.ty U)) then return ← encFieldDirect T fs j
   let some (_, _, h₂) ← encFieldOf? f.ty U (o - f.lo) (fuel - 1) | return none
-  let some (_, _, h₁) ← encFieldDirect T fs j | return none
+  -- the outer field through the cache (shared by every field inside it)
+  let some (_, _, h₁) ← encFieldOf? T f.ty f.lo fuel | return none
   let pf ← mkAppM ``Zig.Full.EncField.comp #[h₁, h₂]
   let a := (← inferType pf).getAppArgs
   let (get, set) := (← Core.betaReduce a[5]!, ← Core.betaReduce a[6]!)
@@ -1913,8 +1916,10 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
       let .const c _ := z.getAppFn | continue
       if ← isLibrary c then continue
       let some z' ← unfold1 z | continue
+      let s ← saveState
       let g' ← g.replaceTargetDefEq (← if left then mkEq z' z₂ else mkEq z₂ z')
-      return ← proveEqGoal g' depth (fuel - 1)
+      if ← proveEqGoal g' depth (fuel - 1) then return true
+      s.restore
     return false
   let s ← saveState
   try
