@@ -8,6 +8,8 @@ import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.Pinned
 import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.Full.ResetLedger
+import ZigLean.Sep.Full.Parts
+import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Range
 
 /-!
@@ -76,12 +78,32 @@ structure Child extends FAllocInv where
 def Child.bytes (CI : Child) : Array Byte :=
   Enc.fields 16 [(0, Enc.encode CI.cctx), (8, Enc.encode CI.vtp)]
 
-@[simp] theorem Child.bytes_size (CI : Child) : CI.bytes.size = 16 := by
+@[simp, fsym_arith] theorem Child.bytes_size (CI : Child) : CI.bytes.size = 16 := by
   have h1 : (Enc.encode CI.cctx).size = 8 := LawfulEnc.size_encode _
   have h2 : (Enc.encode CI.vtp).size = 8 := LawfulEnc.size_encode _
   simp only [Child.bytes, Enc.fields, List.foldl, writeBytes, Array.size_append, Array.size_extract,
     Array.size_replicate, h1, h2]
   omega
+
+theorem Child.layout (CI : Child) :
+    LayoutOk 16 (partSizes [(0, Enc.encode CI.cctx), (8, Enc.encode CI.vtp)]) = true := by
+  simp only [partSizes, List.map, LawfulEnc.size_encode]; decide
+
+/-- The context pointer read back from the child allocator's bytes. -/
+theorem Child.decodeAt0 (CI : Child) : (Enc.decodeAt CI.bytes 0 : Result Ptr) = pure CI.cctx := by
+  have h := fields_extract (pre := []) (post := [(8, Enc.encode CI.vtp)]) CI.layout
+  rw [LawfulEnc.size_encode] at h
+  unfold Enc.decodeAt Child.bytes
+  rw [show [(0, Enc.encode CI.cctx), (8, Enc.encode CI.vtp)] =
+    [] ++ (0, Enc.encode CI.cctx) :: [(8, Enc.encode CI.vtp)] from rfl, h, LawfulEnc.decode_encode]
+
+/-- The vtable pointer read back from the child allocator's bytes. -/
+theorem Child.decodeAt8 (CI : Child) : (Enc.decodeAt CI.bytes 8 : Result Ptr) = pure CI.vtp := by
+  have h := fields_extract (pre := [(0, Enc.encode CI.cctx)]) (post := []) CI.layout
+  rw [LawfulEnc.size_encode] at h
+  unfold Enc.decodeAt Child.bytes
+  rw [show [(0, Enc.encode CI.cctx), (8, Enc.encode CI.vtp)] =
+    [(0, Enc.encode CI.cctx)] ++ (8, Enc.encode CI.vtp) :: [] from rfl, h, LawfulEnc.decode_encode]
 
 /-- **The child's state and the arena's share of the child's fee** (coordinator decision
 2026-10-13): the arena pays the child's fee (`FAllocInv.fee`) for each node it takes from the
@@ -98,6 +120,18 @@ child's `free` refunds that fee into the reservoir (`Child.cown`; `FAllocInv.fee
 nonzero). -/
 def Child.ntok (CI : Child) (N : Ptr) (n k A S : Nat) (K : BlockKind) (q : Frac) : FAssn :=
   FAssn.ex fun φ => ⟪0 < φ.val⟫ ⋆ CI.tok N n k A S K q φ
+
+/-- **A refund joins the reservoir** (`FAllocInv.fee_join`): the child's `free` of a node gives
+back the node's nonzero fee. -/
+theorem Child.cown_refund (CI : Child) {u v : Frac} :
+    EUpd ((⟪0 < u.val⟫ ⋆ CI.fee u) ⋆ (⟪0 < v.val⟫ ⋆ CI.fee v))
+      (FAssn.ex fun χ : Frac => ⟪0 < χ.val⟫ ⋆ CI.fee χ) :=
+  EUpd.of_imp fun _ h => by
+    obtain ⟨r₁, r₂, hd, e, h1, h2⟩ := h
+    obtain ⟨hu, f1⟩ := sep_lift.mp h1
+    obtain ⟨hv, f2⟩ := sep_lift.mp h2
+    obtain ⟨h, hpos⟩ := CI.fee_join hu hv ⟨r₁, r₂, hd, e, f1, f2⟩
+    exact ⟨u.add v, sep_lift.mpr ⟨hpos, h⟩⟩
 
 /-! ## The invariant -/
 
@@ -182,10 +216,21 @@ def FreeCl (CI : Child) : List NodeV → FAssn
   | [] => FAssn.emp
   | nd :: ns => pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag ⋆ FreeCl CI ns
 
-/-- The free list: nodes with no grants, so the arena keeps their whole share (`qh = qn`) and
+/-- A node whose arena keeps its whole share. -/
+def NodeV.full (nd : NodeV) : NodeV := { nd with qh := nd.qn }
+
+/-- The free list: nodes with no grants, so the arena keeps their whole share (`NodeV.full`) and
 their whole claim. -/
 def FreeList (CI : Child) (fl : Option Ptr) : FAssn :=
-  FAssn.ex fun ns => ⟪∀ nd ∈ ns, nd.qh = nd.qn⟫ ⋆ (Chain CI true ns fl ⋆ FreeCl CI ns)
+  FAssn.ex fun ns => Chain CI true (ns.map NodeV.full) fl ⋆ FreeCl CI ns
+
+theorem freeList_none (CI : Child) : FreeList CI none = emp := by
+  funext r; apply propext; constructor
+  · rintro ⟨ns, h⟩
+    cases ns with
+    | nil => exact sep_emp.mp h
+    | cons nd ns => obtain ⟨_, _, -, -, h, -⟩ := h; exact h.1.elim
+  · intro h; exact ⟨[], sep_emp.mpr h⟩
 
 theorem encode_nxt_size (nxt : Option Ptr) : (Enc.encode nxt).size = 8 := LawfulEnc.size_encode nxt
 
@@ -2191,6 +2236,14 @@ theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf 
   · simp only [nodePieces, List.mem_map] at hd
     obtain ⟨nd, hnd, rfl⟩ := hd
     exact le_maxOn (List.mem_append_left _ (List.mem_append_left _ (List.mem_map.mpr ⟨nd, hnd, rfl⟩)))
+
+/-- An item of a vector value at an index below its length (`Zig.vindex`: `deinit` and `reset`
+index `[used_list, free_list]`). A step rule for `fsym [vindex_step]`; it belongs to the library's
+primitive rules (fsym-engine ledger). -/
+theorem vindex_step {α : Type} {n : Nat} (a : Vector α n) (i : BitVec 64) (h : i.toNat < n) :
+    FTotalTriple emp (StateT.lift (Zig.vindex a i)) (fun r => ⟪r = a[i.toNat]⟫) := by
+  unfold Zig.vindex; rw [dif_pos h]
+  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨_, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩
 
 /-! ## Proof tactics of the entries
 

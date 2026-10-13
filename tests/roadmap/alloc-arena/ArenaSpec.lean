@@ -1,6 +1,7 @@
 import AllocArena.ArenaLinux
 import AllocArena.Core
 import AllocArena.Reset
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # The translated `ArenaAllocator`'s `free`, `resize` and `remap` against `FAllocSpec`
@@ -85,6 +86,164 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaLinu
 
 arena_spec_statements
 
+/-! ## `deinit` and `reset`
+
+The child enters through `CAllocSpec` of the allocator that the arena's vtable selects among the
+module's allocators (`tables`, `CVTable.dispatch`). Each loop is `CTriple.loop` with its invariant;
+the bodies and the entries are walked by `fsym`. Workarounds for engine gaps (fsym-engine ledger,
+arena rows): the loop posts are `match`es on the exit (a generated `again` test is not decided),
+an exit's state is named by an equation of the result, the head stores of `free_all` are a rule
+proved by `fsym` without the struct's region, and a node list's empty cases close by
+`contradiction`. -/
+
+/-- The alignment argument of the generated entries, from its log2. -/
+def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
+
+/-- The module's allocators (`std.heap.page_allocator`, `ArenaAllocator`, `FixedBufferAllocator`):
+the entries that an indirect call through the child's vtable can reach. -/
+def tables : AllocTables Tgt where
+  alloc := [(⟨some 3, 0⟩, fun a => heap_PageAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2),
+    (⟨some 8, 0⟩, fun a => heap_ArenaAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2),
+    (⟨some 12, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
+  resize := [(⟨some 4, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2)),
+    (⟨some 9, 0⟩, fun a => heap_ArenaAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2),
+    (⟨some 13, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
+  remap := [(⟨some 5, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2)),
+    (⟨some 10, 0⟩, fun a => heap_ArenaAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2),
+    (⟨some 14, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
+  free := [(⟨some 6, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2)),
+    (⟨some 11, 0⟩, fun a => heap_ArenaAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2),
+    (⟨some 15, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
+
+/-- `Node.Size.toInt` of the bits of an even size, as a step rule (`allocatedSliceUnsafe`). -/
+theorem toInt_step (w : BitVec 64) (h : w.toNat % 2 = 0) :
+    FTotalTriple emp (StateT.lift (heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w)))
+      (fun r => ⟪r = w⟫) := by
+  rw [toInt_ofBits w h]
+  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨w, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩
+
+/-- The child allocator read back from its bytes in the arena struct. -/
+theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
+  simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
+
+/-- `free_all`'s store of the empty list heads into the two atomic words. -/
+theorem reset_heads (ctx : Ptr) (a b : Option Ptr) :
+    FTotalTriple (aptsE (ctx.add 16) a ⋆ aptsE (ctx.add 24) b)
+      (store 8 (ctx.add 16) ({ used_list := none, free_list := none } : heap_ArenaAllocator_State))
+      (fun _ => aptsE (ctx.add 16) (none : Option Ptr) ⋆ aptsE (ctx.add 24) (none : Option Ptr)) := by
+  fsym
+
+section Deinit
+
+variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+
+/-- The inner loop's invariant: the list from `it` (`FreeList`, its nodes opened). -/
+def Inv19 (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
+  FAssn.ex fun ns : List NodeV => ⟪s.local1 = l⟫ ⋆
+    (Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+
+/-- After one run of the inner loop's body. -/
+def Post19 (l : BitVec 64) : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals → FAssn
+  | (.rep19, s) => Inv19 CI l s
+  | (e, s) => ⟪(e, s) = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+
+include h in
+set_option maxHeartbeats 2000000 in
+/-- One node given back to the child (`free` through the vtable; the refund joins the
+reservoir). -/
+theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
+    CTriple (Tgt := Tgt) (Inv19 CI l s) ((heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩).run s)
+      (Post19 CI l) := by
+  refine CTriple.ex fun ns => ?_
+  rcases s with ⟨l', it⟩
+  unfold heap_ArenaAllocator_deinit.loop19
+  cases ns <;> cases it <;> simp only [List.map_cons, List.map_nil] <;>
+    fsym [CAllocSpec.free h, toInt_step, Child.cown_refund]
+  all_goals contradiction
+
+include h in
+theorem loop19_ct (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
+    CTriple (Tgt := Tgt) (Inv19 CI l s)
+      ((Zig.loop (heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩)
+        heap_ArenaAllocator_deinit.again19).run s)
+      (fun r => ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)) :=
+  CTriple.loop (Inv19 CI l) _ (fun s => (loop19_step CI h st l s).post fun r _ hr => by
+    rcases r with ⟨e, s'⟩; cases e <;> exact hr) s
+
+/-- The lists that `deinit` has not given back yet, from index `k` of `[used_list, free_list]`. -/
+def Lists9 (used fl : Option Ptr) (k : BitVec 64) : FAssn :=
+  if k = 0 then FreeList CI used ⋆ FreeList CI fl else if k = 1 then FreeList CI fl else emp
+
+/-- The outer loop's invariant. -/
+def Inv9 (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
+  ⟪s.local1.toNat ≤ 2⟫ ⋆ (Lists9 CI used fl s.local1 ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+
+/-- After one run of the outer loop's body. -/
+def Post9 (used fl : Option Ptr) :
+    heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals → FAssn
+  | (.rep9, s) => Inv9 CI used fl s
+  | (e, s) => FAssn.ex fun s' => ⟪(e, s) = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+
+include h in
+set_option maxHeartbeats 2000000 in
+theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
+    CTriple (Tgt := Tgt) (Inv9 CI used fl s)
+      ((heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl]).run s)
+      (Post9 CI used fl) := by
+  rcases s with ⟨l, it⟩
+  unfold heap_ArenaAllocator_deinit.loop9
+  obtain rfl | rfl | hl : l = 0 ∨ l = 1 ∨ 2 ≤ l.toNat := by bv_omega
+  all_goals fsym [loop19_ct CI h, vindex_step]
+
+include h in
+theorem loop9_ct (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
+    CTriple (Tgt := Tgt) (Inv9 CI used fl s)
+      ((Zig.loop (heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl])
+        heap_ArenaAllocator_deinit.again9).run s)
+      (fun r => FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)) :=
+  CTriple.loop (Inv9 CI used fl) _ (fun s => (loop9_step CI h used fl s).post fun r _ hr => by
+    rcases r with ⟨e, s'⟩; cases e <;> exact hr) s
+
+include h in
+set_option maxHeartbeats 2000000 in
+/-- **`deinit` gives every node of both lists back to the child** (the child's `free` through its
+vtable, `CAllocSpec`), and each node's fee back into the reservoir (`Child.cown_refund`). -/
+theorem deinit_ct (used fl : Option Ptr) :
+    CTriple (Tgt := Tgt) (FreeList CI used ⋆ FreeList CI fl ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+      (heap_ArenaAllocator_deinit ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩)
+      (fun _ => CI.cown ⋆ vtR CI.vtp CI.fns.toList) := by
+  unfold heap_ArenaAllocator_deinit
+  fsym [loop9_ct CI h]
+
+end Deinit
+
+section Reset
+
+attribute [local fsym_atom] own
+
+set_option maxHeartbeats 2000000 in
+/-- `reset(.free_all)` from the released arena (`reset_release`): `deinit` gives both lists back
+to the child, the list heads become empty, and the arena has no node at epoch `e + 1`
+(`own_empty`). -/
+theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+    (γ e : Nat) (ctx : Ptr) :
+    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .free_all)
+      (fun r => ⟪r = true⟫ ⋆ (own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one)) := by
+  have hd := child_decode CI
+  unfold heap_ArenaAllocator_reset
+  fsym [deinit_ct CI h, own_empty, reset_heads, heap_ArenaAllocator_ResetMode.tag.eq_def]
+
+/-- **`reset(.free_all)` meets the reset contract**: from the arena's state at epoch `e` and the
+whole epoch token (no grant outstanding), the arena's state at epoch `e + 1` and that epoch's
+whole token; every node is back with the child. -/
+theorem reset_free_all_spec (CI : Child)
+    (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv) (γ e : Nat) (ctx : Ptr) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one) (heap_ArenaAllocator_reset ctx .free_all)
+      (fun r => ⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one)) :=
+  CTriple.eupd (reset_release CI γ e ctx) (reset_free_all_ct CI h γ e ctx)
+
+end Reset
+
 end AllocArena.ArenaSpec
 
 #print axioms AllocArena.ArenaSpec.free_spec
@@ -94,3 +253,5 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.Core.own_epTok_empty
 #print axioms AllocArena.Core.granted_epTok_false
 #print axioms AllocArena.Core.reset_release
+#print axioms AllocArena.ArenaSpec.deinit_ct
+#print axioms AllocArena.ArenaSpec.reset_free_all_spec

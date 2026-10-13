@@ -74,9 +74,6 @@ theorem chain_split {CI : Child} {free : Bool} :
     exact sep_ex.mpr ⟨ei, sep_ex.mpr ⟨nx, sep_ex.mpr ⟨buf,
       sep_assoc' (sep_lift.mpr ⟨hf, of_eq (by ac_rfl) h⟩)⟩⟩⟩
 
-/-- A node whose arena keeps its whole share. -/
-def NodeV.full (nd : NodeV) : NodeV := { nd with qh := nd.qn }
-
 /-- A chain without shares and the nodes' whole shares are a chain of nodes that keep their whole
 share. -/
 theorem chain_join {CI : Child} {free : Bool} :
@@ -204,11 +201,6 @@ theorem chainH_facts {CI : Child} {free : Bool} :
       exact ⟨hnf, b, by simpa [Ptr.add] using hb⟩
     · obtain ⟨_, _, -, -, -, h3⟩ := h2
       exact chainH_facts h3 nd' hm
-
-/-- The claims of the nodes do not depend on the share they keep. -/
-theorem freeCl_full {CI : Child} : ∀ ns : List NodeV, FreeCl CI (ns.map NodeV.full) = FreeCl CI ns
-  | [] => rfl
-  | nd :: ns => by simp only [List.map_cons, FreeCl, NodeV.full, freeCl_full ns]
 
 /-- A header's node has a block, and its kind is not a `const` global's (its `next` word). -/
 theorem headH_block {CI : Child} {nd : NodeV} {ei : BitVec 64} {nx : Option Ptr} {R : FAssn}
@@ -364,7 +356,7 @@ theorem release_used {CI : Child} {γ e : Nat} {w : OV} (hw : w.Facts) (hM : w.M
     simp only [NodeShares, Full.sep_emp_eq] at h
     refine sep_mono_right (R := FAssn.ex fun jh => JunkAt jh ⋆ FreeList CI none)
       (fun _ x => ⟨w.jh, sep_mono_right (R := FreeList CI none)
-        (fun _ y => ⟨[], sep_lift.mpr ⟨by simp, sep_emp.mpr y⟩⟩) (sep_emp.mpr x)⟩) h
+        (fun _ y => ⟨[], sep_emp.mpr y⟩) (sep_emp.mpr x)⟩) h
   | some N =>
     simp only [OV.FirstFacts, hf] at hff
     obtain ⟨hnf, hei, htail⟩ := hff
@@ -463,10 +455,7 @@ theorem release_used {CI : Child} {γ e : Nat} {w : OV} (hw : w.Facts) (hM : w.M
         (HeadH CI nd (BitVec.ofNat 64 w.ei) w.nxt ⋆ ChainH CI true w.rest w.nxt)) ⋆
           NodeShares CI.tag NodeV.qn (nd :: w.rest))) ⋆ FreeCl CI (nd :: w.rest)))) (by ac_rfl) h
     refine sep_mono_right (fun _ x => ⟨hj', sep_mono_right (fun _ y => ?_) x⟩) h
-    refine ⟨(nd :: w.rest).map NodeV.full, sep_lift.mpr ⟨fun x hx => ?_, ?_⟩⟩
-    · obtain ⟨y, -, rfl⟩ := List.mem_map.mp hx; rfl
-    · rw [freeCl_full]
-      exact sep_mono_left (fun _ z => hch _ z) y
+    exact ⟨nd :: w.rest, sep_mono_left (fun _ z => hch _ z) y⟩
 
 /-- **The arena released at a reset**: its struct, the ledger at the next epoch with no grant and
 that epoch's whole token, the child (with the arena's reservoir of its fee) and its vtable, junk,
@@ -554,5 +543,23 @@ theorem reset_release (CI : Child) (γ e : Nat) (ctx : Ptr) :
     (by ac_rfl) h
   obtain ⟨jh, h⟩ := sep_ex.mp h
   exact ⟨w.Ac, w.Sc, w.Kc, w.first, w.fl, jh, of_eq (by ac_rfl) h⟩
+
+/-- **An arena with no node** at epoch `e`: its struct with empty lists, the ledger with no grant,
+the child with the reservoir and its vtable, and junk (what `reset`'s `free_all` leaves). -/
+theorem own_empty (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : BlockKind} {jh : Heap} :
+    EUpd (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) (none : Option Ptr) ⋆
+        aptsE (ctx.add 24) (none : Option Ptr) ⋆ gauthP γ e GMap.empty CI.tag ⋆
+        LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt jh)
+      (own CI γ e ctx) := by
+  refine EUpd.of_imp fun r h => ⟨⟨Ac, Sc, Kc, none, none, GMap.empty, none, 0, 0, .heap,
+    0, 0, #[], Frac.one, Frac.one, [], 0, 0, fun _ => (0, Frac.one, 0), jh⟩, sep_lift.mpr ⟨?_, ?_⟩⟩
+  · refine ⟨fun _ _ => rfl, ⟨rfl, rfl, rfl⟩, fun _ _ h => ?_, fun _ => ?_, fun _ h => ?_, fun _ h => ?_⟩
+    · cases h
+    · simp only [ndLent, poolOn, grantsOn, esum, OV.nodes]; exact (Rat.add_zero 0).symm
+    · cases h
+    · cases h
+  · simp only [OV.body, OV.cls, FirstCl, FirstPart, RestCl, UsedRest, Chain, Pool, Full.sepN,
+      freeList_none, Full.sep_emp_eq]
+    exact of_eq (by ac_rfl) h
 
 end AllocArena.Core
