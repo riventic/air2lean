@@ -268,7 +268,7 @@ proof quantifies
 over; assumptions about external storage are hypotheses on `ext`
 (`tests/roadmap/global-init/GlobalInit/Proofs.lean`). The field type is the contract: the
 external definition must hold a valid encoding of that type (padding bytes undefined) before the
-program starts; external writes during the run are not modelled. A named, union-free and
+program starts; external writes during the run are not modelled (premise EXT-06). A named, union-free and
 error-free type qualifies (integers, floats, `bool`, enums, data pointers, slices, arrays,
 vectors, structs, tuples and optionals of these); an `extern` function, function pointer, union
 or error storage, an `extern` with an `init`, and an unnamed `extern` are rejected

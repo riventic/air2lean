@@ -317,6 +317,7 @@
     {"premise": "ASM-06", "scope": "closure", "pattern": "(?:^|\\.)Asm\\.(?:readRegion|writeRegion|movePtr)$"},
     {"premise": "EXT-04", "scope": "closure", "pattern": "(?:^|\\.)External\\.claim$"},
     {"premise": "EXT-05", "scope": "closure", "pattern": "(?:^|\\.)extCall$"},
+    {"premise": "EXT-06", "scope": "closure", "pattern": "(?:^|\\.)(?:ExternInit|ExternBlock)$"},
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
     {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device|ptrProjectDevice)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},

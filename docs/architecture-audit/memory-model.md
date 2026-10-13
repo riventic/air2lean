@@ -430,7 +430,11 @@ global**: `storeBytes` and the atomic writes, RMWs and CAS writes check `Mem.acc
 `.owned` block; `munmap`/`mremap` and a thread's stack need a `.mapped` block; claims and
 write-kind loads now throw. The write claim is a conservative over-approximation: a model that
 declares a write but does not write would not fault natively. Atomic reads of a `const` global
-(`loadPrep`, the futex compare) still record an `.atomicRead` entry; it races with nothing either.
+(`loadPrep`, `unorderedPrep`, the futex compare) still record an `.atomicRead` entry; it races
+with nothing either (conservative: there is no thread rule for an atomic read of a `const`
+global). That no code outside the program writes external `const` storage during the run (an
+`extern const`, a read-only `ExternBlock`) is premise EXT-06: the model records no read of it,
+so such a write would be a race the model does not see.
 
 **Consumer audit (no reader depends on a `const` read entry).**
 

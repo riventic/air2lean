@@ -100,7 +100,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -1054,6 +1054,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: tokens `extCall` (the open arm of a generated call, `Zig.extCall`).
 - Sources: [interfaces.md](interfaces.md), `Air2Lean/Emit.lean` (`emitExt`),
   `tests/roadmap/interfaces`.
+
+<a id="ext-06"></a>
+### EXT-06 — External static storage is not written during the run
+
+- Kind: environment.
+- Statement: The storage of an `extern` global that the program does not define (a field of the
+  generated `ExternInit`), and every external storage block that such a global's initial value
+  points into (`Zig.ExternBlock`), is written by no code outside the program while the program
+  runs: no other object's code, C thread, signal handler or device changes it. Its contents are
+  the initial value `ext` until the program itself writes a writable one. A read-only one (a
+  `const` extern, an `ExternBlock` that is not `writable`) is a `const` global of the model, whose
+  reads record no access (MM-20), so a concurrent external write to it would be a race that the
+  model does not see; this premise excludes it.
+- Derived from: tokens `ExternInit` (the generated structure of external initial values) and
+  `ExternBlock`.
+- Sources: [generated-code.md](generated-code.md) (§Globals),
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md) (MM-20),
+  [architecture-audit/structure-2026-10-13.md](architecture-audit/structure-2026-10-13.md) (#7),
+  `tests/roadmap/global-init`.
 
 ## OS page mapping
 
