@@ -233,15 +233,12 @@
       "id": "layout",
       "description": "largest AIR set (51 files): structs, error unions, layout",
       "air": [
-        "tests/golden/layout/air"
+        "tests/golden/0.16.0/layout/air"
       ],
       "air_zig_version": "0.16.0",
       "namespace": "Layout",
       "prefix": "layout.",
-      "translate_args": [
-        "--profile",
-        "legacy-abi64-le"
-      ],
+      "translate_args": [],
       "reference_gen": "Proofs/Layout/Gen.lean",
       "proof_modules": [
         "Proofs.Layout.Gen",
