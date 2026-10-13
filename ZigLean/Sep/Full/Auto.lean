@@ -3920,7 +3920,7 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
           if b.containsFVar d.fvarId then throwError "the state names the fact {d.userName}"
           b := mkSep (mkApp (mkConst liftN) d.type) b
         else
-          unless (← whnfD (← inferType d.type)) == mkSort levelOne do
+          unless (← whnfD (← inferType d.type)) == mkSort Level.one do
             throwError "{d.userName} is not of a type in `Type`"
           b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
         out := out.push b
@@ -4117,9 +4117,10 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let (sp, sn) ← g.byCases cond `hc
     let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
     let gn ← sn.mvarId.withContext (branch sn.mvarId (.fvar sn.fvarId) false)
-    let gp ← destruct gp sp.fvarId
-    let gn ← destruct gn sn.fvarId
-    return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
+    -- (one branch after the other: the substitutions of a branch's fact are recorded for the
+    -- caller's terms of that branch's walk, `refreshUser`)
+    let lp ← walk (← destruct gp sp.fvarId) user extra (fuel - 1)
+    return lp ++ (← walk (← destruct gn sn.fvarId) user extra (fuel - 1))
   -- cases on a variable; a term (a field of the locals) is generalized first, with its equation
   -- (`substCtor` then replaces it in the facts)
   let discr? : Option Expr ←
@@ -4340,7 +4341,13 @@ partial def wpSplit (g : MVarId) (h : FVarId) : TacticM (List MVarId) := g.withC
     let some sg := gs[0]? | return []
     let f1 := sg.fields[1]!.fvarId!
     return ← (← wpSplit sg.mvarId sg.fields[0]!.fvarId!).flatMapM fun g' => do
-      if (← g'.withContext f1.findDecl?).isSome then wpSplit g' f1 else pure [g']
+      -- (a substitution of the first part renames the second: followed by `substs`)
+      let mut f := f1
+      for _ in [0:16] do
+        if (← g'.withContext f.findDecl?).isSome then return ← wpSplit g' f
+        let some (.fvar f') := (← (← caches).substs.get).get? f | break
+        f := f'
+      pure [g']
   if ty.isAppOfArity ``Exists 2 then
     let gs ← g.cases h
     let some sg := gs[0]? | return []
@@ -4413,7 +4420,10 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
   if !t.hasExprMVar then
+    let s ← saveState
     if let some [] ← solveSides [g] then return []
+    -- (a partial solution assigned `g`: undone, the next tries need it open)
+    s.restore
   let ctx ← wpHypCtx extra
   let mut thms := ctx.simpTheorems
   let mut eqs : SimpTheorems := {}
@@ -4571,8 +4581,11 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       return ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
   -- a panic: the branch must be unreachable
   if isThrow x then
+    let s ← saveState
     let g' ← g.exfalso
     if ← closeWith g' (← `(tactic| contradiction)) <||> arithCore g' then return []
+    -- (the goal stays the panic's, not the `False` that `exfalso` assigned it to)
+    s.restore
     trace[fsym] "reachable panic"
     return [g]
   -- an `if`: decided by the facts, else both branches
@@ -4597,9 +4610,10 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let (sp, sn) ← g.byCases cond `hc
     let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
     let gn ← sn.mvarId.withContext (branch sn.mvarId (.fvar sn.fvarId) false)
-    let gp ← destruct gp sp.fvarId
-    let gn ← destruct gn sn.fvarId
-    return (← wpWalk gp user extra (fuel - 1)) ++ (← wpWalk gn user extra (fuel - 1))
+    -- (one branch after the other: the substitutions of a branch's fact are recorded for the
+    -- caller's terms of that branch's walk, `refreshUser`)
+    let lp ← wpWalk (← destruct gp sp.fvarId) user extra (fuel - 1)
+    return lp ++ (← wpWalk (← destruct gn sn.fvarId) user extra (fuel - 1))
   -- a `match` (also of a step of a concurrent body, `(match … : CM σ α).run s`): split
   let inner := if x.isAppOfArity ``StateT.run 5 then x.getArg! 3 else x
   if let some mt ← matchMatcherApp? inner then
