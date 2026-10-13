@@ -780,6 +780,180 @@ theorem FStepIn.recordAt {h : Heap} {b : BlockId} {off len : Nat} {kind : Access
     (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.recordAt b off len kind) :=
   FStepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
 
+theorem FStepIn.cur (hs : FStepIn hF m m') (hc : m.current < m.clocks.size) :
+    m'.current < m'.clocks.size := by
+  rw [hs.current, hs.size]; exact hc
+
 end FStep
+
+/-! ## The steps of an atomic op
+
+An atomic op on a word (`ZigLean/Mem/Thread.lean`) records its access, finds or makes the word's
+location (`locIdx`: a location of the word's bytes gets messages, a new one is pushed, a
+mixed-size access retires the overlapping ones first), and then reads or inserts a message,
+updates the thread's view (`observeM`) and, for an acquire, its clock (`acqM`). Each of these is
+an `FStepIn` of every frame that has none of the word's bytes (`FStepIn.locIdx`, `observe`,
+`acq`, `insertLast`, `loadM`, `storeM`, `rmwM`): the locations that change or are new lie over
+the word, and only the current thread's view and clock change. -/
+
+section AtomicStep
+
+open Conc.Proto
+
+variable {m m' : Mem} {hF : Heap}
+
+/-- The locations stay at their indices (`σ = some`): a location keeps its bytes, and stays as it
+is if it lies in the frame's bytes; a new one (past the old end) has a byte and none of the
+frame's; the other threads' views stay. -/
+theorem AMap.ofSome
+    (hkept : ∀ (i : Nat) (l : ALoc), m.atomics[i]? = some l → ∃ l' : ALoc, m'.atomics[i]? = some l' ∧
+      l'.block = l.block ∧ l'.off = l.off ∧ l'.len = l.len ∧ (l.In hF → l' = l))
+    (hnew : ∀ (j : Nat) (l' : ALoc), m'.atomics[j]? = some l' → m.atomics.size ≤ j →
+      0 < l'.len ∧ l'.Off hF)
+    (hseen : m'.seen.filter (·.1 != m.current) = m.seen.filter (·.1 != m.current)) :
+    AMap hF m m' some where
+  mono _ _ _ _ h h' hlt := by cases h; cases h'; exact hlt
+  kept i j l h hl := by
+    cases h
+    obtain ⟨l', hl', hb, ho, hn, -⟩ := hkept i l hl
+    exact ⟨l', hl', hb, ho, hn⟩
+  frame i l hl hin := by
+    obtain ⟨l', hl', -, -, -, he⟩ := hkept i l hl
+    exact ⟨i, rfl, by rw [hl', he hin]⟩
+  new j l hl hn := hnew j l hl (Nat.le_of_not_lt fun hj => hn j hj rfl)
+  seen := by
+    rw [hseen]
+    conv => lhs; rw [← Array.filterMap_some (xs := m.seen.filter _)]
+    rfl
+
+/-- A step that changes only the atomic locations, the views and the message counter (which
+grows). -/
+theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.nextMsg ≤ m'.nextMsg)
+    (he : m' = { m with atomics := m'.atomics, seen := m'.seen, nextMsg := m'.nextMsg }) :
+    FStepIn hF m m' := by
+  have hfp : m'.footprint = m.footprint := (congrArg Mem.footprint he).trans rfl
+  have hcl : m'.clocks = m.clocks := (congrArg Mem.clocks he).trans rfl
+  have hbl : m'.blocks = m.blocks := (congrArg Mem.blocks he).trans rfl
+  refine ⟨(congrArg Mem.current he).trans rfl, (congrArg Mem.threads he).trans rfl,
+    (congrArg Mem.waiters he).trans rfl, (congrArg Mem.woken he).trans rfl,
+    (congrArg Mem.groups he).trans rfl, by rw [hcl], fun u _ => by rw [hcl],
+    by rw [hcl]; exact VClock.le_refl _, by rw [hbl]; exact Nat.le_refl _, hn, ⟨σ, ha⟩,
+    fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩, fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩,
+    fun b _ hc => ?_⟩
+  obtain ⟨blk, h1, h2⟩ := hc
+  exact ⟨blk, hbl ▸ h1, h2⟩
+
+/-- A new location, over bytes that are not the frame's. -/
+theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) :
+    FStepIn hF m { m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } := by
+  refine .ofAMap (AMap.ofSome (fun i l₀ h => ⟨l₀, ?_, rfl, rfl, rfl, fun _ => rfl⟩)
+    (fun j l' h hj => ?_) rfl) (Nat.le_succ _) rfl
+  · have hi := (Array.getElem?_eq_some_iff.mp h).1
+    show (m.atomics.push l)[i]? = some l₀
+    rw [Array.getElem?_push_lt hi, ← Array.getElem?_eq_getElem hi]; exact h
+  · have hj' := (Array.getElem?_eq_some_iff.mp h).1
+    simp only [Array.size_push] at hj'
+    have : j = m.atomics.size := by omega
+    subst this
+    have e : (m.atomics.push l)[m.atomics.size]? = some l := Array.getElem?_push_size
+    rw [show ({ m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } : Mem).atomics =
+      m.atomics.push l from rfl, e] at h
+    cases h
+    exact ⟨hl, hoff⟩
+
+/-- New messages of a location with a byte that is not the frame's. -/
+theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n)
+    (hnot : ¬ (m.atomics[i]!).In hF) :
+    FStepIn hF m { m with atomics := m.atomics.set! i { m.atomics[i]! with msgs := M }, nextMsg := n } := by
+  refine .ofAMap (AMap.ofSome (fun j l h => ?_) (fun j l' h hj => ?_) rfl) hn rfl
+  · have hj := (Array.getElem?_eq_some_iff.mp h).1
+    show ∃ l', (m.atomics.set! i _)[j]? = some l' ∧ _
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    by_cases e : i = j
+    · subst e
+      rw [getElem!_pos m.atomics i hj, Array.getElem?_eq_getElem hj] at *
+      cases h
+      exact ⟨{ m.atomics[i] with msgs := M }, by simp [hj], rfl, rfl, rfl,
+        fun hin => absurd hin hnot⟩
+    · exact ⟨l, by simp [e, h], rfl, rfl, rfl, fun _ => rfl⟩
+  · have := (Array.getElem?_eq_some_iff.mp h).1
+    simp only [Array.set!_eq_setIfInBounds, Array.size_setIfInBounds] at this
+    omega
+
+/-- The current thread's view of a location changes (`observe`). -/
+theorem FStepIn.observe (li id : Nat) : FStepIn hF m (observeM m li id) := by
+  refine .ofAMap (AMap.ofSome (fun i l h => ⟨l, h, rfl, rfl, rfl, fun _ => rfl⟩)
+    (fun j l' h hj => absurd (Array.getElem?_eq_some_iff.mp h).1 (Nat.not_lt.mpr hj)) ?_)
+    (Nat.le_refl _) rfl
+  simp only [observeM, Array.filter_push, Array.filter_filter]
+  simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
+  congr 1; funext x
+  rcases x with ⟨t, j, k⟩
+  by_cases ht : t = m.current <;> simp [ht]
+
+/-- An acquire: the current thread's clock grows. -/
+theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m (acqM m c) where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := by simp [acqM]
+  others u hu := by
+    show (m.clocks.set! m.current _)[u]! = _
+    rw [Conc.Proto.getElem!_set!_ite]; simp [hu]
+  mine := by
+    show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
+    rw [Array.getElem!_set!_self _ _ _ hc]; exact VClock.le_merge_left _ _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const _ _ h := h
+
+/-- An atomic read of a message (`atomicLoadAt` after `loadPrep`). -/
+theorem FStepIn.loadM (hc : m.current < m.clocks.size) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
+    FStepIn hF m (Conc.Proto.loadM m li ord msg) := by
+  unfold Conc.Proto.loadM
+  dsimp only
+  split
+  · exact (FStepIn.observe li msg.id).trans (FStepIn.acq (m := observeM m li msg.id) hc _)
+  · exact FStepIn.observe li msg.id
+
+/-- A message at the end of a location with a byte that is not the frame's: the location gets
+it, and the block its bytes. -/
+theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) := by
+  rw [insertM_last hb]
+  exact (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot).trans
+    (FStepIn.setBlock fun h => ⟨blk, hb, h⟩)
+
+/-- An atomic store at the end of a location with a byte that is not the frame's. -/
+theorem FStepIn.storeM {n : Nat} {li : Nat} {blk : Block} (ord : AtomicOrder) (v : BitVec n)
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) :=
+  (FStepIn.insertLast hb hnot).trans (FStepIn.observe _ _)
+
+/-- An RMW that read the newest message of a location with a byte that is not the frame's. -/
+theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} (ord : AtomicOrder) (rd : Msg)
+    (new : BitVec n) (hc : m.current < m.clocks.size)
+    (hpos : pos + 1 = (m.atomics[li]!).msgs.size)
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    FStepIn hF m (Conc.Proto.rmwM m li pos ord rd new) := by
+  unfold Conc.Proto.rmwM
+  dsimp only
+  have key : ∀ M : Mem, FStepIn hF m M → M.atomics = m.atomics → M.blocks = m.blocks →
+      FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) := by
+    intro M hs ha hbl
+    rw [hpos, ← ha]
+    exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) (by rw [ha]; exact hnot))).trans
+      (FStepIn.observe _ _)
+  split
+  · exact key _ (FStepIn.acq hc _) rfl rfl
+  · exact key _ (FStepIn.refl m hF) rfl rfl
+
+end AtomicStep
 
 end Zig

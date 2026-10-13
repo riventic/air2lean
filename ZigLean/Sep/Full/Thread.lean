@@ -156,6 +156,28 @@ theorem toFTriple (ht : FTTriple P c Q) : FTriple P c Q := by
       rintro ⟨r', hh', hq, hc', -, hst⟩
       exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hc'.2⟩
 
+/-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
+for resources whose cells are the memory's exact cells, if the precondition survives reading
+the actual sizes. The thread owns the same bytes, and the frame has the same bytes. -/
+theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
+      m.Owns m.current r.heap.erase →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+    FTTriple P c Q := by
+  intro m r rF hh hp hc ho
+  have := h m (r.fix m) (rF.fix m) hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
+    (ho.sub fun l hl => FHeap.erase_fix_ne.mp hl)
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
+    exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
+      hst.weaken fun l hl => FHeap.erase_fix_ne.mpr hl⟩
+
 /-- **The frame rule.** The frame's bytes, tags, knowledge and ghost state stay, and the thread
 keeps owning the frame's bytes. -/
 theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by

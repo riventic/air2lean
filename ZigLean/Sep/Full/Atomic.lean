@@ -1,25 +1,31 @@
-import ZigLean.Sep.Full.Triple
+import ZigLean.Sep.Full.ThreadStep
 
 /-!
-# Atomic points-to (prototype, `docs/sep-full-state.md`)
+# Atomic points-to (`docs/sep-full-state.md`, `docs/sep-threads.md` S1)
 
 Rules for `atomic_load` and `atomic_store` of a 64-bit word that the precondition owns
-(`ZigLean/Sep/Full/Res.lean`), in a sequential run (choice `0`, the only option of one thread:
-the newest message, a write at the end):
+(`ZigLean/Sep/Full/Res.lean`), at choice `0` (the newest message, a write at the end):
 
-* in one thread the op never throws (`locIdx_noErr_single`): a location over the bytes of
-  another offset or size is retired, since every access to it happened before
-  (`ZigLean/Mem/Thread.lean`, `retireAt`);
 * the op puts a location only over the owned bytes (`locIdx_post`), and a retired location
   leaves its other bytes without one, so every frame constraint stays true (`holds_after`;
   atomic tags are constraints, `docs/sep-full-state.md` §Atomic tags are constraints);
-* in a sequential run the newest message has the block's bytes (`locIdx` adds a message when they
-  differ, a new location starts with them), so the op reads and writes the owned bytes like a
-  plain access.
+* choice `0` reads and writes the owned bytes like a plain access: the newest message has the
+  block's bytes (`locIdx` adds a message when they differ, a new location starts with them);
+* the op does not race (the thread owns the word, `Mem.Owns.noRace`) and is a step of the thread
+  outside every frame (`FStepIn.locIdx`, `loadM`, `storeM`, `rmwM`, `ZigLean/Conc/Clock.lean`);
+* the op does not throw at `locIdx` (`locIdx_noErr_word`) when **either** the word is an `apts`
+  (its tag constraint: no location of another offset or size overlaps it, `abytesAt_layout`),
+  **or** the run is sequential (`locIdx_noErr_single`: a location over the bytes of another
+  offset or size is retired, since every access to it happened before; `retireAt`).
 
-The rules take any owned word (`wpts`, whatever its constraint) and leave an `apts`; the `apts`
-versions are corollaries. `FTriple.untag` and `wpts_of_up` apply them to bytes owned as plain
-(`up`) bytes.
+So each op has **one** analysis of its run (`atomicLoad_run`, `atomicStore_run`, …), with that
+disjunction as its premise. It gives the **thread rule** of an `apts` word (`FTTriple.atomicLoad`,
+…, by `FTTriple.of_step`), whose sequential reading is the `apts` rule (`.toFTriple`), and the
+**sequential rule of any owned word** (`wpts`, whatever its constraint: `FTriple.atomicLoadW`, …,
+by `FTriple.of_step`). A `wpts` word has no thread rule: concurrently, a mixed-size access whose
+overlapping location has a concurrent access throws `.unspecified`
+(`tests/roadmap/sep-full/AtomicRetireCX.lean`). `FTriple.untag` and `wpts_of_up` apply the `wpts`
+rules to bytes owned as plain (`up`) bytes.
 -/
 
 namespace Zig
@@ -648,6 +654,208 @@ theorem apts_fix {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {v : BitVe
 theorem heap_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m'.heap = m.heap := by
   funext l; simp [Mem.heap, h]
 
+theorem _root_.Zig.Mem.NoRevive.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m.NoRevive m' :=
+  fun _ _ _ hl => by rwa [heap_of_blocks h] at hl
+
+/-- A write inside block `b` revives no byte. -/
+theorem _root_.Zig.Mem.NoRevive.write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat}
+    {bs : Array Byte} (hb : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size)
+    (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs }) :
+    m.NoRevive m' :=
+  Mem.NoRevive.setBlock hb h id (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _)
+    (Nat.le_refl _)
+
+/-! ## The step of an atomic op in a thread -/
+
+/-- **`locIdx` over bytes that are not the frame's** is a step of the thread, whichever branch
+it takes: new messages of the word's location, a new location, or a mixed-size retirement and a
+new location. -/
+theorem _root_.Zig.FStepIn.locIdx {hF : Heap} {m m₁ : Mem} {b o len li : Nat} (hlen : 0 < len)
+    (hoff : ∀ x, o ≤ x → x < o + len → hF (b, x) = none)
+    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ := by
+  have hret : ∀ {li : Nat} {m₁ : Mem}, ((retireAt b o len).run m).run = some (.ok (li, m₁)) →
+      FStepIn hF m m₁ := by
+    intro li m₁ h
+    unfold retireAt at h
+    obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    dsimp only at h1
+    split at h1
+    · exact (MemM.throw_ok h1).elim
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact (FStepIn.retire hoff).trans (FStepIn.pushLoc hlen hoff)
+  -- the word's location (at `(b, o)`, of `len` bytes) is not in the frame
+  have hnot : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
+      (m.atomics[i]!).len = len → ¬ (m.atomics[i]!).In hF := by
+    intro i hi hl hin
+    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [getElem!_pos m.atomics i hlt] at hl hin
+    have := hin o (by rw [hp.2]; exact Nat.le_refl _) (by rw [hp.2, hl]; omega)
+    have h' : hF (b, o) ≠ none := by simpa [hp.1] using this
+    exact h' (hoff o (Nat.le_refl _) (by omega))
+  unfold Zig.locIdx at h
+  obtain ⟨a₀, m₀, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨ha, hm₀⟩ := MemM.get_ok hg
+  subst a₀; subst m₀
+  dsimp only at h1
+  split at h1
+  · rename_i i hi
+    split at h1
+    · exact hret h1
+    · rename_i hne
+      have hl : (m.atomics[i]!).len = len := by simpa using hne
+      split at h1
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        exact FStepIn.setLoc (Nat.le_refl _) (hnot _ hi hl)
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        exact FStepIn.setLoc (Nat.le_succ _) (hnot _ hi hl)
+  · split at h1
+    · exact hret h1
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact FStepIn.pushLoc hlen hoff
+
+/-- The bytes of an owned word are the resource's. -/
+theorem abytesAt_mine {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} {r : Res} (hab : abytesAt p A S K bs tg r) {b : BlockId}
+    (hpb : p.block = some b) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → r.heap.erase (b, x) ≠ none := by
+  intro x h1 h2
+  simp [FHeap.erase, abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, h1, h2⟩]
+
+/-- The bytes of an owned word are not the frame's. -/
+theorem abytesAt_frame {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    {b : BlockId} (hpb : p.block = some b) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → rF.heap.erase (b, x) = none := fun x h1 h2 =>
+  (FHeap.erase_disjoint hh.disj (b, x)).resolve_left (abytesAt_mine hab hpb x h1 h2)
+
+/-- **O3.** In a memory that holds an owned word whose tag constraint is its own location
+`(p.off, 8)`, no atomic location of another offset or size overlaps it. -/
+theorem abytesAt_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hw : ShapesWF (shapes m))
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hsz : bs.size = 8)
+    (hab : abytesAt p A S K bs (some (p.off.toNat, 8)) r) {b : BlockId} (hpb : p.block = some b)
+    {l : ALoc} (hl : l ∈ m.atomics) (hb : l.block = b) (h1 : p.off.toNat < l.off + l.len)
+    (h2 : l.off < p.off.toNat + 8) : l.off = p.off.toNat ∧ l.len = 8 := by
+  have hmem : ALoc.shape l ∈ shapes m :=
+    List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩
+  -- a byte of the word under `l`: its location is `l`, which its constraint names
+  obtain ⟨x, hx1, hx2, hcov⟩ : ∃ x, p.off.toNat ≤ x ∧ x < p.off.toNat + 8 ∧ Covers b x (ALoc.shape l) := by
+    by_cases ho : p.off.toNat ≤ l.off
+    · exact ⟨l.off, ho, h2, hb, Nat.le_refl _, by have := hw.1 _ hmem; simp only [ALoc.shape] at this ⊢; omega⟩
+    · exact ⟨p.off.toNat, Nat.le_refl _, by omega, hb, by simp only [ALoc.shape]; omega, h1⟩
+  have hc := abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, hx1, by rw [hsz]; exact hx2⟩
+  have hsat := hh.heap.2 (b, x) _ (by rw [FHeap.union_apply, hc]; rfl)
+  have ht := tagOf_of_mem hw hmem hcov
+  simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
+  simpa [ALoc.shape] using hsat
+
+/-- `locIdx` does not throw when every location over the bytes is the one at `(b, o)` of `len`
+bytes: it takes no mixed-size branch. -/
+theorem locIdx_noErr_layout {m : Mem} {b o len : Nat} (hlen : 0 < len)
+    (hpos : ∀ l ∈ m.atomics, 0 < l.len)
+    (hlay : ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len →
+      l.off = o ∧ l.len = len)
+    (e : Error) : ((locIdx b o len).run m).run ≠ some (.error e) := by
+  intro h
+  unfold locIdx at h
+  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
+  · exact MemM.get_err h₀
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  split at h₁
+  · rename_i i hi
+    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    have hmem := Array.getElem_mem hlt
+    have hl := (hlay _ hmem hp.1 (by rw [hp.2]; have := hpos _ hmem; omega)
+      (by rw [hp.2]; omega)).2
+    dsimp only at h₁
+    split at h₁
+    · rename_i hne
+      rw [getElem!_pos _ i hlt, hl] at hne
+      simp at hne
+    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
+      · exact MemM.set_err h₂
+      · exact MemM.pure_err h₂
+  · rename_i hi
+    split at h₁
+    · rename_i hany
+      obtain ⟨j, hj, hpj⟩ := Array.any_eq_true.mp hany
+      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hpj
+      have hjo := (hlay _ (Array.getElem_mem hj) hpj.1.1 hpj.1.2 hpj.2).1
+      have := Array.findIdx?_eq_none_iff.mp hi _ (Array.getElem_mem hj)
+      simp [hpj.1.1, hjo] at this
+    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
+      · exact MemM.set_err h₂
+      · exact MemM.pure_err h₂
+
+/-- **`locIdx` at an owned word does not throw** after the op records its access, if the run is
+sequential (a mixed-size access retires) or the word's tag constraint is its own location (no
+mixed-size access). Concurrently, a word of another constraint can throw
+(`tests/roadmap/sep-full/AtomicRetireCX.lean`). -/
+theorem locIdx_noErr_word {m : Mem} {r rF : Res} (hh : Holds m r rF) (hw : ShapesWF (shapes m))
+    {p : Ptr} {b : BlockId} (hpb : p.block = some b)
+    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r)
+    (k : AccessKind) (e : Error) :
+    ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run ≠ some (.error e) := by
+  rcases hmix with hst | ⟨A, S, K, bs, hsz, hab⟩
+  · exact locIdx_noErr_single (singleThread_recordAt hst _ _ _ _) _ _ _ e
+  · exact locIdx_noErr_layout (m := m.recordAt b p.off.toNat 8 k) (by decide)
+      (fun l hl => hw.1 _ (List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩))
+      (fun l hl hb h1 h2 => abytesAt_layout hh hw hsz hab hpb hl hb h1 h2) e
+
+/-- The run of a step of the current thread on an owned word, read sequentially: from the
+analysis of the run (premise `h`, for a memory that runs one thread), the sequential triple. -/
+theorem FTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.current < m.clocks.size →
+      m.Owns m.current r.heap.erase → ShapesWF (shapes m) → m.LiveLayout → m.SingleThread →
+      (∀ e, (c.run m).run ≠ some (.error e)) ∧
+      ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m') :
+    FTriple P c Q := by
+  refine FTriple.of_fix hP fun m r rF hh hxr hxF hp hs => ?_
+  obtain ⟨hne, hok⟩ := h m r rF hh hxr hxF hp hs.1.single.1 (hs.1.single.owns _) hs.2.1 hs.2.2
+    hs.1.single
+  match e : (c.run m).run with
+  | none => trivial
+  | some (.error er) => exact (hne er e).elim
+  | some (.ok (v, m')) =>
+    obtain ⟨r', hh', hq, hw', hl', hst, -⟩ := hok v m' e
+    exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hw', hl'⟩
+
+/-- The run of a step of the current thread on an owned word, in a thread: from the analysis of
+the run (premise `h`, for every memory where the thread owns the precondition), the thread
+triple. -/
+theorem FTTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.current < m.clocks.size →
+      m.Owns m.current r.heap.erase → ShapesWF (shapes m) → m.LiveLayout →
+      (∀ e, (c.run m).run ≠ some (.error e)) ∧
+      ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m') :
+    FTTriple P c Q := by
+  refine FTTriple.of_fix hP fun m r rF hh hxr hxF hp hc ho => ?_
+  obtain ⟨hne, hok⟩ := h m r rF hh hxr hxF hp hc.1 ho hc.2.1 hc.2.2
+  match e : (c.run m).run with
+  | none => trivial
+  | some (.error er) => exact (hne er e).elim
+  | some (.ok (v, m')) =>
+    obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
+    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh', hst⟩
+
 /-! ## The rules -/
 
 theorem intSize_64 : intSize 64 = 8 := by decide
@@ -656,17 +864,64 @@ theorem access_inj {x y : BlockId × Block × Nat} (h : (pure x : Result _) = pu
   have := congrArg ExceptT.run h
   simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
 
-/-- **Atomic load** of an owned word, whatever its layout (sequential: choice 0); afterwards the
-word is an `apts`. -/
-theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
-    FTriple (wpts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p)
-      (fun w => ⟪w = v⟫ ⋆ apts p v) := by
-  refine FTriple.of_fix (fun _ _ _ hh hp => wpts_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
+/-- An `apts` word: its bytes, with their own location as the tag constraint (`locIdx_noErr_word`). -/
+theorem apts_own {p : Ptr} {v : BitVec 64} {r : Res} (h : apts p v r) :
+    ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r :=
+  let ⟨A, S, K, bs, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, hsz, hab⟩
+
+/-- The step of an atomic op on an owned word: the access to it records the current thread's
+access to its bytes, which are not the frame's. -/
+theorem fstep_record {m : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+    (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
+    {blk : Block} (hblk : m.blocks[b]? = some blk) (hKb : blk.kind = K) (hK : K ≠ .constGlobal)
+    (k : AccessKind) : FStepIn rF.heap.erase m (m.recordAt b p.off.toNat 8 k) :=
+  FStepIn.recordAt hc (FHeap.erase_disjoint hh.disj)
+    (fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; exact h2))
+    (Array.getElem?_eq_some_iff.mp hblk).1 fun _ ⟨blk', e1, e2⟩ => by
+      rw [show (m.blocks[b]? : Option Block) = some blk from hblk] at e1
+      cases e1; exact hK (hKb ▸ e2)
+
+/-- The bytes of an owned word are not the frame's (`FStepIn.locIdx`). -/
+theorem frame_off {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 8 → rF.heap.erase (b, x) = none :=
+  fun x h1 h2 => abytesAt_frame hh hab hpb x h1 (by rw [hsz]; exact h2)
+
+/-- The block's kind is the owned word's (its cells name it). -/
+theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b) {blk : Block}
+    (hblk : m.blocks[b]? = some blk) : blk.kind = K ∧ blk.kind.mappedLo ≤ p.off.toNat := by
+  obtain ⟨-, -, b0, hb0, -, hl0⟩ := id hab
+  rw [hpb] at hb0; cases hb0
+  have hr := hl0 (b, p.off.toNat)
+  rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr
+  obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hxr _ _ hr)
+  obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hxr _ _ hr)
+  rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
+  simp only [Cell.mk.injEq] at hc
+  exact ⟨hc.2.2.2.symm, hlo⟩
+
+/-- **The run of an atomic load** of an owned word (choice 0): it reads the word, and afterwards
+the word is an `apts`; the step does not throw when the run is sequential or the word is an
+`apts` (`locIdx_noErr_word`). -/
+theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
+    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (∀ e, ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run ≠ some (.error e)) ∧
+    ∀ w m', ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run = some (.ok (w, m')) →
+      ∃ r', Holds m' r' rF ∧ (⟪w = v⟫ ⋆ apts p v) r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
+  have hKb := (abytesAt_kind hxr hab hsz hpb hblk).1
   have hacc8 : m.access p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; simpa using hacc
   have hcur : ∀ m₀ : Mem, m₀.blocks = m.blocks → curBytes m₀ b p.off.toNat 8 = bs := by
@@ -674,8 +929,9 @@ theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     simp only [curBytes, e, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := fun e => locIdx_noErr_single (m := m.recordAt b p.off.toNat 8 .atomicRead)
-    (singleThread_recordAt hs.1.single _ _ _ _) b p.off.toNat 8 e
+  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace fun x h1 h2 =>
+    abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   -- A successful preparation reads the newest message, which has the owned bytes.
   have hnewest : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
@@ -687,25 +943,20 @@ theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
     rw [intSize_64] at hl
-    have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1 (by decide) (by rw [hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl, hsz]) hl
+    have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl, hsz]) hl
     obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ := this
     refine ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl], ?_⟩
     exact ⟨hupd, hwf, htag⟩
-  cases hrun : ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run with
-  | none => trivial
-  | some x =>
-    cases x with
-    | error e =>
-      refine (atomicLoadAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun).elim
-      · exact loadPrep_noErr (by simpa using hacc8) (noRace_of_singleThread hs.1.single _ _ _ _)
-          (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
-      · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := loadPrep_ok hp
-        simp only [Bool.false_eq_true, ↓reduceIte] at ha'
-        obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
-        obtain ⟨hz, hbytes, -⟩ := hnewest li m₁ hl
-        exact ⟨_, hz, v, by rw [hbytes, hv]; rfl⟩
-    | ok x =>
-      obtain ⟨w, m'⟩ := x
+  refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
+  · refine atomicLoadAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun
+    · exact loadPrep_noErr (by simpa using hacc8) hnr
+        (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
+    · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := loadPrep_ok hp
+      simp only [Bool.false_eq_true, ↓reduceIte] at ha'
+      obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
+      obtain ⟨hz, hbytes, -⟩ := hnewest li m₁ hl
+      exact ⟨_, hz, v, by rw [hbytes, hv]; rfl⟩
+  ·
       obtain ⟨b', blk', o', li, m₁, pos, ha', -, hl, hpos, hw, hm'⟩ := atomicLoadAt_ok hrun
       obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
       obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hwf, htag⟩ := hnewest li m₁ hl
@@ -728,14 +979,32 @@ theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
-      refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩,
-        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _⟩, by rw [hshapes]; exact hwf,
-          LDMono.of_blocks hblocks hs.2.2⟩⟩
+      have hs0 := fstep_record hh hc hab hsz hpb hblk hKb hK .atomicRead
+      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl)
+      refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, by rw [hshapes]; exact hwf,
+        LDMono.of_blocks hblocks hld,
+        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+        Mem.NoRevive.of_blocks hblocks⟩
+
+/-- **Atomic load** of an owned word, whatever its layout (sequential: choice 0); afterwards the
+word is an `apts`. -/
+theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    FTriple (wpts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p)
+      (fun w => ⟪w = v⟫ ⋆ apts p v) :=
+  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
+    atomicLoad_run p v ord hh hxr hxF hp hc ho hw hl (.inl hst)
+
+/-- **Atomic load** of an `apts` word in a thread (choice 0: the newest message, which the thread
+reads since it owns the word). -/
+theorem FTTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    FTTriple (apts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
+  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicLoad_run p v ord hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
 
 /-- **Atomic load** of an `apts` word (sequential: choice 0). -/
 theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     FTriple (apts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
-  (FTriple.atomicLoadW p v ord).pre fun _ => apts_wpts
+  (FTTriple.atomicLoad p v ord).toFTriple
 
 theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hli : li < m.atomics.size) :
@@ -743,36 +1012,44 @@ theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
   rw [insertM_last hb]
   exact shapes_set hli (by rw [getElem!_pos m.atomics li hli]; rfl)
 
-/-- **Atomic store** to an owned word, whatever its layout (sequential: the write goes at the
-end). -/
-theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
-    FTriple (wpts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) := by
-  refine FTriple.of_fix (fun _ _ _ hh hp => wpts_fix hh hp) fun m r rF hh hxr hxF hp hs => ?_
+/-- The word's location after `locIdx` is not in a frame that has none of the word's bytes. -/
+theorem loc_not_in {m₁ : Mem} {hF : Heap} {li b o : Nat} (hw : ShapesWF (shapes m₁))
+    (hli : li < m₁.atomics.size) (hb : (m₁.atomics[li]!).block = b)
+    (ho : (m₁.atomics[li]!).off = o) (hoff : hF (b, o) = none) : ¬ (m₁.atomics[li]!).In hF := by
+  intro hin
+  have hpos := hw.1 _ (shape_mem hli)
+  rw [← getElem!_pos m₁.atomics li hli] at hpos
+  simp only [ALoc.shape] at hpos
+  have := hin (m₁.atomics[li]!).off (Nat.le_refl _) (by omega)
+  rw [hb, ho] at this
+  exact this hoff
+
+/-- **The run of an atomic store** to an owned word (choice 0: the write goes at the end);
+afterwards the word is an `apts` of the new value. -/
+theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
+    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (∀ e, ((Zig.atomicStoreAt 0 ord 8 p w).run m).run ≠ some (.error e)) ∧
+    ∀ u m', ((Zig.atomicStoreAt 0 ord 8 p w).run m).run = some (.ok (u, m')) →
+      ∃ r', Holds m' r' rF ∧ apts p w r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, -, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
-  have hcast : (p.off.toNat : Int) = p.off := Int.toNat_of_nonneg h0
-  have hKb : blk.kind = K ∧ blk.kind.mappedLo ≤ p.off.toNat := by
-    obtain ⟨-, -, b0, hb0, -, hl0⟩ := id hab
-    rw [hpb] at hb0; cases hb0
-    have hr := hl0 (b, p.off.toNat)
-    rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr
-    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (hxr _ _ hr)
-    obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo (hxr _ _ hr)
-    rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
-    simp only [Cell.mk.injEq] at hc
-    exact ⟨hc.2.2.2.symm, hlo⟩
-  obtain ⟨hKb, hlo⟩ := hKb
+  obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [hacc]
     simp [hKb, hK, pure_bind]
   have hcur : (curBytes (m.recordAt b p.off.toNat 8 .atomicWrite) b p.off.toNat 8).size = 8 := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some, Array.size_extract]
     omega
-  have hlocok := fun e => locIdx_noErr_single (m := m.recordAt b p.off.toNat 8 .atomicWrite)
-    (singleThread_recordAt hs.1.single _ _ _ _) b p.off.toNat 8 e
+  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicWrite
+  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.noRace fun x h1 h2 =>
+    abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
       (writeSlots m₁ li)[0]? = some (m₁.atomics[li]!).msgs.size ∧
@@ -784,22 +1061,16 @@ theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     intro li m₁ hl
     rw [intSize_64] at hl
     obtain ⟨hupd, hli, hb, ho, hpos, -, hwf, htag⟩ :=
-      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2.1 (by decide) hcur hl
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hwf (by decide) hcur hl
     exact ⟨writeSlots_zero hpos, hli, hb, ho, hupd, hwf, htag⟩
-  cases hrun : ((Zig.atomicStoreAt 0 ord 8 p w).run m).run with
-  | none => trivial
-  | some x =>
-    cases x with
-    | error e =>
-      refine (atomicStoreAt_noErr (fun e' => ?_) (fun li slots m₁ hp => ?_) e hrun).elim
-      · exact storePrep_noErr haccW8 (noRace_of_singleThread hs.1.single _ _ _ _)
-          (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
-      · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := storePrep_ok hp
-        obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
-        obtain ⟨hz, -⟩ := hpost li m₁ hl
-        exact (Array.getElem?_eq_some_iff.mp hz).1
-    | ok x =>
-      obtain ⟨u, m'⟩ := x
+  refine ⟨fun e hrun => ?_, fun u m' hrun => ?_⟩
+  · refine atomicStoreAt_noErr (fun e' => ?_) (fun li slots m₁ hp => ?_) e hrun
+    · exact storePrep_noErr haccW8 hnr (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
+    · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := storePrep_ok hp
+      obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
+      obtain ⟨hz, -⟩ := hpost li m₁ hl
+      exact (Array.getElem?_eq_some_iff.mp hz).1
+  ·
       obtain ⟨b', blk', o', li, m₁, slot, ha', -, hl, hslot, hm'⟩ := atomicStoreAt_ok hrun
       obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
       obtain ⟨hz, hli, hb, ho, ⟨a, sn, next, hm₁⟩, hwf, htag⟩ := hpost li m₁ hl
@@ -824,15 +1095,32 @@ theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
             hsz, hA, hS, hKb])
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
         (kmono_write hblk hblocks (by rw [henc]; omega) (hKb ▸ hK))
-      refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode w) (by rw [henc, ← hsz]; exact hab'), ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
-          ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
-      unfold storeM observeM
-      exact singleThread_insertM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _
+      have hs0 := fstep_record hh hc hab hsz hpb hblk hKb hK .atomicWrite
+      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+        (by rw [intSize_64] at hl; exact hl)
+      have hnot := loc_not_in hwf hli hb ho (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
+      refine ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode w) (by rw [henc, ← hsz]; exact hab'),
+        by rw [hshapes]; exact hwf, ld_write hblk (by rw [henc]; omega) hblocks hld,
+        hs0.trans (hs1.trans (FStepIn.storeM ord w hb₁ hnot)),
+        Mem.NoRevive.write hblk (by rw [henc]; omega) hblocks⟩
+
+/-- **Atomic store** to an owned word, whatever its layout (sequential: the write goes at the
+end). -/
+theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
+    FTriple (wpts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
+  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
+    atomicStore_run p v w ord hh hxr hxF hp hc ho hw hl (.inl hst)
+
+/-- **Atomic store** to an `apts` word in a thread (choice 0: the write goes at the end). -/
+theorem FTTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
+    FTTriple (apts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
+  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicStore_run p v w ord hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
 
 /-- **Atomic store** to an `apts` word. -/
 theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     FTriple (apts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
-  (FTriple.atomicStoreW p v w ord).pre fun _ => apts_wpts
+  (FTTriple.atomicStore p v w ord).toFTriple
 
 /-- **O3.** A memory that holds a word as `apts` has no atomic location of another offset or size
 over it (`docs/alloc-page.md`'s `odd` memory, with a 4-byte location at the page allocator's
@@ -840,20 +1128,9 @@ hint, holds no `apts` of the hint, though its heap is that of the program start)
 theorem apts_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq) {p : Ptr}
     {v : BitVec 64} (hp : apts p v r) {b : BlockId} (hpb : p.block = some b) {l : ALoc}
     (hl : l ∈ m.atomics) (hb : l.block = b) (h1 : p.off.toNat < l.off + l.len)
-    (h2 : l.off < p.off.toNat + 8) : l.off = p.off.toNat ∧ l.len = 8 := by
-  obtain ⟨A, S, K, bs, -, -, hsz, -, hab⟩ := hp
-  have hmem : ALoc.shape l ∈ shapes m :=
-    List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩
-  -- a byte of the word under `l`: its location is `l`, which its constraint names
-  obtain ⟨x, hx1, hx2, hcov⟩ : ∃ x, p.off.toNat ≤ x ∧ x < p.off.toNat + 8 ∧ Covers b x (ALoc.shape l) := by
-    by_cases ho : p.off.toNat ≤ l.off
-    · exact ⟨l.off, ho, h2, hb, Nat.le_refl _, by have := hs.2.1.1 _ hmem; simp only [ALoc.shape] at this ⊢; omega⟩
-    · exact ⟨p.off.toNat, Nat.le_refl _, by omega, hb, by simp only [ALoc.shape]; omega, h1⟩
-  have hc := abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, hx1, by rw [hsz]; exact hx2⟩
-  have hsat := hh.heap.2 (b, x) _ (by rw [FHeap.union_apply, hc]; rfl)
-  have ht := tagOf_of_mem hs.2.1 hmem hcov
-  simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
-  simpa [ALoc.shape] using hsat
+    (h2 : l.off < p.off.toNat + 8) : l.off = p.off.toNat ∧ l.len = 8 :=
+  let ⟨_, _, _, _, hsz, hab⟩ := apts_own hp
+  abytesAt_layout hh hs.2.1 hsz hab hpb hl hb h1 h2
 
 end Full
 end Zig
