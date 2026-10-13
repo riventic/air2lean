@@ -1647,18 +1647,9 @@ theorem mremapShrink_of (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (
   simp only at hpb hp0; subst hpb hp0
   simpa [Ptr.add] using hown
 
-/-- `mremapShrink_cut` at a pointer literal `⟨some b, o⟩`, whose block is `b` by definition. -/
-theorem mremapShrink_at (os : Os.Target) (b : BlockId) (o : Int) (oldLen newLen : BitVec 64)
-    (flags : BitVec 32) {S lo : Nat} (hblk : BlockIs b S (.mapped lo) P)
-    (hn : lo + newLen.toNat ≤ S)
-    (hown : OwnsPtr P ⟨some b, ((lo + newLen.toNat : Nat) : Int)⟩ (S - (lo + newLen.toNat))) :
-    ThreadLocal P (Os.mremap os (some ⟨some b, o⟩) oldLen newLen flags none) :=
-  mremapShrink_cut os _ oldLen newLen flags hblk rfl hn hown
-
 end ThreadLocal
 
 attribute [fsym_provider] ThreadLocal.mmap ThreadLocal.munmap_of ThreadLocal.mremapShrink_of
-  ThreadLocal.mremapShrink_at
 
 /-! The thread rules of the growths are `FTTotalTriple.ofSeq` of the sequential rule and the
 locality of its step; the kernel composes them as they are (no separate thread rule): -/
