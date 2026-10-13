@@ -106,13 +106,16 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   `Reaches.shareW`: a share whose tag is active (`Within (bshare b q k t) P`, `Active t P`);
   `Active.root`; `Active.gauthP`: a ledger's authority at its epoch under an active parent.
   `Live b l k` (live bytes from `l` to below `k`) comes only from owned bytes: a share bounds
-  no first live offset (MM-19).
+  no first live offset (MM-19). A rule that needs a live block up to a bound takes `Live b l k₀`
+  and `Reaches b k` apart (`Live.reach`, not a provider: with `Reaches.of_live` it would cycle),
+  so the first live offset comes from owned bytes and the bound from any part (a node's share).
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
 pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+past a live byte; one past a full node is past its header and within its share) gives
+`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
@@ -135,7 +138,9 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   continuation is normalized once it is the head, so a step costs the same on a 900-line
   generated body as on a small one (normalizing the whole body pushes every continuation into
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
-  projection is reduced.
+  projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
+  as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
