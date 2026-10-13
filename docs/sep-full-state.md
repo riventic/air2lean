@@ -620,7 +620,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `const` globals: `Mem.ofGlobals_kn`).
 * **Reading**: the provider `ConstAt` and `FTotalTriple.load_const`; for `fsym`,
   `FTotalTriple.cload` (`@[fsym]`) and `AddrOf.cbytesAt`, `Reaches.cbytesAt`, `Reaches.cpts`
-  (`@[fsym_provider]`).
+  (`@[fsym_provider]`). A read of a `const` global records nothing (MM-20), so the load leaves
+  the memory unchanged and the rules are thread rules (`FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`; the sequential rules are their `toFTotalTriple`).
 * **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
   `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
   owned bytes). The owned form, for a vtable in any block (built at run time), is the old

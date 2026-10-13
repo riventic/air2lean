@@ -216,9 +216,9 @@ theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} 
       (by omega) (by rcases ho with rfl | rfl <;> omega) hao
   have hv' : Enc.decode (blk.bytes.extract (q.off.toNat + o) (q.off.toNat + o + Enc.size T)) =
       pure v := by rw [hx, hsz]; exact hv bs h1 h2
-  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  refine ⟨v, _, hP, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
+    sep_lift.mpr ⟨rfl, hp⟩, hst.readAt _ _ _ _ _⟩
+  funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 theorem load_end : TotalTriple (state ctx B e ∗ R) (load (BitVec 64) 8 ctx)
     (fun r => ⌜r = BitVec.ofNat 64 e⌝ ∗ (state ctx B e ∗ R)) := by

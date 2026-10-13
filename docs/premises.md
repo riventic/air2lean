@@ -1032,7 +1032,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   step. Its memory accesses lie in the blocks of its declared footprint parameters, which the
   generated call claims first (`Zig.External.claim`: one recorded whole-block access, read or
   write), so an unsynchronized conflicting access of another thread is a race (`.illegal`). A
-  binding without a footprint is rejected in a concurrent program.
+  `const` global is never written: a write claim of one is `.illegal`, and a read claim records
+  nothing (it races with nothing, MM-20). A binding without a footprint is rejected in a
+  concurrent program.
 - Derived from: tokens `External.claim`; implies EXT-01 and THR-01.
 - Sources: [external-models.md](external-models.md#callback-contracts-e02),
   `tests/roadmap/callbacks/Callbacks/AsyncProofs.lean`.

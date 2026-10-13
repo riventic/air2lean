@@ -483,7 +483,7 @@ theorem read_run {m : Mem} (hi : Inv true m) (hc : m.current = 1)
     (hle : DataLe m (m.clocks[1]!)) :
     (load (BitVec 32) 4 dPtr).run m = pure (42, m.recordAt 0 0 4 .read) ∧
       Inv true (m.recordAt 0 0 4 .read) := by
-  obtain ⟨blk₀, hb₀, -, -, hacc₀⟩ := acc_g hi.b0 (len := Enc.size (BitVec 32)) (by decide)
+  obtain ⟨blk₀, hb₀, hk₀, -, hacc₀⟩ := acc_g hi.b0 (len := Enc.size (BitVec 32)) (by decide)
   have h42 := hi.data
   unfold U32At curBytes at h42
   rw [hb₀] at h42
@@ -494,7 +494,7 @@ theorem read_run {m : Mem} (hi : Inv true m) (hc : m.current = 1)
     · exact .inl (by rw [hc]; exact hle e he hb hk)
     · exact .inr (by rw [hk]; rfl)
     · exact (blk_ne h hb (by decide)).elim
-  refine ⟨load_run (p := dPtr) hacc₀ hdec hnr, ?_⟩
+  refine ⟨load_run (p := dPtr) hacc₀ hdec (by rw [hk₀]; decide) hnr, ?_⟩
   exact hi.record (b := 0) (o := 0) (len := 4) (k := .read) (by rw [hc]; decide)
     (fun h => by cases h.2) (.inr (.inl ⟨rfl, rfl, hc, rfl⟩))
 

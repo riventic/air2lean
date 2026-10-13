@@ -115,7 +115,7 @@ theorem readLimit_from_start (σ : Placement) (ext : ExternInit) :
   rw [he]
   simp [h₁, readLimit, load, loadBytes, recordAccessIn, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.size, intSize,
     intAlign, alignUp, LawfulEnc.size_encode, hfull, LawfulEnc.decode_encode, set,
-    MonadStateOf.set, StateT.set, zig_unfold]
+    MonadStateOf.set, StateT.set, zig_unfold, AccessKind.isWrite, StateT.pure]
   exact ⟨_, rfl, rfl⟩
 
 /-- `undefined` is not a default: the first read of `scratch` from program start is

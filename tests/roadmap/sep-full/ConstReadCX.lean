@@ -97,7 +97,8 @@ theorem run_unchangedB :
 
 /-- **A `const` load changes nothing** (`Zig.load_const`). -/
 theorem run_unchanged : (Zig.load (BitVec 8) 1 p).run m = pure (0, m) :=
-  Zig.load_const (b := 0) (blk := blk) (o := 0) (by decide +kernel) (by decide +kernel) rfl
+  Zig.load_const (b := 0) (blk := blk) (o := 0) (by with_unfolding_all rfl)
+    (by with_unfolding_all rfl) rfl
 
 /-- **The thread rule for a `const` read from knowledge**, at the old counterexample: the load
 succeeds with `0`, the knowledge stays, and the step is an `FStepIn` of the frame that owns the
@@ -113,7 +114,7 @@ theorem cload_thread :
 
 /-- An external model's write claim of a `const` global throws `.illegal` before recording. -/
 theorem write_claim_illegal : ((External.claim p .write).run m).run = some (.error .illegal) := by
-  decide +kernel
+  with_unfolding_all rfl
 
 /-- A read claim of a `const` global records nothing. -/
 theorem read_claim_records_nothingB :
@@ -125,7 +126,7 @@ theorem read_claim_records_nothingB :
 /-- A `loadBytes` with a write kind on a `const` global throws `.illegal` before recording. -/
 theorem write_kind_load_illegal :
     ((Zig.loadBytes p 1 1 .write).run m).run = some (.error .illegal) := by
-  decide +kernel
+  with_unfolding_all rfl
 
 end Zig.ConstReadCX
 
