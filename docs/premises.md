@@ -858,8 +858,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
-  satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+  satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
+  (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
+  starting credits, uniformly in the oracle and without a fairness premise; its result is
+  `main`'s value or a stack overflow (STK-01).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
