@@ -20,13 +20,14 @@ and the threads' vector clocks. Both thread logics use it: the full-state thread
   unchanged, and each new footprint entry is the current thread's and touches no byte of `hF`.
   So the ownership of every part of `hF`, by any clock, stays (`Mem.OwnsC.frame`).
 
-A zero-length access counts as its first byte (`FootprintEntry.Touches`): the race check sees it
-at that byte too.
+A zero-length access counts as its first byte (`FootprintEntry.Touches`). The race check
+ignores it (it touches no byte, `raceAt`), so this only asks more of an owner than needed.
 -/
 
 namespace Zig
 
-/-- The footprint entry `e` accesses a byte that `h` has (a zero-length entry: its first byte). -/
+/-- The footprint entry `e` accesses a byte that `h` has (a zero-length entry: its first byte,
+conservatively). -/
 def FootprintEntry.Touches (e : FootprintEntry) (h : Heap) : Prop :=
   ∃ x, e.off ≤ x ∧ (x < e.off + e.len ∨ x = e.off) ∧ h (e.block, x) ≠ none
 
