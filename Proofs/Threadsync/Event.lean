@@ -17,7 +17,8 @@ namespace Threadsync
 
 theorem debugAssert_true : (debug_assert true).run = some (.ok ()) := rfl
 
-section
+namespace ResetEvent
+
 variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
@@ -406,13 +407,13 @@ theorem resetEvent_wait_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P
           ↓reduceIte])
     done
 
-end
+end ResetEvent
 
 /-- **`Thread.ResetEvent` is an event** (`EventImpl`) in this program. -/
 def resetEvent : EventImpl Tgt where
   wait p _ := Thread_ResetEvent_wait p
   set p _ := Thread_ResetEvent_set p
-  wait_wp := resetEvent_wait_wp
-  set_wp := resetEvent_set_wp
+  wait_wp := ResetEvent.resetEvent_wait_wp
+  set_wp := ResetEvent.resetEvent_set_wp
 
 end Threadsync
