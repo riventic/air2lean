@@ -70,8 +70,9 @@ cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
 # prints the axioms of `free_spec`, `resize_spec`, `remap_spec`, `deinit_ct` and `reset_free_all_spec`
 # (`deinit` and `reset(.free_all)` walked by `fsym`); ArenaSpec.lean also those of the
 # module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`)
-# and `reset`'s ghost part (`reset_release`, AllocArena/Reset.lean).
-for pair in "ArenaSpec 9" "ArenaSpecMacos 5" "ArenaSpecFixed 5"; do
+# and of AllocArena/Reset.lean (`reset_release`: `reset`'s ghost part; `chain_sizes_le`: a list's node
+# sizes sum to at most 2^63).
+for pair in "ArenaSpec 10" "ArenaSpecMacos 5" "ArenaSpecFixed 5"; do
   spec=${pair% *}
   "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'

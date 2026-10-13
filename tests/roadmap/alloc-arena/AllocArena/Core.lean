@@ -10,6 +10,7 @@ import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.Full.ResetLedger
 import ZigLean.Sep.Full.Parts
 import ZigLean.Sep.Full.AutoAttr
+import ZigLean.Sep.Full.OwnedBound
 import ZigLean.Range
 
 /-!

@@ -253,5 +253,6 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.Core.own_epTok_empty
 #print axioms AllocArena.Core.granted_epTok_false
 #print axioms AllocArena.Core.reset_release
+#print axioms AllocArena.Core.chain_sizes_le
 #print axioms AllocArena.ArenaSpec.deinit_ct
 #print axioms AllocArena.ArenaSpec.reset_free_all_spec

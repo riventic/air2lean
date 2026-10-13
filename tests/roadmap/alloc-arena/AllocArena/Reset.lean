@@ -544,6 +544,63 @@ theorem reset_release (CI : Child) (γ e : Nat) (ctx : Ptr) :
   obtain ⟨jh, h⟩ := sep_ex.mp h
   exact ⟨w.Ac, w.Sc, w.Kc, w.first, w.fl, jh, of_eq (by ac_rfl) h⟩
 
+/-! ## The sizes of a list's nodes fit in the address space
+
+`reset`'s retaining modes sum the buffer sizes of a list (`countListCapacity`) with an
+overflow-checked `+`. The list owns every byte of its nodes (header words, `next`, whole buffer),
+so their sizes sum to at most `2 ^ 63` (`Holds.owned_length_le`, `ZigLean/Sep/Full/OwnedBound.lean`:
+owned bytes have different addresses below `2 ^ 63`). -/
+
+/-- The bytes of a node: `[N, N + sz)` of its block. -/
+def NodeV.locs (nd : NodeV) : List Loc := locRange (blkOf nd.N) nd.N.off.toNat nd.sz
+
+theorem locRange_append (b lo n k : Nat) : locRange b lo n ++ locRange b (lo + n) k = locRange b lo (n + k) := by
+  simp only [locRange, List.range_add, List.map_append, List.map_map]
+  congr 1
+  refine List.map_congr_left fun i _ => ?_
+  simp only [Function.comp, Nat.add_assoc]
+
+/-- **A list of whole nodes owns every byte of its nodes.** -/
+theorem chain_ownsList (CI : Child) :
+    ∀ (ns : List NodeV) (x : Option Ptr), OwnsList (ns.flatMap NodeV.locs) (Chain CI true ns x)
+  | [], none => OwnsList.nil
+  | [], some _ => fun _ h => h.1.elim
+  | _ :: _, none => fun _ h => h.1.elim
+  | nd :: ns, some N' => fun r h => by
+    obtain ⟨ei, nx, buf, h⟩ := h
+    obtain ⟨⟨-, hnf, hbuf⟩, h⟩ := sep_lift.mp h
+    simp only [ite_true] at hbuf
+    obtain ⟨b, hb⟩ : ∃ b, nd.N.block = some b := by
+      obtain ⟨_, _, -, -, h1, -⟩ := h
+      obtain ⟨_, _, -, -, ⟨_, _, _, _, -, -, -, -, -, -, b, hb, -⟩, -⟩ := h1
+      exact ⟨b, hb⟩
+    have h0 := hnf.off0
+    have hsz := hnf.hdr
+    have e8 : (nd.N.add 8).off.toNat = nd.N.off.toNat + 8 := by simp only [Ptr.add]; omega
+    have e16 : (nd.N.add 16).off.toNat = nd.N.off.toNat + 8 + 8 := by simp only [Ptr.add]; omega
+    have e24 : (nd.N.add 24).off.toNat = nd.N.off.toNat + 8 + 8 + 8 := by simp only [Ptr.add]; omega
+    have hbk : ∀ k : Int, (nd.N.add k).block = some b := fun _ => by simpa [Ptr.add] using hb
+    have hnode : OwnsList (nd.locs ++ ns.flatMap NodeV.locs)
+        ((apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ei ⋆
+          up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nx)) ⋆
+          (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
+          up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆ Chain CI true ns nx) := by
+      refine OwnsList.of_eq ((((OwnsList.apts hb).sep ((OwnsList.apts (hbk 8)).sep
+        ((OwnsList.region (hbk 16)).sep (OwnsList.nil (P := CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆
+          pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))))).sep
+        ((OwnsList.region (hbk 24)).sep (chain_ownsList CI ns nx)))) ?_
+      simp only [e8, e16, e24, encode_nxt_size, hbuf, List.append_nil, ← List.append_assoc]
+      rw [locRange_append, locRange_append, locRange_append]
+      simp only [NodeV.locs, blkOf, hb, Option.getD_some]
+      congr 2; omega
+    exact (OwnsList.of_eq hnode (by simp only [List.flatMap_cons])) r h
+
+/-- **The sizes of a list's nodes sum to at most `2 ^ 63`.** -/
+theorem chain_sizes_le {CI : Child} {ns : List NodeV} {x : Option Ptr} {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : Chain CI true ns x r) (hs : m.FSeq) : (ns.map NodeV.sz).sum ≤ 2 ^ 63 := by
+  have := (chain_ownsList CI ns x).length_le hh hp hs
+  simpa [NodeV.locs, locRange, List.length_flatMap] using this
+
 /-- **An arena with no node** at epoch `e`: its struct with empty lists, the ledger with no grant,
 the child with the reservoir and its vtable, and junk (what `reset`'s `free_all` leaves). -/
 theorem own_empty (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : BlockKind} {jh : Heap} :

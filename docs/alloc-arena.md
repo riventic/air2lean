@@ -390,12 +390,27 @@ Not proved yet, in order:
   with the reservoir, junk, and both lists as lists of whole nodes (`FreeList`: header, whole
   buffer, the child's token, the whole share `qn` and the whole claim). The used nodes are
   pairwise disjoint because the arena holds each one's whole claim after `cls_revoke`
-  (`freeCl_pairwise`), which the junk conversion of each buffer needs (`chainH_junk`). Open: the
-  walk of the code. It does plain loads and stores of words the invariant owns as atomic words
-  (`end_index = 0`, the list heads, `arena.state = .init`) and a typed load and store across the
-  struct's region and its two atomic words. These need library rules that keep a word's atomic
-  layout constraint under a plain access (the model's `Res.writeAt`/`Holds.write` keep it); the
-  rules are in the engine lane's queue.
+  (`freeCl_pairwise`), which the junk conversion of each buffer needs (`chainH_junk`). A free
+  list holds whole nodes by construction (`FreeList` over `ns.map NodeV.full`).
+  **`deinit` and `reset(.free_all)` done**, walked by `fsym` in each specification file
+  (`deinit_ct`, `reset_free_all_spec`): `deinit`'s two loops (`CTriple.loop`, invariants over the
+  lists not yet given back) give each node to the child's `free` through the vtable
+  (`CAllocSpec (CVTable.dispatch tables CI.fns)`, the module's allocators as `tables`), the node's
+  header words viewed as bytes of the granted region, and the refund joins the reservoir
+  (`Child.cown_refund`); `free_all` loads the arena struct across its region and two atomic words,
+  runs `deinit`, stores the empty list heads and ends in the arena with no node at epoch `e + 1`
+  (`own_empty`). The engine gaps met on the way have workarounds named in `ArenaSpec.lean`
+  (fsym-engine ledger rows 37–43).
+  The retaining modes sum each list's buffer sizes with an overflow-checked `+`; a list owns every
+  byte of its nodes, so the sizes sum to at most `2 ^ 63` (`chain_sizes_le`, from the library's
+  `Holds.owned_length_le`: owned bytes have different addresses below `2 ^ 63`, from
+  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise). Open: the retaining modes' walk. Their
+  branch where the child's `resize` of the kept node fails allocates a new node from the child
+  (`alloc` from the reservoir's half) and initializes its header by plain stores; `own` keeps a
+  first node's `size` and `end_index` as atomic words (`apts`: atomic layout constraint
+  `(p.off, 8)`), and a region the child grants has no layout constraint (`up`), so a plain store
+  cannot establish `apts` (only `wpts`; the atomic rules take `wpts` and leave `apts`). The same
+  holds for `alloc`'s new nodes. Resolution needs a decision on the invariant's header words.
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is
