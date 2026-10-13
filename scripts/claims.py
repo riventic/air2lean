@@ -56,6 +56,7 @@ ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
 def premises_of(theorem: dict, claims) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
     opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
+    the premises of the generated axioms and opaques it reaches (`declaration_premises`);
     the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None if the report
     lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
     opaques = theorem.get('opaque_dependencies')
@@ -65,7 +66,10 @@ def premises_of(theorem: dict, claims) -> list[str] | None:
     found = []
     if any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
         found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
-    return found + memory
+    # The premises of the generated axioms and opaques it reaches (scripts/assumptions.py
+    # `declaration_premises`: assumed model evidence, extern bindings, asm effect contracts).
+    declared = [p for p in theorem.get('declaration_premises') or () if isinstance(p, str) and p not in found]
+    return found + declared + memory
 
 
 def memory_model_premises(theorem: dict) -> list[str] | None:
