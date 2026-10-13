@@ -26,4 +26,17 @@ theorem two_segments {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t :
       (fun w _ _ _ => w = 7) G m n := by
   fsym
 
+/-- **Steps of a concurrent body** (`callMC`, `callRC`: one rule form, `ConcM.liftMem`): a field
+pointer whose run the caller's lemma gives (`WP.liftMem_pure`), then a pure step
+(`WP.liftMem_liftR`). -/
+theorem body_steps {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (p : Ptr)
+    (hproj : (ptrProject p (·.add 8)).run m = pure (p.add 8, m)) :
+    P.WP t (((do
+        let q ← callMC (ptrProject p (·.add 8))
+        let k ← callRC (Zig.add false (1 : BitVec 32) 2)
+        pure (q, k)) : CM Tgt Unit (Ptr × BitVec 32)).run ())
+      (fun r _ m' _ => r.1.1 = p.add 8 ∧ m' = m) G m n := by
+  fsym [WP.liftMem_pure hproj rfl]
+
 end SepAuto.WP

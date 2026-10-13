@@ -4355,7 +4355,8 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         (if ← isLibrary c then pure none else unfold1 ty0)
       else pure none
     if let some ty' := ty' then
-      if (← whnfR ty').isAppOfArity ``And 2 || (← whnfR ty').isAppOfArity ``Exists 2 then
+      let w ← whnfR ty'
+      if w.isAppOfArity ``And 2 || w.isAppOfArity ``Exists 2 then
         let (h', g') ← (← g.assert `hu ty' (mkFVar h)).intro1
         return ← g'.withContext (wpSplit g' h')
   if ty.isAppOfArity ``Or 2 then
@@ -4724,8 +4725,9 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       if ← isUpd c then user := user.push c; continue
       -- a rule by name: the constant (elaborating it would run its automatic arguments, `hnone`
       -- of `WP.callRC`, before the step fixes their unknowns)
-      let (_, _, concl) ← forallMetaTelescope (← inferType c)
-      if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
+      if ← withNewMCtxDepth do
+          let (_, _, concl) ← forallMetaTelescope (← inferType c)
+          return (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
         user := user.push c; continue
     -- the term's unknowns (implicit arguments) become its leading binders, so that each use
     -- instantiates them afresh in the context of that step (where the walk's witnesses live)

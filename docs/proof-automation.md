@@ -396,10 +396,18 @@ backend):
 * **Rules** are `@[fsym]` theorems (or the caller's terms `fsym [r]`) whose conclusion is a `WP`
   of one command, keyed by its head through `StateT.run`. They are tried only in a `WP` walk.
   The library's (`ZigLean/Sep/Full/AutoWP.lean`): the `MemM` segments of a thread that owns its
-  part (`WP.liftMem_fowned`, partial, and `WP.liftMem_fownedT`, total, with their `liftM`/`callMC`
-  forms) and `spawn`/`join`. A protocol's own rules are passed with its arguments: the steps of a
-  lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract (`MutexImpl.lock_wp`), a
-  loop with its invariant (`WP.loop _ _ inv meas post step`).
+  part (`WP.liftMem_fowned`, partial, and `WP.liftMem_fownedT`, total), a pure step
+  (`WP.liftMem_liftR`) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
+  the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
+  (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
+  run a protocol lemma gives (`WP.liftMem_pure h`).
+* **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
+  `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
+  normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
+  protocol's: a read of a shared object, a holder's step on the lock's resource) is stated on
+  `ConcM.liftMem x` with a post over the value; the step-form lemmas of hand proofs
+  (`WP.liftM_fowned`, `WP.callMC_ptrProject`) do not apply. Stops (atomics, `sync`, `spawn`,
+  `join`) keep their step form.
 * **A rule's hypotheses** are of three kinds. A *continuation* names the rule's post, which is
   the goal's (the rest of the program after `WP.bind`); its binders are introduced (a pair by its
   components; a fact normalized and split: `∧`, `∃`, `∨` by cases, an equation substituted), an
