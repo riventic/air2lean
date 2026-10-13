@@ -397,7 +397,8 @@ backend):
   of one command, keyed by its head through `StateT.run`. They are tried only in a `WP` walk.
   The library's (`ZigLean/Sep/Full/AutoWP.lean`): the `MemM` segments of a thread that owns its
   part (`WP.liftMem_fowned`, partial, and `WP.liftMem_fownedT`, total), a pure step
-  (`WP.liftMem_liftR`) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
+  (`WP.liftMem_liftR`; a checked `+`/`-` without overflow, `WP.liftMem_add`/`_sub`, with its
+  value as a fact, as `add_step`/`sub_step` of a thread's walk) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
   the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
   (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
   run a protocol lemma gives (`WP.liftMem_pure h`).

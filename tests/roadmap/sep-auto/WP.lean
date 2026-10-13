@@ -39,4 +39,13 @@ theorem body_steps {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
       (fun r _ m' _ => r.1.1 = p.add 8 ∧ m' = m) G m n := by
   fsym [WP.liftMem_pure hproj rfl]
 
+/-- **Checked arithmetic on a symbolic word** (`WP.liftMem_add`, `WP.liftMem_sub`): the bound
+from the context, the value as a fact (no overflow branch, also in strict mode). -/
+theorem checked_steps {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (a : BitVec 32) (ha : a.toNat < 10) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.add false a 1)) >>= fun b =>
+        ConcM.liftMem (StateT.lift (Zig.sub false b 1)))
+      (fun r _ _ _ => r.toNat = a.toNat) G m n := by
+  fsym
+
 end SepAuto.WP
