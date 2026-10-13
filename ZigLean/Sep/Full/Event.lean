@@ -652,6 +652,60 @@ theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
     (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h),
       fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt hsxt
 
+/-- **A step of another component of the protocol** (a condition's code) by `t`, which keeps
+`t`'s place in the event and the word's writes: `t` keeps its lock place or goes `out` of the
+lock, and a new waiter in the futex queue is `t` at another word, not as the event's waiter. -/
+theorem Inv.other {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+    (hG : ∀ u, u ≠ t → G' u = G u) (hph : E.ph (G' t) = E.ph (G t))
+    (hlpt : E.ph (G t) ≠ .out → L.ph (G' t) = L.ph (G t) ∨ L.ph (G' t) = .out)
+    (hh : E.W.hist m' = E.W.hist m)
+    (hwt : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w.1 = t ∧ w.2 ≠ E.W.ptr ∧ E.ph (G t) ≠ .w1))
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : E.sx (G t) → E.sx (G' t)) :
+    E.Inv L G' m' := by
+  have hp : ∀ u, E.ph (G' u) = E.ph (G u) := fun u => by
+    by_cases e : u = t
+    · subst e; exact hph
+    · rw [hG u e]
+  refine ⟨by rw [hh]; exact hI.vals, by rw [hh]; exact hI.mono,
+    fun u v hu hv => hI.one u v (by rw [← hp]; exact hu) (by rw [← hp]; exact hv),
+    fun u hu j hj hv => ?_, fun u hu => ?_, fun u hu => ?_, fun w hw hq => ?_, fun w hw hq => ?_,
+    fun u hu => ?_, fun u hu => wx_of hG hwxt (hI.wx u (by rw [← hp]; exact hu)),
+    fun j hj hv => by rw [hh] at hj hv ⊢; exact hI.wby_of hG hwxt hclk hj hv,
+    fun u hu => ?_⟩
+  · rw [hp] at hu; rw [hh] at hj hv ⊢; exact VClock.le_trans (hI.hb u hu j hj hv) (hclk u)
+  · rw [hp] at hu; rw [hh]
+    obtain ⟨i, hi, hv, hc⟩ := hI.seen u hu
+    exact ⟨i, hi, hv, VClock.le_trans hc (hclk u)⟩
+  · rw [hp] at hu
+    by_cases e : u = t
+    · subst e
+      rcases hI.lp u hu with h | ⟨h1, h2⟩
+      · rcases hlpt hu with h' | h'
+        · exact .inl (h'.trans h)
+        · exact .inl h'
+      · rcases hlpt hu with h' | h'
+        · exact .inr ⟨by rw [hph]; exact h1, h'.trans h2⟩
+        · exact .inl h'
+    · rw [hG u e] at ⊢; exact hI.lp u hu
+  · rw [hp] at hq
+    rcases hwt w hw with h | ⟨e, -, hn⟩
+    · exact hI.qw w h hq
+    · rw [e] at hq; exact absurd hq hn
+  · rcases hwt w hw with h | ⟨-, hn, -⟩
+    · obtain ⟨h1, h2⟩ := hI.q w h hq
+      refine ⟨by rw [hp]; exact h1, ?_⟩
+      unfold FEvent.newest; rw [hh]
+      rcases h2 with h2 | ⟨v, hv⟩
+      · exact .inl h2
+      · exact .inr ⟨v, by rw [hp]; exact hv⟩
+    · exact absurd hq hn
+  · rw [hp] at hu; unfold FEvent.newest; rw [hh]; exact hI.swset u hu
+  · rw [hp] at hu
+    by_cases e : u = t
+    · subst e; exact hsxt (hI.sx u hu)
+    · rw [hG u e]; exact hI.sx u hu
+
 /-- **A lock step of a thread out of the event's code** keeps the event's invariant: the word's
 writes and the futex queue at it stay (for a client's `FLock.FitsOn.stable`, whose `ok` excludes
 the threads in the event's code; module doc). -/
