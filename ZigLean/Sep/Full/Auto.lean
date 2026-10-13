@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AutoConc
+import ZigLean.Sep.Full.Typed
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic

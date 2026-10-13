@@ -91,6 +91,30 @@ theorem add_one (p : Ptr) (ptr : Ptr) (len cap : BitVec 64) (L : Lock)
         up (pts p 8 ({ items := ⟨ptr, len + 1⟩, capacity := cap, pointer_stability := L } : Hdr))) := by
   fsym
 
+/-- A header value by its parts (a module's definition). -/
+def hdr (ptr : Ptr) (len cap : BitVec 64) (L : Lock) : Hdr :=
+  { items := ⟨ptr, len⟩, capacity := cap, pointer_stability := L }
+
+/-- `addOneAssumeCapacity` with its buffer: the overflow-checked increment stored, the new item's
+pointer returned; the header afterwards by the module's definition (equal up to arithmetic in
+its fields). -/
+theorem add_one_item (p ptr : Ptr) (len cap : BitVec 64) (L : Lock) (bs : Array Byte) (b : BlockId)
+    (A S : Nat) (K : BlockKind) (hb : ptr.block = some b) (hl : len.toNat < cap.toNat)
+    (hs : bs.size = 4 * cap.toNat) :
+    FTotalTriple (up (pts p 8 (hdr ptr len cap L)) ⋆ up (regionIn ptr A S K 4 bs))
+      (do
+        let n ← load (BitVec 64) 8 (p.add 8)
+        let c ← load (BitVec 64) 8 (p.add 16)
+        if n.toNat < c.toNat then
+          let n1 ← (StateT.lift (Zig.add false n 1) : MemM (BitVec 64))
+          store 8 (p.add 8) n1
+          let s ← load Slice 8 p
+          ptrProject s.ptr (·.elem 4 n)
+        else throw .panic)
+      (fun r => ⟪r = ptr.elem 4 len⟫ ⋆ up (pts p 8 (hdr ptr (len + 1) cap L)) ⋆
+        up (regionIn ptr A S K 4 bs)) := by
+  fsym
+
 set_option linter.unusedVariables false in
 /-- Rejected: a load that straddles two fields reads no field. -/
 example (p : Ptr) (h : Hdr) : True := by

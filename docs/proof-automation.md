@@ -66,7 +66,8 @@ calls with 20 to 30 facts.
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
-  rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
+  rules (loads, stores, pointer operations, checked `+ - % /`), the fields of typed values
+  (`EncField`, §Fields),
   providers (`AddrOf`, `Reaches`, `Live`, `Active`; §Providers), pointer `==` across live blocks
   (`ptrEqAddr_live`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
@@ -118,6 +119,23 @@ past a live byte; one past a full node is past its header and within its share) 
 `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
+
+### Fields
+
+A struct of generated code is one typed value `up (pts p a s)`, read and written whole (the
+`pts` rules) and by field: `EncField T U o get set` (`AutoRules.lean`) says that the bytes
+`[o, o + size U)` of every encoding of `s : T` decode to `get s`, and that bytes decoding to `v`
+written there make an encoding of `set s v`. The `@[fsym]` rules `FTotalTriple.encField_load`/
+`_store` (`Typed.lean`, also at byte 0) load `get s` and store into `set s w`; their side goal
+`EncField T U o ?get ?set` is solved by `encFieldOf?` (`Auto.lean`): it reads the fields off the
+struct's decoding (`do pure { f := ← Enc.decodeAt bs o, … }`, as the translator writes it and as
+`Slice` decodes), finds the field that holds byte `o`, proves its `EncField` from the decoding
+(`result_bind_eq_pure`, `decode_write_*`) and descends into a field of a field by
+`EncField.comp` (a slice's `len` in a list header: `get := fun s => s.items.len`). A decoding of
+another shape, or an access that straddles fields, gives no field: the rules do not apply.
+Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
+proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
+`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
 
 ## How it works
 

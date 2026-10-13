@@ -18,10 +18,11 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
 * **Fields** of a typed value, from the byte rules: `FTotalTriple.field_load` reads `v` at byte
   `o` of `pts q a s` if every byte string of `s` has `v` there; `FTotalTriple.field_store`
   writes `w` there and gives `pts q a s'` if every byte string of `s` with `w` written there
-  decodes to `s'`. The field value is not determined by the program, so these are rules for
-  `fsym [FTotalTriple.field_load (v := …) …]`, not `@[fsym]`. A write that leaves the value
-  undecodable in between (a tag and a payload written one after the other) goes through the
-  bytes view: `up_pts_iff`, the byte rules, `up_pts_of_region`.
+  decodes to `s'`. With the field's `EncField` (`AutoRules.lean`) the value is determined:
+  `FTotalTriple.encField_load`/`_store` (`@[fsym]`) read `get s` and write `set s w`, and `fsym`
+  derives the `EncField` of the structs of generated code (`docs/proof-automation.md` §Fields).
+  A write that leaves the value undecodable in between (a tag and a payload written one after
+  the other) goes through the bytes view: `up_pts_iff`, the byte rules, `up_pts_of_region`.
 * **Payloads** (`@[fsym]`): the payload of an error union holding `.ok x`
   (`errPayload_load`/`errPayload_store` through `errPayloadPtr`).
 * **Read-only fields** of a `const` global (`cpts`, `Full/Const.lean`): `FTotalTriple.cfield_load`
