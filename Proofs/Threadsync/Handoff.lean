@@ -1,6 +1,7 @@
 import ZigLean.Conc.Unroll
 import ZigLean.Conc.WeakWord
 import Proofs.Threadsync.Deadline
+import Proofs.Threadsync.Lock
 import ZigLean.Conc.Word
 
 /-!

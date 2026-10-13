@@ -1033,7 +1033,7 @@ theorem wp_liftPart (hE : E.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
     (hgo : L.ph g = .out) (hok : ok g) (hi : P.inv (upd G t g) m) (hc : m.current = t)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
-      P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
+      E.W.hist m' = E.W.hist m → P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -1045,16 +1045,36 @@ theorem wp_liftPart (hE : E.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   FLock.wp_liftPartW hP hE.rest hgo hi hc htt hp
     (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
-      have hw := (hE.rest _ _ _ hU).1
+      have hh := Word.hist_keepK (hE.rest _ _ _ hU).1 hk
       have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=
         (hE.inv _ _ _ hU).frame (t := t) (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
           (by rw [upd_self, upd_self, hE.ph_part]) (by rw [upd_self, upd_self, L.ph_setPart])
-          (Word.hist_keepK hw hk) hs.waiters hs.clock
+          hh hs.waiters hs.clock
       have hU' := hE.own (upd G t g) rY m m' t r' (by rw [upd_self]; exact hok)
         (by rw [upd_self]; exact hgo) hU hY hc hs hk (by rw [upd_self, upd_upd]; exact hL')
         (by rw [upd_self, upd_upd]; exact hI')
       rw [upd_self, upd_upd] at hU'
-      exact h a m' r' hr hq hc' ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
+      exact h a m' r' hr hq hc' hh ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
+
+/-- `wp_liftPart` for a step of generated code (`liftM`). -/
+theorem wp_liftPartM (hE : E.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out) (hok : ok g) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      E.W.hist m' = E.W.hist m → P.inv (upd G t (L.setPart g r')) m' → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
+  exact WP.bind (wp_liftPart hE hP hgo hok hi hc htt hp (fun a m' r' hr hq hc' hh hi' =>
+    WP.pure' (h a m' r' hr hq hc' hh hi')) hret)
 
 end FEvent
 

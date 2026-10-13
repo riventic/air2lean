@@ -1,6 +1,7 @@
 import ZigLean.Conc.Unroll
 import ZigLean.ResultRun
 import Proofs.Threadsync.Deadline
+import Proofs.Threadsync.Lock
 import ZigLean.Conc.Word
 import ZigLean.Witness
 
