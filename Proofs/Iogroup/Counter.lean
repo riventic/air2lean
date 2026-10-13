@@ -1,5 +1,6 @@
 import Proofs.Iogroup.Lock
 import ZigLean.Sep.Full.ThreadFacts
+import ZigLean.Sep.Full.Local
 import ZigLean.Conc.Share
 import ZigLean.Conc.SpawnLemmas
 import ZigLean.Conc.Unroll

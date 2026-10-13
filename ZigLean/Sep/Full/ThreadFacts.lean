@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.ThreadRest
-import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Ops
 import ZigLean.Conc.Lock
 
 /-!
