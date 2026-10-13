@@ -11,8 +11,10 @@ target) with the two rules that a client uses:
 - `lock_wp`: a thread out of the lock's code that runs `lock` holds the lock afterwards, with a
   resource `rL` in its part (`FLock.Inv.res`: `rL` has the lock's resource `R`);
 - `unlock_wp`: the holder that runs `unlock` is out of the lock's code afterwards; the resource is
-  back in the protocol's rest. The holder is the running thread (`m.current = t`): `Thread.Mutex`'s
-  `unlock` checks that the current thread holds the word (`Thread.mutexOwnerCheck`).
+  back in the protocol's rest. The holder is the running thread (`m.current = t`): an unlock
+  from a thread that does not hold the mutex is illegal in Zig, and `Thread.Mutex`'s `unlock`
+  checks it (`Thread.mutexOwnerCheck`, which reads the current thread). So the premise is the
+  contract of every Zig mutex, not a restriction of this one.
 
 Both hold for **every protocol that has the lock** (`FLock.FitsOn`) and counts no turns
 (`P.cost = none`, as `Proofs/Sync`'s `MutexContract`: a futex wait has no turn charge): its invariant is
