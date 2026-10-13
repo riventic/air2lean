@@ -558,6 +558,16 @@ theorem preM (hp : ∀ m r rF, Holds m r rF → P' r → m.FConc → P r)
     (ht : CTriple P x Q) : CTriple P' x Q :=
   fun n m r rF hh h hc ho => ht n m r rF hh (hp m r rF hh h hc) hc ho
 
+/-- An oracle pick on the part `X` of `P = X ⋆ R` whose choice is `0` (`pick_one`, an atomic op
+at an owned word): the rest runs with the choice `0`. -/
+theorem pickStep {X R : FAssn} {count : Mem → Nat} {f : Nat → ConcM Tgt β} {S : β → FAssn}
+    (hpick : CTriple X (ConcM.sync (.pick count) : ConcM Tgt Nat) (fun c : Nat => ⟪c = 0⟫ ⋆ X))
+    (hP : P = (X ⋆ R)) (hf : CTriple P (f 0) S) :
+    CTriple P ((ConcM.sync (.pick count) : ConcM Tgt Nat) >>= f) S := by
+  subst hP
+  refine bind hpick.frame fun c => ?_
+  exact pre (lift fun hc => hc ▸ hf) fun _ h => sep_assoc h
+
 /-- A step on the part `X` of `P = X ⋆ R` that returns `v` and keeps `X`. -/
 theorem readStep {X R : FAssn} {c : MemM α} {v : α} {f : α → ConcM Tgt β} {S : β → FAssn}
     (ht : FTTriple X c (fun w => ⟪w = v⟫ ⋆ X)) (hP : P = (X ⋆ R)) (hf : CTriple P (f v) S) :

@@ -83,7 +83,7 @@ def vt : RawVTable :=
 theorem alloc_spec (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
     (hfit : ainv.fits len.toNat k) :
     FTriple ainv.own (vt.alloc c len k ra) (ainv.allocPost len.toNat k) :=
-  alloc_ct c len k ra hlen hfit 16
+  (alloc_ct c len k ra hlen hfit).toSolo 16
 
 /-- **The translated `PageAllocator` satisfies `FAllocSpec`** (partial correctness), for
 alignments up to a page, from the generated code and OSM-01 only. -/

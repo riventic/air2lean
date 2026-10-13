@@ -1200,13 +1200,14 @@ def assnIdx (t : Expr) : MetaM Nat := do
     if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
   return args.size - 1
 
-/-- The commands among a provider goal's arguments (of type `MemM _`): their positions and
-heads. A provider lemma about another command does not apply (`providerLemmas`). -/
+/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
+`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
+does not apply (`providerLemmas`). -/
 def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
   let args := t.getAppArgs
   let mut out := #[]
   for i in [0:args.size] do
-    unless (← inferType args[i]!).isAppOf ``Zig.MemM do continue
+    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
     if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
   return out
 
