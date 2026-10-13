@@ -182,12 +182,12 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
     L.Inv G rX' m := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   have hn : ∀ l, rX'.heap l = none ↔ rX.heap l = none := fun l => hs.none
-  refine ⟨hi.w, ⟨rL, ho.congrRest (fun l => ?_) (by simp [rsum, hk]) (by simp [rsum, hg]), hLoff,
+  refine ⟨hi.w, ⟨rL, ho.congrRest (fun l => ?_) (by simp [hk]) (by simp [hg]), hLoff,
     fun l => (hLX l).imp id (fun h => (hn l).mpr h), hF, hnF⟩,
     LockWord.off_erase.mpr fun l hl => (hn l).mpr (LockWord.off_erase.mp hi.xoff l hl), hi.pdisj,
     hi.idle, hi.res⟩
   have := hs l
-  simp only [rsum, FHeap.union_apply]
+  simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
 /-- The word's cells of the rest are the memory's, up to `Cell.norm`. -/
@@ -203,10 +203,10 @@ theorem Inv.cellsN {G : ThreadId → γ} {rY : Res} {m₀ m : Mem}
     have hwr : (L.wordR m).heap l = none := by
       by_cases hin : L.In l
       · have := LockWord.off_erase.mp hi.xoff l hin
-        simp [FHeap.erase, FHeap.union_apply, hW] at this
+        simp [FHeap.union_apply, hW] at this
       · exact cellsAt_none hin
     have := ho.rest_cell (l := l) (fc := ⟨c, none⟩) (by
-      simp only [rsum, FHeap.union_apply, hW, hwr, hrL, Option.none_or, Option.some_or])
+      simp only [FHeap.union_apply, hW, hwr, hrL, Option.none_or, Option.some_or])
     rw [this]; rfl
 
 /-- **An op at a shared word apart from the lock's keeps the lock's invariant**, whose rest has
@@ -309,7 +309,7 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     · rfl
   rw [regroup _ hWw hXY.1] at ho
   have ho' := ho.restStep (hop.rest hw hw') (fun l hl => hw.cellIn hl) (fun l hl => by
-    simp only [rsum, FHeap.union_apply, cellsAt_none (fun h => hnw l h hl), hLW l hl, hWY l hl]; rfl)
+    simp only [FHeap.union_apply, cellsAt_none (fun h => hnw l h hl), hLW l hl, hWY l hl]; rfl)
   rw [← regroup _ hWw' hLW', ← hwR, ← hown] at ho'
   refine ⟨hwi, ⟨rL, ho', hLoff, FHeap.disjoint_union_right.mpr ⟨hLW', hXY.2⟩, fun hF' => ?_, hnF⟩,
     LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
@@ -326,7 +326,7 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
           exact absurd (by simp [FHeap.erase, hLW (W.b, x) ⟨rfl, h1, by rcases h2 with h2 | h2 <;> omega⟩]) h3
         · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
   · have := LockWord.off_erase.mp hi.xoff l hl
-    simp only [FHeap.erase, rsum, FHeap.union_apply, Option.map_eq_none_iff, Option.or_eq_none_iff]
+    simp only [FHeap.union_apply, Option.or_eq_none_iff]
       at this ⊢
     exact ⟨cellsAt_none fun h => hnw l hl h, this.2⟩
 
