@@ -18,19 +18,11 @@ payload that a retag left undefined, `undef_*`, encodes as undefined bytes, so `
 
 open Layout Zig
 
-/-- The hidden tag of `Num`: its `BitVec 1`. -/
+/-- The hidden tag of `Num`: its `BitVec 1`, stored as the version stores a `u1` (`intEncOf` up to
+0.16.0, `intEncExt` from 0.17.0); each of its two values reads back. -/
 instance : LawfulEnc NumTag where
-  size_encode v := LawfulEnc.size_encode (α := BitVec 1) v.toBits
-  decode_encode v := by
-    have h : ∀ w : BitVec 1, (Enc.decode (Enc.encode w) : Result (BitVec 1)) = pure w :=
-      LawfulEnc.decode_encode
-    show (do
-      let b : BitVec 1 ← Enc.decode (Enc.encode v.toBits)
-      match NumTag.ofInt? (Zig.val false b) with
-      | some v => pure v
-      | none => throw .illegal : Result NumTag) = pure v
-    rw [h]
-    cases v <;> rfl
+  size_encode v := by cases v <;> decide +kernel
+  decode_encode v := by apply ExceptT.ext; cases v <;> decide +kernel
 
 /-- The bytes of `Enc.fields 8 [(4, t), (0, x)]`: the tag `t` at 4, the payload `x` at 0. -/
 theorem fields_num {t x : Array Byte} (ht : t.size = 1) (hx : x.size ≤ 4) :

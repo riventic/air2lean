@@ -195,6 +195,13 @@ FIXTURES = [
      ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
+    # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
+    (f"tests/roadmap/enc-exactness/gen/{v}/{out}.lean", f"tests/roadmap/enc-exactness/air/{v}/{src}",
+     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    for src, out, ns in (("enc_exactness", "EncExactness", "EncExactness"),
+                         ("opaque_bytes", "Opaque", "EncExactness.Opaque"))
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+] + [
     # L04 try-pointers/lifetimes/check.sh.
     (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
      ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")

@@ -386,6 +386,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
     # nan_bits.zig (nan-bits/check.sh --export; docs/architecture-audit/nan-bits.md).
     'tests/roadmap/nan-bits/air/{version}/nan_bits': 'tests/roadmap/nan-bits/README.md',
+    # enc_exactness.zig, opaque_bytes.zig (enc-exactness/check.sh --export).
+    'tests/roadmap/enc-exactness/air/{version}/enc_exactness': 'tests/roadmap/enc-exactness/README.md',
+    'tests/roadmap/enc-exactness/air/{version}/opaque_bytes': 'tests/roadmap/enc-exactness/README.md',
     # L04: try_lifetimes.zig (lifetimes/check.sh --export).
     'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
