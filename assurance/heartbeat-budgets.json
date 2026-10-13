@@ -1,0 +1,40 @@
+{
+  "schema": "air2lean-heartbeat-budgets/1",
+  "description": "Heartbeat budgets of proofs that raise maxHeartbeats (scripts/heartbeat-budgets.py, docs/perf-budgets.md). measured and budget are in Lean's maxHeartbeats units (1000 heartbeats).",
+  "policy": {
+    "default": 200000,
+    "tolerance": 1.25,
+    "step": 50000
+  },
+  "files": [
+    "Proofs/Lists/Alloc.lean",
+    "Proofs/Lists/Append.lean",
+    "Proofs/Lists/Container.lean"
+  ],
+  "budgets": [
+    {
+      "file": "Proofs/Lists/Alloc.lean",
+      "declaration": "create_spec",
+      "measured": 213572,
+      "budget": 300000
+    },
+    {
+      "file": "Proofs/Lists/Append.lean",
+      "declaration": "append_pos",
+      "measured": 1117590,
+      "budget": 1400000
+    },
+    {
+      "file": "Proofs/Lists/Append.lean",
+      "declaration": "append_zero",
+      "measured": 1037762,
+      "budget": 1300000
+    },
+    {
+      "file": "Proofs/Lists/Append.lean",
+      "declaration": "precise_pos",
+      "measured": 6276824,
+      "budget": 7850000
+    }
+  ]
+}

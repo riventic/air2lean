@@ -105,7 +105,6 @@ def remapped (old : Ptr) (bs : Array Byte) (n : BitVec 64) : Option Slice → FA
   | some s => ⟪s.len = n ∧ 4 * n.toNat < 2 ^ 64⟫ ⋆ FAssn.ex fun bs' =>
       ⟪bs'.size = 4 * n.toNat ∧ keepsPrefix bs bs'⟫ ⋆ I.granted s.ptr 2 bs'
 
-set_option maxHeartbeats 2000000 in
 theorem remap_spec (s : Slice) (n : BitVec 64) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.size)
     (hs : 4 * s.len.toNat < 2 ^ 64) (h0 : 0 < s.len.toNat) (hn : 0 < n.toNat)
     (hfit : I.fits (4 * n.toNat) 2) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
@@ -122,7 +121,6 @@ def allocated (n : BitVec 64) : Except ErrName Slice → FAssn
   | .ok s => ⟪s.len = n ∧ 4 * n.toNat < 2 ^ 64⟫ ⋆ I.owned 2 s.ptr (Array.replicate (4 * n.toNat) .undef)
   | .error e => ⟪e = "OutOfMemory"⟫
 
-set_option maxHeartbeats 2000000 in
 theorem alignedAlloc_spec (n : BitVec 64) (hfit : I.fits (4 * n.toNat) 2)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList)
@@ -130,7 +128,6 @@ theorem alignedAlloc_spec (n : BitVec 64) (hfit : I.fits (4 * n.toNat) 2)
       (fun r => I.own ⋆ (allocated I n r ⋆ vtR vtp fns.toList)) := by
   fsym [CAllocSpec.alloc h]
 
-set_option maxHeartbeats 2000000 in
 theorem free_spec (s : Slice) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.size)
     (hs : 4 * s.len.toNat < 2 ^ 64) (h0 : 0 < s.len.toNat)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
@@ -192,7 +189,7 @@ def ensured (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : 
         (up (pts p 8 (hdrVal ptr' len g)) ⋆ I.granted ptr' 2 bs')
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (pts p 8 (hdrVal ptr len cap)) ⋆ buf I ptr bs)
 
-set_option maxHeartbeats 40000000 in
+set_option maxHeartbeats 7850000 in
 /-- `ensureTotalCapacityPrecise` of a granted buffer to `g > cap` items: `remap`, else
 `alignedAlloc`, `@memcpy` and `free`. -/
 theorem precise_pos (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : Array Byte)
@@ -212,7 +209,6 @@ theorem precise_pos (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)
     | exact ItemsOk.keep hit ‹keepsPrefix _ _› (by fsym_arith) (by fsym_arith)
     | exact ItemsOk.copy hit (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
-set_option maxHeartbeats 40000000 in
 /-- `ensureTotalCapacityPrecise` of a list without a buffer to `g > 0` items: `alignedAlloc`;
 nothing is copied or freed. -/
 theorem precise_zero (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : Array Byte)
@@ -247,7 +243,7 @@ def growTo (n : Nat) : Nat := Min.min (n + (n / 2 + 32)) (2 ^ 64 - 1)
 
 attribute [local fsym_arith] List.length_append List.length_singleton List.length_cons List.length_nil
 
-set_option maxHeartbeats 40000000 in
+set_option maxHeartbeats 1400000 in
 /-- `append` to a list with a granted buffer. -/
 theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (bs : Array Byte) (xs : List (BitVec 32))
     (v : BitVec 32) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)
@@ -265,7 +261,7 @@ theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (bs : Array Byte) (xs : L
 
 -- the store of `v` at item `0` of a new buffer (not a default rule, `Full/Region.lean`)
 attribute [local fsym] FTotalTriple.regionStore0 in
-set_option maxHeartbeats 40000000 in
+set_option maxHeartbeats 1300000 in
 /-- `append` to a list without a buffer. -/
 theorem append_zero (p ptr : Ptr) (len cap : BitVec 64) (xs : List (BitVec 32)) (v : BitVec 32)
     (hcap : cap.toNat = 0) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)

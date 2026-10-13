@@ -174,7 +174,7 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
 
-set_option maxHeartbeats 2000000 in
+set_option maxHeartbeats 300000 in
 theorem create_spec (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (mem_Allocator_create__anon_48603a336c43 ⟨ctx, vtp⟩)
@@ -194,7 +194,6 @@ def pushResult (next : Option Ptr) (v : BitVec 32) : Except ErrName Ptr → FAss
 -- the store of `next` at the start of the node's region (not a default rule, `Full/Region.lean`)
 attribute [local fsym] FTotalTriple.regionStore0
 
-set_option maxHeartbeats 2000000 in
 theorem push_grant (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (push ⟨ctx, vtp⟩ next v)
@@ -222,7 +221,6 @@ theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8
   rfl
 
 set_option maxRecDepth 20000 in
-set_option maxHeartbeats 2000000 in
 theorem destroy_grant (p : Ptr) (bs : Array Byte) (hbs : bs.size = 16)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted p 3 bs ⋆ vtR vtp fns.toList))
@@ -268,7 +266,6 @@ theorem freeAll_step_nil (R : FAssn) :
   fsym
 
 set_option maxRecDepth 20000 in
-set_option maxHeartbeats 2000000 in
 /-- The body at a node: it reads `next` and gives the node back to the allocator. -/
 theorem freeAll_step_cons (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
