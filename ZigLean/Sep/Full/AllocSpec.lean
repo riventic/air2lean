@@ -597,9 +597,8 @@ no `FLogic.legacy` (with `LegacyTokens`, `FAllocSpec.toLegacy` and the full-stat
 contracts that used them). Both read an arbitrary legacy assertion as `up P`, whose cells no
 longer pin their block's size: `tests/roadmap/sep-full/BlockExtentsCX.lean`
 (`no_cell_size_triple`) is a `Tame` step with a total legacy triple that has no full-state
-triple, so `FLogic.legacy` would not satisfy `Logic.ofTotal`. A legacy triple lifts with its
-side conditions (`FTriple.ofTriple`: size-free outside owned extents, extent-keeping); allocator
-specifications are proved against `FAllocSpec` directly. -/
+triple, so `FLogic.legacy` would not satisfy `Logic.ofTotal`. No legacy triple is lifted;
+allocator specifications are proved against `FAllocSpec` directly. -/
 
 end Full
 end Zig

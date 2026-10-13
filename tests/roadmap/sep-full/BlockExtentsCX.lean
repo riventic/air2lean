@@ -15,9 +15,9 @@ What a cell no longer gives, and where it comes from now:
 
 * **The size, beyond the owned bytes.** `cell_size_old`: in the old model a byte whose cell
   records size `2` makes `q + 2` formable. `no_cell_size`: in the new model the same `up`
-  precondition holds in a memory whose block has one byte, and the step throws. So a legacy
-  assertion that reads a size from a cell lifts only if it is size-free or its block's extent is
-  owned (`FTriple.ofTriple`); `cell_size_bext`: with the extent the step is formed. (The
+  precondition holds in a memory whose block has one byte, and the step throws. So an
+  assertion that reads a size from a cell needs its block's extent; `cell_size_bext`: with the
+  extent the step is formed. (The
   fixed-buffer allocator's pin byte and the arena's `NodeFacts.fit` read sizes this way.)
 * **Ending the block.** `no_free_without_ext`: owning every byte is not enough to `free` a block,
   since the frame may own its extent; `FTriple.free'` takes the extent.
@@ -212,11 +212,10 @@ end Zig.Full.ExtCX
 -- Epoch-tagged shares (`docs/sep-full-state.md` §Epoch-tagged shares): lend a tagged share with
 -- a receipt, give it back during its epoch, revoke a past epoch's share, the fact a tagged share
 -- gives, the ledger updates that read the tags (new ledger, next epoch), the full extent leaving
--- only dormant claims, and the legacy bridge.
+-- only dormant claims.
 #print axioms Zig.Full.EUpd.lendT
 #print axioms Zig.Full.EUpd.returnT
 #print axioms Zig.Full.EUpd.revoke
 #print axioms Zig.Full.Upd.alloc
 #print axioms Zig.Full.Upd.bump
 #print axioms Zig.Full.full_excl
-#print axioms Zig.Full.FTriple.ofTriple

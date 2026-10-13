@@ -18,8 +18,7 @@ step's race freedom (`StepIn` of the frame's bytes) in the post. It replaces the
   `know_intro`): they are read in the memory without its recorded accesses (`Mem.noFp`), which
   holds the same resources.
 - **Ownership and race freedom** come from `ZigLean/Conc/Clock.lean` (`Mem.Owns`, `StepIn`); this
-  module does not import the legacy layer. The transitional bridge from legacy thread triples and
-  the primitive rules lifted through it are `ZigLean/Sep/Full/ThreadBridge.lean`.
+  module does not import the legacy layer, and no legacy thread triple is lifted.
 -/
 
 namespace Zig
@@ -266,19 +265,6 @@ theorem drop {K : α → FAssn} (ht : FTTriple P c (fun v => Q v ⋆ K v))
     have e := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm ho'
     exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg⟩, hq, hc', ho', hs'⟩
-
-/-- A lifted triple whose post's extents are forgotten (`FTriple.forgetExt`). -/
-theorem forgetExt {Q : α → Assn} {B : BlockId → Prop}
-    {E : BlockId → Option (Nat × BlockKind)}
-    (ht : FTTriple P c (fun v => upPost (Q v) B E)) : FTTriple P c (fun v => up (Q v)) := by
-  intro m r rF hh hp hcm ho
-  have := ht m r rF hh hp hcm ho
-  split at this
-  · trivial
-  · exact this
-  · obtain ⟨r', hh', ⟨E', ⟨hq, hk, hg⟩, -⟩, hc', ho', hs'⟩ := this
-    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E')
-      (by rw [hg, Ghost.unit_add]), ⟨hq, hk, rfl⟩, hc', ho', hs'⟩
 
 end FTTriple
 
