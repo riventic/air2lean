@@ -1063,7 +1063,209 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact hu.xc u hc
     · rw [hG u e] at hu' ⊢; exact hu.xc u hu'
 
+/-- **A step of the event's code keeps `U`** (`FEvent.Fits.step`). -/
+theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : EPh) (q : LPh)
+    (hlo : (L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away)
+    (hq : q = .out ∨ (q = .away ∧ p = .w1))
+    (hu : U Lo G (rsum ((E Lo).W.cellsR m) rY) m) (hY : ∀ l, (E Lo).W.In l → rY.heap l = none)
+    (hs : (E Lo).MStep t m m')
+    (hI : (E Lo).Inv (L Lo) (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil)) m') :
+    U Lo (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil)) (rsum ((E Lo).W.cellsR m') rY) m' := by
+  have hmv := Mv.ofE hs
+  have hG : ∀ u, u ≠ t → upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) u = G u :=
+    fun u hu => upd_ne _ _ hu
+  have hXt : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2 = { (G t).2 with e := p } := by
+    rw [upd_self]; rfl
+  have hph : ∀ u, (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) u).2.ph = (G u).2.ph ∧
+      (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) u).2.c = (G u).2.c := fun u => by
+    by_cases e : u = t
+    · subst e; rw [hXt]; exact ⟨rfl, rfl⟩
+    · rw [hG u e]; exact ⟨rfl, rfl⟩
+  -- `t` is not `holds`
+  have hnh : (G t).1.ph ≠ .holds := fun h => by
+    rcases hlo with h' | h' <;> rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;> cases h'
+  -- a waiter of the event is `main` from its event wait on
+  have hEt : (E Lo).ph (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t) = p := by
+    rw [upd_self]; rfl
+  have hwx : (p = .w0 ∨ p = .w1) → (G t).2.ph = .ev ∨ (G t).2.ph = .joins := fun hp => by
+    have := hI.wx t (by rw [hEt]; exact hp)
+    have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .ev ∨
+      (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .joins := this
+    rwa [(hph t).1] at h2
+  have hsw : p = .sw → (G t).2.ph = .st := fun hp => by
+    have := hI.sx t (by rw [hEt]; exact hp)
+    have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .st := this
+    rwa [(hph t).1] at h2
+  -- a thread at the event's waiter places is out of the condition's code
+  have hco : (p = .w0 ∨ p = .w1) → (G t).2.c = .out := fun hp => by
+    by_cases hc : (G t).2.c = .out
+    · exact hc
+    · rcases hu.xc t hc with h' | h' <;> rcases hwx hp with h'' | h'' <;> rw [h'] at h'' <;>
+        cases h''
+  have hS : Lo.WS.hist m' = Lo.WS.hist m := by
+    rcases hmv.hist _ (.inl rfl) hu.ws with e | ⟨e, -⟩
+    · exact e
+    · exact absurd e.symm ne_VS
+  have hE : Lo.WE.hist m' = Lo.WE.hist m := by
+    rcases hmv.hist _ (.inr (.inl rfl)) hu.we with e | ⟨e, -⟩
+    · exact e
+    · exact absurd e.symm ne_VE
+  -- a new waiter in the futex queue is `t` at the event, a waiter there
+  have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WV.ptr) ∧ p = .w1) := fun w hw => by
+    rcases hmv.waiters w hw with h' | rfl
+    · exact .inl h'
+    · have h1 := (hI.q _ hw rfl).1
+      rw [hEt] at h1; exact .inr ⟨rfl, h1⟩
+  refine ⟨?_, fun e he hr => ?_, Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY
+      fun l _ hw => hmv.cells l hw,
+    hmv.blk hu.blk, hmv.ok _ (.inl rfl) hu.ws, hmv.ok _ (.inr (.inl rfl)) hu.we,
+    hmv.ok _ (.inr (.inr rfl)) hu.wv, ?_, hI, by rw [(hph 1).2]; exact hu.places,
+    fun h1 => by rw [(hph 1).1] at h1; rw [hE]; exact hu.ep1 h1,
+    by rw [hE]; exact VClock.le_trans hu.ep0 (hmv.clk 0),
+    fun h0 => by rw [(hph 0).2] at h0; rw [(hph 1).1]; exact hu.ent h0, fun h1 => ?_,
+    fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_,
+    fun u hu' => by rw [(hph u).2] at hu'; rw [(hph u).1]; exact hu.xc u hu'⟩
+  · -- shape
+    refine Shape.congr hu.shape hmv.threads (fun u => (hph u).1) fun u hfr => ?_
+    by_cases e : u = t
+    · subst e
+      have hfr' : (G u).2.ph = .none ∨ (G u).2.ph = .pre := by
+        rcases hfr with h' | h' <;> rw [h'] <;> simp
+      have he : (G u).2.e = .out := by rcases hfr with h' | h' <;> rw [h']
+      have hp : p = .out := by
+        cases p with
+        | out => rfl
+        | w0 => rcases hwx (.inl rfl) with h' | h' <;> rcases hfr' with h'' | h'' <;>
+            rw [h''] at h' <;> cases h'
+        | w1 => rcases hwx (.inr rfl) with h' | h' <;> rcases hfr' with h'' | h'' <;>
+            rw [h''] at h' <;> cases h'
+        | sw => have h' := hsw rfl; rcases hfr' with h'' | h'' <;> rw [h''] at h' <;> cases h'
+      show (upd G u _ u).2 = (G u).2
+      rw [hXt, hp, ← he]
+    · rw [hG u e]
+  · -- io
+    rcases hmv.fp e he with h' | ⟨hb, ho⟩
+    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
+      · exact .inl ⟨hk, LockWord.someLe_mono hmv.threads (fun u _ => hmv.clk u) h''⟩
+      · exact .inr (LockWord.allLe_mono hmv.threads (fun u _ => hmv.clk u) h'')
+    · have := Lo.ok; have := hr.2; omega
+  · -- the condition's invariant
+    refine hu.cinv.other (fun u hu => hG u hu) (hph t).2 (fun hb => ?_) hS hE (fun w hw => ?_)
+      hmv.clk (fun h' => by show (_ = _); rw [(hph t).1]; exact h') apE.ptr_ne
+    · -- `t` in the condition's busy code is a signaller out of the lock, not a waiter
+      have hsig : ((G t).2.c).sig = true := by
+        unfold CPh.busy at hb
+        cases hc : ((G t).2.c).crit
+        · rw [show (C Lo).ph (G t) = (G t).2.c from rfl, hc, Bool.false_or] at hb; exact hb
+        · have := hu.cinv.crit t hc; exact absurd this hnh
+      have hlp : (G t).1.ph = .out := hu.cinv.lp t hsig
+      have hsg : (G t).2.ph = .sg := hu.cinv.sx t hsig
+      rcases hq with rfl | ⟨rfl, rfl⟩
+      · rw [upd_self]; show LPh.out = (G t).1.ph; rw [hlp]
+      · rcases hwx (.inr rfl) with h' | h' <;> rw [hsg] at h' <;> cases h'
+    · rcases hnw w hw with h' | ⟨rfl, hp⟩
+      · exact .inl h'
+      · refine .inr ⟨rfl, fun h => ptr_EV h.symm, ?_⟩
+        show ((G t).2.c).waits = false
+        rw [hco (.inr hp)]; rfl
+  · -- hold
+    rw [(hph 1).1] at h1
+    have hh := hu.hold h1
+    by_cases e : t = 1
+    · subst e; exact absurd hh hnh
+    · rw [hG 1 (Ne.symm e)]; exact hh
+  · -- reg
+    rw [(hph 0).2] at hr
+    rw [hS, (hph 1).1]
+    rcases hu.reg i jr sn e hr with h' | ⟨hlk, h' | h'⟩
+    · exact .inl (VClock.le_trans h' (hmv.clk 1))
+    · refine .inr ⟨hlk, .inl ⟨?_, VClock.le_trans h'.2 (hmv.clk 0)⟩⟩
+      by_cases et : t = 0
+      · subst et; exact absurd h'.1 hnh
+      · rw [hG 0 (Ne.symm et)]; exact h'.1
+    · exact .inr ⟨hlk, .inr (hmv.before _ h')⟩
+  · -- lvc
+    rw [(hph 0).2] at h0; rw [(hph 1).1] at h1
+    show ((Lo.WS.hist m')[(Lo.WS.hist m').size - 1]!).Val _; rw [hS]; exact hu.lvc h0 h1
+  · -- fin: the event stays set
+    rw [(hph 1).1] at h1
+    have hset := hu.fin h1
+    have hpos := FEvent.hist_pos hu.wv
+    rcases hmv.hist _ (.inr (.inr rfl)) hu.wv with e | ⟨-, x, e⟩
+    · show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [e]; exact hset
+    · refine hI.isSet_of (j := (Lo.WV.hist m).size - 1) ?_ ?_
+      · show _ < (Lo.WV.hist m').size; rw [e, Array.size_push]; omega
+      · show ((Lo.WV.hist m')[(Lo.WV.hist m).size - 1]!).Val _
+        rw [e, FEvent.get_push_lt (by omega)]; exact hset
+  · -- q
+    rcases hmv.waiters w hw with h' | rfl
+    · exact hu.q w h'
+    · exact .inr (.inr rfl)
+
+/-- `R` reads the producer's program place only. -/
+theorem R_congr {Y Y' : ThreadId → X} (h : (Y' 1).ph = (Y 1).ph) : R Lo Y' = R Lo Y := by
+  unfold R vOf; rw [h]
+
 variable {prodOf : Tgt → Option Ptr}
+
+/-- **The protocol has the condition.** -/
+theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
+  rS _ _ _ hu := ⟨hu.ws, Rest.split (fun _ => Lo.ws_box) hu.rest⟩
+  rE _ _ _ hu := ⟨hu.we, Rest.split (fun _ => Lo.we_box) hu.rest⟩
+  apS := apS
+  apE := apE
+  inv _ _ _ hu := hu.cinv
+  fin g h := by show g.2.c = _; rw [h.2]
+  joins g h := by show g.2.c = _; rw [h.2]
+  lph _ _ := rfl
+  lpart _ _ := rfl
+  lheld _ _ := rfl
+  lR G t p r hr := by
+    change R Lo (fun u => (upd G t ((C Lo).set (G t) p) u).2) r
+    rw [R_congr (Y := fun u => (G u).2) (by
+      show (upd G t ((C Lo).set (G t) p) 1).2.ph = (G 1).2.ph
+      by_cases e : t = 1
+      · subst e; rw [upd_self]; rfl
+      · rw [upd_ne _ _ (Ne.symm e)])]
+    exact hr
+  ph_l _ _ _ := rfl
+  set_l _ _ _ _ := rfl
+  ph_part _ _ := rfl
+  set_part _ _ _ := rfl
+  sx_l _ _ _ := Iff.rfl
+  sx_part _ _ := Iff.rfl
+  ok_c _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
+  own _ _ _ _ _ _ _ hW _ hu hY _ hs hk hL _ := U_own (hW.imp id .inl) hu hY hs hk hL rfl rfl
+  step := cstep
+
+/-- **The protocol has the event.** -/
+theorem fitsE : (E Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) where
+  rest _ _ _ hu := ⟨hu.wv, Rest.split (fun _ => Lo.wv_box) hu.rest⟩
+  ap := apV
+  inv _ _ _ hu := hu.einv
+  fin g h := by show g.2.e = _; rw [h.2]
+  joins g h := by show g.2.e = _; rw [h.2]
+  lph _ _ := rfl
+  lpart _ _ := rfl
+  lheld _ _ := rfl
+  lR G t p r hr := by
+    change R Lo (fun u => (upd G t ((E Lo).set (G t) p) u).2) r
+    rw [R_congr (Y := fun u => (G u).2) (by
+      show (upd G t ((E Lo).set (G t) p) 1).2.ph = (G 1).2.ph
+      by_cases e : t = 1
+      · subst e; rw [upd_self]; rfl
+      · rw [upd_ne _ _ (Ne.symm e)])]
+    exact hr
+  ph_l _ _ _ := rfl
+  set_l _ _ _ _ := rfl
+  ph_part _ _ := rfl
+  set_part _ _ _ := rfl
+  wx_l _ _ _ := Iff.rfl
+  wx_part _ _ := Iff.rfl
+  sx_l _ _ _ := Iff.rfl
+  sx_part _ _ := Iff.rfl
+  own _ _ _ _ _ _ _ hu hY _ hs hk hL _ := U_own (.inr (.inr rfl)) hu hY hs hk hL rfl rfl
+  step := estep
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
 theorem fitsL : (L Lo).FitsOn (proto Lo prodOf) (U Lo) ok :=
