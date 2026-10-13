@@ -112,7 +112,7 @@ def Owns (P : ThreadId → LPh) (m : Mem) (h : Heap) : Prop :=
 
 /-- The access `e` touches a byte of the word (`FootprintEntry.Touches`). -/
 def Hits (e : FootprintEntry) : Prop :=
-  e.block = L.b ∧ ∃ x, e.off ≤ x ∧ (x < e.off + e.len ∨ x = e.off) ∧ L.o ≤ x ∧ x < L.o + 4
+  e.block = L.b ∧ ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ L.o ≤ x ∧ x < L.o + 4
 
 /-- No thread holds the lock. -/
 def Free (P : ThreadId → LPh) : Prop := ∀ u, P u ≠ .holds
@@ -330,17 +330,16 @@ theorem off_union {h₁ h₂ : Heap} (h1 : L.Off h₁) (h2 : L.Off h₂) : L.Off
 theorem off_empty : L.Off Heap.empty := fun _ _ _ => rfl
 
 /-- An access that overlaps the word hits it. -/
-theorem hits_of {e : FootprintEntry} (hb : e.block = L.b) (h1 : L.o < e.off + e.len)
-    (h2 : e.off < L.o + 4) : L.Hits e := by
+theorem hits_of {e : FootprintEntry} (hb : e.block = L.b) (hel : 0 < e.len)
+    (h1 : L.o < e.off + e.len) (h2 : e.off < L.o + 4) : L.Hits e := by
   by_cases ho : e.off ≤ L.o
-  · exact ⟨hb, L.o, ho, .inl h1, Nat.le_refl _, by omega⟩
-  · exact ⟨hb, e.off, Nat.le_refl _, .inr rfl, by omega, h2⟩
+  · exact ⟨hb, L.o, ho, h1, Nat.le_refl _, by omega⟩
+  · exact ⟨hb, e.off, Nat.le_refl _, by omega, by omega, h2⟩
 
 /-- A plain write to a byte of the word hits it. -/
-theorem hits_of_plain {e : FootprintEntry} (h : plainHit L.b L.o 4 e = true) : L.Hits e := by
-  unfold plainHit at h
-  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  exact hits_of h.1.1.1 h.1.2 h.2
+theorem hits_of_plain {e : FootprintEntry} (h : plainHit L.b L.o 4 e = true) : L.Hits e :=
+  have ⟨_, hel, h1, h2⟩ := plainHit_range h
+  L.hits_of (plainHit_block h) hel h1 h2
 
 /-- An access that does not hit the word is not a plain write to it. -/
 theorem plainHit_false {e : FootprintEntry} (h : ¬ L.Hits e) : plainHit L.b L.o 4 e = false := by
@@ -932,7 +931,7 @@ theorem WInv.recordStep {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {k : Acc
 /-- A read (plain or atomic, `k`) by the current thread of `n` bytes at `o` of block `b`, which
 are not the word's. -/
 theorem WInv.readK {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKind} (hk : k ≠ .write)
-    (hi : L.WInv P m) (hn : 0 < n) (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
+    (hi : L.WInv P m) (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
     L.WInv P (m.recordAt b o n k) := by
   refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) (fun e he => ?_)
     fun e he => by
@@ -948,14 +947,14 @@ theorem WInv.readK {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKin
     dsimp only at hb' h1 h2
     rcases hnw with h | h | h
     · exact h hb'
-    · rcases h2 with h2 | h2 <;> omega
-    · rcases h2 with h2 | h2 <;> omega
+    · omega
+    · omega
 
 /-- A read by the current thread of bytes that are not the word's keeps what the free lock owns
 of a heap that does not have them. -/
 theorem Owns.readK {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKind} {h : Heap}
     (ho : L.Owns P m h) (hb : b < m.blocks.size)
-    (hnR : ∀ x, o ≤ x → x < o + n → h (b, x) = none) (hn : 0 < n) :
+    (hnR : ∀ x, o ≤ x → x < o + n → h (b, x) = none) :
     L.Owns P (m.recordAt b o n k) h := by
   refine ho.mono rfl rfl rfl (recordAt_le m _ _ _ _) fun e he => ?_
   simp only [Mem.recordAt, Array.mem_push] at he
@@ -1855,7 +1854,7 @@ theorem WInv.waitOff {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr
   · exact ⟨rfl, hout m _ hi rfl⟩
   have ha' : m.access p 4 4 = pure (bid, blk, o) := ha
   have hiM : L.WInv P (({ m with current := t } : Mem).recordAt bid o 4 .atomicRead) :=
-    (hi.current t).readK (by decide) (by decide) (hoff bid blk o ha')
+    (hi.current t).readK (by decide) (hoff bid blk o ha')
   rcases hc with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
   · refine hiM.requeue (fun w hw => ?_) fun hw => ?_
     · rcases Array.mem_push.mp hw with hw | rfl
@@ -2258,8 +2257,8 @@ theorem WInv.load {P : ThreadId → LPh} {m m' : Mem} {t c : Nat} {ord : AtomicO
 theorem WInv.noRace {P : ThreadId → LPh} {m : Mem} (hi : L.WInv P m) {k : AccessKind}
     (hk : k.isAtomic = true) (ht : m.current < m.threads.size)
     (hg : P m.current ≠ .gone) : NoRace m L.b L.o 4 k := by
-  refine noRace_of fun e he hb h1 h2 => ?_
-  rcases hi.wfp e he (hits_of hb h1 h2) with ⟨ha, -⟩ | h
+  refine noRace_of_pos fun e he hb hel h1 h2 => ?_
+  rcases hi.wfp e he (hits_of hb hel h1 h2) with ⟨ha, -⟩ | h
   · refine .inr ?_; unfold racePair; simp [ha, hk]
   · exact .inl (h _ ht hg)
 
