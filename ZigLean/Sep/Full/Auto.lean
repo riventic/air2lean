@@ -10,7 +10,8 @@ import ZigLean.Sep.Full.Parts
 `CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
 `AutoConc.lean`), or a thread's step `FTTotalTriple P c Q`, `FTTriple P c Q` (`Bk.thr`, rules in
 `AutoThread.lean`: a sequential rule applies with the locality of its command, `ofSeq`), by
-walking the generated program `c` (`docs/proof-automation.md`):
+walking the generated program `c` (`docs/proof-automation.md`); a thread's run in a protocol
+`P.WP t c Q G m n` is walked the same way with the context as its state (§The `WP` backend):
 
 * **Preconditions** are kept as a flat list of atoms. Definitions that build assertions from
   `⋆`, `⟪φ⟫` and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are

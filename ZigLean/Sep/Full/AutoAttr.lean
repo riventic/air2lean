@@ -7,7 +7,8 @@ import Lean
   total (`FTotalTriple P c Q`, every backend) or partial (`FTriple P c Q`: `FLogic.partial` and the
   concurrent `CTriple` backend, where it executes `ConcM.liftMem c`), or a thread's
   (`FTTotalTriple`, `FTTriple`: the thread backend, where the sequential ones apply too, with
-  the locality of their command). `fsym` tries the
+  the locality of their command), or a `WP` of a thread's run in a protocol (`P.WP t c Q G m n`:
+  only in a `WP` walk, keyed by the head of `c` through `StateT.run`). `fsym` tries the
   rules whose command unifies with the command it executes; the rule's hypotheses become side
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
