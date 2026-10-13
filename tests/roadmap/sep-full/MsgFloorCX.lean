@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Atomic
+import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Witness
 
 /-!
@@ -17,14 +17,18 @@ word `1`; its location `(0, 0, 8)` has the messages `0` (clock `#[]`) and `1` (t
 word (`apts p 1`). Thread 0's floor at the location is position `0`: the load offers both messages
 (`count_two`), and choice `1` reads the old value `0` (`reads_old`).
 
-* `no_ctriple`: so the atomic load as a call (an oracle pick, then the load with the choice)
-  has no `CTriple` with precondition `apts p 1` that returns `1`, although its choice `0` does
-  (`reads_new`; `FTTriple.atomicLoad`).
+Its choice `0` reads the word (`reads_new`; `FTTriple.atomicLoad`).
+
 * `fseq`: the memory is a sequential one (`Mem.FSeq`), so the coverage is not a consequence of
   `FSeq` either: a sequential reading takes choice `0` only and does not need it.
 
-The fix (S4, coordinator ruling (a)): a memory invariant that covers every message of a location
-by the recorded accesses to its bytes; with it an owner's floor is the newest message.
+The fix (S4, coordinator ruling (a)): the memory invariant `Mem.MsgCov` covers every message of a
+location by the recorded accesses to its bytes (`ZigLean/Conc/Clock.lean`); with it an owner's
+floor is the newest message (`newest_before`, the count lemmas `loadCount_le` & co.). The
+concurrent logics carry it (`FOwned.conc`, the resumption of `CTriple.Run`), and this memory
+violates it (`not_msgCov`: the message `1` is not covered by the empty record), so a `CTriple`
+never resumes in it. The atomic load as a call (an oracle pick, then the load with the choice)
+from `apts p 1` returns `1` (`load_ctriple`: `CTriple.pick_load`, then `FTTriple.atomicLoad`).
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound` at most.
 -/
@@ -140,25 +144,25 @@ theorem fseq : m.FSeq := ⟨⟨singleThread_empty rfl (by decide)⟩, fconc.2.1,
 theorem owns : m.Owns m.current (FHeap.ofHeap (shapes m) hP).erase :=
   Witness.owns_of_footprint rfl _ _
 
-/-- **No `CTriple` of the atomic load from an owned word that returns its value**: resumed in
-the same memory with choice `1`, the load reads `0`. -/
-theorem no_ctriple : ¬ CTriple (apts p 1) load (fun w => ⟪w = 1⟫ ⋆ apts p 1) := by
+/-- **The memory does not cover its messages**: thread 1's message `1` is not covered by the
+(empty) record of the word's bytes. So a `CTriple` never resumes in it (`CTriple.Run`). -/
+theorem not_msgCov : ¬ m.MsgCov := by
   intro h
-  have hr := h 1 m _ _ holds word fconc owns
-  change CTriple.Run _ m _ (.sync (.pick (loadCount 64 .relaxed 8 p)) m fun c m' =>
-    .leaf ((Zig.atomicLoadAt (n := 64) c .relaxed 8 p).run m')) at hr
-  obtain ⟨-, r', hh', hc', ho', -, hk⟩ := CTriple.Run.sync_iff.mp hr
-  have h1 := hk m _ rfl hh' hc' ho' (1 : Nat)
-    (show (1 : Nat) < loadCount 64 .relaxed 8 p m ∨ _ by rw [count_two]; exact .inl (by decide))
-  obtain ⟨m', e⟩ := reads_old
-  rw [show (Zig.atomicLoadAt (n := 64) 1 .relaxed 8 p).run m = ExceptT.mk (some (.ok (0, m')))
-    from e] at h1
-  obtain ⟨r'', -, hq, -⟩ := CTriple.Run.ok_iff.mp h1
-  exact absurd (Iff.mp Zig.Full.sep_lift hq).1 (by decide : ¬ ((0 : BitVec 64) = 1))
+  have hl : loc ∈ m.atomics := by simp [m]
+  have hc := ((h loc hl (by decide)).2 (loc.msgs[1]'(by decide)) (Array.getElem_mem _)).1 #[]
+    (by decide +kernel)
+  exact absurd hc (by decide +kernel)
+
+/-- **The atomic load as a call from an owned word returns its value**: the pick at an owned word
+is the choice `0` (`CTriple.pick_load`), the load's thread rule reads the newest message. -/
+theorem load_ctriple : CTriple (apts p 1) load (fun w => ⟪w = 1⟫ ⋆ apts p 1) :=
+  CTriple.bind (CTriple.pick_load p 1 .relaxed) fun _ =>
+    CTriple.lift fun hc => by subst hc; exact CTriple.liftMem (FTTriple.atomicLoad p 1 .relaxed)
 
 end Zig.MsgFloorCX
 
 #print axioms Zig.MsgFloorCX.count_two
 #print axioms Zig.MsgFloorCX.reads_old
-#print axioms Zig.MsgFloorCX.no_ctriple
+#print axioms Zig.MsgFloorCX.not_msgCov
+#print axioms Zig.MsgFloorCX.load_ctriple
 #print axioms Zig.MsgFloorCX.fseq
