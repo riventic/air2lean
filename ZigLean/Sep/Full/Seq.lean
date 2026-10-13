@@ -7,7 +7,8 @@ A concurrent function (`ConcM`, `ZigLean/Conc/Basic.lean`) is a tree of sync ops
 stops at ops that a single thread answers by itself (`yield`, a `choose`, a `pick` of the
 oracle: every atomic op) and the oracle always answers `0`, the scheduler's run
 (`Sched.run`) is the tree read sequentially: each stop answered with `0` (or `()`), in the
-memory the thread stopped with, as thread `0` (`seqTree`). This is how the `alloc` entry of the
+memory the thread stopped with, as thread `0` (`seqTree`). A stop at any other op has no
+answer in one thread, so the reading fails closed there (`.illegal`, `soloResp`). This is how the `alloc` entry of the
 translated `std.heap.PageAllocator` (a `ConcM` function: its hint is an atomic) becomes a
 `MemM` program for `AllocSpec` (`seqTree_run`): `Sched.run env dispatch fuel (fun _ => 0) main m`
 is `seqRun fuel main m` in every environment `env` (`run_solo`), given that the tree is `ThreadFree`
@@ -24,18 +25,18 @@ def SyncOp.Solo : SyncOp Tgt → Bool
   | .yield | .choose _ | .pick _ => true
   | _ => false
 
-/-- The answer of a one-thread run with the oracle `0`. -/
-def soloResp : (op : SyncOp Tgt) → op.Resp
-  | .yield => ()
-  | .choose _ => (0 : Nat)
-  | .pick _ => (0 : Nat)
-  | .spawn _ => .ok (0 : Nat)
-  | .asyncChoice => (0 : Nat)
-  | .spawnGated _ => (0 : Nat)
-  | .gate => ()
-  | .join _ => ()
-  | .wait .. => ()
-  | .wake .. => ()
+/-- The answer of a one-thread run with the oracle `0` to a solo op. Any other op (a spawn, a
+join, a futex wait or wake, a gate, an async choice) has no answer in one thread: a reading that
+reaches it fails closed with `.illegal` (`seqTree`, `soloTree`), instead of inventing one (a
+spawn that returns the caller's id, a join or wait that returns at once). -/
+def soloResp : (op : SyncOp Tgt) → Option op.Resp
+  | .yield => some ()
+  | .choose _ => some (0 : Nat)
+  | .pick _ => some (0 : Nat)
+  | _ => none
+
+theorem soloResp_isSome (op : SyncOp Tgt) : (soloResp op).isSome = SyncOp.Solo op := by
+  cases op <;> rfl
 
 /-- Every stop of the tree is a solo op. -/
 def ThreadFree : {n : Nat} → CoN Tgt β n → Prop
@@ -51,7 +52,9 @@ def seqTree : {n : Nat} → CoN Tgt (α × Mem) n → Out α
     | some (.ok (_, m')) => some (.ok (v, m'))
     | some (.error e) => some (.error e)
     | none => none
-  | _, .sync op m k => seqTree (k (soloResp op) { m with current := 0 })
+  | _, .sync op m k => match soloResp op with
+    | some ρ => seqTree (k ρ { m with current := 0 })
+    | none => some (.error .illegal)
 
 theorem canGo_solo {s : State Tgt α} {op : SyncOp Tgt} (h : SyncOp.Solo op = true) :
     canGo s 0 op = true := by

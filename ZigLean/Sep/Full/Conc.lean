@@ -12,7 +12,9 @@ import ZigLean.Sep.AllocSpec.Norm
 A call of a concurrent function (`ConcM`, a tree of sync ops) from a sequential caller runs in
 the caller's thread: each stop is answered as a single thread answers it (`Sched.soloResp`: the
 oracle's choice `0`, as the sequential atomic rules assume), in the memory the thread stopped
-with. `Sched.soloRun fuel x` is that reading as a `MemM` program, at the depth `fuel`.
+with. A stop that one thread cannot answer (a spawn, a join, a futex wait or wake, a gate) fails
+closed with `.illegal`, so no `CTriple` with a satisfiable precondition holds across it: such
+functions are concurrent and need the protocol logic (`Proto.WP`). `Sched.soloRun fuel x` is that reading as a `MemM` program, at the depth `fuel`.
 Unlike `Sched.seqRun` (`Seq.lean`) it keeps the caller's thread id and does not end the thread
 (no `checkJoinedByChild`), so it is a call, not a whole program.
 
@@ -35,10 +37,20 @@ open Lean.Order
 
 variable {Tgt α β γ : Type}
 
-/-- The in-thread reading of a run (module doc). -/
+/-- The in-thread reading of a run (module doc): a stop at a non-solo op fails closed. -/
 def soloTree : {n : Nat} → CoN Tgt (α × Mem) n → Out α
   | _, .leaf r => r
-  | _, .sync op m k => soloTree (k (soloResp op) m)
+  | _, .sync op m k => match soloResp op with
+    | some ρ => soloTree (k ρ m)
+    | none => some (.error .illegal)
+
+theorem soloTree_some {n : Nat} {op : SyncOp Tgt} {m : Mem} {k : op.Resp → Mem → CoN Tgt (α × Mem) n}
+    {ρ : op.Resp} (h : soloResp op = some ρ) : soloTree (.sync op m k) = soloTree (k ρ m) := by
+  simp only [soloTree, h]
+
+theorem soloTree_none {n : Nat} {op : SyncOp Tgt} {m : Mem} {k : op.Resp → Mem → CoN Tgt (α × Mem) n}
+    (h : soloResp op = none) : soloTree (.sync op m k) = some (.error .illegal) := by
+  simp only [soloTree, h]
 
 /-- A call of `x` read in the caller's thread, at depth `fuel`. -/
 def soloRun (fuel : Nat) (x : ConcM Tgt α) : MemM α := fun m => ExceptT.mk (soloTree (x fuel m))
@@ -51,7 +63,12 @@ theorem soloTree_bind : ∀ {n : Nat} (t : CoN Tgt (γ × Mem) n)
   | _, .leaf none, _ => .inl ⟨rfl, rfl⟩
   | _, .leaf (some (.error e)), _ => .inr (.inl ⟨e, rfl, rfl⟩)
   | n, .leaf (some (.ok b)), _ => .inr (.inr ⟨b, n, rfl, rfl⟩)
-  | _, .sync op m k, G => soloTree_bind (k (soloResp op) m) G
+  | _, .sync op m k, G => by
+    cases h : soloResp op with
+    | none => exact .inr (.inl ⟨.illegal, soloTree_none h, soloTree_none h⟩)
+    | some ρ =>
+      rw [soloTree_some h]
+      exact (soloTree_some (k := fun r m => (k r m).bind G) h).symm ▸ soloTree_bind (k ρ m) G
 
 /-- The in-thread reading of a chain's least upper bound is unknown (`none`) or the reading of an
 element of the chain: at each sync op the reading follows one response, and the sup's rest there
@@ -71,37 +88,50 @@ theorem soloTree_sup : ∀ {n : Nat} (s : CoN Tgt (α × Mem) n) {c : CoN Tgt (�
     cases this
   | _, .sync op m₀ k, c, hs => by
     classical
-    let ρ := soloResp op
-    let c' : CoN Tgt (α × Mem) _ → Prop := fun z => ∃ k', c (.sync op m₀ k') ∧ z = k' ρ m₀
     have hup : ∀ y, c y → CoN.le y (.sync op m₀ k) := fun y hy => (hs _).mp PartialOrder.rel_refl y hy
-    have hsup' : is_sup c' (k ρ m₀) := by
-      intro u
-      constructor
-      · rintro hu _ ⟨k', hk', rfl⟩
-        obtain ⟨k'', e, h⟩ := CoN.le_sync (hup _ hk')
-        cases e
-        exact PartialOrder.rel_trans (h ρ m₀) hu
-      · intro hu
-        let kz : op.Resp → Mem → CoN Tgt (α × Mem) _ := fun r m => if r = ρ ∧ m = m₀ then u else k r m
-        have hz : ∀ y, c y → y ⊑ CoN.sync op m₀ kz := by
-          intro y hy
-          rcases CoN.le_of_le_sync (hup y hy) with e | ⟨k', e, h⟩
-          · subst e; exact CoN.le.bot _
-          · subst e
-            refine CoN.le.sync op m₀ k' kz fun r m => ?_
-            by_cases hrm : r = ρ ∧ m = m₀
-            · obtain ⟨rfl, rfl⟩ := hrm
-              simp only [kz, and_self, ↓reduceIte]
-              exact hu _ ⟨k', hy, rfl⟩
-            · simp only [kz, hrm, ↓reduceIte]; exact h r m
-        obtain ⟨k₂, e, h⟩ := CoN.le_sync ((hs _).mpr hz)
-        cases e
-        have := h ρ m₀
-        simp only [kz, and_self, ↓reduceIte] at this
-        exact this
-    rcases soloTree_sup (k ρ m₀) hsup' with h | ⟨_, ⟨k', hk', rfl⟩, h⟩
-    · exact .inl h
-    · exact .inr ⟨_, hk', h⟩
+    cases hρ : soloResp op with
+    | none =>
+      -- A non-solo stop fails closed; some element of the chain is a stop there too.
+      refine .inr (Classical.byContradiction fun hne => ?_)
+      have hub : ∀ y, c y → y ⊑ CoN.leaf none := by
+        intro y hy
+        rcases CoN.le_of_le_sync (hup y hy) with e | ⟨k', e, -⟩
+        · subst e; exact CoN.le.bot _
+        · subst e
+          exact absurd ⟨_, hy, by rw [soloTree_none hρ, soloTree_none hρ]⟩ hne
+      have := (hs _).mpr hub
+      cases this
+    | some ρ =>
+      rw [soloTree_some hρ]
+      let c' : CoN Tgt (α × Mem) _ → Prop := fun z => ∃ k', c (.sync op m₀ k') ∧ z = k' ρ m₀
+      have hsup' : is_sup c' (k ρ m₀) := by
+        intro u
+        constructor
+        · rintro hu _ ⟨k', hk', rfl⟩
+          obtain ⟨k'', e, h⟩ := CoN.le_sync (hup _ hk')
+          cases e
+          exact PartialOrder.rel_trans (h ρ m₀) hu
+        · intro hu
+          let kz : op.Resp → Mem → CoN Tgt (α × Mem) _ := fun r m => if r = ρ ∧ m = m₀ then u else k r m
+          have hz : ∀ y, c y → y ⊑ CoN.sync op m₀ kz := by
+            intro y hy
+            rcases CoN.le_of_le_sync (hup y hy) with e | ⟨k', e, h⟩
+            · subst e; exact CoN.le.bot _
+            · subst e
+              refine CoN.le.sync op m₀ k' kz fun r m => ?_
+              by_cases hrm : r = ρ ∧ m = m₀
+              · obtain ⟨rfl, rfl⟩ := hrm
+                simp only [kz, and_self, ↓reduceIte]
+                exact hu _ ⟨k', hy, rfl⟩
+              · simp only [kz, hrm, ↓reduceIte]; exact h r m
+          obtain ⟨k₂, e, h⟩ := CoN.le_sync ((hs _).mpr hz)
+          cases e
+          have := h ρ m₀
+          simp only [kz, and_self, ↓reduceIte] at this
+          exact this
+      rcases soloTree_sup (k ρ m₀) hsup' with h | ⟨_, ⟨k', hk', rfl⟩, h⟩
+      · exact .inl h
+      · exact .inr ⟨_, hk', by rw [soloTree_some hρ]; exact h⟩
 
 end Sched
 

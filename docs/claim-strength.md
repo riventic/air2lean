@@ -39,6 +39,12 @@ to match the extracted declarations.
 | `Zig.Conc.Total.EventuallyReturns` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Conc.Total.ReturnsWithin` (bound: `scheduler_turns`) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
 | `Zig.Conc.Total.EventuallyReturnsUnder` | guaranteed-return-under-premise | none |
+
+`Zig.Full.CTriple` reads its concurrent function in the caller's thread. That reading answers
+only solo stops (`yield`, a `choose`, an atomic op's `pick`); a stop at a spawn, join, futex wait
+or wake, gate or async choice fails closed (`.illegal`), so a `CTriple` holds only if no run
+from a state that meets its precondition reaches such a stop, and its claims are those of
+`FTriple` (`tests/roadmap/sep-full/SoloSpawnCX.lean`; audit `structure-2026-10-13.md` #1).
 | `Eq` with right side `pure _` in `Zig.Result`, `Zig.MemM`, `Zig.MM` or `Zig.M`, or `some (Except.ok _)` / `pure (Except.ok _)` in `Option` | all three (exact result) | `total_correctness` |
 | anything else (`Not`, `And`, `Exists`, `Iff`, wrapper definitions, unregistered heads, `Eq` to `ite`/`throw`, `pure` in another monad) | none | none |
 
