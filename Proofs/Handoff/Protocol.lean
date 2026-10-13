@@ -129,7 +129,8 @@ def C : FCond Gh where
   sx g := g.2.ph = .sg
   sx_set _ _ := Iff.rfl
 
-/-- The event: its place is `X.e`; `main` waits (from its event wait on), the producer sets. -/
+/-- The event: its place is `X.e`; `main` waits (from its event wait on), the producer sets (from
+its `set` on: the role stays at its end, so its end keeps the event's invariant). -/
 def E : FEvent Gh where
   W := Lo.WV
   ph g := g.2.e
@@ -139,7 +140,7 @@ def E : FEvent Gh where
   set_self _ := rfl
   wx g := g.2.ph = .ev ∨ g.2.ph = .joins
   wx_set _ _ := Iff.rfl
-  sx g := g.2.ph = .st
+  sx g := g.2.ph = .st ∨ g.2.ph = .fin
   sx_set _ _ := Iff.rfl
 
 /-- The threads that run the lock's code: out of the condition's busy code and of the event's
@@ -484,7 +485,7 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
-      (fun h => by rw [upd_self]; show g.2.ph = .st; rw [hX]; exact h),
+      (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h),
     by rw [hX']; exact hu.places, fun h1 => ?_, ?_, fun h0 => ?_, fun h1 => ?_,
     fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_,
     fun u hu' => by rw [hX'] at hu' ⊢; exact hu.xc u hu'⟩
@@ -572,9 +573,10 @@ theorem keepK_of {rX : Res} {m m' : Mem} {hF : Heap} (hr : Rest Lo rX m)
     (fun l hl => by rw [hcs l hl])
 
 /-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
-ghost value `g` at the same places (a new part or held resource). -/
-theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    (hu : U Lo G rX m) (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv (upd G t g) rX m')
+ghost value `g` at the same places (a new part or held resource); the lock's invariant after it
+(with any ghost values `G'`) pins the `Box`. -/
+theorem U_stepIn {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    (hu : U Lo G rX m) (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv G' rX m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
   have hcs := cells_same hu.blk hi' hu.rest
   have hk := fun (W : Word 32 4) (hW : ∀ l, W.In l → Lo.BoxW l) =>
@@ -820,8 +822,8 @@ theorem U.e_out {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) {u
     have h := hu.einv.wx u (Or.inr he)
     rcases h with h | h <;> rcases hx with h' | h' <;> rw [h'] at h <;> cases h
   | sw =>
-    have h : (G u).2.ph = .st := hu.einv.sx u he
-    rcases hx with h' | h' <;> rw [h'] at h <;> cases h
+    have h : (G u).2.ph = .st ∨ (G u).2.ph = .fin := hu.einv.sx u he
+    rcases h with h | h <;> rcases hx with h' | h' <;> rw [h'] at h <;> cases h
 
 theorem next_out {p : CPh} (h : CPh.Next .out p) : p = .out ∨ p = .inc := by
   cases p <;> simp_all [CPh.Next]
@@ -924,7 +926,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2 (fun hne => ?_) hV (fun w hw => ?_)
       hmv.clk (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
-      (fun h' => by show (_ = _); rw [(hph t).1]; exact h')
+      (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
     · by_cases hl : (L Lo).ph (upd G t ((L Lo).set ((C Lo).set (G t) p) q h) t) = (L Lo).ph (G t)
       · exact .inl hl
       · obtain ⟨-, hq'⟩ := hlq (Ne.symm hl)
@@ -1092,9 +1094,10 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .ev ∨
       (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .joins := this
     rwa [(hph t).1] at h2
-  have hsw : p = .sw → (G t).2.ph = .st := fun hp => by
+  have hsw : p = .sw → (G t).2.ph = .st ∨ (G t).2.ph = .fin := fun hp => by
     have := hI.sx t (by rw [hEt]; exact hp)
-    have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .st := this
+    have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .st ∨
+      (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .fin := this
     rwa [(hph t).1] at h2
   -- a thread at the event's waiter places is out of the condition's code
   have hco : (p = .w0 ∨ p = .w1) → (G t).2.c = .out := fun hp => by
@@ -1139,7 +1142,8 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
             rw [h''] at h' <;> cases h'
         | w1 => rcases hwx (.inr rfl) with h' | h' <;> rcases hfr' with h'' | h'' <;>
             rw [h''] at h' <;> cases h'
-        | sw => have h' := hsw rfl; rcases hfr' with h'' | h'' <;> rw [h''] at h' <;> cases h'
+        | sw => rcases hsw rfl with h' | h' <;> rcases hfr' with h'' | h'' <;> rw [h''] at h' <;>
+            cases h'
       show (upd G u _ u).2 = (G u).2
       rw [hXt, hp, ← he]
     · rw [hG u e]
