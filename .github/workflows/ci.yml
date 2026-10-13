@@ -1469,10 +1469,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
-        run: |
-          set -euo pipefail
-          lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range
-          bash tests/roadmap/alloc-arena/check.sh
+        run: bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
