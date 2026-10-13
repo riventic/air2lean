@@ -2383,13 +2383,15 @@ jobs:
           LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
-      # with its expected error. `lake build Proofs` above built the imported modules. This and
+      # with its expected error. The step builds the modules the tutorials import (not all are in
+      # `Proofs`: a restored olean of a library module would otherwise be used unchecked). This and
       # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
+          lake build $(python3 -B scripts/tutorials.py modules)
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial
