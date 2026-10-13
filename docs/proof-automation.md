@@ -417,8 +417,12 @@ backend):
   hypothesis. A *segment* (`FTTriple Pa x Qa`) is walked by the thread backend, its precondition
   from the context and its post **inferred**: at the segment's return the walk sets `Qa` to the
   strongest post `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ state)` over the locals the walk introduced
-  (`inferPost`); the continuation's hypothesis `Qa a r'` is split into its facts and the
-  assertion that the next segment starts from. *Side goals* are solved with their unknowns (a
+  (`inferPost`). A segment whose walk splits (an `if`, the cases of a variable, a side
+  condition) gets one unknown post per branch, and `Qa` is their join `fun r => ∃ b : Bool, if b
+  then Q₁ r else Q₂ r` (`joinPosts`, `join_l`/`join_r`): branches may end in different states,
+  and the continuation splits on `b`. The continuation's hypothesis `Qa a r'` is split into its
+  facts and the assertion that the next segment starts from. A goal `A ∨ B` (a post over
+  branches) is proved by one side, else by the solver. *Side goals* are solved with their unknowns (a
   ghost value at a stop, a segment's precondition): a goal with unknowns takes a hypothesis that
   unifies with it, with backtracking over the choices until all side goals are proved, or waits
   until the others fix its unknowns; a determined goal goes to assumption, arithmetic and the

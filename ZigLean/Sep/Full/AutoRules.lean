@@ -68,6 +68,16 @@ theorem lift_sep {φ : Prop} (t : φ → L.T R c Q) : L.T (⟪φ⟫ ⋆ R) c Q :
 
 theorem of_false (h : False) : L.T P c Q := h.elim
 
+/-- The join of two branches' posts (a walk whose post it infers, `joinPosts`): the left one. -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₁) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts: the right one. -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₂) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨false, h⟩
+
 end Steps
 
 /-! ## Facts of atoms -/

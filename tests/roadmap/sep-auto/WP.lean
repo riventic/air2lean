@@ -48,4 +48,30 @@ theorem checked_steps {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
       (fun r _ _ _ => r.toNat = a.toNat) G m n := by
   fsym
 
+/-- **Branches of a run** (`if` between segments): each branch's segments, the post a disjunction
+proved by one of its sides. -/
+theorem branch_runs {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (b : Bool) (ho : FOwned own rO m) (hc : m.current = t)
+    (htl : t < m.threads.size) (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (if b then store (α := BitVec 32) 4 q 7 else pure ()) >>= fun _ =>
+        ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ _ _ => w = 7 ∨ w = v) G m n := by
+  fsym
+
+/-- A function of the thread whose branches end in different states. -/
+def setIfZero (q : Ptr) : MemM Unit := do
+  let w ← load (BitVec 32) 4 q
+  if w = 0 then store (α := BitVec 32) 4 q 7 else pure ()
+
+/-- **A segment whose branches end in different states** (`joinPosts`): its post is the join of
+the branches' (`∃ b, if b then … else …`); the next segment starts from each. -/
+theorem branch_states {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (setIfZero q) >>= fun _ => ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ _ _ => w = 7 ∨ w ≠ 0) G m n := by
+  fsym
+
 end SepAuto.WP

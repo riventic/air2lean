@@ -3968,6 +3968,15 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
     mkLambdaFVars #[z] (mkT L α P c' Q)
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
+/-- A postcondition that the walk infers: an unknown, or an unknown applied to distinct locals
+(`?Q x h` after a substitution reverted `x` and `h`). -/
+def isUnknownPost (Q : Expr) : MetaM Bool := do
+  let Q ← instantiateMVars Q
+  let .mvar m := Q.getAppFn | return false
+  if ← m.isAssigned then return false
+  let args := Q.getAppArgs
+  return args.all (·.isFVar) && (args.map (·.fvarId!)).toList.eraseDups.length == args.size
+
 /-- **Post inference.** A return of `v` in the state `P` where the postcondition is the unknown
 `Q` (a `MemM` segment of a `WP` walk, whose post the walk computes): `Q` becomes the strongest
 post `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ P)`, with the locals that the walk introduced (the data
@@ -3977,9 +3986,13 @@ proved with the locals as witnesses. `none` if a local cannot be abstracted (a s
 not in `Q`'s context (a substitution replaced it). -/
 def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
   let Q ← instantiateMVars Q
-  let outer := (← Q.mvarId!.getDecl).lctx
+  -- (an unknown applied to locals, `?Q x h`: a substitution of the walk reverted them; they are
+  -- the unknown's, not the walk's)
+  let outer := (← Q.getAppFn.mvarId!.getDecl).lctx
+  let args := Q.getAppArgs.filterMap fun a => if a.isFVar then some a.fvarId! else none
   let locals := (← getLCtx).foldl (init := #[]) fun acc d =>
-    if d.isImplementationDetail || outer.contains d.fvarId then acc else acc.push d
+    if d.isImplementationDetail || outer.contains d.fvarId || args.contains d.fvarId then acc
+    else acc.push d
   let s ← saveState
   try
     -- the bodies of the post at the result `rv`, outermost first (the last is `⟪rv = v⟫ ⋆ P`)
@@ -4011,6 +4024,44 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
   catch ex =>
     trace[fsym] "post inference: {ex.toMessageData}"
     s.restore; return none
+
+/-- **Branches of a walk whose post it infers** (`isUnknownPost`: a `MemM` segment of a `WP`
+walk), split into the goals `gs` (an `if`, the cases of a variable, a side condition): the post
+becomes the join of one unknown per branch, `fun v => ∃ b : Bool, if b then Q₁ v else …`
+(right-nested), and each branch's goal is about its own unknown (`join_l`, `join_r`), which its
+returns infer. So branches that end in different states have one post; the next segment's walk
+splits on `b` (a state `if`, `wpSplit`). The goals unchanged if the post is known. -/
+def joinPosts (Q : Expr) (gs : List MVarId) : TacticM (List MVarId) := do
+  if gs.length < 2 || !(← isUnknownPost Q) then return gs
+  let Q ← instantiateMVars Q
+  let decl ← Q.getAppFn.mvarId!.getDecl
+  let ty ← instantiateMVars (← inferType Q)
+  let .forallE _ β _ _ := ty | return gs
+  if ty.hasAnyFVar (!decl.lctx.contains ·) then return gs
+  let s ← saveState
+  -- one unknown per branch, where the post's unknown is
+  let qs ← gs.mapM fun _ => mkFreshExprMVarAt decl.lctx decl.localInstances ty
+  let join (A B : Expr) : MetaM Expr := withLocalDeclD `v β fun v => do
+    let body ← withLocalDeclD `b (mkConst ``Bool) fun b => do
+      let c ← mkEq b (mkConst ``Bool.true)
+      mkLambdaFVars #[b] (← mkAppM ``ite #[c, mkApp A v, mkApp B v])
+    mkLambdaFVars #[v] (mkApp2 (mkConst exN) (mkConst ``Bool) body)
+  let rev := qs.reverse
+  let mut J := rev.head!
+  for q in rev.tail! do J ← join q J
+  unless ← isDefEq Q J do s.restore; return gs
+  -- branch `i` of `k`: `join_r` `i` times, then `join_l` (not for the last)
+  let k := gs.length
+  let mut out := []
+  for (g, i) in gs.zipIdx do
+    let mut g := g
+    for j in [0:Nat.min (i + 1) (k - 1)] do
+      let (g0, L, _, _, _, _) ← g.withContext (view g)
+      let lem := L.nm (if j < i then ``Zig.Full.Auto.join_r else ``Zig.Full.Auto.join_l)
+      let [g'] ← g0.apply (← mkConstWithFreshMVarLevels lem) | s.restore; return gs
+      g := g'
+    out := out ++ [g]
+  return out
 
 /-- A rule's side goals left that show it does not apply (ledger #42): an instance that is not
 synthesized (`LawfulEnc T` of a type without one: no case split proves it), or a goal without
@@ -4062,22 +4113,29 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
   let gn ← sn.mvarId.withContext do
     let e ← mkAppOptM ``C.callIndirect_neg #[L.L, β, fp, p, y, d, rest, Expr.fvar sn.fvarId]
     rewriteCmd sn.mvarId L α P Q c x (← inferType e).appArg! e
+  let [gp, gn] ← joinPosts Q [gp, gn] | throwError "fsym: join"
   let gp ← destruct gp sp.fvarId
   return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
 
 /-- Split on a variable of an inductive type and walk each case. -/
 partial def casesWalk (g : MVarId) (d : Expr) (user : Array Expr := #[]) (extra : Array Syntax := #[])
-    (fuel : Nat := 0) : TacticM (List MVarId) :=
-  casesThen g d (walk · user extra (fuel - 1))
+    (fuel : Nat := 0) : TacticM (List MVarId) := do
+  let (g, _, _, _, _, Q) ← g.withContext (view g)
+  casesThen g d (walk · user extra (fuel - 1)) (join := some Q)
 
 /-- Split on a variable of an inductive type, re-split the facts about it, and go on with
-`next` in each case. -/
-partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List MVarId)) :
-    TacticM (List MVarId) := do
+`next` in each case (`join`: the post of a walk, joined over the cases if it infers it,
+`joinPosts`). -/
+partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List MVarId))
+    (join : Option Expr := none) : TacticM (List MVarId) := do
   let gs ← g.cases d.fvarId!
+  let gs := (gs.map (·.mvarId)).toList
+  let gs ← match join with
+    | some Q => joinPosts Q gs
+    | none => pure gs
   let mut out := []
-  for sg in gs do
-    let mut g' := sg.mvarId
+  for g0 in gs do
+    let mut g' := g0
     for decl in (← g'.withContext getLCtx) do
       unless decl.isImplementationDetail do
         g' ← destruct g' decl.fvarId <|> pure g'
@@ -4133,7 +4191,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
     -- a postcondition to infer (a `MemM` segment of a `WP` walk): the state
-    if (← instantiateMVars Q).isMVar then
+    if ← isUnknownPost Q then
       if let some h ← inferPost Q P v then
         g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
         return []
@@ -4212,6 +4270,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let (sp, sn) ← g.byCases cond `hc
     let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
     let gn ← sn.mvarId.withContext (branch sn.mvarId (.fvar sn.fvarId) false)
+    let [gp, gn] ← joinPosts Q [gp, gn] | throwError "fsym: join"
     -- (one branch after the other: the substitutions of a branch's fact are recorded for the
     -- caller's terms of that branch's walk, `refreshUser`)
     let lp ← walk (← destruct gp sp.fvarId) user extra (fuel - 1)
@@ -4292,7 +4351,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       unless ← arith hn.mvarId! (quick := true) do
         trace[fsym] "split on the side condition {φ}"
         let (sp, sn) ← g.byCases φ `hc
-        return (← walk sp.mvarId user extra (fuel - 1)) ++ (← walk sn.mvarId user extra (fuel - 1))
+        let [gp, gn] ← joinPosts Q [sp.mvarId, sn.mvarId] | throwError "fsym: join"
+        return (← walk gp user extra (fuel - 1)) ++ (← walk gn user extra (fuel - 1))
     s.restore
     let some (_, k, left) := partial? | return [g]
     return left ++ (← walk k user extra (fuel - 1))
@@ -4471,6 +4531,22 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   if ty.isAppOfArity ``Or 2 then
     let gs ← g.cases h
     return ← gs.toList.flatMapM fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
+  -- an assertion's `if` at a resource (the join of a segment's branches, `joinPosts`): by cases
+  -- on its condition, the hypothesis the branch's assertion
+  if ty.getAppFn.isConstOf ``ite && ty.getAppNumArgs ≥ 5 then
+    let a := ty.getAppArgs
+    let (c, inst, x, y) := (a[1]!, a[2]!, a[3]!, a[4]!)
+    let (sp, sn) ← g.byCases c `hb
+    let mut out := []
+    for (sg, pos) in [(sp, true), (sn, false)] do
+      let g' ← sg.mvarId.withContext do
+        let mut eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[c, inst, some (.fvar sg.fvarId), none, x, y]
+        for r in a.extract 5 a.size do eq ← mkCongrFun eq r
+        let tyNew := mkAppN (if pos then x else y) (a.extract 5 a.size) |>.headBeta
+        let res ← sg.mvarId.replaceLocalDecl h tyNew eq
+        pure (res.mvarId, res.fvarId)
+      out := out ++ (← wpHyp g'.1 g'.2 #[])
+    return out
   if ty.isAppOfArity ``And 2 then
     let gs ← g.cases h
     let some sg := gs[0]? | return []
@@ -4543,6 +4619,15 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let lx ← wpGoal x.mvarId! user extra fuel
     return lx ++ (← wpGoal y.mvarId! user extra fuel)
   if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
+  -- a disjunction (a post over branches that end in different states): a side that is proved
+  -- whole, else the solver on the disjunction
+  if t.isAppOfArity ``Or 2 then
+    for (i, side) in [(0, ``Or.inl), (1, ``Or.inr)] do
+      let s ← saveState
+      let a ← mkFreshExprSyntheticOpaqueMVar (t.getArg! i)
+      if (← wpGoal a.mvarId! user extra fuel).isEmpty then
+        g.assign (← mkAppOptM side #[t.getArg! 0, t.getArg! 1, a]); return []
+      s.restore
   wpAtom g user extra fuel
 
 /-- An atomic proposition: by a hypothesis, arithmetic and providers; else rewritten by the
