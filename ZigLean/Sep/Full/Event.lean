@@ -1167,7 +1167,7 @@ theorem wp_liftPart (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {α : Type} {x : 
         | exact .inl (.inr (by assumption))
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
-  FLock.wp_liftPartW hP hE.rest hgo hi hc htt hp
+  FLock.wp_liftPartW hP hE.rest (.inl hgo) hi hc htt hp
     (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
       have hh := Word.hist_keepK (hE.rest _ _ _ hU).1 hk
       have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=

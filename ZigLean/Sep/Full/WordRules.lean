@@ -436,13 +436,14 @@ theorem Inv.restW {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
   · simp [Word.cellsR, cellsAt_none hl]
 
-/-- **A step of thread `t` on its own part** (out of the lock's code, `g`; a stack block of a
-sync object's code), with a thread triple: the client gets the rest with the word's cells before
-the step, the step (`StepIn`, `KeepK`: the word stays), and the lock's invariant after it, with
-`t`'s part the triple's post (`FLock.setPart`) and the word's new cells. -/
+/-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock; a
+stack block of a sync object's code), with a thread triple: the client gets the rest with the
+word's cells before the step, the step (`StepIn`, `KeepK`: the word stays), and the lock's
+invariant after it, with `t`'s part the triple's post (`FLock.setPart`) and the word's new
+cells. -/
 theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : MemM α}
     {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r' rY, (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
       U (upd G t g) (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) →

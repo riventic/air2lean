@@ -725,12 +725,13 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
   exact WP.bind (hi.wp_liftMem hc ht hjt htt hp (fun a m' r' hr hq hs hc' hk =>
     WP.pure' (h a m' r' hr hq hs hc' hk)) hret)
 
-/-- **A step of thread `t` out of the lock's code on its own part** (`g`, holding nothing), with
-a thread triple: its part becomes the triple's post (`setPart`). -/
+/-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock;
+the held resource is framed), with a thread triple: its part becomes the triple's post
+(`setPart`). -/
 theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
-    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out)
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
@@ -743,20 +744,30 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
         | exact .inl (.inr (by assumption))
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
-  have hgo' : L.ph (upd G t g t) = .out := by rw [upd_self]; exact hgo
-  have hheld : L.held g = rnil := by
-    have := hi.idle t (by rw [hgo']; decide); rwa [upd_self] at this
-  obtain ⟨ht, hjt⟩ := hi.ht (by rw [hgo']; decide)
-  refine hi.wp_liftMem hc ht hjt htt (by rw [upd_self, hheld, rsum_rnil]; exact hp)
-    (fun a m' r' hr hq hs hc' hk => h a m' r' hr hq hs hc' ?_) hret
-  have := hk (L.setPart g r') (by rw [L.ph_setPart, upd_self]) (by
-      rw [L.part_setPart, L.held_setPart, hheld, rsum_rnil])
-    (by rw [L.held_setPart, hheld]; exact FHeap.disjoint_empty _)
-    (fun _ => by rw [L.held_setPart, hheld])
-    (fun _ r hr => by
-      have := (L.R_setPart (upd G t g) t r' r).mpr hr
-      rwa [upd_self] at this)
-    (fun e => by rw [L.ph_setPart, hgo] at e; cases e)
+  have hgn : L.ph (upd G t g t) ≠ .gone := by
+    rw [upd_self]; rcases hgo with e | e <;> rw [e] <;> decide
+  obtain ⟨ht, hjt⟩ := hi.ht hgn
+  have hd : FHeap.Disjoint (L.part g).heap (L.held g).heap := by
+    have := hi.pdisj t; rwa [upd_self] at this
+  refine hi.wp_liftMem hc ht hjt (htt.frame (R := (· = L.held g)))
+    (by rw [upd_self]; exact ⟨_, _, hd, rfl, hp, rfl⟩)
+    (fun a m' r'' hr hq hs hc' hk => ?_)
+    (hret.imp_right fun hr => (FTTotalTriple.frame (R := (· = L.held g)) ⟨htt, hr⟩).2)
+  obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
+  refine h a m' r' hr hq' hs hc' ?_
+  have hR : ∀ r, L.R (upd G t g) r → L.R (upd (upd G t g) t (L.setPart g r')) r := fun r hr => by
+    have := (L.R_setPart (upd G t g) t r' r).mpr hr
+    rwa [upd_self] at this
+  have := hk (L.setPart g r') (by rw [L.ph_setPart, upd_self])
+    (by rw [L.part_setPart, L.held_setPart])
+    (by rw [L.part_setPart, L.held_setPart]; exact hd')
+    (fun e => by
+      rw [L.ph_setPart] at e; rw [L.held_setPart]
+      have := hi.idle t (by rw [upd_self]; exact e); rwa [upd_self] at this)
+    (fun _ => hR)
+    (fun e => by
+      rw [L.ph_setPart] at e; rw [L.held_setPart]
+      have := hi.res t (by rw [upd_self]; exact e); rw [upd_self] at this; exact hR _ this)
   rwa [upd_upd] at this
 
 /-! ## Spawn and join -/

@@ -205,24 +205,26 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
   simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
+/-- A byte of the rest is the memory's, up to `Cell.norm`. -/
+theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
+    {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by
+  obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
+  have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [hl])
+  have hwr : (L.wordR m).heap l = none := by
+    by_cases hin : L.In l
+    · have := LockWord.off_erase.mp hi.xoff l hin
+      simp [hl] at this
+    · exact cellsAt_none hin
+  exact ho.rest_cell (by simp only [FHeap.union_apply, hl, hwr, hrL, Option.none_or])
+
 /-- The word's cells of the rest are the memory's, up to `Cell.norm`. -/
 theorem Inv.cellsN {G : ThreadId → γ} {rY : Res} {m₀ m : Mem}
     (hi : L.Inv G (rsum (W.cellsR m₀) rY) m) {l : Zig.Loc} (hl : W.In l)
     (h0 : m₀.heap l ≠ none) : (m.heap l).map Cell.norm = (m₀.heap l).map Cell.norm := by
-  obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
   cases e : m₀.heap l with
   | none => exact absurd e h0
   | some c =>
-    have hW : (W.cellsR m₀).heap l = some ⟨c, none⟩ := by simp [cellsAt_of hl, e]
-    have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [FHeap.union_apply, hW])
-    have hwr : (L.wordR m).heap l = none := by
-      by_cases hin : L.In l
-      · have := LockWord.off_erase.mp hi.xoff l hin
-        simp [FHeap.union_apply, hW] at this
-      · exact cellsAt_none hin
-    have := ho.rest_cell (l := l) (fc := ⟨c, none⟩) (by
-      simp only [FHeap.union_apply, hW, hwr, hrL, Option.none_or, Option.some_or])
-    rw [this]; rfl
+    rw [hi.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, cellsAt_of hl, e])]; rfl
 
 /-- **An op at a shared word apart from the lock's keeps the lock's invariant**, whose rest has
 the word's cells: the rest gets the word's new cells. -/

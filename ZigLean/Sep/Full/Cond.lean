@@ -224,9 +224,11 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   sx_part : ∀ g r, C.sx (L.setPart g r) ↔ C.sx g
   /-- A thread out of the condition's busy code runs lock code: `ok` reads no other place. -/
   ok_c : ∀ g p q, p.busy = false → q.busy = false → (ok (C.set g p) ↔ ok (C.set g q))
-  /-- A step of a thread out of the lock's code on its own part (a stack block of the
-  condition's code) keeps the rest, given the lock's and the condition's invariants after it. -/
-  own : ∀ G rY m m' t r (W : Word 32 4), (W = C.S ∨ W = C.Ep) → L.ph (G t) = .out →
+  /-- A step of a thread out of the lock's code or holding the lock on its own part (a stack
+  block of the condition's code) keeps the rest, given the lock's and the condition's invariants
+  after it. -/
+  own : ∀ G rY m m' t r (W : Word 32 4), (W = C.S ∨ W = C.Ep) →
+    (L.ph (G t) = .out ∨ L.ph (G t) = .holds) →
     U G (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) → m.current = t →
     StepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
     L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m' →
@@ -998,6 +1000,26 @@ theorem Inv.moveT {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g g' : γ} 
     (by rw [upd_self]; exact hld) (by rw [upd_self]; exact hreg) (by rw [upd_self]; exact hreg')
     (by rw [upd_self]; exact htq)
 
+/-- A step of `t` that keeps its places and the writes of both words and the futex queue, with
+`t`'s new ghost value `g'` (a step on its own part). -/
+theorem Inv.frame {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (hI : C.Inv L G m)
+    (hph : C.ph g' = C.ph (G t)) (hlph : L.ph g' = L.ph (G t)) (hsx : C.sx (G t) → C.sx g')
+    (hS : C.S.hist m' = C.S.hist m) (hE : C.Ep.hist m' = C.Ep.hist m) (hap : C.Ep.ptr ≠ L.ptr)
+    (hwt : m'.waiters = m.waiters)
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    C.Inv L (upd G t g') m' :=
+  hI.moveT rfl hS hE hap (fun w _ h => by rwa [hwt] at h) hclk (by rw [hph]; exact id)
+    (fun h => by rw [hph] at h; exact ⟨h, by rw [hlph]; exact hI.crit t h⟩)
+    (fun _ => ⟨hph, hlph, hsx⟩)
+    (fun h j hj => by rw [hph] at h; exact VClock.le_trans (hI.en t h j hj) (hclk t))
+    (fun i e h => by
+      rw [hph] at h
+      obtain ⟨h1, h2, h3⟩ := hI.ld t i e h
+      exact ⟨h1, h2, VClock.le_trans h3 (hclk t)⟩)
+    (fun i jr sn e h => ⟨sn, by rw [← hph]; exact h, fun hs => .inl hs⟩)
+    (fun i jr sn e h => ⟨sn, by rw [hph]; exact h⟩)
+    (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h), fun _ => hph⟩)
+
 /-- A step that keeps the writes of both words and the futex queue, with `t` staying. -/
 theorem Inv.stay {G : ThreadId → γ} {m m' : Mem} (t : ThreadId) (hI : C.Inv L G m)
     (hS : C.S.hist m' = C.S.hist m) (hE : C.Ep.hist m' = C.Ep.hist m) (hap : C.Ep.ptr ≠ L.ptr)
@@ -1657,6 +1679,87 @@ theorem Fits.projE (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {G : ThreadId �
   exact ptrProject_add_run (inBounds_of (b := C.S.b) rfl hblk (by simp [Word.ptr])
     (by simp [Word.ptr]; omega)) (inBounds_of (b := C.S.b) rfl hblk
     (by simp [Word.ptr, Ptr.add]; omega) (by simp [Word.ptr, Ptr.add]; omega))
+
+/-- A byte of the epoch is not the state's. -/
+theorem ep_notS {l : Zig.Loc} (hl : C.Ep.In l) : ¬ C.S.In l := by
+  obtain ⟨-, h2, -⟩ := hl
+  rintro ⟨-, -, h3⟩
+  have := C.ep_o
+  omega
+
+/-- **A step of a thread on its own part** in the condition's code (`g`, out of the lock's code
+or holding the lock; a stack block: `allocStack`, its stores and loads, `free`), with a thread
+triple: its part becomes the triple's post (`FLock.setPart`; `Fits.own`), and both words keep
+their writes. -/
+theorem wp_liftPart (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      C.S.hist m' = C.S.hist m → C.Ep.hist m' = C.Ep.hist m →
+      P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  FLock.wp_liftPartW hP hC.rS hgo hi hc htt hp
+    (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
+      have hhS := Word.hist_keepK (hC.rS _ _ _ hU).1 hk
+      -- the epoch's cells are in `rY`; they stay
+      obtain ⟨hwE, rY', hrX, hY'⟩ := hC.rE _ _ _ hU
+      have hcE : ∀ l, C.Ep.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+        intro l hl
+        have hS0 : ∀ m₀ : Mem, (C.S.cellsR m₀).heap l = none := fun _ => cellsAt_none (ep_notS hl)
+        cases e : m.heap l with
+        | none => exact absurd e (hwE.cellIn hl)
+        | some c =>
+          have hYl : rY.heap l = some ⟨c, none⟩ := by
+            have := congrArg (fun r : Res => r.heap l) hrX
+            simpa [FHeap.union_apply, hS0, Word.cellsR, cellsAt_of hl, e, hY' l hl] using this
+          rw [hL'.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, hS0, hYl])]; rfl
+      have hwF : ∀ l, C.Ep.In l → (rsum (C.S.cellsR m) rY).heap.erase l ≠ none := fun l hl => by
+        have := cellsAt_some hl (hwE.cellIn hl) (m := m)
+        rw [hrX]
+        simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+          Option.or_eq_none_iff, not_and]
+        intro h; exact absurd h this
+      have hhE := Word.hist_keepK hwE (Word.keepK_stepIn hs hwF hcE)
+      have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
+        have := (hC.inv _ _ _ hU).frame (t := t) (g' := L.setPart g r')
+          (by rw [upd_self, hC.ph_part]) (by rw [upd_self, L.ph_setPart])
+          (fun h => by rw [upd_self] at h; exact (hC.sx_part _ _).mpr h) hhS hhE hC.apE.ptr_ne
+          hs.waiters hs.clock
+        rwa [upd_upd] at this
+      have hU' := hC.own (upd G t g) rY m m' t r' C.S (.inl rfl) (by rw [upd_self]; exact hgo)
+        hU hY hc hs hk (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
+      rw [upd_self, upd_upd] at hU'
+      exact h a m' r' hr hq hc' hhS hhE ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
+
+/-- `wp_liftPart` for a step of generated code (`liftM`). -/
+theorem wp_liftPartM (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      C.S.hist m' = C.S.hist m → C.Ep.hist m' = C.Ep.hist m →
+      P.inv (upd G t (L.setPart g r')) m' → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
+  exact WP.bind (wp_liftPart hC hP hgo hi hc htt hp (fun a m' r' hr hq hc' hS hE hi' =>
+    WP.pure' (h a m' r' hr hq hc' hS hE hi')) hret)
 
 end FCond
 
