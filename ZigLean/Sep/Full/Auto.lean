@@ -1898,7 +1898,15 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fx == fy && x.getAppNumArgs == y.getAppNumArgs do return false
+  unless fx.isConst && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
+    -- a user definition of a value (a struct value `hdr ptr len cap`) against its fields
+    for (z, z₂, left) in [(x, y, true), (y, x, false)] do
+      let .const c _ := z.getAppFn | continue
+      if ← isLibrary c then continue
+      let some z' ← unfold1 z | continue
+      let g' ← g.replaceTargetDefEq (← if left then mkEq z' z₂ else mkEq z₂ z')
+      return ← proveEqGoal g' depth (fuel - 1)
+    return false
   let s ← saveState
   try
     let gs ← evalTacticAt (← `(tactic| congr 1)) g
