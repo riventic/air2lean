@@ -247,77 +247,77 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "6d62e95f5b7ef1dece7ff534b43593ac4522f3c2",
-          "recorded_at": "2026-10-12T14:53:56+00:00",
-          "translator_sha256": "0e63ca829f2c08343ccde3fdcedbb573f33c54c4fcdda84e8ff4789d7626db9b"
+          "revision": "1bc206217e16f0ee1809ea6263a4a3885c9a82e8",
+          "recorded_at": "2026-10-13T19:01:52+00:00",
+          "translator_sha256": "4e83d65524b394211e45bcc7b050319aa72cece56ac6484e2ab4f802643a68c8"
         },
         "output": {
-          "bytes": 47277,
-          "sha256": "e8834ab6a7a12277a4aadc5b5ea12f7f5fe5ccaf1a3e7a400c1ec3a46a07c866",
+          "bytes": 47974,
+          "sha256": "c66d44d145ba6149275f2c8ecf05a946a62701d5be0f34837e849476c6f83351",
           "matches_reference": true,
           "functions": 51,
-          "input_bytes": 154363
+          "input_bytes": 240946
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.002137,
+            "baseline_seconds": 0.002275,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
           "elaborate": {
-            "baseline_seconds": 2.2339,
-            "max_seconds": 12.234,
-            "portable_max_seconds": 32.234,
-            "baseline_peak_rss_kib": 771216,
-            "max_peak_rss_kib": 1033360,
-            "portable_max_peak_rss_kib": 1542432
+            "baseline_seconds": 2.9603,
+            "max_seconds": 12.96,
+            "portable_max_seconds": 32.96,
+            "baseline_peak_rss_kib": 772784,
+            "max_peak_rss_kib": 1034928,
+            "portable_max_peak_rss_kib": 1545568
           },
           "emit": {
-            "baseline_seconds": 0.004212,
+            "baseline_seconds": 0.004325,
             "max_seconds": 0.254,
             "portable_max_seconds": 1.004
           },
           "normalize": {
-            "baseline_seconds": 0.001487,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
+            "baseline_seconds": 0.001927,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
           },
           "parse": {
-            "baseline_seconds": 0.003615,
-            "max_seconds": 0.254,
-            "portable_max_seconds": 1.004
+            "baseline_seconds": 0.006499,
+            "max_seconds": 0.256,
+            "portable_max_seconds": 1.006
           },
           "proof.cold": {
-            "baseline_seconds": 7.9142,
-            "max_seconds": 17.914,
-            "portable_max_seconds": 47.485,
-            "baseline_peak_rss_kib": 1499264,
-            "max_peak_rss_kib": 1949043,
-            "portable_max_peak_rss_kib": 2998528
+            "baseline_seconds": 9.6692,
+            "max_seconds": 19.669,
+            "portable_max_seconds": 58.015,
+            "baseline_peak_rss_kib": 1498448,
+            "max_peak_rss_kib": 1947982,
+            "portable_max_peak_rss_kib": 2996896
           },
           "proof.warm": {
-            "baseline_seconds": 0.1617,
-            "max_seconds": 10.162,
-            "portable_max_seconds": 30.162,
-            "baseline_peak_rss_kib": 60896,
-            "max_peak_rss_kib": 323040,
-            "portable_max_peak_rss_kib": 585184
+            "baseline_seconds": 0.1644,
+            "max_seconds": 10.164,
+            "portable_max_seconds": 30.164,
+            "baseline_peak_rss_kib": 60640,
+            "max_peak_rss_kib": 322784,
+            "portable_max_peak_rss_kib": 584928
           },
           "translate.cold": {
-            "baseline_seconds": 0.0394,
-            "max_seconds": 0.289,
-            "portable_max_seconds": 1.039,
-            "baseline_peak_rss_kib": 42768,
-            "max_peak_rss_kib": 108304,
-            "portable_max_peak_rss_kib": 173840
+            "baseline_seconds": 0.0793,
+            "max_seconds": 0.329,
+            "portable_max_seconds": 1.079,
+            "baseline_peak_rss_kib": 43952,
+            "max_peak_rss_kib": 109488,
+            "portable_max_peak_rss_kib": 175024
           },
           "translate.warm": {
-            "baseline_seconds": 0.0423,
-            "max_seconds": 0.292,
-            "portable_max_seconds": 1.042,
-            "baseline_peak_rss_kib": 42880,
-            "max_peak_rss_kib": 108416,
-            "portable_max_peak_rss_kib": 173952
+            "baseline_seconds": 0.0508,
+            "max_seconds": 0.301,
+            "portable_max_seconds": 1.051,
+            "baseline_peak_rss_kib": 44016,
+            "max_peak_rss_kib": 109552,
+            "portable_max_peak_rss_kib": 175088
           }
         }
       }
