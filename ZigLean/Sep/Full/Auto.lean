@@ -1030,6 +1030,9 @@ goals it did not prove. `quick`: a probe (no congruence of remainders, no librar
 hypotheses up to arithmetic). -/
 partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
   if ← g.isAssigned then return []
+  -- a hypothesis as stated first (an update's `hv : FV.Facts ctx s` that the context has whole:
+  -- not split and its parts proved by `omega` over every fact, ledger #53)
+  if ← assumptionR g then return []
   let t ← instantiateMVars (← g.getType)
   let t0 ← whnfR t
   let t' ← if t0.isAppOfArity ``And 2 then pure t0 else
