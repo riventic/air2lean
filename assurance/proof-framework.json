@@ -468,13 +468,7 @@
       "path": "Proofs/Iogroup/Counter.lean"
     },
     {
-      "path": "Proofs/Lists/Append.lean"
-    },
-    {
       "path": "Proofs/Lists/Bounded.lean"
-    },
-    {
-      "path": "Proofs/Lists/Container.lean"
     },
     {
       "path": "Proofs/Lists/Cost.lean"
@@ -698,9 +692,6 @@
     },
     {
       "path": "tests/roadmap/claims/Fixture.lean"
-    },
-    {
-      "path": "tests/roadmap/container-contracts/Clients.lean"
     },
     {
       "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"

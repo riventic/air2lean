@@ -2,8 +2,8 @@ import Proofs.Lists.Append
 
 /-!
 Generic containers: `std.ArrayListUnmanaged(u32).append`, the `u32` instance of Zig's generic
-array list, translated from the std source. A successful append leaves the list `xs ++ [v]`
-in the caller's part of the heap; the rest of the heap is untouched.
+array list, translated from the std source. A successful append leaves the list `xs ++ [v]`,
+for every allocator that meets the allocator contract; the rest of the memory is untouched.
 
 From the repository root:
   lake build Proofs.Lists.Append
@@ -14,20 +14,24 @@ See tutorials/generic-containers/README.md for the source, the exercise and the 
 
 namespace GenericContainers
 
-open Lists Zig Assn
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc Lists.Append
 
-/-- A successful `append` gives the list with `v` at the end (possibly in a new buffer), and
-keeps the frame `hF`. -/
-theorem append_success (a : Allocator) (v : BitVec 32) {p ptr : Ptr} {cap : BitVec 64}
-    {xs : List (BitVec 32)} {hL hF : Heap} {m m' : Mem}
-    (list : alist p ptr cap xs hL) (heap : m.heap = hL ∪ hF) (disjoint : Heap.Disjoint hL hF)
-    (hst : m.Seq) (items : ptrOk m ptr)
-    (run : (array_list_Aligned_u32_null_append p a v).run m = pure (.ok (), m')) :
-    ∃ hL' ptr' cap', m'.heap = hL' ∪ hF ∧ alist p ptr' cap' (xs ++ [v]) hL' := by
-  obtain ⟨r, m₁, hr, -, hL', -, heap', post⟩ := append_run a v list heap disjoint hst items
-  rw [run] at hr
-  cases hr
-  obtain ⟨ptr', cap', list', -⟩ := post
-  exact ⟨hL', ptr', cap', heap', list'⟩
+variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+
+/-- A successful `append` gives the list with `v` at the end (possibly in a new buffer). -/
+theorem append_success (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
+    (room : I.fits (4 * growTo (xs.length + 1)) 2)
+    (contract : CAllocSpec (CVTable.env (env e) fns) ctx I) :
+    CTriple (I.own ⋆ (alist I p xs ⋆ vtR vtp fns.toList))
+      (array_list_Aligned_u32_null_append p ⟨ctx, vtp⟩ v)
+      (fun r => I.own ⋆ ((FAssn.ex fun ys => ⟪r = .ok () → ys = xs ++ [v]⟫ ⋆ alist I p ys) ⋆
+        vtR vtp fns.toList)) :=
+  (append_spec ctx vtp fns I e p xs v room contract).post fun r _ h =>
+    sep_mono_right (fun _ h => sep_mono_left (fun _ h => by
+      cases r with
+      | ok => exact ⟨xs ++ [v], sep_lift.mpr ⟨fun _ => rfl, h⟩⟩
+      | error =>
+        obtain ⟨-, h⟩ := sep_lift.mp h
+        exact ⟨xs, sep_lift.mpr ⟨nofun, h⟩⟩) h) h
 
 end GenericContainers
