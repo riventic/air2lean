@@ -1,4 +1,4 @@
-import Proofs.Lists.Gen
+import Proofs.Lists.Open
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Witness
@@ -19,13 +19,14 @@ a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holdin
   leaves the list unchanged.
 
 The loop bodies are walked by `fsym` (`step_*`); the loops are `FTotalTriple.loop_ghost` with the
-number of nodes left as the measure. `push` and `freeAll` allocate and free nodes; their
-full-state proofs need a translated allocator behind the `Allocator` parameter
-(`docs/alloc-spec.md`, §Retired claims) and are still the legacy ones of `Proofs/Lists/Sep.lean`.
+number of nodes left as the measure. The program is `Proofs/Lists/Open.lean`, the translation in
+which the `Allocator` parameter is an open interface; `push` and `freeAll`, which allocate and
+free nodes through it, are proved for every allocator in `Proofs/Lists/Alloc.lean`, with `X` the
+rest of each node's grant.
 -/
 
 namespace Lists.Linked
-open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
+open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto Lists.Open
 
 variable (X : Ptr → FAssn)
 
