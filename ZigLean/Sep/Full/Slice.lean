@@ -26,12 +26,7 @@ open FAssn
 @[fsym] theorem mul_step {w : Nat} {P : FAssn} {a b : BitVec w} (h : a.toNat * b.toNat < 2 ^ w) :
     FTotalTriple P (StateT.lift (Zig.mul false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat * b.toNat⟫ ⋆ P) := by
-  have e : Zig.mul false a b = pure (a * b) := by
-    simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
-    split
-    · rename_i hc; simp at hc; omega
-    · rfl
-  rw [e]; exact Auto.read_val (BitVec.toNat_mul_of_lt h)
+  rw [Auto.mul_lit (decide_eq_true h)]; exact Auto.read_val (BitVec.toNat_mul_of_lt h)
 
 /-- Unsigned `+|`, as of the values. -/
 @[fsym_arith] theorem addSat_false {w : Nat} (a b : BitVec w) :
