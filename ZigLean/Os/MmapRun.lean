@@ -80,9 +80,11 @@ theorem Os.munmap_run {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk 
     (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some u)
     (hst : m.SingleThread) :
     (Os.munmap os s).run m =
-      pure ((), { m.recordAt b s.ptr.off.toNat
+      pure ((), { (m.recordAt b s.ptr.off.toNat
         (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
-          s.ptr.off.toNat) .write with blocks := m.blocks.set! b (u.apply blk) }) := by
+          s.ptr.off.toNat) .write).retire b s.ptr.off.toNat
+        (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
+          s.ptr.off.toNat) with blocks := m.blocks.set! b (u.apply blk) }) := by
   have hrec := recordAccess_run (noRace_of_singleThread hst b s.ptr.off.toNat
     (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat)
     .write)

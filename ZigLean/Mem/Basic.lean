@@ -644,6 +644,29 @@ to every other block stay. -/
 def Mem.forgetFrom (m : Mem) (b : BlockId) (S : Nat) : Mem :=
   { m with footprint := m.footprint.map (FootprintEntry.forgetFrom b S) }
 
+/-- The atomic location `l` overlaps the bytes `o..o+len` of block `b` (zero bytes overlap
+nothing). -/
+def ALoc.hits (b o len : Nat) (l : ALoc) : Bool :=
+  l.block == b && 0 < len && 0 < l.len && o < l.off + l.len && l.off < o + len
+
+/-- The indices of the atomic locations of `m` that do not overlap the bytes `o..o+len` of block
+`b`, in order (`Mem.retire`). -/
+def Mem.retireIdx (m : Mem) (b : BlockId) (o len : Nat) : Array Nat :=
+  (m.atomics.zipIdx.filter fun (l, _) => !l.hits b o len).map (·.2)
+
+/-- **`m` without the atomic locations over the bytes `o..o+len` of block `b`**: they are
+removed with their messages, and the threads' views of the others re-indexed. A mixed-size
+atomic access retires the locations it overlaps (`retireAt`, `ZigLean/Mem/Thread.lean`), and a
+step that ends live bytes retires the locations over them (`Os.munmap`, `Mem.mremapShrunk`,
+`Mem.afterByteRemap`): bytes that come alive again later (a growth in place) start without an
+atomic location, as the bytes of a new block do, so no atomic read of them reads a message from
+before they ended. -/
+def Mem.retire (m : Mem) (b : BlockId) (o len : Nat) : Mem :=
+  { m with
+    atomics := (m.retireIdx b o len).map (m.atomics[·]!)
+    seen := m.seen.filterMap fun (t, j, id) =>
+      ((m.retireIdx b o len).idxOf? j).map fun j' => (t, j', id) }
+
 def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Array Byte) := do
   let (b, blk, o) ← (← get).access p n align
   recordAccess b o n kind

@@ -230,9 +230,17 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   rules come with S1: the step edits old entries, which `StepIn` (every entry of the result is
   an old one or a new one of the thread) does not allow, so they need S1's step relation (an
   entry may also be a narrowing of an old one) and a `ThreadLocal` clause for the revival of
-  history-free bytes. Open: the atomic locations (`Mem.atomics`, their messages) over offsets
-  that a shrink or unmap ends are kept, so an atomic read of a revived byte can still read a
-  message from before the unmap; retiring them is part of S1's atomic step relation.
+  history-free bytes. The atomic locations over ended bytes are retired (done, coordinator
+  ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
+  `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
+  and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,
+  an atomic read of a revived byte could read a message from before the unmap: regression
+  `tests/roadmap/sep-full/RetireCX.lean` (a relaxed load of a regrown zero byte read `5`; now
+  it has one option and reads `0`). The sequential rules carry every resource across
+  (`Holds.retire`: a byte keeps its location or has none, and a tag constraint allows none);
+  the thread rules see a retirement as an `FStepIn` whenever the removed bytes are not the
+  frame's (`FStepIn.retire`). `Os.munmap` and `Os.mremap` are no longer `Tame` (the layout
+  shrinks); `Tame.munmap_mono`/`mremap_mono` keep their address and liveness facts.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).

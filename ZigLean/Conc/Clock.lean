@@ -479,6 +479,124 @@ theorem first_iff (h : AMap hF m m' σ) {p : ALoc → Bool}
 
 end AMap
 
+/-! ## Retiring atomic locations (`Mem.retire`) -/
+
+theorem List.zipIdx_pairwise_snd {α : Type} (L : List α) (k : Nat) :
+    (L.zipIdx k).Pairwise (fun a b => a.2 < b.2) := by
+  induction L generalizing k with
+  | nil => exact List.Pairwise.nil
+  | cons a L ih =>
+    rw [List.zipIdx_cons, List.pairwise_cons]
+    exact ⟨fun y hy => Nat.lt_of_lt_of_le (Nat.lt_succ_self k) (List.le_snd_of_mem_zipIdx hy),
+      ih (k + 1)⟩
+
+section Retire
+
+variable {m : Mem} {b : BlockId} {o len : Nat}
+
+/-- The kept indices increase. -/
+theorem Mem.retireIdx_lt {i j : Nat} (hi : i < (m.retireIdx b o len).size)
+    (hj : j < (m.retireIdx b o len).size) (hij : i < j) :
+    (m.retireIdx b o len)[i] < (m.retireIdx b o len)[j] := by
+  have hp : (m.retireIdx b o len).toList.Pairwise (· < ·) := by
+    simp only [Mem.retireIdx, Array.toList_map, Array.toList_filter, Array.toList_zipIdx]
+    exact List.pairwise_map.mpr ((List.zipIdx_pairwise_snd _ 0).filter _)
+  have := List.pairwise_iff_getElem.mp hp i j (by simpa using hi) (by simpa using hj) hij
+  simpa using this
+
+/-- The kept indices are the locations that do not overlap the bytes. -/
+theorem Mem.mem_retireIdx {i : Nat} :
+    i ∈ m.retireIdx b o len ↔ ∃ h : i < m.atomics.size, m.atomics[i].hits b o len = false := by
+  simp only [Mem.retireIdx, Array.mem_map, Array.mem_filter, Array.mem_zipIdx_iff_getElem?,
+    Bool.not_eq_eq_eq_not, Bool.not_true]
+  constructor
+  · rintro ⟨⟨l, j⟩, ⟨hl, hh⟩, rfl⟩
+    obtain ⟨hj, e⟩ := Array.getElem?_eq_some_iff.mp hl
+    exact ⟨hj, by rw [e]; exact hh⟩
+  · rintro ⟨hi, hh⟩
+    exact ⟨⟨m.atomics[i], i⟩, ⟨Array.getElem?_eq_getElem hi, hh⟩, rfl⟩
+
+theorem Mem.retireIdx_bound {j : Nat} (hj : j < (m.retireIdx b o len).size) :
+    (m.retireIdx b o len)[j] < m.atomics.size :=
+  (Mem.mem_retireIdx.mp (Array.getElem_mem hj)).1
+
+theorem Mem.retireIdx_idxOf {j : Nat} (hj : j < (m.retireIdx b o len).size) :
+    (m.retireIdx b o len).idxOf? (m.retireIdx b o len)[j] = some j := by
+  have e : (m.retireIdx b o len).finIdxOf? (m.retireIdx b o len)[j] = some ⟨j, hj⟩ :=
+    Array.finIdxOf?_eq_some_iff.mpr ⟨rfl, fun k hk =>
+      Nat.ne_of_lt (Mem.retireIdx_lt (m := m) (b := b) (o := o) (len := len) k.2 hj hk)⟩
+  rw [Array.idxOf?, e]; rfl
+
+theorem Mem.retireIdx_of_idxOf {i j : Nat} (h : (m.retireIdx b o len).idxOf? i = some j) :
+    ∃ hj : j < (m.retireIdx b o len).size, (m.retireIdx b o len)[j] = i := by
+  obtain ⟨f, hf, rfl⟩ := Option.map_eq_some_iff.mp h
+  exact ⟨f.2, (Array.finIdxOf?_eq_some_iff.mp hf).1⟩
+
+theorem Mem.retire_get {j : Nat} (hj : j < (m.retireIdx b o len).size) :
+    (m.retire b o len).atomics[j]? = m.atomics[(m.retireIdx b o len)[j]]? := by
+  have hb := Mem.retireIdx_bound hj
+  simp only [Mem.retire, Array.getElem?_map, Array.getElem?_eq_getElem hj, Option.map_some,
+    Array.getElem?_eq_getElem hb]
+  rw [getElem!_pos m.atomics ((m.retireIdx b o len)[j]) hb]
+
+/-- **Retiring the locations over bytes that the frame does not have** keeps the frame's
+locations (each at its new index) and the other threads' views of them. -/
+theorem AMap.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
+    AMap hF m (m.retire b o len) fun i => (m.retireIdx b o len).idxOf? i where
+  mono i i' j j' h h' hlt := by
+    obtain ⟨hj, ej⟩ := Mem.retireIdx_of_idxOf h
+    obtain ⟨hj', ej'⟩ := Mem.retireIdx_of_idxOf h'
+    rcases Nat.lt_trichotomy j j' with hjj | rfl | hjj
+    · exact hjj
+    · omega
+    · have := Mem.retireIdx_lt hj' hj hjj; omega
+  kept i j l h hl := by
+    obtain ⟨hj, ej⟩ := Mem.retireIdx_of_idxOf h
+    exact ⟨l, by rw [Mem.retire_get hj, ej, hl], rfl, rfl, rfl⟩
+  frame i l hl hin := by
+    obtain ⟨hi, e⟩ := Array.getElem?_eq_some_iff.mp hl
+    have hn : m.atomics[i].hits b o len = false := by
+      cases hh : m.atomics[i].hits b o len
+      · rfl
+      · exfalso
+        simp only [ALoc.hits, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, e] at hh
+        obtain ⟨⟨⟨⟨hb, h0⟩, hl0⟩, h1⟩, h2⟩ := hh
+        have hx : ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ o ≤ x ∧ x < o + len :=
+          ⟨if o ≤ l.off then l.off else o, by split <;> omega, by split <;> omega,
+            by split <;> omega, by split <;> omega⟩
+        obtain ⟨x, hx1, hx2, hx3, hx4⟩ := hx
+        exact hin x hx1 hx2 (by rw [hb]; exact hcut x hx3 hx4)
+    obtain ⟨j, hj, ej⟩ := Array.getElem_of_mem (Mem.mem_retireIdx.mpr ⟨hi, hn⟩)
+    exact ⟨j, by rw [← ej]; exact Mem.retireIdx_idxOf hj, by rw [Mem.retire_get hj, ej, hl]⟩
+  new j l hl hn := by
+    have hj : j < (m.retireIdx b o len).size := by
+      have := (Array.getElem?_eq_some_iff.mp hl).1; simpa [Mem.retire] using this
+    exact absurd (Mem.retireIdx_idxOf hj) (hn _ (Mem.retireIdx_bound hj))
+  seen := by
+    simp only [Mem.retire, Array.filter_filterMap, Array.filterMap_filter]
+    congr 1; funext p
+    cases h : p.1 != m.current <;> cases (m.retireIdx b o len).idxOf? p.2.1 <;> simp_all
+
+/-- Retiring the locations over bytes that the frame does not have is a step of the thread. -/
+theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
+    FStepIn hF m (m.retire b o len) where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨_, AMap.retire hcut⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const _ _ h := h
+
+end Retire
+
 section FStep
 
 variable {m m' m'' : Mem} {hF hF' : Heap}

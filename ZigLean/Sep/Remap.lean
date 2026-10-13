@@ -92,9 +92,11 @@ theorem afterByteRemap_owned_frame {m : Mem} {b : BlockId} {blk : Block} {hF : H
     simpa [remapBytes_size] using h
 
 /-- The transition changes no thread clock or scheduler state; of the histories it only forgets
-the accesses past the old end (`Mem.forgetFrom`). -/
+the accesses past the old end (`Mem.forgetFrom`), and it retires the atomic locations over the
+cut bytes (`Mem.retire`). -/
 theorem afterByteRemap_sameThreads (m : Mem) (b : BlockId) (blk : Block) (n : Nat) :
-    (m.forgetFrom b blk.bytes.size).SameThreads (m.afterByteRemap b blk n) :=
+    ((m.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n)).SameThreads
+      (m.afterByteRemap b blk n) :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Whole-block replacement preserves the sequential-memory invariant. -/

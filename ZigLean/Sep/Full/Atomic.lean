@@ -108,7 +108,8 @@ theorem Array.map_getElem!_zipIdx_filter {α : Type} [Inhabited α] (xs : Array 
   simp [getElem!_def]
 
 /-- The location `s` overlaps the bytes `o..o+len` of block `b` (`ALoc.hits` of its shape). -/
-def Hits (b o len : Nat) (s : Shape) : Bool := s.1 == b && o < s.2.1 + s.2.2 && s.2.1 < o + len
+def Hits (b o len : Nat) (s : Shape) : Bool :=
+  s.1 == b && 0 < len && 0 < s.2.2 && o < s.2.1 + s.2.2 && s.2.1 < o + len
 
 theorem shapes_filter_hits (a : Array ALoc) (b o len : Nat) :
     (a.filter fun l => !l.hits b o len).toList.map ALoc.shape =
@@ -121,6 +122,28 @@ theorem tagOf_some_mem {sh : List Shape} {b x : Nat} {t : Nat × Nat} (h : tagOf
   unfold tagOf at h
   obtain ⟨s, hs, rfl⟩ := Option.map_eq_some_iff.mp h
   exact ⟨s, List.mem_of_find?_eq_some hs, by simpa using List.find?_some hs, rfl⟩
+
+/-! ## Retired locations (`Mem.retire`) -/
+
+/-- The layout after `Mem.retire`: the locations over the bytes are gone. -/
+theorem shapes_retire (m : Mem) (b o len : Nat) :
+    shapes (m.retire b o len) = (shapes m).filter fun s => !Hits b o len s := by
+  simp only [shapes, Mem.retire, Mem.retireIdx]
+  rw [Array.map_getElem!_zipIdx_filter _ (fun l => !ALoc.hits b o len l), shapes_filter_hits]
+
+/-- In a well-formed layout, a location of a filtered layout is the one there, or none. -/
+theorem tagOf_filter {sh : List Shape} (hw : ShapesWF sh) (p : Shape → Bool) (b x : Nat) :
+    tagOf (sh.filter p) b x = none ∨ tagOf (sh.filter p) b x = tagOf sh b x := by
+  cases e : tagOf (sh.filter p) b x with
+  | none => exact .inl rfl
+  | some t =>
+    right
+    obtain ⟨s, hs, hcs, rfl⟩ := tagOf_some_mem e
+    exact (tagOf_of_mem hw (List.mem_filter.mp hs).1 hcs).symm
+
+theorem ShapesWF.filter {sh : List Shape} (hw : ShapesWF sh) (p : Shape → Bool) :
+    ShapesWF (sh.filter p) :=
+  ⟨fun s hs => hw.1 s (List.mem_filter.mp hs).1, hw.2.sublist List.filter_sublist⟩
 
 /-- The layout after an access at `(b, o)` of `len` bytes that retires the locations over the
 bytes and adds `(b, o, len)`: well formed, the bytes carry the new location, and every other
@@ -136,7 +159,7 @@ theorem layout_push {sh : List Shape} (hw : ShapesWF sh) {b o len : Nat} (hlen :
     intro s hs
     obtain ⟨h1, h2⟩ := List.mem_filter.mp hs
     refine ⟨h1, fun ⟨e1, e2, e3⟩ => ?_⟩
-    simp [Hits, e1, e2, e3] at h2
+    simp [Hits, e1, e2, e3, hlen, hw.1 s h1] at h2
   refine ⟨⟨fun s hs => ?_, ?_⟩, fun b' x => ?_⟩
   · rcases List.mem_append.mp hs with h | h
     · exact hw.1 s (hmem s h).1
@@ -186,6 +209,7 @@ theorem retireAt_eq {m m₁ : Mem} {b o len li : Nat}
     have := MemM.set_ok hs
     subst this
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+    simp only [Mem.retire, Mem.retireIdx]
     rw [Array.map_getElem!_zipIdx_filter _ (fun l => !ALoc.hits b o len l)]
     exact ⟨rfl, _, rfl⟩
 
@@ -284,7 +308,12 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
         obtain ⟨j, hj, rfl⟩ := Array.mem_iff_getElem.mp hl
         have := Bool.eq_false_iff.mpr (this j hj)
         show (!(m.atomics[j]).hits b o len) = true
-        unfold ALoc.hits; rw [this]; rfl
+        cases hh : (m.atomics[j]).hits b o len
+        · rfl
+        · simp only [ALoc.hits, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hh
+          simp only [hh.1.1.1.1, beq_self_eq_true, Bool.true_and, Bool.and_eq_false_iff,
+            decide_eq_false_iff_not] at this
+          omega
       exact hpush m.seen (by rw [hm₁, hf]; rfl) (by rw [hli, hf])
 
 /-- In one thread `locIdx` never throws: a mixed-size access retires the old locations, whose
@@ -375,6 +404,21 @@ theorem TagSat.mono {sh sh' : List Shape} {b x : Nat} {t : Option (Nat × Nat)}
     rcases h with h | h
     · exact .inl h
     · rw [h]; exact ht
+
+/-- **Retiring locations keeps every resource**: a byte keeps its location or has none, and a
+tag constraint allows none (`TagSat`). -/
+theorem Holds.retire {m : Mem} {r rF : Res} (hw : ShapesWF (shapes m)) (hh : Holds m r rF)
+    (b o len : Nat) : Holds (m.retire b o len) r rF := by
+  have e1 : (m.retire b o len).heap = m.heap := rfl
+  have e3 : (m.retire b o len).kn = m.kn := rfl
+  obtain ⟨hd, ⟨hm1, hm2⟩, hk, hkF, hg⟩ := hh
+  refine ⟨hd, ⟨by rw [e1]; exact hm1, fun l fc hl => ?_⟩, e3 ▸ hk, e3 ▸ hkF, hg⟩
+  rw [shapes_retire]
+  exact TagSat.mono (tagOf_filter hw _ _ _) (hm2 l fc hl)
+
+theorem _root_.Zig.Mem.FSeq.retire {m : Mem} (hs : m.FSeq) (b o len : Nat) :
+    (m.retire b o len).FSeq :=
+  ⟨⟨hs.1.1⟩, by rw [shapes_retire]; exact hs.2.1.filter _, hs.2.2⟩
 
 /-- A byte of an owned `abytesAt`. -/
 theorem abytesAt_cell {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}

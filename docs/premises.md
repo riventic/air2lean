@@ -1086,7 +1086,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   or fails with `error.OutOfMemory`;
   grown bytes up to the old page end are undefined, the rest zero, and a growth in place
   forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`: they are new pages, so
-  an access from before an earlier unmap of them races with nothing). Page size: 4 KiB
+  an access from before an earlier unmap of them races with nothing); `munmap` and a shrink
+  retire the atomic locations over the removed bytes (`Mem.retire`: new pages carry no atomic
+  message from before). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
 - Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`;
