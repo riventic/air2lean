@@ -1772,7 +1772,9 @@ turns.
   mutex again (after it took a signal). It enters only when every other thread is out of the
   condition's code and after every epoch write (`hone`, `hhb`: the scope of the module doc), the
   client's rest allows its entry (`hent`), and the client shows that its sleep at a condition
-  that is not signalled is not a deadlock (`hlive`).
+  that is not signalled is not a deadlock (`hlive`). The waiter is the current thread
+  (`m.current = t`): `Thread.Condition.wait` (0.15.2) allocates its deadline block, a memory
+  step with no stop before it, first.
 - `signal_wp`: a thread out of the condition's and the lock's code that may signal, whose stops
   come after every registration (`hseen`), returns out of the condition's code; a registered
   waiter is then signalled. -/
@@ -1792,7 +1794,7 @@ structure CondImpl (Tgt : Type) where
       U (upd G t (C.set g .en)) rX m) →
     (∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁) →
-    P.inv (upd G t g) m →
+    P.inv (upd G t g) m → m.current = t →
     P.WP t (wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d
   signal_wp : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
