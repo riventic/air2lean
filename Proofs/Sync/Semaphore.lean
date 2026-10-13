@@ -531,8 +531,7 @@ theorem Fits.op (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE)
 
 theorem op_of_cur {W : Word 32 4} {t : ThreadId} {m₁ m' : Mem}
     (hop : W.Op t { m₁ with current := t } m') : W.Op t m₁ m' :=
-  ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
-    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩, hop.fpt⟩
+  hop.of_cur
 
 /-! ## The ops at the condition's words -/
 
@@ -2886,7 +2885,7 @@ theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {b : BlockId} {blk : Bl
   have hno : ∀ i l, ¬ W.Loc m i l := fun i l hl => by
     have := (Word.loc_get hl).1; rw [hat] at this; simp at this
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
-  refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hfit, hal, by rw [hk]; decide⟩,
+  refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hfit, hal, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
     fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
