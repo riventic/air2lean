@@ -52,6 +52,7 @@ GATES = {
     "tests/roadmap/packed-casts/ModelVector.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/packed-casts/ModelAuto.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/nan-bits/Model.lean": "tests/roadmap/nan-bits/check.sh",
+    "tests/roadmap/enc-exactness/Model.lean": "tests/roadmap/enc-exactness/check.sh",
     "tests/roadmap/try-pointers/lifetimes/Lifetimes.lean":
         "tests/roadmap/try-pointers/lifetimes/check.sh",
 }
@@ -152,9 +153,15 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
     for rel in sorted(edges):
         base = root_of(rel)
         module = module_of(rel, base)
-        if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED:
+        # A top-level name it shares with a module it imports from another root
+        # (`strength-log/GlobalInit.lean` importing `GlobalInit.Proofs`): Lean resolves an import
+        # in the first library holding its top-level name, which may be this file's own library.
+        clash = rel not in named and any(
+            m.split(".")[0] == module.split(".")[0] for m, dep, kind in edges[rel]
+            if kind == "local" and root_of(dep) != base)
+        if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED or clash:
             # Not imported, so its name is free: `local-parent/Proofs.lean` must neither be an
-            # invalid name nor the Lake library root `Proofs`.
+            # invalid name nor the Lake library root `Proofs`, nor shadow its own imports.
             base, module = None, "Universe." + re.sub(r"\W", "_", str(Path(rel).with_suffix("")))
         units.append(Unit(rel, base, module, tuple(dep for _, dep, kind in edges[rel] if kind == "local"),
                           tuple(m for m, _, kind in edges[rel] if kind == "lake"), gate_of(rel),

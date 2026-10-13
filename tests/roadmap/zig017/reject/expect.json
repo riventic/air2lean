@@ -4,7 +4,7 @@
  "divCeilOn016": "tag 'div_ceil' is not a Zig 0.16.0 AIR tag (introduced in 0.17.0)",
  "divCeilOptimized": "optimized float mode is outside the subset (div_ceil_optimized)",
  "i0": "type i0 does not exist in Zig 0.17.0",
- "intFromError": "raw error representation casts require finalized error ordinals",
+ "intFromError": "an integer/error cast needs the compilation's error numbering, which the AIR export lacks",
  "noreturnEnum": "enum 'zig017.Never' tag type 1 is not an integer",
  "oldBitcast": "tag 'bitcast' is not a Zig 0.17.0 AIR tag",
  "oldBoolAnd": "tag 'bool_and' is not a Zig 0.17.0 AIR tag",

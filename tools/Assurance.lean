@@ -283,9 +283,21 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
         ("prop", toJson (← isProp decl.type)), ("defs", namesJson (definitionsIn env decl.type)),
         ("uses", toJson (bvarUses (xs.extract 0 i) decl.type))]
     let body := body.consumeMData
+    -- A natural-number argument (a bound of a bounded head) also records its value when it is
+    -- closed (`evalNat`) and its printed form, so a manifest can check the bound it states.
+    let args ← body.getAppArgs.mapM fun a => do
+      let j := subjectJson env xs a
+      let isNat ← try pure ((← whnfR (← inferType a)).isConstOf ``Nat) catch _ => pure false
+      unless isNat do return j
+      let value ← if a.hasFVar || a.hasMVar then pure none else evalNat a
+      let pp ← match value with
+        | some v => pure (toString v)
+        | none => return j.setObjVal! "nat" (Json.mkObj [("value", Json.null),
+            ("pp", toJson (toString (← ppExpr a)))])
+      return j.setObjVal! "nat" (Json.mkObj [("value", toJson value), ("pp", toJson pp)])
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
-      ("args", Json.arr (body.getAppArgs.map (subjectJson env xs))),
+      ("args", Json.arr args),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness)])]
 

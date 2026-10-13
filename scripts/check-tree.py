@@ -22,8 +22,18 @@ host's translations, as check.sh does.
 
 Each run recreates DEST from scratch. DEST must be new or an earlier check tree (it holds a
 `.air2lean-check-tree.json` marker, written first), outside every tracked directory and cache.
+
+  check-tree.py check-models VERSION EXAMPLE...
+
+Fails unless each example's `Proofs/<Ex>/Gen.lean` in this tree (the checkout or a check tree)
+is this host's translation for Zig VERSION, the stock Zig that scripts/diff.sh runs natively
+against it: a fresh translation's first-line profile record names VERSION, and a committed body
+equals the translation check.sh compares for VERSION on this host (the `--host-goldens` file,
+else the checkout's `Proofs/<Ex>/Gen.lean`). A model of another Zig version is never compared
+with this Zig's native code (docs/architecture-audit/soft-float-darwin.md).
 """
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -74,21 +84,74 @@ def clone_tree(source, destination):
         shutil.copytree(source, destination, symlinks=True)
 
 
+def module_of(ex):
+    """`Proofs/<Ex>/Gen.lean` of example `ex` (layout convention: first letter uppercased)."""
+    return f'Proofs/{ex[0].upper()}{ex[1:]}/Gen.lean'
+
+
+def host_golden(version, ex, root=ROOT, system=None, machine=None):
+    """This host's committed translation of example `ex` for Zig `version` when it is not
+    `Proofs/<Ex>/Gen.lean` (check.sh's lookup order), else None."""
+    host_os = (system or platform.system()).lower()
+    arch = machine or platform.machine()
+    golden = Path(root) / 'tests/golden' / version / ex
+    for name in (f'Gen-{host_os}-{arch}.lean', f'Gen-{host_os}.lean', 'Gen.lean'):
+        if (golden / name).is_file():
+            return golden / name
+    return None
+
+
 def host_goldens(version, root=ROOT, system=None, machine=None):
     """`--replace` specs for this host's committed translations of Zig `version` (check.sh's
     lookup order), for every example whose translation is not `Proofs/<Ex>/Gen.lean`."""
-    host_os = (system or platform.system()).lower()
-    arch = machine or platform.machine()
     specs = []
     for ex_dir in sorted((Path(root) / 'examples').iterdir()):
-        ex = ex_dir.name
-        golden = Path(root) / 'tests/golden' / version / ex
-        for name in (f'Gen-{host_os}-{arch}.lean', f'Gen-{host_os}.lean', 'Gen.lean'):
-            if (golden / name).is_file():
-                module = f'Proofs/{ex[0].upper()}{ex[1:]}/Gen.lean'
-                specs.append(f'{module}={golden / name}')
-                break
+        golden = host_golden(version, ex_dir.name, root, system, machine)
+        if golden:
+            specs.append(f'{module_of(ex_dir.name)}={golden}')
     return specs
+
+
+@functools.cache
+def normalize_generated():
+    """scripts/normalize-generated.py as a module."""
+    spec = importlib.util.spec_from_file_location('air2lean_normalize',
+                                                  Path(__file__).with_name('normalize-generated.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def split_generated(data):
+    """(profile record or None, body) of a generated module."""
+    return normalize_generated().split_generated(data)
+
+
+def check_models(version, examples, root=ROOT, system=None, machine=None):
+    """Raise ValueError unless each example's module in tree `root` is this host's translation
+    for Zig `version` (see the module docstring)."""
+    root = Path(root)
+    marker = root / MARKER
+    checkout = Path(json.loads(marker.read_text())['checkout']) if marker.is_file() else root
+    for ex in examples:
+        module = module_of(ex)
+        metadata, body = split_generated((root / module).read_bytes())
+        if metadata is not None:
+            found = metadata['profile']['zig_version']
+            if found != version:
+                raise ValueError(f'{module} is the translation of Zig {found}, the native harness is '
+                                 f'built with Zig {version}: set AIR2LEAN_ZIG to a Zig {found}')
+            continue
+        expected = host_golden(version, ex, root, system, machine)
+        if expected is None:
+            if checkout == root:
+                continue  # The checkout's own module is the committed translation for `version`.
+            expected = checkout / module
+        if split_generated(expected.read_bytes())[1] != body:
+            raise ValueError(f'{module} is not the translation of Zig {version} on this host '
+                             f'({expected}): set AIR2LEAN_ZIG to the Zig whose translation this tree '
+                             f'holds, or test Zig {version} with scripts/check.sh '
+                             f'(AIR2LEAN_ZIG_VERSION={version}) or check-tree.py --host-goldens {version}')
 
 
 def create(dest, replacements, root=ROOT):
@@ -149,10 +212,16 @@ def main(argv=None):
     make.add_argument('--replace', action='append', default=[], metavar='PATH=SOURCE')
     make.add_argument('--host-goldens', metavar='VERSION',
                       help="replace each example's module with this host's committed translation")
+    models = sub.add_parser('check-models')
+    models.add_argument('version')
+    models.add_argument('examples', nargs='+')
     args = parser.parse_args(argv)
     try:
-        create(args.dest, args.replace + (host_goldens(args.host_goldens) if args.host_goldens else []))
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        if args.command == 'check-models':
+            check_models(args.version, args.examples)
+        else:
+            create(args.dest, args.replace + (host_goldens(args.host_goldens) if args.host_goldens else []))
+    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1
     return 0
