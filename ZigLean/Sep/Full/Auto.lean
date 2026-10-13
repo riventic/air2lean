@@ -4325,6 +4325,10 @@ def isSegment (t : Expr) : Bool :=
 /-- Does `e` mention a `WP`? -/
 def hasWP (e : Expr) : Bool := (e.find? (·.isConstOf wpN)).isSome
 
+/-- Does `e` mention a step's run (`(x.run m).run = …`: a hypothesis kept as it is)? -/
+def hasRun (e : Expr) : Bool :=
+  (e.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome
+
 mutual
 
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
@@ -4332,7 +4336,7 @@ the rest by `destruct` (equations substituted, user definitions unfolded). The e
 step's run (`(x.run m).run = …`) stays. -/
 partial def wpSplit (g : MVarId) (h : FVarId) : TacticM (List MVarId) := g.withContext do
   let ty ← whnfR (← instantiateMVars (← h.getType))
-  if (ty.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome then return [g]
+  if hasRun ty then return [g]
   if ty.isAppOfArity ``Or 2 then
     let gs ← g.cases h
     return ← gs.toList.flatMapM fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
@@ -4359,7 +4363,7 @@ lemmas (`upd_self`), then split. -/
 partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  if (ty.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome then return [g]
+  if hasRun ty then return [g]
   let (r, _) ← simp ty (← wpHypCtx extra)
   if r.expr == ty then return ← wpSplit g h
   let some (h', g') ← applySimpResultToLocalDecl g h r false | return []
