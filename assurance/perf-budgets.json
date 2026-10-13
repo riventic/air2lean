@@ -723,7 +723,8 @@
       "prefix": "asm.",
       "translate_args": [
         "--profile",
-        "legacy-abi64-le"
+        "legacy-abi64-le",
+        "--assume-asm-cpu-features"
       ],
       "reference_gen": "Proofs/Asm/Gen.lean",
       "proof_modules": [
