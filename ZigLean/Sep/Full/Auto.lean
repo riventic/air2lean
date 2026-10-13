@@ -4034,8 +4034,15 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     else do
       let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``bind_pure)) _ ?_)) g | throwError "fsym"
       return ← walk g' user extra (fuel - 1)
-  -- an atomic op's oracle choice: every choice
+  -- an atomic op's oracle choice: a pick rule (the options at an owned word), else every choice
   if L.conc && x.isAppOfArity ``ConcM.sync 2 && (x.getArg! 1).isAppOf ``SyncOp.pick then
+    -- (only the rules about a pick of the same count function: no unfolding of other counts)
+    let countHead := fun (e : Expr) => (e.find? (·.isAppOf ``SyncOp.pick)).map (·.appArg!.getAppFn)
+    for r in ← rules user x do
+      unless countHead (← inferType r) == countHead x do continue
+      let s ← saveState
+      if let some (k, []) ← tryRule g r x f then return ← walk k user extra (fuel - 1)
+      s.restore
     let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.C.pick _ fun _ => ?_)) g | throwError "fsym: pick"
     return ← walk g' user extra (fuel - 1)
   let h2 ← IO.getNumHeartbeats

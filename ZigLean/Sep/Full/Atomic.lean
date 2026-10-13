@@ -869,6 +869,106 @@ theorem frame_off {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Na
     ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 8 → rF.heap.erase (b, x) = none :=
   fun x h1 h2 => abytesAt_frame hh hab hpb x h1 (by rw [hsz]; exact h2)
 
+/-- **An owned word offers only its newest message** (`Mem.MsgCov`): after an atomic op's record
+and `locIdx` at a word whose bytes the thread owns, in a memory whose messages are covered, the
+newest message happened before the thread, so the floor of its read is that message
+(`floor_newest`). Every recorded access to the location's bytes happened before the thread
+(`Mem.Owns`), so every message did. -/
+theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+    (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+    (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
+    {k : AccessKind} {li : Nat}
+    (hl : ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run = some (.ok (li, m₁))) :
+    0 < (m₁.atomics[li]!).msgs.size ∧
+      VClock.le ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).clock
+        (m₁.clocks[m₁.current]!) = true := by
+  obtain ⟨blk, hblk, hbsz⟩ := word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 k) rfl
+  have hcur : (curBytes (m.recordAt b p.off.toNat 8 k) b p.off.toNat 8).size = 8 := by
+    simp only [curBytes, hblk, Option.map_some, Option.getD_some, Array.size_extract]; omega
+  have hw' : ShapesWF (shapes (m.recordAt b p.off.toNat 8 k)) := hw
+  obtain ⟨⟨a, sn, next, hm₁⟩, hli, hlb, hlo, hpos, -, hwf₁, htag⟩ :=
+    locIdx_post hw' (by decide) hcur hl
+  -- the location is the word's 8 bytes
+  have hlen : (m₁.atomics[li]!).len = 8 := by
+    have hmem : ALoc.shape (m₁.atomics[li]!) ∈ shapes m₁ := by
+      rw [getElem!_pos m₁.atomics li hli]; exact shape_mem hli
+    have h0 := hwf₁.1 _ hmem
+    simp only [ALoc.shape] at h0
+    have h1 := tagOf_of_mem hwf₁ hmem (b := b) (x := p.off.toNat)
+      ⟨hlb, by simp only [ALoc.shape, hlo]; exact Nat.le_refl _, by simp only [ALoc.shape, hlo]; omega⟩
+    have h2 := htag b p.off.toNat
+    rw [if_pos ⟨rfl, Nat.le_refl _, show p.off.toNat < p.off.toNat + 8 by omega⟩, h1] at h2
+    simp only [ALoc.shape, Option.some.injEq, Prod.mk.injEq] at h2
+    exact h2.2
+  have hmc₁ : m₁.MsgCov := (FStepIn.locIdx (hF := fun _ => none) (by decide) (fun _ _ _ => rfl)
+    ⟨blk, hblk, hbsz⟩ hl).msgCov hmc.recordAt
+  have hcl₁ : m₁.clocks = (m.recordAt b p.off.toNat 8 k).clocks := by rw [hm₁]
+  have hfp₁ : m₁.footprint = (m.recordAt b p.off.toNat 8 k).footprint := by rw [hm₁]
+  have hcu₁ : m₁.current = m.current := by rw [hm₁]; rfl
+  -- every recorded access to the location's bytes happened before the thread
+  have hover : (m₁.atomics[li]!).over m₁ (m₁.clocks[m₁.current]!) = true := by
+    refine ALoc.over_iff.mpr fun e he ⟨h1, h2, h3, h4⟩ => ?_
+    rw [hcl₁, hcu₁, recordAt_clock hc]
+    rw [hfp₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · rw [hlb] at h1; rw [hlo] at h3 h4; rw [hlen] at h4
+      obtain ⟨x, hx1, hx2, hx3, hx4⟩ : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ p.off.toNat ≤ x ∧
+          x < p.off.toNat + 8 := by
+        rcases Nat.le_total e.off p.off.toNat with h | h
+        · exact ⟨p.off.toNat, h, by omega, Nat.le_refl _, by omega⟩
+        · exact ⟨e.off, Nat.le_refl _, by omega, h, by omega⟩
+      have hx := abytesAt_mine hab hpb x hx3 (by rw [hsz]; exact hx4)
+      refine VClock.le_trans (ho e he (.inl ⟨x, hx1, hx2, ?_⟩)) (VClock.le_bump _ _)
+      rw [h1]; exact hx
+    · exact VClock.le_refl _
+  -- so did the newest message
+  have hmem : m₁.atomics[li]! ∈ m₁.atomics := by
+    rw [getElem!_pos m₁.atomics li hli]; exact Array.getElem_mem hli
+  exact ⟨hpos, ((hmc₁ _ hmem (by omega)).2 _ (last_mem hpos)).1 _ hover⟩
+
+/-- `newest_before`: the floor of the read is the newest message. -/
+theorem floor_newest {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+    (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+    (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
+    {k : AccessKind} {li : Nat}
+    (hl : ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run = some (.ok (li, m₁))) :
+    floorPos m₁ li = (m₁.atomics[li]!).msgs.size - 1 := by
+  obtain ⟨hpos, hle⟩ := newest_before hh hc ho hmc hw hab hsz hpb hl
+  rw [getElem!_pos (m₁.atomics[li]!).msgs _ (Nat.sub_lt hpos Nat.one_pos)] at hle
+  have := le_floorPos (m := m₁) (li := li) (Nat.sub_lt hpos Nat.one_pos) hle
+  have := floorPos_lt hpos
+  omega
+
+/-- A read whose floor is the newest message has one option at most. -/
+theorem readOpts_size_le {m : Mem} {li : Nat} {rmw : Bool}
+    (hf : floorPos m li = (m.atomics[li]!).msgs.size - 1) : (readOpts m li rmw).size ≤ 1 := by
+  unfold readOpts
+  refine Nat.le_trans Array.size_filter_le ?_
+  simp only [Array.size_map, Array.size_range, hf]; omega
+
+/-- A write whose floor is the newest message has one place at most. -/
+theorem writeSlots_size_le {m : Mem} {li : Nat}
+    (hf : floorPos m li = (m.atomics[li]!).msgs.size - 1) : (writeSlots m li).size ≤ 1 := by
+  unfold writeSlots
+  refine Nat.le_trans Array.size_filter_le ?_
+  simp only [Array.size_map, Array.size_range, hf]; omega
+
+/-- The options of an op whose preparation gives at most `k ≥ 1` of them (`1` if it throws). -/
+theorem optCount_snd_le {α : Type} {x : MemM (Nat × Array α)} {m : Mem} {k : Nat} (hk : 1 ≤ k)
+    (h : ∀ li opts m', (x.run m).run = some (.ok ((li, opts), m')) → opts.size ≤ k) :
+    optCount ((·.2) <$> x) m ≤ k := by
+  match e : (x.run m).run with
+  | some (.ok ((li, opts), m')) => rw [optCount_eq e]; exact h li opts m' e
+  | none =>
+    unfold optCount
+    rw [StateT.run_map, ExceptT.run_map, e]; exact hk
+  | some (.error er) =>
+    unfold optCount
+    rw [StateT.run_map, ExceptT.run_map, e]; exact hk
+
 /-- The block's kind is the owned word's (its cells name it). -/
 theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat}
     {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)

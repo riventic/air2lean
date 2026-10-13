@@ -328,4 +328,11 @@ attribute [fsym] FTriple.atomicLoadUnorderedEnc FTriple.cmpxchgPtr FTriple.atomi
   FTriple.atomicXchgPtrW FTriple.cmpxchgWeakPtrW FTriple.atomicRmwW FTriple.atomicLoadUnorderedW
   FTriple.atomicRmw FTriple.atomicXchgPtr FTriple.cmpxchgWeakPtr FTriple.atomicLoadUnordered
 
+-- The oracle's choice at an owned word (`AtomicRules.lean`, `CTriple.pick_one`): the one option
+-- of a load, a store, an RMW or a strong `cmpxchg`, both of a weak one. `fsym` tries them before
+-- `C.pick` (every choice).
+attribute [fsym] CTriple.pick_load CTriple.pick_loadE CTriple.pick_rmw CTriple.pick_rmwE
+  CTriple.pick_store CTriple.pick_storeE CTriple.pick_cas CTriple.pick_casPtr CTriple.pick_weakCas
+  CTriple.pick_weakCasPtr CTriple.pick_unordered CTriple.pick_unorderedE
+
 end Zig.Full.Auto
