@@ -40,18 +40,6 @@ theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
 
 /-! ## `remapByteBuffer` (the byte remap of `Allocator.remap`), branch by branch -/
 
-/-- An access fails with `.illegal` or returns its block. -/
-theorem access_cases (m : Mem) (p : Ptr) (n a : Nat) :
-    m.access p n a = throw .illegal ∨ ∃ b blk o, m.access p n a = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 /-- Default remap failure is an exact no-op on all memory, even before success validation.
 This preserves the old model's failure-only behavior, including its admitted call scope. -/
 theorem remapByteBuffer_default_run {m : Mem} (s : Slice) (n : Nat)

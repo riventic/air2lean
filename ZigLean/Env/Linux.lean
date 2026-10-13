@@ -110,17 +110,6 @@ def close (fd : BitVec 32) : MemM (BitVec 64) := fun m =>
 
 /-! ## Run lemmas -/
 
-theorem access_cases' (m : Mem) (p : Ptr) (n al : Nat) :
-    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 theorem raceAt_illegal' {fp : Array FootprintEntry} {c : VClock} {b o len : Nat} {k : AccessKind}
     {err : Error} (h : raceAt fp c b o len k = some err) : err = .illegal := by
   obtain ⟨e, -, he⟩ := Array.exists_of_findSome?_eq_some h
@@ -145,7 +134,7 @@ theorem loadBytes_cases (p : Ptr) (n a : Nat) (m : Mem) :
     ((loadBytes p n a).run m).run = some (.error .illegal) ∨
     ∃ b blk o, m.access p n a = pure (b, blk, o) ∧
       ((loadBytes p n a).run m).run = some (.ok (blk.bytes.extract o (o + n), m.recordAt b o n .read)) := by
-  rcases access_cases' m p n a with h | ⟨b, blk, o, h⟩
+  rcases access_cases m p n a with h | ⟨b, blk, o, h⟩
   · left
     simp [loadBytes, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw, throwThe,
@@ -170,7 +159,7 @@ theorem storeBytes_cases (p : Ptr) (a : Nat) (bs : Array Byte) (m : Mem) :
     ∃ b blk o, m.access p bs.size a = pure (b, blk, o) ∧
       ((storeBytes p a bs).run m).run =
         some (.ok ((), (m.recordAt b o bs.size .write).write b blk o bs)) := by
-  rcases access_cases' m p bs.size a with h | ⟨b, blk, o, h⟩
+  rcases access_cases m p bs.size a with h | ⟨b, blk, o, h⟩
   · left
     simp [storeBytes, Mem.accessW, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw, throwThe,

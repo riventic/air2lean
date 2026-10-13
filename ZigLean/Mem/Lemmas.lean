@@ -123,6 +123,18 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
+/-- `Mem.access` throws only `.illegal`. -/
+theorem access_cases (m : Mem) (p : Ptr) (n al : Nat) :
+    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
+  unfold Mem.access
+  split
+  · exact .inl rfl
+  · split
+    · exact .inl rfl
+    · split
+      · exact .inr ⟨_, _, _, rfl⟩
+      · exact .inl rfl
+
 /-- A successful access starts at or above its block's first live offset. -/
 theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
