@@ -323,12 +323,14 @@ free list) is not attempted.
   therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
   ownership and run lemmas, the resource updates that end each branch (`free_last_upd`,
   `free_other_upd`, `resize_shrink_upd`, `resize_grow_upd`, `resize_other_upd`,
-  `resize_false_of`), and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
-  `arena_loadBuf`, which walk the generated code), and each module's file states the theorems with one command
-  (`arena_spec_statements`, `checked` for the patched arena) and proves them with these tactics,
-  elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
-  (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,
-  so the check passes).
+  `resize_false_of`), and the proof tactics `arena_resize`, `arena_remap`, `arena_loadBuf`,
+  which walk the generated code), and each module's file states the theorems with one command
+  (`arena_spec_statements`, `checked` for the patched arena) and proves them, elaborated against
+  its code (VST-style). `free` is walked by `fsym` alone, with the updates that end its branches
+  (`fsym [toInt_step, free_other_upd, free_last_upd]`; `toInt_step` is the generated
+  `Node.Size.toInt` of the size word as a step rule). The patched `free` and `resize` add a
+  bounds check (`fsym` decides it from the invariant; `arena_resize_checked` for `resize`: the
+  invariant keeps `end_index` within the buffer, so the check passes).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
   (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an

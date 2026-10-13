@@ -12,6 +12,7 @@ import ZigLean.Sep.Full.Parts
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.OwnedBound
 import ZigLean.Sep.Full.WordPlain
+import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Range
 
 /-!
@@ -21,9 +22,10 @@ Everything the proofs of the arena's entries need that does not depend on the ge
 the invariant (`own`, `inv`), the variables of a precondition (`OV`, `FV`), ownership and run
 lemmas, the resource updates that end each branch (ghost ledger, extent shares and receipts,
 `free_last_upd` … `resize_false_of`; stated over the invariant, not the code), and the **proof
-tactics** of the entries (`arena_free`, `arena_resize`, `arena_remap`,
-`arena_loadBuf`, `arena_toInt`; `arena_free_checked`, `arena_resize_checked` for the patched
-arena's bounds check). Each generated module (`AllocArena/ArenaLinux.lean`,
+tactics** of the entries not yet walked by `fsym` (`arena_resize`, `arena_remap`,
+`arena_loadBuf`, `arena_toInt`; `arena_resize_checked` for the patched arena's bounds check).
+`free` is `fsym` with the two updates that end its branches (`free_other_upd`, `free_last_upd`)
+and the rule `toInt_step` for the generated `Node.Size.toInt` of the size word. Each generated module (`AllocArena/ArenaLinux.lean`,
 `ArenaFixedLinux.lean`, …) has its own spawn-target type `Tgt` and its own copies of the std
 types, so no generated term of one is a term of another. The specification files
 (`ArenaSpec.lean`, `ArenaSpecMacos.lean`: the stock arena on x86_64-linux and aarch64-macos,
@@ -2371,77 +2373,6 @@ macro "arena_bounds" : tactic => `(tactic| (
   simp only [hgt, Bool.false_eq_true, ↓reduceIte]
 ))
 
-/-- `free` from the comparison of `buf_ptr + end_index` with the slice's end. -/
-macro "arena_free_tail" : tactic => `(tactic| (
-  -- `buf_ptr + end_index`, `memory.ptr + memory.len`, and their comparison (O-F: `last_dec`)
-  refine CTriple.pureStep (v := (v.N.add 24).add v.w.ei) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [ptrProject_elem_run (by simpa [Ptr.add] using hbN) e2 (by simp [Ptr.add]; omega)
-      (by simp [Ptr.add, hei64]; omega), hei64]
-  refine CTriple.pureStep (v := s.ptr.add s.len.toNat) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    exact ptrProject_elem_run hbp e3 hp0 (by omega)
-  refine CTriple.pureStep (v := !decide (v.bp = v.bN ∧
-    s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, hap, hsame⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [StateT.run_bind, ptrEqAddr_run (q := s.ptr.add s.len.toNat) (by simpa [Ptr.add] using hbN) e2
-      (by simpa [Ptr.add] using hbp) e3, last_dec (P := (v.N.add 24).add v.w.ei)
-      (Q := s.ptr.add s.len.toNat) (xN := v.N.off.toNat + 24 + v.w.ei)
-      (xP := s.ptr.off.toNat + s.len.toNat) (by simp only [Ptr.add]; omega)
-      (by simp only [Ptr.add]; omega) (by omega) (by omega) (by omega) (by omega) hap hsame]
-    simp only [pure_bind, StateT.run_pure]
-  by_cases heq : v.bp = v.bN ∧ s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei
-  · simp only [heq, and_self, decide_true, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
-    -- the slice is the first node's last allocation: its labels are the node's (`last_labels`),
-    -- and it lies past the header (`lo_of`)
-    obtain ⟨hb, hoff⟩ := heq
-    refine CTriple.facts (fun m r rF hh hp hs => And.intro (last_labels (G := G) hv hb hh hp)
-      (lo_of (G := G) hv (p := s.ptr) (bs := bs) (fun _ h => ⟨_, h⟩) (hb ▸ hbp) hpos (by omega) hp)) ?_
-    rintro ⟨⟨hA, hK⟩, hlo⟩
-    have hle : s.len.toNat ≤ (BitVec.ofNat 64 v.w.ei).toNat := by rw [hei64]; omega
-    have hd : (BitVec.ofNat 64 v.w.ei - s.len).toNat = v.w.ei - s.len.toNat := by
-      rw [BitVec.toNat_sub_of_le hle, hei64]
-    rw [Zig.sub_unsigned_of_le hle]
-    conc_norm
-    -- `buf_ptr + new_end_index == memory.ptr`
-    refine CTriple.pureStep (v := (v.N.add 24).add (v.w.ei - s.len.toNat : Nat))
-      (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      rw [ptrProject_elem_run (by simpa [Ptr.add] using hbN) e2 (by simp [Ptr.add]; omega)
-        (by simp [Ptr.add, hd]; omega), hd]
-    refine CTriple.pureStep (v := true) (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, hsame⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      rw [ptrEqAddr_run (by simpa [Ptr.add] using hbN) e2 hbp e3, hsame hb]
-      have : ((v.N.add 24).add (v.w.ei - s.len.toNat : Nat)).off = s.ptr.off := by
-        simp only [Ptr.add]; omega
-      simp [this]
-    rw [debug_assert_true]
-    conc_norm
-    refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-    refine CTriple.pick_bind ?_
-    -- the strong `cmpxchg` finds `end_index` and moves it back
-    refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
-      (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-    refine CTriple.bind (CTriple.liftMem (((FTriple.cmpxchgHitW (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-      (BitVec.ofNat 64 v.w.ei - s.len) _ _).post fun _ _ => sep_mono_right fun _ => apts_wpts).frame))
-      fun _ => ?_
-    have hnew : BitVec.ofNat 64 v.w.ei - s.len = BitVec.ofNat 64 (v.w.ei - s.len.toNat) := by
-      apply BitVec.eq_of_toNat_eq; rw [hd, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
-      have := hnf.small; omega
-    refine CTriple.eupd (free_last_upd hv hx hfirst hnf hei htail hb hA hK hlen hoff hlo hnew) ?_
-    exact CTriple.ret' () fun _ h => h
-  · -- not the last allocation: the slice leaks to the arena
-    simp only [heq, decide_false, Bool.not_false, ↓reduceIte]
-    refine CTriple.eupd (free_other_upd hv hx hfirst hnf hei htail hlen) ?_
-    exact CTriple.ret' () fun _ h => h))
-
 /-- `resize` from the comparison of `buf_ptr + end_index` with the slice's end. -/
 macro "arena_resize_tail" : tactic => `(tactic| (
   obtain ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ := hx
@@ -2602,17 +2533,6 @@ macro "arena_remap" : tactic => `(tactic| (
   refine CTriple.bind (resize_granted_ct CI γ e ctx s k n ra φ bs hlen hpos hn) fun b => ?_
   cases b <;> exact CTriple.ret' _ fun _ h => h))
 
-/-- `free` of the stock arena. -/
-macro "arena_free" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_free (free_pre hh hlen hpos hp) (rgn γ e s k bs)
-  arena_free_tail))
-
-/-- `free` of the patched arena: the bounds check first. -/
-macro "arena_free_checked" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_free (free_pre hh hlen hpos hp) (rgn γ e s k bs)
-  arena_bounds
-  arena_free_tail))
-
 /-- `resize` of the stock arena. -/
 macro "arena_resize" : tactic => `(tactic| (
   arena_prefix heap_ArenaAllocator_resize (pre_of (G := relB CI γ e ctx s n.toNat tl) hh hpos hp) (relB CI γ e ctx s n.toNat tl)
@@ -2633,7 +2553,6 @@ above. The specification files open their module and use it once; the identifier
 
 /-- The statements of a module's specification (section doc). -/
 macro "arena_spec_statements" chk:(&" checked")? : command => do
-  let freeT ← if chk.isSome then `(tactic| arena_free_checked) else `(tactic| arena_free)
   let resizeT ← if chk.isSome then `(tactic| arena_resize_checked) else `(tactic| arena_resize)
   return ⟨Lean.mkNullNode #[
     (← `(command|
@@ -2643,6 +2562,14 @@ theorem debug_assert_true : debug_assert true = pure () := rfl)),
 theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
     heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w) = pure w := by
   arena_toInt)),
+    (← `(command|
+/-- `Node.Size.toInt` of the bits of an even size as a step rule for `fsym` (the generated helper's
+bit operations are not arithmetic the solver reads). -/
+theorem toInt_step (w : BitVec 64) (h : w.toNat % 2 = 0) :
+    FTotalTriple emp (StateT.lift (heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w)))
+      (fun r => ⟪r = w⟫) := by
+  rw [toInt_ofBits w h]
+  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨w, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩)),
     (← `(command|
 /-- `Node.loadBuf` of a node whose `size` word holds the even size `sz`: the buffer after the
 header, `sz - 24` bytes. -/
@@ -2654,13 +2581,17 @@ theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block 
       (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (wpts N (BitVec.ofNat 64 sz) ⋆ R)) := by
   arena_loadBuf)),
     (← `(command|
-/-- `free`'s run, case by case (module doc). -/
+set_option maxHeartbeats 2000000 in
+/-- `free`'s run, case by case (module doc). Workaround (fsym-engine ledger row #53): `arith`
+proves the update's `FV.Facts` hypothesis by one `omega` over every fact, the node's pairwise
+disjointness disjunctions included (~1M heartbeats). -/
 theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
       (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
-  $freeT:tactic)),
+  unfold heap_ArenaAllocator_free
+  fsym [toInt_step, free_other_upd, free_last_upd])),
     (← `(command|
 /-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every
 child `CI` (`Child`), and every depth of the one-thread reading (`Sched.soloRun`). -/

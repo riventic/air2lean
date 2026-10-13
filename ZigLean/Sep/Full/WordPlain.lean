@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AtomicPlain
+import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.OwnedBound
 
 /-!
@@ -18,6 +19,10 @@ below keep the word's constraint, as `AtomicPlain.lean`'s do for `apts`:
   not a view, since `fsym` would otherwise go round in circles;
 * `facts_wpts` (`@[fsym_facts]`): its block and a nonnegative offset; `OwnsList.wpts`: its 8
   bytes, for `Holds.owned_length_le`.
+
+The atomic rules on a `wpts` (`FTriple.atomicLoadW`, `cmpxchgHitW`, …) are `@[fsym]` here, so
+`fsym` walks an atomic op of such a word; they leave an `apts`, which `apts_wpts_view`
+(`@[fsym_view]`) shows as a `wpts` again where an update or a return wants one.
 -/
 
 namespace Zig.Full
@@ -108,6 +113,11 @@ theorem wpts_of_region {A S : Nat} {K : BlockKind} {bs : Array Byte} {v : BitVec
     EUpd (up (regionIn p A S K 8 bs)) (wpts p v) := fun _ r _ hh h _ =>
   ⟨r.untag, hh.untag, wpts_of_up h.1.1 h.1.2.1 hsz hv ⟨h.1.2.2, h.2⟩⟩
 
+/-- **An atomic word is a word with any tag constraint** (`apts_wpts`): the view that gives an
+atomic op's `apts` back to an invariant that holds the word as a `wpts`. -/
+@[fsym_view] theorem apts_wpts_view {v : BitVec 64} : EUpd (apts p v) (wpts p v) :=
+  EUpd.of_imp fun _ h => apts_wpts h
+
 /-- A word with any tag constraint owns its 8 bytes (`OwnedBound.lean`). -/
 theorem OwnsList.wpts {b : BlockId} {v : BitVec 64} (hb : p.block = some b) :
     OwnsList (locRange b p.off.toNat 8) (wpts p v) := by
@@ -115,5 +125,8 @@ theorem OwnsList.wpts {b : BlockId} {v : BitVec 64} (hb : p.block = some b) :
   exact hs ▸ ownsList_bytes hb (abytesAt_bytesAt hab)
 
 end Words
+
+attribute [fsym] FTriple.atomicLoadW FTriple.atomicStoreW FTriple.cmpxchgHitW FTriple.atomicLoadAsW
+  FTriple.atomicRmwAsW FTriple.atomicStoreAsW FTriple.atomicLoadUnorderedAsW
 
 end Zig.Full

@@ -116,13 +116,6 @@ def tables : AllocTables Tgt where
     (⟨some 11, 0⟩, fun a => heap_ArenaAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2),
     (⟨some 15, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
 
-/-- `Node.Size.toInt` of the bits of an even size, as a step rule (`allocatedSliceUnsafe`). -/
-theorem toInt_step (w : BitVec 64) (h : w.toNat % 2 = 0) :
-    FTotalTriple emp (StateT.lift (heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w)))
-      (fun r => ⟪r = w⟫) := by
-  rw [toInt_ofBits w h]
-  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨w, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩
-
 /-- The child allocator read back from its bytes in the arena struct. -/
 theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
   simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
