@@ -627,6 +627,9 @@ theorem imp_trans (h₁ : ∀ r, X r → Y r) (h₂ : ∀ r, Y r → P r) : ∀ 
 
 theorem imp_eq (e : X = Y) : ∀ r, X r → Y r := fun _ h => e ▸ h
 
+/-- An existential assertion of a resource (a hypothesis of a `WP` walk: a segment's post). -/
+theorem ex_apply {γ : Type} {F : γ → FAssn} {r : Res} : FAssn.ex F r ↔ ∃ x, F x r := Iff.rfl
+
 /-- A branch of an assertion-level `if`, with its condition as a fact. -/
 theorem imp_ite_pos {c : Prop} [Decidable c] : ∀ r, (⟪c⟫ ⋆ X) r → (if c then X else Y) r :=
   fun _ h => by obtain ⟨hc, hx⟩ := sep_lift.mp h; rw [if_pos hc]; exact hx

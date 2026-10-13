@@ -223,6 +223,24 @@ def ruleConcl? (concl : Expr) : Option (Name × Expr) :=
     [``FTotalTriple, ``FTriple, ``FTTotalTriple, ``FTTriple].findSome? fun k =>
       if concl.isAppOfArity k 4 then some (k, concl.getArg! 2) else none
 
+/-- `P.WP t x Q G m n` (`Proto.WP`, a thread's run in a protocol: the `WP` backend). -/
+def wpN : Name := ``Zig.Conc.Proto.WP
+
+/-- The arguments `#[Tgt, γ, P, α, t, x, Q, G, m, n]` of a `WP` goal. -/
+def wpArgs? (e : Expr) : Option (Array Expr) :=
+  let e := e.consumeMData
+  if e.isAppOfArity wpN 10 then some e.getAppArgs else none
+
+/-- The key of a `WP` rule or command `x`: the head of the command, through `StateT.run` (a
+step of a concurrent body `(c : CM σ α).run s`). -/
+def wpKey (x : Expr) : Name :=
+  let x := x.consumeMData
+  let x := if x.isAppOfArity ``StateT.run 5 then x.getArg! 3 else x
+  match x.consumeMData.getAppFn with
+  | .const c _ => `wp ++ c
+  | .fvar _ => `wp.fvar
+  | _ => `wp
+
 /-- A thread's rule kind (`FTTotalTriple`, `FTTriple`). -/
 def isThreadKind (k : Name) : Bool := k == ``FTTotalTriple || k == ``FTTriple
 
@@ -240,7 +258,7 @@ partial def headKey (e : Expr) : Name :=
 /-- Unify when the heads agree. Applications of one constant are unified argument by argument
 (without unfolding the constant when the arguments differ: `load (BitVec 64) …` against
 `load Ptr …` fails without unfolding `load`). -/
-partial def unifyKeyed (a b : Expr) : MetaM Bool := do
+partial def unifyKeyed (a b : Expr) (anyGround := false) : MetaM Bool := do
   let ka := headKey a
   let kb := headKey b
   if ka != kb && ka != .anonymous && kb != .anonymous then
@@ -248,9 +266,11 @@ partial def unifyKeyed (a b : Expr) : MetaM Bool := do
     -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
     -- ground values only: a pattern with metavariables must not be matched by unfolding
     if (← instantiateMVars a).hasExprMVar || (← instantiateMVars b).hasExprMVar then return false
-    let ty ← whnfR (← inferType a)
-    unless ty.isAppOfArity ``BitVec 1 || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool do
-      return false
+    -- (a `WP` rule's command is a sync op of values of any type: a lock's states `S.unl`)
+    unless anyGround do
+      let ty ← whnfR (← inferType a)
+      unless ty.isAppOfArity ``BitVec 1 || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isConstOf ``Bool do
+        return false
     return ← isDefEq a b
   let a := a.consumeMData
   let b := b.consumeMData
@@ -259,7 +279,7 @@ partial def unifyKeyed (a b : Expr) : MetaM Bool := do
       if ca == cb && a.getAppNumArgs == b.getAppNumArgs then
         unless ← isDefEq a.getAppFn b.getAppFn do return false
         for (x, y) in a.getAppArgs.zip b.getAppArgs do
-          unless ← unifyKeyed x y do return false
+          unless ← unifyKeyed x y anyGround do return false
         return true
   isDefEq a b
 
@@ -354,13 +374,17 @@ structure RunCaches where
   viewProg : IO.Ref (Option Expr)
   /-- The context the caller's terms (`fsym [t]`) were elaborated in (`refreshUser`). -/
   userCtx : IO.Ref LocalContext
+  /-- The `WP` backend's simp contexts: concurrent bodies, and hypotheses after a stop. -/
+  wpProg : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
+  wpHyp : IO.Ref (Option Simp.Context)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
-           wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {} }
+           wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
+           wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1942,34 +1966,43 @@ where
   mkConstFun (p x : Expr) : MetaM Expr := do
     withLocalDeclD `h p fun h => do mkLambdaFVars #[h] (← mkEqRefl x)
 
+/-- The caller's simp terms (`fsym [t]` that are not rules) added to `thms`. -/
+def addExtra (thms : SimpTheorems) (extra : Array Syntax) : TacticM SimpTheorems := do
+  let mut thms := thms
+  for x in extra do
+    if let some n := (if x.isIdent then some x.getId else none) then
+      if let some n ← (try some <$> realizeGlobalConstNoOverloadWithInfo (mkIdent n) catch _ => pure none) then
+        thms ← thms.addConst n
+        continue
+    let e ← Term.elabTerm x none
+    thms ← thms.add (.stx (← mkFreshId) x) #[] e
+  return thms
+
+/-- Every rewrite carries its proof, also a definitional one (`StateT.run_bind`, a `rfl`
+theorem): simp leaves a definitional step to the kernel at a join of its proof (`Eq.trans`),
+where it unfolds `StateT.run`/`bind` against the step's continuation, the rest of the program;
+on arena `resize` (a `match` on a label after `pure`) that check ran out of 10 GB. -/
+def noRflThms (thms : SimpTheorems) : SimpTheorems :=
+  let noRfl (ts : Array SimpTheorem) := ts.map ({ · with rfl := false })
+  { thms with pre := thms.pre.mapArrays noRfl, post := thms.post.mapArrays noRfl }
+
+/-- The program normal form: `fsym_norm` and the caller's simp terms, with Lean's simprocs. -/
+def progCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+  if let some cp ← (← caches).prog.get then return cp
+  let some ext ← getSimpExtension? `fsym_norm | throwError "fsym: no fsym_norm"
+  let thms := noRflThms (← addExtra (← ext.getTheorems) extra)
+  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  -- Lean's simprocs, without the word complement of a literal: its value would make the
+  -- program equal to the folded one only by a deep unfolding in the kernel
+  let mut procs : Simp.SimprocsArray := #[(← Simp.getSimprocs).erase ``BitVec.reduceNot]
+  if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
+  (← caches).prog.set (some (ctx, procs))
+  return (ctx, procs)
+
 /-- Simplify the head of the program (`lazyMethods`) with `fsym_norm` and the caller's lemmas. -/
 def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
   let (g, L, α, P, c, Q) ← view g
-  let (ctx, procs) ← match ← (← caches).prog.get with
-    | some cp => pure cp
-    | none => do
-      let some ext ← getSimpExtension? `fsym_norm | throwError "fsym: no fsym_norm"
-      let mut thms ← ext.getTheorems
-      for x in extra do
-        if let some n := (if x.isIdent then some x.getId else none) then
-          if let some n ← (try some <$> realizeGlobalConstNoOverloadWithInfo (mkIdent n) catch _ => pure none) then
-            thms ← thms.addConst n
-            continue
-        let e ← Term.elabTerm x none
-        thms ← thms.add (.stx (← mkFreshId) x) #[] e
-      -- every rewrite carries its proof, also a definitional one (`StateT.run_bind`, a `rfl`
-      -- theorem): simp leaves a definitional step to the kernel at a join of its proof (`Eq.trans`),
-      -- where it unfolds `StateT.run`/`bind` against the step's continuation, the rest of the
-      -- program; on arena `resize` (a `match` on a label after `pure`) that check ran out of 10 GB
-      let noRfl (ts : Array SimpTheorem) := ts.map ({ · with rfl := false })
-      thms := { thms with pre := thms.pre.mapArrays noRfl, post := thms.post.mapArrays noRfl }
-      let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
-      -- Lean's simprocs, without the word complement of a literal: its value would make the
-      -- program equal to the folded one only by a deep unfolding in the kernel
-      let mut procs : Simp.SimprocsArray := #[(← Simp.getSimprocs).erase ``BitVec.reduceNot]
-      if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
-      (← caches).prog.set (some (ctx, procs))
-      pure (ctx, procs)
+  let (ctx, procs) ← progCtx extra
   let foldCtx : MetaM Simp.Context := do
     if let some f ← (← caches).fold.get then return f
     let thms ← ({} : SimpTheorems).addConst ``Full.callIndirect_fold_one
@@ -3607,7 +3640,7 @@ def refreshUser (e : Expr) : MetaM Expr := do
   return body
 
 /-- The registered rules and the caller's. -/
-def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
+def rules (user : Array Expr) (x : Expr) (wp := false) : MetaM (Array Expr) := do
   -- the registered rules by the head of their command, once per run
   let keyed ← match ← (← caches).rules.get with
     | some k => pure k
@@ -3620,16 +3653,22 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
           -- a `CTriple` rule's command may unfold to the program's (`unfoldToHead`): any key
           pure (match ruleConcl? concl with
             | some (k, c) => if k == ``CTriple then .anonymous else headKey c
-            | none => .anonymous)
+            | none => match wpArgs? concl with
+              | some a => wpKey a[5]!
+              | none => .anonymous)
         k := k.push (key, n)
       (← caches).rules.set (some k)
       pure k
   let cmd := (memCmd? x).getD x
-  let kx := headKey cmd
+  let kx := if wp then wpKey x else headKey cmd
   let mut out ← (← user.mapM refreshUser).filterM fun u => return !(← isUpd u)
   for (key, n) in keyed do
-    if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
+    -- a `WP` rule only in a `WP` walk, by the head of its command
+    if (`wp).isPrefixOf key != wp then continue
+    if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar ||
+        key == `wp.fvar || kx == `wp.fvar || key == `wp || kx == `wp then
       out := out.push (← mkConstWithFreshMVarLevels n)
+  if wp then return out
   -- a load, last: from the bytes the precondition reads (`load_reads`: a struct whose fields
   -- are owned apart, a region that holds a value's encoding)
   if cmd.isAppOfArity ``Zig.load 4 then out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
@@ -3841,6 +3880,50 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
     mkLambdaFVars #[z] (mkT L α P c' Q)
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
+/-- **Post inference.** A return of `v` in the state `P` where the postcondition is the unknown
+`Q` (a `MemM` segment of a `WP` walk, whose post the walk computes): `Q` becomes the strongest
+post `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ P)`, with the locals that the walk introduced (the data
+`xs` existentially, the facts `φs` as facts, in their order), and the update `EUpd P (Q v)` is
+proved with the locals as witnesses. `none` if a local cannot be abstracted (a sort above
+`Type`, a fact whose proof the state names) or the post would name a local of the walk that is
+not in `Q`'s context (a substitution replaced it). -/
+def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
+  let Q ← instantiateMVars Q
+  let outer := (← Q.mvarId!.getDecl).lctx
+  let locals := (← getLCtx).foldl (init := #[]) fun acc d =>
+    if d.isImplementationDetail || outer.contains d.fvarId then acc else acc.push d
+  let s ← saveState
+  try
+    -- the bodies of the post at the result `rv`, outermost first (the last is `⟪rv = v⟫ ⋆ P`)
+    let bodies (rv : Expr) : MetaM (Array Expr) := do
+      let mut b := mkSep (mkApp (mkConst liftN) (← mkEq rv v)) P
+      let mut out := #[b]
+      for d in locals.reverse do
+        if ← isProp d.type then
+          if b.containsFVar d.fvarId then throwError "the state names the fact {d.userName}"
+          b := mkSep (mkApp (mkConst liftN) d.type) b
+        else
+          unless (← whnfD (← inferType d.type)) == mkSort levelOne do
+            throwError "{d.userName} is not of a type in `Type`"
+          b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
+        out := out.push b
+      return out.reverse
+    let post ← withLocalDeclD `r (← inferType v) fun r => do mkLambdaFVars #[r] (← bodies r)[0]!
+    unless ← isDefEq Q post do throwError "the post names a local outside its context"
+    -- `∀ r, P r → Q v r`: the locals as witnesses, the facts by their hypotheses
+    let bs ← bodies v
+    let mut pf ← mkAppM ``imp_lift #[← mkEqRefl v, ← mkAppOptM ``imp_refl #[P]]
+    for i' in [0:locals.size] do
+      let i := locals.size - 1 - i'
+      let d := locals[i]!
+      pf ← if ← isProp d.type then mkAppM ``imp_lift #[d.toExpr, pf]
+        else mkAppOptM ``imp_ex #[P, d.type, ← mkLambdaFVars #[d.toExpr] bs[i + 1]!, d.toExpr, pf]
+    let h ← mkAppM ``EUpd.of_imp #[pf]
+    return some (← mkExpectedTypeHint h (← mkAppM ``EUpd #[P, mkApp Q v]))
+  catch ex =>
+    trace[fsym] "post inference: {ex.toMessageData}"
+    s.restore; return none
+
 mutual
 /-- An indirect call `callIndirect f ((p, y) :: arms) d` that no rule covers: `y` if the facts
 show `f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is the last arm `d`:
@@ -3879,16 +3962,21 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
 
 /-- Split on a variable of an inductive type and walk each case. -/
 partial def casesWalk (g : MVarId) (d : Expr) (user : Array Expr := #[]) (extra : Array Syntax := #[])
-    (fuel : Nat := 0) : TacticM (List MVarId) := do
+    (fuel : Nat := 0) : TacticM (List MVarId) :=
+  casesThen g d (walk · user extra (fuel - 1))
+
+/-- Split on a variable of an inductive type, re-split the facts about it, and go on with
+`next` in each case. -/
+partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List MVarId)) :
+    TacticM (List MVarId) := do
   let gs ← g.cases d.fvarId!
   let mut out := []
   for sg in gs do
     let mut g' := sg.mvarId
-    -- re-split facts about the variable
     for decl in (← g'.withContext getLCtx) do
       unless decl.isImplementationDetail do
         g' ← destruct g' decl.fvarId <|> pure g'
-    out := out ++ (← walk g' user extra (fuel - 1))
+    out := out ++ (← next g')
   return out
 
 partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
@@ -3932,6 +4020,11 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
+    -- a postcondition to infer (a `MemM` segment of a `WP` walk): the state
+    if (← instantiateMVars Q).isMVar then
+      if let some h ← inferPost Q P v then
+        g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
+        return []
     let Qv := (mkApp Q v).headBeta
     let s ← saveState
     let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
@@ -4029,7 +4122,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
-      let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``bind_pure)) _ ?_)) g | throwError "fsym"
+      -- (applied, not elaborated: the post may be an unknown, `inferPost`)
+      let [g'] ← g.apply (← mkConstWithFreshMVarLevels (L.nm ``bind_pure)) | throwError "fsym"
       return ← walk g' user extra (fuel - 1)
   -- an atomic op's oracle choice: `0` in one thread
   if L.conc && x.isAppOfArity ``ConcM.sync 2 && (x.getArg! 1).isAppOf ``SyncOp.pick then
@@ -4096,6 +4190,355 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
 
 end
 
+/-! ## The `WP` backend: a thread's run in a protocol
+
+A goal `P.WP t x Q G m n` has no assertion: the state of the walk is the context (the
+protocol's invariant `P.inv (upd G t g) m`, the thread's part `FOwned own rO m` and what
+it owns, the facts of the memory). The walk is `walk`'s: the program in normal form
+(`fsym_norm` and the steps of a concurrent body, `CNorm`), results, `if`s and `match`es split
+or decided by the facts, and each command by a rule (the caller's, then the `@[fsym]` rules
+whose conclusion is a `WP` of the command). A rule's hypotheses are of three kinds:
+* **continuations** (they name the rule's post `Q`, which is the goal's: the rest of the
+  program after the command): their binders are introduced (a product by its components, a
+  fact split: `∧`, `∃`, `∨` by cases, equations substituted), an `∃` gets a witness that its
+  side goals fix by unification, and the walk goes on; a rule with a fixed post goes through
+  `WP.mono`, with its post as the hypothesis of the continuation;
+* **segments**: a thread triple `FTTriple Pa x ?Qa` of a `MemM` step, walked by the thread
+  backend with its precondition from the context and its postcondition inferred
+  (`inferPost`);
+* **side goals**, by assumption (up to reducible unfolding, fixing unknowns), arithmetic and
+  providers (`solveSides`), after the caller's simp terms, `upd_self` and the memory's
+  equations of the context (`m'.threads = m.threads`) rewrote them; automatic arguments
+  (`autoParam`) by their own tactic. -/
+
+/-- The simp context of a concurrent body: the program normal form and the steps of `CM`. -/
+def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+  if let some cp ← (← caches).wpProg.get then return cp
+  let (ctx, procs) ← progCtx extra
+  let mut thms : SimpTheorems := {}
+  for n in [``Zig.CNorm.run_ite, ``Zig.CNorm.run_throw, ``Zig.CNorm.throw_bind,
+      ``Zig.CNorm.run_get, ``Zig.CNorm.run_modify, ``Zig.CNorm.run_pickC, ``Zig.CNorm.pick_assoc,
+      ``Zig.CNorm.liftMem_pure, ``Zig.CNorm.liftMem_lift_pure, ``Zig.CNorm.liftMem_lift_throw] do
+    thms ← thms.addConst n
+  let ctx' ← Simp.mkContext (simpTheorems := ctx.simpTheorems.push (noRflThms thms))
+    (congrTheorems := ← getSimpCongrTheorems)
+  (← caches).wpProg.set (some (ctx', procs))
+  return (ctx', procs)
+
+/-- The simp context of a stop's hypotheses and side goals: the caller's simp terms, the ghost
+values of a thread (`upd_self`, `upd_upd`), the facts and witnesses of an assertion that holds
+of a resource (a segment's post: `ex_apply`, `sep_lift`). -/
+def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
+  if let some c ← (← caches).wpHyp.get then return c
+  let mut thms ← addExtra {} extra
+  for n in [``Zig.Conc.upd_self, ``Zig.Conc.Proto.upd_upd, ``ex_apply, ``Zig.Full.sep_lift] do
+    thms ← thms.addConst n
+  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  (← caches).wpHyp.set (some ctx)
+  return ctx
+
+/-- The goal `P.WP t x' Q G m n` from the arguments `a` of `P.WP t x Q G m n` and `x = x'`. -/
+def wpRewrite (g : MVarId) (a : Array Expr) (x' eq : Expr) : MetaM MVarId := do
+  let mot ← withLocalDeclD `z (← inferType a[5]!) fun z =>
+    mkLambdaFVars #[z] (mkAppN (mkConst wpN) (a.set! 5 z))
+  g.replaceTargetEq (mkAppN (mkConst wpN) (a.set! 5 x')) (← mkCongrArg mot eq)
+
+/-- The program of a `WP` goal in normal form (lazily: its first command). -/
+def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
+  let some a := wpArgs? (← instantiateMVars (← g.getType)) | return g
+  let (ctx, procs) ← wpCtx extra
+  let (r, _) ← Simp.main a[5]! ctx (methods := lazyMethods procs none)
+  if r.expr == a[5]! then return g
+  match r.proof? with
+  | none => g.replaceTargetDefEq (mkAppN (mkConst wpN) (a.set! 5 r.expr))
+  | some pf => wpRewrite g a r.expr pf
+
+/-- The equations of the context that relate a field of a local to another term
+(`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory). -/
+def fieldEqs : MetaM (Array Expr) := do
+  let mut out := #[]
+  for d in ← getLCtx do
+    if d.isImplementationDetail then continue
+    let some (_, l, _) := (← instantiateMVars d.type).eq? | continue
+    let .const c _ := l.getAppFn | continue
+    unless (← getProjectionFnInfo? c).isSome && l.appArg!.isFVar do continue
+    out := out.push d.toExpr
+  return out
+
+/-- `g` by a hypothesis, up to reducible unfolding (unknowns of `g` may be fixed). -/
+def wpAssumption (g : MVarId) : MetaM Bool := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let ds := (← getLCtx).foldl (init := #[]) fun acc d => if d.isImplementationDetail then acc else acc.push d
+  for d in ds.reverse do
+    let s ← saveState
+    if ← withReducibleAndInstances (isDefEq t d.type) then
+      g.assign d.toExpr; return true
+    s.restore
+  return false
+
+/-- An automatic argument (`(h : T := by tac)`): its tactic. -/
+def runAutoParam (g : MVarId) : TacticM Bool := do
+  let ty ← g.getType
+  let some (.const decl _) := ty.getAutoParamTactic? | return false
+  let .ok stx := Lean.Elab.evalSyntaxConstant (← getEnv) (← getOptions) decl | return false
+  let g ← g.replaceTargetDefEq ty.appFn!.appArg!
+  closeWith g stx
+
+/-- A thread triple (a `MemM` segment of a run). -/
+def isSegment (t : Expr) : Bool :=
+  t.isAppOfArity ``FTTriple 4 || t.isAppOfArity ``FTTotalTriple 4
+
+/-- Does `e` mention a `WP`? -/
+def hasWP (e : Expr) : Bool := (e.find? (·.isConstOf wpN)).isSome
+
+mutual
+
+/-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
+the rest by `destruct` (equations substituted, user definitions unfolded). The equation of a
+step's run (`(x.run m).run = …`) stays. -/
+partial def wpSplit (g : MVarId) (h : FVarId) : TacticM (List MVarId) := g.withContext do
+  let ty ← whnfR (← instantiateMVars (← h.getType))
+  if (ty.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome then return [g]
+  if ty.isAppOfArity ``Or 2 then
+    let gs ← g.cases h
+    return ← gs.toList.flatMapM fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
+  if ty.isAppOfArity ``And 2 then
+    let gs ← g.cases h
+    let some sg := gs[0]? | return []
+    let f1 := sg.fields[1]!.fvarId!
+    return ← (← wpSplit sg.mvarId sg.fields[0]!.fvarId!).flatMapM fun g' => do
+      if (← g'.withContext f1.findDecl?).isSome then wpSplit g' f1 else pure [g']
+  if ty.isAppOfArity ``Exists 2 then
+    let gs ← g.cases h
+    let some sg := gs[0]? | return []
+    return ← wpSplit sg.mvarId sg.fields[1]!.fvarId!
+  return [← destruct g h]
+
+/-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
+lemmas (`upd_self`), then split. -/
+partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
+  g.withContext do
+  let ty ← instantiateMVars (← h.getType)
+  if (ty.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome then return [g]
+  let (r, _) ← simp ty (← wpHypCtx extra)
+  if r.expr == ty then return ← wpSplit g h
+  let some (h', g') ← applySimpResultToLocalDecl g h r false | return []
+  wpSplit g' h'
+
+/-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
+`∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
+atom (`wpAtom`). The goals left. -/
+partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+    TacticM (List MVarId) := g.withContext do
+  if ← g.isAssigned then return []
+  let t0 ← instantiateMVars (← g.getType)
+  let t ← whnfR t0
+  if (wpArgs? t).isSome then
+    let g ← if t == t0 then pure g else g.replaceTargetDefEq t
+    return ← wpWalk g user extra fuel
+  if let .forallE _ ty _ _ := t then
+    let g ← if t == t0 then pure g else g.replaceTargetDefEq t
+    let (h, g) ← g.intro1P
+    let tyi ← whnfR (← instantiateMVars ty)
+    if tyi.isAppOfArity ``Prod 2 then
+      let gs ← g.cases h
+      return ← gs.toList.flatMapM (wpGoal ·.mvarId user extra fuel)
+    if ← isProp ty then
+      return ← (← wpHyp g h extra).flatMapM (wpGoal · user extra fuel)
+    return ← wpGoal g user extra fuel
+  if t.isAppOfArity ``Exists 2 then
+    let (β, p) := (t.getArg! 0, t.getArg! 1)
+    let w ← mkFreshExprMVar β
+    let g' ← mkFreshExprSyntheticOpaqueMVar (mkApp p w).headBeta
+    g.assign (← mkAppOptM ``Exists.intro #[β, p, w, g'])
+    return ← wpGoal g'.mvarId! user extra fuel
+  if t.isAppOfArity ``And 2 then
+    let a ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 0)
+    let b ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 1)
+    g.assign (← mkAppM ``And.intro #[a, b])
+    let (x, y) := if hasWP (t.getArg! 0) then (b, a) else (a, b)
+    let lx ← wpGoal x.mvarId! user extra fuel
+    return lx ++ (← wpGoal y.mvarId! user extra fuel)
+  if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
+  wpAtom g user extra fuel
+
+/-- An atomic proposition: by a hypothesis, arithmetic and providers; else rewritten by the
+caller's simp terms, the ghost values' lemmas and the memory's equations and tried again; else
+a user definition unfolded. -/
+partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+    TacticM (List MVarId) := g.withContext do
+  if ← wpAssumption g then return []
+  let t ← instantiateMVars (← g.getType)
+  if !t.hasExprMVar then
+    if let some [] ← solveSides [g] then return []
+  let ctx ← wpHypCtx extra
+  let mut thms := ctx.simpTheorems
+  let mut eqs : SimpTheorems := {}
+  for e in ← fieldEqs do eqs ← eqs.add (.fvar e.fvarId!) #[] e
+  let ctx ← Simp.mkContext (simpTheorems := thms.push eqs) (congrTheorems := ← getSimpCongrTheorems)
+  let s ← saveState
+  try
+    let (r, _) ← simp t ctx
+    if r.expr != t then
+      if r.expr.isTrue then
+        g.assign (← mkOfEqTrue (← r.getProof)); return []
+      let g' ← applySimpResultToTarget g t r
+      return ← wpGoal g' user extra fuel
+  catch _ => s.restore
+  if let .const c _ := t.getAppFn then
+    unless ← isLibrary c do
+      if let some t' ← unfold1 t then
+        return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
+  return [g]
+
+/-- A rule `r` on the command `x` of the goal `g` (arguments `a`): `none` if it does not apply,
+else the goals left. -/
+partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr)
+    (extra : Array Syntax) (fuel : Nat) : TacticM (Option (List MVarId)) := g.withContext do
+  let s ← saveState
+  let prep ← try
+      let (args, _, concl) ← forallMetaTelescope (← inferType r)
+      let some ca := wpArgs? (← instantiateMVars concl) | throwError "not a WP rule"
+      unless ← unifyKeyed ca[5]! x (anyGround := true) do throwError "command"
+      trace[fsym] "WP rule {r}: command unified"
+      for i in [2, 4, 7, 8, 9] do
+        unless ← isDefEq ca[i]! a[i]! do throwError "argument {i} of the WP"
+      let Qr ← instantiateMVars ca[6]!
+      let qid? := if Qr.isMVar then some Qr.mvarId! else none
+      if qid?.isSome then
+        unless ← isDefEq Qr a[6]! do throwError "post"
+      synthInstArgs args
+      let mut sides := #[]
+      let mut autos := #[]
+      let mut segs := #[]
+      let mut conts := #[]
+      for arg in args do
+        if ← arg.mvarId!.isAssigned then continue
+        let ty ← arg.mvarId!.getType
+        if ty.isAppOfArity ``autoParam 2 then autos := autos.push arg.mvarId!; continue
+        unless ← isProp ty do continue
+        if let some q := qid? then
+          if (ty.find? (· == .mvar q)).isSome then conts := conts.push arg.mvarId!; continue
+        if isSegment (← instantiateMVars ty).consumeMData then segs := segs.push arg.mvarId!; continue
+        sides := sides.push arg.mvarId!
+      -- side goals (they fix the unknowns of the segments' preconditions and of witnesses)
+      let mut left := []
+      for sg in sides do
+        for m in ← wpGoal sg user extra fuel do
+          if (← instantiateMVars (← m.getType)).hasExprMVar then
+            throwError "side goal not proved{indentExpr (← m.getType)}"
+          left := left ++ [m]
+      for ap in autos do
+        unless (← ap.isAssigned) || (← runAutoParam ap) do throwError "automatic argument"
+      -- the `MemM` segments: the thread backend, the post inferred
+      for sg in segs do
+        let ty ← instantiateMVars (← sg.getType)
+        if (ty.getArg! 1).hasExprMVar then throwError "the precondition of the segment is unknown"
+        trace[fsym] "WP rule {r}: segment{indentExpr ty}"
+        left := left ++ (← walk sg user extra fuel)
+      for arg in args do
+        let ai ← instantiateMVars arg
+        if ai.hasExprMVar && !(← isProp (← inferType arg)) then throwError "undetermined {ai}"
+      pure (some (← instantiateMVars (mkAppN r args), qid?.isSome, Qr, conts, left))
+    catch ex =>
+      trace[fsym] "WP rule {r}: {ex.toMessageData}"
+      pure none
+  let some (pf, direct, Qr, conts, left) := prep | s.restore; return none
+  trace[fsym] "WP rule {r} applies"
+  if direct then
+    g.assign pf
+    return some (left ++ (← conts.toList.flatMapM (wpGoal · user extra fuel)))
+  -- a fixed post: into the goal's (`WP.mono`)
+  let Qr ← instantiateMVars Qr
+  let (tG, tM) := (← inferType a[7]!, ← inferType a[8]!)
+  let hTy ← withLocalDeclD `r a[3]! fun v => do
+    withLocalDeclD `G tG fun G' => withLocalDeclD `m tM fun m' =>
+      withLocalDeclD `d (mkConst ``Nat) fun d => do
+        mkForallFVars #[v, G', m', d]
+          (← mkArrow (mkApp4 Qr v G' m' d).headBeta (mkApp4 a[6]! v G' m' d).headBeta)
+  let hm ← mkFreshExprSyntheticOpaqueMVar hTy
+  g.assign (← mkAppM ``Zig.Conc.Proto.WP.mono #[hm, pf])
+  return some (left ++ (← wpGoal hm.mvarId! user extra fuel))
+
+/-- The walk of a `WP` goal. -/
+partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+    TacticM (List MVarId) := do
+  if fuel == 0 then
+    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return [g]
+  let g ← wpSimp g extra
+  g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let some a := wpArgs? t | wpGoal g user extra (fuel - 1)
+  let x := a[5]!.consumeMData.headBeta
+  trace[fsym] "WP walk {fuel}: {x}"
+  let next (g : MVarId) := wpGoal g user extra (fuel - 1)
+  -- a result, a map, a bind: the structural rules
+  for (test, lem) in [(x.isAppOfArity ``Pure.pure 4, ``Zig.Conc.Proto.WP.pure'),
+      (x.isAppOfArity ``Functor.map 6, ``Zig.Conc.Proto.WP.map),
+      (x.isAppOfArity ``Bind.bind 6, ``Zig.Conc.Proto.WP.bind)] do
+    if test then
+      return ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
+  -- a panic: the branch must be unreachable
+  if isThrow x then
+    let g' ← g.exfalso
+    if ← closeWith g' (← `(tactic| contradiction)) <||> arithCore g' then return []
+    trace[fsym] "reachable panic"
+    return [g]
+  -- an `if`: decided by the facts, else both branches
+  if x.isAppOfArity ``ite 5 then
+    let xa := x.getAppArgs
+    let (cond, inst, tb, eb) := (xa[1]!, xa[2]!, xa[3]!, xa[4]!)
+    let branch (g : MVarId) (h : Expr) (pos : Bool) : TacticM MVarId := do
+      let eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[cond, inst, h, none, tb, eb]
+      wpRewrite g a (if pos then tb else eb) eq
+    let hp ← mkFreshExprMVar cond
+    if ← arith hp.mvarId! (quick := true) then
+      return ← wpWalk (← branch g (← instantiateMVars hp) true) user extra (fuel - 1)
+    let hn ← mkFreshExprMVar (mkNot cond)
+    if ← arith hn.mvarId! (quick := true) then
+      return ← wpWalk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
+    let (sp, sn) ← g.byCases cond `hc
+    let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
+    let gn ← sn.mvarId.withContext (branch sn.mvarId (.fvar sn.fvarId) false)
+    let gp ← destruct gp sp.fvarId
+    let gn ← destruct gn sn.fvarId
+    return (← wpWalk gp user extra (fuel - 1)) ++ (← wpWalk gn user extra (fuel - 1))
+  -- a `match` (also of a step of a concurrent body, `(match … : CM σ α).run s`): split
+  let inner := if x.isAppOfArity ``StateT.run 5 then x.getArg! 3 else x
+  if let some mt ← matchMatcherApp? inner then
+    let some d := mt.discrs.find? (·.isFVar) <|> mt.discrs[0]? | return [g]
+    if d.isFVar then return ← casesThen g d (wpWalk · user extra (fuel - 1))
+    if !d.hasLooseBVars && !(← isCaseCtorApp d) then
+      if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
+        return ← casesThen g' (.fvar xs[0]!) (wpWalk · user extra (fuel - 1))
+  -- a command: the caller's rules, then the registered ones
+  for r in ← rules user x (wp := true) do
+    if let some left ← reportLimit m!"the WP rule {r} on the command{indentExpr x}"
+        (wpRule g a r x user extra fuel) then
+      return left
+  -- a generated function: inlined
+  if let .const c _ := inner.getAppFn then
+    unless ← isLibrary c do
+      if let some inner' ← unfold1 inner then
+        let x' := if x.isAppOfArity ``StateT.run 5 then mkAppN x.getAppFn (x.getAppArgs.set! 3 inner')
+          else inner'
+        return ← wpWalk (← g.replaceTargetDefEq (mkAppN (mkConst wpN) (a.set! 5 x'))) user extra (fuel - 1)
+  logInfo m!"fsym: no WP rule for the command{indentExpr x}"
+  return [g]
+
+end
+
+/-- `fsym` on a `WP` goal: the hypotheses split, then the walk. -/
+def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId) := do
+  let mut gs := [g]
+  for d in ← g.withContext getLCtx do
+    if d.isImplementationDetail then continue
+    unless ← g.withContext (isProp d.type) do continue
+    gs ← gs.flatMapM fun g => g.withContext do
+      if (← getLCtx).contains d.fvarId then wpSplit g d.fvarId else pure [g]
+  gs.flatMapM (wpWalk · user extra 400)
+
 /-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with
 the planner of `fsym`; facts of `Q` it cannot prove are left as goals. A goal `Within X P` (`X`
 is one of the separated parts of `P`, through definitions of `P` that unfold to `⋆`) is closed by
@@ -4145,7 +4588,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let ty ← instantiateMVars (← inferType e)
     -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
     let (_, _, concl) ← forallMetaTelescope ty
-    if (ruleConcl? (← whnfR concl)).isSome || (← isUpd e) then user := user.push e
+    if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
+      user := user.push e
     else extra := extra.push a
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
@@ -4173,7 +4617,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     discard <| arithSimpCtx
     (← caches).userCtx.set userCtx
     let h0 ← IO.getNumHeartbeats
-    let gs ← walk g user extra 400
+    let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
+      else walk g user extra 400
     trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
     replaceMainGoal gs
 
