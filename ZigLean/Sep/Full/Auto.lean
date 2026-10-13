@@ -328,12 +328,15 @@ structure RunCaches where
   detFail : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr)))
   /-- The simp context that turns Boolean tests into propositions (`boolFactCtx`). -/
   boolCtx : IO.Ref (Option Simp.Context)
+  /-- Derived fields (`encFieldOf?`) by struct type, field type and offset: `get`, `set` and
+  the `EncField` proof (closed terms), or `none`. -/
+  fields : IO.Ref (Std.HashMap (Expr × Expr × Nat) (Option (Expr × Expr × Expr)))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
-           detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none }
+           detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1183,6 +1186,189 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
       out := out.push (lemmaGoals n t)
   return out
 
+/-! ## Fields of typed values (`EncField`)
+
+The field rules (`FTotalTriple.encField_load`/`_store`, `Typed.lean`) take an `EncField T U o get
+set`: the `U` at byte `o` of a `T`. For a struct that decodes its fields one after the other (the
+translator's `do pure { f := ← Enc.decodeAt bs o, … }`, `Slice`'s), `encFieldOf?` reads the
+fields off the decoding and proves the field's `EncField` with the steps of `AutoRules.lean`
+(`result_bind_eq_pure`, `decode_write_*`); a field inside a field by `EncField.comp`. Any other
+encoding gives no field (the rules do not apply). -/
+
+/-- A field of a struct's decoding: its projection, its type, its bytes `[lo, hi)`, whether they
+are all of the struct's (a struct of one field that decodes the whole array) and the position
+of its decoding in the struct's `do` block. -/
+structure FieldInfo where
+  proj : Name
+  ty : Expr
+  lo : Nat
+  hi : Nat
+  full : Bool
+  pos : Nat
+  deriving Inhabited
+
+/-- The value of a closed natural-number term (`(16 : Int).toNat`, `0 + Enc.size Slice`). -/
+def natVal? (e : Expr) : MetaM (Option Nat) := do
+  let e ← instantiateMVars e
+  if e.hasExprMVar || e.hasFVar then return none
+  if let some n ← (evalNat e).run then return some n
+  let v ← whnfD e
+  return v.rawNatLit? <|> v.nat?
+
+/-- The fields of a struct type `T` from its encoding's decoding (`FieldInfo`, in the order of
+the structure's fields), or `none` if the decoding is not one field after the other. -/
+partial def structFields? (T : Expr) : MetaM (Option (Array FieldInfo)) := do
+  let T ← instantiateMVars T
+  if T.hasExprMVar || T.hasFVar then return none
+  let env ← getEnv
+  let .const sn _ := (← whnfR T).getAppFn | return none
+  unless isStructure env sn do return none
+  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
+    | return none
+  let some N ← natVal? (mkApp2 (mkConst ``Zig.Enc.size) T inst) | return none
+  withLocalDeclD `bs (mkApp (mkConst ``Array [levelZero]) (mkConst ``Zig.Byte)) fun bs => do
+    let some dec ← unfoldProjInst? (mkApp3 (mkConst ``Zig.Enc.decode) T inst bs) | return none
+    go env sn bs N dec #[]
+where
+  /-- The bytes `[lo, hi)` that the decoding `x` of a `α` reads, and whether they are all. -/
+  readField? (bs : Expr) (N : Nat) (α x : Expr) : MetaM (Option (Nat × Nat × Bool)) := do
+    let x := x.consumeMData
+    let some n ← natVal? (← mkAppOptM ``Zig.Enc.size #[α, none]) | return none
+    if x.isAppOfArity ``Zig.Enc.decodeAt 4 && x.getArg! 2 == bs then
+      let some lo ← natVal? (x.getArg! 3) | return none
+      return if lo + n ≤ N then some (lo, lo + n, false) else none
+    if x.isAppOfArity ``Zig.Enc.decode 3 then
+      let a := x.getArg! 2
+      if a == bs then return if n == N then some (0, N, true) else none
+      if a.isAppOfArity ``Array.extract 4 && a.getArg! 1 == bs then
+        let some lo ← natVal? (a.getArg! 2) | return none
+        let some hi ← natVal? (a.getArg! 3) | return none
+        return if hi == lo + n && hi ≤ N then some (lo, hi, false) else none
+    return none
+  /-- Walk the decoding: `x >>= fun a => …` reads a field, `pure (mk a₁ … aₙ)` ends. -/
+  go (env : Environment) (sn : Name) (bs : Expr) (N : Nat) (e : Expr)
+      (acc : Array (Expr × Nat × Nat × Bool × FVarId)) : MetaM (Option (Array FieldInfo)) := do
+    let e := e.consumeMData.headBeta
+    if e.isAppOfArity ``Bind.bind 6 then
+      let α := e.getArg! 2
+      let some (lo, hi, full) ← readField? bs N α (e.getArg! 4) | return none
+      let .lam n ty body _ := (e.getArg! 5).consumeMData | return none
+      return ← withLocalDeclD n ty fun a =>
+        go env sn bs N (body.instantiate1 a) (acc.push (α, lo, hi, full, a.fvarId!))
+    unless e.isAppOfArity ``Pure.pure 4 do return none
+    let v ← whnfR (e.getArg! 3)
+    let some ctor := v.getAppFn.constName? | return none
+    let some (.ctorInfo ci) := env.find? ctor | return none
+    unless ci.induct == sn do return none
+    let args := v.getAppArgs[ci.numParams:].toArray
+    let names := getStructureFields env sn
+    unless args.size == acc.size && names.size == acc.size do return none
+    let mut out := #[]
+    for j in [0:args.size] do
+      let some pos := acc.findIdx? fun r => args[j]! == .fvar r.2.2.2.2 | return none
+      if out.any (·.pos == pos) then return none
+      let (α, lo, hi, full, _) := acc[pos]!
+      let some proj := getProjFnForField? env sn names[j]! | return none
+      out := out.push { proj, ty := α, lo, hi, full, pos }
+    return some out
+
+/-- Run tactics one after the other on the single goal `g`; `true` if they close it (else the
+state is restored). -/
+def closeSeq (g : MVarId) (tacs : Array Syntax) : TacticM Bool := do
+  let s ← saveState
+  try
+    let mut gs := [g]
+    for t in tacs do
+      let [g'] := gs | throwError "fsym: closeSeq"
+      gs ← evalTacticAt t g'
+    if gs.isEmpty then return true
+    s.restore; return false
+  catch ex =>
+    trace[fsym] "closeSeq: {ex.toMessageData}"
+    s.restore; return false
+
+-- the steps name their hypotheses (`hd`, `hₚ`) and the pattern `rfl` across tactics
+set_option hygiene false in
+/-- The `EncField` of field `j` of the struct `T` (fields `fs`): `get`, `set` and its proof. -/
+def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
+    TacticM (Option (Expr × Expr × Expr)) := do
+  let f := fs[j]!
+  let get ← withLocalDeclD `s T fun s => do mkLambdaFVars #[s] (← mkAppM f.proj #[s])
+  let set ← withLocalDeclD `s T fun s => withLocalDeclD `v f.ty fun v => do
+    let parts ← fs.mapIdxM fun i g => if i == j then pure v else mkAppM g.proj #[s]
+    let .const sn us := (← whnfR T).getAppFn | throwError "fsym: not a structure"
+    let ctor := getStructureCtor (← getEnv) sn
+    mkLambdaFVars #[s, v] (mkAppN (mkAppN (mkConst ctor.name us) (← whnfR T).getAppArgs) parts)
+  let ty ← mkAppM ``Zig.Full.EncField #[T, f.ty, mkNatLit f.lo, get, set]
+  let pf ← mkFreshExprMVar ty
+  let some [gFit, gGet, gSet] ← observing? (evalTacticAt (← `(tactic| refine ⟨?_, ?_, ?_⟩)) pf.mvarId!)
+    | return none
+  let id (s : String) : Ident := mkIdent (.mkSimple s)
+  let (hs, hd, hc, hv) := (id "hs", id "hd", id "hc", id "hv")
+  let k := fs.size
+  -- the decoding of `s` split into its fields `aₚ` with `hₚ : (decoding of field p) = pure aₚ`
+  let split : Array Syntax ← do
+    let mut out := #[]
+    for p in [0:k] do
+      out := out.push (← `(tactic| obtain ⟨$(id s!"a{p}"), $(id s!"h{p}"), $hd⟩ :=
+        Zig.Full.Auto.result_bind_eq_pure $hd))
+    out := out.push (← `(tactic| obtain rfl := Zig.Full.Auto.result_pure_inj $hd))
+    pure out
+  let hi := id s!"h{f.pos}"
+  let getTacs : Array Syntax := #[← `(tactic| intro $(id "bs") $(id "s") $hs $hd)] ++ split ++
+    #[← if f.full then `(tactic| exact Zig.Full.Auto.decode_extract_full $hs (by decide) $hi)
+      else `(tactic| exact $hi)]
+  let mut setTacs : Array Syntax :=
+    #[← `(tactic| intro $(id "bs") $(id "cs") $(id "s") $(id "v") $hs $hd $hc $hv)] ++ split
+  for p in [0:k] do
+    let some g := fs.find? (·.pos == p) | return none
+    let step ← if p == f.pos then
+        if f.full then `(Zig.Full.Auto.decode_write_full $hs $hc (by decide) $hv)
+        else `(Zig.Full.Auto.decode_write_same $hs $hc (by decide) $hv)
+      else `(Zig.Full.Auto.decode_write_other $hs $hc (by decide) (by decide) $(id s!"h{p}"))
+    setTacs := setTacs.push (← `(tactic| refine Zig.Full.Auto.result_bind_of_pure $step ?_))
+  setTacs := setTacs.push (← `(tactic| rfl))
+  unless ← closeWith gFit (← `(tactic| decide)) do return none
+  unless ← closeSeq gGet getTacs do
+    trace[fsym] "field {f.proj}: get not proved"; return none
+  unless ← closeSeq gSet setTacs do
+    trace[fsym] "field {f.proj}: set not proved"; return none
+  let pf ← instantiateMVars pf
+  if pf.hasMVar then return none
+  return some (get, set, pf)
+
+/-- The `EncField T U o get set` of the struct type `T`: `get`, `set` (beta-reduced) and its
+proof, through fields of fields; cached per run. -/
+partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
+    TacticM (Option (Expr × Expr × Expr)) := do
+  let key := (T, U, o)
+  if let some r := (← (← caches).fields.get).get? key then return r
+  let r ← go
+  (← caches).fields.modify (·.insert key r)
+  return r
+where go : TacticM (Option (Expr × Expr × Expr)) := do
+  if fuel == 0 then return none
+  let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
+  let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
+  let f := fs[j]!
+  let some (g₁, s₁, h₁) ← encFieldDirect T fs j | return none
+  if o == f.lo && (← withNewMCtxDepth (isDefEq f.ty U)) then return some (g₁, s₁, h₁)
+  let some (_, _, h₂) ← encFieldOf? f.ty U (o - f.lo) (fuel - 1) | return none
+  let pf ← mkAppM ``Zig.Full.EncField.comp #[h₁, h₂]
+  let a := (← inferType pf).getAppArgs
+  let (get, set) := (← Core.betaReduce a[5]!, ← Core.betaReduce a[6]!)
+  let ty ← mkAppM ``Zig.Full.EncField #[T, U, mkNatLit o, get, set]
+  return some (get, set, ← mkExpectedTypeHint pf ty)
+
+/-- Prove a side goal `EncField T U o get set` (assigning `get` and `set`). -/
+def encFieldGoal (t : Expr) : TacticM (Option Expr) := do
+  let a := t.getAppArgs
+  let some o ← natVal? a[4]! | do trace[fsym] "field offset {a[4]!}: not a number"; return none
+  let some (get, set, pf) ← encFieldOf? (← instantiateMVars a[0]!) (← instantiateMVars a[1]!) o
+    | return none
+  unless ← isDefEq a[5]! get <&&> isDefEq a[6]! set <&&> isDefEq (← inferType pf) t do return none
+  return some pf
+
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
 goals a candidate leaves (depth above 0) are solved before the rest: all of them, or the
 candidate fails. Returns the arithmetic goals of the rule left unproved, or `none` if a block,
@@ -1213,6 +1399,10 @@ where
       | none => return none
     else if isBlockEq t then
       let some pf ← g.withContext (solveBlock t) | return none
+      g.assign pf
+      go rest
+    else if t.isAppOfArity ``Zig.Full.EncField 7 then
+      let some pf ← g.withContext (encFieldGoal t) | return none
       g.assign pf
       go rest
     else
